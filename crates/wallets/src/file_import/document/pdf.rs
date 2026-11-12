@@ -606,7 +606,12 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let root = files::Temp::new("pdf-timeout").unwrap();
         let tool = root.path().join("fake-poppler");
-        fs::write(&tool, "#!/usr/bin/python3\nimport os, sys, time\nprint(os.getpid(), flush=True)\nprint('diagnostic', file=sys.stderr, flush=True)\ntime.sleep(10)\n").unwrap();
+        // `exec` keeps one process, so the kill reaches the sleeper itself.
+        fs::write(
+            &tool,
+            "#!/bin/sh\necho $$\necho diagnostic >&2\nexec sleep 10\n",
+        )
+        .unwrap();
         fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
         for inspection in [true, false] {
             let start = Instant::now();
@@ -628,7 +633,11 @@ mod tests {
                 &Py::from(30)
             );
         }
-        fs::write(&tool, "#!/usr/bin/python3\nimport sys\nsys.stdout.write('Pages: 1\\r\\n')\nsys.stderr.write('local\\rdiagnostic')\n").unwrap();
+        fs::write(
+            &tool,
+            "#!/bin/sh\nprintf 'Pages: 1\\r\\n'\nprintf 'local\\rdiagnostic' >&2\n",
+        )
+        .unwrap();
         let output = run(&tool, &[], TIMEOUT, true).unwrap();
         assert!(output.success);
         assert_eq!(output.stdout, "Pages: 1\n");

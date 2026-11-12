@@ -35,12 +35,9 @@ case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) ;;
   *) echo "This script builds the Windows artifacts and must run in Git Bash on Windows." >&2; exit 2 ;;
 esac
-for command in cargo rustup pnpm 7z; do
+for command in cargo rustup pnpm 7z jq; do
   command -v "$command" >/dev/null 2>&1 || { echo "Missing required tool: $command" >&2; exit 2; }
 done
-python="${PYTHON:-$(command -v python || command -v python3 || true)}"
-[ -n "$python" ] || { echo "Missing required tool: python" >&2; exit 2; }
-export PYTHON="$python"
 [ ! -e "$output" ] || { echo "Output directory already exists: $output" >&2; exit 2; }
 
 run() {
@@ -66,15 +63,22 @@ mkdir -p "$work" "$output"
 
 run "$ROOT/scripts/build-rust-cli.sh" --target "$TRIPLE" --channel "$channel" \
   --commit "$commit" --output "$work/dist"
+
+# The release tool (crates/release) writes BUILD_INFO.json and the manifest.
+release_tool="${KASSIBER_RELEASE_TOOL:-}"
+if [ -z "$release_tool" ]; then
+  run cargo build --locked --release -p kassiber-release --no-default-features --bin kassiber-release
+  release_tool="$ROOT/target/release/kassiber-release.exe"
+fi
 binary="$work/dist/kassiber.exe"
 
-run "$python" scripts/write_build_info.py --output "$work/BUILD_INFO.json" \
+run "$release_tool" build-info --output "$work/BUILD_INFO.json" \
   --version "$version" --commit "$commit" --ref "$(git rev-parse --abbrev-ref HEAD)" \
   --run-id local --channel "$channel"
 
 run pnpm --dir ui-tauri install --frozen-lockfile
 run pnpm --dir ui-tauri run broker:build
-broker="$ROOT/kassiber/ai/provider_broker/index.mjs"
+broker="$ROOT/ui-tauri/provider-broker/dist/index.mjs"
 test -s "$broker"
 
 run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$binary" --scratch "$work/smoke" \

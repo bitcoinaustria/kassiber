@@ -1,5 +1,7 @@
 -- Read-only guards for data-dependent ensure_schema_compat branches. These are
--- acceptance probes, never migration SQL. Unsupported legacy shapes go to Python.
+-- acceptance probes, never migration SQL: a book they flag still needs its
+-- migrating open (legacy_pair_components: a legacy review Python's migration
+-- would still pick up, neither linked to a component nor held by an issue).
 -- probe: legacy_source_links
 SELECT EXISTS(SELECT 1 FROM source_funds_links WHERE method IN ('transaction_pair','same_onchain_scope','payment_hash'));
 -- probe: source_funds_target_snapshot
@@ -9,7 +11,7 @@ SELECT EXISTS(SELECT 1 FROM ai_providers WHERE display_name IS NULL OR trim(disp
 -- probe: wallet_scoped_labels
 SELECT EXISTS(SELECT 1 FROM bip329_labels WHERE wallet_id IS NOT NULL);
 -- probe: legacy_pair_components
-SELECT EXISTS(SELECT 1 FROM transaction_pairs WHERE component_id IS NULL) OR EXISTS(SELECT 1 FROM direct_swap_payouts WHERE component_id IS NULL) OR EXISTS(SELECT 1 FROM custody_authored_migration_issues WHERE resolved_at IS NULL);
+SELECT EXISTS(SELECT 1 FROM transaction_pairs p JOIN transactions o ON o.id=p.out_transaction_id JOIN wallets ow ON ow.id=o.wallet_id JOIN transactions i ON i.id=p.in_transaction_id JOIN wallets iw ON iw.id=i.wallet_id WHERE p.component_id IS NULL AND NOT EXISTS(SELECT 1 FROM custody_authored_migration_issues m WHERE m.legacy_table='transaction_pairs' AND m.legacy_source_id=p.id AND m.resolved_at IS NULL)) OR EXISTS(SELECT 1 FROM direct_swap_payouts p JOIN transactions o ON o.id=p.out_transaction_id JOIN wallets ow ON ow.id=o.wallet_id WHERE p.component_id IS NULL AND NOT EXISTS(SELECT 1 FROM custody_authored_migration_issues m WHERE m.legacy_table='direct_swap_payouts' AND m.legacy_source_id=p.id AND m.resolved_at IS NULL));
 -- probe: missing_durable_anchors
 SELECT EXISTS(SELECT 1 FROM custody_component_legs WHERE anchor_transaction_id IS NULL AND transaction_id IS NOT NULL);
 -- probe: evidence_commitments

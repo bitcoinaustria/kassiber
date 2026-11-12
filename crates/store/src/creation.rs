@@ -175,6 +175,7 @@ pub(crate) fn create(
         durable::create_new(&database)?
     };
     observer("schema.after_file_create")?;
+    crate::seed_test_prng();
     let mut conn = Connection::open_with_flags(
         &database,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -221,7 +222,7 @@ pub(crate) fn create(
     durable::sync_directory(root)?;
     observer("schema.after_directory_sync")?;
     let instance_id = read_instance_id(&conn)?;
-    let database = std::fs::canonicalize(database).map_err(Error::io)?;
+    let database = kassiber_paths::canonicalize(&database).map_err(Error::io)?;
     Ok(Book {
         connection: conn,
         database,

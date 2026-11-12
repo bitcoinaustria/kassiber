@@ -5,7 +5,7 @@
     "find": "self.grant.validate(conn, &mut *self.backend.borrow_mut())?;",
     "replace": "let _ = &self.backend;",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_pretransport_fences_are_inert[wallet]"
+      "test_native_graph_pretransport_fences_are_inert"
     ],
     "rule": "Revalidate the captured wallet before queueing or transport."
   },
@@ -15,7 +15,7 @@
     "find": ".authorize(backend.request().clone(), Some(consent))",
     "replace": ".authorize(backend.request().clone(), None)",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_reference_full_book_parity[graphless-esplora]"
+      "test_native_graph_reference_full_book_parity"
     ],
     "rule": "A graph lookup must carry the successful sync grant through the network gate."
   },
@@ -25,7 +25,7 @@
     "find": "pub const MAX_ROWS: usize = 1_000;",
     "replace": "pub const MAX_ROWS: usize = 1_001;",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_row_limit_and_private_cursor_parity"
+      "test_native_graph_row_limit_and_private_cursor_parity"
     ],
     "rule": "A graph pass inspects at most one thousand local rows."
   },
@@ -35,7 +35,7 @@
     "find": "pub const MAX_TRANSACTIONS: usize = 50;",
     "replace": "pub const MAX_TRANSACTIONS: usize = 51;",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_transaction_limit_cursor_and_cache_parity[esplora]"
+      "test_native_graph_transaction_limit_cursor_and_cache_parity"
     ],
     "rule": "A pass attempts at most fifty incomplete graphs."
   },
@@ -45,7 +45,7 @@
     "find": "pub const MAX_RUN_SECONDS: u64 = 30;",
     "replace": "pub const MAX_RUN_SECONDS: u64 = 0;",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_reference_full_book_parity[graphless-esplora]"
+      "test_native_graph_reference_full_book_parity"
     ],
     "rule": "The monotonic deadline controls admission of new graph rows."
   },
@@ -55,7 +55,7 @@
     "find": "pub const MAX_PREVOUTS: usize = 250;",
     "replace": "pub const MAX_PREVOUTS: usize = 251;",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_shared_prevout_budget_leaves_refused_row_first"
+      "test_native_graph_shared_prevout_budget_leaves_refused_row_first"
     ],
     "rule": "Reserve uncached prevouts against one pass-wide budget."
   },
@@ -65,7 +65,7 @@
     "find": "last_rowid = resume;",
     "replace": "let _ = resume;",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_shared_prevout_budget_leaves_refused_row_first"
+      "test_native_graph_shared_prevout_budget_leaves_refused_row_first"
     ],
     "rule": "A budget-refused row must remain first in the next pass."
   },
@@ -75,7 +75,7 @@
     "find": "return Ok(Local::Conflict);\n        }\n        combined.extend",
     "replace": "return Ok(Local::Absent);\n        }\n        combined.extend",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_reference_full_book_parity[conflict-esplora]"
+      "test_native_graph_reference_full_book_parity"
     ],
     "rule": "Conflicting local physical facts must prevent public graph lookup."
   },
@@ -85,7 +85,7 @@
     "find": "schema_version=? AND chain=? AND network=? AND txid=?",
     "replace": "schema_version=? AND chain=? AND ? IS NOT NULL AND txid=?",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_local_scope_and_cache_guards[foreign-cache]"
+      "test_native_graph_local_scope_and_cache_guards"
     ],
     "rule": "Only the exact physical network may reuse a graph cache entry."
   },
@@ -95,7 +95,7 @@
     "find": "pub(super) fn sanitize(raw: &Value, id: &str) -> Value {\n    let mut result = Map::new();",
     "replace": "pub(super) fn sanitize(raw: &Value, id: &str) -> Value {\n    let mut result = Map::new();\n    result.insert(\"backend_response\".into(),raw.clone());",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_reference_full_book_parity[graphless-esplora]"
+      "test_native_graph_reference_full_book_parity"
     ],
     "rule": "Persist only the normalized public reference allowlist."
   },
@@ -105,7 +105,7 @@
     "find": "if !tx.compute_txid().to_string().eq_ignore_ascii_case(id) {",
     "replace": "if false && !tx.compute_txid().to_string().eq_ignore_ascii_case(id) {",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_reference_electrum_mismatched_transaction_repro_and_native_refusal"
+      "test_electrum_mismatched_transaction_is_refused_like_python"
     ],
     "rule": "Refuse raw Electrum transactions whose computed identifier differs from the requested reference."
   },
@@ -115,7 +115,7 @@
     "find": "if let Some(active) = self.graph.as_ref().filter(|v| v.id == target) {\n            active.cancel.cancel();",
     "replace": "if let Some(active) = self.graph.as_ref().filter(|v| v.id == target) {\n            let _ = &active.cancel;",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_worker_controls_and_owned_connection[cancel-esplora]"
+      "test_native_graph_worker_controls_and_owned_connection"
     ],
     "rule": "Request cancellation must stop the graph worker after handoff."
   },
@@ -125,7 +125,7 @@
     "find": "if let Some(active) = &self.freshness_requests.graph {\n                active.cancel.cancel();",
     "replace": "if let Some(active) = &self.freshness_requests.graph {\n                let _ = &active.cancel;",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_worker_controls_and_owned_connection[lock-esplora]"
+      "test_native_graph_worker_controls_and_owned_connection"
     ],
     "rule": "Lifecycle shutdown must cancel the graph worker before joining it."
   },
@@ -135,7 +135,7 @@
     "find": "passphrase: passphrase.as_ref(),",
     "replace": "passphrase: None,",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_encrypted_worker_handoff_and_cleanup[complete-electrum]"
+      "test_native_graph_encrypted_worker_handoff_and_cleanup"
     ],
     "rule": "The worker must use its one-shot verified SQLCipher session handoff."
   },
@@ -145,7 +145,7 @@
     "find": "check: &check,",
     "replace": "check: &|| Ok(()),",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_cancels_between_electrum_prevout_batches"
+      "test_native_graph_cancels_between_electrum_prevout_batches"
     ],
     "rule": "Revalidate graph authority between every Electrum prevout batch and before writes."
   },
@@ -155,7 +155,7 @@
     "find": "if explicit_id {",
     "replace": "if false && explicit_id {",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_reference_full_book_parity[invalid-txid-esplora]"
+      "test_native_graph_reference_full_book_parity"
     ],
     "rule": "A malformed explicit transaction ID must not authorize lookup using a different row identity."
   },
@@ -165,7 +165,7 @@
     "find": "if finished.output_closed {",
     "replace": "if false && finished.output_closed {",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_closed_output_joins_worker_before_exit[esplora]"
+      "test_native_graph_closed_output_joins_worker_before_exit"
     ],
     "rule": "A closed graph event stream must terminate the daemon and discard queued authority after joining the worker."
   },
@@ -175,7 +175,7 @@
     "find": "if missing.len() > 250 {",
     "replace": "if missing.len() > 251 {",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_refuses_transaction_over_prevout_limit"
+      "test_native_graph_refuses_transaction_over_prevout_limit"
     ],
     "rule": "Reject an oversized transaction before reserving the shared pass budget or fetching any parents."
   },
@@ -185,7 +185,7 @@
     "find": "self.graph.as_ref().filter(|v| v.id == target)",
     "replace": "self.graph.as_ref().filter(|_| true)",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_request_identity_and_replay_are_fenced"
+      "test_native_graph_request_identity_and_replay_are_fenced"
     ],
     "rule": "An unrelated request identity cannot cancel a graph worker, and a consumed sync request cannot mint another grant."
   },
@@ -195,7 +195,7 @@
     "find": "if automatic_graph {\n            self.freshness_requests.graph_enabled = true;",
     "replace": "if false && automatic_graph {\n            self.freshness_requests.graph_enabled = true;",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_enabled_worker_waits_for_terminal_handoff[True-esplora]"
+      "test_native_graph_enabled_worker_waits_for_terminal_handoff"
     ],
     "rule": "Product execution must automatically consume receipt-backed grants after terminal flush."
   },
@@ -205,7 +205,7 @@
     "find": "|| truthy(field(&source, \"paused\"))",
     "replace": "|| false && truthy(field(&source, \"paused\"))",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_worker_controls_and_owned_connection[source-pause-esplora]"
+      "test_native_graph_worker_controls_and_owned_connection"
     ],
     "rule": "Pausing the originating wallet source must stop a live graph lookup before publication."
   },
@@ -215,7 +215,7 @@
     "find": ".is_some_and(|v| truthy(field(&v, \"paused\")))",
     "replace": ".is_some_and(|_| false)",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_worker_controls_and_owned_connection[graph-pause-esplora]"
+      "test_native_graph_worker_controls_and_owned_connection"
     ],
     "rule": "Pausing the graph source must stop transport continuation and cache publication."
   },
@@ -225,7 +225,7 @@
     "find": "if truthy(field(&row, \"cancel_requested\")) || field(&row, \"status\") == &s(\"cancelled\") {",
     "replace": "if false && truthy(field(&row, \"cancel_requested\")) || field(&row, \"status\") == &s(\"cancelled\") {",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_worker_controls_and_owned_connection[graph-cancel-esplora]"
+      "test_native_graph_worker_controls_and_owned_connection"
     ],
     "rule": "Cancelling a running graph job must stop cache publication at the next check."
   },
@@ -235,7 +235,7 @@
     "find": "    if backend[\"kind\"] != \"bitcoinrpc\" {",
     "replace": "    if true {",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_core_rpc_parity[graphless]"
+      "test_native_graph_core_rpc_parity"
     ],
     "rule": "A wallet synced through Bitcoin Core fills its graph from that node."
   },
@@ -245,7 +245,7 @@
     "find": "== Some(&kassiber_pyjson::Value::Int((-5).into())) => {}",
     "replace": "== Some(&kassiber_pyjson::Value::Int((-6).into())) => {}",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_core_rpc_parity[missing-parent]"
+      "test_native_graph_core_rpc_parity"
     ],
     "rule": "A parent the node cannot see (-5) does not stop the next one."
   },
@@ -255,7 +255,7 @@
     "find": "\"value\": source[\"value\"],",
     "replace": "\"value\": null,",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_core_rpc_parity[graphless]"
+      "test_native_graph_core_rpc_parity"
     ],
     "rule": "Core's BTC values reach the graph."
   }

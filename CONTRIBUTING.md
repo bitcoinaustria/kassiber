@@ -21,22 +21,25 @@ dependency changes. Regenerate lockfiles instead of copying them.
 
 ## Setup
 
-Python development uses the locked `uv` environment:
+Kassiber is a Rust workspace plus the Tauri desktop in `ui-tauri/`. Use the
+Rust release [rust-toolchain.toml](rust-toolchain.toml) pins, with rustfmt and
+clippy. rustup selects it inside the checkout once it is installed:
 
 ```sh
-./scripts/bootstrap-dev-env.sh
+rustup toolchain install "$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" \
+  --profile minimal --component rustfmt --component clippy
 ```
 
-The script checks system prerequisites, including the Rust toolchain that
-builds the [tax engine](docs/reference/tax-engine.md) (it installs the Rust
-release `rust-toolchain.toml` pins through rustup), runs `uv sync --locked`,
-and verifies imports. Use `uv run --locked` for Python commands so a stale lockfile fails
-instead of being rewritten. End-user pip installation remains a packaging
-contract, not a second contributor workflow. A pip install needs the tax
-engine's binding installed from the checkout first, for example
-`pip install ./tax-engine/python .`, which needs a Rust toolchain. Kassiber pins
-the binding to a local version (`kassiber-tax==0.2.0+local`) that PyPI cannot
-host, so pip never fetches an unrelated `kassiber-tax` from PyPI.
+With mise, run cargo through the same release, for example
+`mise exec rust@1.99.1 -- cargo test -p kassiber-store`. SQLCipher and, outside
+macOS, OpenSSL are compiled from source by the build, so no system SQLCipher
+or crypto library is needed; a C compiler, `make`, and `perl` are.
+
+`./scripts/bootstrap-dev-env.sh` does this in one step: it installs the pinned
+Rust release through rustup, checks the C toolchain, installs the frontend's
+locked pnpm dependencies, and reports whether `python3` 3.11 or newer is
+available for the regtest harness (standard library only). It sets up no
+Python environment.
 
 For frontend development, use the pnpm version pinned in
 [ui-tauri/package.json](ui-tauri/package.json):
@@ -45,10 +48,12 @@ For frontend development, use the pnpm version pinned in
 pnpm --dir ui-tauri install --frozen-lockfile
 ```
 
-The daemon-backed preview and disposable regtest setup are documented in
+Run the CLI from the checkout with `cargo run -p kassiber -- <command>`, or
+build it once and use `target/debug/kassiber`. The daemon-backed preview and
+disposable regtest setup are documented in
 [Testing](docs/reference/testing.md). Keep development commands off real books.
 
-Generated test data (recorded and Python-produced fixtures) is fetched, not
+Generated test data (recorded sessions and frozen goldens) is fetched, not
 committed: run `scripts/fetch-test-data.sh` once after checkout and after the
 lock changes. See [generated test data](docs/reference/testing.md#generated-test-data).
 
@@ -57,7 +62,8 @@ lock changes. See [generated test data](docs/reference/testing.md#generated-test
 During development, run the smallest relevant checks. For example:
 
 ```sh
-uv run --locked python -m pytest tests/test_cli_smoke.py -q
+cargo test -p kassiber-journals --features test-harness
+scripts/replay-sessions.sh --only test_cli_smoke
 ```
 
 Focused frontend checks, from `ui-tauri/`:
@@ -82,13 +88,23 @@ Before push or PR, run the full gate:
 ./scripts/quality-gate.sh
 ```
 
-It checks the tax engine's Rust formatting and clippy lints and runs its tests, compiles Python,
-validates the test inventory, runs all Python tests once, reruns the modules
-that reach the tax engine against its frozen oracle, and runs TypeScript,
-ESLint, and Vitest. CI partitions that Python inventory
-into disjoint shards; the required aggregate and specialized integration lanes
-are explained in [Testing](docs/reference/testing.md#pull-request-ci).
-The full gate is required before calling work push-ready.
+It refuses a toolchain other than the pinned one and checks the locked test
+data, then runs `cargo fmt` and clippy, the workspace tests, the mutation
+catalog check (`cargo run -p kassiber-mutation-check -- check`), the
+ledger-feature check, the egress observer and `kassiber` test-harness tests,
+the check that a product build carries no test hooks, the recorded-session
+replay (`scripts/replay-sessions.sh`), and TypeScript, ESLint, and Vitest for
+the desktop. The CI lanes, including the regtest integration lanes, are
+explained in [Testing](docs/reference/testing.md#pull-request-ci). The full
+gate is required before calling work push-ready.
+
+A change that moves or rewrites tests reruns the affected mutation catalogs
+with `cargo run -p kassiber-mutation-check -- run <suite>`; it must not lose
+kills. A change that alters a frozen golden or a recorded session follows the
+[regeneration flow](docs/plan/22-python-removal.md#generators-become-frozen-goldens):
+rewrite through the tests' write mode, review the diff, publish the data, and
+bump `tests/test-data.lock` in the same change. Tax and journal numbers,
+stored data, and exports need owner sign-off.
 
 Stage explicit paths; do not use `git add -A`. Review staged and unstaged diffs
 separately after implementation. When a second

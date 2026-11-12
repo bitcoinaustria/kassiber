@@ -1,5 +1,9 @@
 # Legacy project and network partition acceptance stop
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 Historical stop record at `0df35af0`. The orchestrator resolved both questions
 in the R3b continuation: the logical-dump boundary, a Python recovery fix and
 private Rust parity.

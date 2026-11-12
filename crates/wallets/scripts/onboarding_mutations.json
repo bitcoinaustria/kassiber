@@ -315,7 +315,7 @@
     "find": "    kinds.push(\"ui.wallets.identify\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_onboarding.py::RustWalletIdentifyTest::test_no_active_profile_and_sqlcipher_match_wire_bytes"
+      "kassiber/desktop_onboarding:onboarding_identify_no_active_profile_and_sqlcipher_match_wire_bytes"
     ],
     "rule": "The daemon advertises native identification."
   },
@@ -325,7 +325,7 @@
     "find": "    kinds.push(\"ui.wallets.ledger_preview\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_onboarding.py::RustLedgerPreviewTest::test_sqlcipher_preview_matches_wire_bytes"
+      "kassiber/desktop_onboarding:onboarding_ledger_preview_sqlcipher_matches_wire_bytes"
     ],
     "rule": "The daemon advertises the native ledger preview."
   },
@@ -335,7 +335,7 @@
     "find": "    kinds.push(\"ui.wallets.detect_script_types\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_onboarding.py::RustScriptTypeDetectionTest::test_fallbacks_and_refusals_match_wire_bytes"
+      "kassiber/desktop_onboarding:onboarding_detection_fallbacks_and_refusals_match_wire_bytes"
     ],
     "rule": "The daemon advertises native detection."
   },
@@ -425,7 +425,7 @@
     "find": "if ![\"bitcoin\", \"liquid\"].contains(&chain.as_str()) {",
     "replace": "if chain.as_str() == \"never\" {",
     "expect_failing": [
-      "tests/test_rust_wallet_identify_onchain.py::RustIdentifyOnchainTest::test_local_answers_refusals_and_lookups_match_python"
+      "kassiber/desktop_onboarding:onboarding_onchain_local_answers_refusals_and_lookups_match_python"
     ],
     "rule": "Electrum verification refuses a backend without a chain."
   },
@@ -435,7 +435,7 @@
     "find": "\"cancelled\", Value::Bool(cancelled())",
     "replace": "\"cancelled\", Value::Bool(false)",
     "expect_failing": [
-      "tests/test_rust_wallet_identify_onchain.py::RustIdentifyOnchainTest::test_cancel_mid_request_and_before_registration_match_python"
+      "kassiber/desktop_onboarding:onboarding_onchain_cancel_mid_request_and_before_registration_match_python"
     ],
     "rule": "The streamed report says whether it was cancelled."
   },
@@ -445,7 +445,7 @@
     "find": "let result = progress(0, total).and_then(",
     "replace": "let result = Ok(()).and_then(",
     "expect_failing": [
-      "tests/test_rust_wallet_identify_onchain.py::RustIdentifyOnchainTest::test_cancel_mid_request_and_before_registration_match_python"
+      "kassiber/desktop_onboarding:onboarding_onchain_cancel_mid_request_and_before_registration_match_python"
     ],
     "rule": "The worker announces zero of N before its first lookup."
   },
@@ -465,7 +465,7 @@
     "find": "    kinds.push(\"ui.wallets.identify_onchain\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_identify_onchain.py::RustIdentifyOnchainTest::test_sqlcipher_lookup_matches_python"
+      "kassiber/desktop_onboarding:onboarding_onchain_sqlcipher_lookup_matches_python"
     ],
     "rule": "The daemon advertises native on-chain identification."
   },
@@ -475,7 +475,7 @@
     "find": "        set(&mut payload, \"journals\", journals);\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_json_import_runs_the_journal_step"
+      "kassiber/desktop_onboarding:onboarding_import_json_runs_the_journal_step"
     ],
     "rule": "A desktop import reports its local journal step."
   },
@@ -485,7 +485,7 @@
     "find": "if !truthy(field(field(&policy, \"source_classes\"), \"journals\")) {",
     "replace": "if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_csv_import_with_journals_disabled"
+      "kassiber/desktop_onboarding:onboarding_import_csv_with_journals_disabled"
     ],
     "rule": "A policy without journals reports the step as disabled instead of rebuilding."
   },
@@ -495,7 +495,7 @@
     "find": "            Some(with_request_id(success(kind, payload), request_id)),\n            true,",
     "replace": "            Some(with_request_id(success(kind, payload), request_id)),\n            false,",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_json_import_runs_the_journal_step"
+      "kassiber/desktop_onboarding:onboarding_import_json_runs_the_journal_step"
     ],
     "rule": "A committed desktop import ends the daemon session like Python."
   },
@@ -505,7 +505,7 @@
     "find": "        _ => {\n            let wallet = required(\"wallet\", \"Wallet\")?;",
     "replace": "        _ => {\n            let wallet = optional_string(args, \"wallet\")?.unwrap_or_default();",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_refusals_keep_the_session_and_match_python"
+      "kassiber/desktop_onboarding:onboarding_import_refusals_keep_the_session_and_match_python"
     ],
     "rule": "Ordinary file formats need an explicit wallet."
   },
@@ -515,7 +515,7 @@
     "find": "kassiber_envelope::set(&mut result, \"source\", s(\"inline:wasabi_bundle\"));",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_inline_wasabi_bundle"
+      "kassiber/desktop_onboarding:onboarding_import_inline_wasabi_bundle"
     ],
     "rule": "An inline Wasabi bundle reports its inline source."
   },
@@ -525,7 +525,7 @@
     "find": "delimiter_name(&path).map_or(Py::Null, s)",
     "replace": "Py::Null",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustAnalyzeFileTest::test_uploads_tokens_and_refusals_match_python"
+      "kassiber/desktop_onboarding:onboarding_analyze_uploads_tokens_and_refusals_match_python"
     ],
     "rule": "Delimited files report the sniffed delimiter."
   },
@@ -535,7 +535,7 @@
     "find": "!negative && significant.len() >= 4",
     "replace": "!negative && significant.len() >= 7",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustAnalyzeFileTest::test_uploads_tokens_and_refusals_match_python"
+      "kassiber/desktop_onboarding:onboarding_analyze_uploads_tokens_and_refusals_match_python"
     ],
     "rule": "Amounts of 1000 or more are flagged as probably not BTC."
   },
@@ -545,7 +545,7 @@
     "find": "!native && !(truthy(field(&effective, \"type\")) || truthy(field(&effective, \"direction\")));",
     "replace": "false;",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustAnalyzeFileTest::test_uploads_tokens_and_refusals_match_python"
+      "kassiber/desktop_onboarding:onboarding_analyze_uploads_tokens_and_refusals_match_python"
     ],
     "rule": "Without a Type or direction column, row kinds come from the amount's sign and are flagged."
   },
@@ -555,7 +555,7 @@
     "find": "get(args, key).is_some_and(|v| !matches!(v, Value::Null) && *v != s(\"\"))",
     "replace": "false",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustDesktopSamouraiTest::test_refusals_match_python"
+      "kassiber/desktop_onboarding:onboarding_samourai_refusals_match_python"
     ],
     "rule": "Samourai imports refuse backup and recovery material."
   },
@@ -565,7 +565,7 @@
     "find": "    kinds.push(\"ui.wallets.import_file\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustDesktopImportTest::test_refusals_keep_the_session_and_match_python"
+      "kassiber/desktop_onboarding:onboarding_import_refusals_keep_the_session_and_match_python"
     ],
     "rule": "The daemon advertises the native desktop file import."
   },
@@ -575,7 +575,7 @@
     "find": "    kinds.push(\"ui.wallets.analyze_file\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_import_desktop.py::RustAnalyzeFileTest::test_sqlcipher_analysis_matches_python"
+      "kassiber/desktop_onboarding:onboarding_analyze_sqlcipher_analysis_matches_python"
     ],
     "rule": "The daemon advertises native file analysis."
   },
@@ -635,7 +635,7 @@
     "find": "                    && get(row, \"status\") == Some(&s(\"ready\"))",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_grants_previews_and_refusals_match_python"
+      "kassiber/desktop_onboarding:onboarding_document_grants_previews_and_refusals_match_python"
     ],
     "rule": "Only ready preview rows are importable."
   },
@@ -645,7 +645,7 @@
     "find": "        let mut public = draft;\n        if let Some(source) = field_mut(&mut public, \"source\") {\n            drop_key(source, \"path\");\n        }",
     "replace": "        let mut public = draft;",
     "expect_failing": [
-      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_grants_previews_and_refusals_match_python"
+      "kassiber/desktop_onboarding:onboarding_document_grants_previews_and_refusals_match_python"
     ],
     "rule": "The preview never hands the source path to the renderer."
   },
@@ -655,7 +655,7 @@
     "find": "            let payload = daemon\n                .book_mut()?\n                .import_journal_step(outcome, &profile_id)?;",
     "replace": "            let _ = &profile_id;\n            let payload = outcome;",
     "expect_failing": [
-      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_reviewed_rows_import_and_end_the_session"
+      "kassiber/desktop_onboarding:onboarding_document_reviewed_rows_import_and_end_the_session"
     ],
     "rule": "A document import reports its local journal step."
   },
@@ -665,7 +665,7 @@
     "find": "        self.backup_sessions.clear();\n        self.document_sessions.clear();\n        Ok(())",
     "replace": "        self.backup_sessions.clear();\n        Ok(())",
     "expect_failing": [
-      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_grants_previews_and_refusals_match_python"
+      "kassiber/desktop_onboarding:onboarding_document_grants_previews_and_refusals_match_python"
     ],
     "rule": "Locking the book withdraws every document grant."
   },
@@ -675,7 +675,7 @@
     "find": "                    // Document grants are bound to the book they were staged in.\n                    self.document_sessions.clear();",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_profile_switch_withdraws_grants"
+      "kassiber/desktop_onboarding:onboarding_document_profile_switch_withdraws_grants"
     ],
     "rule": "Switching books withdraws every document grant."
   },
@@ -685,7 +685,7 @@
     "find": "    kinds.push(\"ui.wallets.document_import.import\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_document_import.py::RustDocumentImportTest::test_sqlcipher_import_matches_python"
+      "kassiber/desktop_onboarding:onboarding_document_sqlcipher_import_matches_python"
     ],
     "rule": "The daemon advertises the native document import."
   },
@@ -695,7 +695,7 @@
     "find": "    if let Some(response) =\n        daemon.authorize_sensitive(\"wallets.reveal_descriptor\", args, request_id)?\n    {\n        return Ok((Some(response), false));\n    }\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_reveal.py::RustDescriptorRevealTest::test_encrypted_books_require_a_fresh_passphrase"
+      "kassiber/desktop_onboarding:onboarding_reveal_encrypted_books_require_a_fresh_passphrase"
     ],
     "rule": "Every reveal needs fresh local authentication, even on an unlocked book."
   },
@@ -705,7 +705,7 @@
     "find": "            if noun == \"wallet\" {\n                \"reveal_descriptor\"",
     "replace": "            if noun == \"wallet\" {\n                \"reveal_token\"",
     "expect_failing": [
-      "tests/test_rust_wallet_reveal.py::RustDescriptorRevealTest::test_encrypted_books_require_a_fresh_passphrase"
+      "kassiber/desktop_onboarding:onboarding_reveal_encrypted_books_require_a_fresh_passphrase"
     ],
     "rule": "The reveal asks for the descriptor-reveal scope."
   },
@@ -715,7 +715,7 @@
     "find": "[\"descriptor\", \"change_descriptor\", \"sp_descriptor\"]\n        .into_iter()\n        .filter_map(|key| kassiber_envelope::get(config, key))",
     "replace": "[\"descriptor\", \"change_descriptor\"]\n        .into_iter()\n        .filter_map(|key| kassiber_envelope::get(config, key))",
     "expect_failing": [
-      "tests/test_rust_wallet_reveal.py::RustDescriptorRevealTest::test_plaintext_acknowledgement_and_material_match_python"
+      "kassiber/desktop_onboarding:onboarding_reveal_plaintext_acknowledgement_and_material_match_python"
     ],
     "rule": "The reveal includes the silent-payment descriptor."
   },
@@ -725,7 +725,7 @@
     "find": "    kinds.push(\"wallets.reveal_descriptor\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_reveal.py::RustDescriptorRevealTest::test_plaintext_acknowledgement_and_material_match_python"
+      "kassiber/desktop_onboarding:onboarding_reveal_plaintext_acknowledgement_and_material_match_python"
     ],
     "rule": "The daemon advertises the native descriptor reveal."
   }

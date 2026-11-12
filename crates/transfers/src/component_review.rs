@@ -1781,7 +1781,7 @@ fn apply_review(
             if action == "activate" {
                 rows_::activate(c, scope, &a.component_id, sources)?;
             } else {
-                rows_::supersede(c, scope, &a.component_id, &a.reason, sources)?;
+                rows_::supersede(c, scope, &a.component_id, &a.reason, None, sources)?;
             }
             Ok(dict([
                 ("input_version", int(plan.input_version)),

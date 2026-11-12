@@ -1,0 +1,15 @@
+$ --machine journals quarantine clear --transaction a
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Transaction is not quarantined",
+    "hint": "Run `kassiber journals quarantined` to see active entries.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}

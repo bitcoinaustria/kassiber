@@ -1,0 +1,75 @@
+$ --data-root <SANDBOX>/explicit/data daemon
+> {"args":{},"kind":"ui.projects.list","request_id":0}
+< {"kind":"ui.projects.list","schema_version":1,"data":{"selected_project_id":null,"projects":[]},"request_id":0}
+> {"args":{},"kind":"status","request_id":1}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"<SANDBOX>/explicit","data_root":"<SANDBOX>/explicit/data","database":"<SANDBOX>/explicit/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"<SANDBOX>/explicit/config","settings_file":"<SANDBOX>/explicit/config/settings.json","exports_root":"<SANDBOX>/explicit/exports","attachments_root":"<SANDBOX>/explicit/attachments","current_workspace":"","current_profile":"","workspaces":0,"profiles":0,"accounts":0,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"<SANDBOX>/explicit/config/backends.env"},"request_id":1}
+> {"args":{"auth_response":{"passphrase_secret":"abcdefghijk"},"name":"Main","select":false},"kind":"ui.projects.create","request_id":2}
+< {"kind":"error","schema_version":1,"error":{"code":"invalid_passphrase","message":"database passphrase must be at least 12 characters long","hint":"Pick a long passphrase from a password manager.","details":null,"retryable":false,"debug":null},"request_id":2}
+> {"args":{"auth_response":{"passphrase_secret":"abcdefghijkl"},"name":"Main","select":false},"kind":"ui.projects.create","request_id":3}
+< {"kind":"ui.projects.create","schema_version":1,"data":{"project":{"id":"main","name":"Main","path":"<SANDBOX>/xdg-data/kassiber/projects/main","data_root":"<SANDBOX>/xdg-data/kassiber/projects/main/data","database":"<SANDBOX>/xdg-data/kassiber/projects/main/data/kassiber.sqlite3","encrypted":true,"last_opened_at":null},"selected_project_id":null,"unlocked":false},"request_id":3}
+> {"args":{"project_id":"main"},"kind":"ui.projects.select","request_id":4}
+< {"kind":"auth_required","schema_version":1,"data":{"scope":"unlock_project","label":"Enter the SQLCipher passphrase for project 'Main'.","project":{"id":"main","name":"Main","path":"<SANDBOX>/xdg-data/kassiber/projects/main","data_root":"<SANDBOX>/xdg-data/kassiber/projects/main/data","database":"<SANDBOX>/xdg-data/kassiber/projects/main/data/kassiber.sqlite3","encrypted":true,"last_opened_at":null}},"request_id":4}
+> {"args":{"auth_response":{"passphrase_secret":"abcdefghijkl"},"project_id":"main"},"kind":"ui.projects.select","request_id":5}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"main","name":"Main","path":"<SANDBOX>/xdg-data/kassiber/projects/main","data_root":"<SANDBOX>/xdg-data/kassiber/projects/main/data","database":"<SANDBOX>/xdg-data/ka… [1316 bytes fnv128 30cdc1efb59678f18a21fda67defdbaa]
+> {"args":{},"kind":"ui.projects.list","request_id":6}
+< {"kind":"ui.projects.list","schema_version":1,"data":{"selected_project_id":"main","projects":[{"id":"main","name":"Main","path":"<SANDBOX>/xdg-data/kassiber/projects/main","data_root":"<SANDBOX>/xdg-data/kassiber/projects/main/data","database":"<SANDBOX>/xdg-data/kassiber/projects/main/data/kassiber.sqlite3","encrypted":true,"last_opened_at":"2030-01-02T03:04:05Z","selected":true}]},"request_id":6}
+> {"args":{},"kind":"status","request_id":7}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":true,"state_root":"<SANDBOX>/xdg-data/kassiber/projects/main","data_root":"<SANDBOX>/xdg-data/kassiber/projects/main/data","database":"<SANDBOX>/xdg-data/kassiber/projects/main/data/kassiber.sqlite3","project_id":"main","project_name":"Main","project_root":"<SANDBOX>/xdg-data/kassiber/projects/main","config_root":"<SANDBOX>/xdg-data/kassiber/projects/main/config","settings_file":"<SANDBOX>/xdg-data/kassiber/projects/main/config/settings.json","exports_root":"<SANDBOX>/xdg-data/kassiber/projects/main/exports","attachments_root":"<SANDBOX>/xdg-data/kassiber/projects/main/attachments","current_workspace":"","current_profile":"","workspaces":0,"profiles":0,"accounts":0,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"<SANDBOX>/xdg-data/kassiber/projects/main/config/backends.env"},"request_id":7}
+> {"args":{},"kind":"daemon.lock","request_id":8}
+< {"kind":"daemon.lock","schema_version":1,"data":{"locked":true},"request_id":8}
+> {"args":{},"kind":"ui.projects.list","request_id":9}
+< {"kind":"ui.projects.list","schema_version":1,"data":{"selected_project_id":"main","projects":[{"id":"main","name":"Main","path":"<SANDBOX>/xdg-data/kassiber/projects/main","data_root":"<SANDBOX>/xdg-data/kassiber/projects/main/data","database":"<SANDBOX>/xdg-data/kassiber/projects/main/data/kassiber.sqlite3","encrypted":true,"last_opened_at":"2030-01-02T03:04:05Z","selected":true}]},"request_id":9}
+> {"args":{"project_id":"MAIN"},"kind":"ui.projects.select","request_id":10}
+< {"kind":"auth_required","schema_version":1,"data":{"scope":"unlock_project","label":"Enter the SQLCipher passphrase for project 'Main'.","project":{"id":"main","name":"Main","path":"<SANDBOX>/xdg-data/kassiber/projects/main","data_root":"<SANDBOX>/xdg-data/kassiber/projects/main/data","database":"<SANDBOX>/xdg-data/kassiber/projects/main/data/kassiber.sqlite3","encrypted":true,"last_opened_at":"2030-01-02T03:04:05Z"}},"request_id":10}
+> {"args":{"auth_response":{"passphrase_secret":"R5 project synthetic '🔑"},"project_id":"main"},"kind":"ui.projects.select","request_id":11}
+< {"kind":"error","schema_version":1,"error":{"code":"local_auth_denied","message":"passphrase verification failed","hint":null,"details":null,"retryable":true,"debug":null},"request_id":11}
+> {"args":{"auth_response":{"passphrase_secret":"abcdefghijkl"},"project_id":"main"},"kind":"ui.projects.select","request_id":12}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"main","name":"Main","path":"<SANDBOX>/xdg-data/kassiber/projects/main","data_root":"<SANDBOX>/xdg-data/kassiber/projects/main/data","database":"<SANDBOX>/xdg-data/ka… [1317 bytes fnv128 b3aba3dbab26d134f7d31bdcfd83ca46]
+> {"args":{},"kind":"status","request_id":13}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":true,"state_root":"<SANDBOX>/xdg-data/kassiber/projects/main","data_root":"<SANDBOX>/xdg-data/kassiber/projects/main/data","database":"<SANDBOX>/xdg-data/kassiber/projects/main/data/kassiber.sqlite3","project_id":"main","project_name":"Main","project_root":"<SANDBOX>/xdg-data/kassiber/projects/main","config_root":"<SANDBOX>/xdg-data/kassiber/projects/main/config","settings_file":"<SANDBOX>/xdg-data/kassiber/projects/main/config/settings.json","exports_root":"<SANDBOX>/xdg-data/kassiber/projects/main/exports","attachments_root":"<SANDBOX>/xdg-data/kassiber/projects/main/attachments","current_workspace":"","current_profile":"","workspaces":0,"profiles":0,"accounts":0,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"<SANDBOX>/xdg-data/kassiber/projects/main/config/backends.env"},"request_id":13}
+> {"args":{"name":"Main"},"kind":"ui.projects.create","request_id":14}
+< {"kind":"error","schema_version":1,"error":{"code":"project_exists","message":"project 'main' already exists","hint":null,"details":{"project_id":"main","project_root":"<SANDBOX>/xdg-data/kassiber/projects/main"},"retryable":false,"debug":null},"request_id":14}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== catalog
+{
+  "projects": [
+    {
+      "encrypted": true,
+      "id": "main",
+      "last_opened_at": "2030-01-02T03:04:05Z",
+      "name": "Main",
+      "path": "<SANDBOX>/xdg-data/kassiber/projects/main"
+    }
+  ],
+  "schema_version": 1,
+  "selected_project_id": "main"
+}
+=== project main
+chain_index_clock: id=i:1 | revision=i:14
+chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
+chain_index_dirty: source_table=t:"chain_analysis_acquisition_grants" | source_key=i:-1 | revision=i:14
+chain_index_dirty: source_table=t:"chain_analysis_dataset_claims" | source_key=i:-1 | revision=i:12
+chain_index_dirty: source_table=t:"chain_analysis_datasets" | source_key=i:-1 | revision=i:11
+chain_index_dirty: source_table=t:"chain_analysis_labels" | source_key=i:-1 | revision=i:10
+chain_index_dirty: source_table=t:"chain_analysis_observations" | source_key=i:-1 | revision=i:4
+chain_index_dirty: source_table=t:"chain_analysis_reference_assertions" | source_key=i:-1 | revision=i:5
+chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:8
+chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
+chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
+… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]
+=== explicit book
+chain_index_clock: id=i:1 | revision=i:14
+chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
+chain_index_dirty: source_table=t:"chain_analysis_acquisition_grants" | source_key=i:-1 | revision=i:14
+chain_index_dirty: source_table=t:"chain_analysis_dataset_claims" | source_key=i:-1 | revision=i:12
+chain_index_dirty: source_table=t:"chain_analysis_datasets" | source_key=i:-1 | revision=i:11
+chain_index_dirty: source_table=t:"chain_analysis_labels" | source_key=i:-1 | revision=i:10
+chain_index_dirty: source_table=t:"chain_analysis_observations" | source_key=i:-1 | revision=i:4
+chain_index_dirty: source_table=t:"chain_analysis_reference_assertions" | source_key=i:-1 | revision=i:5
+chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:8
+chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
+chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
+… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]

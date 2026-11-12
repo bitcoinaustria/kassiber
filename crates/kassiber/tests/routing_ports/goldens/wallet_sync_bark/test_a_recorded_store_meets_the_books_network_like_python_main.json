@@ -1,0 +1,481 @@
+{
+ "pytest": "tests/test_rust_wallet_sync_bark.py::test_a_recorded_store_meets_the_books_network_like_python[main]",
+ "sessions": [
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Bark"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333576585188,
+    1794333576585188,
+    1794333576597917
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/attachments\",\n    \"config_root\": \"{tmp}/config\",\n    \"data_root\": \"{tmp}/data\",\n    \"database\": \"{tmp}/data/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/config/backends.env\",\n    \"exports_root\": \"{tmp}/exports\",\n    \"settings_file\": \"{tmp}/config/settings.json\",\n    \"state_root\": \"{tmp}\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/data",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/data/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "accounts": {
+        "upsert": [
+         [
+          1,
+          "acct",
+          "w",
+          "p",
+          "treasury",
+          "Treasury",
+          "asset",
+          "BTC",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "backends": {
+        "upsert": [
+         [
+          1,
+          "merchant",
+          "btcpay",
+          null,
+          null,
+          "http://127.0.0.1:46659",
+          null,
+          "synthetic-btcpay-secret",
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ],
+         [
+          2,
+          "chain",
+          "esplora",
+          null,
+          null,
+          "http://127.0.0.1:1",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ]
+        ]
+       },
+       "book_network_bindings": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "env",
+          "main",
+          1,
+          null,
+          "[]",
+          "[]",
+          "x",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          18
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "transactions",
+          -1,
+          1
+         ],
+         [
+          2,
+          "transaction_graph_cache",
+          -1,
+          2
+         ],
+         [
+          3,
+          "wallet_utxos",
+          -1,
+          3
+         ],
+         [
+          4,
+          "chain_analysis_observations",
+          -1,
+          4
+         ],
+         [
+          5,
+          "chain_analysis_reference_assertions",
+          -1,
+          5
+         ],
+         [
+          6,
+          "wallets",
+          -1,
+          17
+         ],
+         [
+          7,
+          "profiles",
+          -1,
+          15
+         ],
+         [
+          8,
+          "journal_custody_decisions",
+          -1,
+          8
+         ],
+         [
+          9,
+          "journal_custody_economic_relations",
+          -1,
+          9
+         ],
+         [
+          10,
+          "chain_analysis_labels",
+          -1,
+          10
+         ],
+         [
+          11,
+          "chain_analysis_datasets",
+          -1,
+          11
+         ],
+         [
+          12,
+          "chain_analysis_dataset_claims",
+          -1,
+          12
+         ],
+         [
+          13,
+          "book_network_bindings",
+          -1,
+          18
+         ],
+         [
+          14,
+          "chain_analysis_acquisition_grants",
+          -1,
+          14
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "w",
+          "Book",
+          "USD",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "2026-01-01T00:00:00Z",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T17:59:34.494Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:34.497Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:34.497Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:34.497Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:34.497Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T17:59:34.497Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T17:59:34.497Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T17:59:34.508Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T17:59:34.512Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T17:59:34Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T17:59:34.513Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T17:59:34.514Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          1,
+          "database_instance_id",
+          "53d62fcc1b16437a96ab70a8f89757b1"
+         ],
+         [
+          2,
+          "context_workspace",
+          "w"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "a",
+          "w",
+          "p",
+          null,
+          "Cold",
+          "custom",
+          "{}",
+          "2026-01-01T00:00:00Z"
+         ],
+         [
+          2,
+          "bark",
+          "w",
+          "p",
+          null,
+          "Bark",
+          "custom",
+          "{\"sync_source\": \"btcpay\", \"backend\": \"merchant\", \"store_id\": \"shop\", \"payment_method_id\": \"BTC-ARK\", \"chain\": \"bitcoin\"}",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "w",
+          "Main",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       }
+      }
+     }
+    },
+    {
+     "mkdir": "{tmp}/exports",
+     "mode": 493
+    }
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Bark"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333576585188,
+    1794333576703359,
+    1794333577589834
+   ],
+   "tape": {"templates":["GET /api/v1/stores/shop/invoices?skip=0&take=100&includePaymentMethods=true HTTP/1.1\r\nHost: 127.0.0.1:46659\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 8844\r\n\r\n","[{\"additionalStatus\": \"None\", \"amount\": \"0.0012\", \"archived\": false, \"availableStatusesForManualMarking\": [], \"checkout\": {\"defaultLanguage\": null, \"defaultPaymentMethod\": null, \"expirationMinutes\": 15, \"lazyPaymentMethods\": null, \"monitoringMinutes\": 1440, \"paymentMethods\": [\"BTC-LN\"], \"paymentTolerance\": 0.0, \"redirectAutomatically\": false, \"redirectURL\": null, \"speedPolicy\": \"MediumSpeed\"}, \"checkoutLink\": \"http://127.0.0.1:28601/i/E5mxtedvENirbwt55k2V1m\", \"createdTime\": 1794157785, \"currency\": \"BTC\", \"expirationTime\": 1794158685, \"id\": \"E5mxtedvENirbwt55k2V1m\", \"metadata\": {\"orderId\": \"ln-only-invoice\"}, \"monitoringExpiration\": 1794245085, \"paidAmount\": \"0.00120\", \"paymentMethods\": [{\"activated\": true, \"additionalData\": {\"invoiceId\": \"\u0001\", \"paymentHash\": \"\u0001\", \"preimage\": \"\u0001\"}, \"amount\": \"0.0012\", \"currency\": \"BTC\", \"destination\": \"lnbcrt1200u1p40ptxesp5uc3rhhwgx3y5x0hnqgffa6vlt082l5l2vhy4lclrp6uay3ws4rvspp58kx6uvccfunr5q80ykdkhucy57afvty90c2vsghqu8t28gyhnknsdqqxqy9gcqcqzgq9qyysgqr60cgadet88tku68fx9ve3km6s7jcqpr6jngpg73dugyga2ee309uut6gcrvg2jctquplym42ra95m85gf06su8jx4gxa789unc7v5cpd9p4qp\", \"due\": \"0\", \"paymentLink\": \"lightning:lnbcrt1200u1p40ptxesp5uc3rhhwgx3y5x0hnqgffa6vlt082l5l2vhy4lclrp6uay3ws4rvspp58kx6uvccfunr5q80ykdkhucy57afvty90c2vsghqu8t28gyhnknsdqqxqy9gcqcqzgq9qyysgqr60cgadet88tku68fx9ve3km6s7jcqpr6jngpg73dugyga2ee309uut6gcrvg2jctquplym42ra95m85gf06su8jx4gxa789unc7v5cpd9p4qp\", \"paymentMethodFee\": \"0\", \"paymentMethodId\": \"BTC-LN\", \"paymentMethodPaid\": \"0.0012\", \"payments\": [{\"destination\": \"lnbcrt1200u1p40ptxesp5uc3rhhwgx3y5x0hnqgffa6vlt082l5l2vhy4lclrp6uay3ws4rvspp58kx6uvccfunr5q80ykdkhucy57afvty90c2vsghqu8t28gyhnknsdqqxqy9gcqcqzgq9qyysgqr60cgadet88tku68fx9ve3km6s7jcqpr6jngpg73dugyga2ee309uut6gcrvg2jctquplym42ra95m85gf06su8jx4gxa789unc7v5cpd9p4qp\", \"fee\": \"0\", \"id\": \"\u0001\", \"receivedDate\": 1794157787, \"status\": \"Settled\", \"value\": \"0.0012\"}], \"rate\": \"1.0\", \"totalPaid\": \"0.0012\"}], \"receipt\": {\"enabled\": true, \"showPayments\": true, \"showQR\": true}, \"status\": \"Settled\", \"storeId\": \"6d7LQXokr1qtUM3JNveDQyMmS3xtCWkzizRLdMgNLo2e\", \"type\": \"Standard\"}, {\"additionalStatus\": \"None\", \"amount\": \"0.0015\", \"archived\": false, \"availableStatusesForManualMarking\": [], \"checkout\": {\"defaultLanguage\": null, \"defaultPaymentMethod\": null, \"expirationMinutes\": 15, \"lazyPaymentMethods\": null, \"monitoringMinutes\": 1440, \"paymentMethods\": [\"BTC-LN\", \"BTC-ARK\"], \"paymentTolerance\": 0.0, \"redirectAutomatically\": false, \"redirectURL\": null, \"speedPolicy\": \"MediumSpeed\"}, \"checkoutLink\": \"http://127.0.0.1:28601/i/4kA2cCQDoB29RhTSKEMMK1\", \"createdTime\": 1794157781, \"currency\": \"BTC\", \"expirationTime\": 1794158681, \"id\": \"4kA2cCQDoB29RhTSKEMMK1\", \"metadata\": {\"orderId\": \"lightning-on-ark-invoice\"}, \"monitoringExpiration\": 1794245081, \"paidAmount\": \"0.00150\", \"paymentMethods\": [{\"activated\": true, \"additionalData\": {\"invoiceId\": \"\u0001\", \"paymentHash\": \"\u0001\", \"preimage\": \"\u0001\"}, \"amount\": \"0.0015\", \"currency\": \"BTC\", \"destination\": \"lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqmmmjvca5dqtmjxwmpa9hdxagyfq6st3944spp5punnf5tu8tkd74qfmrycv4ys8yd8caaxngdwh4660e7d3g9u5k6sdqqxqy9gcqcqzgq9qyysgqupg6l39y4qjpmj0gs3pyc20hxa4th5aug3s9f3ce4rll9v0d8k7xyj9qsknq3nal8z970sj7ux7jf683r7hqrnjdms0f58hkhaq4uccp5gy5hm\", \"due\": \"0\", \"paymentLink\": \"lightning:lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqmmmjvca5dqtmjxwmpa9hdxagyfq6st3944spp5punnf5tu8tkd74qfmrycv4ys8yd8caaxngdwh4660e7d3g9u5k6sdqqxqy9gcqcqzgq9qyysgqupg6l39y4qjpmj0gs3pyc20hxa4th5aug3s9f3ce4rll9v0d8k7xyj9qsknq3nal8z970sj7ux7jf683r7hqrnjdms0f58hkhaq4uccp5gy5hm\", \"paymentMethodFee\": \"0\", \"paymentMethodId\": \"BTC-LN\", \"paymentMethodPaid\": \"0.0015\", \"payments\": [{\"destination\": \"lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqmmmjvca5dqtmjxwmpa9hdxagyfq6st3944spp5punnf5tu8tkd74qfmrycv4ys8yd8caaxngdwh4660e7d3g9u5k6sdqqxqy9gcqcqzgq9qyysgqupg6l39y4qjpmj0gs3pyc20hxa4th5aug3s9f3ce4rll9v0d8k7xyj9qsknq3nal8z970sj7ux7jf683r7hqrnjdms0f58hkhaq4uccp5gy5hm\", \"fee\": \"0\", \"id\": \"\u0001\", \"receivedDate\": 1794157782, \"status\": \"Settled\", \"value\": \"0.0015\"}], \"rate\": \"1.0\", \"totalPaid\": \"0.0015\"}, {\"activated\": true, \"additionalData\": {\"arkAddress\": \"tark1ppms64dpzqqpzxyacpq3u3v43s3dwm3nsej9z26vc8948lwy4qw9n7z86rr9rdq3zqyppq0ugfrs506dqxn9sxdnf2drapz2jm54u60nwm2kukh9yuvlp6gse0u2c7\", \"onchainAddress\": null}, \"amount\": \"0.0015\", \"currency\": \"BTC\", \"destination\": \"tark1ppms64dpzqqpzxyacpq3u3v43s3dwm3nsej9z26vc8948lwy4qw9n7z86rr9rdq3zqyppq0ugfrs506dqxn9sxdnf2drapz2jm54u60nwm2kukh9yuvlp6gse0u2c7\", \"due\": \"0\", \"paymentLink\": \"bitcoin:?amount=0.0&lightning=lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqmmmjvca5dqtmjxwmpa9hdxagyfq6st3944spp5punnf5tu8tkd74qfmrycv4ys8yd8caaxngdwh4660e7d3g9u5k6sdqqxqy9gcqcqzgq9qyysgqupg6l39y4qjpmj0gs3pyc20hxa4th5aug3s9f3ce4rll9v0d8k7xyj9qsknq3nal8z970sj7ux7jf683r7hqrnjdms0f58hkhaq4uccp5gy5hm&ark=tark1ppms64dpzqqpzxyacpq3u3v43s3dwm3nsej9z26vc8948lwy4qw9n7z86rr9rdq3zqyppq0ugfrs506dqxn9sxdnf2drapz2jm54u60nwm2kukh9yuvlp6gse0u2c7\", \"paymentMethodFee\": \"0\", \"paymentMethodId\": \"BTC-ARK\", \"paymentMethodPaid\": \"0\", \"payments\": [], \"rate\": \"1.0\", \"totalPaid\": \"0.0015\"}], \"receipt\": {\"enabled\": true, \"showPayments\": true, \"showQR\": true}, \"status\": \"Settled\", \"storeId\": \"6d7LQXokr1qtUM3JNveDQyMmS3xtCWkzizRLdMgNLo2e\", \"type\": \"Standard\"}, {\"additionalStatus\": \"None\", \"amount\": \"0.002\", \"archived\": false, \"availableStatusesForManualMarking\": [], \"checkout\": {\"defaultLanguage\": null, \"defaultPaymentMethod\": null, \"expirationMinutes\": 15, \"lazyPaymentMethods\": null, \"monitoringMinutes\": 1440, \"paymentMethods\": [\"BTC-LN\", \"BTC-ARK\"], \"paymentTolerance\": 0.0, \"redirectAutomatically\": false, \"redirectURL\": null, \"speedPolicy\": \"MediumSpeed\"}, \"checkoutLink\": \"http://127.0.0.1:28601/i/6zTrmwy5tNVt5gzCBmCXvy\", \"createdTime\": 1794157756, \"currency\": \"BTC\", \"expirationTime\": 1794158656, \"id\": \"6zTrmwy5tNVt5gzCBmCXvy\", \"metadata\": {\"orderId\": \"ark-invoice\"}, \"monitoringExpiration\": 1794245056, \"paidAmount\": \"0.0020\", \"paymentMethods\": [{\"activated\": true, \"additionalData\": {\"invoiceId\": \"\u0001\", \"paymentHash\": \"\u0001\", \"preimage\": null}, \"amount\": \"0.002\", \"currency\": \"BTC\", \"destination\": \"lnbcrt2m1p40pt9asp56sw36qtjye3lq7myf5tpyvnk3xkz07msrxhkdhhl56q5c5dntjdqpp5fzadcvt3fa833u5xhls3unnc05t973u3eka59z2snsjtgkvrv2mqdqqxqy9gcqcqzgq9qyysgqg9td2fm60ag3vsckdvvhts8wq7rkxzj4hw90rr296wd7ql8qw7yz5dw28hhu020ksacl763xf29z4yace5g0gh74a285vp08elh2c2gpz9pch2\", \"due\": \"0\", \"paymentLink\": \"lightning:lnbcrt2m1p40pt9asp56sw36qtjye3lq7myf5tpyvnk3xkz07msrxhkdhhl56q5c5dntjdqpp5fzadcvt3fa833u5xhls3unnc05t973u3eka59z2snsjtgkvrv2mqdqqxqy9gcqcqzgq9qyysgqg9td2fm60ag3vsckdvvhts8wq7rkxzj4hw90rr296wd7ql8qw7yz5dw28hhu020ksacl763xf29z4yace5g0gh74a285vp08elh2c2gpz9pch2\", \"paymentMethodFee\": \"0\", \"paymentMethodId\": \"BTC-LN\", \"paymentMethodPaid\": \"0\", \"payments\": [], \"rate\": \"1.0\", \"totalPaid\": \"0.002\"}, {\"activated\": true, \"additionalData\": {\"arkAddress\": \"tark1ppms64dpzqqpkm0k0vlkvaevuyye9jywgaju2qjarf65ap9qel4u8rave8uvp003zqyp8e2kz379kj5dyrzpgjj03jn2j8msxq79au2jyv6jmnu6gnuykh8qhrur9x\", \"onchainAddress\": null}, \"amount\": \"0.002\", \"currency\": \"BTC\", \"destination\": \"tark1ppms64dpzqqpkm0k0vlkvaevuyye9jywgaju2qjarf65ap9qel4u8rave8uvp003zqyp8e2kz379kj5dyrzpgjj03jn2j8msxq79au2jyv6jmnu6gnuykh8qhrur9x\", \"due\": \"0\", \"paymentLink\": \"bitcoin:?amount=0.0&lightning=lnbcrt2m1p40pt9asp56sw36qtjye3lq7myf5tpyvnk3xkz07msrxhkdhhl56q5c5dntjdqpp5fzadcvt3fa833u5xhls3unnc05t973u3eka59z2snsjtgkvrv2mqdqqxqy9gcqcqzgq9qyysgqg9td2fm60ag3vsckdvvhts8wq7rkxzj4hw90rr296wd7ql8qw7yz5dw28hhu020ksacl763xf29z4yace5g0gh74a285vp08elh2c2gpz9pch2&ark=tark1ppms64dpzqqpkm0k0vlkvaevuyye9jywgaju2qjarf65ap9qel4u8rave8uvp003zqyp8e2kz379kj5dyrzpgjj03j","n2j8msxq79au2jyv6jmnu6gnuykh8qhrur9x\", \"paymentMethodFee\": \"0\", \"paymentMethodId\": \"BTC-ARK\", \"paymentMethodPaid\": \"0.002\", \"payments\": [{\"destination\": \"tark1ppms64dpzqqpkm0k0vlkvaevuyye9jywgaju2qjarf65ap9qel4u8rave8uvp003zqyp8e2kz379kj5dyrzpgjj03jn2j8msxq79au2jyv6jmnu6gnuykh8qhrur9x\", \"fee\": \"0\", \"id\": \"\u0001-0\", \"receivedDate\": 1794157758, \"status\": \"Settled\", \"value\": \"0.002\"}], \"rate\": \"1.0\", \"totalPaid\": \"0.002\"}], \"receipt\": {\"enabled\": true, \"showPayments\": true, \"showQR\": true}, \"status\": \"Settled\", \"storeId\": \"6d7LQXokr1qtUM3JNveDQyMmS3xtCWkzizRLdMgNLo2e\", \"type\": \"Standard\"}]","GET /api/v1/stores/shop/payouts?includeCancelled=false HTTP/1.1\r\nHost: 127.0.0.1:46659\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 1787\r\n\r\n","[{\"date\": 1794157805, \"destination\": \"lnbcrt120u1p40pt8dsp5a3203kzp7qxxyx6w5v2da99aal398kjs2qc6d3z6udn8p5ydq2pspp5r399yltk35agyx983kgqpxf4k4mvp7wp5us8tazkw5vnrzrert3sdqcddshxumfvfjhygrsv9uk7at5xqyjw5qcqp29qxpqysgq9yaur756css7cju0s6c7ym94zm39qdw0pzhdy6d66wwqlcn5punk5yq7nguzhcgrxp723vhht6ef49kurl73pxawwsun65220hrxeycp4rt5ev\", \"id\": \"423X27Nbwrt1Mp99dp23DYk32KvA\", \"metadata\": {}, \"originalAmount\": \"0.00012\", \"originalCurrency\": \"BTC\", \"paymentProof\": {\"Id\": \"\u0001\", \"Link\": null, \"PaymentHash\": \"\u0001\", \"Preimage\": \"\u0001\", \"ProofType\": \"PayoutLightningBlob\"}, \"payoutAmount\": \"0.00012\", \"payoutCurrency\": \"BTC\", \"payoutMethodId\": \"BTC-LN\", \"pullPaymentId\": null, \"revision\": 0, \"state\": \"Completed\"}, {\"date\": 1794157811, \"destination\": \"lnbcrt100u1p40pt8nsp5j5yp7cclalwhxhjfnandgjeszcp8n974luffjgl2fylkgeykwywspp57zau5nypsfz9zyauj6sj89rhha68u5f4h0n8jjtewdeq928fz7dqdqcddshxumfvfjhygrjv4n82mnyxq9z3h5qcqp29qxpqysgqj0t64fhhynqlmu0trm7pqryvpg0d7q8vqpnsruypgkdald990n6598nj48h7nhudh09jr7j57vjuqu83t8wxad0kwfxqsyvksfn6xxqp0fjy0r\", \"id\": \"4Zkfmkr1rdto4XZ437aSgabUy9bv\", \"metadata\": {}, \"originalAmount\": \"0.0001\", \"originalCurrency\": \"BTC\", \"paymentProof\": {\"Id\": \"\u0001\", \"Link\": null, \"PaymentHash\": \"\u0001\", \"Preimage\": \"\u0001\", \"ProofType\": \"PayoutLightningBlob\"}, \"payoutAmount\": \"0.0001\", \"payoutCurrency\": \"BTC\", \"payoutMethodId\": \"BTC-LN\", \"pullPaymentId\": \"4HLTHnDFnm4xWWdVgcq1X32ogJdf\", \"revision\": 0, \"state\": \"Completed\"}]","GET /api/v1/stores/shop/pull-payments?includeArchived=true HTTP/1.1\r\nHost: 127.0.0.1:46659\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 404 Not Found\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 0\r\n\r\n","GET /api/v1/stores/shop/payment-methods/BTC-ARK/wallet/transactions?statusFilter=Confirmed&skip=0&limit=100 HTTP/1.1\r\nHost: 127.0.0.1:46659\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 9808\r\n\r\n[{\"amount\": \"-0.0000013\", \"blockHash\": \"\u0001\", \"blockHeight\": 278, \"comment\": \"\", \"confirmations\": 3, \"fee\": \"0.0000013\", \"id\": \"16-639297549175577978:\u0001\", \"kind\": \"exit-claim\", \"labels\": {}, \"movementId\": 16, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794158253, \"transactionHash\": \"\u0001\"}, {\"amount\": \"-0.00000317\", \"blockHash\": \"\u0001\", \"blockHeight\": 131, \"comment\": \"\", \"confirmations\": 150, \"fee\": \"0.00000317\", \"id\": \"16-639297549175577978:\u0001\", \"kind\": \"exit-fee\", \"labels\": {}, \"movementId\": 16, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794158128, \"transactionHash\": \"\u0001\"}, {\"amount\": \"-0.0000032\", \"blockHash\": \"\u0001\", \"blockHeight\": 125, \"comment\": \"\", \"confirmations\": 156, \"fee\": \"0.0000032\", \"id\": \"16-639297549175577978:\u0001\", \"kind\": \"exit-fee\", \"labels\": {}, \"movementId\": 16, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794158118, \"transactionHash\": \"\u0001\"}, {\"amount\": \"-0.00000155\", \"blockHash\": \"\u0001\", \"blockHeight\": 124, \"comment\": \"\", \"confirmations\": 157, \"fee\": \"0.00000155\", \"id\": \"tx:\u0001\", \"kind\": \"onchain-send\", \"labels\": {}, \"movementId\": null, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794158093, \"transactionHash\": \"\u0001\"}, {\"amount\": \"-0.00020201\", \"blockHash\": \"\u0001\", \"blockHeight\": 123, \"comment\": \"\", \"confirmations\": 158, \"fee\": \"0.00000201\", \"id\": \"tx:\u0001\", \"kind\": \"onchain-send\", \"labels\": {}, \"movementId\": null, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794158058, \"transactionHash\": \"\u0001\"}, {\"amount\": \"-0.00002888\", \"blockHash\": \"\u0001\", \"blockHeight\": 121, \"comment\": \"\", \"confirmations\": 160, \"fee\": \"0.00002888\", \"id\": \"15-639297547978191713\", \"kind\": \"offboard\", \"labels\": {}, \"movementId\": 15, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794157997, \"transactionHash\": \"\u0001\"}, {\"amount\": \"-0.00017155\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0.00002768\", \"id\": \"14-639297547380328057\", \"kind\": \"offboard\", \"labels\": {}, \"movementId\": 14, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794157938, \"transactionHash\": \"\u0001\"}, {\"amount\": \"-0.00032802\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0.00002802\", \"id\": \"13-639297546778985165\", \"kind\": \"send-onchain\", \"labels\": {\"kassiber-send-onchain\": {\"text\": \"kassiber-send-onchain\", \"type\": \"raw\"}}, \"movementId\": 13, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794157877, \"transactionHash\": \"\u0001\"}, {\"amount\": \"-0.00000868\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0.00000868\", \"id\": \"12-639297546169550216\", \"kind\": \"refresh\", \"labels\": {}, \"movementId\": 12, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794157816, \"transactionHash\": \"\u0001\"}, {\"amount\": \"-0.00010115\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0.00000115\", \"id\": \"11-639297546116046927\", \"kind\": \"lightning-send\", \"labels\": {}, \"movementId\": 11, \"outpoint\": null, \"paymentHash\": \"\u0001\", \"status\": \"Confirmed\", \"timestamp\": 1794157811, \"transactionHash\": null}, {\"amount\": \"-0.00012123\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0.00000123\", \"id\": \"10-639297546061286860\", \"kind\": \"lightning-send\", \"labels\": {}, \"movementId\": 10, \"outpoint\": null, \"paymentHash\": \"\u0001\", \"status\": \"Confirmed\", \"timestamp\": 1794157806, \"transactionHash\": null}, {\"amount\": \"-0.00015135\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0.00000135\", \"id\": \"9-639297546032974357\", \"kind\": \"lightning-send\", \"labels\": {}, \"movementId\": 9, \"outpoint\": null, \"paymentHash\": \"\u0001\", \"status\": \"Confirmed\", \"timestamp\": 1794157803, \"transactionHash\": null}, {\"amount\": \"-0.00025175\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0.00000175\", \"id\": \"8-639297545987286899\", \"kind\": \"lightning-send\", \"labels\": {}, \"movementId\": 8, \"outpoint\": null, \"paymentHash\": \"\u0001\", \"status\": \"Confirmed\", \"timestamp\": 1794157798, \"transactionHash\": null}, {\"amount\": \"-0.0004\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0\", \"id\": \"7-639297545974052270\", \"kind\": \"ark-send\", \"labels\": {}, \"movementId\": 7, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794157797, \"transactionHash\": null}, {\"amount\": \"0.0002984\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0.0000016\", \"id\": \"6-639297545913937248\", \"kind\": \"lightning-receive\", \"labels\": {}, \"movementId\": 6, \"outpoint\": null, \"paymentHash\": \"\u0001\", \"status\": \"Confirmed\", \"timestamp\": 1794157791, \"transactionHash\": null}, {\"amount\": \"0.0011966\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0.0000034\", \"id\": \"5-639297545866676689\", \"kind\": \"lightning-receive\", \"labels\": {\"invoice\": {\"ref\": \"E5mxtedvENirbwt55k2V1m\", \"text\": \"invoice\", \"type\": \"invoice\"}}, \"movementId\": 5, \"outpoint\": null, \"paymentHash\": \"\u0001\", \"status\": \"Confirmed\", \"timestamp\": 1794157786, \"transactionHash\": null}, {\"amount\": \"0.001496\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0.000004\", \"id\": \"4-639297545822394922\", \"kind\": \"lightning-receive\", \"labels\": {\"invoice\": {\"ref\": \"4kA2cCQDoB29RhTSKEMMK1\", \"text\": \"invoice\", \"type\": \"invoice\"}}, \"movementId\": 4, \"outpoint\": null, \"paymentHash\": \"\u0001\", \"status\": \"Confirmed\", \"timestamp\": 1794157782, \"transactionHash\": null}, {\"amount\": \"0.0005\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0\", \"id\": \"3-639297545658717401:\u0001:0\", \"kind\": \"ark-receive\", \"labels\": {}, \"movementId\": 3, \"outpoint\": \"\u0001:0\", \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794157765, \"transactionHash\": \"\u0001\"}, {\"amount\": \"0.002\", \"blockHash\": null, \"blockHeight\": null, \"comment\": \"\", \"confirmations\": 1, \"fee\": \"0\", \"id\": \"2-639297545582853037:\u0001:0\", \"kind\": \"ark-receive\", \"labels\": {\"invoice\": {\"r","ef\": \"6zTrmwy5tNVt5gzCBmCXvy\", \"text\": \"invoice\", \"type\": \"invoice\"}}, \"movementId\": 2, \"outpoint\": \"\u0001:0\", \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794157758, \"transactionHash\": \"\u0001\"}, {\"amount\": \"-0.00001313\", \"blockHash\": \"\u0001\", \"blockHeight\": 113, \"comment\": \"\", \"confirmations\": 168, \"fee\": \"0.00001313\", \"id\": \"1-639297545267527447\", \"kind\": \"board\", \"labels\": {}, \"movementId\": 1, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794157726, \"transactionHash\": \"\u0001\"}, {\"amount\": \"0.005\", \"blockHash\": \"\u0001\", \"blockHeight\": 112, \"comment\": \"\", \"confirmations\": 169, \"fee\": null, \"id\": \"tx:\u0001\", \"kind\": \"onchain-receive\", \"labels\": {}, \"movementId\": null, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794157702, \"transactionHash\": \"\u0001\"}, {\"amount\": \"0.02\", \"blockHash\": \"\u0001\", \"blockHeight\": 112, \"comment\": \"\", \"confirmations\": 169, \"fee\": null, \"id\": \"tx:\u0001\", \"kind\": \"onchain-receive\", \"labels\": {}, \"movementId\": null, \"outpoint\": null, \"paymentHash\": null, \"status\": \"Confirmed\", \"timestamp\": 1794157698, \"transactionHash\": \"\u0001\"}]"],"connections":[[1,false,"127.0.0.1",46659,1,null,[["w",229,[0]],["r",[1]],["r",[2,"3d8dae33184f263a00ef259b6bf304a7ba962c857e14c822e0e1d6a3a0979da7","3d8dae33184f263a00ef259b6bf304a7ba962c857e14c822e0e1d6a3a0979da7","f16e4d9020ee0dfc7b6589038d265febd668193ebf8dfa11f2ff6a02631df793","3d8dae33184f263a00ef259b6bf304a7ba962c857e14c822e0e1d6a3a0979da7","0f2734d17c3aecdf5409d8c9865490391a7c77a69a1aebd75a7e7cd8a0bca5b5","0f2734d17c3aecdf5409d8c9865490391a7c77a69a1aebd75a7e7cd8a0bca5b5","80274356aad1e9b789a6b3161f7a0a826fb5911f09dfac561dbd3d41a77d7ce0","0f2734d17c3aecdf5409d8c9865490391a7c77a69a1aebd75a7e7cd8a0bca5b5","48badc31714f4f18f286bfe11e4e787d165f4791cdbb4289509c24b4598362b6","48badc31714f4f18f286bfe11e4e787d165f4791cdbb4289509c24b4598362b6"]],["r",[3,"14ff40b88bc0669889748af67548c03b74c73d42933943e4a99feb98816bc006"]]]],[2,false,"127.0.0.1",46659,1,null,[["w",208,[4]],["r",[5]],["r",[6,"1c4a527d768d3a8218a78d90009935b576c0f9c1a72075f45675193188791ae3","1c4a527d768d3a8218a78d90009935b576c0f9c1a72075f45675193188791ae3","dfcd5d7f3890f3b36a8c1dc99db434b1d459e03ccc78538a7a24f7743a4bd054","f0bbca4c8182445113bc96a1239477bf747e5135bbe6794979737202a8e9179a","f0bbca4c8182445113bc96a1239477bf747e5135bbe6794979737202a8e9179a","c40c24b54e0b888d9e00e590853b7e9015434e0f2c36d4a33b0a8378eb514b83"]]]],[3,false,"127.0.0.1",46659,1,null,[["w",212,[7]],["r",[8]]]],[4,false,"127.0.0.1",46659,1,null,[["w",261,[9]],["r",[10,"749326998ec1da8d0313c1044d65881283aa50697dd70b22bf77375a595580ba","842ac72f2fe110cca52bba7847316e399b8789dc28c89202d635c6bade65184f","842ac72f2fe110cca52bba7847316e399b8789dc28c89202d635c6bade65184f","602e8b0f3184d7572fb497080483a7b2f769a2a492a5183091cf3038183bfac4","d1887807c9793930fdaaa87bce36423dda876bdf25e668a98244d0f77e4c24a0","d1887807c9793930fdaaa87bce36423dda876bdf25e668a98244d0f77e4c24a0","3e50cbb7d957b50178f914eaf1e065c617a57acc31720062ffe841082d4acca3","e5249c5a23ea7c5e16569b740761860e699851c0c64f57938d29a794cc7a3be5","e5249c5a23ea7c5e16569b740761860e699851c0c64f57938d29a794cc7a3be5","16c3b569935dd45238333339bf94db894530626fb596aabf00bcb0e72d499368","cb57fe9f78b8e472534dadcc1da566fc051df0fbe1485de6db1ef3bf3f8928c4","cb57fe9f78b8e472534dadcc1da566fc051df0fbe1485de6db1ef3bf3f8928c4","41d1eb74e8a74daeda7211573566100dc5e9ba62a430855ab0c60b0ae9bd1d4e","2fbca4ba3bd7cde03bd8c2d67fbe1e51fb2b722c282be000896bf1e46f6e0a66","2fbca4ba3bd7cde03bd8c2d67fbe1e51fb2b722c282be000896bf1e46f6e0a66","41c502fccb8e92d697cad81470d027df4edb573e447fea99ed116a26cecc1399","d29987847617d8aed75cf45c3e7ac7cd448c89a2ec3c111402c33b50d3dad542","ddc85d22950856e405bc16e4f3bb652c05489a8c0e7b8f97f6abe39a95fec7a6","241f237262e838f319b057ebd6ae4de9cbf3b2f7f4c2b67ad1a1f684681d5805","d8062048f1cc1b36565836bee7e973fb4d2dfe39ccf047e25febeda0e9bfb5dc","f0bbca4c8182445113bc96a1239477bf747e5135bbe6794979737202a8e9179a","1c4a527d768d3a8218a78d90009935b576c0f9c1a72075f45675193188791ae3","bafef29ee3956bbd7a21365f7495faad55bad1034333cff0961d0112c260ab05","255cd1ee08b907192e98844b8e41b44ef1d36067bfcc5e308e20a73a62b35081","d0a70dae3b051a2b03496c7d7d3e7d49841e61a8e8425d5452fbde458c3d40e7","3d8dae33184f263a00ef259b6bf304a7ba962c857e14c822e0e1d6a3a0979da7","0f2734d17c3aecdf5409d8c9865490391a7c77a69a1aebd75a7e7cd8a0bca5b5","7c8f8c34c593439f98182ddf185ef9a96ee9fee37f2f7e1a1f036bcb421ca981","7c8f8c34c593439f98182ddf185ef9a96ee9fee37f2f7e1a1f036bcb421ca981","7c8f8c34c593439f98182ddf185ef9a96ee9fee37f2f7e1a1f036bcb421ca981","14ff40b88bc0669889748af67548c03b74c73d42933943e4a99feb98816bc006"]],["r",[11,"14ff40b88bc0669889748af67548c03b74c73d42933943e4a99feb98816bc006","14ff40b88bc0669889748af67548c03b74c73d42933943e4a99feb98816bc006","6b2434a021f78cc3938541612b72476c0b185f350624f49ad2c6f458d03420da","3a673688aff0a9d4fa01c11c25909395246cc28793741ec84eb1b9abbbda4c50","47f56717929de5fe7cb3a2419b834de1bfcf3f54f736b4b4635a6ee6b348050e","9036b7ba7e30b7e66a665f799da4f06203e0a1ef216f24015fd55d68db56fb10","9036b7ba7e30b7e66a665f799da4f06203e0a1ef216f24015fd55d68db56fb10","47f56717929de5fe7cb3a2419b834de1bfcf3f54f736b4b4635a6ee6b348050e","616935969231a538ce759d53e87c52f4251b35790672bc47bc4f848b64e15827","616935969231a538ce759d53e87c52f4251b35790672bc47bc4f848b64e15827"]]]]]},
+   "expect": {
+    "exit": 1,
+    "stdout": "{\n  \"kind\": \"error\",\n  \"schema_version\": 1,\n  \"error\": {\n    \"code\": \"book_network_mismatch\",\n    \"message\": \"The Bark wallet of store shop is on a different network than this book\",\n    \"hint\": \"Its payments went to Ark addresses of another network (`ark1` is mainnet, `tark1` a test network). Connect this store in a book bound to that network.\",\n    \"details\": {\n      \"store_id\": \"shop\",\n      \"bark_networks\": [\n        \"test\"\n      ],\n      \"book_environment\": \"main\"\n    },\n    \"retryable\": false,\n    \"debug\": null\n  }\n}\n",
+    "stderr": "",
+    "changes": {}
+   }
+  }
+ ]
+}

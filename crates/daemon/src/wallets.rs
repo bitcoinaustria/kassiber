@@ -200,7 +200,7 @@ pub(crate) fn source_file(args: &Value) -> Result<Option<String>, AppError> {
                 .with_hint("Choose an existing local export file."),
         );
     }
-    path.canonicalize()
+    kassiber_paths::canonicalize(path)
         .map(|p| Some(p.to_string_lossy().into_owned()))
         .map_err(|_| AppError::new("internal_error", "Could not resolve source file"))
 }

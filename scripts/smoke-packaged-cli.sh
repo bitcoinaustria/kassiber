@@ -40,6 +40,8 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$cli" ] && [ -n "$scratch" ] || { usage; exit 2; }
 [ -x "$cli" ] || { echo "Not an executable: $cli" >&2; exit 2; }
+# The packaged binary must not carry test-only code such as the network tape.
+"$(dirname "$0")/check-no-test-tape.sh" "$cli"
 if [ -e "$scratch" ] && [ -n "$(ls -A "$scratch")" ]; then
   echo "Scratch directory is not empty: $scratch" >&2
   exit 2
@@ -47,11 +49,8 @@ fi
 mkdir -p "$scratch"
 scratch="$(cd "$scratch" && pwd -P)"
 
-python="${PYTHON:-}"
-if [ -z "$python" ]; then
-  python="$(command -v python3 || command -v python || true)"
-fi
-[ -n "$python" ] || { echo "python3 is required for JSON assertions" >&2; exit 2; }
+# jq ships on GitHub's Linux, macOS and Windows runners and in macOS 15.
+command -v jq >/dev/null 2>&1 || { echo "jq is required for JSON assertions" >&2; exit 2; }
 
 # The offline switch, agent access and update preferences are machine-wide
 # files under the default state root even with --data-root; XDG_DATA_HOME
@@ -75,8 +74,16 @@ assert_contains() {
     return 1
   fi
 }
+# assert_json_value FILE DOTTED.PATH EXPECTED: the string at PATH equals EXPECTED.
 assert_json_value() {
-  if ! "$python" -c 'import json, sys; from functools import reduce; value = reduce(lambda current, key: current[key], sys.argv[2].split("."), json.load(open(sys.argv[1], encoding="utf-8"))); assert value == sys.argv[3], f"{sys.argv[2]}: expected {sys.argv[3]!r}, got {value!r}"' "$1" "$2" "$3"; then
+  local actual=""
+  actual="$(jq -er --arg path "$2" --arg expected "$3" \
+    'getpath($path | split(".")) as $value
+     | if $value == $expected then "ok" else ($value | tojson) end' "$1")" || actual=""
+  # Windows jq ends lines with CRLF.
+  actual="${actual%$'\r'}"
+  if [ "$actual" != ok ]; then
+    echo "$2: expected \"$3\", got ${actual:-<unreadable JSON>}" >&2
     cat "$1" >&2
     return 1
   fi

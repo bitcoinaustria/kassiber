@@ -5,7 +5,7 @@
     "find": "kind == \"journal_refresh\"",
     "replace": "kind == \"disabled_journal_refresh\"",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_default_refresh_envelopes_events_and_all_tables[empty-ui.freshness.run-esplora]"
+      "test_default_refresh_envelopes_events_and_all_tables"
     ],
     "rule": "Journal jobs execute through the shared native journals service."
   },
@@ -15,7 +15,7 @@
     "find": "(\"skip_rebuild_when_current\", Value::Bool(true))",
     "replace": "(\"skip_rebuild_when_current\", Value::Bool(false))",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_default_refresh_current_after_repeat"
+      "test_default_refresh_current_after_repeat"
     ],
     "rule": "Wallet sync leaves a current journal projection intact when no new pairs were applied."
   },
@@ -25,7 +25,7 @@
     "find": "auto_pair: get(payload, \"auto_pair\").is_some_and(truthy),",
     "replace": "auto_pair: true,",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_journal_job_pairing_and_caller_authority[False-exact]"
+      "test_journal_job_pairing_and_caller_authority"
     ],
     "rule": "Freshness without automatic-pair authority must not author transaction pairs."
   },
@@ -35,29 +35,9 @@
     "find": "auto_pair: request.auto_pair,",
     "replace": "auto_pair: false,",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_journal_job_pairing_and_caller_authority[True-exact]"
+      "test_journal_job_pairing_and_caller_authority"
     ],
     "rule": "An explicit automatic-pair request reaches journal processing."
-  },
-  {
-    "id": "journal-retain-committed-first-build",
-    "file": "crates/kassiber/src/real_store/journals.rs",
-    "find": "&& guard.unchanged(conn)\n                    && hybrid::enabled()",
-    "replace": "&& true\n                    && hybrid::enabled()",
-    "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_journal_refusal_census_and_hybrid_only_replay[after-first-commit-True]"
-    ],
-    "rule": "A journal refusal after the first durable rebuild cannot replay in Python."
-  },
-  {
-    "id": "journal-hybrid-cancellation",
-    "file": "crates/kassiber/src/real_store/journals/hybrid.rs",
-    "find": "let _ = self.0.kill();",
-    "replace": "let _ = self.0.try_wait();",
-    "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_encrypted_journal_job_and_hybrid_key_handoff[cancel]"
-    ],
-    "rule": "Cancellation kills and joins development replay before it can publish journals."
   },
   {
     "id": "journal-execution-slot",
@@ -65,7 +45,7 @@
     "find": ".compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)",
     "replace": ".compare_exchange(false, false, Ordering::AcqRel, Ordering::Acquire)",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_admission_execution_slot_released_after_refusal_and_drop"
+      "test_freshness_admission_execution_slot_released_after_refusal_and_drop"
     ],
     "rule": "One foreground slot excludes a competing refresh while a journal job is running."
   }

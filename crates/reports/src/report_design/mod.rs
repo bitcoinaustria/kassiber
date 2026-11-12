@@ -341,7 +341,8 @@ impl Cell {
         match self {
             Cell::Empty => String::new(),
             Cell::Text(t) | Cell::Date(t) => t.clone(),
-            Cell::Fiat(d) | Cell::Btc(d) | Cell::Percent(d) => plain(d),
+            Cell::Fiat(d) | Cell::Percent(d) => plain(d),
+            Cell::Btc(d) => btc_text(d),
             Cell::Msat(n) => n.to_string(),
             Cell::Count(n) => n.to_string(),
             Cell::Formula { cached, .. } => cached.csv(),
@@ -359,6 +360,16 @@ pub(crate) fn austrian_rules(country: &str) -> bool {
 /// A decimal without exponent or grouping.
 pub fn plain(d: &Decimal) -> String {
     d.to_fixed_string().unwrap_or_else(|_| d.to_canonical())
+}
+
+/// A BTC amount as CSV text: eight decimal places (`0.05000000`), more only
+/// for the sub-satoshi digits an exact amount carries (`0.00000000001` is one
+/// msat); the value is never rounded.
+pub fn btc_text(d: &Decimal) -> String {
+    let text = plain(d);
+    let (whole, fraction) = text.split_once('.').unwrap_or((&text, ""));
+    let fraction = fraction.trim_end_matches('0');
+    format!("{whole}.{fraction:0<8}")
 }
 
 /// The exact decimal behind a Python float (its shortest `repr`).
@@ -965,16 +976,21 @@ fn pdf_data(doc: &Document, stamp: kassiber_pdf::engine::Stamp) -> Value {
 
 /// The PDF and its page count.
 pub fn pdf(doc: &Document) -> Result<(Vec<u8>, usize)> {
+    let rendered = rendered_pdf(doc)?;
+    Ok((rendered.bytes, rendered.pages.len()))
+}
+
+/// The rendered PDF with its page geometry and any text past a page edge.
+pub fn rendered_pdf(doc: &Document) -> Result<kassiber_pdf::engine::Rendered> {
     let stamp = kassiber_pdf::engine::Stamp::parse(&doc.generated_at)
         .ok_or_else(|| AppError::new("internal_error", "invalid report timestamp"))?;
-    let rendered = kassiber_pdf::engine::render(kassiber_pdf::engine::Document {
+    kassiber_pdf::engine::render(kassiber_pdf::engine::Document {
         template: kassiber_pdf::engine::REPORT,
         data: pdf_data(doc, stamp),
         files: Vec::new(),
         created: stamp,
     })
-    .map_err(|e| AppError::new("internal_error", format!("PDF rendering failed: {e}")))?;
-    Ok((rendered.bytes, rendered.pages.len()))
+    .map_err(|e| AppError::new("internal_error", format!("PDF rendering failed: {e}")))
 }
 
 // ------------------------------------------------------------------ XLSX

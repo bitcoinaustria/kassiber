@@ -65,7 +65,7 @@
     "find": "if importing && !interactive {",
     "replace": "if false && importing && !interactive {",
     "expect_failing": [
-      "tests/test_rust_document_cli.py::RustDocumentCliTest::test_document_cli_refuses_before_provider_contact_and_resolves_scope_first"
+      "kassiber/document_cli:document_cli_refuses_before_provider_contact_and_resolves_scope_first"
     ],
     "rule": "Refuse unattended writes before provider discovery and OCR."
   },
@@ -75,7 +75,7 @@
     "find": "importing.then_some(wallet)",
     "replace": "None",
     "expect_failing": [
-      "tests/test_rust_document_cli.py::RustDocumentCliTest::test_document_cli_refuses_before_provider_contact_and_resolves_scope_first"
+      "kassiber/document_cli:document_cli_refuses_before_provider_contact_and_resolves_scope_first"
     ],
     "rule": "Resolve wallet selection before interaction refusal."
   },
@@ -85,7 +85,7 @@
     "find": "pages: value(\"pages\"),",
     "replace": "pages: Value::Null,",
     "expect_failing": [
-      "tests/test_rust_document_cli.py::RustDocumentCliTest::test_document_cli_pdf_options_and_full_book_parity"
+      "kassiber/document_cli:document_cli_pdf_options_and_full_book_parity"
     ],
     "rule": "Pass explicit PDF page selection unchanged to the shared core."
   },
@@ -95,7 +95,7 @@
     "find": "expected_source_sha256: Some(request.source_sha256),",
     "replace": "expected_source_sha256: None,",
     "expect_failing": [
-      "tests/test_rust_document_cli.py::RustDocumentCliTest::test_document_cli_changed_source_and_atomic_database_failure"
+      "kassiber/document_cli:document_cli_changed_source_and_atomic_database_failure"
     ],
     "rule": "Reviewed writes remain bound to the preview source digest."
   },
@@ -105,7 +105,7 @@
     "find": "attach_evidence: true,",
     "replace": "attach_evidence: false,",
     "expect_failing": [
-      "tests/test_rust_document_cli.py::RustDocumentCliTest::test_document_cli_preview_review_reimport_and_zero_fallback"
+      "kassiber/document_cli:document_cli_preview_review_reimport_and_zero_fallback"
     ],
     "rule": "Every inserted or enriched transaction gets managed source evidence."
   },
@@ -115,7 +115,7 @@
     "find": "selected_row_ids: Some(request.selected_row_ids),",
     "replace": "selected_row_ids: None,",
     "expect_failing": [
-      "tests/test_rust_document_cli.py::RustDocumentCliTest::test_document_cli_imports_only_selected_rows"
+      "kassiber/document_cli:document_cli_imports_only_selected_rows"
     ],
     "rule": "Only explicitly reviewed rows reach the write coordinator."
   },
@@ -125,7 +125,7 @@
     "find": "    \"wallets.preview-document\",\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_document_cli.py::RustDocumentCliTest::test_document_cli_preview_review_reimport_and_zero_fallback"
+      "kassiber/document_cli:document_cli_preview_review_reimport_and_zero_fallback"
     ],
     "rule": "The hybrid must serve the accepted document command in Rust."
   },
@@ -135,7 +135,7 @@
     "find": "    \"wallets.import-document\",\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_document_cli.py::RustDocumentCliTest::test_document_cli_preview_review_reimport_and_zero_fallback"
+      "kassiber/document_cli:document_cli_preview_review_reimport_and_zero_fallback"
     ],
     "rule": "The hybrid must serve the accepted document command in Rust."
   },
@@ -145,7 +145,7 @@
     "find": "action.sa_sigaction = interrupt as *const () as usize;",
     "replace": "action.sa_sigaction = libc::SIG_DFL;",
     "expect_failing": [
-      "tests/test_rust_document_cli.py::RustDocumentCliTest::test_document_cli_sigint_cancels_without_writes"
+      "kassiber/document_cli:document_cli_sigint_cancels_without_writes"
     ],
     "rule": "A native SIGINT at the review prompt produces the Python cancellation output."
   }

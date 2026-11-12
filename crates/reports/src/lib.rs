@@ -318,7 +318,10 @@ pub fn execute_with_sources(
         }
         match command {
             "reports.balance-history" | "ui.reports.balance_history" => {
-                let rows = history::report(conn, &profile, args)?;
+                let pinned = sources
+                    .pinned_now()
+                    .and_then(|s| kassiber_rates::time::parse(&s));
+                let rows = history::report_at(conn, &profile, args, pinned)?;
                 if command == "ui.reports.balance_history" {
                     Ok(desktop::history(rows, args))
                 } else {

@@ -1,0 +1,50 @@
+# tax_country="unsupported"
+$ --machine journals transfers list
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "Unsupported tax country 'unsupported'",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+# tax_country="AT"
+$ --machine journals transfers list
+exit 0
+--- stdout
+{
+  "kind": "journals.transfers.list",
+  "schema_version": 1,
+  "data": {
+    "profile": "P",
+    "processing": {
+      "last_processed_at": "2026-10-31T12:00:00Z",
+      "last_processed_tx_count": 5,
+      "journal_input_version": 0,
+      "last_processed_input_version": 0,
+      "current_active_tx_count": 11,
+      "processed_journals_current": false
+… [4339 bytes, 146 lines fnv128 094a6ba8fea16caa42ce7eba7689f189]
+# tax_country=""
+$ --machine journals transfers list
+exit 0
+--- stdout
+{
+  "kind": "journals.transfers.list",
+  "schema_version": 1,
+  "data": {
+    "profile": "P",
+    "processing": {
+      "last_processed_at": "2026-10-31T12:00:00Z",
+      "last_processed_tx_count": 5,
+      "journal_input_version": 0,
+      "last_processed_input_version": 0,
+      "current_active_tx_count": 11,
+      "processed_journals_current": false
+… [4339 bytes, 146 lines fnv128 094a6ba8fea16caa42ce7eba7689f189]

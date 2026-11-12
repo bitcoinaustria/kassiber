@@ -1,10 +1,7 @@
 """Replay a recorded Bitcoin Core tape through the real CLI over loopback.
 
-`tests/test_regtest_harness.py` replays the same tapes by patching
-`bitcoinrpc_call` inside the interpreter, which only a Python runtime can
-take. Here a loopback JSON-RPC server answers from the tape instead, so any
-runtime `tests/cli_runner.py` can start (`KASSIBER_TEST_CLI`) builds the book
-through its own transport. The server is strict: a request the tape lacks is
+A loopback JSON-RPC server answers from the tape, so the Rust binary
+`tests/integration/cli.py` starts builds the book through its own transport. The server is strict: a request the tape lacks is
 answered with a Core error and recorded as a miss.
 
 Two transforms keep the tape usable through the CLI, which generates wallet
@@ -152,7 +149,7 @@ def serve(tape_name: str) -> Iterator[TapeRpcServer]:
 
 def setup_steps(server: TapeRpcServer, addresses: list[str]) -> list[tuple[str, ...] | tuple]:
     """CLI argv for an empty book with one Core-backed address wallet."""
-    from tests.cli_runner import InputFd
+    from tests.integration.cli import InputFd
 
     address_args: list[str] = []
     for address in addresses:
@@ -172,7 +169,7 @@ def setup_steps(server: TapeRpcServer, addresses: list[str]) -> list[tuple[str, 
 
 
 def core_wallet_name(wallet_id: str) -> str:
-    from kassiber.core.sync_backends import sanitize_wallet_segment
+    from tests.integration.book import sanitize_wallet_segment
 
     return f"kassiber-{sanitize_wallet_segment(wallet_id)}"
 

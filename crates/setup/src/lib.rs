@@ -164,6 +164,12 @@ fn integrity(error: &rusqlite::Error) -> bool {
 pub trait Sources {
     fn uuid(&self, conn: &Connection) -> Result<String>;
     fn now(&self, conn: &Connection) -> Result<String>;
+    /// A pinned current time (`YYYY-MM-DDTHH:MM:SSZ`) for reads that run up
+    /// to "now", such as a balance history without an end. Only test sources
+    /// pin one; the product reads the wall clock at full precision.
+    fn pinned_now(&self) -> Option<String> {
+        None
+    }
 }
 pub struct SystemSources;
 impl Sources for SystemSources {

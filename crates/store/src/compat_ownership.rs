@@ -1,15 +1,15 @@
 //! Retired ownership policies are private history, never current authority.
 use super::{backfills, data, python_json as py, repairs::statement};
-use crate::{map_sqlite_error, Error, ErrorKind, Result};
+use crate::{map_sqlite_error, stored_values::Shape, Error, Result};
 use kassiber_pyjson::{Key, Value};
 use rusqlite::{params, Connection};
 use std::collections::BTreeSet;
 
 pub(super) fn unsupported() -> Error {
-    Error::new(
-        ErrorKind::UnsupportedSchemaLayout,
-        "stored migration input requires unsupported Python semantics",
-    )
+    crate::stored_values::refusal(Shape::Other)
+}
+pub(super) fn surrogate() -> Error {
+    crate::stored_values::refusal(Shape::LoneSurrogate)
 }
 pub(super) fn json(raw: Option<&str>) -> Result<Value> {
     match py::loads(raw.filter(|v| !v.is_empty()).unwrap_or("{}")) {
@@ -23,7 +23,7 @@ pub(super) fn json(raw: Option<&str>) -> Result<Value> {
 pub(super) fn text(value: Option<&Value>) -> Result<String> {
     Ok(match value.filter(|v| backfills::truthy(v)) {
         None => String::new(),
-        Some(Value::Str(v)) => v.as_str().ok_or_else(unsupported)?.into(),
+        Some(Value::Str(v)) => v.as_str().ok_or_else(surrogate)?.into(),
         Some(Value::Bool(true)) => "True".into(),
         Some(Value::Int(v)) => v.to_string(),
         Some(Value::Float(v)) => kassiber_pyjson::float_repr(*v),

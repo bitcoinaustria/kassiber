@@ -3,14 +3,15 @@
 **Status:** implemented in the Rust backend as a **preview** country
 (2026-11-07). No Irish tax professional has reviewed it; every Irish report
 and screen carries the preview notice until one does. Sources were read on
-2026-11-07. Python stays `generic`/`at` only and refuses Irish books
-(`tests/test_python_rust_only_countries.py`). Nothing here is tax advice.
+2026-11-07. Nothing here is tax advice.
 
 Test vectors: [tax-country-ie-vectors.json](tax-country-ie-vectors.json)
 (18 cases, same format as the
 [Spanish vectors](tax-country-es.md#test-vectors)).
-[`scripts/tax-country-vectors.py`](../../scripts/tax-country-vectors.py)
-recomputes them and runs RP2's IE plugin on the same inputs.
+A Python script (`scripts/tax-country-vectors.py`) computed them and ran
+RP2's IE plugin on the same inputs; it was removed with Python
+([plan 22](../plan/22-python-removal.md), D6), so the file is now a frozen,
+reviewed golden.
 
 ## Summary
 
@@ -396,9 +397,11 @@ Every vector passes through the engine (`ledger` operation under the
 registry's rules) and the layer: `crates/reports/tests/tax_country_vectors.rs`
 with `country_vectors/gb_ie.rs`, which also checks RP2's computed rows lot
 by lot and allows only the four recorded differences (ie-05, ie-06, ie-14,
-ie-17). `tests/test_rust_gb_ie_tax_countries.py` builds a book with the CLI,
-processes its journal and checks the CG1 lines, payments and rates in the
-CSV, XLSX and PDF exports (two PDFs of one book are byte-identical).
+ie-17). The Python black-box test `tests/test_rust_gb_ie_tax_countries.py`
+built a book with the CLI, processed its journal and checked the CG1 lines,
+payments and rates in the CSV, XLSX and PDF exports (two PDFs of one book are
+byte-identical); it went with Python ([plan 22](../plan/22-python-removal.md))
+and has no Rust port yet.
 
 ### Using it
 

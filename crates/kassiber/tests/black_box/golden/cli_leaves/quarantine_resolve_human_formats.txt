@@ -1,0 +1,23 @@
+$ --format table journals quarantine resolve exclude --transaction t
+exit 0
+--- stdout
+field             value                                                 
+----------------  ------------------------------------------------------
+transaction_id    t                                                     
+resolution        exclude                                               
+excluded          True                                                  
+history_event_id  <uuid#1>                  
+note              Run `kassiber journals process` to regenerate entries.
+$ --format plain journals quarantine resolve exclude --transaction t
+exit 0
+--- stdout
+transaction_id: t
+resolution: exclude
+excluded: True
+history_event_id: <uuid#2>
+note: Run `kassiber journals process` to regenerate entries.
+$ --format csv journals quarantine resolve exclude --transaction t
+exit 0
+--- stdout
+transaction_id,resolution,excluded,history_event_id,note
+t,exclude,True,<uuid#3>,Run `kassiber journals process` to regenerate entries.

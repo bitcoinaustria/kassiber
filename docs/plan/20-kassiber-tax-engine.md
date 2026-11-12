@@ -9,7 +9,12 @@ mirror is deleted, and the core keeps the schema-1 operations as the lot
 engine's fixture API. Still open from earlier phases: the authoritative
 fixtures (Verification 3, part of phase 2's exit), which need reviewed sources
 from the owner, and the provenance invariant. Phases 5-6 remain; tasks move to
-[TODO.md](../../TODO.md) as each phase starts.
+[TODO.md](../../TODO.md) as each phase starts. Since [plan 22](22-python-removal.md)
+the Rust backend calls the engine directly: the PyO3 binding
+(`tax-engine/python`), the Python adapter and `tests/tax_oracle/` are removed,
+and the RP2 and oracle results remain as frozen fixtures that
+`tax-engine/core/tests` check. The binding and Python mentions below are
+history.
 **Current source of truth:** [tax engine](../reference/tax-engine.md),
 [tax](../reference/tax.md), [Austrian handoff](../austrian-handoff.md),
 [plan 06](06-austrian-tax-engine.md),

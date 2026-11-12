@@ -1,0 +1,56 @@
+$ daemon
+> {"args":{"transaction":" h "},"kind":"ui.reports.export_audit_package","request_id":"0"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607/manifest.json","format":"directory","scope":"audit_package","filename":"kassiber-audit-package-20260304-050607","transaction_count":1,"ready_count":0,"blocked_count":1,"evidence_file_count":3,"url_reference_count":0,"warnings":[{"code":"attachment_hash_mismatch","severity":"blocker","message":"Attachment at-file hash does not match the copied file."},{"code":"attachment_file_missing","severity":"blocker","message":"Attachment at-missing points to a missing managed file."},{"code":"edit_history_excluded","severity":"info","message":"Transaction edit history exists but was excluded by export options."},{"code":"sensitive_material_excluded","severity":"info","message":"Descriptors, xpubs, backend URLs, credentials, wallet files, logs, AI settings, unrelated books, and raw technical wallet evidence were excluded; authored evidence is represented by hashes only."}]},"request_id":"0"}
+> {"args":{"transactions":["i","h","h"]},"kind":"ui.reports.export_audit_package","request_id":"1"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-2","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-2/manifest.json",… [1825 bytes fnv128 389ad21f4e4d263aee29686db6bd32ce]
+> {"args":{"transactions":["k"]},"kind":"ui.reports.export_audit_package","request_id":"2"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-3","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-3/manifest.json",… [2730 bytes fnv128 f302cff9c0f3865ff538c7bd150c85eb]
+> {"args":{"source_funds_case":"case"},"kind":"ui.reports.export_audit_package","request_id":"3"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-4","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-4/manifest.json",… [3420 bytes fnv128 ebb1e88472d85bf6f803eb212c25e8ee]
+> {"args":{"include_edit_history":true,"source_funds_case":" case "},"kind":"ui.reports.export_audit_package","request_id":"4"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-5","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-5/manifest.json",… [3289 bytes fnv128 504d32147e100e0b038cafb6f57a7ad8]
+> {"args":"x","kind":"ui.reports.export_audit_package","request_id":"5"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"5"}
+> {"args":[],"kind":"ui.reports.export_audit_package","request_id":"6"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":"6"}
+> {"args":{"transaction":3},"kind":"ui.reports.export_audit_package","request_id":"7"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"transaction must be a string","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"7"}
+> {"args":{"transaction":"h","transactions":["i"]},"kind":"ui.reports.export_audit_package","request_id":"8"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Use either transaction or transactions, not both","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"8"}
+> {"args":{"transactions":[]},"kind":"ui.reports.export_audit_package","request_id":"9"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"transactions must be a non-empty array of non-empty strings","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"9"}
+> {"args":{"include_url_references":"no"},"kind":"ui.reports.export_audit_package","request_id":"10"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"include_url_references must be a boolean","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"10"}
+> {"args":{"transaction":"absent"},"kind":"ui.reports.export_audit_package","request_id":"11"}
+< {"kind":"error","schema_version":1,"error":{"code":"app_error","message":"Transaction 'absent' not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"11"}
+> {"args":{"source_funds_case":"tampered"},"kind":"ui.reports.export_audit_package","request_id":"12"}
+< {"kind":"error","schema_version":1,"error":{"code":"snapshot_integrity_error","message":"Source-funds case snapshot hash does not match stored payload","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"12"}
+> {"args":{"transaction":"i"},"kind":"ui.reports.export_audit_package","request_id":"13"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-8","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-8/manifest.json",… [1577 bytes fnv128 5e92ecc836ab937ab3f6bd46de320f64]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== exports
+reports/ mode=755
+reports/kassiber-audit-package-20260304-050607/ mode=755
+reports/kassiber-audit-package-20260304-050607/evidence/ mode=755
+reports/kassiber-audit-package-20260304-050607/evidence/at-good-ae8379fc51f3-minutes_2024.pdf mode=640 mtime_ns=1600000001987654321 text:
+%PDF
+<no newline>
+reports/kassiber-audit-package-20260304-050607/evidence/at-src-559bdcd0cb8c-stmt.pdf mode=644 mtime_ns=1500000000000000007 text:
+%PDF
+<no newline>
+reports/kassiber-audit-package-20260304-050607/evidence/at_odd_ü-f08d85adc8ab-evidence.bin mode=640 mtime_ns=1600000001987654321 text:
+%PDF
+<no newline>
+… [184898 bytes, 5794 lines fnv128 ce55c0487c54dd4b81469ffb53d7d79c]
+$ daemon
+> {"args":{},"kind":"ui.reports.export_audit_package","request_id":"0"}
+< {"kind":"error","schema_version":1,"error":{"code":"app_error","message":"No workspace selected. Create one or run `kassiber context set --workspace ...`.","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"0"}
+> {"args":{"transaction":"h"},"kind":"ui.reports.export_audit_package","request_id":"1"}
+< {"kind":"error","schema_version":1,"error":{"code":"app_error","message":"No workspace selected. Create one or run `kassiber context set --workspace ...`.","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"1"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== exports
+reports/ mode=755
+reports/kassiber-audit-package-20260304-050607/ mode=755
+reports/kassiber-audit-package-20260304-050607-2/ mode=755

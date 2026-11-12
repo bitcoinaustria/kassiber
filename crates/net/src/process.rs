@@ -215,7 +215,7 @@ mod tests {
     fn fake(body: &str) -> (tempfile::TempDir, PathBuf) {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("fake-lightning-cli");
-        std::fs::write(&path, format!("#!/usr/bin/python3\n{body}\n")).unwrap();
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
         (root, path)
     }
@@ -241,15 +241,29 @@ mod tests {
         deadline: Instant,
         limit: usize,
     ) -> Result<Vec<u8>, ClnProcessError> {
-        let consent = Consent::explicit_trigger(&request);
-        gate.authorize(request, Some(consent))
-            .unwrap()
-            .cln(ClnMethod::GetInfo, deadline, limit)
+        // A script written a moment ago can be "text file busy" (ETXTBSY)
+        // while another test thread's fork still holds its write descriptor;
+        // that spawn fails as Io. Retry it briefly; any other outcome stands.
+        for _ in 0..20 {
+            let consent = Consent::explicit_trigger(&request);
+            let result = gate.authorize(request.clone(), Some(consent)).unwrap().cln(
+                ClnMethod::GetInfo,
+                deadline,
+                limit,
+            );
+            if !matches!(result, Err(ClnProcessError::Io)) {
+                return result;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        Err(ClnProcessError::Io)
     }
 
     #[test]
     fn cln_process_pins_read_only_argv_and_redacted_ram_metadata() {
-        let (_root, program) = fake("import json,sys; print(json.dumps(sys.argv[1:]))");
+        let (_root, program) = fake(
+            r#"printf '['; sep=; for a in "$@"; do printf '%s"%s"' "$sep" "$a"; sep=', '; done; echo ']'"#,
+        );
         let gate = gate(program.clone());
         let request = Request::cln(config(program), [7; 32]);
         let bytes = run(&gate, request.clone(), deadline(), 4096).unwrap();
@@ -310,9 +324,9 @@ mod tests {
     #[test]
     fn cln_process_timeout_revocation_offline_exit_and_output_limit_reap_child() {
         for (body, expected) in [
-            ("import time; time.sleep(10)", "timeout"),
-            ("import sys; sys.exit(9)", "failed"),
-            ("import sys; sys.stdout.write('x'*100000)", "limit"),
+            ("exec sleep 10", "timeout"),
+            ("exit 9", "failed"),
+            ("head -c 100000 /dev/zero | tr '\\0' x", "limit"),
         ] {
             let (_root, program) = fake(body);
             let gate = gate(program.clone());
@@ -337,7 +351,7 @@ mod tests {
             assert!(start.elapsed() < budget + Duration::from_secs(2));
         }
         for revoke in [true, false] {
-            let (_root, program) = fake("import time; time.sleep(10)");
+            let (_root, program) = fake("exec sleep 10");
             let state = Arc::new(AtomicU8::new(0));
             let observed = state.clone();
             let mut gate = Gate::new(
@@ -378,7 +392,7 @@ mod tests {
 
     #[test]
     fn cln_process_test_observer_blocks_unapproved_children_before_spawn() {
-        let (_root, program) = fake("raise SystemExit('guard did not stop child')");
+        let (_root, program) = fake("echo 'guard did not stop child' >&2; exit 1");
         for strict in [false, true] {
             let mut gate = gate(program.clone());
             if strict {

@@ -8,6 +8,12 @@ disposable books under `target/macval/` with
 `/Applications` app or existing Keychain item was read or changed. Nothing
 was notarized, uploaded, pushed or installed.
 
+This is the record of a run made while the Python backend still existed. Its
+Python comparisons, `uv` setup and `tests/*.py` names refer to code removed
+under [plan 22](../plan/22-python-removal.md); it is reachable at the
+`archive/python-backend` tag. The Rust findings and the open owner items
+below still apply.
+
 ## Machine and toolchain
 
 ```text
@@ -185,7 +191,7 @@ Each step (`$APP/Contents/MacOS/kassiber-ui --cli --machine --data-root <book> â
 
 To finish the hardware run, add the Developer ID provisioning profile:
 1. Copy it to `Contents/embedded.provisionprofile`.
-2. Re-sign the app with the `scripts/macos_release.py` entitlements
+2. Re-sign the app with the release tool's entitlements (`kassiber-release macos`)
    (`com.apple.application-identifier`, `com.apple.developer.team-identifier`,
    `keychain-access-groups`).
 3. Run steps 2, 3 and 7 again. Expect `{"configured": true, "auth":
@@ -204,8 +210,9 @@ therefore reaches the user as `kassiber native auth: [redacted]`.
 - **Notarization and a timestamped signature** were deliberately not done.
   `spctl` rejects the local signed copy.
 - **Keychain prompts after the switch:** keep the sidecar identifier and team
-  so items written by the Python sidecar stay readable without a dialog.
-  Check once with a real signed Python build before release.
+  so items written by the earlier (Python) sidecar of a signed release stay
+  readable without a dialog. Check once against items a real signed earlier
+  release wrote before release.
 - **Decisions:**
   - SQLite `fullfsync` on macOS (A8).
   - The `auth:` redaction that hides helper errors (B).

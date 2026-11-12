@@ -4,7 +4,9 @@
     "file": "crates/daemon/src/freshness.rs",
     "find": ".remove(id)\n                .is_some_and(|v| v > Instant::now())",
     "replace": ".remove(id)\n                .is_some_and(|_| false)",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_preconsent_and_early_request_fences[early-cancel]"],
+    "expect_failing": [
+      "test_live_freshness_preconsent_and_early_request_fences"
+    ],
     "rule": "An early request cancellation must prevent queue writes and transport."
   },
   {
@@ -12,7 +14,9 @@
     "file": "crates/daemon/src/freshness.rs",
     "find": "} else {\n                active.cancel.cancel();\n            }",
     "replace": "} else {\n                let _ = &active.cancel;\n            }",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_controls_remain_available_during_fetch[cancel-esplora]"],
+    "expect_failing": [
+      "test_live_freshness_controls_remain_available_during_fetch"
+    ],
     "rule": "The live request loop must deliver cancellation while backend work is blocked."
   },
   {
@@ -20,7 +24,9 @@
     "file": "crates/daemon/src/freshness.rs",
     "find": "if revoke {\n                if let Some(consent) = &active.consent {\n                    consent.revoke();",
     "replace": "if revoke {\n                if let Some(consent) = &active.consent {\n                    let _ = consent;",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_controls_remain_available_during_fetch[revoke-esplora]"],
+    "expect_failing": [
+      "test_live_freshness_controls_remain_available_during_fetch"
+    ],
     "rule": "Revoking the active request must end its exact-action transport authority."
   },
   {
@@ -28,7 +34,9 @@
     "file": "crates/daemon/src/freshness.rs",
     "find": "self.active.as_ref().filter(|v| v.id == target)",
     "replace": "self.active.as_ref().filter(|_| true)",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_refuses_replay_and_foreign_request_cancellation"],
+    "expect_failing": [
+      "test_live_freshness_refuses_replay_and_foreign_request_cancellation"
+    ],
     "rule": "A cancellation for a different request must not revoke the running request."
   },
   {
@@ -36,7 +44,9 @@
     "file": "crates/daemon/src/freshness.rs",
     "find": "if self.freshness_requests.used.contains(id) {",
     "replace": "if false && self.freshness_requests.used.contains(id) {",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_refuses_replay_and_foreign_request_cancellation"],
+    "expect_failing": [
+      "test_live_freshness_refuses_replay_and_foreign_request_cancellation"
+    ],
     "rule": "A used request identity cannot create a fresh consent grant or repeat traffic."
   },
   {
@@ -44,7 +54,9 @@
     "file": "crates/daemon/src/freshness.rs",
     "find": "if stop {\n            if let Some(active) = &self.active {",
     "replace": "if false && stop {\n            if let Some(active) = &self.active {",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_eof_joins_the_request_before_exit[esplora]"],
+    "expect_failing": [
+      "test_live_freshness_eof_joins_the_request_before_exit"
+    ],
     "rule": "Quiescence must cancel and revoke the request before waiting for its connection to close."
   },
   {
@@ -52,7 +64,9 @@
     "file": "crates/daemon/src/freshness.rs",
     "find": "                | \"ui.profiles.switch\"\n                | \"ui.backup.apply\"",
     "replace": "                | \"test.absent.switch\"\n                | \"ui.backup.apply\"",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_quiesces_before_lifecycle_acknowledgement[ui.profiles.switch-args2-esplora]"],
+    "expect_failing": [
+      "test_live_freshness_quiesces_before_lifecycle_acknowledgement"
+    ],
     "rule": "A book switch must quiesce the refresh before acknowledging a changed context."
   },
   {
@@ -60,7 +74,9 @@
     "file": "crates/daemon/src/freshness.rs",
     "find": "| \"ui.network.offline.set\"",
     "replace": "| \"test.absent.offline.set\"",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_controls_remain_available_during_fetch[offline-esplora]"],
+    "expect_failing": [
+      "test_live_freshness_controls_remain_available_during_fetch"
+    ],
     "rule": "The offline switch must remain available while a native request executes."
   },
   {
@@ -68,7 +84,9 @@
     "file": "crates/wallets/src/freshness.rs",
     "find": "\"cancel\" => queue.cancel(value)?,",
     "replace": "\"cancel\" => queue.job(value)?,",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_controls_remain_available_during_fetch[source-cancel-esplora]"],
+    "expect_failing": [
+      "test_live_freshness_controls_remain_available_during_fetch"
+    ],
     "rule": "A source cancellation must persist its fence before the next fetch batch."
   },
   {
@@ -76,7 +94,9 @@
     "file": "crates/wallets/src/freshness.rs",
     "find": "queue.pause(&profile_id, value, action == \"pause\")?",
     "replace": "queue.pause(&profile_id, value, false)?",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_controls_remain_available_during_fetch[pause-esplora]"],
+    "expect_failing": [
+      "test_live_freshness_controls_remain_available_during_fetch"
+    ],
     "rule": "A concurrent source pause must prevent later selected-job dispatch."
   },
   {
@@ -84,7 +104,9 @@
     "file": "crates/wallets/src/freshness.rs",
     "find": "Ok(ui::payload(&status))",
     "replace": "Ok(status)",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_reference_source_control_checkpoint_repro_and_native_parity[wallet-pause]"],
+    "expect_failing": [
+      "test_reference_source_control_checkpoint_repro_and_native_parity"
+    ],
     "rule": "Source-control results must not disclose persisted private checkpoints to the UI."
   },
   {
@@ -92,7 +114,9 @@
     "file": "crates/daemon/src/freshness.rs",
     "find": ".write_for_handoff(&response)\n                .map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\"))?",
     "replace": ".write_for_handoff(&response)\n                .map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\")).unwrap_or(None)",
-    "expect_failing": ["tests/test_rust_freshness_lifecycle.py::test_live_freshness_closed_output_stops_and_joins_the_request[esplora]"],
+    "expect_failing": [
+      "test_live_freshness_closed_output_stops_and_joins_the_request"
+    ],
     "rule": "Failure to write the terminal response must stop the daemon after joining the request."
   },
   {
@@ -101,7 +125,7 @@
     "find": "grants.push(grant);",
     "replace": "drop(grant);",
     "expect_failing": [
-      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_private_graph_handoff_and_discard[cancel-esplora]"
+      "test_live_freshness_private_graph_handoff_and_discard"
     ],
     "rule": "A successful exact-action native job must privately hand off its graph grant."
   },
@@ -111,7 +135,7 @@
     "find": "graph_grants = consent.take_graph_grants();",
     "replace": "graph_grants = { let _ = consent; vec![] };",
     "expect_failing": [
-      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_private_graph_handoff_and_discard[cancel-esplora]"
+      "test_live_freshness_private_graph_handoff_and_discard"
     ],
     "rule": "Finished must carry private grants separately from the public terminal response."
   },
@@ -121,7 +145,7 @@
     "find": "if !stop {\n            if let Some(written) = written {",
     "replace": "if false && !stop {\n            if let Some(written) = written {",
     "expect_failing": [
-      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_private_graph_handoff_and_discard[cancel-esplora]"
+      "test_live_freshness_private_graph_handoff_and_discard"
     ],
     "rule": "A flushed successful response publishes the private grants into the bounded mailbox."
   },
@@ -131,7 +155,7 @@
     "find": "if self.published.revoke_request(target) {",
     "replace": "if false && self.published.revoke_request(target) {",
     "expect_failing": [
-      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_private_graph_handoff_and_discard[revoke-esplora]"
+      "test_live_freshness_private_graph_handoff_and_discard"
     ],
     "rule": "Request revocation remains available after the terminal response and discards pending grants."
   },
@@ -141,7 +165,7 @@
     "find": "self.freshness_requests.graph_enabled = false;\n            self.freshness_requests.published.clear();",
     "replace": "self.freshness_requests.graph_enabled = false;\n            let _ = &self.freshness_requests.published;",
     "expect_failing": [
-      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_encrypted_graph_handoff_drops_on_lock[esplora]"
+      "test_live_freshness_encrypted_graph_handoff_drops_on_lock"
     ],
     "rule": "Locking an encrypted book removes pending graph authority before acknowledging lock."
   },
@@ -151,7 +175,7 @@
     "find": "self.entries.retain(|old| !old.grant.same_wallet(&grant));",
     "replace": "self.entries.retain(|_| true);",
     "expect_failing": [
-      "tests/test_rust_freshness_lifecycle.py::test_live_freshness_graph_handoff_deduplicates_and_never_recovers_authority[esplora]"
+      "test_live_freshness_graph_handoff_deduplicates_and_never_recovers_authority"
     ],
     "rule": "A later successful sync replaces the pending grant for the same wallet and request authority never survives restart."
   }

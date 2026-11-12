@@ -5,7 +5,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 MODE="${1:-fast}"
-PYTHON_BIN="uv-managed project environment"
 STARTED_COMPOSE=0
 STARTED_BOLTZ=0
 BOLTZ_COMPOSE_FILE=""
@@ -19,60 +18,55 @@ export TZ="${TZ:-UTC}"
 export LC_ALL="${LC_ALL:-C.UTF-8}"
 export LANG="${LANG:-C.UTF-8}"
 
+# The harness itself is stdlib-only Python run with `python3 -I`: no uv, no
+# virtual environment, and no `import kassiber` (docs/plan/22-python-removal.md,
+# D2). It drives the product only through the Rust binary. `py -m MODULE`
+# runs a harness module from this checkout; anything else passes through.
 py() {
-  if ! command -v uv >/dev/null 2>&1; then
-    echo "integration harness requires uv; run ./scripts/bootstrap-dev-env.sh" >&2
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "integration harness requires python3 (3.11 or newer, standard library only)" >&2
     return 2
   fi
-  uv run --locked python "$@"
+  if [ "${1:-}" = -m ]; then
+    local module="$2"
+    shift 2
+    python3 -I -c 'import runpy, sys
+sys.path.insert(0, sys.argv.pop(1))
+runpy.run_module(sys.argv.pop(1), run_name="__main__", alter_sys=True)' "$ROOT" "$module" "$@"
+  else
+    python3 -I "$@"
+  fi
 }
 
-# KASSIBER_RUNTIME selects the product every lane starts: `python` (default,
-# `python -m kassiber`) or `rust` (the binary KASSIBER_RUST_BIN names, default
-# target/release/kassiber). Product children go through tests/cli_runner.py,
-# so `rust` exports KASSIBER_TEST_CLI for them; the harness's own seeding and
-# probe helpers stay Python. A release binary has no test socket guard and
-# exits 78 when KASSIBER_TEST_NO_EGRESS is armed, so Rust lanes that need that
-# guard in a child use a `--features test-harness` build instead.
+# The lanes' test modules are stdlib `unittest` suites under tests/integration/,
+# run the same way: `py_unittest tests.integration.MODULE ...`.
+py_unittest() {
+  py -m unittest "$@"
+}
+
+# Every lane starts the Rust `kassiber` binary: KASSIBER_RUST_BIN, default
+# target/release/kassiber. Product children go through tests/integration/cli.py,
+# which reads KASSIBER_TEST_CLI. A release binary has no test socket guard and
+# exits 78 when KASSIBER_TEST_NO_EGRESS is armed, so lanes that arm that
+# guard in a child need a `--features test-harness` build instead.
 configure_runtime() {
-  case "${KASSIBER_RUNTIME:-python}" in
-    python)
-      ;;
-    rust)
-      local bin="${KASSIBER_RUST_BIN:-$ROOT/target/release/kassiber}"
-      if [ ! -x "$bin" ]; then
-        echo "KASSIBER_RUNTIME=rust needs the Rust binary at $bin" >&2
-        echo "Build it with 'cargo build -p kassiber --release' or set KASSIBER_RUST_BIN." >&2
-        exit 2
-      fi
-      KASSIBER_RUST_BIN="$(cd "$(dirname "$bin")" && pwd -P)/$(basename "$bin")"
-      export KASSIBER_RUST_BIN
-      export KASSIBER_TEST_CLI="$KASSIBER_RUST_BIN"
-      ;;
-    shadow)
-      # Python drives the lane; each CLI step also runs on Rust from a copy
-      # of the same book and both are compared (tests/integration/runtime_shadow.py).
-      local bin="${KASSIBER_RUST_BIN:-$ROOT/target/release/kassiber}"
-      if [ ! -x "$bin" ] || [ ! -x "$ROOT/.venv/bin/python" ]; then
-        echo "KASSIBER_RUNTIME=shadow needs the Rust binary at $bin and ./.venv" >&2
-        exit 2
-      fi
-      KASSIBER_RUST_BIN="$(cd "$(dirname "$bin")" && pwd -P)/$(basename "$bin")"
-      export KASSIBER_RUST_BIN
-      local stamp
-      stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-      mkdir -p "$ROOT/target/runtime-shadow"
-      export KASSIBER_RUNTIME_SHADOW_DIR="${KASSIBER_RUNTIME_SHADOW_DIR:-$(cd "$ROOT/target/runtime-shadow" && pwd -P)/$MODE-$stamp}"
-      export KASSIBER_RUNTIME_SHADOW_LOG="${KASSIBER_RUNTIME_SHADOW_LOG:-$KASSIBER_RUNTIME_SHADOW_DIR/steps.jsonl}"
-      mkdir -p "$KASSIBER_RUNTIME_SHADOW_DIR"
-      export KASSIBER_TEST_CLI="[\"$ROOT/.venv/bin/python\", \"$ROOT/tests/integration/runtime_shadow.py\"]"
-      ;;
+  case "${KASSIBER_RUNTIME:-rust}" in
+    rust) ;;
     *)
-      echo "KASSIBER_RUNTIME must be python, rust or shadow, not '${KASSIBER_RUNTIME}'" >&2
+      echo "KASSIBER_RUNTIME=${KASSIBER_RUNTIME} is gone: the harness runs only the Rust binary." >&2
       exit 2
       ;;
   esac
-  export KASSIBER_RUNTIME="${KASSIBER_RUNTIME:-python}"
+  local bin="${KASSIBER_RUST_BIN:-$ROOT/target/release/kassiber}"
+  if [ ! -x "$bin" ]; then
+    echo "The integration harness needs the Rust binary at $bin" >&2
+    echo "Build it with 'cargo build -p kassiber --release' or set KASSIBER_RUST_BIN." >&2
+    exit 2
+  fi
+  KASSIBER_RUST_BIN="$(cd "$(dirname "$bin")" && pwd -P)/$(basename "$bin")"
+  export KASSIBER_RUST_BIN
+  export KASSIBER_TEST_CLI="$KASSIBER_RUST_BIN"
+  export KASSIBER_RUNTIME=rust
 }
 
 # The product reads the machine-wide offline switch and other preferences from
@@ -91,75 +85,42 @@ isolate_preferences() {
   export KASSIBER_DISABLE_UPDATE_CHECK=1
 }
 
-# The product CLI in the selected runtime.
+# The product CLI.
 kassiber_cli() {
-  if [ "$KASSIBER_RUNTIME" = rust ]; then
-    "$KASSIBER_RUST_BIN" "$@"
-  else
-    py -m kassiber "$@"
-  fi
+  "$KASSIBER_RUST_BIN" "$@"
 }
 
 configure_runtime
 isolate_preferences
 
 ensure_python_runtime() {
-  if py - <<'PY' >/dev/null 2>&1
-import importlib.util
-import sys
-
-missing = [
-    name
-    for name in ("embit", "openpyxl")
-    if importlib.util.find_spec(name) is None
-]
-if missing:
-    print(",".join(missing), file=sys.stderr)
-    sys.exit(1)
-PY
-  then
+  if py -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
     return 0
   fi
-  echo "Kassiber's Python dependencies are not available in this interpreter." >&2
-  echo "Run ./scripts/bootstrap-dev-env.sh and rerun." >&2
-  echo "Current Python: $PYTHON_BIN" >&2
-  exit 2
-}
-
-ensure_bdk_runtime() {
-  if py - <<'PY' >/dev/null 2>&1
-import importlib.util
-import sys
-
-if importlib.util.find_spec("bdkpython") is None:
-    sys.exit(1)
-PY
-  then
-    return 0
-  fi
-  echo "The Bitcoin dependency-backed observer requires bdkpython in this interpreter." >&2
-  echo "Run ./scripts/bootstrap-dev-env.sh on a supported BDK wheel platform and rerun." >&2
-  echo "Current Python: $PYTHON_BIN" >&2
+  echo "The integration harness needs python3 3.11 or newer (standard library only)." >&2
   exit 2
 }
 
 run_fast() {
   ensure_python_runtime
-  KASSIBER_NO_EGRESS=1 py -m unittest \
-    tests.test_regtest_harness \
-    tests.test_lightning_business_plan \
-    tests.test_lightning_funding \
-    tests.test_regtest_source_funds_seed \
+  KASSIBER_NO_EGRESS=1 py_unittest \
+    tests.integration.test_product_free \
+    tests.integration.test_chain_observer_oracle \
+    tests.integration.test_lightning_business_plan \
+    tests.integration.test_lightning_funding \
+    tests.integration.test_regtest_source_funds_seed \
     tests.integration.test_demo_fingerprint \
     tests.integration.test_regtest_demo_realism \
     tests.integration.test_regtest_exchange_cases \
     tests.integration.test_regtest_tape_cli \
+    tests.integration.test_lot_order_determinism \
     -v
-  # These tests exercise the real HTTP adapter against a loopback-only fixture.
-  # Their socket guard blocks external destinations; the product kill switch
-  # would also block the fixture before its authentication can be tested.
-  KASSIBER_NO_EGRESS=0 KASSIBER_TEST_NO_EGRESS=1 py -m unittest \
-    tests.test_regtest_exchange_api -v
+  # These tests exercise the Rust binary's HTTP adapter against a
+  # loopback-only fixture. Their socket guard blocks external destinations;
+  # the product kill switch would also block the fixture before its
+  # authentication can be tested.
+  KASSIBER_NO_EGRESS=0 KASSIBER_TEST_NO_EGRESS=1 py_unittest \
+    tests.integration.test_regtest_exchange_api -v
 }
 
 rpc_auth() {
@@ -437,11 +398,11 @@ run_with_bitcoin_core() {
 }
 
 run_bitcoin_core_smoke() {
-  py -m unittest tests.integration.test_live_bitcoin_core_regtest -v
+  py_unittest tests.integration.test_live_bitcoin_core_regtest -v
 }
 
 run_bitcoin_electrum_parity_smoke() {
-  py -m unittest tests.integration.test_live_bitcoin_electrum_parity -v
+  py_unittest tests.integration.test_live_bitcoin_electrum_parity -v
 }
 
 run_bitcoin_backend_suite() {
@@ -450,12 +411,12 @@ run_bitcoin_backend_suite() {
 }
 
 run_chain_observer_oracle() {
-  py -m unittest tests.integration.test_live_chain_observer_oracle -v
+  py_unittest tests.integration.test_live_chain_observer_oracle -v
   if [ "${KASSIBER_CHAIN_OBSERVER_CHAIN:-all}" != "liquid" ]; then
-    py -m unittest tests.integration.test_live_bdk_observer -v
+    py_unittest tests.integration.test_live_bdk_observer -v
   fi
   if [ "${KASSIBER_CHAIN_OBSERVER_CHAIN:-all}" != "bitcoin" ]; then
-    py -m unittest tests.integration.test_live_lwk_observer -v
+    py_unittest tests.integration.test_live_lwk_observer -v
   fi
 }
 
@@ -469,9 +430,6 @@ run_chain_observers() {
       exit 2
       ;;
   esac
-  if [ "$selected" != "liquid" ]; then
-    ensure_bdk_runtime
-  fi
   export KASSIBER_CHAIN_OBSERVER_CHAIN="$selected"
   if [ "$selected" != "bitcoin" ]; then
     export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
@@ -592,7 +550,7 @@ wait_for_frigate() {
 run_silent_payments_smoke() {
   seed_frigate_regtest_tip
   wait_for_frigate
-  py -m unittest tests.test_silent_payments -v
+  py_unittest tests.integration.test_live_silent_payments -v
 }
 
 run_demo_full() {
@@ -974,57 +932,23 @@ demo_refresh_live_rate() {
   if [ ! -d "$DEMO_HOME/data" ]; then
     return 0
   fi
-  KASSIBER_DEMO_SCENARIO="$DEMO_SCENARIO" \
-  KASSIBER_DEMO_DATA_ROOT="$DEMO_HOME/data" \
-    py - <<'PY'
+  local live_source pair
+  live_source="$(KASSIBER_DEMO_SCENARIO="$DEMO_SCENARIO" py - <<'PY'
 import json
 import os
-import time
 
-from kassiber.core import rates as core_rates
-from kassiber.db import open_db
-from kassiber.errors import AppError
-
-scenario_path = os.environ["KASSIBER_DEMO_SCENARIO"]
-data_root = os.environ["KASSIBER_DEMO_DATA_ROOT"]
-with open(scenario_path, "r", encoding="utf-8") as handle:
-    scenario = json.load(handle)
-pricing = scenario.get("pricing") or {}
+with open(os.environ["KASSIBER_DEMO_SCENARIO"], "r", encoding="utf-8") as handle:
+    pricing = json.load(handle).get("pricing") or {}
 live_env = str(pricing.get("live_source_env") or "KASSIBER_REGTEST_DEMO_LIVE_RATES")
-live_source = str(os.environ.get(live_env) or pricing.get("live_source") or "").strip().lower()
-pair = pricing.get("pair") or "BTC-EUR"
-conn = open_db(data_root)
-try:
-    if not live_source or live_source in {"0", "false", "no", "off"}:
-        for source in core_rates.LIVE_MARKET_RATE_SOURCES:
-            conn.execute(
-                "DELETE FROM rates_cache WHERE pair = ? AND source = ? AND granularity = 'latest'",
-                (pair, source),
-            )
-        conn.execute(
-            "DELETE FROM settings WHERE key = ? AND value = ?",
-            (core_rates.MARKET_RATE_PROVIDER_SETTING, core_rates.RATE_SOURCE_MEMPOOL),
-        )
-        conn.commit()
-    else:
-        normalized = core_rates.normalize_market_rate_provider(live_source)
-        deadline = time.monotonic() + 60
-        while True:
-            try:
-                core_rates.sync_latest_rates(conn, pair=pair, source=normalized, commit=True)
-                break
-            except AppError:
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(2)
-        conn.execute(
-            "DELETE FROM settings WHERE key = ? AND value = ?",
-            (core_rates.MARKET_RATE_PROVIDER_SETTING, core_rates.RATE_SOURCE_MEMPOOL),
-        )
-        conn.commit()
-finally:
-    conn.close()
+source = str(os.environ.get(live_env) or pricing.get("live_source") or "").strip().lower()
+print("" if source in {"", "0", "false", "no", "off"} else source)
+print(pricing.get("pair") or "BTC-EUR")
 PY
+)"
+  pair="$(printf '%s\n' "$live_source" | sed -n 2p)"
+  live_source="$(printf '%s\n' "$live_source" | sed -n 1p)"
+  KASSIBER_DEMO_DATA_ROOT="$DEMO_HOME/data" KASSIBER_DEMO_PAIR="$pair" \
+  KASSIBER_DEMO_LIVE_SOURCE="$live_source" py -m tests.integration.book_rates
 }
 
 demo_write_lightning_cli_wrapper() {
@@ -1214,7 +1138,7 @@ fi)
 
 Next steps:
   cd ui-tauri && pnpm dev:demo                       # dev preview on the real demo book
-  uv run --locked python -m kassiber --data-root "$DEMO_HOME/data" reports summary
+  "$KASSIBER_RUST_BIN" --data-root "$DEMO_HOME/data" reports summary
   ./dev/regtest/bitcoin-cli.sh getblockchaininfo    # poke the regtest node
   ./scripts/integration-harness.sh demo-down         # stop the node (book + chain kept)
   ./scripts/integration-harness.sh demo-down --purge # remove node, chain, and demo book
@@ -1268,7 +1192,7 @@ run_demo_tick() {
   echo
   echo "New business activity is confirmed on the demo node."
   echo "Refresh/sync in the app (or run it directly) to import it:"
-  echo "  uv run --locked python -m kassiber --data-root \"$DEMO_HOME/data\" wallets sync --all"
+  echo "  \"$KASSIBER_RUST_BIN\" --data-root \"$DEMO_HOME/data\" wallets sync --all"
 }
 
 run_demo_down() {
@@ -1505,7 +1429,7 @@ run_lightning_business() {
   export KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX
   KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX="$(demo_lnd_readonly_macaroon_hex)"
   ./dev/regtest/lightning-business-scenario.sh
-  py -m unittest tests.integration.test_live_lightning_business_regtest -v
+  py_unittest tests.integration.test_live_lightning_business_regtest -v
 }
 
 run_btcpay_seed_smoke() (
@@ -1801,15 +1725,13 @@ run_boltz_liquid() {
   fi
 
   wait_for_boltz_liquid
-  py -m unittest tests.integration.test_boltz_liquid_regtest -v
+  py_unittest tests.integration.test_boltz_liquid_regtest -v
 }
 
 run_custody_desktop() {
-  ensure_python_runtime
-  KASSIBER_NO_EGRESS=1 py -m unittest \
-    tests.test_custody_gap_acceptance \
-    tests.test_connection_catalog_drift \
-    -v
+  # The gap acceptance and connection-catalog checks were pytest modules and
+  # go with the Python test suite (plan 22, D1); this lane keeps the desktop
+  # route's own tests.
   pnpm --dir ui-tauri exec vitest run \
     src/routes/CustodyGaps.test.tsx
 }

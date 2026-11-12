@@ -611,7 +611,7 @@ fn stage_attachments(client: &mut DaemonClient, args: &Args) -> Result<Vec<Value
     let mut grants = Vec::new();
     for (index, file) in args.file.iter().enumerate() {
         let path = expand_user(file);
-        let path = std::fs::canonicalize(&path).unwrap_or(path);
+        let path = kassiber_paths::canonicalize(&path).unwrap_or(path);
         if !path.is_file() {
             return Err(AppError::new(
                 "not_found",

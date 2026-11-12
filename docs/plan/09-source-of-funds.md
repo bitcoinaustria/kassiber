@@ -326,8 +326,9 @@ core privacy consequence — sharing the report demonstrates common ownership
 of those wallets to the recipient. This is a deliberate lightweight summary,
 not a chain-analysis privacy scorer.
 
-Diagrams are rendered by a single on-device substrate
-([kassiber/core/source_funds_diagram.py](../../kassiber/core/source_funds_diagram.py)):
+Diagrams are rendered by a single on-device substrate (designed in Python's
+`kassiber/core/source_funds_diagram.py`; the Rust port is
+`crates/reports/src/source_funds_svg.rs`):
 one `reportlab.graphics` `Drawing` per chart (a weighted Sankey-style
 simplified flow with value-share edge percentages and a Bitcoin-native legend,
 plus source-mix and data-source donut rings). The same builder renders the
@@ -511,7 +512,8 @@ The first implementation adds the conservative, testable core path:
   mix, a simplified boxes-and-arrows flow path, level-by-level flow rows,
   transaction details, review gates, disclosure preview, and limitations
 - a single on-device diagram substrate
-  ([kassiber/core/source_funds_diagram.py](../../kassiber/core/source_funds_diagram.py))
+  (`crates/reports/src/source_funds_svg.rs`, ported from Python's
+  `source_funds_diagram.py`)
   that renders a weighted Sankey-style simplified flow (value-share edge
   percentages, Bitcoin-native legend) plus source-mix / data-source donut rings,
   emitted both as native-vector PDF charts and as web-safe SVG strings frozen in

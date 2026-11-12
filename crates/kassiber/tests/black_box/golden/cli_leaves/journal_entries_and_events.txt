@@ -1,0 +1,2158 @@
+$ --machine journals list
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -0.2,
+… [2609 bytes, 101 lines fnv128 1cf055865913229169752790316f1af9]
+$ --machine journals list --limit 0
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "--limit must be positive",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit -3
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "--limit must be positive",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 9223372036854775807
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "Python int too large to convert to SQLite INTEGER",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --cursor bogus
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: bogus",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --cursor e30
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: e30",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --workspace missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Workspace 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --profile missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'missing' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -0.2,
+      "fiat_value": 6200.1,
+      "cost_basis": 4000.0,
+      "proceeds": 6200.1,
+      "gain_loss": 2200.1,
+      "description": "sell",
+      "quantity_msat": -20000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjdmYWI4M2M5LTlmYjQtODgxNC1iZmMyLWZjMjE2ZDM3ZWFlYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wNC0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjdmYWI4M2M5LTlmYjQtODgxNC1iZmMyLWZjMjE2ZDM3ZWFlYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wNC0wMVQwMDowMDowMFo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjdmYWI4M2M5LTlmYjQtODgxNC1iZmMyLWZjMjE2ZDM3ZWFlYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wNC0wMVQwMDowMDowMFo",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIkJUQyIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiN2ZhYjgzYzktOWZiNC04ODE0LWJmYzItZmMyMTZkMzdlYWViIiwgIm9jY3VycmVkX2F0IjogIjIwMjQtMDQtMDFUMDA6MDA6MDBaIn0
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIkJUQyIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiN2ZhYjgzYzktOWZiNC04ODE0LWJmYzItZmMyMTZkMzdlYWViIiwgIm9jY3VycmVkX2F0IjogIjIwMjQtMDQtMDFUMDA6MDA6MDBaIn0",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wNC0wMVQwMDowMDowMFoifQ
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wNC0wMVQwMDowMDowMFoifQ",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiBudWxsLCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wNC0wMVQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "94b8628d-6e50-8b47-87ac-683f894cf736",
+      "occurred_at": "2024-03-02T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "income",
+      "asset": "BTC",
+      "quantity": 0.01,
+      "fiat_value": 300.0,
+      "cost_basis": 0.0,
+      "proceeds": 300.0,
+      "gain_loss": 300.0,
+      "description": "interest",
+      "quantity_msat": 1000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiN2ZhYjgzYzktOWZiNC04ODE0LWJmYzItZmMyMTZkMzdlYWViIiwgIm9jY3VycmVkX2F0IjogN30
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -0.2,
+      "fiat_value": 6200.1,
+      "cost_basis": 4000.0,
+      "proceeds": 6200.1,
+      "gain_loss": 2200.1,
+      "description": "sell",
+      "quantity_msat": -20000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjdmYWI4M2M5LTlmYjQtODgxNC1iZmMyLWZjMjE2ZDM3ZWFlYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wNC0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjdmYWI4M2M5LTlmYjQtODgxNC1iZmMyLWZjMjE2ZDM3ZWFlYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wNC0wMVQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "94b8628d-6e50-8b47-87ac-683f894cf736",
+      "occurred_at": "2024-03-02T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "income",
+      "asset": "BTC",
+      "quantity": 0.01,
+      "fiat_value": 300.0,
+      "cost_basis": 0.0,
+      "proceeds": 300.0,
+      "gain_loss": 300.0,
+      "description": "interest",
+      "quantity_msat": 1000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFo",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIkJUQyIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiOTRiODYyOGQtNmU1MC04YjQ3LTg3YWMtNjgzZjg5NGNmNzM2IiwgIm9jY3VycmVkX2F0IjogIjIwMjQtMDMtMDJUMDA6MDA6MDBaIn0
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIkJUQyIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiOTRiODYyOGQtNmU1MC04YjQ3LTg3YWMtNjgzZjg5NGNmNzM2IiwgIm9jY3VycmVkX2F0IjogIjIwMjQtMDMtMDJUMDA6MDA6MDBaIn0",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMy0wMlQwMDowMDowMFoifQ
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMy0wMlQwMDowMDowMFoifQ",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiBudWxsLCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMy0wMlQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "31144205-3dea-8534-91e9-b8cfd4f332b3",
+      "occurred_at": "2024-03-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "ACC",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -1.50001,
+      "fiat_value": 45000.0,
+      "cost_basis": 20000.2,
+      "proceeds": 45000.0,
+      "gain_loss": 24999.8,
+      "description": "sell",
+      "quantity_msat": -150001000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiOTRiODYyOGQtNmU1MC04YjQ3LTg3YWMtNjgzZjg5NGNmNzM2IiwgIm9jY3VycmVkX2F0IjogN30
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -0.2,
+      "fiat_value": 6200.1,
+      "cost_basis": 4000.0,
+      "proceeds": 6200.1,
+      "gain_loss": 2200.1,
+      "description": "sell",
+      "quantity_msat": -20000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjdmYWI4M2M5LTlmYjQtODgxNC1iZmMyLWZjMjE2ZDM3ZWFlYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wNC0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "2954c95a-4c0d-81a7-a5bf-1c4b110601ab",
+      "occurred_at": "2024-03-02T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "acquisition",
+      "asset": "BTC",
+      "quantity": 0.01,
+      "fiat_value": 300.0,
+      "cost_basis": 0,
+      "proceeds": 0,
+      "gain_loss": 0,
+      "description": "interest",
+      "quantity_msat": 1000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjI5NTRjOTVhLTRjMGQtODFhNy1hNWJmLTFjNGIxMTA2MDFhYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjI5NTRjOTVhLTRjMGQtODFhNy1hNWJmLTFjNGIxMTA2MDFhYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjI5NTRjOTVhLTRjMGQtODFhNy1hNWJmLTFjNGIxMTA2MDFhYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFo",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIkJUQyIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiMjk1NGM5NWEtNGMwZC04MWE3LWE1YmYtMWM0YjExMDYwMWFiIiwgIm9jY3VycmVkX2F0IjogIjIwMjQtMDMtMDJUMDA6MDA6MDBaIn0
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIkJUQyIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiMjk1NGM5NWEtNGMwZC04MWE3LWE1YmYtMWM0YjExMDYwMWFiIiwgIm9jY3VycmVkX2F0IjogIjIwMjQtMDMtMDJUMDA6MDA6MDBaIn0",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMy0wMlQwMDowMDowMFoifQ
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMy0wMlQwMDowMDowMFoifQ",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiBudWxsLCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMy0wMlQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "31144205-3dea-8534-91e9-b8cfd4f332b3",
+      "occurred_at": "2024-03-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "ACC",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -1.50001,
+      "fiat_value": 45000.0,
+      "cost_basis": 20000.2,
+      "proceeds": 45000.0,
+      "gain_loss": 24999.8,
+      "description": "sell",
+      "quantity_msat": -150001000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiMjk1NGM5NWEtNGMwZC04MWE3LWE1YmYtMWM0YjExMDYwMWFiIiwgIm9jY3VycmVkX2F0IjogN30
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -0.2,
+      "fiat_value": 6200.1,
+      "cost_basis": 4000.0,
+      "proceeds": 6200.1,
+      "gain_loss": 2200.1,
+      "description": "sell",
+      "quantity_msat": -20000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjdmYWI4M2M5LTlmYjQtODgxNC1iZmMyLWZjMjE2ZDM3ZWFlYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wNC0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjI5NTRjOTVhLTRjMGQtODFhNy1hNWJmLTFjNGIxMTA2MDFhYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "31144205-3dea-8534-91e9-b8cfd4f332b3",
+      "occurred_at": "2024-03-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "ACC",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -1.50001,
+      "fiat_value": 45000.0,
+      "cost_basis": 20000.2,
+      "proceeds": 45000.0,
+      "gain_loss": 24999.8,
+      "description": "sell",
+      "quantity_msat": -150001000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFo",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIkJUQyIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiMzExNDQyMDUtM2RlYS04NTM0LTkxZTktYjhjZmQ0ZjMzMmIzIiwgIm9jY3VycmVkX2F0IjogIjIwMjQtMDMtMDFUMDA6MDA6MDBaIn0
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIkJUQyIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiMzExNDQyMDUtM2RlYS04NTM0LTkxZTktYjhjZmQ0ZjMzMmIzIiwgIm9jY3VycmVkX2F0IjogIjIwMjQtMDMtMDFUMDA6MDA6MDBaIn0",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMy0wMVQwMDowMDowMFoifQ
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMy0wMVQwMDowMDowMFoifQ",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiBudWxsLCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMy0wMVQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "dc7d3c77-1a23-8d53-9d79-6e4b6886be42",
+      "occurred_at": "2024-02-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "acquisition",
+      "asset": "BTC",
+      "quantity": 1.0,
+      "fiat_value": 20000.0,
+      "cost_basis": 0,
+      "proceeds": 0,
+      "gain_loss": 0,
+      "description": "buy",
+      "at_category": "neu",
+      "at_kennzahl": 801,
+      "quantity_msat": 100000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6ImRjN2QzYzc3LTFhMjMtOGQ1My05ZDc5LTZlNGI2ODg2YmU0MiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMi0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiMzExNDQyMDUtM2RlYS04NTM0LTkxZTktYjhjZmQ0ZjMzMmIzIiwgIm9jY3VycmVkX2F0IjogN30
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -0.2,
+      "fiat_value": 6200.1,
+      "cost_basis": 4000.0,
+      "proceeds": 6200.1,
+      "gain_loss": 2200.1,
+      "description": "sell",
+      "quantity_msat": -20000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjdmYWI4M2M5LTlmYjQtODgxNC1iZmMyLWZjMjE2ZDM3ZWFlYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wNC0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "dc7d3c77-1a23-8d53-9d79-6e4b6886be42",
+      "occurred_at": "2024-02-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "acquisition",
+      "asset": "BTC",
+      "quantity": 1.0,
+      "fiat_value": 20000.0,
+      "cost_basis": 0,
+      "proceeds": 0,
+      "gain_loss": 0,
+      "description": "buy",
+      "at_category": "neu",
+      "at_kennzahl": 801,
+      "quantity_msat": 100000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6ImRjN2QzYzc3LTFhMjMtOGQ1My05ZDc5LTZlNGI2ODg2YmU0MiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMi0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6ImRjN2QzYzc3LTFhMjMtOGQ1My05ZDc5LTZlNGI2ODg2YmU0MiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMi0wMVQwMDowMDowMFo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6ImRjN2QzYzc3LTFhMjMtOGQ1My05ZDc5LTZlNGI2ODg2YmU0MiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMi0wMVQwMDowMDowMFo",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIkJUQyIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiZGM3ZDNjNzctMWEyMy04ZDUzLTlkNzktNmU0YjY4ODZiZTQyIiwgIm9jY3VycmVkX2F0IjogIjIwMjQtMDItMDFUMDA6MDA6MDBaIn0
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIkJUQyIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiZGM3ZDNjNzctMWEyMy04ZDUzLTlkNzktNmU0YjY4ODZiZTQyIiwgIm9jY3VycmVkX2F0IjogIjIwMjQtMDItMDFUMDA6MDA6MDBaIn0",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMi0wMVQwMDowMDowMFoifQ
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMi0wMVQwMDowMDowMFoifQ",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiBudWxsLCAib2NjdXJyZWRfYXQiOiAiMjAyNC0wMi0wMVQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "7094e0de-d003-89b8-a630-14241e5a99a9",
+      "occurred_at": "2024-01-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "ACC",
+      "entry_type": "acquisition",
+      "asset": "BTC",
+      "quantity": 1.0,
+      "fiat_value": 10000.0,
+      "cost_basis": 0,
+      "proceeds": 0,
+      "gain_loss": 0,
+      "description": "buy",
+      "quantity_msat": 100000000000
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjogIjIwMjYtMTAtMzFUMTI6MDA6MDBaIiwgImZpbHRlcnMiOiB7ImFjY291bnRfaWQiOiAiIiwgImFzc2V0IjogIiIsICJlbmQiOiAiIiwgImVudHJ5X3R5cGUiOiAiIiwgInByb2ZpbGVfaWQiOiAicCIsICJzdGFydCI6ICIiLCAid2FsbGV0X2lkIjogIiIsICJ3b3Jrc3BhY2VfaWQiOiAidyJ9LCAiaWQiOiAiZGM3ZDNjNzctMWEyMy04ZDUzLTlkNzktNmU0YjY4ODZiZTQyIiwgIm9jY3VycmVkX2F0IjogN30
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -0.2,
+      "fiat_value": 6200.1,
+      "cost_basis": 4000.0,
+      "proceeds": 6200.1,
+      "gain_loss": 2200.1,
+      "description": "sell",
+      "quantity_msat": -20000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjdmYWI4M2M5LTlmYjQtODgxNC1iZmMyLWZjMjE2ZDM3ZWFlYiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wNC0wMVQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 1
+}
+$ --machine journals list --limit 1 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6ImRjN2QzYzc3LTFhMjMtOGQ1My05ZDc5LTZlNGI2ODg2YmU0MiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMi0wMVQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "7094e0de-d003-89b8-a630-14241e5a99a9",
+      "occurred_at": "2024-01-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "ACC",
+      "entry_type": "acquisition",
+      "asset": "BTC",
+      "quantity": 1.0,
+      "fiat_value": 10000.0,
+      "cost_basis": 0,
+      "proceeds": 0,
+      "gain_loss": 0,
+      "description": "buy",
+      "quantity_msat": 100000000000
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false,
+  "limit": 1
+}
+$ --machine journals events list
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [5684 bytes, 185 lines fnv128 72bead0eede41520f90ceeb478e9f43d]
+$ --machine journals events list --limit 2
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [2648 bytes, 71 lines fnv128 182360f7e539c32cc29a2d5b8b2a3d26]
+$ --machine journals events list --limit 0
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "--limit must be positive",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --limit 1000
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [5685 bytes, 185 lines fnv128 1a49ac42b2aeda35891e3d229411b929]
+$ --machine journals events list --limit 1001
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "--limit cannot exceed 1000",
+    "hint": "Use cursor-based pagination instead of larger limits; max page size is 1000.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --wallet wallet
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [5684 bytes, 185 lines fnv128 72bead0eede41520f90ceeb478e9f43d]
+$ --machine journals events list --wallet  WALLET 
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [5684 bytes, 185 lines fnv128 72bead0eede41520f90ceeb478e9f43d]
+$ --machine journals events list --wallet missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Wallet 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --wallet 
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [5684 bytes, 185 lines fnv128 72bead0eede41520f90ceeb478e9f43d]
+$ --machine journals events list --account ACC
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "31144205-3dea-8534-91e9-b8cfd4f332b3",
+        "occurred_at": "2024-03-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "s",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": "acct",
+        "account": "ACC",
+        "account_label": "Treasury",
+        "entry_type": "disposal",
+        "asset": "BTC",
+        "quantity": -1.50001,
+        "fiat_value": 45000.0,
+        "unit_cost": 0.0,
+        "cost_basis": 20000.2,
+        "proceeds": 45000.0,
+        "gain_loss": 24999.8,
+        "fiat_value_exact": "45000.000000000000000000000000000",
+        "unit_cost_exact": "0",
+        "cost_basis_exact": "20000.20000",
+        "proceeds_exact": "45000.000000000000000000000000000",
+        "gain_loss_exact": "24999.800000000000000000000000000",
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "sell",
+        "quantity_msat": -150001000000
+      },
+      {
+        "id": "7094e0de-d003-89b8-a630-14241e5a99a9",
+        "occurred_at": "2024-01-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "a",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": "acct",
+        "account": "ACC",
+        "account_label": "Treasury",
+        "entry_type": "acquisition",
+        "asset": "BTC",
+        "quantity": 1.0,
+        "fiat_value": 10000.0,
+        "unit_cost": 10000.0,
+        "cost_basis": 0,
+        "proceeds": 0,
+        "gain_loss": 0,
+        "fiat_value_exact": "10000",
+        "unit_cost_exact": "10000",
+        "cost_basis_exact": null,
+        "proceeds_exact": null,
+        "gain_loss_exact": null,
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "buy",
+        "quantity_msat": 100000000000
+      }
+    ],
+    "next_cursor": null,
+    "has_more": false,
+    "limit": 100,
+    "page": {
+      "next_cursor": null,
+      "has_more": false
+    }
+  }
+}
+$ --machine journals events list --account treasury
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "31144205-3dea-8534-91e9-b8cfd4f332b3",
+        "occurred_at": "2024-03-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "s",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": "acct",
+        "account": "ACC",
+        "account_label": "Treasury",
+        "entry_type": "disposal",
+        "asset": "BTC",
+        "quantity": -1.50001,
+        "fiat_value": 45000.0,
+        "unit_cost": 0.0,
+        "cost_basis": 20000.2,
+        "proceeds": 45000.0,
+        "gain_loss": 24999.8,
+        "fiat_value_exact": "45000.000000000000000000000000000",
+        "unit_cost_exact": "0",
+        "cost_basis_exact": "20000.20000",
+        "proceeds_exact": "45000.000000000000000000000000000",
+        "gain_loss_exact": "24999.800000000000000000000000000",
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "sell",
+        "quantity_msat": -150001000000
+      },
+      {
+        "id": "7094e0de-d003-89b8-a630-14241e5a99a9",
+        "occurred_at": "2024-01-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "a",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": "acct",
+        "account": "ACC",
+        "account_label": "Treasury",
+        "entry_type": "acquisition",
+        "asset": "BTC",
+        "quantity": 1.0,
+        "fiat_value": 10000.0,
+        "unit_cost": 10000.0,
+        "cost_basis": 0,
+        "proceeds": 0,
+        "gain_loss": 0,
+        "fiat_value_exact": "10000",
+        "unit_cost_exact": "10000",
+        "cost_basis_exact": null,
+        "proceeds_exact": null,
+        "gain_loss_exact": null,
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "buy",
+        "quantity_msat": 100000000000
+      }
+    ],
+    "next_cursor": null,
+    "has_more": false,
+    "limit": 100,
+    "page": {
+      "next_cursor": null,
+      "has_more": false
+    }
+  }
+}
+$ --machine journals events list --account Same
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Account label 'Same' is ambiguous",
+    "hint": "Use the account code or id instead of the non-unique label.",
+    "details": {
+      "matches": [
+        {
+          "id": "dup1",
+          "code": "D1",
+          "label": "Same"
+        },
+        {
+          "id": "dup2",
+          "code": "D2",
+          "label": "Same"
+        }
+      ]
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --account missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Account 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --asset btc
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [5684 bytes, 185 lines fnv128 72bead0eede41520f90ceeb478e9f43d]
+$ --machine journals events list --asset eth
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [],
+    "next_cursor": null,
+    "has_more": false,
+    "limit": 100,
+    "page": {
+      "next_cursor": null,
+      "has_more": false
+    }
+  }
+}
+$ --machine journals events list --entry-type DISPOSAL
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": null,
+        "account": "",
+        "account_label": "",
+        "entry_type": "disposal",
+        "asset": "BTC",
+        "quantity": -0.2,
+        "fiat_value": 6200.1,
+        "unit_cost": 0.0,
+        "cost_basis": 4000.0,
+        "proceeds": 6200.1,
+        "gain_loss": 2200.1,
+        "fiat_value_exact": "6200.10",
+        "unit_cost_exact": "0",
+        "cost_basis_exact": "4000.0",
+        "proceeds_exact": "6200.10",
+        "gain_loss_exact": "2200.10",
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "sell",
+        "quantity_msat": -20000000000
+      },
+      {
+        "id": "31144205-3dea-8534-91e9-b8cfd4f332b3",
+        "occurred_at": "2024-03-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "s",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": "acct",
+        "account": "ACC",
+        "account_label": "Treasury",
+        "entry_type": "disposal",
+        "asset": "BTC",
+        "quantity": -1.50001,
+        "fiat_value": 45000.0,
+        "unit_cost": 0.0,
+        "cost_basis": 20000.2,
+        "proceeds": 45000.0,
+        "gain_loss": 24999.8,
+        "fiat_value_exact": "45000.000000000000000000000000000",
+        "unit_cost_exact": "0",
+        "cost_basis_exact": "20000.20000",
+        "proceeds_exact": "45000.000000000000000000000000000",
+        "gain_loss_exact": "24999.800000000000000000000000000",
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "sell",
+        "quantity_msat": -150001000000
+      }
+    ],
+    "next_cursor": null,
+    "has_more": false,
+    "limit": 100,
+    "page": {
+      "next_cursor": null,
+      "has_more": false
+    }
+  }
+}
+$ --machine journals events list --entry-type Income
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "94b8628d-6e50-8b47-87ac-683f894cf736",
+        "occurred_at": "2024-03-02T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "i",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": null,
+        "account": "",
+        "account_label": "",
+        "entry_type": "income",
+        "asset": "BTC",
+        "quantity": 0.01,
+        "fiat_value": 300.0,
+        "unit_cost": 0.0,
+        "cost_basis": 0.0,
+        "proceeds": 300.0,
+        "gain_loss": 300.0,
+        "fiat_value_exact": "300.00",
+        "unit_cost_exact": "0",
+        "cost_basis_exact": "0",
+        "proceeds_exact": "300.00",
+        "gain_loss_exact": "300.00",
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "interest",
+        "quantity_msat": 1000000000
+      }
+    ],
+    "next_cursor": null,
+    "has_more": false,
+    "limit": 100,
+    "page": {
+      "next_cursor": null,
+      "has_more": false
+    }
+  }
+}
+$ --machine journals events list --start 2024-02-01T00:00:00Z
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [4801 bytes, 157 lines fnv128 f5e1c87a66938a5f37146a6ead3aaaf0]
+$ --machine journals events list --end 2024-03-01
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "31144205-3dea-8534-91e9-b8cfd4f332b3",
+        "occurred_at": "2024-03-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "s",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [3043 bytes, 101 lines fnv128 38f36ffbc567388be50cdf0d04e44086]
+$ --machine journals events list --start 2024-02-01 --end 2024-03-01T23:59:59.5+01:00
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "31144205-3dea-8534-91e9-b8cfd4f332b3",
+        "occurred_at": "2024-03-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "s",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": "acct",
+        "account": "ACC",
+        "account_label": "Treasury",
+        "entry_type": "disposal",
+        "asset": "BTC",
+        "quantity": -1.50001,
+        "fiat_value": 45000.0,
+        "unit_cost": 0.0,
+        "cost_basis": 20000.2,
+        "proceeds": 45000.0,
+        "gain_loss": 24999.8,
+        "fiat_value_exact": "45000.000000000000000000000000000",
+        "unit_cost_exact": "0",
+        "cost_basis_exact": "20000.20000",
+        "proceeds_exact": "45000.000000000000000000000000000",
+        "gain_loss_exact": "24999.800000000000000000000000000",
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "sell",
+        "quantity_msat": -150001000000
+      },
+      {
+        "id": "dc7d3c77-1a23-8d53-9d79-6e4b6886be42",
+        "occurred_at": "2024-02-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "b",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": null,
+        "account": "",
+        "account_label": "",
+        "entry_type": "acquisition",
+        "asset": "BTC",
+        "quantity": 1.0,
+        "fiat_value": 20000.0,
+        "unit_cost": 20000.0,
+        "cost_basis": 0,
+        "proceeds": 0,
+        "gain_loss": 0,
+        "fiat_value_exact": "20000",
+        "unit_cost_exact": "20000",
+        "cost_basis_exact": null,
+        "proceeds_exact": null,
+        "gain_loss_exact": null,
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "buy",
+        "at_category": "neu",
+        "at_kennzahl": 801,
+        "quantity_msat": 100000000000
+      }
+    ],
+    "next_cursor": null,
+    "has_more": false,
+    "limit": 100,
+    "page": {
+      "next_cursor": null,
+      "has_more": false
+    }
+  }
+}
+$ --machine journals events list --start yesterday
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid start timestamp 'yesterday'",
+    "hint": "Use RFC3339 UTC like 2025-01-01T00:00:00Z",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --end 2024-13-01
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid end timestamp '2024-13-01'",
+    "hint": "Use RFC3339 UTC like 2025-01-01T00:00:00Z",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --start 
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [5684 bytes, 185 lines fnv128 72bead0eede41520f90ceeb478e9f43d]
+$ --machine journals events list --wallet missing --start bogus
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid start timestamp 'bogus'",
+    "hint": "Use RFC3339 UTC like 2025-01-01T00:00:00Z",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --limit 0 --start bogus
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "--limit must be positive",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --asset BTC --limit 2
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [2656 bytes, 71 lines fnv128 fdb0be6458ad17ef9f9a27bb0e004358]
+$ --machine journals events list --limit 2 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IkJUQyIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IkJUQyIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IkJUQyIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IkJUQyIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --asset BTC --limit 2 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IkJUQyIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "2954c95a-4c0d-81a7-a5bf-1c4b110601ab",
+        "occurred_at": "2024-03-02T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "i",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [2757 bytes, 71 lines fnv128 945761fdf260a436a5e96bfd9a95fb45]
+$ --machine journals events list --limit 2 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IkJUQyIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFoifQ
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IkJUQyIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFoifQ",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals list --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IkJUQyIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFoifQ
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Invalid cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IkJUQyIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFoifQ",
+    "hint": "Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events list --asset BTC --limit 2 --cursor eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IkJUQyIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6IjMxMTQ0MjA1LTNkZWEtODUzNC05MWU5LWI4Y2ZkNGYzMzJiMyIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMVQwMDowMDowMFoifQ
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "dc7d3c77-1a23-8d53-9d79-6e4b6886be42",
+        "occurred_at": "2024-02-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "b",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": null,
+        "account": "",
+        "account_label": "",
+        "entry_type": "acquisition",
+        "asset": "BTC",
+        "quantity": 1.0,
+        "fiat_value": 20000.0,
+        "unit_cost": 20000.0,
+        "cost_basis": 0,
+        "proceeds": 0,
+        "gain_loss": 0,
+        "fiat_value_exact": "20000",
+        "unit_cost_exact": "20000",
+        "cost_basis_exact": null,
+        "proceeds_exact": null,
+        "gain_loss_exact": null,
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "buy",
+        "at_category": "neu",
+        "at_kennzahl": 801,
+        "quantity_msat": 100000000000
+      },
+      {
+        "id": "7094e0de-d003-89b8-a630-14241e5a99a9",
+        "occurred_at": "2024-01-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "a",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+        "account_id": "acct",
+        "account": "ACC",
+        "account_label": "Treasury",
+        "entry_type": "acquisition",
+        "asset": "BTC",
+        "quantity": 1.0,
+        "fiat_value": 10000.0,
+        "unit_cost": 10000.0,
+        "cost_basis": 0,
+        "proceeds": 0,
+        "gain_loss": 0,
+        "fiat_value_exact": "10000",
+        "unit_cost_exact": "10000",
+        "cost_basis_exact": null,
+        "proceeds_exact": null,
+        "gain_loss_exact": null,
+        "pricing_source_kind": "manual",
+        "pricing_quality": "exact",
+        "description": "buy",
+        "quantity_msat": 100000000000
+      }
+    ],
+    "next_cursor": null,
+    "has_more": false,
+    "limit": 2,
+    "page": {
+      "next_cursor": null,
+      "has_more": false
+    }
+  }
+}
+$ --machine journals events get --event-id 2954c95a-4c0d-81a7-a5bf-1c4b110601ab
+exit 0
+--- stdout
+{
+  "kind": "journals.events.get",
+  "schema_version": 1,
+  "data": {
+    "id": "2954c95a-4c0d-81a7-a5bf-1c4b110601ab",
+    "workspace_id": "w",
+    "profile_id": "p",
+    "transaction_id": "i",
+    "wallet_id": "wallet",
+    "account_id": null,
+    "occurred_at": "2024-03-02T00:00:00Z",
+    "entry_type": "acquisition",
+    "asset": "BTC",
+    "quantity": 0.01,
+    "fiat_value": 300.0,
+    "unit_cost": 30000.0,
+    "cost_basis": null,
+    "proceeds": null,
+    "gain_loss": null,
+    "fiat_value_exact": "300.00",
+    "unit_cost_exact": "30000",
+    "cost_basis_exact": null,
+    "proceeds_exact": null,
+    "gain_loss_exact": null,
+    "calculation_json": "{\"legacy\": true}",
+    "pricing_source_kind": "manual",
+    "pricing_quality": "exact",
+    "description": "interest",
+    "at_category": null,
+    "at_kennzahl": null,
+    "capital_gains_type": null,
+    "created_at": "2026-10-31T12:00:00Z",
+    "wallet": "Wallet",
+    "account": "",
+    "account_label": "",
+    "transaction_external_id": null,
+    "transaction_direction": "inbound",
+    "transaction_counterparty": null,
+    "transaction_note": null,
+    "quantity_msat": 1000000000
+  }
+}
+$ --machine journals events get --event-id 31144205-3dea-8534-91e9-b8cfd4f332b3
+exit 0
+--- stdout
+{
+  "kind": "journals.events.get",
+  "schema_version": 1,
+  "data": {
+    "id": "31144205-3dea-8534-91e9-b8cfd4f332b3",
+    "workspace_id": "w",
+    "profile_id": "p",
+    "transaction_id": "s",
+    "wallet_id": "wallet",
+    "account_id": "acct",
+    "occurred_at": "2024-03-01T00:00:00Z",
+    "entry_type": "disposal",
+… [5227 bytes, 42 lines fnv128 89cf64afc2a54762d585b1c76ef52b4a]
+$ --machine journals events get --event-id 7094e0de-d003-89b8-a630-14241e5a99a9
+exit 0
+--- stdout
+{
+  "kind": "journals.events.get",
+  "schema_version": 1,
+  "data": {
+    "id": "7094e0de-d003-89b8-a630-14241e5a99a9",
+    "workspace_id": "w",
+    "profile_id": "p",
+    "transaction_id": "a",
+    "wallet_id": "wallet",
+    "account_id": "acct",
+    "occurred_at": "2024-01-01T00:00:00Z",
+    "entry_type": "acquisition",
+    "asset": "BTC",
+    "quantity": 1.0,
+    "fiat_value": 10000.0,
+    "unit_cost": 10000.0,
+    "cost_basis": null,
+    "proceeds": null,
+    "gain_loss": null,
+    "fiat_value_exact": "10000",
+    "unit_cost_exact": "10000",
+    "cost_basis_exact": null,
+    "proceeds_exact": null,
+    "gain_loss_exact": null,
+    "calculation_json": null,
+    "pricing_source_kind": "manual",
+    "pricing_quality": "exact",
+    "description": "buy",
+    "at_category": null,
+    "at_kennzahl": null,
+    "capital_gains_type": null,
+    "created_at": "2026-10-31T12:00:00Z",
+    "wallet": "Wallet",
+    "account": "ACC",
+    "account_label": "Treasury",
+    "transaction_external_id": null,
+    "transaction_direction": "inbound",
+    "transaction_counterparty": null,
+    "transaction_note": null,
+    "quantity_msat": 100000000000
+  }
+}
+$ --machine journals events get --event-id 7fab83c9-9fb4-8814-bfc2-fc216d37eaeb
+exit 0
+--- stdout
+{
+  "kind": "journals.events.get",
+  "schema_version": 1,
+  "data": {
+    "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+    "workspace_id": "w",
+    "profile_id": "p",
+    "transaction_id": "t",
+    "wallet_id": "wallet",
+    "account_id": null,
+    "occurred_at": "2024-04-01T00:00:00Z",
+    "entry_type": "disposal",
+    "asset": "BTC",
+    "quantity": -0.2,
+    "fiat_value": 6200.1,
+    "unit_cost": 0.0,
+    "cost_basis": 4000.0,
+    "proceeds": 6200.1,
+    "gain_loss": 2200.1,
+    "fiat_value_exact": "6200.10",
+    "unit_cost_exact": "0",
+    "cost_basis_exact": "4000.0",
+    "proceeds_exact": "6200.10",
+    "gain_loss_exact": "2200.10",
+    "calculation_json": "[2, \"broken\"",
+    "pricing_source_kind": "manual",
+    "pricing_quality": "exact",
+    "description": "sell",
+    "at_category": null,
+    "at_kennzahl": null,
+    "capital_gains_type": "short",
+    "created_at": "2026-10-31T12:00:00Z",
+    "wallet": "Wallet",
+    "account": "",
+    "account_label": "",
+    "transaction_external_id": null,
+    "transaction_direction": "outbound",
+    "transaction_counterparty": null,
+    "transaction_note": null,
+    "quantity_msat": -20000000000
+  }
+}
+$ --machine journals events get --event-id 94b8628d-6e50-8b47-87ac-683f894cf736
+exit 0
+--- stdout
+{
+  "kind": "journals.events.get",
+  "schema_version": 1,
+  "data": {
+    "id": "94b8628d-6e50-8b47-87ac-683f894cf736",
+    "workspace_id": "w",
+    "profile_id": "p",
+    "transaction_id": "i",
+    "wallet_id": "wallet",
+    "account_id": null,
+    "occurred_at": "2024-03-02T00:00:00Z",
+    "entry_type": "income",
+    "asset": "BTC",
+    "quantity": 0.01,
+    "fiat_value": 300.0,
+    "unit_cost": 0.0,
+    "cost_basis": 0.0,
+    "proceeds": 300.0,
+    "gain_loss": 300.0,
+    "fiat_value_exact": "300.00",
+    "unit_cost_exact": "0",
+    "cost_basis_exact": "0",
+    "proceeds_exact": "300.00",
+    "gain_loss_exact": "300.00",
+    "calculation_json": "{\"legacy\": true}",
+    "pricing_source_kind": "manual",
+    "pricing_quality": "exact",
+    "description": "interest",
+    "at_category": null,
+    "at_kennzahl": null,
+    "capital_gains_type": "short",
+    "created_at": "2026-10-31T12:00:00Z",
+    "wallet": "Wallet",
+    "account": "",
+    "account_label": "",
+    "transaction_external_id": null,
+    "transaction_direction": "inbound",
+    "transaction_counterparty": null,
+    "transaction_note": null,
+    "quantity_msat": 1000000000
+  }
+}
+$ --machine journals events get --event-id dc7d3c77-1a23-8d53-9d79-6e4b6886be42
+exit 0
+--- stdout
+{
+  "kind": "journals.events.get",
+  "schema_version": 1,
+  "data": {
+    "id": "dc7d3c77-1a23-8d53-9d79-6e4b6886be42",
+    "workspace_id": "w",
+    "profile_id": "p",
+    "transaction_id": "b",
+    "wallet_id": "wallet",
+    "account_id": null,
+    "occurred_at": "2024-02-01T00:00:00Z",
+    "entry_type": "acquisition",
+    "asset": "BTC",
+    "quantity": 1.0,
+    "fiat_value": 20000.0,
+    "unit_cost": 20000.0,
+    "cost_basis": null,
+    "proceeds": null,
+    "gain_loss": null,
+    "fiat_value_exact": "20000",
+    "unit_cost_exact": "20000",
+    "cost_basis_exact": null,
+    "proceeds_exact": null,
+    "gain_loss_exact": null,
+    "calculation_json": null,
+    "pricing_source_kind": "manual",
+    "pricing_quality": "exact",
+    "description": "buy",
+    "at_category": "neu",
+    "at_kennzahl": 801,
+    "capital_gains_type": null,
+    "created_at": "2026-10-31T12:00:00Z",
+    "wallet": "Wallet",
+    "account": "",
+    "account_label": "",
+    "transaction_external_id": null,
+    "transaction_direction": "inbound",
+    "transaction_counterparty": null,
+    "transaction_note": null,
+    "quantity_msat": 100000000000
+  }
+}
+$ --machine journals events get --event-id missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Journal event 'missing' not found",
+    "hint": "Run `kassiber journals events list` to find valid event ids.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events get --event-id 
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Journal event '' not found",
+    "hint": "Run `kassiber journals events list` to find valid event ids.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals events get --event-id x --profile missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'missing' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --format table journals list --limit 2
+exit 0
+--- stdout
+id                                    occurred_at           wallet  account  entry_type  asset  quantity  fiat_value  cost_basis  proceeds  gain_loss  description  quantity_msat
+------------------------------------  --------------------  ------  -------  ----------  -----  --------  ----------  ----------  --------  ---------  -----------  -------------
+7fab83c9-9fb4-8814-bfc2-fc216d37eaeb  2024-04-01T00:00:00Z  Wallet           disposal    BTC    -0.2      6200.1      4000        6200.1    2200.1     sell         -20000000000 
+94b8628d-6e50-8b47-87ac-683f894cf736  2024-03-02T00:00:00Z  Wallet           income      BTC    0.01      300         0           300       300        interest     1000000000   
+$ --format table journals events list --limit 2
+exit 0
+--- stdout
+field        value                                                                                                                                                                                                                              … [1337 bytes fnv128 add8a2c9dcdc5cb2088e48f37a7b5d1c]
+-----------  -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------… [1337 bytes fnv128 adbfe26c786d6718d3225845b25b0a12]
+events       [{'id': '7fab83c9-9fb4-8814-bfc2-fc216d37eaeb', 'occurred_at': '2024-04-01T00:00:00Z', 'created_at': '2026-10-31T12:00:00Z', 'transaction_id': 't', 'wallet_id': 'wallet', 'wallet': 'Wallet', 'account_id': None, 'account': '', '… [1337 bytes fnv128 af87b3dbc4ed92583dfddb38399ad6a4]
+next_cursor  eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk… [1337 bytes fnv128 f6b9da93c040aed3e39312ac4147e369]
+has_more     True                                                                                                                                                                                                                               … [1337 bytes fnv128 37a8817fd87db43cf1dae55be0ff2503]
+limit        2                                                                                                                                                                                                                                  … [1337 bytes fnv128 95e3466c177efac82faba2c4ecc567ce]
+… [8028 bytes, 6 lines fnv128 849e98f10c886c637e98f52751dc526f]
+$ --format table journals events get --event-id 2954c95a-4c0d-81a7-a5bf-1c4b110601ab
+exit 0
+--- stdout
+field                     value                               
+------------------------  ------------------------------------
+id                        2954c95a-4c0d-81a7-a5bf-1c4b110601ab
+workspace_id              w                                   
+profile_id                p                                   
+transaction_id            i                                   
+wallet_id                 wallet                              
+account_id                                                    
+occurred_at               2024-03-02T00:00:00Z                
+entry_type                acquisition                         
+asset                     BTC                                 
+quantity                  0.01                                
+fiat_value                300                                 
+unit_cost                 30000                               
+cost_basis                                                    
+proceeds                                                      
+gain_loss                                                     
+fiat_value_exact          300.00                              
+unit_cost_exact           30000                               
+cost_basis_exact                                              
+proceeds_exact                                                
+gain_loss_exact                                               
+calculation_json          {"legacy": true}                    
+pricing_source_kind       manual                              
+pricing_quality           exact                               
+description               interest                            
+at_category                                                   
+at_kennzahl                                                   
+capital_gains_type                                            
+created_at                2026-10-31T12:00:00Z                
+wallet                    Wallet                              
+account                                                       
+account_label                                                 
+transaction_external_id                                       
+transaction_direction     inbound                             
+transaction_counterparty                                      
+transaction_note                                              
+quantity_msat             1000000000                          
+$ --format plain journals list --limit 2
+exit 0
+--- stdout
+id: 7fab83c9-9fb4-8814-bfc2-fc216d37eaeb
+occurred_at: 2024-04-01T00:00:00Z
+wallet: Wallet
+account: 
+entry_type: disposal
+asset: BTC
+quantity: -0.2
+fiat_value: 6200.1
+cost_basis: 4000
+proceeds: 6200.1
+gain_loss: 2200.1
+description: sell
+quantity_msat: -20000000000
+
+id: 94b8628d-6e50-8b47-87ac-683f894cf736
+occurred_at: 2024-03-02T00:00:00Z
+wallet: Wallet
+account: 
+entry_type: income
+asset: BTC
+quantity: 0.01
+fiat_value: 300
+cost_basis: 0
+proceeds: 300
+gain_loss: 300
+description: interest
+quantity_msat: 1000000000
+$ --format plain journals events list --limit 2
+exit 0
+--- stdout
+events: [{"id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb", "occurred_at": "2024-04-01T00:00:00Z", "created_at": "2026-10-31T12:00:00Z", "transaction_id": "t", "wallet_id": "wallet", "wallet": "Wallet", "account_id": null, "account": "", "accou… [1332 bytes fnv128 aacae4a9de0675a590b0eede8f235cd8]
+next_cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ
+has_more: True
+limit: 2
+$ --format plain journals events get --event-id 2954c95a-4c0d-81a7-a5bf-1c4b110601ab
+exit 0
+--- stdout
+id: 2954c95a-4c0d-81a7-a5bf-1c4b110601ab
+workspace_id: w
+profile_id: p
+transaction_id: i
+wallet_id: wallet
+account_id: 
+occurred_at: 2024-03-02T00:00:00Z
+entry_type: acquisition
+asset: BTC
+quantity: 0.01
+fiat_value: 300
+unit_cost: 30000
+cost_basis: 
+proceeds: 
+gain_loss: 
+fiat_value_exact: 300.00
+unit_cost_exact: 30000
+cost_basis_exact: 
+proceeds_exact: 
+gain_loss_exact: 
+calculation_json: {"legacy": true}
+pricing_source_kind: manual
+pricing_quality: exact
+description: interest
+at_category: 
+at_kennzahl: 
+capital_gains_type: 
+created_at: 2026-10-31T12:00:00Z
+wallet: Wallet
+account: 
+account_label: 
+transaction_external_id: 
+transaction_direction: inbound
+transaction_counterparty: 
+transaction_note: 
+quantity_msat: 1000000000
+$ --format csv journals list --limit 2
+exit 0
+--- stdout
+id,occurred_at,wallet,account,entry_type,asset,quantity,fiat_value,cost_basis,proceeds,gain_loss,description,quantity_msat
+7fab83c9-9fb4-8814-bfc2-fc216d37eaeb,2024-04-01T00:00:00Z,Wallet,,disposal,BTC,-0.2,6200.1,4000,6200.1,2200.1,sell,-20000000000
+94b8628d-6e50-8b47-87ac-683f894cf736,2024-03-02T00:00:00Z,Wallet,,income,BTC,0.01,300,0,300,300,interest,1000000000
+$ --format csv journals events list --limit 2
+exit 0
+--- stdout
+events,next_cursor,has_more,limit
+"[{""id"": ""7fab83c9-9fb4-8814-bfc2-fc216d37eaeb"", ""occurred_at"": ""2024-04-01T00:00:00Z"", ""created_at"": ""2026-10-31T12:00:00Z"", ""transaction_id"": ""t"", ""wallet_id"": ""wallet"", ""wallet"": ""Wallet"", ""account_id"": null, ""… [1837 bytes fnv128 c4769bde98615a905b5ae343009b4c6a]
+$ --format csv journals events get --event-id 2954c95a-4c0d-81a7-a5bf-1c4b110601ab
+exit 0
+--- stdout
+id,workspace_id,profile_id,transaction_id,wallet_id,account_id,occurred_at,entry_type,asset,quantity,fiat_value,unit_cost,cost_basis,proceeds,gain_loss,fiat_value_exact,unit_cost_exact,cost_basis_exact,proceeds_exact,gain_loss_exact,calculation_json,pricing_source_kind,pricing_quality,description,at_category,at_kennzahl,capital_gains_type,created_at,wallet,account,account_label,transaction_external_id,transaction_direction,transaction_counterparty,transaction_note,quantity_msat
+2954c95a-4c0d-81a7-a5bf-1c4b110601ab,w,p,i,wallet,,2024-03-02T00:00:00Z,acquisition,BTC,0.01,300,30000,,,,300.00,30000,,,,"{""legacy"": true}",manual,exact,interest,,,,2026-10-31T12:00:00Z,Wallet,,,,inbound,,,1000000000
+$ --format json journals list --limit 2
+exit 0
+--- stdout
+{
+  "kind": "journals.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "disposal",
+      "asset": "BTC",
+      "quantity": -0.2,
+      "fiat_value": 6200.1,
+      "cost_basis": 4000.0,
+      "proceeds": 6200.1,
+      "gain_loss": 2200.1,
+      "description": "sell",
+      "quantity_msat": -20000000000
+    },
+    {
+      "id": "94b8628d-6e50-8b47-87ac-683f894cf736",
+      "occurred_at": "2024-03-02T00:00:00Z",
+      "wallet": "Wallet",
+      "account": "",
+      "entry_type": "income",
+      "asset": "BTC",
+      "quantity": 0.01,
+      "fiat_value": 300.0,
+      "cost_basis": 0.0,
+      "proceeds": 300.0,
+      "gain_loss": 300.0,
+      "description": "interest",
+      "quantity_msat": 1000000000
+    }
+  ],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0zMVQxMjowMDowMFoiLCJmaWx0ZXJzIjp7ImFjY291bnRfaWQiOiIiLCJhc3NldCI6IiIsImVuZCI6IiIsImVudHJ5X3R5cGUiOiIiLCJwcm9maWxlX2lkIjoicCIsInN0YXJ0IjoiIiwid2FsbGV0X2lkIjoiIiwid29ya3NwYWNlX2lkIjoidyJ9LCJpZCI6Ijk0Yjg2MjhkLTZlNTAtOGI0Ny04N2FjLTY4M2Y4OTRjZjczNiIsIm9jY3VycmVkX2F0IjoiMjAyNC0wMy0wMlQwMDowMDowMFoifQ",
+  "has_more": true,
+  "limit": 2
+}
+$ --format json journals events list --limit 2
+exit 0
+--- stdout
+{
+  "kind": "journals.events.list",
+  "schema_version": 1,
+  "data": {
+    "events": [
+      {
+        "id": "7fab83c9-9fb4-8814-bfc2-fc216d37eaeb",
+        "occurred_at": "2024-04-01T00:00:00Z",
+        "created_at": "2026-10-31T12:00:00Z",
+        "transaction_id": "t",
+        "wallet_id": "wallet",
+        "wallet": "Wallet",
+… [2648 bytes, 71 lines fnv128 182360f7e539c32cc29a2d5b8b2a3d26]
+$ --format json journals events get --event-id 2954c95a-4c0d-81a7-a5bf-1c4b110601ab
+exit 0
+--- stdout
+{
+  "kind": "journals.events.get",
+  "schema_version": 1,
+  "data": {
+    "id": "2954c95a-4c0d-81a7-a5bf-1c4b110601ab",
+    "workspace_id": "w",
+    "profile_id": "p",
+    "transaction_id": "i",
+    "wallet_id": "wallet",
+    "account_id": null,
+    "occurred_at": "2024-03-02T00:00:00Z",
+    "entry_type": "acquisition",
+    "asset": "BTC",
+    "quantity": 0.01,
+    "fiat_value": 300.0,
+    "unit_cost": 30000.0,
+    "cost_basis": null,
+    "proceeds": null,
+    "gain_loss": null,
+    "fiat_value_exact": "300.00",
+    "unit_cost_exact": "30000",
+    "cost_basis_exact": null,
+    "proceeds_exact": null,
+    "gain_loss_exact": null,
+    "calculation_json": "{\"legacy\": true}",
+    "pricing_source_kind": "manual",
+    "pricing_quality": "exact",
+    "description": "interest",
+    "at_category": null,
+    "at_kennzahl": null,
+    "capital_gains_type": null,
+    "created_at": "2026-10-31T12:00:00Z",
+    "wallet": "Wallet",
+    "account": "",
+    "account_label": "",
+    "transaction_external_id": null,
+    "transaction_direction": "inbound",
+    "transaction_counterparty": null,
+    "transaction_note": null,
+    "quantity_msat": 1000000000
+  }
+}

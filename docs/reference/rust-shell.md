@@ -1,5 +1,9 @@
 # Rust shell
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 The Rust backend's binary shell, built in stage R1 of
 [plan 21](../plan/21-rust-backend.md): the `kassiber` binary, its command
 line, the machine envelope, and the daemon's JSONL protocol. The Python
@@ -206,8 +210,19 @@ it may launch a detached broker.
   regenerated from every ledger revision by
   `crates/store/scripts/gen_legacy_ledger_triggers.py`). Any other `gl_*`
   trigger, such as an `AFTER INSERT ON external_documents`, or a shipped name
-  with another body, is drift: `requires_python_migration`
+  with another body, is drift: `requires_python_migration`, whose details
+  name the drifted object (`"object": "gl_lines_no_delete", "aspects":
+  ["unexpected"]`; a current object that is gone reads `missing`)
   (`schema_structure::tests::populated_legacy_ledger_archives_pass_the_structural_check`).
+  The purge itself is proven on a book the last ledger revision wrote
+  (frozen: its own 57 tables and all 203 triggers, populated through its
+  ledger API, upgraded by Python's open; provenance in the test's header): `crates/kassiber/tests/black_box/legacy_ledger.rs` runs the
+  binary's plan and `--confirm` on it, plaintext and SQLCipher, and requires
+  Python's plan and its complete typed dump of the purged book (every schema
+  object and row with its storage class, audits included); the same book
+  with the unshipped `gl_lines_no_delete` added is refused by name with the
+  file unchanged. `tests/test_legacy_ledger.py` builds its books from the
+  same shipped objects, so it passes against Python and the binary.
 - `wallets reveal-descriptor` keeps Python's gates: the explicit leaf, the book
   unlock of this invocation (a locked SQLCipher book without a passphrase
   descriptor is refused non-interactively), the brokered admin authentication
@@ -240,7 +255,8 @@ Documented difference: Python's open path keeps every `gl_*` object of a
 populated ledger archive (it validates no schema), so it opens a book whose
 archive carries a trigger Kassiber never shipped. Rust refuses that book as
 `requires_python_migration` before reading or writing it
-(`test_unshipped_ledger_trigger_refuses_where_python_opens`). Empty archives
+(`test_unshipped_ledger_trigger_refuses_where_python_opens`,
+`legacy_ledger::an_unshipped_ledger_trigger_is_refused_by_name_without_a_write`). Empty archives
 are dropped on open by both runtimes, whatever their triggers.
 
 Documented difference: Python's `_decode_event_cursor` catches only
@@ -4117,10 +4133,11 @@ implemented kind subset.
 Child wrappers inject indentation, key-order, and separator changes to prove
 the oracle rejects them, including usage and caught output errors.
 
-Golden data and the scripts that write it, all run with the locked Python
-3.11:
+Golden data the Python 3.11 reference wrote. It is frozen now: the scripts
+went with the Python tree under [plan 22](../plan/22-python-removal.md#generators-become-frozen-goldens)
+(tag `archive/python-backend`), and `spec_data.rs` is edited by hand.
 
-| Data | Script |
+| Data | Former generator |
 | --- | --- |
 | `crates/pytext/src/unicode_tables.rs` | `crates/pytext/scripts/gen_unicode_tables.py` |
 | `crates/pytext/tests/data/vectors.txt` | `crates/pytext/scripts/gen_vectors.py` |

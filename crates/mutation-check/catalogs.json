@@ -1,0 +1,1357 @@
+{
+ "suites": [
+  {
+   "name": "ai",
+   "catalogs": [
+    "crates/ai/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-ai",
+    "-p",
+    "kassiber-net",
+    "-p",
+    "kassiber-transfers"
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
+  },
+  {
+   "name": "backup",
+   "catalogs": [
+    "crates/backup/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-backup",
+    "-p",
+    "kassiber-store"
+   ]
+  },
+  {
+   "name": "chain",
+   "catalogs": [
+    "crates/chain/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-chain",
+    "-p",
+    "kassiber-net",
+    "--features",
+    "kassiber-chain/test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "cli-leaves",
+   "catalogs": [
+    "crates/cli/scripts/leaves_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-cli",
+    "-p",
+    "kassiber-journals",
+    "-p",
+    "kassiber-store"
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
+  },
+  {
+   "name": "credentials",
+   "catalogs": [
+    "crates/credentials/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-credentials"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "custody",
+   "catalogs": [
+    "crates/custody/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-custody"
+   ]
+  },
+  {
+   "name": "custody-sync",
+   "catalogs": [
+    "crates/custody/scripts/sync_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-custody"
+   ]
+  },
+  {
+   "name": "daemon-desktop-projection",
+   "catalogs": [
+    "crates/daemon/scripts/desktop_projection_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-journals",
+    "--lib"
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
+  },
+  {
+   "name": "daemon-shell",
+   "catalogs": [
+    "crates/daemon/scripts/shell_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-daemon",
+    "-p",
+    "kassiber-setup",
+    "-p",
+    "kassiber-store",
+    "-p",
+    "kassiber-transactions",
+    "-p",
+    "kassiber-diagnostics",
+    "-p",
+    "kassiber-secrets",
+    "-p",
+    "kassiber-workspace",
+    "-p",
+    "kassiber-release",
+    "-p",
+    "kassiber",
+    "--features",
+    "kassiber/test-harness"
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
+  },
+  {
+   "name": "daemon-sync-s8-s10",
+   "catalogs": [
+    "crates/daemon/scripts/sync_s8_s10_mutations.json"
+   ],
+   "cargo": [],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
+  },
+  {
+   "name": "diagnostics",
+   "catalogs": [
+    "crates/diagnostics/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-diagnostics"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "envelope",
+   "catalogs": [
+    "crates/envelope/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-envelope"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "imports",
+   "catalogs": [
+    "crates/imports/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-imports",
+    "-p",
+    "kassiber-wallets"
+   ]
+  },
+  {
+   "name": "journals-loader",
+   "catalogs": [
+    "crates/journals/scripts/loader_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-journals",
+    "-p",
+    "kassiber-custody",
+    "-p",
+    "kassiber-pyjson",
+    "-p",
+    "kassiber-pytext",
+    "-p",
+    "kassiber-envelope"
+   ]
+  },
+  {
+   "name": "journals",
+   "catalogs": [
+    "crates/journals/scripts/mutations.json",
+    "crates/journals/scripts/branch_mutations.json",
+    "crates/journals/scripts/builder_mutations.json",
+    "crates/journals/scripts/legacy_mutations.json",
+    "crates/journals/scripts/loader_blob_mutations.json",
+    "crates/journals/scripts/native_graph_mutations.json",
+    "crates/journals/scripts/native_mutations.json",
+    "crates/journals/scripts/nonfinite_mutations.json",
+    "crates/journals/scripts/pipeline_mutations.json",
+    "crates/journals/scripts/prebuild_binary_mutations.json",
+    "crates/journals/scripts/prebuild_branch_mutations.json",
+    "crates/journals/scripts/prebuild_edge_mutations.json",
+    "crates/journals/scripts/prebuild_mutations.json",
+    "crates/journals/scripts/probe_mutations.json",
+    "crates/journals/scripts/process_native_mutations.json",
+    "crates/journals/scripts/recorder_mutations.json",
+    "crates/journals/scripts/scalar_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-journals",
+    "--features",
+    "test-harness"
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/journals/tests",
+    "extra": {
+     "probe": "crates/journals/examples/journal-persist.rs"
+    }
+   },
+   "test_args": [
+    "--test-threads=1"
+   ]
+  },
+  {
+   "name": "journals-desktop",
+   "catalogs": [
+    "crates/journals/scripts/desktop_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness"
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests"
+   }
+  },
+  {
+   "name": "journals-review",
+   "catalogs": [
+    "crates/journals/scripts/review_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-journals",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "RUST_TEST_THREADS": "1"
+   }
+  },
+  {
+   "name": "journals-route",
+   "catalogs": [
+    "crates/journals/scripts/route_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-cli",
+    "--features",
+    "test-probe"
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/cli/tests"
+   },
+   "test_args": [
+    "--test-threads=1"
+   ]
+  },
+  {
+   "name": "journals-sync",
+   "catalogs": [
+    "crates/journals/scripts/sync_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-journals",
+    "--lib"
+   ]
+  },
+  {
+   "name": "lightning",
+   "catalogs": [
+    "crates/kassiber/scripts/lightning_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "-p",
+    "kassiber-cli",
+    "-p",
+    "kassiber-daemon",
+    "-p",
+    "kassiber-chain",
+    "-p",
+    "kassiber-net",
+    "--features",
+    "kassiber/test-harness,kassiber-chain/test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "restart-recovery",
+   "catalogs": [
+    "crates/kassiber/scripts/restart_recovery_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness",
+    "--bin",
+    "kassiber"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "mcp",
+   "catalogs": [
+    "crates/mcp/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-mcp",
+    "-p",
+    "kassiber-cli",
+    "-p",
+    "kassiber-setup",
+    "-p",
+    "kassiber-store",
+    "-p",
+    "kassiber-ipc",
+    "-p",
+    "kassiber-daemon",
+    "-p",
+    "kassiber-transfers"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "strict"
+   },
+   "timeout_secs": 10800
+  },
+  {
+   "name": "net-chokepoint",
+   "catalogs": [
+    "crates/net/scripts/chokepoint_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-net",
+    "--test",
+    "chokepoint"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "operator",
+   "catalogs": [
+    "crates/operator/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-operator",
+    "-p",
+    "kassiber-ipc",
+    "-p",
+    "kassiber-ownership",
+    "-p",
+    "kassiber-setup",
+    "-p",
+    "kassiber-daemon",
+    "-p",
+    "kassiber-cli",
+    "--features",
+    "kassiber-cli/test-probe"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "strict"
+   },
+   "timeout_secs": 10800
+  },
+  {
+   "name": "operator-native-auth-redaction",
+   "catalogs": [
+    "crates/operator/scripts/native_auth_redaction_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-envelope",
+    "-p",
+    "kassiber-operator"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "pdf",
+   "catalogs": [
+    "crates/pdf/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-pdf",
+    "-p",
+    "kassiber-reports",
+    "--test",
+    "full_pdf",
+    "--test",
+    "engine"
+   ]
+  },
+  {
+   "name": "rates",
+   "catalogs": [
+    "crates/rates/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-rates"
+   ]
+  },
+  {
+   "name": "reports-legacy-privacy",
+   "catalogs": [
+    "crates/reports/scripts/legacy_privacy_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-reports",
+    "--features",
+    "test-harness",
+    "--test",
+    "legacy_privacy"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "strict"
+   }
+  },
+  {
+   "name": "reports-legacy-privacy-transport",
+   "catalogs": [
+    "crates/reports/scripts/legacy_privacy_transport_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness",
+    "--test",
+    "legacy_privacy_transport"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "strict"
+   }
+  },
+  {
+   "name": "reports",
+   "catalogs": [
+    "crates/reports/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-reports",
+    "-p",
+    "kassiber-pytext",
+    "-p",
+    "kassiber-daemon",
+    "-p",
+    "kassiber-cli",
+    "-p",
+    "kassiber-store"
+   ]
+  },
+  {
+   "name": "reports-psbt-privacy",
+   "catalogs": [
+    "crates/reports/scripts/psbt_privacy_mutations.json",
+    "crates/reports/scripts/privacy_mirror_mutations.json",
+    "crates/reports/scripts/psbt_inventory_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-reports",
+    "--features",
+    "test-harness",
+    "--test",
+    "psbt_privacy"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "strict"
+   }
+  },
+  {
+   "name": "reports-psbt-transport",
+   "catalogs": [
+    "crates/reports/scripts/psbt_transport_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness",
+    "--test",
+    "psbt_privacy"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "strict"
+   }
+  },
+  {
+   "name": "reports-design",
+   "catalogs": [
+    "crates/reports/scripts/report_design_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-reports",
+    "--lib",
+    "--test",
+    "report_design",
+    "--test",
+    "austrian_pdf",
+    "--test",
+    "source_funds_pdf",
+    "--test",
+    "artifact_vectors",
+    "--test",
+    "tax_country_vectors"
+   ],
+   "timeout_secs": 7200
+  },
+  {
+   "name": "reports-screen",
+   "catalogs": [
+    "crates/reports/scripts/reports_screen_mutations.json"
+   ],
+   "cargo": [],
+   "groups": {
+    "by": "file-crate",
+    "args": {
+     "reports": [
+      "-p",
+      "kassiber-reports",
+      "--lib",
+      "--test",
+      "vectors",
+      "--test",
+      "gain_reads"
+     ],
+     "journals": [
+      "-p",
+      "kassiber-journals",
+      "--lib"
+     ]
+    }
+   }
+  },
+  {
+   "name": "secrets",
+   "catalogs": [
+    "crates/secrets/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-secrets",
+    "-p",
+    "kassiber-store"
+   ]
+  },
+  {
+   "name": "setup-book-reset",
+   "catalogs": [
+    "crates/setup/scripts/book_reset_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-setup"
+   ]
+  },
+  {
+   "name": "setup",
+   "catalogs": [
+    "crates/setup/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-setup",
+    "-p",
+    "kassiber-cli",
+    "-p",
+    "kassiber-daemon"
+   ]
+  },
+  {
+   "name": "store-durability",
+   "catalogs": [
+    "crates/store/scripts/durability_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-store",
+    "-p",
+    "kassiber-backup",
+    "-p",
+    "kassiber-operator",
+    "-p",
+    "kassiber-reports"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "store-lot-order",
+   "catalogs": [
+    "crates/store/scripts/lot_order_mutations.json"
+   ],
+   "cargo": [],
+   "groups": {
+    "by": "id-prefix",
+    "args": {
+     "store": [
+      "-p",
+      "kassiber-store"
+     ],
+     "journals": [
+      "-p",
+      "kassiber-journals"
+     ],
+     "custody": [
+      "-p",
+      "kassiber-custody"
+     ],
+     "wallets": [
+      "-p",
+      "kassiber-wallets",
+      "--lib"
+     ],
+     "reports": [
+      "-p",
+      "kassiber-reports",
+      "--lib"
+     ],
+     "workspace": [
+      "-p",
+      "kassiber-workspace",
+      "--lib"
+     ]
+    }
+   },
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "store",
+   "catalogs": [
+    "crates/store/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-store"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "store-pyfix-8f",
+   "catalogs": [
+    "crates/store/scripts/pyfix_8f_mutations.json"
+   ],
+   "cargo": [],
+   "groups": {
+    "by": "id-prefix",
+    "args": {
+     "store": [
+      "-p",
+      "kassiber-store"
+     ],
+     "chain": [
+      "-p",
+      "kassiber-chain",
+      "--features",
+      "kassiber-chain/test-harness"
+     ],
+     "wallets": [
+      "-p",
+      "kassiber-wallets",
+      "--features",
+      "kassiber-wallets/test-harness"
+     ],
+     "custody": [
+      "-p",
+      "kassiber-custody"
+     ],
+     "transfers": [
+      "-p",
+      "kassiber-transfers",
+      "--features",
+      "kassiber-transfers/test-harness"
+     ],
+     "reports": [
+      "-p",
+      "kassiber-reports"
+     ]
+    }
+   },
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "store-rounds-5-8-a",
+   "catalogs": [
+    "crates/wallets/scripts/mutations.json",
+    "crates/store/scripts/mutations.json",
+    "crates/reports/scripts/mutations.json",
+    "crates/journals/scripts/mutations.json",
+    "crates/transactions/scripts/mutations.json",
+    "crates/rates/scripts/mutations.json"
+   ],
+   "cargo": [],
+   "id_contains": "-r58a-",
+   "groups": {
+    "by": "catalog",
+    "args": {
+     "crates/wallets/scripts/mutations.json": [
+      "-p",
+      "kassiber-wallets",
+      "--lib"
+     ],
+     "crates/store/scripts/mutations.json": [
+      "-p",
+      "kassiber-store",
+      "--lib"
+     ],
+     "crates/reports/scripts/mutations.json": [
+      "-p",
+      "kassiber-reports",
+      "--lib"
+     ],
+     "crates/journals/scripts/mutations.json": [
+      "-p",
+      "kassiber-journals",
+      "--test",
+      "prebuild_pricing"
+     ],
+     "crates/transactions/scripts/mutations.json": [
+      "-p",
+      "kassiber-transactions",
+      "--test",
+      "metadata"
+     ],
+     "crates/rates/scripts/mutations.json": [
+      "-p",
+      "kassiber-rates",
+      "--lib"
+     ]
+    }
+   },
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "store-symlink",
+   "catalogs": [
+    "crates/store/scripts/symlink_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-store"
+   ]
+  },
+  {
+   "name": "tax-countries",
+   "catalogs": [
+    "crates/tax-countries/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-tax-countries"
+   ]
+  },
+  {
+   "name": "transactions",
+   "catalogs": [
+    "crates/transactions/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transactions"
+   ]
+  },
+  {
+   "name": "transactions-sync",
+   "catalogs": [
+    "crates/transactions/scripts/sync_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transactions"
+   ]
+  },
+  {
+   "name": "transfers",
+   "catalogs": [
+    "crates/transfers/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transfers",
+    "-p",
+    "kassiber-daemon"
+   ]
+  },
+  {
+   "name": "transfers-legacy-migrations",
+   "catalogs": [
+    "crates/transfers/scripts/legacy_migration_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transfers",
+    "--lib",
+    "--test",
+    "legacy_migrations"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "transfers-pairing",
+   "catalogs": [
+    "crates/transfers/scripts/pairing_mutations.json"
+   ],
+   "cargo": [
+    "--release",
+    "-p",
+    "kassiber-transfers",
+    "--lib",
+    "--test",
+    "pairing_matcher",
+    "--test",
+    "pairing_services"
+   ]
+  },
+  {
+   "name": "transfers-review-apply",
+   "catalogs": [
+    "crates/transfers/scripts/review_apply_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transfers",
+    "--features",
+    "test-harness",
+    "--test",
+    "review_apply"
+   ],
+   "env": {
+    "RUST_TEST_THREADS": "1"
+   }
+  },
+  {
+   "name": "transfers-review-cases",
+   "catalogs": [
+    "crates/transfers/scripts/review_cases_mutations.json",
+    "crates/transfers/scripts/review_operations_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transfers",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "RUST_TEST_THREADS": "1"
+   }
+  },
+  {
+   "name": "transfers-review-closure",
+   "catalogs": [
+    "crates/transfers/scripts/review_closure_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transfers",
+    "-p",
+    "kassiber-journals",
+    "-p",
+    "kassiber-transactions",
+    "--features",
+    "kassiber-transfers/test-harness,kassiber-journals/test-harness"
+   ],
+   "env": {
+    "RUST_TEST_THREADS": "1"
+   }
+  },
+  {
+   "name": "transfers-review-effects",
+   "catalogs": [
+    "crates/transfers/scripts/review_effects_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transfers",
+    "--features",
+    "test-harness",
+    "--test",
+    "review_effects",
+    "--test",
+    "review_artifacts"
+   ],
+   "env": {
+    "RUST_TEST_THREADS": "1"
+   }
+  },
+  {
+   "name": "transfers-review-plan",
+   "catalogs": [
+    "crates/transfers/scripts/review_plan_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transfers",
+    "-p",
+    "kassiber-journals",
+    "--features",
+    "kassiber-transfers/test-harness",
+    "--lib",
+    "--test",
+    "review_plans"
+   ],
+   "env": {
+    "RUST_TEST_THREADS": "1"
+   }
+  },
+  {
+   "name": "transfers-review-process",
+   "catalogs": [
+    "crates/transfers/scripts/review_process_mutations.json",
+    "crates/transfers/scripts/repair_determinism_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "RUST_TEST_THREADS": "1"
+   },
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests"
+   }
+  },
+  {
+   "name": "transfers-review-route",
+   "catalogs": [
+    "crates/transfers/scripts/review_route_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transfers",
+    "-p",
+    "kassiber-daemon",
+    "-p",
+    "kassiber-cli",
+    "--features",
+    "kassiber-transfers/test-harness,kassiber-cli/test-probe"
+   ],
+   "env": {
+    "RUST_TEST_THREADS": "1"
+   }
+  },
+  {
+   "name": "transfers-sync",
+   "catalogs": [
+    "crates/transfers/scripts/sync_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transfers"
+   ]
+  },
+  {
+   "name": "wallets-acquisition",
+   "catalogs": [
+    "crates/wallets/scripts/acquisition_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "wallets-analysis-recovery",
+   "catalogs": [
+    "crates/wallets/scripts/analysis_recovery_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "strict"
+   },
+   "resolve_target": {
+    "tests_dir": "crates/wallets/tests"
+   }
+  },
+  {
+   "name": "wallets-bdk",
+   "catalogs": [
+    "crates/wallets/scripts/bdk_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "--lib",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "wallets-desktop-settings",
+   "catalogs": [
+    "crates/wallets/scripts/desktop_settings_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness"
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests"
+   }
+  },
+  {
+   "name": "wallets-discovery",
+   "catalogs": [
+    "crates/wallets/scripts/discovery_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "wallets-document-cli",
+   "catalogs": [
+    "crates/wallets/scripts/document_cli_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-cli",
+    "--lib"
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
+  },
+  {
+   "name": "wallets-exchange",
+   "catalogs": [
+    "crates/wallets/scripts/exchange_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "--lib",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "wallets-freshness",
+   "catalogs": [
+    "crates/wallets/scripts/freshness_mutations.json",
+    "crates/wallets/scripts/freshness_admission_mutations.json",
+    "crates/wallets/scripts/freshness_execution_mutations.json",
+    "crates/wallets/scripts/freshness_progress_mutations.json",
+    "crates/wallets/scripts/freshness_lifecycle_mutations.json",
+    "crates/wallets/scripts/freshness_graph_mutations.json",
+    "crates/wallets/scripts/freshness_product_mutations.json",
+    "crates/wallets/scripts/freshness_journal_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "-p",
+    "kassiber",
+    "--features",
+    "kassiber-wallets/test-harness,kassiber/test-harness"
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests",
+    "extra": {
+     "freshness": "crates/wallets/tests/freshness/main.rs",
+     "freshness_daemon": "crates/kassiber/tests/freshness_daemon/main.rs"
+    }
+   },
+   "timeout_secs": 1200
+  },
+  {
+   "name": "wallets-lwk",
+   "catalogs": [
+    "crates/wallets/scripts/lwk_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "--lib",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "wallets",
+   "catalogs": [
+    "crates/wallets/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "-p",
+    "kassiber-daemon"
+   ]
+  },
+  {
+   "name": "wallets-observer",
+   "catalogs": [
+    "crates/wallets/scripts/observer_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "-p",
+    "kassiber-store",
+    "--features",
+    "kassiber-wallets/test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "wallets-onboarding",
+   "catalogs": [
+    "crates/wallets/scripts/onboarding_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "-p",
+    "kassiber-daemon"
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
+  },
+  {
+   "name": "wallets-persistence",
+   "catalogs": [
+    "crates/wallets/scripts/persistence_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "--lib",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "wallets-record",
+   "catalogs": [
+    "crates/wallets/scripts/record_mutations.json",
+    "crates/wallets/scripts/analysis_analytics_mutations.json",
+    "crates/wallets/scripts/analysis_datasets_mutations.json",
+    "crates/wallets/scripts/analysis_durable_mutations.json",
+    "crates/wallets/scripts/analysis_entropy_mutations.json",
+    "crates/wallets/scripts/analysis_features_mutations.json",
+    "crates/wallets/scripts/analysis_handles_mutations.json",
+    "crates/wallets/scripts/analysis_index_mutations.json",
+    "crates/wallets/scripts/analysis_ingestion_mutations.json",
+    "crates/wallets/scripts/analysis_legacy_mutations.json",
+    "crates/wallets/scripts/analysis_mirror_mutations.json",
+    "crates/wallets/scripts/analysis_ops_mutations.json",
+    "crates/wallets/scripts/analysis_sources_mutations.json",
+    "crates/wallets/scripts/analysis_synchronize_mutations.json",
+    "crates/wallets/scripts/analysis_traversal_mutations.json",
+    "crates/wallets/scripts/analysis_views_mutations.json",
+    "crates/wallets/scripts/chain_analysis_dataset_preview_mutations.json",
+    "crates/wallets/scripts/chain_analysis_psbt_reads_mutations.json",
+    "crates/wallets/scripts/chain_analysis_reads_mutations.json",
+    "crates/wallets/scripts/psbt_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "--lib",
+    "--features",
+    "test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
+   "name": "wallets-routing",
+   "catalogs": [
+    "crates/wallets/scripts/routing_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness"
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests",
+    "extra": {
+     "routing_ports": "crates/kassiber/tests/routing_ports/main.rs"
+    }
+   },
+   "test_args": [
+    "--exact"
+   ]
+  },
+  {
+   "name": "wallets-sync",
+   "catalogs": [
+    "crates/wallets/scripts/discovery_mutations.json",
+    "crates/wallets/scripts/acquisition_mutations.json",
+    "crates/wallets/scripts/observer_mutations.json",
+    "crates/wallets/scripts/bdk_mutations.json",
+    "crates/wallets/scripts/record_mutations.json",
+    "crates/wallets/scripts/persistence_mutations.json",
+    "crates/wallets/scripts/fetch_mutations.json",
+    "crates/wallets/scripts/service_mutations.json",
+    "crates/chain/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-wallets",
+    "-p",
+    "kassiber-store",
+    "-p",
+    "kassiber-chain",
+    "--lib",
+    "--features",
+    "kassiber-wallets/test-harness,kassiber-chain/test-harness"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "RUST_TEST_THREADS": "1"
+   }
+  },
+  {
+   "name": "xlsx",
+   "catalogs": [
+    "crates/xlsx/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-xlsx"
+   ]
+  },
+  {
+   "name": "tax-engine",
+   "catalogs": [
+    "tax-engine/scripts/mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-tax-core",
+    "-p",
+    "kassiber-tax"
+   ]
+  }
+ ]
+}

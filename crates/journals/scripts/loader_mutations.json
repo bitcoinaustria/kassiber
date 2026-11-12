@@ -1340,26 +1340,6 @@
     "rule": "Preserve the SQLite scalar type identity in the revision witness."
   },
   {
-    "id": "JL-audit-seed-variants",
-    "file": "crates/journals/scripts/audit_loader_storage.py",
-    "find": "return actual == reference",
-    "replace": "return True",
-    "expect_failing": [
-      "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
-    ],
-    "rule": "Refusal comparison requires exact complete boundary pairs; obsolete operand-order variants must fail."
-  },
-  {
-    "id": "JL-audit-seed-code",
-    "file": "crates/journals/scripts/audit_loader_storage.py",
-    "find": "return actual == reference",
-    "replace": "return actual is not None and all(actual[key][\"message\"] == value[\"message\"] for key, value in reference.items())",
-    "expect_failing": [
-      "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
-    ],
-    "rule": "Refusal comparison must include error codes as well as messages."
-  },
-  {
     "id": "JL-convert-null",
     "file": "crates/journals/src/loader.rs",
     "find": "Value::Null => J::Null,",
@@ -3078,16 +3058,6 @@
       "native_loader_scoped_index_preserves_evidence_order_and_sorts_wallet_pairs"
     ],
     "rule": "Sort scoped txid wallet pairs while preserving the authored order of scoped outpoint evidence."
-  },
-  {
-    "id": "JL-reference-mixed-type-guard",
-    "file": "kassiber/core/custody_snapshot.py",
-    "find": "if len(revision_types) > 1:",
-    "replace": "if False:",
-    "expect_failing": [
-      "tests/test_rust_custody_loader.py::test_loader_mixed_revision_refusal_is_stable_across_hash_seeds"
-    ],
-    "rule": "Refuse incompatible revision types before Python sorts the hash-randomized set."
   },
   {
     "id": "JL-revision-validation-code",

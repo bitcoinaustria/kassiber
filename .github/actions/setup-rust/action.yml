@@ -37,6 +37,26 @@ runs:
         rustc --version
         cargo --version
 
+    # The bundled SQLCipher builds a vendored OpenSSL whose Configure needs a
+    # full Perl. On Windows, Git Bash puts its own Perl first on PATH, which
+    # lacks modules such as IPC::Cmd and Params::Check; the hosted runners
+    # ship Strawberry Perl, which openssl-src takes through OPENSSL_SRC_PERL
+    # (as scripts/build-rust-cli.sh does for release builds).
+    - name: Use Strawberry Perl for the vendored OpenSSL
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -n "${OPENSSL_SRC_PERL:-}" ]; then
+          exit 0
+        fi
+        strawberry="C:/Strawberry/perl/bin/perl.exe"
+        if [ -x "$strawberry" ]; then
+          echo "OPENSSL_SRC_PERL=$strawberry" >> "$GITHUB_ENV"
+        else
+          echo "::warning::no Strawberry Perl at $strawberry; set OPENSSL_SRC_PERL if OpenSSL's Configure fails"
+        fi
+
     # The key covers the compiler, Cargo.lock, every Cargo.toml, and
     # rust-toolchain.toml, so a toolchain or dependency change starts fresh.
     - name: Restore the Cargo cache

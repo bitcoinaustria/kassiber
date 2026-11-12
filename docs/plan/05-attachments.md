@@ -1,7 +1,7 @@
 # Transaction Attachments
 
 **Status:** Shipped behavior plus project-storage guidance.
-**Current source of truth:** `kassiber/core/attachments.py`, `kassiber/db.py`,
+**Current source of truth:** `crates/transactions/src/attachments.rs`, `crates/store`,
 README, AGENTS.md, and TODO.md.
 
 ## Current Behavior

@@ -1,8 +1,7 @@
 [package]
 name = "kassiber"
 description = "Kassiber's backend binary: the CLI, the desktop daemon, the MCP server, and the operator broker"
-# The product version (kassiber.__version__ and pyproject.toml), which
-# --version, daemon.ready, and status report; bumped with them.
+# The product version, which --version, daemon.ready, and status report.
 version = "0.22.78"
 edition.workspace = true
 rust-version.workspace = true
@@ -33,6 +32,7 @@ test-harness = [
   "kassiber-secrets/test-hooks",
   "kassiber-backup/test-hooks",
   "kassiber-operator/test-harness",
+  "kassiber-transactions/test-harness",
 ]
 
 [dependencies]
@@ -69,6 +69,8 @@ serde_json = "1"
 zeroize = "1"
 
 [dev-dependencies]
+# Reads the transfers crate's gzip legacy migration vectors.
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 tempfile = "3"
 
 [lints.rust]
@@ -76,4 +78,9 @@ unsafe_code = "forbid"
 
 [[example]]
 name = "psbt_transport_fixture"
+required-features = ["test-harness"]
+
+[[test]]
+name = "routing_ports"
+path = "tests/routing_ports/main.rs"
 required-features = ["test-harness"]

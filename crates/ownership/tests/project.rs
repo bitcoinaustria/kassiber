@@ -61,8 +61,21 @@ fn now() -> f64 {
 
 fn age(path: &Path, seconds: f64) {
     let when = SystemTime::now() - Duration::from_secs_f64(seconds);
-    fs::File::options()
-        .write(true)
+    let mut options = fs::File::options();
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_WRITE_ATTRIBUTES alone: share modes govern data access, so a
+        // live owner's exclusive handle does not stop setting its times.
+        const FILE_WRITE_ATTRIBUTES: u32 = 0x0100;
+        const FILE_SHARE_ALL: u32 = 0x7;
+        options
+            .access_mode(FILE_WRITE_ATTRIBUTES)
+            .share_mode(FILE_SHARE_ALL);
+    }
+    #[cfg(not(windows))]
+    options.write(true);
+    options
         .open(path)
         .unwrap()
         .set_times(fs::FileTimes::new().set_accessed(when).set_modified(when))
@@ -87,6 +100,22 @@ fn symlink_aliases_share_existing_database_identity() {
         s.owners.canonical_project(&real).unwrap().identity,
         s.owners.canonical_project(&alias).unwrap().identity
     );
+}
+
+/// std's canonicalize spells a Windows path verbatim (`\\?\C:\...`); a data
+/// root given that way is the same project as its plain spelling.
+#[cfg(windows)]
+#[test]
+fn verbatim_windows_paths_name_the_same_project() {
+    let s = scratch();
+    let data = book(&s.root.join("verbatim"));
+    let verbatim = fs::canonicalize(&data).unwrap();
+    assert!(verbatim.to_string_lossy().starts_with(r"\\?\"));
+    let plain = s.owners.canonical_project(&data).unwrap();
+    let spelled = s.owners.canonical_project(&verbatim).unwrap();
+    assert_eq!(spelled.identity, plain.identity);
+    assert_eq!(spelled.database, plain.database);
+    assert!(!spelled.database.to_string_lossy().starts_with(r"\\?\"));
 }
 
 #[test]

@@ -346,6 +346,73 @@ mod tests {
                 .unwrap();
         }
     }
+    /// The workbook's satoshi columns hold Python's numbers, never the text
+    /// `Decimal('50000000')`: whole satoshis as counts, fractions (msat)
+    /// as exact decimals.
+    #[test]
+    fn year_handoff_satoshi_cells_are_pythons_numbers() {
+        use crate::report_design::{Block, Cell};
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/data/year_handoff.json")).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let book = kassiber_store::Book::create(&root.path().join("data"), None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(include_str!("../tests/data/book.sql"))
+            .unwrap();
+        let (mut whole, mut fractional) = (0, 0);
+        for case in cases.as_array().unwrap() {
+            let Some(expected) = case["expected"].get("report") else {
+                continue;
+            };
+            conn.execute_batch("SAVEPOINT sats_vector").unwrap();
+            conn.execute_batch(case["sql"].as_str().unwrap()).unwrap();
+            let args = kassiber_pytext::loads(case["args_json"].as_str().unwrap()).unwrap();
+            let report = year_handoff::build(conn, &args, &Fixed).unwrap();
+            let document = report_design::year_handoff(&report);
+            let table = document
+                .sections
+                .iter()
+                .flat_map(|s| &s.blocks)
+                .find_map(|b| match b {
+                    Block::Table(t) if t.id == "transactions" => Some(t),
+                    _ => None,
+                });
+            let rows = expected["transactions"].as_array().unwrap();
+            let Some(table) = table else {
+                // No rows in the year: the sheet is a note.
+                assert!(rows.is_empty(), "{}", case["name"]);
+                conn.execute_batch("ROLLBACK TO sats_vector; RELEASE sats_vector")
+                    .unwrap();
+                continue;
+            };
+            assert_eq!(table.rows.len(), rows.len(), "{}", case["name"]);
+            for key in ["amount_sats", "fee_sats", "net_change_sats"] {
+                let col = table.columns.iter().position(|c| c.key == key).unwrap();
+                for (cells, row) in table.rows.iter().zip(rows) {
+                    let at = format!("{} {key}", case["name"]);
+                    match (&cells[col], &row[key]) {
+                        (Cell::Empty, serde_json::Value::Null) => {}
+                        (Cell::Count(n), serde_json::Value::String(python)) => {
+                            assert_eq!(n.to_string(), *python, "{at}");
+                            whole += 1;
+                        }
+                        (Cell::Btc(d), serde_json::Value::String(python)) => {
+                            assert!(python.contains('.'), "{at}: {python}");
+                            assert_eq!(d.to_string(), *python, "{at}");
+                            fractional += 1;
+                        }
+                        (cell, python) => panic!("{at}: {cell:?} for Python's {python}"),
+                    }
+                }
+            }
+            conn.execute_batch("ROLLBACK TO sats_vector; RELEASE sats_vector")
+                .unwrap();
+        }
+        assert!(
+            whole > 0 && fractional > 0,
+            "{whole} whole, {fractional} fractional"
+        );
+    }
     #[test]
     fn year_handoff_managed_publication_saves_actual_hash_and_retains_freshness() {
         let root = tempfile::tempdir().unwrap();

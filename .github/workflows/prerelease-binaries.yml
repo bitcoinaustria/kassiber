@@ -5,31 +5,27 @@ on:
     paths:
       - ".github/workflows/prerelease-binaries.yml"
       - ".github/workflows/finalize-signed-release.yml"
-      - "pyproject.toml"
       # Embedded into the Rust binary with include_str!.
-      - "kassiber/ai/skill_references/**"
+      - "crates/ai/skill_references/**"
       - "kassiber/data/**"
       - "scripts/build-rust-cli.sh"
       - "scripts/check-linux-glibc-floor.sh"
       - "scripts/smoke-packaged-cli.sh"
       - "scripts/package-cli-archive.sh"
-      - "tests/test_packaged_cli_no_egress.py"
+      - "scripts/check-packaged-cli-no-egress.sh"
       - "ui-tauri/provider-broker/**"
       - "scripts/build-apt-repository.sh"
       - "scripts/build-rpm-repository.sh"
       - "scripts/package-cli-deb.sh"
       - "scripts/package-cli-rpm.sh"
       - "scripts/package-desktop-rpm.sh"
-      - "scripts/release_manifest.py"
-      - "scripts/render_aur.py"
-      - "scripts/render_nix.py"
-      - "scripts/write_build_info.py"
       - "tax-engine/**"
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
       - ".github/actions/setup-rust/**"
+      - ".github/actions/release-tool/**"
       - "packaging/linux/**"
       - "packaging/release/**"
       - "ui-tauri/package.json"
@@ -94,11 +90,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     # The CLI and the desktop sidecar are the Rust `kassiber` binary (plan 21,
-    # stage 7). Python only runs the release helper scripts and the smoke's
-    # JSON assertions; nothing Python ships. See docs/reference/rust-packaging.md.
-    env:
-      UV_PYTHON: "3.11"
-      UV_PYTHON_PREFERENCE: only-managed
+    # stage 7); the job needs no Python. See docs/reference/rust-packaging.md.
     strategy:
       fail-fast: false
       matrix:
@@ -130,22 +122,13 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
-        with:
-          enable-cache: true
-
-      # Runs the build-identity writer and the smoke's JSON assertions. No
-      # runner-provided interpreter is on PATH under every OS in this matrix.
-      - name: Install the managed Python
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv python install "$UV_PYTHON"
-          echo "PYTHON=$(uv python find "$UV_PYTHON")" >> "$GITHUB_ENV"
-
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
+        with:
+          setup-rust: "false"
 
       # The AI provider broker is a Node script bundled from
       # ui-tauri/provider-broker. It is deliberately NOT committed. The Rust
@@ -171,8 +154,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -s kassiber/ai/provider_broker/index.mjs
-          echo "broker bundle: $(wc -c < kassiber/ai/provider_broker/index.mjs) bytes"
+          test -s ui-tauri/provider-broker/dist/index.mjs
+          echo "broker bundle: $(wc -c < ui-tauri/provider-broker/dist/index.mjs) bytes"
 
       - name: Install Linux RPM tooling
         if: runner.os == 'Linux'
@@ -188,25 +171,24 @@ jobs:
         run: |
           set -euo pipefail
           # The backend crate carries the product version. Every other copy
-          # must agree (tests/test_dependency_drift.py checks the same set in
-          # CI, but needs the Python package this job no longer builds).
+          # must agree.
           version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' crates/kassiber/Cargo.toml | head -n 1)"
-          "$PYTHON" - "$version" <<'PY'
-          import json, re, sys
-          from pathlib import Path
-          expected = sys.argv[1]
-          def table_version(path):
-              return re.search(r'(?m)^version\s*=\s*"([^"]+)"', Path(path).read_text(encoding="utf-8")).group(1)
-          found = {
-              "pyproject.toml": table_version("pyproject.toml"),
-              "ui-tauri/src-tauri/Cargo.toml": table_version("ui-tauri/src-tauri/Cargo.toml"),
-              "ui-tauri/package.json": json.loads(Path("ui-tauri/package.json").read_text(encoding="utf-8"))["version"],
-              "ui-tauri/src-tauri/tauri.conf.json": json.loads(Path("ui-tauri/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))["version"],
+          table_version() {
+            sed -n 's/^version *= *"\([^"]*\)".*/\1/p' "$1" | head -n 1
           }
-          wrong = {path: value for path, value in found.items() if value != expected}
-          if not expected or wrong:
-              sys.exit(f"crates/kassiber is {expected!r}, but these disagree: {wrong}")
-          PY
+          wrong=""
+          for copy in \
+              "ui-tauri/src-tauri/Cargo.toml=$(table_version ui-tauri/src-tauri/Cargo.toml)" \
+              "ui-tauri/package.json=$(jq -r .version ui-tauri/package.json)" \
+              "ui-tauri/src-tauri/tauri.conf.json=$(jq -r .version ui-tauri/src-tauri/tauri.conf.json)"; do
+            if [ "${copy#*=}" != "$version" ]; then
+              wrong="$wrong ${copy}"
+            fi
+          done
+          if [ -z "$version" ] || [ -n "$wrong" ]; then
+            echo "crates/kassiber is '$version', but these disagree:$wrong" >&2
+            exit 1
+          fi
           release_tag=""
           if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
             release_tag="$GITHUB_REF_NAME"
@@ -234,7 +216,7 @@ jobs:
           fi
           SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
           export SOURCE_DATE_EPOCH
-          "$PYTHON" scripts/write_build_info.py \
+          "$KASSIBER_RELEASE_TOOL" build-info \
             --output build/BUILD_INFO.json \
             --version "$version" \
             --commit "$package_commit" \
@@ -276,18 +258,18 @@ jobs:
       - name: Prove the packaged CLI stays offline
         if: runner.os == 'Linux'
         shell: bash
-        env:
-          KASSIBER_PACKAGED_CLI: dist/kassiber
         run: |
           set -euo pipefail
-          "$PYTHON" -m unittest -v tests.test_packaged_cli_no_egress
+          scripts/check-packaged-cli-no-egress.sh \
+            --cli dist/kassiber \
+            --scratch "$RUNNER_TEMP/kassiber-packaged-no-egress"
 
       - name: Package CLI-only release
         shell: bash
         run: |
           set -euo pipefail
           package_name="kassiber-cli-${{ matrix.target }}"
-          broker=kassiber/ai/provider_broker/index.mjs
+          broker=ui-tauri/provider-broker/dist/index.mjs
           scripts/package-cli-archive.sh \
             --binary "dist/kassiber${{ matrix.exe_ext }}" \
             --broker "$broker" \
@@ -343,7 +325,7 @@ jobs:
           cp "dist/kassiber${{ matrix.exe_ext }}" \
             "$sidecar_dir/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
           chmod 755 "$sidecar_dir/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
-          cp kassiber/ai/provider_broker/index.mjs "$sidecar_dir/provider_broker/index.mjs"
+          cp ui-tauri/provider-broker/dist/index.mjs "$sidecar_dir/provider_broker/index.mjs"
           # The macOS signer requires embedded build provenance in the app;
           # the Python sidecar carried it inside its payload.
           cp build/BUILD_INFO.json "$sidecar_dir/BUILD_INFO.json"
@@ -601,7 +583,7 @@ jobs:
           if [ "$RUNNER_OS" = "Linux" ]; then
             desktop_deb="$(find release -maxdepth 1 -type f -name '*.deb' -print -quit)"
             test -n "$desktop_deb"
-            package_version="$(python3 -c 'import json; print(json.load(open("ui-tauri/src-tauri/tauri.conf.json", encoding="utf-8"))["version"])')"
+            package_version="$(jq -r .version ui-tauri/src-tauri/tauri.conf.json)"
             export SOURCE_DATE_EPOCH
             SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
             scripts/package-desktop-rpm.sh \
@@ -636,7 +618,7 @@ jobs:
       - build-cli
       - build-desktop
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' &&
@@ -659,15 +641,18 @@ jobs:
             exit 1
           fi
 
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
+
       - name: Enforce release signing cutover policy
         id: release-signing
         env:
           RELEASE_IS_DRAFT: 'true'
         run: |
           set -euo pipefail
-          policy_json="$(python3 scripts/release_manifest.py policy \
+          policy_json="$("$KASSIBER_RELEASE_TOOL" manifest policy \
             --policy packaging/release/signing-policy.json)"
-          policy_enabled="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["enabled"]).lower())' "$policy_json")"
+          policy_enabled="$(jq -r '.enabled' <<< "$policy_json")"
           if [ "$policy_enabled" = true ] && [ "$RELEASE_IS_DRAFT" != true ]; then
             echo "Signed-release policy is enabled; build a draft and publish it only through finalize-signed-release.yml." >&2
             exit 1
@@ -708,7 +693,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG_NAME#v}"
-          python scripts/release_manifest.py generate \
+          "$KASSIBER_RELEASE_TOOL" manifest generate \
             --release-dir release \
             --version "$version"
           manifest_path="release/kassiber-${version}-manifest.txt"
@@ -732,7 +717,7 @@ jobs:
       - name: Extract reviewed release notes
         env:
           RELEASE_TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
-        run: python scripts/release_notes.py --version "$RELEASE_TAG_NAME" --output "$RUNNER_TEMP/release-notes.md"
+        run: '"$KASSIBER_RELEASE_TOOL" release-notes --version "$RELEASE_TAG_NAME" --output "$RUNNER_TEMP/release-notes.md"'
       - name: Create or update release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
@@ -795,12 +780,12 @@ jobs:
             printf '%s' "$sha256"
           }
 
-          python scripts/render_homebrew.py cask \
+          "$KASSIBER_RELEASE_TOOL" render-homebrew cask \
             --version "$version" \
             --sha256 "$(release_sha256 kassiber-macos-arm64.dmg)" \
             --output "homebrew-tap/${HOMEBREW_CASK_PATH}"
 
-          python scripts/render_homebrew.py cli-formula \
+          "$KASSIBER_RELEASE_TOOL" render-homebrew cli-formula \
             --version "$version" \
             --sha256-macos-arm64 "$(release_sha256 kassiber-cli-macos-arm64.tar.gz)" \
             --sha256-linux-x64 "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \

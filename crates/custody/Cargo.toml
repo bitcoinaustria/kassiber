@@ -32,3 +32,5 @@ required-features = ["timing"]
 [dev-dependencies]
 # The private fusion probe invokes the existing ledger; product custody remains independent.
 kassiber-tax-core = { path = "../../tax-engine/core" }
+# The frozen generated component snapshots are gzip test data (plan 22).
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }

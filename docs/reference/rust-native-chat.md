@@ -1,5 +1,9 @@
 # Rust native chat: writes through chat, and no feature gates
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 Branch `t3code/rust-native-chat` (from the integration tip d12d6e29e) makes
 the assistant's chat and the MCP server fully native in the product binary.
 Python stays the reference ([plan 21](../plan/21-rust-backend.md)); the
@@ -231,8 +235,9 @@ the consent bound to their call id.
   every daemon served by Rust.
 - A product build (`cargo build -p kassiber`, no features) registers
   `ai.chat`, answers the chat kinds and the `chats` leaves, serves
-  `mcp serve`, and has no test kinds; `tests/test_packaged_cli_no_egress.py`
-  passes against it (6 of 6).
+  `mcp serve`, and has no test kinds; the packaged no-egress check (then
+  `tests/test_packaged_cli_no_egress.py`, now
+  `scripts/check-packaged-cli-no-egress.sh`) passes against it (6 of 6).
 - `crates/ai/scripts/mutations.json`: 18 new entries (chat consent binding,
   the executor call, each custody audit path, each consent card, the node
   snapshot projection, the worker's write forwarding, the two new reads, the

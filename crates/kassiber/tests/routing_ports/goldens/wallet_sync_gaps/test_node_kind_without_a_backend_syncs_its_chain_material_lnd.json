@@ -1,0 +1,551 @@
+{
+ "pytest": "tests/test_rust_wallet_sync_gaps.py::test_node_kind_without_a_backend_syncs_its_chain_material[lnd]",
+ "sessions": [
+  {
+   "args": [
+    "--machine",
+    "--data-root",
+    "{tmp}/rust",
+    "wallets",
+    "sync",
+    "--all"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_BACKEND_FIXTURE_BATCH_SIZE": "2",
+    "KASSIBER_BACKEND_FIXTURE_KIND": "esplora",
+    "KASSIBER_BACKEND_FIXTURE_URL": "http://127.0.0.1:46221",
+    "KASSIBER_DEFAULT_BACKEND": "fixture",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_NOW": "0",
+    "KASSIBER_RUST_TEST_SYNC_PREFIX": "r0",
+    "KASSIBER_RUST_TEST_SYNC_START": "1700000000",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333680768757,
+    1794333680768757,
+    1794333681643858
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/python",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/python/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/python/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/python/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/python/attachments\",\n    \"config_root\": \"{tmp}/python/config\",\n    \"data_root\": \"{tmp}/python\",\n    \"database\": \"{tmp}/python/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/python/config/backends.env\",\n    \"exports_root\": \"{tmp}/python/exports\",\n    \"settings_file\": \"{tmp}/python/config/settings.json\",\n    \"state_root\": \"{tmp}/python\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/python/exports",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/rust",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/rust/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          3
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "profiles",
+          -1,
+          1
+         ],
+         [
+          2,
+          "wallets",
+          -1,
+          3
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "w",
+          "book",
+          "EUR",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "fixed",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T18:01:19.479Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:01:19.480Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:01:19.480Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T18:01:19.480Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T18:01:19.480Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T18:01:19.480Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T18:01:19.480Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T18:01:19.483Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T18:01:19.489Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T18:01:19Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T18:01:19.490Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T18:01:19.491Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          1,
+          "database_instance_id",
+          "f8d5033b0bbb464baf5f3a096b95ecbb"
+         ],
+         [
+          2,
+          "context_workspace",
+          "w"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "a",
+          "w",
+          "p",
+          null,
+          "Cold",
+          "lnd",
+          "{\"addresses\": [\"bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff\"], \"chain\": \"bitcoin\", \"network\": \"main\"}",
+          "fixed"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "w",
+          "ws",
+          "fixed"
+         ]
+        ]
+       }
+      }
+     }
+    }
+   ],
+   "tape": {"templates":["GET /blocks/tip/hash HTTP/1.1\r\nHost: 127.0.0.1:46221\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: text/plain\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 64\r\n\r\n","GET /blocks/tip/height HTTP/1.1\r\nHost: 127.0.0.1:46221\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: text/plain\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2\r\n\r\n20","GET /block-height/20 HTTP/1.1\r\nHost: 127.0.0.1:46221\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: text/plain\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","GET /scripthash/\u0001 HTTP/1.1\r\nHost: 127.0.0.1:46221\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 242\r\n\r\n","{\"chain_stats\": {\"funded_txo_count\": 1, \"funded_txo_sum\": 50000, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 1}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","GET /scripthash/\u0001/txs/chain HTTP/1.1\r\nHost: 127.0.0.1:46221\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 881\r\n\r\n","[{\"txid\": \"\u0001\", \"version\": 2, \"locktime\": 0, \"vin\": [{\"txid\": \"\u0001\", \"vout\": 0, \"scriptsig\": \"\", \"witness\": [\"\u0001\u0001ababababababab\", \"\u0001cd\"], \"is_coinbase\": false, \"sequence\": 4294967294, \"prevout\": {\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 51000}}], \"vout\": [{\"scriptpubkey\": \"0014cbd1e051255041224649ef67da8082850856a983\", \"value\": 50000}], \"size\": 191, \"weight\": 764, \"fee\": 1000, \"status\": {\"confirmed\": true, \"block_height\": 2, \"block_hash\": \"\u0001\", \"block_time\": 1700001200}}]","GET /scripthash/\u0001/txs/mempool HTTP/1.1\r\nHost: 127.0.0.1:46221\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2\r\n\r\n","GET /scripthash/\u0001/utxo HTTP/1.1\r\nHost: 127.0.0.1:46221\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 263\r\n\r\n","[{\"txid\": \"\u0001\", \"vout\": 0, \"value\": 50000, \"status\": {\"confirmed\": true, \"block_height\": 2, \"block_hash\": \"\u0001\", \"block_time\": 1700001200}}]"],"connections":[[1,false,"127.0.0.1",46221,1,null,[["w",152,[0]],["r",[1]],["r","c1e14df1501b3acc3de4dca30d55b7993a85a01a75dde81fc7f2b9802b72ea8a"]]],[2,false,"127.0.0.1",46221,1,null,[["w",154,[2]],["r",[3]]]],[3,false,"127.0.0.1",46221,1,null,[["w",152,[4]],["r",[1]],["r","c1e14df1501b3acc3de4dca30d55b7993a85a01a75dde81fc7f2b9802b72ea8a"]]],[4,false,"127.0.0.1",46221,1,null,[["w",218,[5,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[6]],["r",[7]]]],[5,false,"127.0.0.1",46221,1,null,[["w",228,[8,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[9]],["r",[10,"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1","160a367528d37fc98e1b24ef27048090e009f2ff494e77e633f9813a5460012f","abababababababababababababababababababababababababababababababab","abababababababababababababababababababababababababababababababab","02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","e648913eb8b23452b513f7cd41a990ddf8e600313472d1676b6104209800ef3f"]]]],[6,false,"127.0.0.1",46221,1,null,[["w",230,[11,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[12]],["r","[]"]]],[7,false,"127.0.0.1",46221,1,null,[["w",218,[5,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[6]],["r",[7]]]],[8,false,"127.0.0.1",46221,1,null,[["w",154,[2]],["r",[12]],["r","20"]]],[9,false,"127.0.0.1",46221,1,null,[["w",223,[13,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[14]],["r",[15,"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1","e648913eb8b23452b513f7cd41a990ddf8e600313472d1676b6104209800ef3f"]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Cold\",\n      \"status\": \"synced\",\n      \"source\": \"backend:fixture\",\n      \"imported\": 1,\n      \"skipped\": 0,\n      \"unchanged\": 0,\n      \"journal_invalidated\": true,\n      \"inserted_records\": [\n        {\n          \"transaction_id\": \"r0-0002\",\n          \"external_id\": \"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1\",\n          \"wallet\": \"Cold\",\n          \"asset\": \"BTC\",\n          \"direction\": \"inbound\",\n          \"amount_msat\": 50000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        }\n      ],\n      \"updated_records\": [],\n      \"saved_report_impacts\": 0,\n      \"output_inventory\": {\n        \"observed\": 1,\n        \"active\": 1,\n        \"spent\": 0,\n        \"last_seen_at\": \"2030-01-01T00:00:03Z\"\n      },\n      \"backend\": \"fixture\",\n      \"backend_kind\": \"esplora\",\n      \"backend_url\": \"http://127.0.0.1:46221\",\n      \"chain\": \"bitcoin\",\n      \"network\": \"main\",\n      \"sync_mode\": \"addresses\",\n      \"target_count\": 1,\n      \"records_fetched\": 1,\n      \"updated\": 0,\n      \"addresses\": \"bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff\",\n      \"esplora_history_complete\": true,\n      \"freshness_checkpoint\": {\n        \"backend\": {\n          \"batch_size\": 2,\n          \"chain\": \"bitcoin\",\n          \"kind\": \"esplora\",\n          \"name\": \"fixture\",\n          \"network\": \"main\"\n        },\n        \"compatibility_history_anchor_version\": 2,\n        \"esplora_history_memberships\": {\n          \"backend_key\": \"6119c7a712b6a0e15e777974a1531db28dc6373e14442d2e03f439ac37de983b\",\n          \"scripts\": {\n            \"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\": {\n              \"complete\": true,\n              \"fingerprint\": \"377e88b1a9c1660ac5e929747af70c31e84b809c23ee113a83b1959704734d70\",\n              \"txids\": [\n                \"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1\"\n              ]\n            }\n          },\n          \"version\": 1\n        },\n        \"esplora_scripthashes\": {\n          \"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\": {\n            \"fingerprint\": \"377e88b1a9c1660ac5e929747af70c31e84b809c23ee113a83b1959704734d70\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 1\n          }\n        },\n        \"esplora_tip_hash\": \"c1e14df1501b3acc3de4dca30d55b7993a85a01a75dde81fc7f2b9802b72ea8a\",\n        \"esplora_tip_height\": 20,\n        \"highest_used\": {\n          \"0\": 0\n        }\n      },\n      \"known_txids\": 1,\n      \"observer_compatibility_reason\": \"address_list\",\n      \"observer_route\": \"bitcoin_script\",\n      \"scripts_changed\": 1,\n      \"scripts_unchanged\": 0,\n      \"scripts_checked\": 1,\n      \"utxos_refreshed\": true,\n      \"elapsed_ms\": 0\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/rust/attachments": {
+      "dir": true
+     },
+     "{tmp}/rust/config": {
+      "dir": true
+     },
+     "{tmp}/rust/config/settings.json": {
+      "mode": 384,
+      "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/rust/attachments\",\n    \"config_root\": \"{tmp}/rust/config\",\n    \"data_root\": \"{tmp}/rust\",\n    \"database\": \"{tmp}/rust/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/rust/config/backends.env\",\n    \"exports_root\": \"{tmp}/rust/exports\",\n    \"settings_file\": \"{tmp}/rust/config/settings.json\",\n    \"state_root\": \"{tmp}/rust\"\n  },\n  \"schema_version\": 1\n}\n"
+     },
+     "{tmp}/rust/exports": {
+      "dir": true
+     },
+     "{tmp}/rust/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           8
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           1,
+           "profiles",
+           -1,
+           6
+          ],
+          [
+           2,
+           "wallets",
+           -1,
+           8
+          ],
+          [
+           3,
+           "transactions",
+           1,
+           4
+          ],
+          [
+           4,
+           "wallet_utxos",
+           1,
+           7
+          ]
+         ]
+        },
+        "chain_observation_provenance": {
+         "upsert": [
+          [
+           1,
+           "r0-0002",
+           "w",
+           "p",
+           "a",
+           1,
+           "[\"adapter:esplora:a\"]",
+           "[\"esplora\"]",
+           "bitcoin",
+           "main",
+           "r0-0001",
+           "8a60c61e30563db9a0cdfc20c879418749bd0493714986fbc76315cb6ba2a4f5",
+           "cce26a57b3a588897f252772b6994b25548865d55228a5ad3d3f4dc7ef08e978",
+           "unknown",
+           "2030-01-01T00:00:02Z",
+           "2030-01-01T00:00:02Z"
+          ]
+         ]
+        },
+        "freshness_source_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "onchain_wallet:a",
+           "onchain_wallet",
+           "Cold",
+           "fresh",
+           "fresh",
+           null,
+           0,
+           0,
+           null,
+           null,
+           0,
+           "2030-01-01T00:00:04Z",
+           null,
+           null,
+           null,
+           "done",
+           "{\"phase\":\"done\"}",
+           "{\"backend\":{\"batch_size\":2,\"chain\":\"bitcoin\",\"kind\":\"esplora\",\"name\":\"fixture\",\"network\":\"main\"},\"compatibility_history_anchor_version\":2,\"esplora_history_memberships\":{\"backend_key\":\"6119c7a712b6a0e15e777974a1531db28dc6373e14442d2e03f439ac37de983b\",\"scripts\":{\"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\":{\"complete\":true,\"fingerprint\":\"377e88b1a9c1660ac5e929747af70c31e84b809c23ee113a83b1959704734d70\",\"txids\":[\"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1\"]}},\"version\":1},\"esplora_scripthashes\":{\"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\":{\"fingerprint\":\"377e88b1a9c1660ac5e929747af70c31e84b809c23ee113a83b1959704734d70\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":1}},\"esplora_tip_hash\":\"c1e14df1501b3acc3de4dca30d55b7993a85a01a75dde81fc7f2b9802b72ea8a\",\"esplora_tip_height\":20,\"highest_used\":{\"0\":0}}",
+           "2030-01-01T00:00:05Z"
+          ]
+         ]
+        },
+        "profiles": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "w",
+           "book",
+           "EUR",
+           "generic",
+           365,
+           "FIFO",
+           0,
+           1,
+           "global",
+           1,
+           0,
+           1,
+           0,
+           null,
+           0,
+           null,
+           "fixed",
+           null
+          ]
+         ]
+        },
+        "transactions": {
+         "upsert": [
+          [
+           1,
+           "r0-0002",
+           "w",
+           "p",
+           "a",
+           "e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1",
+           "txid",
+           "c48f707f634f7f2a089d6e6e21c333f752c23914604625bd9e63af5e1757c3fc",
+           "2023-11-14T22:33:20Z",
+           "2023-11-14T22:33:20Z",
+           "inbound",
+           "BTC",
+           50000000,
+           0,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Synced from fixture",
+           null,
+           null,
+           0,
+           "{\"fee\": 1000, \"locktime\": 0, \"observer_owned_scripts\": [\"0014cbd1e051255041224649ef67da8082850856a983\"], \"size\": 191, \"status\": {\"block_hash\": \"e648913eb8b23452b513f7cd41a990ddf8e600313472d1676b6104209800ef3f\", \"block_height\": 2, \"block_time\": 1700001200, \"confirmed\": true}, \"txid\": \"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1\", \"version\": 2, \"vin\": [{\"is_coinbase\": false, \"prevout\": {\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 51000}, \"scriptsig\": \"\", \"sequence\": 4294967294, \"txid\": \"160a367528d37fc98e1b24ef27048090e009f2ff494e77e633f9813a5460012f\", \"vout\": 0, \"witness\": [\"ababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\", \"02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"]}], \"vout\": [{\"scriptpubkey\": \"0014cbd1e051255041224649ef67da8082850856a983\", \"value\": 50000}], \"weight\": 764}",
+           null,
+           null,
+           null,
+           null,
+           "2030-01-01T00:00:01Z"
+          ]
+         ]
+        },
+        "wallet_utxo_refreshes": {
+         "upsert": [
+          [
+           1,
+           "a",
+           "w",
+           "p",
+           "fixture",
+           "esplora",
+           "bitcoin",
+           "main",
+           1,
+           1,
+           "2030-01-01T00:00:03Z"
+          ]
+         ]
+        },
+        "wallet_utxos": {
+         "upsert": [
+          [
+           1,
+           "3c7457d8b79d96cb62401e178217fc386bd9773ba0fc834b8fae81058aafd113",
+           "w",
+           "p",
+           "a",
+           "fixture",
+           "esplora",
+           "bitcoin",
+           "main",
+           "BTC",
+           50000000,
+           "e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1",
+           0,
+           "e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1:0",
+           "confirmed",
+           19,
+           2,
+           "2023-11-14T22:33:20Z",
+           "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+           "0014cbd1e051255041224649ef67da8082850856a983",
+           "address #0",
+           "address",
+           0,
+           0,
+           null,
+           null,
+           null,
+           null,
+           "[]",
+           "2030-01-01T00:00:03Z",
+           "2030-01-01T00:00:03Z",
+           null,
+           "{\"confirmed\": true, \"source\": \"esplora_scripthash_utxo\"}"
+          ]
+         ]
+        },
+        "wallets": {
+         "upsert": [
+          [
+           1,
+           "a",
+           "w",
+           "p",
+           null,
+           "Cold",
+           "lnd",
+           "{\"addresses\": [\"bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff\"], \"chain\": \"bitcoin\", \"last_synced_at\": \"2030-01-01T00:00:04Z\", \"network\": \"main\"}",
+           "fixed"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

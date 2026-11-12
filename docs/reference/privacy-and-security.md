@@ -90,7 +90,7 @@ Mitigations, in order of effect:
    or `electrum` backend.
 3. Deliberately set `--tor-proxy` / `tor_proxy` on each supported backend you
    want routed, including `.onion` Esplora/Electrum/Fulcrum backends, or torify
-   the whole process (`torsocks python3 -m kassiber ...`) / route through a VPN.
+   the whole process (`torsocks kassiber ...`) / route through a VPN.
 4. Prefer `address`-kind wallets over `descriptor`-kind wallets when
    you only care about a fixed set of addresses.
 5. Skip `rates sync` and use `rates set` for manual rate upserts.
@@ -143,7 +143,7 @@ slices and rechecks between slices; it keeps the same retry and total-wait caps.
 Native BDK/LWK Electrum observers check before opening connections, between
 SDK calls (including tip/header reads and repeated scans), and between observer
 identities. A BDK `full_scan` or `sync`, or LWK `full_scan_to_index`, already in
-progress cannot be interrupted through the pinned Python bindings: all requests
+progress cannot be interrupted through the pinned BDK/LWK crates: all requests
 inside that call may finish after cancellation, but no later SDK call or identity
 starts and its result is not applied. Esplora uses the compatibility transport
 on both chains and retains its per-request checks.
@@ -163,16 +163,9 @@ those actions retain the private checkpoint locally for the next sync.
 The Rust freshness source/admission prerequisite only reads local state. It
 creates no consent grant, recovers no jobs and contacts no backend, even when
 saved configuration selects a loopback server. Admission rejects the entire
-selection when an enabled source has no native executor. The three native daemon sync/freshness product
-routes also admit default local journal refresh. The guarded
-whole-invocation hybrid selector reads only an already opened book; static
-unsupported shapes and unopened/locked books decline without database open or
-migration. Journal refresh performs no network I/O. Production builds return
-native refusals. The development hybrid launcher alone enables a test-build
-reference job after byte-identical journal rollback; it cannot replay a
-committed stale-first rebuild or a cancelled/revoked request. Refusal census
-records contain phase, exception family and replay eligibility, without book
-operands or error messages. Python retains production authority until R4-16.
+selection when an enabled source has no executor. The three daemon sync/freshness
+routes also admit default local journal refresh. Journal refresh performs no
+network I/O.
 
 The internal Rust freshness executor consumes an admitted plan under its
 foreground slot. Its once-only request grant binds to that exact plan;
@@ -185,8 +178,7 @@ request runner services cancellation, source controls and offline
 changes while fetching; switch, lock, shutdown and EOF cancel/revoke and join
 its connection owner before releasing the book. Used request identities cannot
 create another grant. Source-control results redact private checkpoints,
-including the result container, matching Python pause/resume after the
-cancellation and checkpoint-redaction fixes.
+including the result container.
 
 The runner carries private successful-job graph grants separately
 from the response and publishes them into a bounded in-memory mailbox only
@@ -209,10 +201,7 @@ buffers before consent and under pretransport fences. Worker failure events
 expose fixed error categories rather than database or backend error details.
 
 Native Electrum graph decoding also checks the computed transaction ID before
-using a response or caching a parent. A disposable reference repro demonstrates
-that Python currently accepts different transaction bytes under the requested
-ID. That correctness difference remains open; the cancellation and checkpoint
-privacy differences are resolved on both runtimes.
+using a response or caching a parent.
 
 Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview
@@ -262,10 +251,10 @@ checking an artifact hash. Releases published before the SSH release key
 (`SHA256:UzYeHzOEIbanmYDAylIaGhI6dGFvhNOkszPXwUgzo9M`) carry no signature and
 remain unauthenticated. The verifier requires both a local public-key file and
 the full SHA256 fingerprint obtained independently; packaged builds do not
-embed the key. It hashes the key in Python and pins the fingerprint, writes one
-canonical allowed-signers entry to a private temporary directory, runs
-`ssh-keygen -Y verify` locally without a shell or network lookup, and only then
-hashes the selected artifact. See [release signing](release-signing.md).
+embed the key. It hashes the key and pins the fingerprint, checks the SSHSIG
+signature in process with the rules of `ssh-keygen -Y verify` (no external
+program, shell or network lookup), and only then hashes the selected
+artifact. See [release signing](release-signing.md).
 
 Release finalization and external Linux channel publication use the same
 code-reviewed public key and fingerprint from the enabled signing policy. The
@@ -311,8 +300,9 @@ supported: configuring a proxy on one backend does not route any other backend,
 AI provider, or standalone rate provider. Proxy values may be `HOST:PORT`,
 `socks5://...`, `socks5h://...`, `socks5h://USER:PASS@HOST:PORT`, or
 `http://...`; encode special characters in usernames/passwords. An `https://`
-proxy is rejected before connecting because Python's HTTP CONNECT path does
-not establish TLS to that proxy; Kassiber never silently downgrades it. This
+proxy is rejected before connecting (`HTTPS proxy transport is not supported`)
+because the HTTP CONNECT path does not establish TLS to that proxy; Kassiber
+never silently downgrades it. This
 restriction concerns the proxy transport, not HTTPS target nodes: their TLS
 and certificate verification remain intact. Standalone
 Coinbase/CoinGecko providers do not yet have a per-provider proxy setting. The
@@ -333,7 +323,7 @@ contact nothing. Each invocation requires a grant bound to the document,
 options, database instance and selected provider configuration. Disabled,
 unacknowledged, off-device and unavailable-secret providers refuse before any
 request. Only marked-local loopback HTTP(S) is admitted; no CLI provider starts.
-The local-AI exception to offline mode and `KASSIBER_NO_EGRESS` matches Python.
+The local-AI exception to offline mode and `KASSIBER_NO_EGRESS` applies.
 Requests ignore ambient proxies and permit only same-origin redirects. Both
 wire formats carry `store: false`; only the saved explicit Chat Completions
 opt-out omits it. A refusal never weakens retention. No document bytes,
@@ -341,10 +331,12 @@ credentials or request contents enter the bounded RAM network ledger. Product
 CLI `wallets preview-document` and interactive `wallets import-document`
 grant this exact action after resolving the selected book. Imports resolve the
 wallet and refuse machine, noninteractive or nonterminal input before provider
-discovery or OCR. Daemon registration remains deferred; R6 AI paths stay Python.
+discovery or OCR. The desktop reaches the same flow through
+`internal.document_import.stage` and the `ui.wallets.document_import.*` kinds
+([daemon](daemon.md)).
 
-Rust OCR PDF preparation launches only local Poppler `pdfinfo` and `pdftoppm`,
-with Python's exact arguments and limits: at most eight contiguous pages,
+OCR PDF preparation launches only local Poppler `pdfinfo` and `pdftoppm`,
+with fixed arguments and limits: at most eight contiguous pages,
 180 DPI, 2400 pixels per side, 24 MiB per PNG, 96 MiB in total and 30 seconds per
 process. Private temporary source/page directories honor the selected temporary
 root; verification sets it inside each disposable data root. Child processes
@@ -352,14 +344,14 @@ are killed and reaped on timeout, and pages are removed on success or failure.
 No shell or provider contact is involved in preparation; image disclosure still
 requires the exact OCR action grant. PDF report/export rendering is separate.
 
-Two Rust document-import privacy deviations are deliberate and regression
-tested. Generic database errors use the shared redacted diagnostic rather than
-raw SQLite exceptions that may contain local paths or source values. A managed
-copy that fails source-digest verification is removed after rollback, rather
-than left as untracked evidence as in Python; cleanup is restricted to canonical
-paths under the managed evidence root. Successful accounting is unchanged.
+Two document-import privacy rules are regression tested. Generic database
+errors use the shared redacted diagnostic rather than raw SQLite exceptions
+that may contain local paths or source values. A managed copy that fails
+source-digest verification is removed after rollback rather than left as
+untracked evidence; cleanup is restricted to canonical paths under the managed
+evidence root. Successful accounting is unchanged.
 
-`KASSIBER_NO_EGRESS=1` blocks the shared backend HTTP/SOCKS and Python Electrum
+`KASSIBER_NO_EGRESS=1` blocks the shared backend HTTP/SOCKS and Electrum
 connect boundaries, native BDK/LWK observer construction, and chain-analysis
 acquisition and Core Lightning client subprocesses, including loopback nodes.
 Acquisition rechecks it for every
@@ -420,7 +412,7 @@ running as that user, an agent included, can change it.
 The [Rust port's HTTPS/HTTP foundation](rust-port-egress.md#rust-gate-and-httpshttp-foundation)
 adds no enabled service or request trigger. Its clients consume exact-route
 consent, ignore ambient proxies, retain policy checks for proxy/TLS writes and
-keep only bounded RAM metadata. Rust retains Python's explicitly local,
+keep only bounded RAM metadata. They keep the explicitly local,
 loopback AI offline exception and the AI/update paths outside the process
 `KASSIBER_NO_EGRESS` override. Its optional offline cache requires an authoritative
 cross-process revision and fails closed on missing or racing revisions; absent
@@ -620,16 +612,16 @@ journal mode and durability settings do not change. See the
 - A `.kassiber` backup file does **not** recover a forgotten passphrase.
   The DB inside the backup is encrypted under whatever project passphrase was
   active when the backup was produced.
-  The Rust archive service keeps that SQLCipher payload and Python's age format.
-  Passphrase mode uses the already locked in-process Rust `age` crate (the same
-  format Python's pyrage uses); passphrases enter neither argv nor a child
-  environment. Recipient mode searches PATH for `age`, then `rage`, and runs
+  The archive service keeps that SQLCipher payload inside an `age` archive.
+  Passphrase mode uses the locked in-process `age` crate; passphrases enter
+  neither argv nor a child environment. Recipient mode searches PATH for `age`, then `rage`, and runs
   only the reference's fixed `--recipient` or `--decrypt --identity` command
   with file-backed stdin/stdout and inherited stderr/environment. This reviewed
-  child starts only for an explicit backup command. There is no shell or
-  Python fallback. Staging-only import leaves the decrypted private temporary
-  workspace to its caller, as Python does; errors remove it. Rust installation
-  and desktop restore remain unavailable pending cross-runtime recovery proof.
+  child starts only for an explicit backup command. There is no shell
+  fallback. Staging-only import leaves the decrypted private temporary
+  workspace to its caller; errors remove it. `backup import --install` and the
+  desktop restore install the staged book under a maintenance lease and then
+  remove the decrypted workspace.
 - Kassiber has no device sync. To use a book on another device, restore an
   encrypted `.kassiber` backup there. A file-sync tool such as Syncthing can
   carry backup archives, but never file-sync a live project directory while
@@ -703,7 +695,7 @@ the guard channel.
 **Desktop credential stores are a separate boundary, not SQLCipher
 replacement.** Desktop builds can store AI provider API keys in macOS
 Keychain, Windows user-scope Credential Manager/DPAPI, or Linux Secret Service
-when platform policy selects a native store. The unlocked Python daemon remains
+when platform policy selects a native store. The unlocked daemon remains
 trusted at runtime and receives the key only to call the configured provider.
 Backend tokens, descriptors, xpubs, blinding keys, and reveal payloads stay
 SQLCipher-protected and are not migrated to OS credential stores. See
@@ -721,7 +713,7 @@ status`, enrollment, revocation and post-rotation refresh can access the native
 credential service; startup, route mounts and ordinary display reads do not
 invoke these operations. Native interop tests must launch a disposable bus and
 keyring, never reuse the account's store. Backend credentials remain in the
-encrypted book. `secrets migrate-credentials` retains Python's plaintext
+encrypted book. `secrets migrate-credentials` keeps a plaintext
 timestamped dotenv recovery copy, preserves non-secret and skipped lines, and
 publishes sanitized bytes only after backend commits and a flushed snapshot.
 Rust stages complete files before replacement and refuses a conflicting
@@ -949,13 +941,13 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
   `ai.providers.move_api_key`; provider envelopes return only `has_api_key`
   plus `secret_ref.{store_id,state}`. No generic keyring get/list API is
   exposed to the webview or assistant.
-- **No encrypted-while-running claim.** Once the Python daemon is unlocked, it
+- **No encrypted-while-running claim.** Once the daemon is unlocked, it
   can read stored AI keys, backend tokens, descriptors, and blinding keys to do
   its job. This does not protect against malware, admin/root access, debugger
   memory inspection, a compromised OS, or a compromised webview process.
 - **The Tauri shell allowlists exactly the AI daemon kinds.** The webview
   cannot reach Ollama (or any other model API) directly — every call
-  passes through the Python daemon. The provider URL never reaches the
+  passes through the daemon. The provider URL never reaches the
   webview's CSP/CORS surface. The in-app AI has no shell, raw filesystem,
   arbitrary CLI, or generic daemon-dispatch access.
 - **The Vite daemon bridge is development-only.** `pnpm --dir ui-tauri run
@@ -965,7 +957,7 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
   a local development bridge to the same daemon trust boundary.
 - **Streaming Stop is best-effort cooperative cancel, not a billing
   guarantee.** Pressing Stop sends `ai.chat.cancel` to the local daemon and
-  suppresses later streamed UI updates. The Python worker stops forwarding
+  suppresses later streamed UI updates. The chat worker stops forwarding
   deltas once provider control returns between chunks and marks the terminal
   response `finish_reason: "cancelled"`. Remote providers may still bill for
   tokens already generated or in flight. No prompt content is exposed beyond
@@ -1051,76 +1043,30 @@ other processes out of the signed app's memory.
 Do not file security-impacting issues in the public tracker. See
 [SECURITY.md](../../SECURITY.md) for the private reporting channel.
 
-## Custody port verification data
+## Verification data
 
-Native journal refusal replay compares hashes of the admitted database and its
-durable sidecars in RAM after rollback, and verifies the selected book from
-before bootstrap through connection close. It retains no book copy or hash log.
-The development hybrid launcher buffers the bounded passphrase bytes in RAM
-and supplies a fresh pipe to a possible reference replay. Only the test build
-emits a replay signal, and only after the durable files compare byte-identical.
-Neither path authorizes provider access or adds an AI tool.
+Test recordings and goldens hold complete local accounting operands, so they
+are test fixtures, not product logs, diagnostics or AI projections. Only
+synthetic data is checked in or published to the test-data branch:
 
-The test-only R2 recorder is enabled explicitly with
-`KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR`; ordinary product builds never install it.
-Its [raw request](custody-engine.md) contains local accounting evidence, including
-private component locations, and is not a public diagnostic or AI projection.
-Wallet configuration is reduced to required network/Samourai facts, and private
-policy material never enters the request or Rust response. The recorder rejects
-known wallet key material before writing. Owner-book comparisons remain local
-and ephemeral; repository recordings use synthetic data only. No verification
-path grants network consent or changes observation, ownership or tax authority.
+- The recorded product sessions replayed by `scripts/replay-sessions.sh`
+  admit only synthetic secrets, the literals of the checked-in test sources
+  ([plan 22](../plan/22-python-removal.md#session-replay)).
+- The custody recordings ([testing](testing.md#custody-recordings)) contain
+  raw custody requests, including private component locations. Wallet
+  configuration is reduced to the required network/Samourai facts, and
+  private policy material never enters a request. Recordings of owner books
+  stay on the machine that recorded them.
+- Test examples such as `custody-load`, `custody-replay` and the wallet
+  fixtures need a test feature (`test-harness`, `test-hooks`) or are
+  examples outside the product binary; no product command, daemon kind or AI
+  route reaches them. Their outputs stay under a disposable worktree data root
+  or `target/`.
 
-The R4-11 test-only `KASSIBER_TEST_JOURNAL_RENDER_DIR` hook similarly captures
-complete rendering operands, entry UUID mappings and canonical build states.
-These local parity fixtures can contain private book facts and must stay in a
-disposable worktree data root. Nothing is redacted for parity; they are not
-diagnostic exports or AI projections. The checked-in corpus is synthetic.
+No verification path grants network consent or changes observation, ownership
+or tax authority.
 
-The explicit pytest plugin `tests.rust_port.journal_prebuild_recorder` likewise
-copies the complete current schema and logical database, including pending
-caller writes, through a guarded native child pipe. With `--prebuild-binary`
-and `--prebuild-recordings`, it also stores complete local parity operands in
-mode-0600 files in the requested disposable worktree `target/` directory.
-Existing recording paths are refused.
-The explicit recorder configuration also propagates to Python children through
-the test-only import hook. Children append private failure markers containing
-only a fixed failure label, so a caught comparison error still fails the parent
-pytest session. Each session requires an empty destination; process IDs and a
-per-process sequence prevent child recording collisions.
-Those files can include private wallet/provider configuration and must remain
-ephemeral; they are neither product logs nor redacted diagnostics. Only synthetic
-scenario operands are checked in. The plugin is never installed by the product,
-daemon or AI, and grants no network consent.
-
-The explicit R4-13 `scripts/check-journal-process-campaign.py` runner likewise
-uses complete stored-book operands through the unregistered native process
-probe. Its incremental comparison records, source/binary manifest and private
-failure operands are written only beneath the worktree's `target/` directory,
-with mode-0700 directories and mode-0600 files. Failure operands can include
-private book facts and must remain ephemeral. They are test fixtures, not
-product logs, diagnostics or AI projections. The runner denies native socket
-syscalls and patches reference network entry points; it grants no egress or
-accounting authority and installs no product hook.
-
-The experimental R4-9 test-only `KASSIBER_TEST_CUSTODY_LOADER_BIN` hook adds a
-native snapshot byte comparison to custody census/shadow runs when explicitly
-set. It sends a complete `iterdump` of the caller's current connection through
-a local child-process pipe, including uncommitted changes. That copy can contain
-unrelated private wallet/provider configuration; it stays in RAM, is never
-written as a fixture or diagnostic, and assertion failures expose only a byte
-offset. The `custody-load` example requires the `test-harness` feature and has no
-product, daemon or AI route. Its root mode opens plaintext/SQLCipher books through
-`crates/store`; SQL-copy mode is solely a disposable verification fixture.
-CI census/shadow jobs and the local quality gate explicitly enable this hook
-on disposable books. Its match counter appends only `equal` to a mode-0600
-disposable records file; no SQL, descriptor, snapshot or refusal payload is
-retained there. Structured reference refusals and their test-only CLI/daemon
-code/message projections are returned only on the local probe pipe for exact
-exceptional-path tests, never as public diagnostics. The scalar audit retains
-only synthetic fixture records under the disposable verification root.
-
-The partial Rust chain-client slice implements explicit HTTP, Electrum, Core,
+The chain client implements explicit HTTP, Electrum, Core,
 BTCPay and local Core-detection tests through the reviewed network gate.
 Its action grant binds the exact daemon kind, form arguments and book; backend
 configuration and display reads grant nothing. Offline refuses these paths,
@@ -1177,17 +1123,9 @@ rechecks cancellation, grant revocation and the fresh `kassiber-net` offline
 policy at every savepoint stage, including commit. The CLI/book adapter
 reads the persisted offline preference afresh; `KASSIBER_NO_EGRESS` remains
 enforced by the gate. No saved backend creates a grant. The service adds no
-automatic trigger or AI projection. Registered no-refresh daemon requests use
+automatic trigger or AI projection. The daemon sync/freshness requests use
 their separate exact-action lifecycle and terminal-flush graph handoff described
-above; default journal refresh still requires native R4-13 integration.
-
-The test-only hybrid CLI may open the admitted book to check saved sync
-capabilities. This check constructs and discards an inert action without
-granting consent or creating a network client. Only an explicit silent
-pre-consent handoff permits Python selection. Once native sync starts, errors
-and internal capability refusals never retry through Python. Passphrase-FD and
-interactive hybrid sync invocations select Python before opening either book,
-so unlock input is consumed once. Production builds have no hybrid handoff.
+above.
 
 Wallets using the active default retain that selection in their grant. The
 service re-resolves the current stored default before fetch and publication;
@@ -1201,8 +1139,8 @@ plan equals the submitted one; planning, listing and all source-grant leaves
 send nothing. Every request first checks `KASSIBER_NO_EGRESS` and the offline
 switch, then the gate rechecks the route; the grant is revoked before the
 local save. Redirects are refused and environment proxies are never read.
-Loopback fakes prove that native and Python send the same request sequence and
-that refused, stale or offline actions send nothing. See the
+Loopback fakes prove the request sequence and that refused, stale or offline
+actions send nothing. See the
 [acquisition egress record](rust-port-egress.md#chain-analysis-acquisition-apply-r5).
 The native daemon's background worker runs authorized recurring sources with
 a narrowly scoped grant bound to the saved Bitcoin Core route, only while the
@@ -1218,13 +1156,14 @@ The native configuration privacy hygiene read (`reports privacy-hygiene` and
 `ui.reports.privacy_hygiene`) inspects only stored configuration, local counts
 and the active database header. It performs no DNS lookup, socket connection,
 provider launch or backend probe, including for loopback endpoints. Endpoint
-posture is inferred rather than verified: Python's private-address ranges and
-`.local` names retain the `on_device` label. Counts include configured disabled
+posture is inferred rather than verified: only loopback endpoints
+(`localhost`, `*.localhost` and loopback addresses) get the `on_device` label;
+LAN addresses and `.local` names can reach other machines and do not. Counts include configured disabled
 AI providers. Neither classification grants network consent. The output omits
 endpoints, credentials, labels, watch-only material, raw metadata and exact
-amounts. AI dispatch remains Python. The
-[Rust privacy checkpoint](rust-shell.md#privacy-hygiene-checkpoint-r5-reports-privacy-partial)
-records that configuration-only checkpoint; Mirror remains unported.
+amounts. The assistant reads it through the `ui.reports.privacy_hygiene` tool.
+The port record is the
+[Rust privacy checkpoint](rust-shell.md#privacy-hygiene-checkpoint-r5-reports-privacy-partial).
 
 The native LND profitability acquisition client uses only
 `kassiber-net` HTTP routes. Its caller must provide current consent for the
@@ -1234,26 +1173,25 @@ trust. Construction performs local configuration/certificate reads and no
 probe. The gate checks offline mode, the product no-egress switch and shared
 consent revocation during transport. The shared book service rechecks scope and
 configuration between resources and before publication, and revokes its
-request-local grant on completion or failure. It reads the same fixed
-1000-event/payment/invoice pages as Python, including private-peer alias
+request-local grant on completion or failure. It reads fixed
+1000-event/payment/invoice pages, including private-peer alias
 lookups, and never follows redirects or retries directly around a proxy.
 Only report channels and routing totals leave the helper; errors omit raw
-node bodies. Only exact CLI profitability read/CSV and desktop profitability
-requests use it; background and AI routes remain unported. See the
+node bodies. Only explicit profitability requests use it: the CLI read/CSV,
+the desktop kind and the assistant's redacted tool. See the
 [Lightning product checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5).
 
 The native CLN profitability client gates `lightning-cli` launch
 through `kassiber-net` for local IPC; commando configurations are refused
-before a request exists, as in Python. Exact-action
+before a request exists. Exact-action
 consent covers the executable, options and backend configuration as well as
 the report scope. Missing or revoked consent, offline/unavailable policy and
 `KASSIBER_NO_EGRESS` refuse before launch; policy changes and deadlines stop
 and reap an in-flight child. Only fixed read-only resource methods can be
 called. The child owns its transport; the parent records a redacted process
 marker rather than claiming visibility into child sockets. Raw output and
-command details are excluded from errors. It serves the same exact profitability
-actions through the shared book service; background and AI routes remain
-unported. See the
+command details are excluded from errors. It serves the same explicit profitability
+requests through the shared book service. See the
 [CLN subprocess boundary](rust-port-egress.md#cln-profitability-subprocess-acquisition-r5-preparation).
 
 ## Native reduced PSBT privacy reads
@@ -1286,13 +1224,13 @@ records complete-table, exact-wire and strict no-egress checks.
 
 ## Native Mirror derived storage
 
-The unregistered native Mirror projection helper updates only the existing
+The Mirror projection helper updates only the existing
 book-local derived index and source-change feed, inside the caller's transaction.
 Stored wallet configuration and observations supply local evidence; they grant
 no acquisition consent or accounting authority. Installation, synchronization,
 expiry handling and recovery perform no DNS, socket, HTTP, RPC, loopback or
-provider operation. Mirror report routes remain unregistered; AI projections
-stay in Python.
+provider operation. The Mirror report (`ui.reports.privacy_mirror`) and its
+redacted AI tool are registered.
 
 Native Chain Analysis graph and synchronous entropy reads now use this derived
 publication boundary. Saved-case, label and dataset metadata/claim reads use

@@ -17,9 +17,9 @@
 //!   scanner's error messages and positions;
 //! - [`zone`]: `zoneinfo.ZoneInfo` key validation, TZif loading and offsets.
 //!
-//! The Unicode tables come from CPython 3.11 (Unicode 14.0.0) through
-//! `scripts/gen_unicode_tables.py`; `tests/data/vectors.txt` comes from the
-//! same interpreter through `scripts/gen_vectors.py`.
+//! The Unicode tables and `tests/data/vectors.txt` were taken from CPython
+//! 3.11 (Unicode 14.0.0) and are frozen; their generators went with the
+//! Python tree (tag `archive/python-backend`).
 
 mod case;
 mod json;

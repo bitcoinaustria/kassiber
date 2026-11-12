@@ -13,10 +13,12 @@ income figures and flags the classification for review.
 
 The worked cases are in [tax-country-us-vectors.json](tax-country-us-vectors.json)
 (schema `kassiber.tax-country-vectors/1`, shared with the other countries);
-their expected values come from the reference model
-[tax-country-reference/us.py](tax-country-reference/us.py), which also checks
-the hand-worked figures each vector carries:
-`python3 -I docs/reference/tax-country-reference/build.py . us`.
+their expected values came from an independent Python reference model
+(`us.py`), which also checked the hand-worked figures each vector carries.
+That model was removed with Python ([plan 22](../plan/22-python-removal.md),
+D6; it remains at the `archive/python-backend` tag), so the file is now a
+frozen, reviewed golden: change an expected value only by hand, with the
+reason.
 
 ## Sources
 
@@ -67,7 +69,7 @@ Every rule has an id; the vectors list the ids they exercise.
   market value when received (VC FAQ 9, 12, 23); **US-INCOME-BASIS** that value
   is their basis (VC FAQ 13, 25) and their holding period starts the next
   day (FAQ 29). Kassiber's inbound kinds map to these as in every country
-  (`kassiber/core/transaction_kinds.py`); `wages` are an acquisition at
+  (the engine's kind tables, `tax-engine/core/src/manifest.rs`); `wages` are an acquisition at
   their value, since the employer reports the wage. **US-INCOME-AIRDROP**
   Kassiber books an airdrop as income; a reviewer should confirm that no
   airdrop kind needs a separate review (open question 5).
@@ -123,7 +125,7 @@ Every rule has an id; the vectors list the ids they exercise.
   of a lot the first pass already moved away (vector `us-10`: FIFO sells b1
   in both wallets; basis 200,000 instead of 300,000). Kassiber's engine
   holds every wallet's portions in one chronological pass instead
-  (`tax-engine/core/src/wallets.rs`). The RP2 comparison uses RP2's
+  (`tax-engine/core/src/wallets.rs`). The RP2 comparison used RP2's
   per-wallet results only on books where its passes agree (no disposal from
   a wallet after it sent units away).
 - **US-ORDER** — At one instant: acquisitions, then moves, then disposals.

@@ -1,0 +1,528 @@
+{
+ "pytest": "tests/test_rust_connections.py::test_btcpay_discover_daemon_bytes_requests_and_all_tables[btcpay24_read_only-sqlite]",
+ "sessions": [
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "daemon"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333626604715,
+    1794333626604715,
+    1794333626626408
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/attachments\",\n    \"config_root\": \"{tmp}/config\",\n    \"data_root\": \"{tmp}/data\",\n    \"database\": \"{tmp}/data/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/config/backends.env\",\n    \"exports_root\": \"{tmp}/exports\",\n    \"settings_file\": \"{tmp}/config/settings.json\",\n    \"state_root\": \"{tmp}\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/data",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/data/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "accounts": {
+        "upsert": [
+         [
+          1,
+          "acct",
+          "w",
+          "p",
+          "treasury",
+          "Treasury",
+          "asset",
+          "BTC",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "backends": {
+        "upsert": [
+         [
+          1,
+          "merchant",
+          "btcpay",
+          null,
+          null,
+          "http://127.0.0.1:45207",
+          null,
+          "synthetic-btcpay-secret",
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ],
+         [
+          2,
+          "chain",
+          "esplora",
+          null,
+          null,
+          "http://127.0.0.1:1",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ],
+         [
+          3,
+          "sibling",
+          "btcpay",
+          null,
+          null,
+          "http://127.0.0.1:45207/",
+          null,
+          "other-key",
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ]
+        ]
+       },
+       "btcpay_account_routes": {
+        "upsert": [
+         [
+          1,
+          "route-1",
+          "w",
+          "p",
+          "merchant",
+          "s1",
+          "BTC-LN",
+          "provenance_only",
+          "Shop",
+          "2026-01-01T00:00:00Z",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "btcpay_store_sync_states": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "merchant",
+          "s1",
+          "2026-01-01T00:00:00Z",
+          "2026-01-01T00:00:00Z",
+          null,
+          null,
+          null,
+          null,
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          18
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "transactions",
+          -1,
+          1
+         ],
+         [
+          2,
+          "transaction_graph_cache",
+          -1,
+          2
+         ],
+         [
+          3,
+          "wallet_utxos",
+          -1,
+          3
+         ],
+         [
+          4,
+          "chain_analysis_observations",
+          -1,
+          4
+         ],
+         [
+          5,
+          "chain_analysis_reference_assertions",
+          -1,
+          5
+         ],
+         [
+          6,
+          "wallets",
+          -1,
+          18
+         ],
+         [
+          7,
+          "profiles",
+          -1,
+          15
+         ],
+         [
+          8,
+          "journal_custody_decisions",
+          -1,
+          8
+         ],
+         [
+          9,
+          "journal_custody_economic_relations",
+          -1,
+          9
+         ],
+         [
+          10,
+          "chain_analysis_labels",
+          -1,
+          10
+         ],
+         [
+          11,
+          "chain_analysis_datasets",
+          -1,
+          11
+         ],
+         [
+          12,
+          "chain_analysis_dataset_claims",
+          -1,
+          12
+         ],
+         [
+          13,
+          "book_network_bindings",
+          -1,
+          13
+         ],
+         [
+          14,
+          "chain_analysis_acquisition_grants",
+          -1,
+          14
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "w",
+          "Book",
+          "USD",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "2026-01-01T00:00:00Z",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T18:00:23.751Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:23.755Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:23.755Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:23.756Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:23.756Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T18:00:23.756Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T18:00:23.756Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T18:00:23.773Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T18:00:23.779Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T18:00:23Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T18:00:23.780Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T18:00:23.784Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          1,
+          "database_instance_id",
+          "be752e10cd6d4e56b960296b1a09f0f1"
+         ],
+         [
+          2,
+          "context_workspace",
+          "w"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "a",
+          "w",
+          "p",
+          null,
+          "Cold",
+          "custom",
+          "{}",
+          "2026-01-01T00:00:00Z"
+         ],
+         [
+          2,
+          "cold",
+          "w",
+          "p",
+          null,
+          "Shop cold",
+          "address",
+          "{\"addresses\":[\"bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq\",\"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4\"],\"chain\":\"bitcoin\",\"network\":\"main\"}",
+          "2026-01-01T00:00:00Z"
+         ],
+         [
+          3,
+          "ln",
+          "w",
+          "p",
+          null,
+          "Node",
+          "lnd",
+          "{}",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "w",
+          "Main",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       }
+      }
+     }
+    },
+    {
+     "mkdir": "{tmp}/exports",
+     "mode": 493
+    }
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "daemon\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "daemon"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333626604715,
+    1794333626753805,
+    1794333627357942
+   ],
+   "stdin": [
+    {
+     "after_lines": 0,
+     "text": "{\"request_id\": \"0\", \"kind\": \"ui.connections.btcpay.discover\", \"args\": {\"backend\": \"merchant\"}}\n{\"request_id\": \"1\", \"kind\": \"ui.connections.btcpay.discover\", \"args\": {\"backend\": \"Sibling\"}}\n{\"request_id\": \"2\", \"kind\": \"ui.connections.btcpay.discover\", \"args\": {\"backend\": \"missing\"}}\n{\"request_id\": \"3\", \"kind\": \"ui.connections.btcpay.discover\", \"args\": {\"backend\": \"chain\"}}\n{\"request_id\": \"4\", \"kind\": \"ui.connections.btcpay.discover\", \"args\": {\"server_url\": \"http://127.0.0.1:45207\", \"api_key\": \"inline-key\", \"instance_label\": \"New shop\"}}\n{\"request_id\": \"5\", \"kind\": \"ui.connections.btcpay.discover\", \"args\": {\"server_url\": \"http://127.0.0.1:45207\"}}\n{\"request_id\": \"6\", \"kind\": \"ui.connections.btcpay.discover\", \"args\": {\"backend\": \"merchant\", \"api_key\": \"x\"}}\n{\"request_id\": \"7\", \"kind\": \"ui.connections.btcpay.discover\", \"args\": {}}\n{\"request_id\": \"8\", \"kind\": \"ui.connections.btcpay.discover\", \"args\": []}\n{\"request_id\": \"stop\", \"kind\": \"daemon.shutdown\"}\n"
+    },
+    {
+     "after_lines": 0,
+     "close": true
+    }
+   ],
+   "tape": {"templates":["GET /api/v1/server/info HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 107\r\n\r\n{\"version\": \"2.4.7\", \"fullySynched\": false, \"supportedPaymentMethods\": [\"BTC\", \"BTC-LightningNetwork\", \"\"]}","GET /api/v1/api-keys/current HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 142\r\n\r\n","{\"label\": \"Kassiber\", \"permissions\": [\"btcpay.store.canviewstoresettings\", \"btcpay.store.canviewwallet\"], \"apiKey\": \"synthetic-btcpay-secret\"}","GET /api/v1/stores HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 143\r\n\r\n","[{\"id\": \"s1\", \"name\": \"Shop\", \"defaultCurrency\": \"EUR\"}, {\"id\": \"s2\", \"name\": \"Cafe\"}, {\"id\": \"arch\", \"name\": \"Old\", \"archived\": true}, \"junk\"]","GET /api/v1/stores/s1/payment-methods?onlyEnabled=true HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 167\r\n\r\n","[{\"paymentMethodId\": \"BTC-CHAIN\", \"enabled\": true}, {\"paymentMethodId\": \"BTC-LN\", \"enabled\": true}, {\"paymentMethodId\": \"XMR-CHAIN\"}, {\"paymentMethodId\": \"BTC-Boltz\"}]","GET /api/v1/stores/s1/payment-methods/BTC-CHAIN/wallet/preview?offset=0&count=5 HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 152\r\n\r\n","{\"addresses\": [{\"address\": \"bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq\"}, {\"address\": \"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4\"}, {\"no\": \"address\"}]}","GET /api/v1/stores/s2/payment-methods?onlyEnabled=true HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 61\r\n\r\n","{\"BTC\": true, \"LBTC-CHAIN\": {\"enabled\": true}, \"DOGE\": false}","GET /api/v1/stores/s2/payment-methods/BTC-CHAIN/wallet/preview?offset=0&count=5 HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","GET /api/v1/stores/s2/payment-methods/LBTC-CHAIN/wallet/preview?offset=0&count=5 HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 403 Forbidden\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 30\r\n\r\n","{\"code\": \"missing-permission\"}","GET /api/v1/server/info HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token other-key\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 107\r\n\r\n","{\"version\": \"2.4.7\", \"fullySynched\": false, \"supportedPaymentMethods\": [\"BTC\", \"BTC-LightningNetwork\", \"\"]}","GET /api/v1/api-keys/current HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token other-key\r\n\r\n","GET /api/v1/stores HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token other-key\r\n\r\n","GET /api/v1/stores/s1/payment-methods?onlyEnabled=true HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token other-key\r\n\r\n","GET /api/v1/stores/s1/payment-methods/BTC-CHAIN/wallet/preview?offset=0&count=5 HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token other-key\r\n\r\n","GET /api/v1/stores/s2/payment-methods?onlyEnabled=true HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token other-key\r\n\r\n","GET /api/v1/stores/s2/payment-methods/BTC-CHAIN/wallet/preview?offset=0&count=5 HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token other-key\r\n\r\n","GET /api/v1/stores/s2/payment-methods/LBTC-CHAIN/wallet/preview?offset=0&count=5 HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token other-key\r\n\r\n","GET /api/v1/server/info HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token inline-key\r\n\r\n","GET /api/v1/api-keys/current HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token inline-key\r\n\r\n","GET /api/v1/stores HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token inline-key\r\n\r\n","GET /api/v1/stores/s1/payment-methods?onlyEnabled=true HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token inline-key\r\n\r\n","GET /api/v1/stores/s1/payment-methods/BTC-CHAIN/wallet/preview?offset=0&count=5 HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token inline-key\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 152\r\n\r\n{\"addresses\": [{\"address\": \"bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq\"}, {\"address\": \"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4\"}, {\"no\": \"address\"}]}","GET /api/v1/stores/s2/payment-methods?onlyEnabled=true HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token inline-key\r\n\r\n","GET /api/v1/stores/s2/payment-methods/BTC-CHAIN/wallet/preview?offset=0&count=5 HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token inline-key\r\n\r\n","GET /api/v1/stores/s2/payment-methods/LBTC-CHAIN/wallet/preview?offset=0&count=5 HTTP/1.1\r\nHost: 127.0.0.1:45207\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token inline-key\r\n\r\n","HTTP/1.0 403 Forbidden\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 30\r\n\r\n{\"code\": \"missing-permission\"}"],"connections":[[1,false,"127.0.0.1",45207,1,null,[["w",177,[0]],["r",[1]]]],[2,false,"127.0.0.1",45207,1,null,[["w",182,[2]],["r",[3]],["r",[4]]]],[3,false,"127.0.0.1",45207,1,null,[["w",172,[5]],["r",[6]],["r",[7]]]],[4,false,"127.0.0.1",45207,1,null,[["w",208,[8]],["r",[9]],["r",[10]]]],[5,false,"127.0.0.1",45207,1,null,[["w",233,[11]],["r",[12]],["r",[13]]]],[6,false,"127.0.0.1",45207,1,null,[["w",208,[14]],["r",[15]],["r",[16]]]],[7,false,"127.0.0.1",45207,1,null,[["w",233,[17]],["r",[12]],["r",[13]]]],[8,false,"127.0.0.1",45207,1,null,[["w",234,[18]],["r",[19]],["r",[20]]]],[9,false,"127.0.0.1",45207,1,null,[["w",163,[21]],["r",[22]],["r",[23]]]],[10,false,"127.0.0.1",45207,1,null,[["w",168,[24]],["r",[3]],["r",[4]]]],[11,false,"127.0.0.1",45207,1,null,[["w",158,[25]],["r",[6]],["r",[7]]]],[12,false,"127.0.0.1",45207,1,null,[["w",194,[26]],["r",[9]],["r",[10]]]],[13,false,"127.0.0.1",45207,1,null,[["w",219,[27]],["r",[12]],["r",[13]]]],[14,false,"127.0.0.1",45207,1,null,[["w",194,[28]],["r",[15]],["r",[16]]]],[15,false,"127.0.0.1",45207,1,null,[["w",219,[29]],["r",[12]],["r",[13]]]],[16,false,"127.0.0.1",45207,1,null,[["w",220,[30]],["r",[19]],["r",[20]]]],[17,false,"127.0.0.1",45207,1,null,[["w",164,[31]],["r",[22]],["r",[23]]]],[18,false,"127.0.0.1",45207,1,null,[["w",169,[32]],["r",[3]],["r",[4]]]],[19,false,"127.0.0.1",45207,1,null,[["w",159,[33]],["r",[6]],["r",[7]]]],[20,false,"127.0.0.1",45207,1,null,[["w",195,[34]],["r",[9]],["r",[10]]]],[21,false,"127.0.0.1",45207,1,null,[["w",220,[35]],["r",[36]]]],[22,false,"127.0.0.1",45207,1,null,[["w",195,[37]],["r",[15]],["r",[16]]]],[23,false,"127.0.0.1",45207,1,null,[["w",220,[38]],["r",[12]],["r",[13]]]],[24,false,"127.0.0.1",45207,1,null,[["w",221,[39]],["r",[40]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\"kind\":\"daemon.ready\",\"schema_version\":1,\"data\":{\"version\":\"0.22.78\",\"supported_kinds\":[\"ui.chain_analysis.acquire.apply\",\"ui.chain_analysis.acquire.plan\",\"ui.chain_analysis.ai_context\",\"ui.chain_analysis.cases.compare\",\"ui.chain_analysis.cases.delete\",\"ui.chain_analysis.cases.get\",\"ui.chain_analysis.cases.list\",\"ui.chain_analysis.cases.save\",\"ui.chain_analysis.datasets.discard\",\"ui.chain_analysis.datasets.discard.start\",\"ui.chain_analysis.datasets.get\",\"ui.chain_analysis.datasets.import\",\"ui.chain_analysis.datasets.import.start\",\"ui.chain_analysis.datasets.list\",\"ui.chain_analysis.datasets.preview\",\"ui.chain_analysis.datasets.preview.start\",\"ui.chain_analysis.datasets.query\",\"ui.chain_analysis.datasets.revoke\",\"ui.chain_analysis.entropy\",\"ui.chain_analysis.entropy.start\",\"ui.chain_analysis.jobs.cancel\",\"ui.chain_analysis.jobs.get\",\"ui.chain_analysis.labels.delete\",\"ui.chain_analysis.labels.import\",\"ui.chain_analysis.labels.list\",\"ui.chain_analysis.labels.upsert\",\"ui.chain_analysis.psbt.analyze\",\"ui.chain_analysis.psbt.compare\",\"ui.chain_analysis.psbt.entropy\",\"ui.chain_analysis.psbt.entropy.start\",\"ui.chain_analysis.query\",\"ui.chain_analysis.sources.authorize\",\"ui.chain_analysis.sources.list\",\"ui.chain_analysis.sources.plan\",\"ui.chain_analysis.sources.revoke\",\"ui.chain_analysis.sources.run\",\"ui.chain_analysis.watches.acknowledge\",\"ui.chain_analysis.watches.configure\",\"ui.chain_analysis.watches.create\",\"ui.chain_analysis.watches.delete\",\"ui.chain_analysis.watches.evaluate\",\"ui.chain_analysis.watches.inbox\",\"ui.chain_analysis.watches.list\",\"ui.chain_analysis.watches.preview\",\"status\",\"ui.logs.snapshot\",\"ui.agent_access.status\",\"ui.agent_access.configure\",\"ui.agent_access.unlock\",\"ui.agent_access.lock\",\"ui.agent_access.pairing\",\"ui.egress.snapshot\",\"ui.network.offline\",\"ui.network.offline.set\",\"ui.overview.snapshot\",\"ui.workspace.overview.snapshot\",\"ui.transactions.list\",\"ui.transactions.dashboard\",\"ui.transactions.extremes\",\"ui.transactions.resolve\",\"ui.transactions.graph\",\"ui.transactions.review_context\",\"ui.transactions.search\",\"ui.transactions.export_csv\",\"ui.transactions.export_xlsx\",\"ui.transactions.export_platform_csv\",\"ui.transactions.ledger_template\",\"ui.transactions.metadata.update\",\"ui.transactions.history\",\"ui.transactions.history.revert\",\"ui.activity.history\",\"ui.activity.stale\",\"ui.attachments.list\",\"ui.attachments.add\",\"ui.attachments.copy\",\"ui.attachments.rename\",\"ui.attachments.remove\",\"ui.attachments.open\",\"ui.wallets.list\",\"ui.wallets.utxos\",\"ui.privacy_hygiene.snapshot\",\"ui.wallets.identify\",\"ui.wallets.identify_onchain\",\"ui.wallets.identify_onchain.cancel\",\"ui.loans.list\",\"ui.loans.link\",\"ui.loans.mark\",\"ui.loans.unmark\",\"ui.backends.list\",\"ui.backends.options\",\"ui.backends.public_defaults\",\"ui.backends.settings.list\",\"ui.backends.create\",\"ui.backends.update\",\"ui.backends.delete\",\"ui.backends.set_default\",\"ui.backends.bitcoinrpc.test\",\"ui.backends.btcpay.test\",\"ui.backends.detect_core\",\"ui.backends.electrum.test\",\"ui.backends.http.test\",\"ui.backends.lightning.test\",\"ui.reports.capital_gains\",\"ui.reports.explain_capital_gain\",\"ui.reports.summary\",\"ui.reports.balance_sheet\",\"ui.reports.portfolio_summary\",\"ui.reports.tax_summary\",\"ui.reports.balance_history\",\"ui.reports.privacy_hygiene\",\"ui.reports.privacy_mirror\",\"ui.reports.psbt_privacy\",\"ui.reports.exit_tax_preview\",\"ui.reports.export_pdf\",\"ui.reports.export_summary_pdf\",\"ui.reports.export_csv\",\"ui.reports.export_xlsx\",\"ui.reports.export_capital_gains_csv\",\"ui.reports.export_austrian_e1kv_pdf\",\"ui.reports.export_austrian_e1kv_xlsx\",\"ui.reports.export_austrian_e1kv_csv\",\"ui.reports.export_exit_tax_pdf\",\"ui.reports.export_exit_tax_xlsx\",\"ui.reports.export_year_handoff\",\"ui.reports.export_cross_check\",\"ui.reports.export_audit_package\",\"ui.source_funds.preview\",\"ui.source_funds.review_context\",\"ui.source_funds.request_input\",\"ui.source_funds.cases.save\",\"ui.source_funds.cases.list\",\"ui.source_funds.sources.list\",\"ui.source_funds.sources.create\",\"ui.source_funds.sources.attach\",\"ui.source_funds.links.list\",\"ui.source_funds.links.create\",\"ui.source_funds.links.review\",\"ui.source_funds.links.bulk_review\",\"ui.source_funds.links.attach\",\"ui.source_funds.suggest\",\"ui.source_funds.assemble\",\"ui.source_funds.evidence.list\",\"ui.source_funds.export_pdf\",\"ui.source_funds.export_bundle\",\"ui.source_funds.coverage\",\"ui.source_funds.recipients.list\",\"ui.source_funds.recipients.create\",\"ui.source_funds.recipients.update\",\"ui.source_funds.recipients.delete\",\"ui.btcpay.provenance.sync\",\"ui.btcpay.provenance.list\",\"ui.btcpay.provenance.suggest\",\"ui.btcpay.provenance.links\",\"ui.btcpay.provenance.review\",\"ui.transactions.commercial_context\",\"ui.documents.list\",\"ui.documents.create\",\"ui.documents.attach\",\"ui.documents.import_report\",\"ui.journals.snapshot\",\"ui.journals.events.list\",\"ui.journals.quarantine\",\"ui.journals.quarantine.resolve\",\"ui.journals.transfers.list\",\"ui.journals.process\",\"ui.transfers.suggest\",\"ui.transfers.review_context\",\"ui.transfers.list\",\"ui.transfers.payouts.list\",\"ui.transfers.payouts.create\",\"ui.transfers.payouts.delete\",\"ui.transfers.pair\",\"ui.transfers.unpair\",\"ui.transfers.update\",\"ui.transfers.bulk_pair\",\"ui.transfers.dismiss\",\"ui.transfers.dismissals.list\",\"ui.transfers.dismissals.delete\",\"ui.transfers.components.list\",\"ui.transfers.components.get\",\"ui.transfers.components.plan\",\"ui.transfers.components.apply\",\"ui.custody.coverage.snapshot\",\"ui.custody.lineage.snapshot\",\"ui.custody.gaps.list\",\"ui.custody.gaps.review_context\",\"ui.custody.gaps.history\",\"ui.custody.review.plan\",\"ui.custody.review.apply\",\"ui.transfers.rules.list\",\"ui.transfers.rules.create\",\"ui.transfers.rules.delete\",\"ui.transfers.rules.set_enabled\",\"ui.transfers.rules.apply\",\"ui.saved_views.list\",\"ui.saved_views.create\",\"ui.saved_views.delete\",\"ui.networks.partition_plan\",\"ui.networks.partition_export\",\"ui.networks.binding\",\"ui.networks.inventory\",\"ui.networks.plan\",\"ui.networks.bind\",\"ui.profiles.snapshot\",\"ui.onboarding.complete\",\"ui.profiles.create\",\"ui.profiles.rename\",\"ui.profiles.update\",\"ui.profiles.switch\",\"ui.rates.summary\",\"ui.rates.coverage\",\"ui.rates.kraken_csv.import\",\"ui.rates.latest\",\"ui.rates.rebuild\",\"ui.report.blockers\",\"ui.audit.changes_since_last_answer\",\"ui.audit.evidence.summary\",\"ui.review.worklist\",\"ui.review.cases\",\"ui.review.request_input\",\"ui.review.plan\",\"ui.review.apply\",\"ui.review.receipt\",\"ui.maintenance.settings\",\"ui.maintenance.configure\",\"ui.maintenance.run\",\"ui.freshness.status\",\"ui.freshness.configure\",\"ui.freshness.run\",\"ui.freshness.cancel\",\"ui.freshness.pause\",\"ui.freshness.resume\",\"ui.workspace.health\",\"ui.workspace.freshness.run\",\"ui.workspace.create\",\"ui.workspace.rename\",\"ui.workspace.delete\",\"ui.profiles.reset_data\",\"ui.projects.list\",\"ui.projects.create\",\"ui.projects.select\",\"ui.backup.export\",\"ui.backup.preview\",\"ui.backup.apply\",\"ui.backup.cancel\",\"ui.secrets.init\",\"ui.secrets.change_passphrase\",\"ui.secrets.forget_cli_unlock\",\"ui.next_actions\",\"ui.review.badges\",\"ui.wallets.create\",\"ui.wallets.import_file\",\"internal.document_import.stage\",\"ui.chat.attachments.upload\",\"internal.chain_analysis.stage\",\"ui.wallets.document_import.preview\",\"ui.wallets.document_import.import\",\"ui.wallets.import_samourai\",\"ui.wallets.ledger_preview\",\"ui.wallets.analyze_file\",\"ui.imports.list\",\"ui.imports.rollback\",\"ui.wallets.preview_descriptor\",\"ui.wallets.detect_script_types\",\"ui.connections.sources\",\"ui.connections.btcpay.create\",\"ui.connections.bullbitcoin_wallet.create\",\"ui.connections.btcpay.discover\",\"ui.connections.btcpay.key_guide\",\"ui.connections.btcpay.test\",\"ui.connections.node.snapshot\",\"ui.reports.lightning_profitability\",\"ui.metadata.bip329.preview\",\"ui.metadata.bip329.import\",\"ui.metadata.bip329.export\",\"ui.exports.preview\",\"ui.reports.cross_check\",\"ui.wallets.update\",\"ui.wallets.delete\",\"ui.wallets.sync\",\"daemon.lock\",\"daemon.unlock\",\"ai.providers.list\",\"ai.providers.get\",\"ai.providers.create\",\"ai.providers.update\",\"ai.providers.set_api_key\",\"ai.providers.move_api_key\",\"ai.providers.delete\",\"ai.providers.set_default\",\"ai.providers.clear_default\",\"ai.providers.acknowledge\",\"ai.provider_runtime.status\",\"ai.list_models\",\"ai.test_connection\",\"ai.chat\",\"ai.chat.cancel\",\"ai.tool_call.consent\",\"ai.chat.permission_mode\",\"ui.chat.sessions.list\",\"ui.chat.sessions.get\",\"ui.chat.sessions.delete\",\"ui.chat.sessions.clear\",\"ui.chat.history.configure\",\"wallets.reveal_descriptor\",\"backends.reveal_token\",\"daemon.shutdown\",\"ui.connections.exchange.status\",\"ui.connections.exchange.test\",\"ui.connections.exchange.create\",\"ui.connections.exchange.sync\",\"test.stream\",\"test.journals.refresh\",\"test.emit_event\",\"test.late\",\"test.secret_store\",\"test.freshness.plan\",\"test.freshness.select\",\"test.freshness.invoke\",\"test.freshness.execute\",\"test.freshness.product.execute\",\"test.freshness.cancel\",\"test.freshness.pause\",\"test.freshness.resume\",\"test.freshness.request.cancel\",\"test.freshness.request.revoke\",\"test.freshness.graph.pending\",\"test.freshness.graph.start\",\"test.ai_tool\",\"test.ai_auto_read\",\"test.ai_consent_preview\",\"test.ai_custody_record\"]}}\n{\"kind\":\"ui.connections.btcpay.discover\",\"schema_version\":1,\"data\":{\"server\":{\"version\":\"2.4.7\",\"major_version\":2,\"fully_synced\":false,\"supported_payment_methods\":[\"BTC-CHAIN\",\"BTC-LN\"],\"tor\":false,\"loopback\":true,\"transport\":\"http\"},\"api_key\":{\"label\":\"Kassiber\",\"known\":true,\"scope\":\"all_stores\",\"store_ids\":[],\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"],\"risk\":\"read_only\",\"excess_permissions\":[],\"global_capabilities\":{\"store_catalog\":true,\"wallet_preview\":true,\"invoices\":true,\"payment_requests\":true,\"payouts\":true,\"pull_payments\":true,\"wallet_history\":true}},\"stores\":[{\"id\":\"s1\",\"name\":\"Shop\",\"default_currency\":\"EUR\",\"archived\":false,\"capabilities\":{\"store_catalog\":true,\"wallet_preview\":true,\"invoices\":true,\"payment_requests\":true,\"payouts\":true,\"pull_payments\":true,\"wallet_history\":true},\"missing_permissions\":[],\"payment_methods_error\":null,\"sync_state\":{\"last_attempt_at\":\"2026-01-01T00:00:00Z\",\"last_success_at\":\"2026-01-01T00:00:00Z\",\"last_error_code\":null,\"age_seconds\":27108027,\"stale\":true,\"never_synced\":false}},{\"id\":\"s2\",\"name\":\"Cafe\",\"default_currency\":null,\"archived\":false,\"capabilities\":{\"store_catalog\":true,\"wallet_preview\":true,\"invoices\":true,\"payment_requests\":true,\"payouts\":true,\"pull_payments\":true,\"wallet_history\":true},\"missing_permissions\":[],\"payment_methods_error\":null,\"sync_state\":null}],\"payment_methods\":[{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-CHAIN\",\"label\":\"Bitcoin on-chain\",\"enabled\":true,\"sync_supported\":true,\"rail\":\"onchain\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"btc_onchain\",\"settlement_hint\":\"Customers pay into this store's on-chain wallet. Kassiber can import BTCPay's wallet history (needs the wallet-history key) or recognise the watch-only wallet you already track for this store.\",\"ledger_group\":null,\"wallet_history_available\":true,\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"network\":\"main\",\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":{\"wallet\":\"Shop cold\",\"wallet_id\":\"cold\",\"addresses_matched\":2,\"addresses_checked\":2},\"same_wallet_imported_by\":[],\"shared_with\":[{\"store_id\":\"s2\",\"payment_method_id\":\"BTC-CHAIN\"}],\"actions\":{\"wallet_source\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"existing_wallet\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"existing_wallet\",\"wallet\":\"Shop cold\",\"reason\":\"wallet_recognised\",\"reason_text\":\"Kassiber already tracks the wallet this store pays into.\"}},{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-LN\",\"label\":\"Lightning\",\"enabled\":true,\"sync_supported\":false,\"rail\":\"lightning\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"lightning\",\"settlement_hint\":\"Lightning payments settle in the node or wallet configured for this store: your own LND or Core Lightning node, or a plugin such as Boltz (Liquid), Breez, Blink, Strike, or Nostr Wallet Connect. Add that node or wallet as its own connection; Kassiber links BTCPay payments to it by payment hash.\",\"ledger_group\":\"lightning\",\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[{\"action\":\"provenance_only\",\"backend\":\"merchant\",\"route_id\":\"route-1\",\"wallet\":null,\"wallet_id\":null,\"store_id\":\"s1\",\"payment_method_id\":\"BTC-LN\",\"label\":\"Shop\",\"wallet_fingerprint\":null,\"deprecated\":false}],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"lightning_wallets\":[{\"wallet\":\"Node\",\"wallet_id\":\"ln\",\"kind\":\"lnd\"}],\"recommendation\":{\"action\":\"provenance_only\",\"wallet\":null,\"reason\":\"already_configured\",\"reason_text\":\"Already set up in Kassiber.\"}},{\"store_id\":\"s1\",\"payment_method_id\":\"XMR-CHAIN\",\"label\":\"XMR on-chain\",\"enabled\":true,\"sync_supported\":false,\"rail\":\"onchain\",\"currency\":\"XMR\",\"chain\":null,\"bitcoin_asset\":false,\"settlement\":\"non_bitcoin\",\"settlement_hint\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only. Payments in this currency are skipped; invoices can still be kept as provenance.\",\"ledger_group\":null,\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"skip\",\"wallet\":null,\"reason\":\"non_bitcoin_asset\",\"reason_text\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only.\"}},{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-BOLTZ\",\"label\":\"BTC-BOLTZ (plugin)\",\"enabled\":true,\"sync_supported\":false,\"rail\":\"plugin\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"plugin\",\"settlement_hint\":\"This payment method comes from a BTCPay plugin Kassiber cannot import directly. Invoices stay available as provenance; add the account that receives the funds separately.\",\"ledger_group\":\"BTC-BOLTZ\",\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"payment_ledger\",\"wallet\":null,\"reason\":\"plugin_payment_ledger\",\"reason_text\":\"Plugin payment method: Kassiber books BTCPay's settled payments and completed payouts as the balance.\"}},{\"store_id\":\"s2\",\"payment_method_id\":\"BTC-CHAIN\",\"label\":\"Bitcoin on-chain\",\"enabled\":true,\"sync_supported\":true,\"rail\":\"onchain\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"btc_onchain\",\"settlement_hint\":\"Customers pay into this store's on-chain wallet. Kassiber can import BTCPay's wallet history (needs the wallet-history key) or recognise the watch-only wallet you already track for this store.\",\"ledger_group\":null,\"wallet_history_available\":true,\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"network\":\"main\",\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":{\"wallet\":\"Shop cold\",\"wallet_id\":\"cold\",\"addresses_matched\":2,\"addresses_checked\":2},\"same_wallet_imported_by\":[],\"shared_with\":[{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-CHAIN\"}],\"actions\":{\"wallet_source\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"existing_wallet\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"existing_wallet\",\"wallet\":\"Shop cold\",\"reason\":\"wallet_recognised\",\"reason_text\":\"Kassiber already tracks the wallet this store pays into.\"}},{\"store_id\":\"s2\",\"payment_method_id\":\"LBTC-CHAIN\",\"label\":\"Liquid Bitcoin\",\"enabled\":true,\"sync_supported\":true,\"rail\":\"onchain\",\"currency\":\"LBTC\",\"chain\":\"liquid\",\"bitcoin_asset\":true,\"settlement\":\"liquid_onchain\",\"settlement_hint\":\"Customers pay into this store's Liquid wallet. Kassiber imports it the same way as on-chain Bitcoin, or maps it to a Liquid wallet you track.\",\"ledger_group\":null,\"wallet_history_available\":true,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":\"missing_permission\",\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"existing_wallet\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"wallet_source\",\"wallet\":null,\"reason\":\"import_btcpay_wallet_history\",\"reason_text\":\"Import BTCPay's wallet history for this store.\"}},{\"store_id\":\"s2\",\"payment_method_id\":\"DOGE-CHAIN\",\"label\":\"DOGE on-chain\",\"enabled\":false,\"sync_supported\":false,\"rail\":\"onchain\",\"currency\":\"DOGE\",\"chain\":null,\"bitcoin_asset\":false,\"settlement\":\"non_bitcoin\",\"settlement_hint\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only. Payments in this currency are skipped; invoices can still be kept as provenance.\",\"ledger_group\":null,\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"skip\",\"wallet\":null,\"reason\":\"non_bitcoin_asset\",\"reason_text\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only.\"}}],\"shared_wallets\":[{\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"members\":[{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-CHAIN\"},{\"store_id\":\"s2\",\"payment_method_id\":\"BTC-CHAIN\"}]}],\"warnings\":[{\"code\":\"server_not_synced\",\"message\":\"BTCPay Server is still syncing its node; recent payments may be missing.\"},{\"code\":\"shared_store_wallet\",\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"message\":\"Cafe, Shop pay into the same wallet. Kassiber imports that wallet once and keeps each store's invoices as provenance.\"},{\"code\":\"stale_store_data\",\"severity\":\"info\",\"message\":\"BTCPay does not notify Kassiber of new invoices or payouts. Data for 1 configured store(s) is over a day old or its last refresh failed; sync to bring it up to date.\",\"store_ids\":[\"s1\"]}],\"backend\":\"merchant\",\"sibling_backends\":[\"sibling\"],\"existing_routes\":[{\"action\":\"provenance_only\",\"backend\":\"merchant\",\"route_id\":\"route-1\",\"wallet\":null,\"wallet_id\":null,\"store_id\":\"s1\",\"payment_method_id\":\"BTC-LN\",\"label\":\"Shop\",\"wallet_fingerprint\":null,\"deprecated\":false}],\"book_network\":{\"state\":\"unbound\",\"environment\":null},\"lightning_wallets\":[{\"wallet\":\"Node\",\"wallet_id\":\"ln\",\"kind\":\"lnd\"}],\"detected_network\":\"main\",\"summary\":{\"stores\":2,\"payment_methods\":7,\"recommended\":{\"wallet_source\":1,\"existing_wallet\":2,\"payment_ledger\":1,\"provenance_only\":1,\"skip\":2},\"key_risk\":\"read_only\"},\"key_upgrade\":{\"preset\":\"read_only\",\"label\":\"Read-only (recommended)\",\"summary\":\"Invoices, payments, refunds and payouts, payment requests, and a wallet check that recognises which wallet each store pays into. On BTCPay Server 2.4 and later it also reads each store's on-chain wallet history. The key cannot change your store.\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"],\"permission_labels\":[\"View your stores\",\"View wallets\"],\"capabilities\":[\"store_catalog\",\"wallet_preview\",\"invoices\",\"payment_requests\",\"payouts\",\"pull_payments\"],\"store_scope\":\"all\",\"manual_steps\":[\"Sign in to BTCPay Server with the account that owns the store.\",\"Open Account \\u2192 Manage Account \\u2192 API Keys and choose Generate Key.\",\"Label the key 'Kassiber' and enable only: View your stores (btcpay.store.canviewstoresettings), View wallets (btcpay.store.canviewwallet).\",\"Leave the permission on all stores so one key serves every store, then generate the key.\",\"Copy the key into Kassiber. BTCPay shows it again on the API Keys page if you need it later.\"],\"presets\":[{\"id\":\"read_only\",\"label\":\"Read-only (recommended)\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"]},{\"id\":\"wallet_history\",\"label\":\"Include BTCPay wallet history\",\"permissions\":[\"btcpay.store.canmodifystoresettings\"]}],\"authorize_url\":\"http://127.0.0.1:45207/api-keys/authorize?applicationName=Kassiber&permissions=btcpay.store.canviewstoresettings&permissions=btcpay.store.canviewwallet&strict=true&selectiveStores=false\"},\"key_read_only\":{\"preset\":\"read_only\",\"label\":\"Read-only (recommended)\",\"summary\":\"Invoices, payments, refunds and payouts, payment requests, and a wallet check that recognises which wallet each store pays into. On BTCPay Server 2.4 and later it also reads each store's on-chain wallet history. The key cannot change your store.\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"],\"permission_labels\":[\"View your stores\",\"View wallets\"],\"capabilities\":[\"store_catalog\",\"wallet_preview\",\"invoices\",\"payment_requests\",\"payouts\",\"pull_payments\"],\"store_scope\":\"all\",\"manual_steps\":[\"Sign in to BTCPay Server with the account that owns the store.\",\"Open Account \\u2192 Manage Account \\u2192 API Keys and choose Generate Key.\",\"Label the key 'Kassiber' and enable only: View your stores (btcpay.store.canviewstoresettings), View wallets (btcpay.store.canviewwallet).\",\"Leave the permission on all stores so one key serves every store, then generate the key.\",\"Copy the key into Kassiber. BTCPay shows it again on the API Keys page if you need it later.\"],\"presets\":[{\"id\":\"read_only\",\"label\":\"Read-only (recommended)\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"]},{\"id\":\"wallet_history\",\"label\":\"Include BTCPay wallet history\",\"permissions\":[\"btcpay.store.canmodifystoresettings\"]}],\"authorize_url\":\"http://127.0.0.1:45207/api-keys/authorize?applicationName=Kassiber&permissions=btcpay.store.canviewstoresettings&permissions=btcpay.store.canviewwallet&strict=true&selectiveStores=false\"}},\"request_id\":\"0\"}\n{\"kind\":\"ui.connections.btcpay.discover\",\"schema_version\":1,\"data\":{\"server\":{\"version\":\"2.4.7\",\"major_version\":2,\"fully_synced\":false,\"supported_payment_methods\":[\"BTC-CHAIN\",\"BTC-LN\"],\"tor\":false,\"loopback\":true,\"transport\":\"http\"},\"api_key\":{\"label\":\"Kassiber\",\"known\":true,\"scope\":\"all_stores\",\"store_ids\":[],\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"],\"risk\":\"read_only\",\"excess_permissions\":[],\"global_capabilities\":{\"store_catalog\":true,\"wallet_preview\":true,\"invoices\":true,\"payment_requests\":true,\"payouts\":true,\"pull_payments\":true,\"wallet_history\":true}},\"stores\":[{\"id\":\"s1\",\"name\":\"Shop\",\"default_currency\":\"EUR\",\"archived\":false,\"capabilities\":{\"store_catalog\":true,\"wallet_preview\":true,\"invoices\":true,\"payment_requests\":true,\"payouts\":true,\"pull_payments\":true,\"wallet_history\":true},\"missing_permissions\":[],\"payment_methods_error\":null,\"sync_state\":null},{\"id\":\"s2\",\"name\":\"Cafe\",\"default_currency\":null,\"archived\":false,\"capabilities\":{\"store_catalog\":true,\"wallet_preview\":true,\"invoices\":true,\"payment_requests\":true,\"payouts\":true,\"pull_payments\":true,\"wallet_history\":true},\"missing_permissions\":[],\"payment_methods_error\":null,\"sync_state\":null}],\"payment_methods\":[{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-CHAIN\",\"label\":\"Bitcoin on-chain\",\"enabled\":true,\"sync_supported\":true,\"rail\":\"onchain\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"btc_onchain\",\"settlement_hint\":\"Customers pay into this store's on-chain wallet. Kassiber can import BTCPay's wallet history (needs the wallet-history key) or recognise the watch-only wallet you already track for this store.\",\"ledger_group\":null,\"wallet_history_available\":true,\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"network\":\"main\",\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":{\"wallet\":\"Shop cold\",\"wallet_id\":\"cold\",\"addresses_matched\":2,\"addresses_checked\":2},\"same_wallet_imported_by\":[],\"shared_with\":[{\"store_id\":\"s2\",\"payment_method_id\":\"BTC-CHAIN\"}],\"actions\":{\"wallet_source\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"existing_wallet\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"existing_wallet\",\"wallet\":\"Shop cold\",\"reason\":\"wallet_recognised\",\"reason_text\":\"Kassiber already tracks the wallet this store pays into.\"}},{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-LN\",\"label\":\"Lightning\",\"enabled\":true,\"sync_supported\":false,\"rail\":\"lightning\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"lightning\",\"settlement_hint\":\"Lightning payments settle in the node or wallet configured for this store: your own LND or Core Lightning node, or a plugin such as Boltz (Liquid), Breez, Blink, Strike, or Nostr Wallet Connect. Add that node or wallet as its own connection; Kassiber links BTCPay payments to it by payment hash.\",\"ledger_group\":\"lightning\",\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[\"merchant\"],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"lightning_wallets\":[{\"wallet\":\"Node\",\"wallet_id\":\"ln\",\"kind\":\"lnd\"}],\"recommendation\":{\"action\":\"provenance_only\",\"wallet\":null,\"reason\":\"lightning_settles_elsewhere\",\"reason_text\":\"A Lightning node is already connected to this book, so Kassiber keeps these invoices as provenance and links them by payment hash. Choose the payment ledger if that node is not this store's.\"}},{\"store_id\":\"s1\",\"payment_method_id\":\"XMR-CHAIN\",\"label\":\"XMR on-chain\",\"enabled\":true,\"sync_supported\":false,\"rail\":\"onchain\",\"currency\":\"XMR\",\"chain\":null,\"bitcoin_asset\":false,\"settlement\":\"non_bitcoin\",\"settlement_hint\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only. Payments in this currency are skipped; invoices can still be kept as provenance.\",\"ledger_group\":null,\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"skip\",\"wallet\":null,\"reason\":\"non_bitcoin_asset\",\"reason_text\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only.\"}},{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-BOLTZ\",\"label\":\"BTC-BOLTZ (plugin)\",\"enabled\":true,\"sync_supported\":false,\"rail\":\"plugin\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"plugin\",\"settlement_hint\":\"This payment method comes from a BTCPay plugin Kassiber cannot import directly. Invoices stay available as provenance; add the account that receives the funds separately.\",\"ledger_group\":\"BTC-BOLTZ\",\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"payment_ledger\",\"wallet\":null,\"reason\":\"plugin_payment_ledger\",\"reason_text\":\"Plugin payment method: Kassiber books BTCPay's settled payments and completed payouts as the balance.\"}},{\"store_id\":\"s2\",\"payment_method_id\":\"BTC-CHAIN\",\"label\":\"Bitcoin on-chain\",\"enabled\":true,\"sync_supported\":true,\"rail\":\"onchain\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"btc_onchain\",\"settlement_hint\":\"Customers pay into this store's on-chain wallet. Kassiber can import BTCPay's wallet history (needs the wallet-history key) or recognise the watch-only wallet you already track for this store.\",\"ledger_group\":null,\"wallet_history_available\":true,\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"network\":\"main\",\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":{\"wallet\":\"Shop cold\",\"wallet_id\":\"cold\",\"addresses_matched\":2,\"addresses_checked\":2},\"same_wallet_imported_by\":[],\"shared_with\":[{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-CHAIN\"}],\"actions\":{\"wallet_source\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"existing_wallet\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"existing_wallet\",\"wallet\":\"Shop cold\",\"reason\":\"wallet_recognised\",\"reason_text\":\"Kassiber already tracks the wallet this store pays into.\"}},{\"store_id\":\"s2\",\"payment_method_id\":\"LBTC-CHAIN\",\"label\":\"Liquid Bitcoin\",\"enabled\":true,\"sync_supported\":true,\"rail\":\"onchain\",\"currency\":\"LBTC\",\"chain\":\"liquid\",\"bitcoin_asset\":true,\"settlement\":\"liquid_onchain\",\"settlement_hint\":\"Customers pay into this store's Liquid wallet. Kassiber imports it the same way as on-chain Bitcoin, or maps it to a Liquid wallet you track.\",\"ledger_group\":null,\"wallet_history_available\":true,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":\"missing_permission\",\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"existing_wallet\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"wallet_source\",\"wallet\":null,\"reason\":\"import_btcpay_wallet_history\",\"reason_text\":\"Import BTCPay's wallet history for this store.\"}},{\"store_id\":\"s2\",\"payment_method_id\":\"DOGE-CHAIN\",\"label\":\"DOGE on-chain\",\"enabled\":false,\"sync_supported\":false,\"rail\":\"onchain\",\"currency\":\"DOGE\",\"chain\":null,\"bitcoin_asset\":false,\"settlement\":\"non_bitcoin\",\"settlement_hint\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only. Payments in this currency are skipped; invoices can still be kept as provenance.\",\"ledger_group\":null,\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"skip\",\"wallet\":null,\"reason\":\"non_bitcoin_asset\",\"reason_text\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only.\"}}],\"shared_wallets\":[{\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"members\":[{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-CHAIN\"},{\"store_id\":\"s2\",\"payment_method_id\":\"BTC-CHAIN\"}]}],\"warnings\":[{\"code\":\"server_not_synced\",\"message\":\"BTCPay Server is still syncing its node; recent payments may be missing.\"},{\"code\":\"shared_store_wallet\",\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"message\":\"Cafe, Shop pay into the same wallet. Kassiber imports that wallet once and keeps each store's invoices as provenance.\"}],\"backend\":\"sibling\",\"sibling_backends\":[\"merchant\"],\"existing_routes\":[],\"book_network\":{\"state\":\"unbound\",\"environment\":null},\"lightning_wallets\":[{\"wallet\":\"Node\",\"wallet_id\":\"ln\",\"kind\":\"lnd\"}],\"detected_network\":\"main\",\"summary\":{\"stores\":2,\"payment_methods\":7,\"recommended\":{\"wallet_source\":1,\"existing_wallet\":2,\"payment_ledger\":1,\"provenance_only\":1,\"skip\":2},\"key_risk\":\"read_only\"},\"key_upgrade\":{\"preset\":\"read_only\",\"label\":\"Read-only (recommended)\",\"summary\":\"Invoices, payments, refunds and payouts, payment requests, and a wallet check that recognises which wallet each store pays into. On BTCPay Server 2.4 and later it also reads each store's on-chain wallet history. The key cannot change your store.\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"],\"permission_labels\":[\"View your stores\",\"View wallets\"],\"capabilities\":[\"store_catalog\",\"wallet_preview\",\"invoices\",\"payment_requests\",\"payouts\",\"pull_payments\"],\"store_scope\":\"all\",\"manual_steps\":[\"Sign in to BTCPay Server with the account that owns the store.\",\"Open Account \\u2192 Manage Account \\u2192 API Keys and choose Generate Key.\",\"Label the key 'Kassiber' and enable only: View your stores (btcpay.store.canviewstoresettings), View wallets (btcpay.store.canviewwallet).\",\"Leave the permission on all stores so one key serves every store, then generate the key.\",\"Copy the key into Kassiber. BTCPay shows it again on the API Keys page if you need it later.\"],\"presets\":[{\"id\":\"read_only\",\"label\":\"Read-only (recommended)\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"]},{\"id\":\"wallet_history\",\"label\":\"Include BTCPay wallet history\",\"permissions\":[\"btcpay.store.canmodifystoresettings\"]}],\"authorize_url\":\"http://127.0.0.1:45207/api-keys/authorize?applicationName=Kassiber&permissions=btcpay.store.canviewstoresettings&permissions=btcpay.store.canviewwallet&strict=true&selectiveStores=false\"},\"key_read_only\":{\"preset\":\"read_only\",\"label\":\"Read-only (recommended)\",\"summary\":\"Invoices, payments, refunds and payouts, payment requests, and a wallet check that recognises which wallet each store pays into. On BTCPay Server 2.4 and later it also reads each store's on-chain wallet history. The key cannot change your store.\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"],\"permission_labels\":[\"View your stores\",\"View wallets\"],\"capabilities\":[\"store_catalog\",\"wallet_preview\",\"invoices\",\"payment_requests\",\"payouts\",\"pull_payments\"],\"store_scope\":\"all\",\"manual_steps\":[\"Sign in to BTCPay Server with the account that owns the store.\",\"Open Account \\u2192 Manage Account \\u2192 API Keys and choose Generate Key.\",\"Label the key 'Kassiber' and enable only: View your stores (btcpay.store.canviewstoresettings), View wallets (btcpay.store.canviewwallet).\",\"Leave the permission on all stores so one key serves every store, then generate the key.\",\"Copy the key into Kassiber. BTCPay shows it again on the API Keys page if you need it later.\"],\"presets\":[{\"id\":\"read_only\",\"label\":\"Read-only (recommended)\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"]},{\"id\":\"wallet_history\",\"label\":\"Include BTCPay wallet history\",\"permissions\":[\"btcpay.store.canmodifystoresettings\"]}],\"authorize_url\":\"http://127.0.0.1:45207/api-keys/authorize?applicationName=Kassiber&permissions=btcpay.store.canviewstoresettings&permissions=btcpay.store.canviewwallet&strict=true&selectiveStores=false\"}},\"request_id\":\"1\"}\n{\"kind\":\"error\",\"schema_version\":1,\"error\":{\"code\":\"not_found\",\"message\":\"BTCPay instance 'missing' is not configured\",\"hint\":\"Choose a saved BTCPay instance or add a new one here.\",\"details\":null,\"retryable\":false,\"debug\":null},\"request_id\":\"2\"}\n{\"kind\":\"error\",\"schema_version\":1,\"error\":{\"code\":\"validation\",\"message\":\"Backend 'chain' is not a BTCPay instance\",\"hint\":\"Choose a backend whose kind is btcpay.\",\"details\":null,\"retryable\":false,\"debug\":null},\"request_id\":\"3\"}\n{\"kind\":\"ui.connections.btcpay.discover\",\"schema_version\":1,\"data\":{\"server\":{\"version\":\"2.4.7\",\"major_version\":2,\"fully_synced\":false,\"supported_payment_methods\":[\"BTC-CHAIN\",\"BTC-LN\"],\"tor\":false,\"loopback\":true,\"transport\":\"http\"},\"api_key\":{\"label\":\"Kassiber\",\"known\":true,\"scope\":\"all_stores\",\"store_ids\":[],\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"],\"risk\":\"read_only\",\"excess_permissions\":[],\"global_capabilities\":{\"store_catalog\":true,\"wallet_preview\":true,\"invoices\":true,\"payment_requests\":true,\"payouts\":true,\"pull_payments\":true,\"wallet_history\":true}},\"stores\":[{\"id\":\"s1\",\"name\":\"Shop\",\"default_currency\":\"EUR\",\"archived\":false,\"capabilities\":{\"store_catalog\":true,\"wallet_preview\":true,\"invoices\":true,\"payment_requests\":true,\"payouts\":true,\"pull_payments\":true,\"wallet_history\":true},\"missing_permissions\":[],\"payment_methods_error\":null,\"sync_state\":null},{\"id\":\"s2\",\"name\":\"Cafe\",\"default_currency\":null,\"archived\":false,\"capabilities\":{\"store_catalog\":true,\"wallet_preview\":true,\"invoices\":true,\"payment_requests\":true,\"payouts\":true,\"pull_payments\":true,\"wallet_history\":true},\"missing_permissions\":[],\"payment_methods_error\":null,\"sync_state\":null}],\"payment_methods\":[{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-CHAIN\",\"label\":\"Bitcoin on-chain\",\"enabled\":true,\"sync_supported\":true,\"rail\":\"onchain\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"btc_onchain\",\"settlement_hint\":\"Customers pay into this store's on-chain wallet. Kassiber can import BTCPay's wallet history (needs the wallet-history key) or recognise the watch-only wallet you already track for this store.\",\"ledger_group\":null,\"wallet_history_available\":true,\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"network\":\"main\",\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":{\"wallet\":\"Shop cold\",\"wallet_id\":\"cold\",\"addresses_matched\":2,\"addresses_checked\":2},\"same_wallet_imported_by\":[],\"shared_with\":[{\"store_id\":\"s2\",\"payment_method_id\":\"BTC-CHAIN\"}],\"actions\":{\"wallet_source\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"existing_wallet\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"existing_wallet\",\"wallet\":\"Shop cold\",\"reason\":\"wallet_recognised\",\"reason_text\":\"Kassiber already tracks the wallet this store pays into.\"}},{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-LN\",\"label\":\"Lightning\",\"enabled\":true,\"sync_supported\":false,\"rail\":\"lightning\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"lightning\",\"settlement_hint\":\"Lightning payments settle in the node or wallet configured for this store: your own LND or Core Lightning node, or a plugin such as Boltz (Liquid), Breez, Blink, Strike, or Nostr Wallet Connect. Add that node or wallet as its own connection; Kassiber links BTCPay payments to it by payment hash.\",\"ledger_group\":\"lightning\",\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[\"merchant\"],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"lightning_wallets\":[{\"wallet\":\"Node\",\"wallet_id\":\"ln\",\"kind\":\"lnd\"}],\"recommendation\":{\"action\":\"provenance_only\",\"wallet\":null,\"reason\":\"lightning_settles_elsewhere\",\"reason_text\":\"A Lightning node is already connected to this book, so Kassiber keeps these invoices as provenance and links them by payment hash. Choose the payment ledger if that node is not this store's.\"}},{\"store_id\":\"s1\",\"payment_method_id\":\"XMR-CHAIN\",\"label\":\"XMR on-chain\",\"enabled\":true,\"sync_supported\":false,\"rail\":\"onchain\",\"currency\":\"XMR\",\"chain\":null,\"bitcoin_asset\":false,\"settlement\":\"non_bitcoin\",\"settlement_hint\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only. Payments in this currency are skipped; invoices can still be kept as provenance.\",\"ledger_group\":null,\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"skip\",\"wallet\":null,\"reason\":\"non_bitcoin_asset\",\"reason_text\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only.\"}},{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-BOLTZ\",\"label\":\"BTC-BOLTZ (plugin)\",\"enabled\":true,\"sync_supported\":false,\"rail\":\"plugin\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"plugin\",\"settlement_hint\":\"This payment method comes from a BTCPay plugin Kassiber cannot import directly. Invoices stay available as provenance; add the account that receives the funds separately.\",\"ledger_group\":\"BTC-BOLTZ\",\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"payment_ledger\",\"wallet\":null,\"reason\":\"plugin_payment_ledger\",\"reason_text\":\"Plugin payment method: Kassiber books BTCPay's settled payments and completed payouts as the balance.\"}},{\"store_id\":\"s2\",\"payment_method_id\":\"BTC-CHAIN\",\"label\":\"Bitcoin on-chain\",\"enabled\":true,\"sync_supported\":true,\"rail\":\"onchain\",\"currency\":\"BTC\",\"chain\":\"bitcoin\",\"bitcoin_asset\":true,\"settlement\":\"btc_onchain\",\"settlement_hint\":\"Customers pay into this store's on-chain wallet. Kassiber can import BTCPay's wallet history (needs the wallet-history key) or recognise the watch-only wallet you already track for this store.\",\"ledger_group\":null,\"wallet_history_available\":true,\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"network\":\"main\",\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":{\"wallet\":\"Shop cold\",\"wallet_id\":\"cold\",\"addresses_matched\":2,\"addresses_checked\":2},\"same_wallet_imported_by\":[],\"shared_with\":[{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-CHAIN\"}],\"actions\":{\"wallet_source\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"existing_wallet\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"existing_wallet\",\"wallet\":\"Shop cold\",\"reason\":\"wallet_recognised\",\"reason_text\":\"Kassiber already tracks the wallet this store pays into.\"}},{\"store_id\":\"s2\",\"payment_method_id\":\"LBTC-CHAIN\",\"label\":\"Liquid Bitcoin\",\"enabled\":true,\"sync_supported\":true,\"rail\":\"onchain\",\"currency\":\"LBTC\",\"chain\":\"liquid\",\"bitcoin_asset\":true,\"settlement\":\"liquid_onchain\",\"settlement_hint\":\"Customers pay into this store's Liquid wallet. Kassiber imports it the same way as on-chain Bitcoin, or maps it to a Liquid wallet you track.\",\"ledger_group\":null,\"wallet_history_available\":true,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":\"missing_permission\",\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"existing_wallet\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"wallet_source\",\"wallet\":null,\"reason\":\"import_btcpay_wallet_history\",\"reason_text\":\"Import BTCPay's wallet history for this store.\"}},{\"store_id\":\"s2\",\"payment_method_id\":\"DOGE-CHAIN\",\"label\":\"DOGE on-chain\",\"enabled\":false,\"sync_supported\":false,\"rail\":\"onchain\",\"currency\":\"DOGE\",\"chain\":null,\"bitcoin_asset\":false,\"settlement\":\"non_bitcoin\",\"settlement_hint\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only. Payments in this currency are skipped; invoices can still be kept as provenance.\",\"ledger_group\":null,\"wallet_history_available\":false,\"wallet_fingerprint\":null,\"network\":null,\"preview_error\":null,\"network_compatible\":null,\"existing_routes\":[],\"configured_via\":[],\"owned_by\":null,\"same_wallet_imported_by\":[],\"shared_with\":[],\"actions\":{\"wallet_source\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"existing_wallet\":{\"available\":false,\"reason\":\"not_on_chain\",\"reason_text\":\"Only on-chain Bitcoin and Liquid can be imported as a wallet.\"},\"payment_ledger\":{\"available\":false,\"reason\":\"not_ledger_rail\",\"reason_text\":\"Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.\"},\"provenance_only\":{\"available\":true,\"reason\":null,\"reason_text\":null},\"skip\":{\"available\":true,\"reason\":null,\"reason_text\":null}},\"recommendation\":{\"action\":\"skip\",\"wallet\":null,\"reason\":\"non_bitcoin_asset\",\"reason_text\":\"Kassiber tracks Bitcoin and Liquid Bitcoin only.\"}}],\"shared_wallets\":[{\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"members\":[{\"store_id\":\"s1\",\"payment_method_id\":\"BTC-CHAIN\"},{\"store_id\":\"s2\",\"payment_method_id\":\"BTC-CHAIN\"}]}],\"warnings\":[{\"code\":\"server_not_synced\",\"message\":\"BTCPay Server is still syncing its node; recent payments may be missing.\"},{\"code\":\"shared_store_wallet\",\"wallet_fingerprint\":\"btcpay-wallet:9253a77ec690ec506513d07c\",\"message\":\"Cafe, Shop pay into the same wallet. Kassiber imports that wallet once and keeps each store's invoices as provenance.\"}],\"backend\":\"new-shop\",\"sibling_backends\":[\"merchant\",\"sibling\"],\"existing_routes\":[],\"book_network\":{\"state\":\"unbound\",\"environment\":null},\"lightning_wallets\":[{\"wallet\":\"Node\",\"wallet_id\":\"ln\",\"kind\":\"lnd\"}],\"detected_network\":\"main\",\"summary\":{\"stores\":2,\"payment_methods\":7,\"recommended\":{\"wallet_source\":1,\"existing_wallet\":2,\"payment_ledger\":1,\"provenance_only\":1,\"skip\":2},\"key_risk\":\"read_only\"},\"key_upgrade\":{\"preset\":\"read_only\",\"label\":\"Read-only (recommended)\",\"summary\":\"Invoices, payments, refunds and payouts, payment requests, and a wallet check that recognises which wallet each store pays into. On BTCPay Server 2.4 and later it also reads each store's on-chain wallet history. The key cannot change your store.\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"],\"permission_labels\":[\"View your stores\",\"View wallets\"],\"capabilities\":[\"store_catalog\",\"wallet_preview\",\"invoices\",\"payment_requests\",\"payouts\",\"pull_payments\"],\"store_scope\":\"all\",\"manual_steps\":[\"Sign in to BTCPay Server with the account that owns the store.\",\"Open Account \\u2192 Manage Account \\u2192 API Keys and choose Generate Key.\",\"Label the key 'Kassiber' and enable only: View your stores (btcpay.store.canviewstoresettings), View wallets (btcpay.store.canviewwallet).\",\"Leave the permission on all stores so one key serves every store, then generate the key.\",\"Copy the key into Kassiber. BTCPay shows it again on the API Keys page if you need it later.\"],\"presets\":[{\"id\":\"read_only\",\"label\":\"Read-only (recommended)\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"]},{\"id\":\"wallet_history\",\"label\":\"Include BTCPay wallet history\",\"permissions\":[\"btcpay.store.canmodifystoresettings\"]}],\"authorize_url\":\"http://127.0.0.1:45207/api-keys/authorize?applicationName=Kassiber&permissions=btcpay.store.canviewstoresettings&permissions=btcpay.store.canviewwallet&strict=true&selectiveStores=false\"},\"key_read_only\":{\"preset\":\"read_only\",\"label\":\"Read-only (recommended)\",\"summary\":\"Invoices, payments, refunds and payouts, payment requests, and a wallet check that recognises which wallet each store pays into. On BTCPay Server 2.4 and later it also reads each store's on-chain wallet history. The key cannot change your store.\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"],\"permission_labels\":[\"View your stores\",\"View wallets\"],\"capabilities\":[\"store_catalog\",\"wallet_preview\",\"invoices\",\"payment_requests\",\"payouts\",\"pull_payments\"],\"store_scope\":\"all\",\"manual_steps\":[\"Sign in to BTCPay Server with the account that owns the store.\",\"Open Account \\u2192 Manage Account \\u2192 API Keys and choose Generate Key.\",\"Label the key 'Kassiber' and enable only: View your stores (btcpay.store.canviewstoresettings), View wallets (btcpay.store.canviewwallet).\",\"Leave the permission on all stores so one key serves every store, then generate the key.\",\"Copy the key into Kassiber. BTCPay shows it again on the API Keys page if you need it later.\"],\"presets\":[{\"id\":\"read_only\",\"label\":\"Read-only (recommended)\",\"permissions\":[\"btcpay.store.canviewstoresettings\",\"btcpay.store.canviewwallet\"]},{\"id\":\"wallet_history\",\"label\":\"Include BTCPay wallet history\",\"permissions\":[\"btcpay.store.canmodifystoresettings\"]}],\"authorize_url\":\"http://127.0.0.1:45207/api-keys/authorize?applicationName=Kassiber&permissions=btcpay.store.canviewstoresettings&permissions=btcpay.store.canviewwallet&strict=true&selectiveStores=false\"}},\"request_id\":\"4\"}\n{\"kind\":\"error\",\"schema_version\":1,\"error\":{\"code\":\"validation\",\"message\":\"BTCPay API key is required.\",\"hint\":\"Enter btcpay api key.\",\"details\":null,\"retryable\":false,\"debug\":null},\"request_id\":\"5\"}\n{\"kind\":\"error\",\"schema_version\":1,\"error\":{\"code\":\"validation\",\"message\":\"BTCPay setup received both a saved instance and inline credentials\",\"hint\":\"Choose a saved BTCPay instance or enter a new instance, not both.\",\"details\":null,\"retryable\":false,\"debug\":null},\"request_id\":\"6\"}\n{\"kind\":\"error\",\"schema_version\":1,\"error\":{\"code\":\"validation\",\"message\":\"BTCPay server URL is required.\",\"hint\":\"Enter btcpay server url.\",\"details\":null,\"retryable\":false,\"debug\":null},\"request_id\":\"7\"}\n{\"kind\":\"error\",\"schema_version\":1,\"error\":{\"code\":\"validation\",\"message\":\"daemon args must be an object\",\"hint\":null,\"details\":{\"type\":\"list\"},\"retryable\":false,\"debug\":null},\"request_id\":\"8\"}\n{\"kind\":\"daemon.shutdown\",\"schema_version\":1,\"data\":{},\"request_id\":\"stop\"}\n",
+    "stderr": "",
+    "changes": {}
+   }
+  }
+ ]
+}

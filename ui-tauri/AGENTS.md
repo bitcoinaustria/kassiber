@@ -6,9 +6,10 @@ version and committed lockfile; frontend commands live in
 
 ## Shared runtime
 
-The React UI reaches the Python daemon through Tauri or the Vite bridge.
-Keep accounting, review plans, consent effects, and readiness decisions in the
-shared core. Read [the daemon contract](../docs/reference/daemon.md#desktop-invoke-contract)
+The React UI reaches the daemon, the Rust `kassiber` binary, through Tauri or
+the Vite bridge. Keep accounting, review plans, consent effects, and readiness
+decisions in the shared Rust core ([backend guidance](../crates/AGENTS.md)).
+Read [the daemon contract](../docs/reference/daemon.md#desktop-invoke-contract)
 before changing transport or adding a desktop-invoked kind. A working browser
 preview alone does not prove the packaged Tauri path accepts the same request.
 
@@ -54,4 +55,4 @@ Tauri supervises the bundled runtime in packaged builds. Preserve request-ID
 routing, cancellation, streaming, and unsolicited event handling when changing
 supervisor code. Read [release packaging](../docs/reference/prerelease-binaries.md)
 for sidecar layout and installed-app CLI forwarding; do not assume a source
-checkout or separate Python installation exists on the user's machine.
+checkout or a separately installed `kassiber` exists on the user's machine.

@@ -1,0 +1,51 @@
+$ daemon
+> {"args":{},"kind":"ui.egress.snapshot","request_id":0}
+< {"data":{"allowlist":[{"host":"api.exchange.coinbase.com","label":"Coinbase Exchange","port":443,"source":"built-in","subsystem":"pricing","user_allowlisted":false},{"host":"api.coingecko.com","label":"CoinGecko","port":443,"source":"buil… [1441 bytes fnv128 0517373501d69632d34d03fadfc1e46c]
+> {"args":{},"kind":"ui.logs.snapshot","request_id":1}
+< {"data":{"buffer_bytes":"<stamp>","gap":false,"last_id":0,"max_bytes":4194304,"records":[],"started_at":"<stamp>"},"kind":"ui.logs.snapshot","request_id":1,"schema_version":1}
+> {"args":{},"kind":"status","request_id":2}
+< {"data":{"accounts":0,"attachments_root":"<SANDBOX>/attachments","auth":{"authenticated":true,"mode":"local"},"config_root":"<SANDBOX>/config","current_profile":"","current_workspace":"","data_root":"<SANDBOX>/data","database":"<SANDBOX>/data/kassiber.sqlite3","database_encrypted":false,"default_backend":"fulcrum","env_file":"<SANDBOX>/config/backends.env","exports_root":"<SANDBOX>/exports","journal_entries":0,"profiles":0,"project_id":null,"project_name":null,"project_root":null,"quarantines":0,"schema_version":1,"settings_file":"<SANDBOX>/config/settings.json","state_root":"<SANDBOX>","transactions":0,"version":"0.22.78","wallets":0,"workspaces":0},"kind":"status","request_id":2,"schema_version":1}
+> {"args":{},"kind":"ui.workspace.health","request_id":3}
+< {"data":{"counts":{"active_transactions":0,"journal_entries":0,"quarantines":0,"rate_pairs":0,"transactions":0,"wallets":0},"journals":{"active_transaction_count":0,"journal_entry_count":0,"journal_input_version":0,"last_processed_at":null,"last_processed_input_version":0,"last_processed_tx_count":0,"needs_processing":false,"quarantine_count":0,"reason":"no active profile","status":"no_profile"},"profile":null,"reports":{"hints":["Create or select a workspace and profile first."],"ready":false},"workspace":null},"kind":"ui.workspace.health","request_id":3,"schema_version":1}
+> {"args":{},"kind":"nope","request_id":4}
+< {"error":{"code":"unsupported_kind","debug":null,"details":{"kind":"nope"},"hint":null,"message":"daemon kind 'nope' is not classified or supported","retryable":false},"kind":"error","request_id":4,"schema_version":1}
+> {"args":{},"kind":"ui.projects.select","request_id":5}
+< {"error":{"code":"validation","debug":null,"details":null,"hint":null,"message":"ui.projects.select requires project_id","retryable":false},"kind":"error","request_id":5,"schema_version":1}
+> {"args":null,"kind":"ui.logs.snapshot","request_id":6}
+< {"data":{"buffer_bytes":"<stamp>","gap":false,"last_id":8,"max_bytes":4194304,"records":[{"fields":{"kind":{"type":"text","value":"status"},"request_id":{"type":"text","value":"2"}},"file":"<stamp>","id":1,"level":"debug","line":"<stamp>"… [2455 bytes fnv128 5df7b0bbd9f850bef0dffb8b1beba5a9]
+> {"args":{"after_id":2},"kind":"ui.logs.snapshot","request_id":7}
+< {"data":{"buffer_bytes":"<stamp>","gap":false,"last_id":8,"max_bytes":4194304,"records":[{"fields":{"kind":{"type":"text","value":"ui.workspace.health"},"request_id":{"type":"text","value":"3"}},"file":"<stamp>","id":3,"level":"debug","li… [1900 bytes fnv128 14ab5b659e80b33b52be8373e0a28576]
+> {"args":{"after_id":1,"limit":1},"kind":"ui.logs.snapshot","request_id":8}
+< {"data":{"buffer_bytes":"<stamp>","gap":false,"last_id":8,"max_bytes":4194304,"records":[{"fields":{"duration_ms":{"type":"duration_ms","value":"<stamp>"},"kind":{"type":"text","value":"status"},"request_id":{"type":"text","value":"2"},"response_kind":{"type":"text","value":"status"}},"file":"<stamp>","id":2,"level":"debug","line":"<stamp>","module":"kassiber.daemon.request","msg":"request finished","ts":"<stamp>"}],"started_at":"<stamp>"},"kind":"ui.logs.snapshot","request_id":8,"schema_version":1}
+> {"args":{"limit":0},"kind":"ui.logs.snapshot","request_id":9}
+< {"error":{"code":"validation","debug":null,"details":{"max":2000,"min":1},"hint":null,"message":"ui.logs.snapshot limit is out of range","retryable":false},"kind":"error","request_id":9,"schema_version":1}
+> {"args":{"limit":2001},"kind":"ui.logs.snapshot","request_id":10}
+< {"error":{"code":"validation","debug":null,"details":{"max":2000,"min":1},"hint":null,"message":"ui.logs.snapshot limit is out of range","retryable":false},"kind":"error","request_id":10,"schema_version":1}
+> {"args":{"after_id":-1},"kind":"ui.logs.snapshot","request_id":11}
+< {"error":{"code":"validation","debug":null,"details":{"max":null,"min":0},"hint":null,"message":"ui.logs.snapshot after_id is out of range","retryable":false},"kind":"error","request_id":11,"schema_version":1}
+> {"args":{"after_id":true},"kind":"ui.logs.snapshot","request_id":12}
+< {"error":{"code":"validation","debug":null,"details":{"type":"bool"},"hint":null,"message":"ui.logs.snapshot after_id must be an integer","retryable":false},"kind":"error","request_id":12,"schema_version":1}
+> {"args":{"after_id":"1"},"kind":"ui.logs.snapshot","request_id":13}
+< {"error":{"code":"validation","debug":null,"details":{"type":"str"},"hint":null,"message":"ui.logs.snapshot after_id must be an integer","retryable":false},"kind":"error","request_id":13,"schema_version":1}
+> {"args":{"after_id":1000000000000000000000000000000},"kind":"ui.logs.snapshot","request_id":14}
+< {"data":{"buffer_bytes":"<stamp>","gap":false,"last_id":8,"max_bytes":4194304,"records":[],"started_at":"<stamp>"},"kind":"ui.logs.snapshot","request_id":14,"schema_version":1}
+> {"args":{"alpha":2,"limit":5,"zeta":1},"kind":"ui.logs.snapshot","request_id":15}
+< {"error":{"code":"validation","debug":null,"details":{"unknown":["alpha","zeta"]},"hint":null,"message":"ui.logs.snapshot received unsupported fields","retryable":false},"kind":"error","request_id":15,"schema_version":1}
+> {"args":[1],"kind":"ui.logs.snapshot","request_id":16}
+< {"error":{"code":"validation","debug":null,"details":{"type":"list"},"hint":null,"message":"daemon args must be an object","retryable":false},"kind":"error","request_id":16,"schema_version":1}
+> {"args":{"after_id":0,"limit":2000},"kind":"ui.egress.snapshot","request_id":17}
+< {"data":{"allowlist":[{"host":"api.exchange.coinbase.com","label":"Coinbase Exchange","port":443,"source":"built-in","subsystem":"pricing","user_allowlisted":false},{"host":"api.coingecko.com","label":"CoinGecko","port":443,"source":"buil… [1757 bytes fnv128 ab954917b5d5e1b634b57377646f6984]
+> {"args":{"limit":1.5},"kind":"ui.egress.snapshot","request_id":18}
+< {"error":{"code":"validation","debug":null,"details":{"type":"float"},"hint":null,"message":"ui.egress.snapshot limit must be an integer","retryable":false},"kind":"error","request_id":18,"schema_version":1}
+> {"args":{"beta":null},"kind":"ui.egress.snapshot","request_id":19}
+< {"error":{"code":"validation","debug":null,"details":{"unknown":["beta"]},"hint":null,"message":"ui.egress.snapshot received unsupported fields","retryable":false},"kind":"error","request_id":19,"schema_version":1}
+> {"args":"x","kind":"ui.egress.snapshot","request_id":20}
+< {"error":{"code":"validation","debug":null,"details":{"type":"str"},"hint":null,"message":"daemon args must be an object","retryable":false},"kind":"error","request_id":20,"schema_version":1}
+> {"args":{},"kind":"daemon.lock","request_id":21}
+< {"data":{"locked":true},"kind":"daemon.lock","request_id":21,"schema_version":1}
+> {"args":{},"kind":"ui.egress.snapshot","request_id":22}
+< {"data":{"allowlist":[{"host":"api.exchange.coinbase.com","label":"Coinbase Exchange","port":443,"source":"built-in","subsystem":"pricing","user_allowlisted":false},{"host":"api.coingecko.com","label":"CoinGecko","port":443,"source":"buil… [1524 bytes fnv128 61d23a240cba6d8e7b8a08b2707e5308]
+> {"args":{"after_id":3},"kind":"ui.logs.snapshot","request_id":23}
+< {"data":{"buffer_bytes":"<stamp>","gap":false,"last_id":10,"max_bytes":4194304,"records":[{"fields":{"duration_ms":{"type":"duration_ms","value":"<stamp>"},"kind":{"type":"text","value":"ui.workspace.health"},"request_id":{"type":"text","… [2237 bytes fnv128 458d13d0c9e2a856de42f23defd324c4]
+> <shutdown>
+< {"data":{},"kind":"daemon.shutdown","request_id":"stop","schema_version":1}

@@ -154,7 +154,7 @@ describe("ExchangeSyncCard", () => {
     expect(screen.getByRole("alert").textContent).toContain("Bitpanda is limiting requests right now.");
   });
 
-  it("cannot sync without a stored key or on the Python backend", () => {
+  it("cannot sync without a stored key or on an older backend", () => {
     mocks.status = { data: { data: { connections: [row({ has_api_key: false })] } }, error: null };
     render(<Card />);
     expect((screen.getByRole("button", { name: "Sync now" }) as HTMLButtonElement).disabled).toBe(true);
@@ -171,7 +171,7 @@ describe("ExchangeSyncCard", () => {
     };
     render(<Card />);
     expect((screen.getByRole("button", { name: "Sync now" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole("alert").textContent).toContain("need Kassiber's Rust backend");
+    expect(screen.getByRole("alert").textContent).toContain("need a newer Kassiber backend");
   });
 
   it("speaks Austrian German", async () => {

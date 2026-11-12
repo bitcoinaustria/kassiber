@@ -1068,5 +1068,15 @@
       "disk_members_preserve_pax_names_mtimes_and_python_record_padding"
     ],
     "rule": "Disk members retain the PAX metadata included in Python export sizes."
+  },
+  {
+    "id": "passphrase-work-factor-ceiling",
+    "file": "crates/backup/src/encryption.rs",
+    "find": "            identity.set_max_work_factor(max_work_factor);\n",
+    "replace": "",
+    "expect_failing": [
+      "a_backup_above_the_work_factor_ceiling_fails_closed_without_writing"
+    ],
+    "rule": "Passphrase backups open up to a fixed scrypt work factor, independent of this machine's speed, and fail closed above it."
   }
 ]

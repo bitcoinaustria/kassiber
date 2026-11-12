@@ -157,7 +157,7 @@
     "expect_failing": [
       "component_bytes_sort_and_integer_semantics_match_python"
     ],
-    "rule": "Invalid byte integers retain Python\u2019s exact ValueError and byte repr."
+    "rule": "Invalid byte integers retain Python’s exact ValueError and byte repr."
   },
   {
     "id": "JB-component-byte-sort",
@@ -280,16 +280,6 @@
     "rule": "JSON byte decoding preserves surrogatepass identity rather than discarding a Python-accepted input."
   },
   {
-    "id": "JB-audit-blob-variant",
-    "file": "crates/journals/scripts/audit_loader_storage.py",
-    "find": "stored_type in (\"integer\", \"real\", \"blob\")",
-    "replace": "stored_type in (\"integer\", \"real\")",
-    "expect_failing": [
-      "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
-    ],
-    "rule": "Include BLOB/TEXT mixed revisions in the exact deterministic refusal seed sweep."
-  },
-  {
     "id": "JB-convert-literal-map",
     "file": "crates/journals/src/loader.rs",
     "find": "Value::Dict(values) => kassiber_custody::codec::json_dict(",
@@ -387,7 +377,7 @@
     "expect_failing": [
       "bytes_json_policy_and_repr_match_python"
     ],
-    "rule": "Byte repr chooses Python\u2019s deterministic quote style."
+    "rule": "Byte repr chooses Python’s deterministic quote style."
   },
   {
     "id": "JB-query-bytes-truth",
@@ -397,7 +387,7 @@
     "expect_failing": [
       "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
     ],
-    "rule": "Auxiliary byte truth retains Python\u2019s false empty bytes case."
+    "rule": "Auxiliary byte truth retains Python’s false empty bytes case."
   },
   {
     "id": "JB-outpoint-bytes-ascii",

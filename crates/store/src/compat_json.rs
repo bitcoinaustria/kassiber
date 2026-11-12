@@ -340,11 +340,15 @@ pub(crate) fn dumps(value: &Value, ascii: bool, compact: bool) -> crate::Result<
             ..Default::default()
         },
     )
-    .map_err(|_| {
-        crate::Error::new(
-            crate::ErrorKind::UnsupportedSchemaLayout,
-            "stored JSON cannot be encoded with Python's rules",
-        )
+    .map_err(|error| {
+        use crate::stored_values::{refusal, Shape};
+        refusal(match error {
+            kassiber_pyjson::Error::Surrogate => Shape::LoneSurrogate,
+            kassiber_pyjson::Error::OutOfRangeFloat | kassiber_pyjson::Error::NanKeyOrder => {
+                Shape::NonFinite
+            }
+            _ => Shape::Other,
+        })
     })
 }
 

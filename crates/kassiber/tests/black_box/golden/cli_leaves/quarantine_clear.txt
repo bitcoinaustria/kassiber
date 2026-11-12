@@ -1,0 +1,142 @@
+$ --machine journals quarantine clear --transaction a
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.clear",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "a",
+    "resolution": "clear",
+    "note": "Run `kassiber journals process` to re-evaluate."
+  }
+}
+=== book changes after the clear
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- journal_quarantines: transaction_id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_spot_price" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
++ chain_index_clock: id=i:1 | revision=i:33
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:33
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2020" | swap_candidate_count=i:0
+$ --machine journals quarantine clear --transaction a
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Transaction is not quarantined",
+    "hint": "Run `kassiber journals quarantined` to see active entries.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== book changes after the second clear
+(unchanged)
+$ --machine journals quarantine clear --transaction ext-b
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.clear",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "b",
+    "resolution": "clear",
+    "note": "Run `kassiber journals process` to re-evaluate."
+  }
+}
+=== book changes after the clear
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- journal_quarantines: transaction_id=t:"b" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"transfer_pair_dependency_blocked" | detail_json=t:"{\"blocked_by_transaction_ids\": [\"a\"]}" | created_at=t:"2024-05-01T00:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
++ chain_index_clock: id=i:1 | revision=i:33
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:33
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2020" | swap_candidate_count=i:0
+$ --machine journals quarantine clear --transaction ext-b
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Transaction is not quarantined",
+    "hint": "Run `kassiber journals quarantined` to see active entries.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== book changes after the second clear
+(unchanged)
+$ --machine journals quarantine clear --transaction missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "Transaction 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== book changes after the clear
+(unchanged)
+$ --machine journals quarantine clear --transaction missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "Transaction 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== book changes after the second clear
+(unchanged)
+$ --machine journals quarantine clear --transaction a --profile missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'missing' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== book changes after the clear
+(unchanged)
+$ --machine journals quarantine clear --transaction a --profile missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'missing' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== book changes after the second clear
+(unchanged)

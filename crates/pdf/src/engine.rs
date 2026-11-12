@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use typst::diag::{FileError, FileResult, SourceDiagnostic};
 use typst::foundations::{Bytes, Datetime, Dict, Duration, Smart, Value};
+use typst::layout::{Abs, Frame, FrameItem, Point, Size, Transform};
 use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
@@ -103,6 +104,35 @@ pub struct Rendered {
     pub bytes: Vec<u8>,
     /// Page sizes in points, in order.
     pub pages: Vec<(f64, f64)>,
+    /// Text the layout placed past a page edge outside any clipping box,
+    /// which no reader sees (a table wider than its page), as
+    /// `page N: text`. Every report keeps this empty.
+    pub off_page: Vec<String>,
+}
+
+/// Collect the text runs of `frame` that start or end past `page`'s edges.
+/// A group that clips its content (a fixed-size box) is the template's own
+/// choice and is not followed.
+fn off_page(frame: &Frame, ts: Transform, page: Size, number: usize, out: &mut Vec<String>) {
+    let slack = Abs::pt(0.5);
+    let outside =
+        |p: Point| p.x < -slack || p.y < -slack || p.x > page.x + slack || p.y > page.y + slack;
+    for (pos, item) in frame.items() {
+        match item {
+            FrameItem::Group(group) if group.clip.is_none() => {
+                let inner =
+                    ts.pre_concat(Transform::translate(pos.x, pos.y).pre_concat(group.transform));
+                off_page(&group.frame, inner, page, number, out);
+            }
+            FrameItem::Text(text) => {
+                let end = Point::new(pos.x + text.width(), pos.y);
+                if outside(pos.transform(ts)) || outside(end.transform(ts)) {
+                    out.push(format!("page {number}: {}", text.text));
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 struct SealedWorld {
@@ -269,5 +299,20 @@ pub fn render(document: Document<'_>) -> Result<Rendered, String> {
             (size.x.to_pt(), size.y.to_pt())
         })
         .collect();
-    Ok(Rendered { bytes, pages })
+    let mut outside = Vec::new();
+    for (index, page) in paged.pages().iter().enumerate() {
+        let size = page.frame.size();
+        off_page(
+            &page.frame,
+            Transform::identity(),
+            size,
+            index + 1,
+            &mut outside,
+        );
+    }
+    Ok(Rendered {
+        bytes,
+        pages,
+        off_page: outside,
+    })
 }

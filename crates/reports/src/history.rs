@@ -255,6 +255,18 @@ fn cached_quotes(
 }
 
 pub fn report(conn: &Connection, profile: &Value, args: &Value) -> Result<Vec<Value>> {
+    report_at(conn, profile, args, None)
+}
+
+/// `report`, with "now" (where a range without an end stops) pinned by test
+/// sources; `None` reads the wall clock.
+pub fn report_at(
+    conn: &Connection,
+    profile: &Value,
+    args: &Value,
+    pinned_now: Option<i64>,
+) -> Result<Vec<Value>> {
+    let now = || pinned_now.unwrap_or_else(time::now);
     let interval = interval(args);
     let start = parse(value(args, "start"), "start")?;
     let end = parse(value(args, "end"), "end")?;
@@ -313,8 +325,8 @@ pub fn report(conn: &Connection, profile: &Value, args: &Value) -> Result<Vec<Va
     }
     let range_start = start
         .or_else(|| events.first().map(|e| e.at))
-        .unwrap_or_else(time::now);
-    let range_end = end.unwrap_or_else(time::now);
+        .unwrap_or_else(now);
+    let range_end = end.unwrap_or_else(now);
     if range_start > range_end {
         return Ok(Vec::new());
     }

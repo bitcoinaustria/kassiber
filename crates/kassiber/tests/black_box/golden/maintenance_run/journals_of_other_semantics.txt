@@ -1,0 +1,7 @@
+$ daemon
+> {"args":{"sync":"never"},"kind":"ui.maintenance.run","request_id":"0"}
+< {"kind":"error","schema_version":1,"error":{"code":"book_network_review_required","message":"This book contains incompatible network histories","hint":"Review the active book's network in Settings. Existing history cannot be relabeled.","details":{"state":"mixed"},"retryable":false,"debug":null},"request_id":"0"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the ui.maintenance.run session
+(unchanged)

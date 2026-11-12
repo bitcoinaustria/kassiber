@@ -1,0 +1,779 @@
+{
+ "pytest": "tests/test_rust_wallet_sync_cli.py::test_sync_cli_fixture_books_match_python[receive-change-wallet-electrum]",
+ "sessions": [
+  {
+   "args": [
+    "--machine",
+    "--data-root",
+    "{tmp}/rust",
+    "wallets",
+    "sync",
+    "--wallet",
+    "a"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_BACKEND_FIXTURE_BATCH_SIZE": "2",
+    "KASSIBER_BACKEND_FIXTURE_KIND": "electrum",
+    "KASSIBER_BACKEND_FIXTURE_URL": "tcp://127.0.0.1:41639",
+    "KASSIBER_DEFAULT_BACKEND": "fixture",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_RUST_TEST_SYNC_NOW": "0",
+    "KASSIBER_RUST_TEST_SYNC_PREFIX": "r0",
+    "KASSIBER_RUST_TEST_SYNC_START": "1700000000",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333575864988,
+    1794333575864988,
+    1794333575880067
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/python",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/python/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/python/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/python/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/python/attachments\",\n    \"config_root\": \"{tmp}/python/config\",\n    \"data_root\": \"{tmp}/python\",\n    \"database\": \"{tmp}/python/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/python/config/backends.env\",\n    \"exports_root\": \"{tmp}/python/exports\",\n    \"settings_file\": \"{tmp}/python/config/settings.json\",\n    \"state_root\": \"{tmp}/python\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/python/exports",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/rust",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/rust/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          2
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "profiles",
+          -1,
+          1
+         ],
+         [
+          2,
+          "wallets",
+          -1,
+          2
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "w",
+          "book",
+          "EUR",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "fixed",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T17:59:32.734Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:32.734Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:32.734Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:32.734Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:32.735Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T17:59:32.735Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T17:59:32.735Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T17:59:32.740Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T17:59:32.746Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T17:59:32Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T17:59:32.747Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T17:59:32.749Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          1,
+          "database_instance_id",
+          "b2fcb4d283004bf89dca1e66db495efc"
+         ],
+         [
+          2,
+          "context_workspace",
+          "w"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "a",
+          "w",
+          "p",
+          null,
+          "Cold",
+          "descriptor",
+          "{\"descriptor\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\", \"gap_limit\": 3, \"backend\": \"fixture\"}",
+          "fixed"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "w",
+          "ws",
+          "fixed"
+         ]
+        ]
+       }
+      }
+     }
+    }
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--machine",
+    "--data-root",
+    "{tmp}/rust",
+    "wallets",
+    "sync",
+    "--wallet",
+    "a"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_BACKEND_FIXTURE_BATCH_SIZE": "2",
+    "KASSIBER_BACKEND_FIXTURE_KIND": "electrum",
+    "KASSIBER_BACKEND_FIXTURE_URL": "tcp://127.0.0.1:41639",
+    "KASSIBER_DEFAULT_BACKEND": "fixture",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_RUST_TEST_SYNC_NOW": "0",
+    "KASSIBER_RUST_TEST_SYNC_PREFIX": "r0",
+    "KASSIBER_RUST_TEST_SYNC_START": "1700000000",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333575864988,
+    1794333576091954,
+    1794333577605232
+   ],
+   "tape": {"templates":["{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"server.version\",\"params\":[\"Kassiber\",\"1.6\"]}\n","{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": [\"fixture\", \"1.6\"]}\n","{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"height\": 20, \"hex\": \"\u0001\u000100000000e01f5465ffff7f2000000000\"}}\n","{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"count\": 8, \"max\": 2016, \"headers\": [\"\u0001\u000100000000780f5465ffff7f2000000000\", \"\u0001\u000100000000d0115465ffff7f2000000000\", \"\u0001\u00010000000028145465ffff7f2000000000\", \"\u0001\u00010000000080165465ffff7f2000000000\", \"\u0001\u000100000000d8185465ffff7f2000000000\", \"\u0001\u000100000000301b5465ffff7f2000000000\", \"\u0001\u000100000000881d5465ffff7f2000000000\", \"\u0001\u000100000000e01f5465ffff7f2000000000\"], \"hex\": \"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\"}}\n","{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": \"\u0001\u00014b1e5e4a29ab5f49ffff001d1dac2b7c\"}\n","{\"jsonrpc\": \"2.0\", \"id\": 5, \"result\": []}\n","{\"jsonrpc\": \"2.0\", \"id\": 6, \"result\": [{\"tx_hash\": \"\u0001\", \"height\": 2}, {\"tx_hash\": \"\u0001\", \"height\": 12}]}\n","{\"jsonrpc\": \"2.0\", \"id\": 7, \"result\": \"\u0001\u0001\u0001\u0001\u0001cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd00000000\"}\n","{\"jsonrpc\": \"2.0\", \"id\": 8, \"result\": \"\u0001\u0001faa0c317b0f55365ffff7f2000000000\"}\n","{\"jsonrpc\": \"2.0\", \"id\": 9, \"result\": {\"pos\": 0, \"merkle\": [], \"block_height\": 2}}\n","{\"jsonrpc\": \"2.0\", \"id\": 10, \"result\": \"\u0001\u0001\u0001\u0001\u0001\u0001cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd00000000\"}\n","{\"jsonrpc\": \"2.0\", \"id\": 11, \"result\": \"\u0001\u00012a133e61200d5465ffff7f2000000000\"}\n","{\"jsonrpc\": \"2.0\", \"id\": 12, \"result\": {\"pos\": 0, \"merkle\": [], \"block_height\": 12}}\n","{\"jsonrpc\": \"2.0\", \"id\": 13, \"result\": []}\n","{\"jsonrpc\": \"2.0\", \"id\": 14, \"result\": []}\n","{\"jsonrpc\": \"2.0\", \"id\": 15, \"result\": []}\n","{\"jsonrpc\": \"2.0\", \"id\": 16, \"result\": []}\n","{\"jsonrpc\": \"2.0\", \"id\": 17, \"result\": []}\n","{\"jsonrpc\": \"2.0\", \"id\": 18, \"result\": [{\"tx_hash\": \"\u0001\", \"height\": 12}]}\n","{\"jsonrpc\": \"2.0\", \"id\": 19, \"result\": []}\n","{\"jsonrpc\": \"2.0\", \"id\": 20, \"result\": []}\n","{\"jsonrpc\": \"2.0\", \"id\": 21, \"result\": []}\n","{\"jsonrpc\": \"2.0\", \"id\": 22, \"result\": []}\n","{\"jsonrpc\": \"2.0\", \"id\": 23, \"result\": \"\u0001\u0001333333333333333333333333333333333333333300000000\"}\n"],"connections":[[1,false,"127.0.0.1",41639,1,null,[["w",79,[0]],["r",[1]],["w",77],["r",[2,"010000009530bdf8f2e36f6d7b1dce4a2759f9604646f24dad3bd56e29c29b87","20fc38c400000000000000000000000000000000000000000000000000000000"]],["w",77],["r",[3,"01000000c4e803222a51e0041e52abca2e510bffa0b94808c5c6367b0a4abcd2","480fd44900000000000000000000000000000000000000000000000000000000","01000000e0b4d6bbdde6e39ec6a4527a12b4ec24ff242d914acfbb867c279191","75c25f3800000000000000000000000000000000000000000000000000000000","01000000a7b827661b144303a1ce474e71d19df0b4cbba1cc79c1e398bc245f4","4450508600000000000000000000000000000000000000000000000000000000","01000000f4350fa9d5560c0e5a0347bf59b85a3787db66145c799a68e866bbcb","752c2f4a00000000000000000000000000000000000000000000000000000000","0100000081e6ca9517be2396233ff75852eace573236b2a336d877bf9459c922","40f8cba800000000000000000000000000000000000000000000000000000000","0100000091ef1cd91c94f5fde600ccfc6217ea8e9521a71e75c81490b62e13c9","f32fb6f500000000000000000000000000000000000000000000000000000000","01000000802350f94db25b80d6f32abda8e95e5d088ebd0351970cdec4040880","488c136b00000000000000000000000000000000000000000000000000000000","010000009530bdf8f2e36f6d7b1dce4a2759f9604646f24dad3bd56e29c29b87","20fc38c400000000000000000000000000000000000000000000000000000000","01000000c4e803222a51e0041e52abca2e510bffa0b94808c5c6367b0a4abcd2","480fd44900000000000000000000000000000000000000000000000000000000","00000000780f5465ffff7f200000000001000000e0b4d6bbdde6e39ec6a4527a","12b4ec24ff242d914acfbb867c27919175c25f38000000000000000000000000","0000000000000000000000000000000000000000d0115465ffff7f2000000000","01000000a7b827661b144303a1ce474e71d19df0b4cbba1cc79c1e398bc245f4","4450508600000000000000000000000000000000000000000000000000000000","0000000028145465ffff7f200000000001000000f4350fa9d5560c0e5a0347bf","59b85a3787db66145c799a68e866bbcb752c2f4a000000000000000000000000","000000000000000000000000000000000000000080165465ffff7f2000000000","0100000081e6ca9517be2396233ff75852eace573236b2a336d877bf9459c922","40f8cba800000000000000000000000000000000000000000000000000000000","00000000d8185465ffff7f20000000000100000091ef1cd91c94f5fde600ccfc","6217ea8e9521a71e75c81490b62e13c9f32fb6f5000000000000000000000000","0000000000000000000000000000000000000000301b5465ffff7f2000000000","01000000802350f94db25b80d6f32abda8e95e5d088ebd0351970cdec4040880","488c136b00000000000000000000000000000000000000000000000000000000","00000000881d5465ffff7f2000000000010000009530bdf8f2e36f6d7b1dce4a","2759f9604646f24dad3bd56e29c29b8720fc38c4000000000000000000000000","0000000000000000000000000000000000000000e01f5465ffff7f2000000000"]],["w",73],["r",[4,"0100000000000000000000000000000000000000000000000000000000000000","000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa"]],["w",296],["r",[5]],["r",[6,"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0","613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e"]],["w",141],["r",[7,"0200000000010118d8c2525010829bafed6ae0f7def4391d7b1eb2c6fb10238e","e2340fd5662a640000000000feffffff01a086010000000000160014ce23876b","24b9b9b77040da0ba56324ee62aa51390247abababababababababababababab","abababababababababababababababababababababababababababababababab","ababababababababababababababababababababababababab2102cdcdcdcdcd"]],["w",73],["r",[8,"01000000809fd83ff1cdb916d27799c4fe7d471e556a2041fbac233a1fc4ff1f","3a0e1bc9d0d1d79e7f20438e04dc85e40c68a4b55dcbf563059a1fef12f47dd0"]],["w",150],["r",[9]],["w",142],["r",[10,"02000000000101d0d1d79e7f20438e04dc85e40c68a4b55dcbf563059a1fef12","f47dd0faa0c3170000000000fdffffff0250c300000000000016001433333333","3333333333333333333333333333333380bb000000000000160014856de81171","334cd8efe4493e4c94a7444cde50050247ababababababababababababababab","abababababababababababababababababababababababababababababababab","abababababababababababababababababababababababab2102cdcdcdcdcdcd"]],["w",75],["r",[11,"0100000060fccc7f65faa43fcf316d42ab9d80fd4af691c78740e4b625358bba","d0f978ab4e8fe912ba7f7e39376fc317c526384e24ad2896e183bd703c2c256c"]],["w",152],["r",[12]],["w",298],["r",[13]],["r",[14]],["w",298],["r",[15]],["r",[16]],["w",298],["r",[17]],["r",[18,"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e"]],["w",298],["r",[19]],["r",[20]],["w",298],["r",[21]],["r",[22]],["w",142],["r",[23,"0200000001000000000000000000000000000000000000000000000000000000","0000000000ffffffff06010001000000ffffffff01888a010000000000160014"]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Cold\",\n      \"status\": \"synced\",\n      \"source\": \"backend:fixture\",\n      \"imported\": 2,\n      \"skipped\": 0,\n      \"unchanged\": 0,\n      \"journal_invalidated\": true,\n      \"inserted_records\": [\n        {\n          \"transaction_id\": \"r0-0004\",\n          \"external_id\": \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\",\n          \"wallet\": \"Cold\",\n          \"asset\": \"BTC\",\n          \"direction\": \"outbound\",\n          \"amount_msat\": 50000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        },\n        {\n          \"transaction_id\": \"r0-0005\",\n          \"external_id\": \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\n          \"wallet\": \"Cold\",\n          \"asset\": \"BTC\",\n          \"direction\": \"inbound\",\n          \"amount_msat\": 100000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        }\n      ],\n      \"updated_records\": [],\n      \"saved_report_impacts\": 0,\n      \"output_inventory\": {\n        \"observed\": 1,\n        \"active\": 1,\n        \"spent\": 0,\n        \"last_seen_at\": \"2030-01-01T00:00:07Z\"\n      },\n      \"backend\": \"fixture\",\n      \"backend_kind\": \"electrum\",\n      \"backend_url\": \"tcp://127.0.0.1:41639\",\n      \"chain\": \"bitcoin\",\n      \"network\": \"main\",\n      \"sync_mode\": \"descriptor\",\n      \"target_count\": 6,\n      \"records_fetched\": 2,\n      \"updated\": 0,\n      \"gap_limit\": 3,\n      \"freshness_checkpoint\": {\n        \"highest_used\": {\n          \"0\": 1,\n          \"1\": 1\n        },\n        \"observer_instances\": {\n          \"82ab91aabb39af6aff384e7051ddccc3eca74cab890c465425f5ff2d2f1e416d\": {\n            \"canonical_txids\": [\n              \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\n              \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"\n            ],\n            \"highest_used\": {\n              \"0\": 1,\n              \"1\": 1\n            },\n            \"observer\": \"bdk\",\n            \"tip_hash\": \"8f9733f2d9829f9cbad038147e33f24a10716ddf19a0ed61e1aa2a687346d9e7\",\n            \"tip_height\": 20\n          }\n        }\n      },\n      \"observer_route\": \"bdk\",\n      \"utxos_refreshed\": true,\n      \"elapsed_ms\": 0\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/rust/attachments": {
+      "dir": true
+     },
+     "{tmp}/rust/config": {
+      "dir": true
+     },
+     "{tmp}/rust/config/settings.json": {
+      "mode": 384,
+      "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/rust/attachments\",\n    \"config_root\": \"{tmp}/rust/config\",\n    \"data_root\": \"{tmp}/rust\",\n    \"database\": \"{tmp}/rust/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/rust/config/backends.env\",\n    \"exports_root\": \"{tmp}/rust/exports\",\n    \"settings_file\": \"{tmp}/rust/config/settings.json\",\n    \"state_root\": \"{tmp}/rust\"\n  },\n  \"schema_version\": 1\n}\n"
+     },
+     "{tmp}/rust/exports": {
+      "dir": true
+     },
+     "{tmp}/rust/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           8
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           1,
+           "profiles",
+           -1,
+           6
+          ],
+          [
+           2,
+           "wallets",
+           -1,
+           8
+          ],
+          [
+           3,
+           "transactions",
+           1,
+           3
+          ],
+          [
+           4,
+           "transactions",
+           2,
+           4
+          ],
+          [
+           5,
+           "wallet_utxos",
+           1,
+           7
+          ]
+         ]
+        },
+        "chain_observation_provenance": {
+         "upsert": [
+          [
+           1,
+           "r0-0005",
+           "w",
+           "p",
+           "a",
+           1,
+           "[\"82ab91aabb39af6aff384e7051ddccc3eca74cab890c465425f5ff2d2f1e416d\"]",
+           "[\"bdk\"]",
+           "bitcoin",
+           "main",
+           "r0-0003",
+           "6a606da51fd16b5ce702dc5b4453a1fab53d091266bdac9d39db40d0b689437a",
+           "bfc272d0201e161c7e51619e092045da9be009e91c0f56adcb2f4c7100e27aa9",
+           "exact",
+           "2030-01-01T00:00:06Z",
+           "2030-01-01T00:00:06Z"
+          ],
+          [
+           2,
+           "r0-0004",
+           "w",
+           "p",
+           "a",
+           1,
+           "[\"82ab91aabb39af6aff384e7051ddccc3eca74cab890c465425f5ff2d2f1e416d\"]",
+           "[\"bdk\"]",
+           "bitcoin",
+           "main",
+           "r0-0003",
+           "432cb6304aeb1516d32fef723512d8cb0c2e7eb27d8fbcc66817936502b9693e",
+           "a6d75ed162c20633a261c303334215c68316fa434d01302cac1166c07a4d28cf",
+           "exact",
+           "2030-01-01T00:00:06Z",
+           "2030-01-01T00:00:06Z"
+          ]
+         ]
+        },
+        "chain_observer_coverage": {
+         "upsert": [
+          [
+           1,
+           "82ab91aabb39af6aff384e7051ddccc3eca74cab890c465425f5ff2d2f1e416d",
+           "change",
+           2,
+           1,
+           5,
+           "{\"branch_index\":1,\"observer\":\"bdk\"}",
+           "2030-01-01T00:00:01Z"
+          ],
+          [
+           2,
+           "82ab91aabb39af6aff384e7051ddccc3eca74cab890c465425f5ff2d2f1e416d",
+           "receive",
+           2,
+           1,
+           5,
+           "{\"branch_index\":0,\"observer\":\"bdk\"}",
+           "2030-01-01T00:00:01Z"
+          ]
+         ]
+        },
+        "chain_observer_instances": {
+         "upsert": [
+          [
+           1,
+           "82ab91aabb39af6aff384e7051ddccc3eca74cab890c465425f5ff2d2f1e416d",
+           "w",
+           "p",
+           "a",
+           "a",
+           "descriptor:default",
+           "bdk",
+           "bitcoin",
+           "main",
+           1,
+           1,
+           "{\"bdk_changeset\":{\"change_descriptor\":\"wpkh([4ba43603/84'/0'/0']xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*)#vy9zakj4\",\"descriptor\":\"wpkh([4ba43603/84'/0'/0']xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)#asqrqrzd\",\"indexer\":[{\"descriptor_id\":\"2ca23701527894ab11ecdb7852cba5c7cc8089b1b063e0d2ce093a30537bc08d\",\"last_revealed\":4},{\"descriptor_id\":\"dd624b82e70f1d3c0f9d06ebf640eee63c8c410c4f1756f5aabc1ac571812e82\",\"last_revealed\":4}],\"local_chain\":[{\"hash\":\"6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000\",\"height\":0},{\"hash\":\"ab303a43f46ac5ccc377241ff564aaab7a0dd21682c776b353e8bd31ae846870\",\"height\":2},{\"hash\":\"c4e803222a51e0041e52abca2e510bffa0b94808c5c6367b0a4abcd2480fd449\",\"height\":12},{\"hash\":\"e0b4d6bbdde6e39ec6a4527a12b4ec24ff242d914acfbb867c27919175c25f38\",\"height\":13},{\"hash\":\"a7b827661b144303a1ce474e71d19df0b4cbba1cc79c1e398bc245f444505086\",\"height\":14},{\"hash\":\"f4350fa9d5560c0e5a0347bf59b85a3787db66145c799a68e866bbcb752c2f4a\",\"height\":15},{\"hash\":\"81e6ca9517be2396233ff75852eace573236b2a336d877bf9459c92240f8cba8\",\"height\":16},{\"hash\":\"91ef1cd91c94f5fde600ccfc6217ea8e9521a71e75c81490b62e13c9f32fb6f5\",\"height\":17},{\"hash\":\"802350f94db25b80d6f32abda8e95e5d088ebd0351970cdec4040880488c136b\",\"height\":18},{\"hash\":\"9530bdf8f2e36f6d7b1dce4a2759f9604646f24dad3bd56e29c29b8720fc38c4\",\"height\":19},{\"hash\":\"e7d94673682aaae161eda019df6d71104af2337e1438d0ba9c9f82d9f233978f\",\"height\":20}],\"locked_outpoints\":[],\"network\":\"BITCOIN\",\"schema_version\":1,\"tx_graph\":{\"anchors\":[{\"block_hash\":\"c4e803222a51e0041e52abca2e510bffa0b94808c5c6367b0a4abcd2480fd449\",\"block_height\":12,\"confirmation_time\":1700007200,\"txid\":\"4e8fe912ba7f7e39376fc317c526384e24ad2896e183bd703c2c256c2a133e61\"},{\"block_hash\":\"ab303a43f46ac5ccc377241ff564aaab7a0dd21682c776b353e8bd31ae846870\",\"block_height\":2,\"confirmation_time\":1700001200,\"txid\":\"d0d1d79e7f20438e04dc85e40c68a4b55dcbf563059a1fef12f47dd0faa0c317\"}],\"first_seen\":[],\"last_evicted\":[],\"last_seen\":[],\"txouts\":[{\"script_pubkey\":\"00143333333333333333333333333333333333333333\",\"txid\":\"18d8c2525010829bafed6ae0f7def4391d7b1eb2c6fb10238ee2340fd5662a64\",\"value_sats\":101000,\"vout\":0}],\"txs\":[\"0200000000010118d8c2525010829bafed6ae0f7def4391d7b1eb2c6fb10238ee2340fd5662a640000000000feffffff01a086010000000000160014ce23876b24b9b9b77040da0ba56324ee62aa51390247ababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab2102cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd00000000\",\"02000000000101d0d1d79e7f20438e04dc85e40c68a4b55dcbf563059a1fef12f47dd0faa0c3170000000000fdffffff0250c3000000000000160014333333333333333333333333333333333333333380bb000000000000160014856de81171334cd8efe4493e4c94a7444cde50050247ababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab2102cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd00000000\"]}},\"canonical_txids\":[\"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"],\"record_fingerprint_version\":\"1:0.22.78\",\"record_fingerprints\":{\"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\":\"77f60de2e0516b848e6a493347abdb04\",\"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\":\"1b2ad7e8ed1a1f2d7d6753521b9148f0\"},\"schema_version\":1}",
+           "2030-01-01T00:00:01Z",
+           "2030-01-01T00:00:01Z"
+          ]
+         ]
+        },
+        "freshness_source_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "onchain_wallet:a",
+           "onchain_wallet",
+           "Cold",
+           "fresh",
+           "fresh",
+           null,
+           0,
+           0,
+           null,
+           null,
+           0,
+           "2030-01-01T00:00:08Z",
+           null,
+           null,
+           null,
+           "done",
+           "{\"phase\":\"done\"}",
+           "{\"highest_used\":{\"0\":1,\"1\":1},\"observer_instances\":{\"82ab91aabb39af6aff384e7051ddccc3eca74cab890c465425f5ff2d2f1e416d\":{\"canonical_txids\":[\"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"],\"highest_used\":{\"0\":1,\"1\":1},\"observer\":\"bdk\",\"tip_hash\":\"8f9733f2d9829f9cbad038147e33f24a10716ddf19a0ed61e1aa2a687346d9e7\",\"tip_height\":20}}}",
+           "2030-01-01T00:00:09Z"
+          ]
+         ]
+        },
+        "profiles": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "w",
+           "book",
+           "EUR",
+           "generic",
+           365,
+           "FIFO",
+           0,
+           1,
+           "global",
+           1,
+           0,
+           1,
+           0,
+           null,
+           0,
+           null,
+           "fixed",
+           null
+          ]
+         ]
+        },
+        "transactions": {
+         "upsert": [
+          [
+           1,
+           "r0-0004",
+           "w",
+           "p",
+           "a",
+           "613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e",
+           "txid",
+           "9dcff6f77d076a359f3ff2fe57f0882c9b3c3d14cff99f78ea60c6ba4bd5cdd9",
+           "2023-11-15T00:13:20Z",
+           "2023-11-15T00:13:20Z",
+           "outbound",
+           "BTC",
+           50000000,
+           2000000,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "withdrawal",
+           "Synced from fixture",
+           null,
+           null,
+           0,
+           "{\"block_height\": 12, \"block_time\": 1700007200, \"confirmation_status\": \"confirmed\", \"confirmations\": 9, \"fee\": 2000, \"observed_at\": null, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014856de81171334cd8efe4493e4c94a7444cde5005\", \"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\"], \"status\": {\"block_hash\": \"49d40f48d2bc4a0a7b36c6c50848b9a0ff0b512ecaab521e04e0512a2203e8c4\", \"block_height\": 12, \"block_time\": 1700007200, \"confirmed\": true}, \"txid\": \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\", \"value\": 100000}, \"txid\": \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\", \"vout\": 0, \"witness\": [\"ababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\", \"02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"]}], \"vout\": [{\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 50000}, {\"scriptpubkey\": \"0014856de81171334cd8efe4493e4c94a7444cde5005\", \"value\": 48000}]}",
+           null,
+           null,
+           null,
+           null,
+           "2030-01-01T00:00:04Z"
+          ],
+          [
+           2,
+           "r0-0005",
+           "w",
+           "p",
+           "a",
+           "17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0",
+           "txid",
+           "db5823f47d495b2974f6ec35b3a75e6b54288e0fbad6dc8966c0f2a891def6cf",
+           "2023-11-14T22:33:20Z",
+           "2023-11-14T22:33:20Z",
+           "inbound",
+           "BTC",
+           100000000,
+           0,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Synced from fixture",
+           null,
+           null,
+           0,
+           "{\"block_height\": 2, \"block_time\": 1700001200, \"confirmation_status\": \"confirmed\", \"confirmations\": 19, \"fee\": 1000, \"observed_at\": null, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\"], \"status\": {\"block_hash\": \"706884ae31bde853b376c78216d20d7aabaa64f51f2477c3ccc56af4433a30ab\", \"block_height\": 2, \"block_time\": 1700001200, \"confirmed\": true}, \"txid\": \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 101000}, \"txid\": \"642a66d50f34e28e2310fbc6b21e7b1d39f4def7e06aedaf9b82105052c2d818\", \"vout\": 0, \"witness\": [\"ababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\", \"02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"]}], \"vout\": [{\"scriptpubkey\": \"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\", \"value\": 100000}]}",
+           null,
+           null,
+           null,
+           null,
+           "2030-01-01T00:00:05Z"
+          ]
+         ]
+        },
+        "wallet_policy_coverage_witnesses": {
+         "upsert": [
+          [
+           1,
+           "r0-0002",
+           "receive",
+           5,
+           1,
+           "bdk",
+           "2030-01-01T00:00:03Z"
+          ],
+          [
+           2,
+           "r0-0002",
+           "change",
+           5,
+           1,
+           "bdk",
+           "2030-01-01T00:00:03Z"
+          ]
+         ]
+        },
+        "wallet_policy_epochs": {
+         "upsert": [
+          [
+           1,
+           "r0-0001",
+           "w",
+           "p",
+           "a",
+           "bitcoin",
+           "main",
+           "active",
+           "{\"descriptor\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\", \"gap_limit\": 3}",
+           "2030-01-01T00:00:02Z",
+           null
+          ]
+         ]
+        },
+        "wallet_policy_sources": {
+         "upsert": [
+          [
+           1,
+           "r0-0002",
+           "r0-0001",
+           "a",
+           "descriptor:default",
+           "bdk",
+           "[\"receive\", \"change\"]",
+           "2030-01-01T00:00:03Z",
+           "2030-01-01T00:00:03Z"
+          ]
+         ]
+        },
+        "wallet_utxo_refreshes": {
+         "upsert": [
+          [
+           1,
+           "a",
+           "w",
+           "p",
+           "fixture",
+           "electrum",
+           "bitcoin",
+           "main",
+           1,
+           1,
+           "2030-01-01T00:00:07Z"
+          ]
+         ]
+        },
+        "wallet_utxos": {
+         "upsert": [
+          [
+           1,
+           "b40ad56b8d72ef50ec0976f88a64acae2df13150cb3c0d59ddb0e5f0bfc40eea",
+           "w",
+           "p",
+           "a",
+           "fixture",
+           "electrum",
+           "bitcoin",
+           "main",
+           "BTC",
+           48000000,
+           "613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e",
+           1,
+           "613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e:1",
+           "confirmed",
+           9,
+           12,
+           "1700007200",
+           "bc1qs4k7syt3xdxd3mlyfylye998g3xdu5q92k4rt5",
+           "0014856de81171334cd8efe4493e4c94a7444cde5005",
+           null,
+           "change",
+           1,
+           1,
+           null,
+           null,
+           null,
+           null,
+           "[]",
+           "2030-01-01T00:00:07Z",
+           "2030-01-01T00:00:07Z",
+           null,
+           "{\"confirmed\": true, \"source\": \"bdk_wallet\"}"
+          ]
+         ]
+        },
+        "wallets": {
+         "upsert": [
+          [
+           1,
+           "a",
+           "w",
+           "p",
+           null,
+           "Cold",
+           "descriptor",
+           "{\"backend\": \"fixture\", \"descriptor\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\", \"gap_limit\": 3, \"last_synced_at\": \"2030-01-01T00:00:08Z\"}",
+           "fixed"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

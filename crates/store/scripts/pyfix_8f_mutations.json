@@ -20,22 +20,22 @@
     "rule": "Unnumbered batches continue after the largest existing import_sequence."
   },
   {
-    "id": "store-legacy-pair-fee-left-for-python",
+    "id": "store-legacy-pair-fee-needs-custody-layer",
     "file": "crates/store/src/semantics.rs",
-    "find": "    if candidates {\n        return Err(Error::new(\n            ErrorKind::UnsupportedSchemaLayout,",
-    "replace": "    if candidates && false {\n        return Err(Error::new(\n            ErrorKind::UnsupportedSchemaLayout,",
+    "find": "    if !candidates.is_empty() {",
+    "replace": "    if false && !candidates.is_empty() {",
     "expect_failing": [
-      "legacy_pair_fee_candidates_are_left_for_python"
+      "legacy_pair_fee_candidates_need_the_custody_layer"
     ],
-    "rule": "A book with legacy pair fee candidates and no audit is refused for Python to migrate (ca630b9a6)."
+    "rule": "A book with legacy pair fee candidates and no audit is refused, before the audit, when no custody layer is installed to decide them."
   },
   {
     "id": "store-legacy-pair-fee-audit",
     "file": "crates/store/src/semantics.rs",
-    "find": "AND fee.role = 'fee' AND fee.notes = 'reviewed_residual:network_fee')\",",
-    "replace": "AND fee.role = 'fee' AND fee.notes = 'never')\",",
+    "find": "AND fee.role = 'fee' AND fee.notes = 'reviewed_residual:network_fee'\",",
+    "replace": "AND fee.role = 'fee' AND fee.notes = 'never'\",",
     "expect_failing": [
-      "legacy_pair_fee_candidates_are_left_for_python"
+      "legacy_pair_fee_candidates_need_the_custody_layer"
     ],
     "rule": "Legacy candidates are active quantity components with a reviewed_residual:network_fee fee leg."
   },

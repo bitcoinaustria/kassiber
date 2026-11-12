@@ -1,5 +1,9 @@
 # Rust main sync 1: parity gaps from main #672 to #714
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 The Rust backend stack (integration tip `t3code/rust-backend-r10b`,
 a0b4d0342) sat on main as of #654. `t3code/rust-main-sync-1` merges
 `t3code/tax-engine-phase-4` at c4f82d3db, which carries main up to #714

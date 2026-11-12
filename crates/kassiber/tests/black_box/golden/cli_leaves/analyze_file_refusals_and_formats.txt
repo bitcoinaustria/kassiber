@@ -1,0 +1,246 @@
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv
+exit 0
+--- stdout
+{
+  "kind": "wallets.file_analysis",
+  "schema_version": 1,
+  "data": {
+    "source": {
+      "path": "<SANDBOX>/work/export.csv",
+      "filename": "export.csv",
+      "kind": "delimited",
+      "size_bytes": 82,
+      "delimiter": ";"
+    },
+    "route": "generic_ledger",
+    "supported": true,
+    "template": false,
+    "headers": [
+      "Datum",
+      "Richtung",
+      "Stueck",
+      "Kurs"
+    ],
+    "inferred_plan": {
+      "date": "Datum",
+      "type": null,
+      "direction": "Richtung",
+      "received": null,
+      "sent": null,
+      "amount": null,
+      "received_asset": null,
+      "sent_asset": null,
+      "asset": null,
+      "fee": null,
+      "fee_asset": null,
+      "fiat_currency": null,
+      "fiat_value": null,
+      "fiat_rate": "Kurs",
+      "note": null,
+      "txid": null,
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "received_header_asset": null,
+      "sent_header_asset": null,
+      "amount_header_asset": null,
+      "fee_header_asset": null
+    },
+    "inferred_confident": false,
+    "detected": [
+      {
+        "column": "Datum",
+        "field": "date"
+      },
+      {
+        "column": "Richtung",
+        "field": "direction"
+      },
+      {
+        "column": "Kurs",
+        "field": "fiat_rate"
+      }
+    ],
+    "applied_plan": null,
+    "confident": false,
+    "rows_read": 2,
+    "mapped": 0,
+    "errors": 0,
+    "problems": [],
+    "preview": [],
+    "truncated": false,
+    "row_kinds_from_amount_sign": false,
+    "amount_units_unconfirmed": false,
+    "header_is_preamble": false,
+    "next_step": {
+      "action": "supply_column_map",
+      "reason": "The columns in this file were not recognized. Map them with column_map (at least a date column and one amount column), or fill in the blank ledger template instead."
+    }
+  }
+}
+$ --format table --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv
+exit 0
+--- stdout
+field                       value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+--------------------------  -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+source                      {'path': '<SANDBOX>/work/export.csv', 'filename': 'export.csv', 'kind': 'delimited', 'size_bytes': 82, 'delimiter': ';'}                                                                                                                                                                                                                                                                              
+route                       generic_ledger                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+supported                   True                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+template                    False                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+headers                     ['Datum', 'Richtung', 'Stueck', 'Kurs']                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+inferred_plan               {'date': 'Datum', 'type': None, 'direction': 'Richtung', 'received': None, 'sent': None, 'amount': None, 'received_asset': None, 'sent_asset': None, 'asset': None, 'fee': None, 'fee_asset': None, 'fiat_currency': None, 'fiat_value': None, 'fiat_rate': 'Kurs', 'note': None, 'txid': None, 'counterparty': None, 'payment_hash': None, 'payment_hash_source': None, 'swap_refund_funding_txid': None, 'swap_refund_funding_vout': None, 'received_header_asset': None, 'sent_header_asset': None, 'amount_header_asset': None, 'fee_header_asset': None}
+inferred_confident          False                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+detected                    [{'column': 'Datum', 'field': 'date'}, {'column': 'Richtung', 'field': 'direction'}, {'column': 'Kurs', 'field': 'fiat_rate'}]                                                                                                                                                                                                                                                                                                                                                                                                                               
+applied_plan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+confident                   False                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+… [12389 bytes, 22 lines fnv128 618d2af0b7e90fec41e09924d9fc60ed]
+$ --format plain --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv
+exit 0
+--- stdout
+source: {"path": "<SANDBOX>/work/export.csv", "filename": "export.csv", "kind": "delimited", "size_bytes": 82, "delimiter": ";"}
+route: generic_ledger
+supported: True
+template: False
+headers: ["Datum", "Richtung", "Stueck", "Kurs"]
+inferred_plan: {"date": "Datum", "type": null, "direction": "Richtung", "received": null, "sent": null, "amount": null, "received_asset": null, "sent_asset": null, "asset": null, "fee": null, "fee_asset": null, "fiat_currency": null, "fiat_value": null, "fiat_rate": "Kurs", "note": null, "txid": null, "counterparty": null, "payment_hash": null, "payment_hash_source": null, "swap_refund_funding_txid": null, "swap_refund_funding_vout": null, "received_header_asset": null, "sent_header_asset": null, "amount_header_asset": null, "fee_header_asset": null}
+inferred_confident: False
+detected: [{"column": "Datum", "field": "date"}, {"column": "Richtung", "field": "direction"}, {"column": "Kurs", "field": "fiat_rate"}]
+applied_plan: 
+confident: False
+rows_read: 2
+mapped: 0
+errors: 0
+problems: []
+preview: []
+truncated: False
+row_kinds_from_amount_sign: False
+amount_units_unconfirmed: False
+header_is_preamble: False
+next_step: {"action": "supply_column_map", "reason": "The columns in this file were not recognized. Map them with column_map (at least a date column and one amount column), or fill in the blank ledger template instead."}
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file scan.pdf
+exit 0
+--- stdout
+{
+  "kind": "wallets.file_analysis",
+  "schema_version": 1,
+  "data": {
+    "source": {
+      "path": "<SANDBOX>/work/scan.pdf",
+      "filename": "scan.pdf",
+      "kind": "pdf",
+      "size_bytes": 9,
+      "delimiter": null
+    },
+    "route": "document_import",
+    "supported": true,
+    "next_step": {
+      "action": "document_import_preview",
+      "reason": "Photos and PDFs are read by a local vision model, which never leaves this device. Preview the draft rows, then import the ones you confirm."
+    }
+  }
+}
+$ --format table --data-root <SANDBOX>/analyze-root wallets analyze-file --file scan.pdf
+exit 0
+--- stdout
+field      value                                                                                                                                                                                                                                                                
+---------  ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+source     {'path': '<SANDBOX>/work/scan.pdf', 'filename': 'scan.pdf', 'kind': 'pdf', 'size_bytes': 9, 'delimiter': None}
+route      document_import                                                                                                                                                                                                                                                      
+supported  True                                                                                                                                                                                                                                                                 
+next_step  {'action': 'document_import_preview', 'reason': 'Photos and PDFs are read by a local vision model, which never leaves this device. Preview the draft rows, then import the ones you confirm.'}                                                                       
+$ --format plain --data-root <SANDBOX>/analyze-root wallets analyze-file --file scan.pdf
+exit 0
+--- stdout
+source: {"path": "<SANDBOX>/work/scan.pdf", "filename": "scan.pdf", "kind": "pdf", "size_bytes": 9, "delimiter": null}
+route: document_import
+supported: True
+next_step: {"action": "document_import_preview", "reason": "Photos and PDFs are read by a local vision model, which never leaves this device. Preview the draft rows, then import the ones you confirm."}
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file notes.docx
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Cannot analyze '.docx' files",
+    "hint": "Export the history as CSV or XLSX, or supply a PDF/photo statement.",
+    "details": {
+      "supported_extensions": [
+        ".csv",
+        ".gif",
+        ".jpeg",
+        ".jpg",
+        ".pdf",
+        ".png",
+        ".tsv",
+        ".txt",
+        ".webp",
+        ".xlsm",
+        ".xlsx"
+      ]
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --format table --data-root <SANDBOX>/analyze-root wallets analyze-file --file notes.docx
+exit 1
+--- stderr
+error: Cannot analyze '.docx' files
+hint: Export the history as CSV or XLSX, or supply a PDF/photo statement.
+$ --format plain --data-root <SANDBOX>/analyze-root wallets analyze-file --file notes.docx
+exit 1
+--- stderr
+error: Cannot analyze '.docx' files
+hint: Export the history as CSV or XLSX, or supply a PDF/photo statement.
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file missing.csv
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "File not found: <SANDBOX>/work/missing.csv",
+    "hint": "Check the path.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --format table --data-root <SANDBOX>/analyze-root wallets analyze-file --file missing.csv
+exit 1
+--- stderr
+error: File not found: <SANDBOX>/work/missing.csv
+hint: Check the path.
+$ --format plain --data-root <SANDBOX>/analyze-root wallets analyze-file --file missing.csv
+exit 1
+--- stderr
+error: File not found: <SANDBOX>/work/missing.csv
+hint: Check the path.
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file .
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Analysis source must be a file",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --format table --data-root <SANDBOX>/analyze-root wallets analyze-file --file .
+exit 1
+--- stderr
+error: Analysis source must be a file
+$ --format plain --data-root <SANDBOX>/analyze-root wallets analyze-file --file .
+exit 1
+--- stderr
+error: Analysis source must be a file

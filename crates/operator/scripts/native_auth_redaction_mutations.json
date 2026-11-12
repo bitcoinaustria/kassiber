@@ -49,56 +49,5 @@
       "rust_lists_match_the_shared_vectors"
     ],
     "rule": "Rust's allowlist equals the shared vectors, so it matches Python's."
-  },
-  {
-    "id": "py-allowlist-ignored",
-    "file": "kassiber/log_ring.py",
-    "find": "    if is_known_native_auth_error(text):\n        return text\n",
-    "replace": "",
-    "expect_failing": [
-      "tests/test_native_auth_error_redaction.py::test_known_helper_errors_pass_unchanged",
-      "tests/test_native_auth_error_redaction.py::test_broker_error_response_shows_the_helper_message"
-    ],
-    "rule": "Known helper errors pass the Python sanitizer unchanged, including in the broker's error response."
-  },
-  {
-    "id": "py-status-any-length",
-    "file": "kassiber/log_ring.py",
-    "find": "    return 1 <= len(digits) <= 10 and all(",
-    "replace": "    return 1 <= len(digits) and all(",
-    "expect_failing": [
-      "tests/test_native_auth_error_redaction.py::test_anything_else_after_auth_is_still_redacted"
-    ],
-    "rule": "An OSStatus has at most ten digits; longer numbers stay redacted."
-  },
-  {
-    "id": "py-status-any-text",
-    "file": "kassiber/log_ring.py",
-    "find": "all(\"0\" <= ch <= \"9\" for ch in digits)",
-    "replace": "all(ch != \" \" for ch in digits)",
-    "expect_failing": [
-      "tests/test_native_auth_error_redaction.py::test_anything_else_after_auth_is_still_redacted"
-    ],
-    "rule": "Only digits fill a status template; other text stays redacted."
-  },
-  {
-    "id": "py-prefix-anywhere",
-    "file": "kassiber/log_ring.py",
-    "find": "    if not text.startswith(NATIVE_AUTH_ERROR_PREFIX):\n        return False\n    message = text[len(NATIVE_AUTH_ERROR_PREFIX):]",
-    "replace": "    text = text.lstrip()\n    if not text.startswith(NATIVE_AUTH_ERROR_PREFIX):\n        return False\n    message = text[len(NATIVE_AUTH_ERROR_PREFIX):]",
-    "expect_failing": [
-      "tests/test_native_auth_error_redaction.py::test_anything_else_after_auth_is_still_redacted"
-    ],
-    "rule": "The prefix must start the whole message."
-  },
-  {
-    "id": "py-extra-message",
-    "file": "kassiber/log_ring.py",
-    "find": "    \"secret_store_locked_or_denied\",\n))",
-    "replace": "    \"secret_store_locked_or_denied\",\n    \"hunter2\",\n))",
-    "expect_failing": [
-      "tests/test_native_auth_error_redaction.py::test_python_lists_match_the_shared_vectors"
-    ],
-    "rule": "Python's allowlist equals the shared vectors, so it matches Rust's."
   }
 ]

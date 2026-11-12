@@ -1,0 +1,2470 @@
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [669 bytes fnv128 edbead5c18f853b584bd4bce0456c133]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [852 bytes fnv128 b319029f2fcc9cb812c4854551b1a375]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [850 bytes fnv128 7a653331c83bc2c6c2f5082291baa8b8]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [733 bytes fnv128 6bd764b371e70a522a81e0d87d806d9a]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [916 bytes fnv128 eeeeeb50ddd8197654698d3bc76ad014]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [914 bytes fnv128 53d8e6727a095df08f12551cd1a6963b]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 3895007cf1ac9ad65f24044bd409eedb]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [853 bytes fnv128 6490f1fe999dc4880f388231d0dcb868]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [851 bytes fnv128 837aeb083e1e6487e93157142cbf108d]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [671 bytes fnv128 d27c0ea3c356b6914e34054e6998781e]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [855 bytes fnv128 cb9933ea91672adda148d9af2240a3d7]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [853 bytes fnv128 d0d320ccd91e8e0464d4af3a5ad3cda6]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [672 bytes fnv128 4480cd57d957a20a7f09eb25b2b1a2c2]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [855 bytes fnv128 140c855f5319932108759e4aa6acbbac]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [853 bytes fnv128 ce58ed0d0fefb46a44051745c901b94f]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [634 bytes fnv128 cd836fc4f56aef9b8edab9a5f3513832]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [634 bytes fnv128 dd67623916782cc045cdb7ca44513757]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [609 bytes fnv128 93382ece60879855e86ed66b195ee7a1]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [649 bytes fnv128 3e38ab233cbe94f69d1f8dcfe98c3c04]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [601 bytes fnv128 46abf0b219df5b0e8f78ec47ef2daf95]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [595 bytes fnv128 02f7e10864db1e8b9988d4f2bfcb09ce]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [581 bytes fnv128 17ce5021e1f6727f258aa43371d4afb5]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [595 bytes fnv128 5abb2bec18f015e7848bbe39ae9a0b91]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [595 bytes fnv128 0cf78e756d9503f14afa61023e1f2be8]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [595 bytes fnv128 35aaea5834f7cd9a03a5c00ef1664a1f]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2998 bytes fnv128 192b6e656e538fc328aa1420fc463589]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3025 bytes fnv128 5e04b749c964aa80e5e76ada6325970e]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2988 bytes fnv128 d78052085397ff6dc266df830e906587]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3015 bytes fnv128 eb84097ee272364246bb659f54bdcdac]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2998 bytes fnv128 1aa0559368cda03d88b3e21302883c4d]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3025 bytes fnv128 2ea39f93ce80025769e977e345278212]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [653 bytes fnv128 a922c9c40282ba67348d5b23ddd4f69d]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 8b1a5a6166122f1f8a843e2fa21da6df]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 c639bf387b6ba2e2dfe3a376eca04360]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 89b940533abe6e9b9e33e6856a4e3995]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [645 bytes fnv128 422f92e344d79112c657716fb157dabb]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 730753198e010cb14cdc6371271d1def]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 f8ed2d559038f0d13d2d4ac386401530]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [645 bytes fnv128 32198a146e62f745b0921fceb2428a43]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 d46ec3c03d098c2b9240a6e8b8151a9f]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [648 bytes fnv128 f1047b1f350c9909c62b4413e2975fa2]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [648 bytes fnv128 a20f02bd6ca23684050e902d58cd19df]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [665 bytes fnv128 bc35abd2d08b481df58a3c1b119dd5b9]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [668 bytes fnv128 068bb6824db1a97899b4fde90a5ec147]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [668 bytes fnv128 ce3bb3d62280a68a8dda0c4174c49e38]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [641 bytes fnv128 c39540842c26b90aa62efacc3b7e54eb]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [656 bytes fnv128 aba44c1b39f079adbedde6e93cf8d4c5]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [656 bytes fnv128 7c390b566b3e154e32a975a74894fca2]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [641 bytes fnv128 e5733a71710df5e8eb312ffa391b2005]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [656 bytes fnv128 d6f9c200f7c2ed9bbcbd85d83130e827]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [609 bytes fnv128 ae2f731ba77f19ed0cea81e9879e14a3]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [585 bytes fnv128 b8ad2ef88c8025e69ec0737d697ae076]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 b7fa24107ca2c7b60f45af7c81b915e2]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [609 bytes fnv128 b5732918dc7ab7709b305fa5503767eb]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 f98663f84f3ba31a5d3d71a147eeb215]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [646 bytes fnv128 6f981bcd90cf3c40681e10e23080d306]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [613 bytes fnv128 9d604dc11dbc46a7da097a535a3de491]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [642 bytes fnv128 0e6f8c9dac2960f4b229f6195c62ea9f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [642 bytes fnv128 a25d2caeaaa18c67a7bd4a57a28f23b0]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 5f7ec2361382b7932d99163e7aec3d62]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [633 bytes fnv128 f41519bb93b2c20fb8819e21aba6a3e3]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [652 bytes fnv128 f3bde8fd58ac0139875262b24479f429]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [633 bytes fnv128 488126e73b2e99fb2a5cacd878d71175]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [652 bytes fnv128 81894101a78624af12911229de7c0ad7]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [653 bytes fnv128 ebfe404dd96da7c9e0c07f9bbb86b46b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 e45b29b0f1cf6ca258ee30a705603677]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [650 bytes fnv128 f9b0e149e96871d10c95c13823caa2f6]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [617 bytes fnv128 0e8f3203cf1f50fd1f9b56a7b5450dc9]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [644 bytes fnv128 448afa6a44c9396124f70b90b735a283]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [644 bytes fnv128 266164d894f38243492eeb450e80f0dc]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [617 bytes fnv128 8fc217de9eb3e0d352dfa20bbd19317b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [644 bytes fnv128 0ef5d15a5fb0fd1541fef79264bc31b5]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [585 bytes fnv128 37c4fff05f8476449848757d1d8d6e9d]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [628 bytes fnv128 24ddc05d9c905648d61ba2642edbf597]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [628 bytes fnv128 29b5608db29ee001f4cb0de49c521bb8]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [585 bytes fnv128 d54a89676b51270d1d03a5848b30ff53]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [593 bytes fnv128 d4e67f81f33c746146c223d755918022]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [628 bytes fnv128 b97eb4dc368f974639e2afa690a426d6]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [593 bytes fnv128 93a85144ed605696e67468d2e254794b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [632 bytes fnv128 7a77fa047916bacbec68273f2b654bc5]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [632 bytes fnv128 43ec40a3bce2f010c6daf8d6e202a1ca]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [609 bytes fnv128 baba21fe03be3eef9727df0b1a12ac8b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [573 bytes fnv128 d8c93076b8be87c2f4aad65c5db892d6]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [645 bytes fnv128 ba083e7d32a3c34308539330b83b29ab]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [828 bytes fnv128 365050b9086017588c7c3e58dd89dc39]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [826 bytes fnv128 8666938f80af5e077f59508126bc7dc0]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [786 bytes fnv128 6c5d1b77f8632421884104db72387bf6]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [841 bytes fnv128 3869e4abe5234c3e7cd1acb96511ffc5]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [839 bytes fnv128 5c461c808a2ebb29032413ab4de67f9e]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [786 bytes fnv128 338e0747d220f97dd4b02ed225d1c8a3]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [841 bytes fnv128 bf837fce5455005000e87857e50796f0]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [839 bytes fnv128 1a4f63e3bb6ffa59f45cd8196e7cc895]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [788 bytes fnv128 41a9fd0a3200d11f2b86d64205161758]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [844 bytes fnv128 1192634f838ce1f64f72d037ac82d636]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [842 bytes fnv128 76b0e81d715471b14a6fd826f6bb6757]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [789 bytes fnv128 7782424c981814b63c05ce805eb56404]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [914 bytes fnv128 f6c3e4dd738c5e0397e34e11d3e1c626]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [912 bytes fnv128 bd2ef19f01c2222b26b20f955c963b29]
+> #15
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [650 bytes fnv128 f928116c4c5b75e51619259ff8b570cd]
+> #16
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [833 bytes fnv128 93700a055bdcf82b76f26838f81fae4f]
+> #17
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [831 bytes fnv128 dd4978693e573c31dcfc158718b84722]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [661 bytes fnv128 f2008694c377a30a35a6057b63e1601b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [723 bytes fnv128 a8911cf6dc706281bd40339a77250eb4]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [653 bytes fnv128 d3216f3be6a31e0198a4885c50a929db]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 2dbf441752a19cd4c42e977e0a412ad7]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [645 bytes fnv128 980cdad797743580fa82f861bf8513c1]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 4c08574d1c53283c2dc18ce4ccc116fb]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [629 bytes fnv128 8bdefc411e7ea6bc9a3292d7d3ea5021]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [650 bytes fnv128 d2fb969fbe2dc824b869ffa5c32de843]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [650 bytes fnv128 f3e9aa73c05f866e7fd7bcf53e53f044]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [637 bytes fnv128 edbd737d3b57600496831cc56f14e6bd]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [654 bytes fnv128 969f169e316dadd93d130d438616ad3f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [654 bytes fnv128 e42f4313f1d532f88991b240e8e160f0]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [621 bytes fnv128 21bebe3fddfdc43cb15d900f05853f15]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [646 bytes fnv128 c75a79489c5ca5cc41b30f80047710e7]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [646 bytes fnv128 b0e03e0f02b5a7c364b8ef18c717b188]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 a3b0ef452d5b1f8bf1f2fe2846bc694e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [641 bytes fnv128 7c786e783d141a338ac8ad6e0144d4e9]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [656 bytes fnv128 5c88ac39f132798fdb821fcdd0a293d7]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [609 bytes fnv128 96600d608c46fd97f5897314511e73f1]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 b74b5f540a28a2a69a887faeb43fd8ab]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 7043c834acf11fc53b71e7c2156622c4]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [632 bytes fnv128 9e92ec215bb073a982daad445c915d5a]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [601 bytes fnv128 f30f368c3d29087b6ac54bf2e2e6201b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [636 bytes fnv128 0afbc617184332564398a2b6fbf4bfc5]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [636 bytes fnv128 d9274e8ce6010a7faba9c1fe9d4191fa]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [636 bytes fnv128 00151d0cde83d3fe91aa0b5becc177ff]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [636 bytes fnv128 9ad21a38b81af0b786f6b42c6a1f591c]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [636 bytes fnv128 e7fe71cdf54152b8ea562f539e7f2d91]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [636 bytes fnv128 ed93d2a93007dc0722724991f8ce5a56]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [636 bytes fnv128 5bc2ff7791c6e418219c1826ed5ec85b]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [636 bytes fnv128 efa7ed8953f7cee684964a71f309c538]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [638 bytes fnv128 4b3db2eab7b45c825d609e8dbe90bae9]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [639 bytes fnv128 05c44ba18ff16dbaba635bc4042e2115]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [639 bytes fnv128 79d14caf01aff35f2be25c9c8f58111e]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [639 bytes fnv128 af1a7df5357ab6073c61190791497deb]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [606 bytes fnv128 89d7e304b91686372987eda45a42fccd]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [572 bytes fnv128 a6263ca6ce824c6769a282404e277294]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [593 bytes fnv128 58023bf1eb3450c5e1126366e94014e5]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [632 bytes fnv128 78bb913c3432b63923b8553e72205177]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [665 bytes fnv128 a186282b4653531a9b3a3a1deaddb4c5]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [663 bytes fnv128 30361a9c40399de380c42749148028b8]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [668 bytes fnv128 f17d02e2c18e1bd510e3c1df273b4e58]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [666 bytes fnv128 804c9c5ab5ed33a2ba2ee5a825c345f1]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [665 bytes fnv128 ebc521ccd95c4fe5a49797a29f44e7ab]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [663 bytes fnv128 213cb17a0ccd595f05afb7a188f0e9be]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [668 bytes fnv128 fa15600a4f94156835118a2daab06cbe]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [666 bytes fnv128 1f55691706737c722d14573c86cb810f]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [645 bytes fnv128 4b9ba31e3ccb0addfdbcdf406c2b247d]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [643 bytes fnv128 bea2d44df3cf018278d989ee1de189e0]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 1163363e651b20d2cd355e0a6c2013c0]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [656 bytes fnv128 be74d7a61132e42db631d04ae3727cb1]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [653 bytes fnv128 7ef86bedc5e382ca4ef53f259c259605]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [651 bytes fnv128 86731bda7bc7efb8cccae0ba2b0943c8]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 85a39e2ac3561abd782ef0fda3a8e298]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [660 bytes fnv128 8a43b0e52a2c4b90ae3ed939b0dc4661]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [657 bytes fnv128 ccbe9618ac0b5631f1d2d44c95680795]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [655 bytes fnv128 11b0050e80f938d2e1ead96732c97a68]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [664 bytes fnv128 8ddf0254e9383d69c4034f1d17f1c878]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 3f63b573904adb77e49ec25e92161b29]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [664 bytes fnv128 78c98c89c89fa7910802af4a5f158cce]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 fd9cf0c9ff9a0d6755c79297aa2b4707]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [657 bytes fnv128 6a88a96fd12ce3ac86baac624eb13755]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [655 bytes fnv128 e20a78def9926f3519d266bc6d4464c8]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [664 bytes fnv128 b8c5303d38cb31497a40b9ec9c83a978]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 f9769cad3fcd2615a6854ff25f354091]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [657 bytes fnv128 74c7d93948f65e26d774b47776dabdf5]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [655 bytes fnv128 beb4540823d1693600f755d41c0f8ad0]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [664 bytes fnv128 ecac4d86be382119ba2f10a3eab67568]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 19264d554c547faf8f2c7ed680119401]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [661 bytes fnv128 f8e7731e543fbf611d08f13288ffb323]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [659 bytes fnv128 9bf687f489d285aa0f35c5e26241bf4a]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [666 bytes fnv128 caac4f3f63ea6d2a0ecb4f34e9a2d5dc]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [664 bytes fnv128 28a40edfcc1278275e10afd1226fe53d]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [673 bytes fnv128 c6c7455dfdef8f732f220c9f36177aab]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [671 bytes fnv128 9b29be6ef4f53b798946c2802b31ab3e]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [672 bytes fnv128 8b7cb06cba40f0bb433cebe1aaa40f86]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [670 bytes fnv128 1a700083ee1fb10c2a4550627fc6ab0f]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [661 bytes fnv128 94ff480ae8d3ca39534974da7df30ddd]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [659 bytes fnv128 731ac0301abed8017c03e833a375e038]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [666 bytes fnv128 0c245557ba1dfa36ef11bcf400b76980]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [664 bytes fnv128 76d3ed5c51a2a2ecf7de9dafced109f1]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [681 bytes fnv128 1456f81753936df750fd2e3a4b5a36b3]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [679 bytes fnv128 3f522e23bf5c8265d5d118db2f2ba556]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [676 bytes fnv128 0a2189640fc36d507b8c8352b49e6aee]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [674 bytes fnv128 203dcc5006a7919dce691fd1e652ae2f]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [670 bytes fnv128 df41f6e84d2dd1c5fbb0938097410d02]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [668 bytes fnv128 0c864d6537d13bbd44df1c54db757d63]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [671 bytes fnv128 76fb0b60b3cbe26a57f2164e68236553]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [669 bytes fnv128 dda65521f7022833976b0705b22a070e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [669 bytes fnv128 b4cdf4237df97e89feb79e1d93152bc3]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [667 bytes fnv128 9c87f7f92bfedab0b5dcfd96e5e8ae22]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [670 bytes fnv128 77e20d48fbd4c8bc1ed874f539ff1f0c]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [668 bytes fnv128 2fb8e04293010ae1185774058262fa75]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [689 bytes fnv128 77ad67a347680a52c9053cc870c0c041]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [687 bytes fnv128 9c3b50cec6f0accc957d76a3ae5e26dc]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [680 bytes fnv128 99d3ac5e87b1dca9e0c161eb322425f4]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [678 bytes fnv128 5d6f30378bc39529a32d8541cf2103ed]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [693 bytes fnv128 4a08fdcb4bde051ef903143bc8fb52fb]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [691 bytes fnv128 2522421b8d059e1371c8dcfa8e3bc766]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [682 bytes fnv128 b5d284656181a3f5906a6cb5faad91bc]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [680 bytes fnv128 f8c3f55d210ebc3a92bb37aa3fc735b5]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [673 bytes fnv128 ae713cfd085a3dd06fce1470d6b3708b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [671 bytes fnv128 fcac94a6bc8808a97e23660111693b2e]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [672 bytes fnv128 281329c79adfd4d704926f113559b412]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [670 bytes fnv128 3acbaecc08ec24252754d07e60ea497b]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [661 bytes fnv128 7ebb7796509030e707e6dc9559aeb07d]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [659 bytes fnv128 6c5ac5b5e3ff1088690f93b56e0857c0]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [666 bytes fnv128 28853f573ec649968ade655bd527e968]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [664 bytes fnv128 268af4f78755ba1b5f093e99c7e6a531]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [649 bytes fnv128 ef7189482d0c8695e10311d235725dab]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [647 bytes fnv128 7e9277c8cb1f2ff2cacadc25f2e40236]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [660 bytes fnv128 f3b99adf7fcf061a825d40cdaabe362a]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 56b972ed5e646448d2b94067e0344583]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [717 bytes fnv128 a12f934728831c8dbcaa78260e3afa3c]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [900 bytes fnv128 344f72b012ad5ab70cfc1822f756e3d2]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [898 bytes fnv128 b63e0fc48d71f40eedc1fcb4479305cb]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [781 bytes fnv128 6fca310df3c143afd8793ff3f2a63619]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [964 bytes fnv128 2589f827a3eb8b3656c02d90ec189247]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [962 bytes fnv128 58a7ed3df9d83f363f8bf2e5e0611220]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [846 bytes fnv128 47c4f7777e49e1bbb5e03faafeec54da]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1274 bytes fnv128 5dc74c3e13e31a6a69e5cad6ab3c2e61]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1272 bytes fnv128 eac33a5e02d21817ea2a10c23796e964]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [719 bytes fnv128 3397fca7af6abc00be5eb8fcb6d35fcd]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [903 bytes fnv128 9be07f84edb9ccfbf60913b76d6e06ce]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [901 bytes fnv128 7e44a890e1bec8fd6221a168cf042d53]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [720 bytes fnv128 ad52b28a0f9061053d7bd9c9c425ab0b]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [903 bytes fnv128 3c8aaad3e67ba5602547c387c71595bd]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [901 bytes fnv128 bab3163b4bacd2d7bf5703cb42f7a6b6]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [657 bytes fnv128 d19fe2ac9ede67296f2c95be0b179f86]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [697 bytes fnv128 02277baca504755c6e3031731e1856d7]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [955 bytes fnv128 666e4bcc878181fe9b4a980bb685a797]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [955 bytes fnv128 3023c6984eb0ff70ad660cebf2da5c2a]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [776 bytes fnv128 71d6e5c158439400ea273970411508bb]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [643 bytes fnv128 148756716424e9da655702978826d6c9]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [629 bytes fnv128 28d372c43e6ebd97efd43daa94f748a2]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3276 bytes fnv128 f233b886f6bcb2b88f25392de00fe077]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3276 bytes fnv128 796fb169695fde5de90b19851d0d47ce]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3248 bytes fnv128 9ff04b835b116a3aaf460f9bf71f9517]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
++ settings: key=t:"freshness.policy.profile.p" | value=t:"{\"background_enabled\":false,\"report_read_sync\":true,\"source_classes\":{\"btcpay_provenance\":true,\"btcpay_wallet\":true,\"journals\":true,\"market_rates\":false,\"onchain_wallet\":true}}"
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [871 bytes fnv128 2bce06dec267c177abdacb0c2d12a962]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [898 bytes fnv128 3393146f2fdfa9943aa80fd9c18aac99]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [871 bytes fnv128 c7f691d524816162bdee419c33703a80]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [898 bytes fnv128 ed90023197b9a27b9e81bc35145aab1b]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [871 bytes fnv128 acab51767a6ef6bb4c2513da2f09551e]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [898 bytes fnv128 4e5ffb51bec8b61a23a88f9409501695]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [701 bytes fnv128 715f0deddca4ad943c9c9d4b792742a6]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1248 bytes fnv128 4bf7384436a101e03c917794228549e2]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1288 bytes fnv128 f4bb6224814e48152610b12f849a80cf]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1266 bytes fnv128 d11893ebd025682cd6dbc412cabd0f70]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 105 empty)
++ source_funds_sources: id=t:"<uuid#2>" | workspace_id=t:"w" | profile_id=t:"p" | source_type=t:"fia… [363 bytes fnv128 b9790356d55230064616e8a8c62f0a83]
++ source_funds_sources: id=t:"<uuid#1>" | workspace_id=t:"w" | profile_id=t:"p" | source_type=t:"fia… [339 bytes fnv128 8d99914fe65f93570b04261f1f5019b5]
++ source_funds_sources: id=t:"<uuid#3>" | workspace_id=t:"w" | profile_id=t:"p" | source_type=t:"gif… [353 bytes fnv128 03bec16ecc65bc87cf4c5d314307b692]
++ (116 tables, 104 empty)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [693 bytes fnv128 cbd5d5e464782ffff51f448c2fc27904]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [665 bytes fnv128 346264f4fb7c41e46575b806b7bc83f5]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [665 bytes fnv128 cd0feb03b88aee4e71a9e4f0d3b79a3e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [693 bytes fnv128 f703d26e9cbeaee7ba1fc672ebdec69c]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [608 bytes fnv128 f94eae1ac1fc4235abafbb6d26938f06]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1066 bytes fnv128 2efa2c965464257cfc41bb9c6e152b9b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1066 bytes fnv128 448248c0b981b951b1c2d9a30762e80e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [713 bytes fnv128 8675fa7524a6bf370ade95b2afa1f0e6]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [606 bytes fnv128 9ac9c545afdae672161038bca77bf436]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1188 bytes fnv128 5cbf5a65686b84e7e99424b677e09741]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [689 bytes fnv128 84951a6b470181a7ef48f1c548ecfa70]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [612 bytes fnv128 9add2e555b83a362008c13ab08e30c04]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1908 bytes fnv128 80c68534bf9d9d9dcf29f7ce876aa1c3]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:34
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 fc6dc2cd07900c94490b7b655f416e22]
+- (116 tables, 105 empty)
++ chain_index_clock: id=i:1 | revision=i:38
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:38
++ custody_authored_evidence_snapshots: workspace_id=t:"w" | profile_id=t:"p" | subject_kind=t:"custo… [951 bytes fnv128 8c151d72d4793f566fcb77736115e253]
++ custody_component_allocations: id=t:"8dff1074-df0a-5458-883c-c1e7ba3eaf0e" | component_id=t:"43faf… [396 bytes fnv128 cb01409c40ada651f14f0c8f6fc37738]
++ custody_component_economic_terms: id=t:"c8e3d353-126f-53d5-9b16-21dcff56aa24" | component_id=t:"43… [886 bytes fnv128 076adecd8ad7d73dc5242e7cddbb034a]
++ custody_component_evidence_commitments: id=t:"afb5aebdec2d899fb107a78fabdeb031bbda12193411646f5b4b… [429 bytes fnv128 4ab29159afdbecd14a62d1f796b34632]
++ custody_component_legs: id=t:"0790989a-ec50-5d6c-ac9c-2772c808e667" | component_id=t:"43faf282-fb3… [603 bytes fnv128 5cdfc204b736609b6c90b7c0c1a874f9]
++ custody_component_legs: id=t:"80b7c4fb-7201-56f5-a670-1e13b5b90336" | component_id=t:"43faf282-fb3… [611 bytes fnv128 75f3d8080e0513a2eac22e6a01eb2de6]
+… [6283 bytes, 16 lines fnv128 cc409cebed55d8e35b607f9eb44c8536]
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [689 bytes fnv128 bdac993ef070e42e08fab99d90f94f46]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [600 bytes fnv128 e300da066748cc05b51f011c1db4fa82]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [657 bytes fnv128 e797808f16fc4e63f43059f714a82084]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [633 bytes fnv128 3463d3ab2d59002f28c63d2387056e75]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [564 bytes fnv128 f71a4315c9d9c3d0b96e97fc7166557f]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [657 bytes fnv128 872c1ca5d77e7645a856d1d12eb335e4]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [564 bytes fnv128 1f0cafee807836d262bd97857ddd95a4]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [752 bytes fnv128 2c77328b4e9b72f777d74723cd19606d]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [661 bytes fnv128 1bac360b852a64232492b1f1988ab4ba]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [580 bytes fnv128 c3302b7b943bb3f27f8f4436f24f2522]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1140 bytes fnv128 51a84fdb4601d1fe8706ac7f90925ee7]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:34
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 fc6dc2cd07900c94490b7b655f416e22]
+- (116 tables, 105 empty)
++ chain_index_clock: id=i:1 | revision=i:36
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:36
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 b40751319ae66ada11caf1089733f927]
++ transaction_pair_dismissals: id=t:"<uuid#4>" | workspace_id=t:"w" | profile_id=t:"p" | out_transaction_id=t:"g" | in_transaction_id=t:"a" | reason=NULL | created_at=t:"2026-03-04T05:06:07Z" | expires_at=t:"<later>"
++ (116 tables, 104 empty)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [771 bytes fnv128 2dc05fd467c6065384819813a99fb134]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [681 bytes fnv128 ef7077c2dc1921ac62262c5c241655b0]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1212 bytes fnv128 978b2354d5812408b7237e1bdb15036e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 105 empty)
++ swap_matching_rules: id=t:"<uuid#4>" | workspace_id=t:"w" | profile_id=t:"p" | name=NULL | predicate_json=t:"{}" | kind=t:"manual" | policy=t:"carrying-value" | enabled=i:1 | created_at=t:"2026-03-04T05:06:07Z" | updated_at=t:"2026-03-04T05:06:07Z"
++ (116 tables, 104 empty)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [681 bytes fnv128 791b8a805bf5b4bb54f7ccdb04581a6e]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [576 bytes fnv128 a8945ba22490f91872d5e21bdbdc37fa]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [701 bytes fnv128 ac0d3516d2910dd66c1c671dcbaf8bf4]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [586 bytes fnv128 196cccb0bb41feb766b8638f7b423ac2]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [744 bytes fnv128 9b6ac5207a4f57c30d7bfccc74455955]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [665 bytes fnv128 606f781a743218238c50527b25237f56]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1030 bytes fnv128 19070b026ae1c2f5a81c6e746dbe3e06]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1064 bytes fnv128 68f73eff50a7f015b51c1a9dfb1ecb4b]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 105 empty)
++ saved_views: id=t:"<uuid#6>" | workspace_id=t:"w" | profile_id=t:"p" | surface=t:"transactions" | name=t:"AI view" | filter_json=t:"{}" | created_at=t:"<now>" | updated_at=t:"<now>"
++ saved_views: id=t:"<uuid#5>" | workspace_id=t:"w" | profile_id=t:"p" | surface=t:"x" | name=t:"x" | filter_json=t:"{}" | created_at=t:"<now>" | updated_at=t:"<now>"
++ (116 tables, 104 empty)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [665 bytes fnv128 d59270c2a652d8a787b529238f4c6dec]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [614 bytes fnv128 1f684724b4f1c71c472320949462112c]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [633 bytes fnv128 9c121fbf71ca480474bc499a7267180e]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [592 bytes fnv128 a953795db4e0e7ea540d6f8ac83a4f2a]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1032 bytes fnv128 49bb1242e02fd7f656607057b569dae5]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:34
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 fc6dc2cd07900c94490b7b655f416e22]
+- (116 tables, 105 empty)
++ chain_index_clock: id=i:1 | revision=i:36
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:36
++ loan_legs: id=t:"<uuid#7>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"g" | loan_id=NULL | role=t:"collateral_lock" | note=NULL | deleted_at=NULL | created_at=t:"<now>"
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 b40751319ae66ada11caf1089733f927]
++ (116 tables, 104 empty)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [633 bytes fnv128 ecee01c53520a56371531c0d892b9ab0]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [641 bytes fnv128 de15ba3cee5912ddd403f8cfdf43411d]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [632 bytes fnv128 c41cc332dd04b2fac9d3d083f8332755]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [641 bytes fnv128 b9a125e7609a0f2311590bdce6353d24]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [596 bytes fnv128 ba28f6b1bf0566338abd0383955f3afc]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [582 bytes fnv128 345678d303aa47cd0613807bee4ed1f7]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [657 bytes fnv128 9ea6272c40630e483313bdddc6dc2a30]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [621 bytes fnv128 aaa5d9f67ddd8e9305c7f86da8e22f39]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [693 bytes fnv128 c24a7863afcc63c871d3add69a145624]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [876 bytes fnv128 6a98f6baf09c2536f2e467f87137d346]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [874 bytes fnv128 eb84c16796adfde03f3615c13db997f3]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [834 bytes fnv128 69845f42bed783de057037777452f3d3]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [779 bytes fnv128 bc27bd45a3bd2d7ff7cd63ce96c7cc50]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [777 bytes fnv128 4f7bbd132e5b2e771bff464a99b76667]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [834 bytes fnv128 40985c6b1ed9352aa594bfd29d5d3452]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1689 bytes fnv128 36aa4967204f9f76f356e9503bd79667]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1877 bytes fnv128 3aacbc804c428757925750e87eb5c11e]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [836 bytes fnv128 7488270d94a8027e7dd8d7e5f5a9ff59]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1818 bytes fnv128 624fb833f1122899a7fe41f00f061371]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1890 bytes fnv128 fa0f286e338d52c7207308e53e45f5c4]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [837 bytes fnv128 6632bb6d1bd005183c61db768111af9f]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [962 bytes fnv128 9e505eae91bb6ecf1f64051eff8795a5]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [960 bytes fnv128 b8d950e1e2083523762b1b7c1b1f1c5a]
+> #15
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [698 bytes fnv128 d466e65a2ecd4d6f4b673575e70cecc4]
+> #16
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [881 bytes fnv128 2493be63c29efc05bbeae3f3b3daea52]
+> #17
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [879 bytes fnv128 863a4d6b2803297dff4dc88982af266b]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 105 empty)
++ attachments: id=t:"<uuid#10>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | att… [462 bytes fnv128 ad4702b0249a1d60fbec53f8c9124870]
++ attachments: id=t:"<uuid#11>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | att… [462 bytes fnv128 e7f30805ec9c3bf3e98647a457fd10aa]
++ attachments: id=t:"<uuid#8>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | atta… [458 bytes fnv128 0e2bb6b15c5c2372a4630e515a48c6da]
++ attachments: id=t:"<uuid#9>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | atta… [458 bytes fnv128 e27522d021458ee9a8f11174dbeb9b5e]
++ (116 tables, 104 empty)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [709 bytes fnv128 8e2ae58524f6fa1b58055e4e6601b1bc]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [771 bytes fnv128 1273039d996080bea2a1fdeb514b35a3]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [701 bytes fnv128 a74b542d572b7cb087c312d61fdbe714]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [616 bytes fnv128 a2b6175cf9e7efec5ac5342188c05d5e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [693 bytes fnv128 4886402497c7dd6053aaac29646606fa]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [608 bytes fnv128 1879d5668f91439673e9a460ede358ba]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [677 bytes fnv128 240f0cababbd990bc0496a55422d1f6a]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [588 bytes fnv128 9a481f1813d354d059fc3a5696d4f5e6]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1682 bytes fnv128 65968fece9057395928943e9398093b7]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [685 bytes fnv128 48cbcc1b9dd679e7edbccad723a37ac6]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [592 bytes fnv128 7a587825213ec980b70a41d349ea0112]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [24644 bytes fnv128 46e966d777dd2b20e3c2203a48173a0b]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 105 empty)
++ source_funds_cases: id=t:"<uuid#12>" | workspace_id=t:"w" | profile_id=t:"p" | target_transaction_… [13520 bytes fnv128 b20f7e800f772783f901a48c7606ba1f]
++ source_funds_snapshots: id=t:"<uuid#13>" | case_id=t:"<uuid#12>" | snapshot_hash=t:"3476ea58dfead7… [13117 bytes fnv128 5d79a208859e9b5443d28cb05b64d6c7]
++ (116 tables, 103 empty)
+… [26691 bytes, 4 lines fnv128 cdae01c4ef72479832386d1d9f71857d]
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [669 bytes fnv128 44868f22d43fad435163abdcf9ce3d86]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [596 bytes fnv128 7d959538e9a44643c362c4b15a01dd8e]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [596 bytes fnv128 88660d7bfc25588f411a744c60487841]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [666 bytes fnv128 084ec4eeb9dcfc6ecf8f239eccfcc7e9]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [689 bytes fnv128 22ce88378f544d8165487a38aee45dc6]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [602 bytes fnv128 3018575450131fe8dd8fc7dca44883de]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [657 bytes fnv128 a605335ef89d780fc8272298ab1b36b6]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [757 bytes fnv128 52d31806391be0475f8b0e98ec4fb333]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1154 bytes fnv128 985714e62b2504d74e519b7188efd279]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 105 empty)
++ external_documents: id=t:"<uuid#14>" | workspace_id=t:"w" | profile_id=t:"p" | document_type=t:"in… [390 bytes fnv128 2cf16353b92b9be5e6dd486c4fd9c368]
++ (116 tables, 104 empty)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [953 bytes fnv128 217d33804578a87abd90aafac225423f]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [649 bytes fnv128 779491727b9778e10d6b73584c26b8f4]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [869 bytes fnv128 84809a5e935bf521a81a961a52e0c8c5]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [869 bytes fnv128 beb3bbe8b3e85361092aaf4db9110d1e]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [869 bytes fnv128 5939ebba953d1605214d282c69ff21f7]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [869 bytes fnv128 efcbd34de3c163a9aa0a36ebe1ca03a0]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [869 bytes fnv128 f1a4bf09b3a42c4c944b7c5b7235f099]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [869 bytes fnv128 ef198198986170cb1b27a6c6ed73088a]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [869 bytes fnv128 5990e98ba8beff06d6f62b36dfa780db]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [869 bytes fnv128 84c05b1e233cf818890361f7e25e268c]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [871 bytes fnv128 0141ad81a49cfa37ed926145d1db6451]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [872 bytes fnv128 fc6010322726ecf6c02639edae10a89d]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1731 bytes fnv128 d5870e3e585d060965d17be278e7afe3]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1735 bytes fnv128 688b14778a2b77930a577d97a2f6e5fa]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [654 bytes fnv128 31659b565821df59a8777362da21f1f8]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [620 bytes fnv128 6f140832e62aee522f4b18f1db15c7e9]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [641 bytes fnv128 035e7336569ae65d4b21c9effb5f934e]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [595 bytes fnv128 65dc69f3509a0b16e7beafcd2f267c29]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [713 bytes fnv128 ebfcb8af53aafa0de8597724e083018e]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [711 bytes fnv128 32d58deaedd56d148a18731c030c1b27]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1572 bytes fnv128 bc22c6d6309c4d7018f54eeecd0876ef]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [720 bytes fnv128 290447a838323e96cecec788841a15e0]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [713 bytes fnv128 b03d6528dd5f2bc6f4c1ac552a995878]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [711 bytes fnv128 181aafa0bd622c152403d17f6f1d55d9]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [752 bytes fnv128 10ac5b61abfee9b443b61b508c263185]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [614 bytes fnv128 5d6b049773a6f47bc0af8fc25f7127a6]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [693 bytes fnv128 df383cc979edbaa70804146f08623fbe]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [691 bytes fnv128 73ae42c9f0e355606d9a6a5de70577d7]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [775 bytes fnv128 a49d39a035b6975e7c7b4c33673e747b]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [693 bytes fnv128 2f393b30e96a214e2c14c888454d79ac]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [701 bytes fnv128 e8fbcb0e1c53c4671e643f7b625cad76]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [699 bytes fnv128 c43a56f8222300f6edca85e88505092f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [746 bytes fnv128 fe2d783600168fd849d6683d99c7076f]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [620 bytes fnv128 cc95acd548d1189e14e2051ba01ecab4]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [705 bytes fnv128 041809739ba24fa498d960d2b01b4bae]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [703 bytes fnv128 c601d9bf8e9124463c605145ba1cb66f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [751 bytes fnv128 1f1f4f6f9c90182962031f2d08b17bb6]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [711 bytes fnv128 1bbb44da668240d890fc203bc869dd09]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [751 bytes fnv128 8d8a7b15e051afc64ded7902f3c201bc]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [711 bytes fnv128 1b2a73d7bf76e9b5d53c3840b492aef7]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [705 bytes fnv128 eed43c4998213e6e36cd31cb9155e6fe]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [703 bytes fnv128 94e77a6478d7dcd79b0f0a8506a61197]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [748 bytes fnv128 0eca90c8ac6510f43e8338d5fb9f6a17]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [606 bytes fnv128 37c5b13b9bb55557d73cd60f6ed15f48]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [705 bytes fnv128 c60f0f70cfd3838fab2ee6ae21a07856]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [703 bytes fnv128 629b9d540676f4997ef4bbf8d890f097]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1568 bytes fnv128 f5646d1e6cc11353194e71ff3f741f57]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [615 bytes fnv128 9382fc3a5213b3ef54f9b4cc304bc4c1]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [709 bytes fnv128 f799b82afe4d31aa4c1c2fb42d80c0bc]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [707 bytes fnv128 8276b75d410f0229782b401f8f98d689]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [822 bytes fnv128 7de838c0178c0609306d008e14cef716]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [900 bytes fnv128 996972ad197e1740ea2cd47c82fcb315]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [721 bytes fnv128 385436ef8d348419528d473cf25b230c]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [719 bytes fnv128 04618cea21664a47847e13f31f5f70ad]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [756 bytes fnv128 84cbf6c7f286bab94c3faf6f905c0b39]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [614 bytes fnv128 190a3982d3106475b238aff8f0dc4d90]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [709 bytes fnv128 34716441f38bc82c9d44b2064a85ffc6]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [707 bytes fnv128 c6d2f814cffc18988d61c2d2f427c6c7]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [750 bytes fnv128 6b6d05502cf87180ffe652e1cbee56b7]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [608 bytes fnv128 8238d7c01f7f39a3741adde45217d516]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [729 bytes fnv128 3ff6aaef4e8ef090071c68a1577dfbec]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [727 bytes fnv128 6366c1c50f0b69aa2e2cef6f7c46238d]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [760 bytes fnv128 10dee893e834f05b1391fd059736a1a1]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [630 bytes fnv128 6d3e7192c13a6a68ad9e2d1fbf11f402]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [826 bytes fnv128 248bb76dd17914600f692919d2679074]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [904 bytes fnv128 aa1ca9282c16a91527531f99bbf52b33]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [719 bytes fnv128 df3425be14a65f9e984ed2bc1b0b5264]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [717 bytes fnv128 3b5d568e6931c20ad74c337e41c8ede5]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [717 bytes fnv128 b7a6c1d8c80ab8404d3d0659ec281ee4]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [715 bytes fnv128 2ab86a6f3578baa9e81fe3e68a232739]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [754 bytes fnv128 1c4dc747f06b87ed4d9ffa24303685db]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [616 bytes fnv128 37932fc69fcb83d28ab2d31e1e029bf4]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [737 bytes fnv128 30ed1fff201f2d2cb9e6f4ef7082029e]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [735 bytes fnv128 5d99c103ffa72d97f0b6320523c95d1f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1584 bytes fnv128 78e5a00acf1f05e7091a3b5fb9f95e9f]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [732 bytes fnv128 1f3c1bd7da20f784add5bc900bf2c6c0]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [741 bytes fnv128 0ca915ae0fc77f0c844a7907ef3569b4]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [739 bytes fnv128 d6b710210163507d986b830634fc2035]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [784 bytes fnv128 28885e85f18b49ecf39eb4b9c8edecc5]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [754 bytes fnv128 b961d3792af3cc1c0f864827972d14bc]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [721 bytes fnv128 6c26493ca32248c9c3743ab7e6a3adb0]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [719 bytes fnv128 10825f71783b997066133daf9c385c49]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1576 bytes fnv128 021f4bb84928f1dfdf7d4c017dba0d69]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [906 bytes fnv128 b9bd53244415f86665a52c7f9eb38217]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [709 bytes fnv128 5af76a43589f3f40a7b0bcac599fecf6]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [707 bytes fnv128 310f2d39b8e6246051cab1119c7f3b3f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1570 bytes fnv128 e3f34f23eab3b64f25eb36dfee930edf]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [638 bytes fnv128 a36e98b70a71ea2e9da0be81f0b663dc]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [697 bytes fnv128 45a3be29c0cd931550cb87a24091ce5c]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [695 bytes fnv128 f3d419243107e72c528cf7e86ebce7b5]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1564 bytes fnv128 001227b01947e582aa7b469534e20895]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [632 bytes fnv128 36a42e548dce9120e96eed5aa7764b2a]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [718 bytes fnv128 409313c25b3017de8c35a2ccb775722b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [901 bytes fnv128 24ea1c0e9e211bf5d1c67fab75b718a3]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [899 bytes fnv128 a54cb8fc91a2d13876965551e3185e8a]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [782 bytes fnv128 48fa7f7bbddf4ceab0f443d6521c1652]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [965 bytes fnv128 d5dc6861594e01bd8d3be0c8e7bfb08a]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [963 bytes fnv128 10a5b9b1b78f7da0fff7b04f294256a9]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [847 bytes fnv128 aa348283969cc474c42a16aedb27ad9b]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1275 bytes fnv128 bdee7b9179a7ab0a360bc8690c4d556c]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1273 bytes fnv128 6bf1f74732c2ef7361a7283123e54c31]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [720 bytes fnv128 7459964fab808216d72e9909d6f43656]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [904 bytes fnv128 642974893586b41bb2be768c17f42149]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [902 bytes fnv128 ebddc10ad79cf11de3497f206f224d08]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [721 bytes fnv128 93d8a516883fcbeda3073d9a74fdaa72]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [904 bytes fnv128 a6d80520520305d53e3817e539a54932]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [902 bytes fnv128 03153ce16cbf444e49bc24c3c18d4171]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 9c0b4bfca5ae8c2f518ca30736c7f8d1]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [698 bytes fnv128 dc8953e74e9cf68d0efe51c93b90d05c]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [5118 bytes fnv128 cf43614155d1203dd142fa5269327dc9]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [644 bytes fnv128 0e5c390fd491c15c55c6172cedab8f26]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [630 bytes fnv128 0e8fdfb1c82de15f6b0b27ae0364717d]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:27
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
+- profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
+- (116 tables, 99 empty)
++ chain_index_clock: id=i:1 | revision=i:28
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:28
++ freshness_jobs: id=t:"<uuid#15>" | profile_id=t:"p" | job_type=t:"journal_refresh" | source_key=t:… [601 bytes fnv128 344fd172861afc28408173da179354e8]
++ freshness_source_states: profile_id=t:"p" | source_key=t:"journals:p" | source_type=t:"journals" |… [502 bytes fnv128 c736e581830143898e2823c5b383a1f1]
++ profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [557 bytes fnv128 461dff0c614778e1d377fc50448403ab]
++ (116 tables, 97 empty)
+… [2522 bytes, 10 lines fnv128 5f8adb6ee02c0baa5a043675723ff446]
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [956 bytes fnv128 8a5018248be09213a256099a0cc1dca0]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [956 bytes fnv128 aea8c393ae5e5f2f1b1c27cf4e5782c1]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3277 bytes fnv128 9bbb5bdb45cf9eaffe033ce8f3a590c2]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3277 bytes fnv128 2f81c36db2976ee3ab15970c108a1937]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3249 bytes fnv128 ba49f9f558b9554b5508bb6148a52c2e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
++ settings: key=t:"freshness.policy.profile.p" | value=t:"{\"background_enabled\":false,\"report_read_sync\":true,\"source_classes\":{\"btcpay_provenance\":true,\"btcpay_wallet\":true,\"journals\":true,\"market_rates\":false,\"onchain_wallet\":true}}"
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6584 bytes fnv128 88a4112186f154abf35cf6db9139ead5]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6611 bytes fnv128 f5842bd36ec18920302b5ab960ac7566]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6574 bytes fnv128 9bf497c0590e205600b0302ab73b4aef]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6601 bytes fnv128 009890e426e4eb42e10aa865d0e5b1b0]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6584 bytes fnv128 e488c2d0db7e41c3d9043f0e438cf551]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6611 bytes fnv128 cfe1582ae3230f30122634ee70a17a22]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [702 bytes fnv128 9f289836ea150c0f0148fcafa28e190d]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1251 bytes fnv128 9d1ef4af5c83284fbed71456629d5f79]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1291 bytes fnv128 67dc76a939c85d455b23af42b1965c08]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1269 bytes fnv128 2c2c1c569eebcfedb3c55fe6db23a6c9]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 99 empty)
++ source_funds_sources: id=t:"<uuid#17>" | workspace_id=t:"ws" | profile_id=t:"p" | source_type=t:"f… [365 bytes fnv128 93170561394712bfbd99680b003536ea]
++ source_funds_sources: id=t:"<uuid#16>" | workspace_id=t:"ws" | profile_id=t:"p" | source_type=t:"f… [341 bytes fnv128 03520b3e56eeb48ed502fb170dcc7208]
++ source_funds_sources: id=t:"<uuid#18>" | workspace_id=t:"ws" | profile_id=t:"p" | source_type=t:"g… [355 bytes fnv128 f5e63e7eb40d8f26afe16ce9ff97aa47]
++ (116 tables, 98 empty)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [694 bytes fnv128 5a961d0aeacca8a5a6240b737570a8fb]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [666 bytes fnv128 854252e3920f936ca2394a0f8f200fb6]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [666 bytes fnv128 358720899720770269147ad617e341f5]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [694 bytes fnv128 09c429317963d48ded8cbe53abe74623]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [609 bytes fnv128 ea578565b4313f71f3faad3502687cf3]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3937 bytes fnv128 d8108d178415db6a040afcd05957f3b6]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3939 bytes fnv128 6a1c483fd11416b8102e88afb5b2f555]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 99 empty)
++ source_funds_links: id=t:"<uuid#19>" | workspace_id=t:"ws" | profile_id=t:"p" | from_source_id=NUL… [673 bytes fnv128 e562d13d824615ce8ee9fba9ad5d6dcb]
++ source_funds_links: id=t:"<uuid#20>" | workspace_id=t:"ws" | profile_id=t:"p" | from_source_id=NUL… [677 bytes fnv128 55a37ef5797f217b43b4b6effa00e573]
++ (116 tables, 98 empty)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [714 bytes fnv128 1fa50113c717ee0253a70deb69b038e1]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [607 bytes fnv128 5f3ad1d463631a1dd0664876eade6b87]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1191 bytes fnv128 e78dd41705ddb26e36ec7b1077eb8ef0]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [690 bytes fnv128 d6a20afde72be671ada631a1e52ba933]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [613 bytes fnv128 9a9b4e05b466f1f7f879a2ee0f95cf5d]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1917 bytes fnv128 8168a22ebf7998258d73db7774cd1880]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:27
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
+- profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
+- (116 tables, 99 empty)
++ chain_index_clock: id=i:1 | revision=i:31
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
++ custody_authored_evidence_snapshots: workspace_id=t:"ws" | profile_id=t:"p" | subject_kind=t:"cust… [952 bytes fnv128 1543f7a701c68e7d78dd381f2acf2e90]
++ custody_component_allocations: id=t:"eecacb0c-852c-52aa-986a-78557983642a" | component_id=t:"49c84… [400 bytes fnv128 aa245733894f9c9be5868f11dcfbd588]
++ custody_component_economic_terms: id=t:"6ddacd37-b8f8-5f20-a163-577021dd34da" | component_id=t:"49… [891 bytes fnv128 5e18336d202d1850a44eb6312ead20c3]
++ custody_component_evidence_commitments: id=t:"72df14404237a6bcb1353130945a88266d8cc6dd418b626daa85… [430 bytes fnv128 37b89c6f54d6429706a4254011c51caa]
++ custody_component_legs: id=t:"0ad3271c-4aae-53af-88ce-82c6fe549e50" | component_id=t:"49c84233-cc6… [611 bytes fnv128 6682667166f18bbe5eba3c70d2807b47]
++ custody_component_legs: id=t:"56e03302-1a6e-5afc-ba5e-821d5f904995" | component_id=t:"49c84233-cc6… [615 bytes fnv128 7d5e52c15e99e31fb35411c73932d8f5]
+… [6342 bytes, 16 lines fnv128 08f4923397c07ecb2fdf2d65239c72e1]
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [690 bytes fnv128 4828ab8cc2c027d50d4ddf19808f15f5]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [601 bytes fnv128 09d478ffece907b9dd8a8bd9b685bb77]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 62296ab915aeb1085a1d744a21e7786b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [634 bytes fnv128 3d943c18691e178cf00529072a238316]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [565 bytes fnv128 0d47bc4f551cca8c5e560e74c2b5fd4a]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 f3a54257190c64f5158151488910bd33]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [565 bytes fnv128 70f3a43519a9b569dfcd2341cf9b6641]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [753 bytes fnv128 76df40eff97ffd31ac00aa8b62e5982c]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 e6fd07d387e07a9c9daac597dbc87dd9]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [581 bytes fnv128 7eec51d75702af5373f3cd030240a4df]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1149 bytes fnv128 4a776bb43710d802b4772556355b2038]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:27
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
+- profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
+- (116 tables, 99 empty)
++ chain_index_clock: id=i:1 | revision=i:29
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:29
++ profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [538 bytes fnv128 612d8e9317bf4f1f7decdb0e99bf6470]
++ transaction_pair_dismissals: id=t:"<uuid#4>" | workspace_id=t:"ws" | profile_id=t:"p" | out_transaction_id=t:"out" | in_transaction_id=t:"in" | reason=NULL | created_at=t:"2026-03-04T05:06:07Z" | expires_at=t:"<later>"
++ (116 tables, 98 empty)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [772 bytes fnv128 f620789bebac72e7bfd890063a0ec713]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [682 bytes fnv128 f4fc681ae201d149494c03e237c30613]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1215 bytes fnv128 d721f0169036b2a0e1803a6f62bc0d15]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 99 empty)
++ swap_matching_rules: id=t:"<uuid#4>" | workspace_id=t:"ws" | profile_id=t:"p" | name=NULL | predicate_json=t:"{}" | kind=t:"manual" | policy=t:"carrying-value" | enabled=i:1 | created_at=t:"2026-03-04T05:06:07Z" | updated_at=t:"2026-03-04T05:06:07Z"
++ (116 tables, 98 empty)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [682 bytes fnv128 1f856af39a63c4281ad408e072aff325]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [577 bytes fnv128 1ab9a1a14c34a09498c0e7e4aacbb317]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [702 bytes fnv128 cfc5b7c5d074874eacfe64381538b90b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [587 bytes fnv128 b4d7d8fd71a10d0a2f79b670019e6137]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [745 bytes fnv128 0e201feb76d940655f0cd49f7ab58fa4]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [666 bytes fnv128 b74c518dee2a014f12af4e7014efd979]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1037 bytes fnv128 5268ac82bf7d8fe1a98ca9502e6ec4a9]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1071 bytes fnv128 465e434bcb7c01f2577feb86a6ce3d82]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 99 empty)
++ saved_views: id=t:"<uuid#22>" | workspace_id=t:"ws" | profile_id=t:"p" | surface=t:"transactions" | name=t:"AI view" | filter_json=t:"{}" | created_at=t:"<now>" | updated_at=t:"<now>"
++ saved_views: id=t:"<uuid#21>" | workspace_id=t:"ws" | profile_id=t:"p" | surface=t:"x" | name=t:"x" | filter_json=t:"{}" | created_at=t:"<now>" | updated_at=t:"<now>"
++ (116 tables, 98 empty)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [666 bytes fnv128 18bb7cef1fa214eebe2d9447cef24b43]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [615 bytes fnv128 25e45d1b9f5acca2db9c9cf70779bab9]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [634 bytes fnv128 9ede80d1898a3f87158ba07e5dabe64d]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [593 bytes fnv128 13da94d942833b0e8af9e9c91cfc666f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1045 bytes fnv128 1179252c1c7427daf7a9a4490c8b9dc6]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:27
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
+- profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
+- (116 tables, 99 empty)
++ chain_index_clock: id=i:1 | revision=i:29
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:29
++ loan_legs: id=t:"<uuid#23>" | workspace_id=t:"ws" | profile_id=t:"p" | transaction_id=t:"out" | loan_id=NULL | role=t:"collateral_lock" | note=NULL | deleted_at=NULL | created_at=t:"<now>"
++ profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [538 bytes fnv128 612d8e9317bf4f1f7decdb0e99bf6470]
++ (116 tables, 98 empty)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [634 bytes fnv128 205b441c2ff330d8f2bca198f31b6243]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [642 bytes fnv128 fbdf4363d7e52283fb1b1d9c35722c82]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [633 bytes fnv128 47a2e63df2ead898ba62d54a63fb203c]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [642 bytes fnv128 1052001f7fbe008e800ccc75415207d3]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [597 bytes fnv128 851e3fea4fbac67adea68826f9c96ec9]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [587 bytes fnv128 009fb9af17726422918e02205314ddba]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 d2533f3f1470c1d70b3a1c1ba0b5d0b3]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [622 bytes fnv128 bf34411cdd88498c3ac86c18698c1d36]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [694 bytes fnv128 4f63e5556894af351f2e734cb8a9bc63]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [877 bytes fnv128 0dffbb04456aba281bf4c53d4ed31a57]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [875 bytes fnv128 a669ed2b2251d7a43f47eb56d10254aa]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [835 bytes fnv128 311f5608da672ef0a92c9d1585d57226]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [780 bytes fnv128 048ea7792f1f82ed335793c7230e478f]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [778 bytes fnv128 28754bfc65af75bad4e1eaa6ed544958]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [835 bytes fnv128 dbbaf80d8362f704764cd70a55111b63]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1566 bytes fnv128 57b3c8b57f5caf4561d598456f2cb134]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1754 bytes fnv128 834c76603233b8a89db6340edffcd057]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [837 bytes fnv128 26c9e6784505b7e25c33e004a6ddfc88]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1693 bytes fnv128 3408edf762e802060005b9cb398c4b3c]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1765 bytes fnv128 ccde7075e2588e51fce57cd58ef2fcb1]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [838 bytes fnv128 c78409a022479012bc431a8b8895b91c]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [963 bytes fnv128 dd2663dbdb09dd9755f94edf024f06ac]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [961 bytes fnv128 89dcaf9394a22896b41b2ca63996566b]
+> #15
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [699 bytes fnv128 5836ff7f74142c853fbf9e470715e5f5]
+> #16
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [882 bytes fnv128 1408cf79ab5edb622c8678d9f7b97825]
+> #17
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [880 bytes fnv128 7af905bfe242a0701aec913949397f70]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 99 empty)
++ attachments: id=t:"<uuid#26>" | workspace_id=t:"ws" | profile_id=t:"p" | transaction_id=t:"in" | a… [464 bytes fnv128 8683cb9750f79db3070490f645f7f0c5]
++ attachments: id=t:"<uuid#27>" | workspace_id=t:"ws" | profile_id=t:"p" | transaction_id=t:"in" | a… [464 bytes fnv128 cf9bcfbb7517cbf988514a5e3563c413]
++ attachments: id=t:"<uuid#24>" | workspace_id=t:"ws" | profile_id=t:"p" | transaction_id=t:"in" | a… [462 bytes fnv128 0e299d0ebf054bc9ed6bdbfbf41cc47b]
++ attachments: id=t:"<uuid#25>" | workspace_id=t:"ws" | profile_id=t:"p" | transaction_id=t:"in" | a… [462 bytes fnv128 5861266f3d666d4615aa5b4e2168d9c5]
++ (116 tables, 98 empty)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [710 bytes fnv128 25db70eff182f5d5c6dcb7c80a8e1d7b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [772 bytes fnv128 802447c47381201dac2d312323067914]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [702 bytes fnv128 87db6a3ffb234069cb11f0df4eafbb3b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [617 bytes fnv128 88669fb9d52a473b2095056402d5ebcb]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [694 bytes fnv128 40b730de2e3200abba7a0b38d94f9031]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [609 bytes fnv128 b72c9a8fe701f59235ba6e39d135decf]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [678 bytes fnv128 066953d3d5da04215f445272cebe5291]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [589 bytes fnv128 c99214e46de298c95e53f23a03903e83]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1687 bytes fnv128 51c37c4bab440463b9e7b61c7023a206]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 99 empty)
++ source_funds_links: id=t:"<uuid#28>" | workspace_id=t:"ws" | profile_id=t:"p" | from_source_id=NUL… [673 bytes fnv128 93cd04a63f1852e8651ed14068b352ff]
++ source_funds_links: id=t:"<uuid#29>" | workspace_id=t:"ws" | profile_id=t:"p" | from_source_id=NUL… [677 bytes fnv128 3b89f0f614ae2d842a948a90034709f2]
++ (116 tables, 98 empty)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [686 bytes fnv128 f954f3ac738ff8481eccb90f037c1d2d]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [593 bytes fnv128 b478475606d35b0acacad09d6f74ec7f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [22747 bytes fnv128 b1b71687cc11479370a9f897d8bdb7d6]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 99 empty)
++ source_funds_cases: id=t:"<uuid#30>" | workspace_id=t:"ws" | profile_id=t:"p" | target_transaction… [12503 bytes fnv128 7d604516a6f23f24cb498e4c10fd4f74]
++ source_funds_snapshots: id=t:"<uuid#31>" | case_id=t:"<uuid#30>" | snapshot_hash=t:"4591859a35e253… [12166 bytes fnv128 d17b18060cbf9e079fa48ca8d6584187]
++ (116 tables, 97 empty)
+… [24721 bytes, 4 lines fnv128 51069be36c81cf6b8ae8ccf666669608]
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [670 bytes fnv128 c5582865ac4a0d24d683b4b49f7b8245]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [597 bytes fnv128 113e6ea1c19aef11a2fab1dded55dddb]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [597 bytes fnv128 23488b17a69b16d1521ff13025a7c4dc]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [667 bytes fnv128 3cd8939eb5c94c8a9185a0572b8001c4]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [690 bytes fnv128 e44f6e688ba15aec82953eb6857682b1]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [603 bytes fnv128 2a2660a8f0de63416b384db88e4414af]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [658 bytes fnv128 b0e6197db1696e4ca0746ef4b67f09e1]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [758 bytes fnv128 6c528d2c868bbef9e922831af02f3190]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1155 bytes fnv128 d1e05742262c906baf90d767659f22dc]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 99 empty)
++ external_documents: id=t:"<uuid#32>" | workspace_id=t:"ws" | profile_id=t:"p" | document_type=t:"i… [391 bytes fnv128 145bdf635d9b4e39b4020cb89a394f55]
++ (116 tables, 98 empty)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [954 bytes fnv128 7b9b1bc161bde63fe3a367dd780cdd08]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [650 bytes fnv128 2421425f8669b23bfe79bcf59e6ce343]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2545 bytes fnv128 90484dc375c77f617e629411f7695319]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2947 bytes fnv128 94ff5ac40e1dd1813515f8003d8f54b2]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3141 bytes fnv128 4ba83100c95461accb041379324cf811]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1045 bytes fnv128 70c9907e53438a5f8c5ded650a7f48a8]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [844 bytes fnv128 c82b7c6b14a4e9ba98448d910b0d3a5c]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1263 bytes fnv128 eacabc95dc078d1c3d1d6c3d2ae7480e]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6623 bytes fnv128 a9ed66f1cc3e54ea3dafbe3559d5a493]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2511 bytes fnv128 d7e0ea5571c7f892330e13155cc7377a]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [846 bytes fnv128 21276bf34f898e36f62f1d879c46ac7c]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1231 bytes fnv128 95395a2258a0658d9467a1a72cab92ad]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1732 bytes fnv128 1a9c58367194dd614290488ea2a07234]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1736 bytes fnv128 9440b3893883894a0366eee02ad2d245]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [655 bytes fnv128 3722d1b9b1172db1bdce6daf34bf2f8d]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [621 bytes fnv128 7dcaa7f3038cd8ee328417c67556ef54]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 99 empty)
++ filed_report_chain_captures: snapshot_id=t:"<uuid#33>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
++ filed_report_chain_captures: snapshot_id=t:"<uuid#34>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
++ filed_report_chain_captures: snapshot_id=t:"<uuid#35>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
++ filed_report_chain_captures: snapshot_id=t:"<uuid#36>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
++ filed_report_chain_captures: snapshot_id=t:"<uuid#37>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
++ filed_report_snapshots: id=t:"<uuid#34>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [798 bytes fnv128 2ee87b0d6fce5aa910cb31df55bb8a21]
++ filed_report_snapshots: id=t:"<uuid#37>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [774 bytes fnv128 600a1027cb7da7d1c351e7667c048e1e]
++ filed_report_snapshots: id=t:"<uuid#33>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [798 bytes fnv128 417d21c6a597f6b6880969867eb29d13]
++ filed_report_snapshots: id=t:"<uuid#35>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [799 bytes fnv128 80be9f231f73f8ef88460f54e06d2001]
++ filed_report_snapshots: id=t:"<uuid#36>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [745 bytes fnv128 e548e29e6199528806556ee83b6b6e46]
++ (116 tables, 97 empty)
+… [4674 bytes, 12 lines fnv128 984efb3e55649e22141a1c717574bc74]
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [642 bytes fnv128 fc950d03080e907c68c3ab445ae1e915]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [596 bytes fnv128 6df5e17690f6e7405809a04df99cbc1a]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [714 bytes fnv128 ece92991b05594c1c0d9fa69eb52a475]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [712 bytes fnv128 c8063cc6d1bcb387d54d2d9a5b4f6070]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1573 bytes fnv128 afb75e51c95fcdcbb5de99cfd73ef20a]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [721 bytes fnv128 a5c0b1ac77d26d3dc3d5ee0dade93999]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [714 bytes fnv128 ca13a8ba26bab69f29b082b07b09365b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [712 bytes fnv128 d3f12c06d9333ec62568b51a16088bf6]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [753 bytes fnv128 021ffb63ce5084138e7b7da0b1dd854c]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [615 bytes fnv128 331377317d44a7db1db2bb1b423ba3b3]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [694 bytes fnv128 5e82c5bd4b59ac359dbbb0dc1c6e88ed]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [692 bytes fnv128 65477b15d0deb7f7c0177394408222d8]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [776 bytes fnv128 be0b3c18a18817eff5bf0ca830aa7970]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [694 bytes fnv128 f98c2d1e776510ec35a4ff46ff45903f]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [702 bytes fnv128 f2df4e14cdfb87e6021ef85ae78432b5]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [700 bytes fnv128 65633a61299d46a1600b1a5d64087c40]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [747 bytes fnv128 8978d5ab8a36fcbf73dec3349bff2f9a]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [621 bytes fnv128 66bbdbc2fd86cdd90402f79875c0916d]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [706 bytes fnv128 21b718cb8b5f053a600c0e5a2a0ebc85]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [704 bytes fnv128 db7fc097f5f899cf8db17c34e9a04d00]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [752 bytes fnv128 9e3bac92f3eaaac8731fa8fd131bd59d]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [712 bytes fnv128 83bf07d77640473ea67e8f7e8c6c7c9a]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [752 bytes fnv128 5352f4cb0b074018907c153993b872ab]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [712 bytes fnv128 cc8ce4be045697a41ffa4fbdecaef430]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [706 bytes fnv128 9178380c9b3e70d5af7ae8a796d77b45]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [704 bytes fnv128 8502128ef58f424f97a157ff5ae0f240]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [749 bytes fnv128 4b5a3ced0fcfeb6d6c0e0c65b53ccaaa]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [607 bytes fnv128 f9626ba43596620de9871d982df6c631]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [706 bytes fnv128 bd6859655c6d4c60d16a3d81b05437e5]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [704 bytes fnv128 b99abb2f71fb6670464beb207cb8e708]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1569 bytes fnv128 70030ab57156be85fd2c395e34ed9c1a]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [616 bytes fnv128 d475de2e1325afdef0ffc54cacb5f9b2]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [710 bytes fnv128 62803f2dd8bc15b400c05b882106169b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [708 bytes fnv128 49ef0d4c1cdce99a74f3012ddd3be5ba]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [823 bytes fnv128 a70919c87bb13d8b08a91188391717b3]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [901 bytes fnv128 33e559acff9678eb21294d8649a5c72c]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [722 bytes fnv128 1d389445f80e1464a6b6b91496e7de5b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [720 bytes fnv128 d043f274f3fdb1544accd4ef1d0dee56]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [757 bytes fnv128 7b051101112efee505004f743c9618ec]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [615 bytes fnv128 ad7be58c5d088f9a1fcc460ae2be5c29]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [710 bytes fnv128 fc974bcaff39b2bb57ed2e5251609dcd]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [708 bytes fnv128 4eeac1fd63e14b2b89e54ca311735770]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [751 bytes fnv128 73f24e51b8f0bd12ffe4c453114ce34a]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [609 bytes fnv128 158aa3428971e887b3f772627ebcdb77]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [730 bytes fnv128 da820d94f4067fea492c0a62d97266a3]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [728 bytes fnv128 50817fa1430763f36b5285c11941b44e]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [761 bytes fnv128 96b129d38539c96388ebe9971ef9b22c]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [631 bytes fnv128 01f1395b5388d7e0c0bb324a72a55613]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [827 bytes fnv128 9433456d60dce2f616264ca2c9bd191d]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [905 bytes fnv128 31670ab5671f1000eaf0da23cfabcc06]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [720 bytes fnv128 47b55e8ff938d0dfee509882507f75fb]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [718 bytes fnv128 d7eedc895f15d366a38ea6e28a4e08c6]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [718 bytes fnv128 7c1d73dc33d428a119611ded3eb82d5b]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [716 bytes fnv128 6b093e2b36dc12fb845f21843327a912]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [755 bytes fnv128 dccef41ee61acc80121ce24db8cd9b3e]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [617 bytes fnv128 6dfc5802bfa4af3ca55577e64730f2dd]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [738 bytes fnv128 c36fa8d362e178b0e13904b4fc7dc0f1]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [736 bytes fnv128 8332e1713fedbbc0ac05ca3aedcbc014]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1585 bytes fnv128 bccb581fea8e8d9ca51955c8e9ffa29e]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [733 bytes fnv128 4ca47d8335e46902942e6e97f589555d]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [742 bytes fnv128 27b25586052a37296db3ce753173f293]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [740 bytes fnv128 254d550c018a401bbe74d911ade7056e]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [785 bytes fnv128 ce417b40a1af09e1f5aeec240b22a230]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [755 bytes fnv128 0e87d153a39641bda7da81c8feaf25c5]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [722 bytes fnv128 6a1399701cecdd660b5e7658a5e9f633]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [720 bytes fnv128 7ce8b9894f957d9f4aa807ca42128b8e]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1577 bytes fnv128 8ea41fe5738f9977d8870ac5ae28cff0]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [907 bytes fnv128 12c97c6410d7f4e95e4b1ac13757f7fa]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [710 bytes fnv128 d76e1677324ed6d39eb818aad5758d6d]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [708 bytes fnv128 600c3ef4d3b88a6f20ecdb645d896c38]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1571 bytes fnv128 aced84fb71ba56c7411d6a160c6aa3ba]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [639 bytes fnv128 3d8abdddc66d53d42419897ff0e0907d]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [698 bytes fnv128 981be28c4215353e282ba7341452d673]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [696 bytes fnv128 0a5e267013a91bd14e94ddeee9e7c1d6]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1565 bytes fnv128 abdbb225a26e0d5ebe8c75f0f97d1d08]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [633 bytes fnv128 3d78edb8e989e195152dd25885293b1b]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)

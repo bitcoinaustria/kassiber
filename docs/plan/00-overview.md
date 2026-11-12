@@ -8,7 +8,9 @@ the docs in the same change.
 ## Product
 
 Kassiber is local-first Bitcoin accounting with a desktop app and a first-class
-CLI. The desktop uses Tauri, React, and a Python sidecar daemon;
+CLI. The backend is a Rust workspace whose `kassiber` binary serves the CLI,
+the desktop daemon, the MCP server, and the operator broker. The desktop uses
+Tauri and React and runs that binary as a sidecar daemon;
 see [01-stack-decision.md](01-stack-decision.md) for the stack
 and [04-desktop-ui.md](04-desktop-ui.md) for the historical implementation roadmap.
 
@@ -19,8 +21,8 @@ as a reviewed, path-scoped provenance report, not as chain-surveillance scoring.
 
 Kassiber's own Rust [tax engine](../reference/tax-engine.md) owns the crypto
 lot/tax calculation path. It replaced RP2 under
-[plan 20](20-kassiber-tax-engine.md), which keeps RP2 as a test-only parity
-oracle. Wallet buckets and personal tax journals are not double-entry books.
+[plan 20](20-kassiber-tax-engine.md); RP2's results remain as frozen test
+fixtures. Wallet buckets and personal tax journals are not double-entry books.
 The opt-in general ledger of
 plans 17/18 was removed on 2026-09-30 under [plan 19](19-extensions.md#removed);
 an organization that needs one would get it as an extension.
@@ -41,20 +43,25 @@ Out of scope unless a future design says otherwise:
 
 ## Current Architecture
 
-- CLI entrypoint: `kassiber/cli/main.py`
-- remaining CLI helper surface: `kassiber/cli/handlers.py`
-- shared runtime/core: `kassiber/core/`
+- backend binary: `crates/kassiber` (`kassiber`), serving the CLI, the JSONL
+  daemon, the MCP server, and the operator broker
+- command line: `crates/cli`; daemon protocol: `crates/daemon`; machine
+  envelope and error type: `crates/envelope`
+- shared core: the other crates under `crates/` (storage, wallets, custody,
+  journals, reports, AI, network routes and the rest); see
+  [crate guidance](../../crates/AGENTS.md)
 - desktop shell: `ui-tauri/`, sharing the daemon contract with the browser bridge
 - storage: SQLite under the OS-native per-user app-data root, with meaningful
   `~/.kassiber` state moved there once when the native target does not exist
 - storage shape: one DB per project under `<state-root>/projects/`
-- tax engine: Rust crate in `tax-engine/`, called through the `kassiber_tax`
-  binding ([contract](../reference/tax-engine.md)); RP2 is a test-only oracle
+- tax engine: the `kassiber-tax-core` crate in `tax-engine/core`
+  ([contract](../reference/tax-engine.md)); RP2's results are frozen test fixtures
 - machine envelope: `{kind, schema_version, data}` for success, structured
   `error` envelope for failure
 
 The production accounting path is observations and reviewed evidence →
-`core/custody_journal.py` → finalized tax projection → tax engine → stored journals
+custody computation (`crates/custody`) and journal composition
+(`crates/journals`) → finalized tax projection → tax engine → stored journals
 and reports. See
 [the tax implementation boundary](../reference/tax.md#implementation-boundary)
 and [the daemon contract](../reference/daemon.md#desktop-invoke-contract).
@@ -64,7 +71,7 @@ and [the daemon contract](../reference/daemon.md#desktop-invoke-contract).
 - local-first by default
 - CLI stays first-class
 - no bundled browser runtime; no separately-installed user runtime (Tauri uses
-  the OS webview; the bundled Python sidecar ships inside the app)
+  the OS webview; the `kassiber` sidecar binary ships inside the app)
 - Bitcoin-first; L-BTC is in scope
 - BTC amounts are integer msat
 - reports are trusted only after journal processing
@@ -91,10 +98,10 @@ checklists and test counts are not current delivery evidence.
 | Core extraction | Landed | keep logic in shared core, not CLI/UI copies |
 | Attachments | Landed | use shipped `attachments`; keep links/file blobs bounded |
 | Austrian tax path | Active | processing and review-gated E 1kv PDF/XLSX export work; domestic-provider KESt metadata pending |
-| Kassiber tax engine | Active | phases 0-4 implemented: the pure Rust engine is the default, with RP2-identical results and RP2 as a test-only oracle; phase 4 moved the boundary to the finalized projection, froze the phase-3 adapter as that oracle, and retired its RP2-shaped mirror (authoritative Austrian fixtures and version provenance still open), per [20-kassiber-tax-engine.md](20-kassiber-tax-engine.md) |
-| Rust backend | Planned, R0 in progress | move custody, storage, the daemon, the CLI, and the rest of the backend to Rust and retire Python, per [21-rust-backend.md](21-rust-backend.md) |
+| Kassiber tax engine | Active | phases 0-4 implemented: the pure Rust engine is the only engine, with RP2-identical results pinned by frozen RP2 fixtures; phase 4 moved the boundary to the finalized projection, froze the phase-3 adapter as a test oracle (removed with Python; its results stay as frozen fixtures), and retired its RP2-shaped mirror (authoritative Austrian fixtures and version provenance still open), per [20-kassiber-tax-engine.md](20-kassiber-tax-engine.md) |
+| Rust backend | Implemented | the Rust `kassiber` binary is the whole backend per [21-rust-backend.md](21-rust-backend.md); Python was removed under [22-python-removal.md](22-python-removal.md), and the last Python commit is tagged `archive/python-backend` |
 | Organizational accounting and AI | Removed | plans 16-18 removed 2026-09-30 under plan 19; code preserved at git tag `archive/general-ledger` |
-| Desktop UI | In progress | Tauri 2 + React + TypeScript with a Python sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
+| Desktop UI | In progress | Tauri 2 + React + TypeScript with the `kassiber` binary as sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
 | Project storage | Implemented | per-project databases; [compatibility](../reference/database-compatibility.md) covers legacy upgrades |
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
 | Source of funds | v1 landed | desktop review workstation, reviewed transaction-flow links, disclosure preview, immutable snapshots, and gated PDF export |
@@ -105,7 +112,10 @@ checklists and test counts are not current delivery evidence.
 
 ## Stack
 
-Desktop: Tauri 2 + React + TypeScript + shadcn/ui, with the Python core
+Backend: a Rust Cargo workspace (`crates/`, `tax-engine/core`) built into one
+`kassiber` binary.
+
+Desktop: Tauri 2 + React + TypeScript + shadcn/ui, with the `kassiber` binary
 running as a long-lived sidecar daemon over stdin/stdout JSONL.
 
 See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
@@ -113,7 +123,8 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 
 ## Doc Index
 
-- `01-stack-decision.md`: desktop stack ADR (Tauri + React + Python sidecar)
+- `01-stack-decision.md`: desktop stack ADR (Tauri + React + sidecar daemon;
+  the sidecar is the Rust binary since plans 21 and 22)
 - `02-core-extraction.md`: archived Phase 0 extraction reference
 - `03-storage-conventions.md`: project-bundle storage target
 - `04-desktop-ui.md`: historical desktop implementation roadmap
@@ -148,6 +159,8 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
   engine, parity requirements, country manifests, and phases
 - `21-rust-backend.md`: moving the whole backend to Rust and retiring Python:
   contracts, transition, recorded-corpus verification, and stages
+- `22-python-removal.md`: inventory and order of operations for deleting
+  Python after the Rust cutover, and how frozen goldens are regenerated
 
 ## Highest-Risk Drift Points
 

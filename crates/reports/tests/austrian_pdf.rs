@@ -61,6 +61,14 @@ fn austrian_model_matches_python_and_renders_deterministically() {
                 .unwrap();
                 assert_eq!(model, ok["model"], "{name}: report model");
                 check_sections(&document, &ok["model"], name);
+                // A table wider than its page draws its last columns past the
+                // edge: the Disposals table once showed Kennzahl 174 as "17".
+                let shown = report_design::rendered_pdf(&document).unwrap();
+                assert_eq!(
+                    shown.off_page,
+                    Vec::<String>::new(),
+                    "{name}: text past the page edge"
+                );
                 let [file] = prepared.files.as_slice() else {
                     panic!("{name}: one PDF")
                 };
@@ -289,4 +297,52 @@ fn check_values(document: &report_design::Document, report: &serde_json::Value, 
             .any(|b| matches!(b, Block::Note { text, .. } if text == gate)),
         "{name}: review gate"
     );
+}
+
+/// The session's book named its wallet `AustrianE1kv`: one word the
+/// Disposals table cannot wrap. Its headers then no longer fit the page
+/// side by side, and the last column, the Kennzahl, was drawn past the
+/// right edge, so a reader saw Kennzahl 174 as "17". Every figure of such a
+/// table stays on the page, the Kennzahl whole.
+#[test]
+fn a_long_wallet_name_keeps_every_disposal_column_on_the_page() {
+    let cases: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("data/austrian_pdf.json")).unwrap();
+    let case = cases.iter().find(|c| c["name"] == "at-base").unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let book = Book::create(&root.path().join("data"), None).unwrap();
+    let conn = book.connection();
+    conn.execute_batch(include_str!("data/book.sql")).unwrap();
+    conn.execute_batch(case["sql"].as_str().unwrap()).unwrap();
+    let args = kassiber_pytext::loads(case["args_json"].as_str().unwrap()).unwrap();
+    let (workspace, profile) = kassiber_setup::references::scope(conn, &args).unwrap();
+    let model =
+        kassiber_reports::austrian_pdf::model(conn, &workspace, &profile, &args, &Fixed).unwrap();
+    let text = kassiber_pyjson::dumps(&model, &Default::default()).unwrap();
+    assert!(text.contains("\"Cold\""), "the fixture's wallet");
+    let model = kassiber_pytext::loads(&text.replace("\"Cold\"", "\"AustrianE1kv\"")).unwrap();
+    let document = report_design::austrian(&model);
+    let disposals = document
+        .sections
+        .iter()
+        .flat_map(|s| &s.blocks)
+        .find_map(|b| match b {
+            report_design::Block::Table(t) if t.id == "disposals" => Some(t),
+            _ => None,
+        })
+        .unwrap();
+    let kennzahl = disposals
+        .columns
+        .iter()
+        .position(|c| c.key == "kennzahl")
+        .unwrap();
+    assert!(
+        disposals
+            .rows
+            .iter()
+            .any(|r| r[kennzahl] == report_design::Cell::Text("174".into())),
+        "the fixture disposes under Kennzahl 174"
+    );
+    let rendered = report_design::rendered_pdf(&document).unwrap();
+    assert_eq!(rendered.off_page, Vec::<String>::new());
 }

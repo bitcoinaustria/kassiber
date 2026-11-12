@@ -1,7 +1,7 @@
 # Desktop Reference
 
-Kassiber's desktop shell uses Tauri 2 + React + TypeScript with the Python
-core running as a long-lived sidecar daemon over JSONL. See
+Kassiber's desktop shell uses Tauri 2 + React + TypeScript with the Rust
+`kassiber` binary running as a long-lived sidecar daemon over JSONL. See
 [../plan/01-stack-decision.md](../plan/01-stack-decision.md) for the stack
 decision and [../plan/04-desktop-ui.md](../plan/04-desktop-ui.md) for the
 implementation plan.
@@ -16,7 +16,7 @@ contract the shell consumes through the daemon.
 The desktop UI is bilingual — English and Austrian German (informal `du`) — via
 i18next. The active language lives in the UI store's `lang` (the single source
 of truth) and is switchable from Settings → Appearance or the header overflow
-menu; first run defaults to English. The CLI and Python daemon stay English and
+menu; first run defaults to English. The CLI and daemon stay English and
 machine-deterministic (the UI translates their stable codes). For how
 translations are organized and the workflow for keeping English/German in sync,
 see [i18n.md](i18n.md); for the Austrian-German terminology (Bitcoin jargon kept
@@ -85,11 +85,15 @@ Current development modes:
   browser preview. In bridge mode, the
   Welcome screen can open existing local books through a dev-only loopback
   folder picker; the Vite bridge validates the selected Kassiber data root and
-  restarts its Python daemon with `--data-root` before the normal unlock/profile
+  restarts its daemon with `--data-root` before the normal unlock/profile
   picker flow continues in the browser. Leaving an imported folder restarts the
   daemon on the book the preview started with: `KASSIBER_DEV_DATA_ROOT` when
-  set, otherwise the default root.
-- `pnpm tauri:dev` runs the Tauri shell, starts `python -m kassiber daemon`,
+  set, otherwise the default root. The bridge starts the Rust binary named by
+  `KASSIBER_BIN`, else the checkout's `target/release/kassiber`, else
+  `target/debug/kassiber`. It only looks for those files; it never runs a
+  probe, and with no binary the preview shows an error naming the
+  `cargo build -p kassiber --bin kassiber` step.
+- `pnpm tauri:dev` runs the Tauri shell, starts `kassiber daemon`,
   and calls the Rust `daemon_invoke` boundary. The command allowlists the
   current UI data, export, and action kinds. Report exports write under the
   managed `exports/reports/` state directory, and the desktop shell exposes a
@@ -107,31 +111,25 @@ Current development modes:
   inside the encrypted database. macOS uses the system folder picker, Windows
   uses the system folder dialog through PowerShell/.NET, and Linux desktops use
   `zenity`, `kdialog`, or `yad` when one of those pickers is installed.
-  The supervisor uses `.venv/bin/python` when present, then `python3`, unless
-  `KASSIBER_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
+  Without a bundled sidecar, the debug shell starts the checkout's
+  `target/release/kassiber`, then `target/debug/kassiber`, unless
+  `KASSIBER_BIN` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
   different checkout.
 
 Release desktop packages bundle the Rust `kassiber` binary as a
 `kassiber-cli-<target triple>` sidecar, with the AI provider broker beside it
 ([Rust packaging](rust-packaging.md)). macOS keeps it at
 `binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, the location and
-signing identifier of the former Python one-dir sidecar, which the Touch ID
+signing identifier of the earlier one-dir sidecar, which the Touch ID
 helper's identity check and existing Keychain items rely on; Linux and Windows
 ship it flat under `binaries/`. A single native executable has no one-file
 extraction and no per-launch dylib re-validation.
 
-`scripts/build-macos-arm64-app.sh` still builds the Python-backed
-"Kassiber Dev" app with a PyInstaller one-dir sidecar against uv's managed
-CPython, for side-by-side comparison until Python retires. Its one-dir layout
-is a cold-start fix: a one-file sidecar unpacks ~170 MB into a fresh temp
-directory on every launch, and macOS re-validates every bundled dylib's
-signature each time because that cache is keyed by inode (6s before the daemon
-answered, against 0.19s from a stable path).
-
-At runtime the supervisor prefers `KASSIBER_PYTHON` when it is explicitly set,
-then the bundled sidecar from the app resources (one-dir candidate first), then
-the development Python fallback above. The same `KASSIBER_PYTHON` override
-applies to installed-app CLI forwarding.
+At runtime the supervisor prefers `KASSIBER_BIN` when it is explicitly set,
+then the bundled sidecar from the app resources (one-dir candidate first), then,
+in debug builds only, the checkout build above. A missing binary is a
+`daemon_binary_missing` error. The same `KASSIBER_BIN`
+override applies to installed-app CLI forwarding.
 
 On macOS the window uses an overlay title bar, and the shell draws the row the
 traffic lights sit in: one 40px title bar carrying the nav toggle, history
@@ -298,7 +296,7 @@ downloaded bytes are authenticated. See
 [release signing](release-signing.md).
 
 For a real installable `.app` built locally on Apple Silicon (without
-Rosetta), use `./scripts/build-macos-arm64-app.sh`. The build is unsigned
+Rosetta), use `./scripts/build-macos-arm64-rust-app.sh`. The build is unsigned
 and ad-hoc signed; first-launch Gatekeeper handling is documented in
 [prerelease-binaries.md → Local Apple Silicon build](prerelease-binaries.md#local-apple-silicon-build).
 

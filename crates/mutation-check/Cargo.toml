@@ -1,0 +1,25 @@
+[package]
+name = "kassiber-mutation-check"
+description = "Development tool: checks that named tests fail when the rule they pin breaks"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "mutation-check"
+path = "src/main.rs"
+
+[dependencies]
+# Already in the workspace (kassiber-chain, -credentials, -net); reads the
+# JSON catalogs and the runner configuration.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"

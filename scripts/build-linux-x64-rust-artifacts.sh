@@ -61,7 +61,7 @@ run() {
 
 # Preflight: name every missing tool before the long build.
 missing_required=()
-for command in cargo pnpm python3 readelf objdump tar gzip sha256sum; do
+for command in cargo pnpm jq cc readelf objdump tar gzip sha256sum; do
   command -v "$command" >/dev/null 2>&1 || missing_required+=("$command")
 done
 if [ "${#missing_required[@]}" -gt 0 ]; then
@@ -118,23 +118,30 @@ release="$output"
 
 run "$ROOT/scripts/build-rust-cli.sh" --target "$TRIPLE" --channel "$channel" \
   --commit "$commit" --output "$work/dist" --glibc-floor "$glibc_floor"
+
+# The release tool (crates/release) writes BUILD_INFO.json and the manifest.
+release_tool="${KASSIBER_RELEASE_TOOL:-}"
+if [ -z "$release_tool" ]; then
+  run cargo build --locked --release -p kassiber-release --no-default-features --bin kassiber-release
+  release_tool="$ROOT/target/release/kassiber-release"
+fi
 binary="$work/dist/kassiber"
 
-run python3 scripts/write_build_info.py --output "$work/BUILD_INFO.json" \
+run "$release_tool" build-info --output "$work/BUILD_INFO.json" \
   --version "$version" --commit "$commit" --ref "$(git rev-parse --abbrev-ref HEAD)" \
   --run-id local --channel "$channel"
 
 run pnpm --dir ui-tauri install --frozen-lockfile
 run pnpm --dir ui-tauri run broker:build
-broker="$ROOT/kassiber/ai/provider_broker/index.mjs"
+broker="$ROOT/ui-tauri/provider-broker/dist/index.mjs"
 test -s "$broker"
 
 smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-linux-smoke.XXXXXX")"
 trap 'rm -rf "$smoke_root"' EXIT
 run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$binary" --scratch "$smoke_root/cli" \
   --expect-commit "$short_commit"
-run env KASSIBER_PACKAGED_CLI="$binary" TMPDIR="$smoke_root" \
-  python3 -m unittest -v tests.test_packaged_cli_no_egress
+run "$ROOT/scripts/check-packaged-cli-no-egress.sh" --cli "$binary" \
+  --scratch "$smoke_root/no-egress"
 
 name="kassiber-cli-$TARGET"
 run "$ROOT/scripts/package-cli-archive.sh" --binary "$binary" --broker "$broker" \
@@ -201,7 +208,7 @@ if [ "$want_rpm" -eq 1 ]; then
     --version "$version" --architecture x86_64 --output "$release/kassiber-$TARGET.rpm"
 fi
 
-run python3 scripts/release_manifest.py generate --release-dir "$release" --version "$version"
+run "$release_tool" manifest generate --release-dir "$release" --version "$version"
 
 echo
 echo "Linux x86_64 artifacts ($channel, commit $short_commit, glibc floor $glibc_floor):"

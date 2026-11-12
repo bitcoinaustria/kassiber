@@ -1,5 +1,10 @@
 # Transaction page index implementation evidence
 
+> **Historical.** This records evidence gathered while Python and Rust both
+> opened books. Python was removed under [plan 22](../plan/22-python-removal.md);
+> the Python columns and steps below exist only at the `archive/python-backend`
+> tag.
+
 Local branch `t3code/page-index`, based on `f261b9b2`. Only the approved
 `idx_transactions_profile_page` index is added. The flow and metrics proposals
 remain unimplemented. See [database compatibility](database-compatibility.md#transaction-page-index)

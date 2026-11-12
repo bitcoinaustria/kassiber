@@ -1261,46 +1261,6 @@
     "rule": "Empty notes fall back to the note alias and otherwise clear stored notes."
   },
   {
-    "id": "reference-native-review-atomic",
-    "file": "kassiber/core/custody_authored_migration.py",
-    "find": "with _savepoint(conn, \"custody_native_review\"):",
-    "replace": "if True:",
-    "expect_failing": [
-      "tests/test_custody_authored_migration.py::test_native_review_activation_failure_leaves_no_committed_draft"
-    ],
-    "rule": "Refused activation cannot commit a partial authored draft."
-  },
-  {
-    "id": "reference-pair-create-invalidation",
-    "file": "kassiber/core/custody_review_terms.py",
-    "find": "with custody_authored_migration._savepoint(conn, \"custody_pair_review\"):\n        pair_row = custody_authored_migration.create_pair_review_component(",
-    "replace": "if True:\n        pair_row = custody_authored_migration.create_pair_review_component(",
-    "expect_failing": [
-      "tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[create]"
-    ],
-    "rule": "Refused final invalidation rolls back the entire pair create operation."
-  },
-  {
-    "id": "reference-pair-update-invalidation",
-    "file": "kassiber/core/custody_review_terms.py",
-    "find": "with custody_authored_migration._savepoint(conn, \"custody_pair_review\"):\n        updated = custody_authored_migration.revise_pair_review_component(",
-    "replace": "if True:\n        updated = custody_authored_migration.revise_pair_review_component(",
-    "expect_failing": [
-      "tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[update]"
-    ],
-    "rule": "Refused final invalidation rolls back the entire pair update operation."
-  },
-  {
-    "id": "reference-pair-unpair-invalidation",
-    "file": "kassiber/core/custody_review_terms.py",
-    "find": "with custody_authored_migration._savepoint(conn, \"custody_pair_review\"):\n        custody_authored_migration.delete_authored_review(",
-    "replace": "if True:\n        custody_authored_migration.delete_authored_review(",
-    "expect_failing": [
-      "tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[unpair]"
-    ],
-    "rule": "Refused final invalidation rolls back the entire pair unpair operation."
-  },
-  {
     "id": "desktop-pair-capability-order",
     "file": "crates/daemon/src/transfers.rs",
     "find": "\"ui.transfers.list\",\n    \"ui.transfers.payouts.list\",\n    \"ui.transfers.payouts.create\",\n    \"ui.transfers.payouts.delete\",\n    \"ui.transfers.pair\",",

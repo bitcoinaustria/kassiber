@@ -1,0 +1,23 @@
+[package]
+name = "kassiber-repo-checks"
+description = "Development tests: repository contracts (workflow pins, test-data lock, versions)"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+serde = "1"
+serde_json = "1"
+# Already compiled into the workspace through Typst (typst-library,
+# hayagriva); parses the workflow YAML the pin audit walks, including flow
+# mappings, explicit keys and escaped key spellings a line scan would miss.
+serde_yaml = "0.9"
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"

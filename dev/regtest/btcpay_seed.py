@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
 
-from tests import cli_runner
+from tests.integration import cli as cli_runner
 
 
 DEFAULT_USER = "regtest@regtest.local"
@@ -675,7 +675,6 @@ def _run_kassiber(args: list[str], *, token: str | None = None) -> subprocess.Co
     return cli_runner.run(
         args,
         input=token,
-        secret_input=token is not None,
         text=True,
         capture_output=True,
         check=False,

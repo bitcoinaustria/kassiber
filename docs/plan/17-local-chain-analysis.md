@@ -50,16 +50,13 @@ does not, by itself, prove a common owner or a unique input-to-output value path
 | Chain coverage | Wallet sync freshness and reorg handling exist | Requested graph depth, available branches, chain tips and backend/index coverage in one result |
 | Agents | Read-only graph/privacy/review-context tools and scoped missing-input handoffs | Queries over a shared investigation; model-created edges must never count as observations |
 
-Code entry points:
-[transaction_graph](../../kassiber/core/transaction_graph.py),
-[ownership](../../kassiber/core/ownership.py),
-[onchain](../../kassiber/core/onchain.py),
-[privacy_linkage](../../kassiber/core/privacy_linkage.py),
-[privacy_hygiene](../../kassiber/core/privacy_hygiene.py),
-[reports](../../kassiber/core/reports.py),
-[native transitions](../../kassiber/core/custody_native_transitions.py),
-[custody snapshots](../../kassiber/core/ui_snapshot.py),
-[source-funds review](../../kassiber/core/source_funds_review.py).
+Code entry points at the audit (Python modules, now only at tag
+`archive/python-backend`): `kassiber/core/transaction_graph.py`,
+`ownership.py`, `onchain.py`, `privacy_linkage.py`, `privacy_hygiene.py`,
+`reports.py`, `custody_native_transitions.py`, `ui_snapshot.py` and
+`source_funds_review.py`. Their Rust ports live in `crates/journals`
+(transaction graph), `crates/wallets` (analysis index and observer state),
+`crates/custody`, and `crates/reports` (privacy hygiene, source-funds review).
 
 PR #543 already supplied the important native custody and review foundation.
 Reusing it is preferable to another transfer matcher inside privacy analysis.

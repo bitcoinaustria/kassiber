@@ -1,0 +1,432 @@
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b24e45863bc55f62ea9ba2225eb367f]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [796 bytes fnv128 25633642900b7a361f72e6035e40cd24]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [794 bytes fnv128 7220c055cd22efa71d0cf1f9d577cfb1]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b24dfcdcebc55f62ea9ba22240e8bae]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [796 bytes fnv128 2563433b5b0b7a361f72e603637053ff]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [794 bytes fnv128 7220e0bef822efa71d0cf1f9e2e357b0]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b24c9bfd1bc55f62ea9ba221b25a559]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [796 bytes fnv128 25633eb0c60b7a361f72e6036193a92e]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [794 bytes fnv128 7220a5a93322efa71d0cf1f9caa5b57b]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b250de0c4bc55f62ea9ba2237166280]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 047244eff91f6098b2610625143659ba]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 6838b91090fce2a0beedbe70a419b461]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [668 bytes fnv128 2f57f70010b76bfeeec8376343325676]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [828 bytes fnv128 4fec3273b83d7b330e0dcd8d444b3c92]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [826 bytes fnv128 40dc85733183fd4beb8da1b5e5f4de2b]
+> #15
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 8892940205bdc5eb6ad808070c459821]
+> #16
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 04725f9d8b1f6098b26106251f09a518]
+> #17
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 6838d3aa22fce2a0beedbe70aee08087]
+> #18
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 889286573abdc5eb6ad8080706a80e4e]
+> #19
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 04726428281f6098b261062520e659c1]
+> #20
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 6821d12377fce2a0beedbe6989d1e9d1]
+> #21
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887bc222e9bdc5eb6ad807fffae6b3e6]
+> #22
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 045b618d751f6098b261061dfbcb39fb]
+> #23
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 6821dec33efce2a0beedbe698f67f41c]
+> #24
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887bac13ecbdc5eb6ad807fff1fc9291]
+> #25
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 045b6f2e441f6098b261061e0162891e]
+> #26
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 6821ebbd09fce2a0beedbe699498b5f7]
+> #27
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887bb9b4b3bdc5eb6ad807fff793d7dc]
+> #28
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 045b7c3a0f1f6098b261061e069d5431]
+> #29
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 6821b0b048fce2a0beedbe697c601d4a]
+> #30
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 888331f4d2bdc5eb6ad8080244490f28]
+> #31
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [998 bytes fnv128 cbe962933b8d064b507bb7618516ab48]
+> #32
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [996 bytes fnv128 6935fda311a91de91174005eae22a9c5]
+> #33
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 a8fa692e472dd1fb8bbb66a12efc1db7]
+> #34
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [800 bytes fnv128 d089af760809eb1177b1038a5054f461]
+> #35
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 8f9fa1c6033244e53e27d4f3b4b024a6]
+> #36
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 1574cea447ab245dd887681f3725edf6]
+> #37
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [800 bytes fnv128 11be3b7c7648fede7971a5c11a0f1af2]
+> #38
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 ff3b58c51dc47fe961c8c18649073547]
+> #39
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [638 bytes fnv128 54c636ed5372a8d706c65b8506fde3f3]
+> #40
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 4ab6d0393d0781db91dcee714dd04168]
+> #41
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [796 bytes fnv128 9eaa07a5c237f88208287475fb805ad7]
+> #42
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 886e812e72bdc5eb6ad807fc127f1d0d]
+> #43
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 0486e6db921f6098b261062b3fa8750a]
+> #44
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 684fbc353bfce2a0beedbe77c989ced7]
+> #45
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 0f216e94436ffc96398b8528d0657b74]
+> #46
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [800 bytes fnv128 8719933ca63909b41c66d7daf082cb8e]
+> #47
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 2f449cbdbef2dcf770b3082e9d34d265]
+> #48
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 886eaf2d68bdc5eb6ad807fc257a74a7]
+> #49
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 048714ee881f6098b261062b52b04bdc]
+> #50
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 68571dbf61fce2a0beedbe7a0cee615e]
+> #51
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 8875fa0b91bdc5eb6ad807fe5f949d19]
+> #52
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 048ef993ff1f6098b261062dcbbaa020]
+> #53
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 68572249f6fce2a0beedbe7a0ecb0c2f]
+> #54
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 8876101a8ebdc5eb6ad807fe687ebe6e]
+> #55
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 048eda65d41f6098b261062dbf10e4a1]
+> #56
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 685714b42bfce2a0beedbe7a093b3c94]
+> #57
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887614a523bdc5eb6ad807fe6a5b693f]
+> #58
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 048eccbb091f6098b261062db9735ace]
+> #59
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 68573cf790fce2a0beedbe7a199e6165]
+> #60
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 885f118078bdc5eb6ad807f744eb4ec9]
+> #61
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 04780886b81f6098b2610626adb20066]
+> #62
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 68403a5cddfce2a0beedbe72f483419f]
+> #63
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 885f1fbe3fbdc5eb6ad807f74ae2dcd4]
+> #64
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [797 bytes fnv128 0477f277bb1f6098b2610626a4c7df11]
+> #65
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [795 bytes fnv128 68402308e4fce2a0beedbe72ead1191a]
+> #66
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 885f2d550abdc5eb6ad807f75073e76f]
+> #67
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [867 bytes fnv128 118adc91395d559ccd482f62643c9753]
+> #68
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [865 bytes fnv128 40f6f39fe29c26eec1cf876d31f25f06]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the reads
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b24e45863bc55f62ea9ba2225eb367f]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [895 bytes fnv128 daec7a39eafcbfa5f6c3c317a7cdfa49]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [893 bytes fnv128 3c9dc6258f5bf59b0c77a6c4159e8dec]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b24dfcdcebc55f62ea9ba22240e8bae]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4096 bytes fnv128 7d87c7cb45588a69f133d8951bba1a7f]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4162 bytes fnv128 66806cc98d69c4fe555b6ecb16100070]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b24c9bfd1bc55f62ea9ba221b25a559]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4110 bytes fnv128 f00b5d1eced3355be6cda5b52019a2d6]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4176 bytes fnv128 97b5b62d968e8d899a78a9c9acfe00b3]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b250de0c4bc55f62ea9ba2237166280]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4095 bytes fnv128 07da6e25f6e23c52e1d3525d1dd9c5ea]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4161 bytes fnv128 b3dc232aa80f068ffe7b7952fbf22737]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [668 bytes fnv128 2f57f70010b76bfeeec8376343325676]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [828 bytes fnv128 4fec3273b83d7b330e0dcd8d444b3c92]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [826 bytes fnv128 40dc85733183fd4beb8da1b5e5f4de2b]
+> #15
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 8892940205bdc5eb6ad808070c459821]
+> #16
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4055 bytes fnv128 0a006b3b6948575b2936f16272920828]
+> #17
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4121 bytes fnv128 ee6f3b27ff4d7f3f0c80e44a0becb7bd]
+> #18
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 889286573abdc5eb6ad8080706a80e4e]
+> #19
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3469 bytes fnv128 a68ceaa2e1d8267e85c0dd561a0f18c5]
+> #20
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3535 bytes fnv128 ebe4db83a611c60f725e0f9384fa7bc9]
+> #21
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887bc222e9bdc5eb6ad807fffae6b3e6]
+> #22
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [854 bytes fnv128 0b85d5cc0f060f0c2af5a1ff2aa24bc4]
+> #23
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [852 bytes fnv128 ac19ccc78f2a576aa2010fe7968b11f3]
+> #24
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887bac13ecbdc5eb6ad807fff1fc9291]
+> #25
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3481 bytes fnv128 1f97efedb75bfebaba0467d7575f7162]
+> #26
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3547 bytes fnv128 8368ee04d63f61133506c436019ba9c9]
+> #27
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887bb9b4b3bdc5eb6ad807fff793d7dc]
+> #28
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3649 bytes fnv128 2221d3b4e3a134deaeaf1e801007216b]
+> #29
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3715 bytes fnv128 5c9c6782fa89493e3209c8e5a7863838]
+> #30
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 888331f4d2bdc5eb6ad8080244490f28]
+> #31
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [998 bytes fnv128 cbe962933b8d064b507bb7618516ab48]
+> #32
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [996 bytes fnv128 6935fda311a91de91174005eae22a9c5]
+> #33
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 a8fa692e472dd1fb8bbb66a12efc1db7]
+> #34
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [800 bytes fnv128 d089af760809eb1177b1038a5054f461]
+> #35
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 8f9fa1c6033244e53e27d4f3b4b024a6]
+> #36
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 1574cea447ab245dd887681f3725edf6]
+> #37
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [800 bytes fnv128 11be3b7c7648fede7971a5c11a0f1af2]
+> #38
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 ff3b58c51dc47fe961c8c18649073547]
+> #39
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [638 bytes fnv128 54c636ed5372a8d706c65b8506fde3f3]
+> #40
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 4ab6d0393d0781db91dcee714dd04168]
+> #41
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [796 bytes fnv128 9eaa07a5c237f88208287475fb805ad7]
+> #42
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 886e812e72bdc5eb6ad807fc127f1d0d]
+> #43
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [730 bytes fnv128 1f284b364db902347f01e9fcd27e16c9]
+> #44
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [728 bytes fnv128 20601509af08c69414e24830209cab00]
+> #45
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 0f216e94436ffc96398b8528d0657b74]
+> #46
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [800 bytes fnv128 8719933ca63909b41c66d7daf082cb8e]
+> #47
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 2f449cbdbef2dcf770b3082e9d34d265]
+> #48
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 886eaf2d68bdc5eb6ad807fc257a74a7]
+> #49
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4487 bytes fnv128 a3484210b9c60166911d07c49b993e9a]
+> #50
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4553 bytes fnv128 c17287bb2d24c9b10eda4bf3037bfef6]
+> #51
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 8875fa0b91bdc5eb6ad807fe5f949d19]
+> #52
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4487 bytes fnv128 a34fcc7c3cc60166911d07c6efc26fda]
+> #53
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4553 bytes fnv128 c1728c46c224c9b10eda4bf30559e4c7]
+> #54
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 8876101a8ebdc5eb6ad807fe687ebe6e]
+> #55
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [689 bytes fnv128 c35fa174aa926a7db3a57863f91f4c93]
+> #56
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [687 bytes fnv128 98ff9ca3fc358ab64b3ec45364fc860e]
+> #57
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887614a523bdc5eb6ad807fe6a5b693f]
+> #58
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [896 bytes fnv128 78c13f884affd136a2e10e2527ee004d]
+> #59
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [894 bytes fnv128 5a3fba65202735c8573a3348d4a973a6]
+> #60
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 885f118078bdc5eb6ad807f744eb4ec9]
+> #61
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [706 bytes fnv128 06d9091b3937fc8c0fb29ed4445b3139]
+> #62
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [704 bytes fnv128 9ef9713c656fddd8936ac3bedd5e2a3c]
+> #63
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 885f1fbe3fbdc5eb6ad807f74ae2dcd4]
+> #64
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4355 bytes fnv128 ce94d2c70919f7581b69e3e55d0c3ce1]
+> #65
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4421 bytes fnv128 33ace47c233c1246d6aee05ef69a2ebc]
+> #66
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 885f2d550abdc5eb6ad807f75073e76f]
+> #67
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [867 bytes fnv128 118adc91395d559ccd482f62643c9753]
+> #68
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [865 bytes fnv128 40f6f39fe29c26eec1cf876d31f25f06]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the reads
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b24e45863bc55f62ea9ba2225eb367f]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [895 bytes fnv128 daec7a39eafcbfa5f6c3c317a7cdfa49]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [893 bytes fnv128 3c9dc6258f5bf59b0c77a6c4159e8dec]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b24dfcdcebc55f62ea9ba22240e8bae]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4262 bytes fnv128 57338a7056b30d03df8f9e9f25833e19]
+> #5
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [5152 bytes fnv128 0cdd61935f4d634bb7fa526688b6dbea]
+> #6
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b24c9bfd1bc55f62ea9ba221b25a559]
+> #7
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4276 bytes fnv128 be3fc7d790e33a56adeaae5ce5fdad66]
+> #8
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [5166 bytes fnv128 4e5a38b5cf745665bd944ac282d177b3]
+> #9
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 1b250de0c4bc55f62ea9ba2237166280]
+> #10
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4261 bytes fnv128 f42a23729d420c68576ae0dea951074a]
+> #11
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [5151 bytes fnv128 6ef1a58135c4adbce9bde8a730b234af]
+> #12
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [668 bytes fnv128 2f57f70010b76bfeeec8376343325676]
+> #13
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [828 bytes fnv128 4fec3273b83d7b330e0dcd8d444b3c92]
+> #14
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [826 bytes fnv128 40dc85733183fd4beb8da1b5e5f4de2b]
+> #15
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 8892940205bdc5eb6ad808070c459821]
+> #16
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4115 bytes fnv128 c9bf159c5e66d712dc46cddfd6085f6c]
+> #17
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4927 bytes fnv128 d2a1de6d23e314a45246fa9e8fe60861]
+> #18
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 889286573abdc5eb6ad8080706a80e4e]
+> #19
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3529 bytes fnv128 fee116d474597ba04f8c5adc5147b179]
+> #20
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4341 bytes fnv128 0d1128ced7fc2e154d229cdc1e01c933]
+> #21
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887bc222e9bdc5eb6ad807fffae6b3e6]
+> #22
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [854 bytes fnv128 0b85d5cc0f060f0c2af5a1ff2aa24bc4]
+> #23
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [852 bytes fnv128 ac19ccc78f2a576aa2010fe7968b11f3]
+> #24
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887bac13ecbdc5eb6ad807fff1fc9291]
+> #25
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3647 bytes fnv128 73975421ea889d3ea3a83e97a2217b80]
+> #26
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4537 bytes fnv128 68ca30c2bd0c36bd5280cdcbd48172a7]
+> #27
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887bb9b4b3bdc5eb6ad807fff793d7dc]
+> #28
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3815 bytes fnv128 1d9a045069f62460c9cf7dc975103b0d]
+> #29
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4705 bytes fnv128 7576e26f700b512ccbae29f3d3b1ee0c]
+> #30
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 888331f4d2bdc5eb6ad8080244490f28]
+> #31
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [998 bytes fnv128 cbe962933b8d064b507bb7618516ab48]
+> #32
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [996 bytes fnv128 6935fda311a91de91174005eae22a9c5]
+> #33
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 a8fa692e472dd1fb8bbb66a12efc1db7]
+> #34
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [800 bytes fnv128 d089af760809eb1177b1038a5054f461]
+> #35
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 8f9fa1c6033244e53e27d4f3b4b024a6]
+> #36
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 1574cea447ab245dd887681f3725edf6]
+> #37
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [800 bytes fnv128 11be3b7c7648fede7971a5c11a0f1af2]
+> #38
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 ff3b58c51dc47fe961c8c18649073547]
+> #39
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [638 bytes fnv128 54c636ed5372a8d706c65b8506fde3f3]
+> #40
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 4ab6d0393d0781db91dcee714dd04168]
+> #41
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [796 bytes fnv128 9eaa07a5c237f88208287475fb805ad7]
+> #42
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 886e812e72bdc5eb6ad807fc127f1d0d]
+> #43
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [730 bytes fnv128 1f284b364db902347f01e9fcd27e16c9]
+> #44
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [728 bytes fnv128 20601509af08c69414e24830209cab00]
+> #45
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 0f216e94436ffc96398b8528d0657b74]
+> #46
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [800 bytes fnv128 8719933ca63909b41c66d7daf082cb8e]
+> #47
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [798 bytes fnv128 2f449cbdbef2dcf770b3082e9d34d265]
+> #48
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 886eaf2d68bdc5eb6ad807fc257a74a7]
+> #49
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4227 bytes fnv128 bb39d68f1cdbe656a868527b548b1bf2]
+> #50
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [5117 bytes fnv128 86f798c00d9d4ae452d2744b1c1ef558]
+> #51
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 8875fa0b91bdc5eb6ad807fe5f949d19]
+> #52
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4227 bytes fnv128 bb41a9a72fdbe656a868527dc682fa02]
+> #53
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [5117 bytes fnv128 86f78b20469d4ae452d2744b1688eb0d]
+> #54
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 8876101a8ebdc5eb6ad807fe687ebe6e]
+> #55
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [689 bytes fnv128 c35fa174aa926a7db3a57863f91f4c93]
+> #56
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [687 bytes fnv128 98ff9ca3fc358ab64b3ec45364fc860e]
+> #57
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 887614a523bdc5eb6ad807fe6a5b693f]
+> #58
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [896 bytes fnv128 78c13f884affd136a2e10e2527ee004d]
+> #59
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [894 bytes fnv128 5a3fba65202735c8573a3348d4a973a6]
+> #60
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 885f118078bdc5eb6ad807f744eb4ec9]
+> #61
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [706 bytes fnv128 06d9091b3937fc8c0fb29ed4445b3139]
+> #62
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [704 bytes fnv128 9ef9713c656fddd8936ac3bedd5e2a3c]
+> #63
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 885f1fbe3fbdc5eb6ad807f74ae2dcd4]
+> #64
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4357 bytes fnv128 c8aaa68f9189099ce82d06ca6e39fae9]
+> #65
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4423 bytes fnv128 5c2316edbd6c88c3766a3b4204b3dc4c]
+> #66
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [765 bytes fnv128 885f2d550abdc5eb6ad807f75073e76f]
+> #67
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [867 bytes fnv128 118adc91395d559ccd482f62643c9753]
+> #68
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [865 bytes fnv128 40f6f39fe29c26eec1cf876d31f25f06]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the reads
+(unchanged)

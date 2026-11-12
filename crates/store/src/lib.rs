@@ -2,6 +2,7 @@
 //! migration and encryption maintenance are explicit operations.
 mod compat;
 mod creation;
+pub mod custody_hooks;
 mod durable;
 pub mod encryption;
 pub mod layout;
@@ -16,12 +17,54 @@ mod schema_structure;
 pub mod semantics;
 pub mod state_root;
 pub mod stored_errors;
+mod stored_values;
 pub mod transaction_order;
 mod write_lock;
 pub use schema::table_names;
 pub use write_lock::{
     begin_write_savepoint, debug_assert_no_write, write_savepoint, write_transaction,
 };
+
+/// Seed SQLite's random generator (`randomblob`, which every random row id
+/// comes from) from `KASSIBER_TEST_SQLITE_SEED`, once per process, so a
+/// recorded test session replays with the very ids it generated
+/// (crates/session-replay). Only with the `test-hooks` feature; a product
+/// build compiles this to nothing and never reads the variable.
+pub fn seed_test_prng() {
+    #[cfg(feature = "test-hooks")]
+    {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            let Some(base) = std::env::var("KASSIBER_TEST_SQLITE_SEED")
+                .ok()
+                .and_then(|v| v.parse::<u32>().ok())
+                .filter(|s| *s != 0)
+            else {
+                return;
+            };
+            // A process this one starts inherits the variable; mixing in the
+            // arguments keeps the two from drawing the same ids.
+            let mut hash: u32 = 0x811c_9dc5 ^ base;
+            for byte in std::env::args_os().flat_map(|a| {
+                let mut bytes = a.into_encoded_bytes();
+                bytes.push(0);
+                bytes
+            }) {
+                hash = (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193);
+            }
+            let seed = (hash & 0x7fff_ffff).max(1) as i32;
+            // SAFETY: SQLITE_TESTCTRL_PRNG_SEED takes (int, sqlite3*); a null
+            // handle selects the integer seed. It only sets the PRNG seed.
+            unsafe {
+                rusqlite::ffi::sqlite3_test_control(
+                    rusqlite::ffi::SQLITE_TESTCTRL_PRNG_SEED,
+                    seed as std::os::raw::c_int,
+                    std::ptr::null_mut::<rusqlite::ffi::sqlite3>(),
+                );
+            }
+        });
+    }
+}
 
 /// Development-only deterministic sources and file-layer fault injection.
 /// No product command reads test environment variables or enables this feature.
@@ -70,6 +113,7 @@ pub mod test_hooks {
                 "invalid deterministic identity",
             ));
         }
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),
             OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -78,8 +122,8 @@ pub mod test_hooks {
         if let Some(pass) = passphrase {
             apply_keying(&conn, pass)?;
         }
-        // Migrations must not change an existing book's journal mode during
-        // coexistence. Refuse a mode requiring transition before any writes.
+        // Deterministic test migrations keep the book's journal mode; refuse a
+        // mode requiring transition before any writes.
         let version: String = conn
             .query_row("SELECT sqlite_version()", [], |r| r.get(0))
             .map_err(map_sqlite_error)?;
@@ -93,6 +137,7 @@ pub mod test_hooks {
             ));
         }
         configure_pragmas(&conn, passphrase.is_some())?;
+        let timestamp_text = timestamp.to_owned();
         let timestamp = timestamp.to_owned();
         conn.create_scalar_function(
             "strftime",
@@ -101,7 +146,12 @@ pub mod test_hooks {
             move |_| Ok(timestamp.clone()),
         )
         .map_err(map_sqlite_error)?;
-        crate::compat::ordered::migrate(&mut conn, &mut |_| Ok(identity.to_owned()), observer)
+        crate::compat::ordered::migrate_with_clock(
+            &mut conn,
+            &mut |_| Ok(identity.to_owned()),
+            crate::custody_hooks::MigrationClock::pinned(&timestamp_text),
+            observer,
+        )
     }
     pub fn json_roundtrip(raw: &str, ascii: bool) -> Result<String> {
         let value = crate::compat::python_json::loads(raw).map_err(|_| {
@@ -124,6 +174,7 @@ pub mod test_hooks {
                 "invalid deterministic identity",
             ));
         }
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),
             OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -149,6 +200,7 @@ pub mod test_hooks {
         timestamp: Option<&str>,
         observer: &mut impl FnMut(&str) -> Result<()>,
     ) -> Result<()> {
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),
             OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -168,6 +220,7 @@ pub mod test_hooks {
         crate::compat::backfills::step(&mut conn, name, observer)
     }
     pub fn graph(root: &Path) -> Result<()> {
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),
             OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -177,6 +230,7 @@ pub mod test_hooks {
         crate::compat::install_graph(&mut conn)
     }
     pub fn msat(root: &Path, observer: &mut impl FnMut(&str) -> Result<()>) -> Result<()> {
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),
             OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -210,6 +264,7 @@ pub mod test_hooks {
         observer: &mut impl FnMut(&str) -> Result<()>,
     ) -> Result<()> {
         let database = kassiber_paths::resolve_database_path(root);
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(&database, OpenFlags::SQLITE_OPEN_READ_WRITE)
             .map_err(map_sqlite_error)?;
         if let Some(pass) = passphrase {
@@ -258,6 +313,7 @@ pub mod test_hooks {
         observer: &mut impl FnMut(&str) -> Result<()>,
     ) -> Result<()> {
         let database = kassiber_paths::resolve_database_path(root);
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(database, OpenFlags::SQLITE_OPEN_READ_WRITE)
             .map_err(map_sqlite_error)?;
         if let Some(pass) = passphrase {
@@ -431,6 +487,7 @@ impl Book {
             }
             _ => (),
         }
+        crate::seed_test_prng();
         let mut connection = Connection::open_with_flags(
             &database,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -514,7 +571,20 @@ impl Book {
             }
         }
         if migrate {
-            require_unchanged_journal(&connection, encrypted)?;
+            let clock = sources.map_or_else(custody_hooks::MigrationClock::system, |s| {
+                custody_hooks::MigrationClock::pinned(s.1)
+            });
+            // Before the pass (and its journal-mode change) writes anything: a
+            // book that still needs migrating is migrated on a private copy
+            // first, so a stored value Kassiber refuses leaves it untouched.
+            let has_schema: bool = connection
+                .query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master)", [], |r| {
+                    r.get(0)
+                })
+                .map_err(map_sqlite_error)?;
+            if has_schema && stored_values::layout_pending(&connection)? {
+                stored_values::rehearse(&connection, encrypted, clock)?;
+            }
             configure_pragmas(&connection, encrypted)?;
             if let Some((_, timestamp)) = sources {
                 let timestamp = timestamp.to_owned();
@@ -541,11 +611,12 @@ impl Book {
             if empty {
                 creation::install(&mut connection, sources.map(|s| s.0), &mut |_| Ok(()))?;
             } else {
-                compat::ordered::migrate(
+                compat::ordered::migrate_with_clock(
                     &mut connection,
                     &mut |conn| {
                         sources.map_or_else(|| random_identity(conn), |s| Ok(s.0.to_owned()))
                     },
+                    clock,
                     &mut |_| Ok(()),
                 )?;
             }
@@ -808,21 +879,6 @@ fn random_identity(conn: &Connection) -> Result<String> {
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
-fn require_unchanged_journal(conn: &Connection, encrypted: bool) -> Result<()> {
-    let version: String = conn
-        .query_row("SELECT sqlite_version()", [], |r| r.get(0))
-        .map_err(map_sqlite_error)?;
-    let current: String = conn
-        .query_row("PRAGMA journal_mode", [], |r| r.get(0))
-        .map_err(map_sqlite_error)?;
-    if transition_journal_settings(&version, encrypted, &current).0 != current {
-        return Err(Error::new(
-            ErrorKind::DatabaseJournalModeUnavailable,
-            "opening this book requires a journal-mode change during Python coexistence",
-        ));
-    }
-    Ok(())
-}
 fn apply_keying(conn: &Connection, passphrase: &str) -> Result<()> {
     if passphrase.is_empty() || passphrase.contains('\0') {
         return Err(Error::new(
@@ -937,10 +993,10 @@ fn configure_pragmas(conn: &Connection, encrypted: bool) -> Result<()> {
     let version: String = conn
         .query_row("SELECT sqlite_version()", [], |r| r.get(0))
         .map_err(map_sqlite_error)?;
-    // During Python coexistence a newer embedded SQLite must never promote a
-    // file to WAL behind a live, older Python connection. SQLCipher's shipped
-    // Python driver requires DELETE/FULL. Plaintext preserves its existing
-    // mode unless WAL is unsafe for this connection's own SQLite.
+    // Never promote a file to WAL behind another live connection: SQLCipher
+    // books use DELETE/FULL, and a plaintext book keeps its existing mode
+    // unless WAL is unsafe for this connection's own SQLite or the mode is not
+    // a durable rollback/WAL mode, in which case it returns to DELETE/FULL.
     let current: String = conn
         .query_row("PRAGMA journal_mode", [], |r| r.get(0))
         .map_err(map_sqlite_error)?;
@@ -1060,6 +1116,39 @@ mod tests {
                     .unwrap();
             assert_eq!(durability(&keyed), (1, 1));
         });
+    }
+
+    /// An encrypted book another build left in WAL opens and returns to
+    /// DELETE: the refusal only protected live Python connections.
+    #[test]
+    fn migrating_open_moves_an_encrypted_wal_book_to_delete() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        let passphrase = "Synthetic passphrase 1";
+        let book = Book::create(&data, Some(passphrase)).unwrap();
+        let database = book.database().to_owned();
+        book.close().map_err(|f| f.error).unwrap();
+        {
+            let keyed = encryption::open_container(&database, Some(passphrase)).unwrap();
+            let mode: String = keyed
+                .query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(mode, "wal");
+        }
+        let book = Book::open_migrating(
+            &data,
+            OpenOptions {
+                passphrase: Some(passphrase),
+                ..Default::default()
+            },
+            true,
+        )
+        .unwrap();
+        let mode: String = book
+            .connection()
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(mode, "delete");
     }
 
     /// Without the seam the host decides: the Mac agent's run checks macOS.

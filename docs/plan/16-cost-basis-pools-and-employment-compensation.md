@@ -232,7 +232,8 @@ Add exactly one profile column:
 cost_basis_pool_scope TEXT NOT NULL DEFAULT 'global'
 ```
 
-Validation, supported values, and defaults belong in `kassiber/tax_policy.py`.
+Validation, supported values, and defaults belong in the tax-country registry
+(`crates/tax-countries`) and the profile services (`crates/setup`).
 The country policy exposes its allowed set; Kassiber resolves factual ids. Add
 the field to the existing profile snapshot/update paths and to the replication
 allowlist as a high-stakes profile field.

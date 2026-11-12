@@ -311,18 +311,42 @@ pub(crate) fn verify(conn: &Connection, manifest: &Value) -> Result<()> {
         if ephemeral_gap(&actual, &reference) {
             return Err(Error::new(
                 crate::ErrorKind::DatabaseBusy,
-                "schema objects may be temporarily absent during a Python open",
+                "schema objects may be temporarily absent while another process opens this book",
             )
             .retryable(true)
             .details(json!({"reason":"schema_install_in_progress"})));
         }
-        let mismatch = actual
-            .as_array()
-            .expect("objects")
-            .iter()
-            .zip(reference.as_array().expect("objects"))
-            .find(|(a, b)| a != b);
-        if let Some((a, b)) = mismatch {
+        Err(mismatch(
+            actual.as_array().expect("objects"),
+            reference.as_array().expect("objects"),
+        ))
+    } else {
+        Ok(())
+    }
+}
+/// The refusal naming the drifted object: one the current schema lacks
+/// (`unexpected`), one it needs that is absent (`missing`), or the first
+/// object of both whose definition differs, with the differing aspects.
+fn mismatch(actual: &[Value], reference: &[Value]) -> Error {
+    let same = |a: &Value, b: &Value| a["type"] == b["type"] && a["name"] == b["name"];
+    let named = |object: &Value, aspects: Vec<&str>| {
+        Error::migration("schema_structure")
+            .details(json!({"reason":"schema_structure","object":object["name"],"aspects":aspects}))
+    };
+    if let Some(extra) = actual
+        .iter()
+        .find(|a| !reference.iter().any(|b| same(a, b)))
+    {
+        return named(extra, vec!["unexpected"]);
+    }
+    if let Some(absent) = reference
+        .iter()
+        .find(|b| !actual.iter().any(|a| same(a, b)))
+    {
+        return named(absent, vec!["missing"]);
+    }
+    for b in reference {
+        if let Some(a) = actual.iter().find(|a| same(a, b)).filter(|a| *a != b) {
             let aspects: Vec<_> = [
                 "type",
                 "name",
@@ -335,13 +359,10 @@ pub(crate) fn verify(conn: &Connection, manifest: &Value) -> Result<()> {
             .into_iter()
             .filter(|key| a[key] != b[key])
             .collect();
-            return Err(Error::migration("schema_structure").details(
-                json!({"reason":"schema_structure","object":b["name"],"aspects":aspects}),
-            ));
+            return named(b, aspects);
         }
-        return Err(Error::migration("schema_structure"));
     }
-    Ok(())
+    Error::migration("schema_structure")
 }
 fn ephemeral_gap(actual: &Value, reference: &Value) -> bool {
     let actual = actual.as_array().expect("schema objects");
@@ -424,7 +445,8 @@ mod tests {
             conn.execute_batch(&sql).unwrap();
         }
         verify(conn, &manifest).unwrap();
-        let refused = |sql: &str| {
+        // The refusal names the drifted object, never a neighbour.
+        let refused_as = |sql: &str, object: &str, aspect: &str| {
             conn.execute_batch(sql).unwrap();
             let error = verify(conn, &manifest).unwrap_err();
             assert_eq!(
@@ -432,6 +454,20 @@ mod tests {
                 crate::ErrorKind::RequiresPythonMigration,
                 "{sql}"
             );
+            assert_eq!(
+                error.details,
+                json!({"reason":"schema_structure","object":object,"aspects":[aspect]}),
+                "{sql}"
+            );
+        };
+        let refused = |sql: &str| {
+            let name = sql
+                .split_whitespace()
+                .nth(2)
+                .unwrap()
+                .trim_end_matches(['(', ';']);
+            let name = name.split('(').next().unwrap();
+            refused_as(sql, name, "unexpected");
         };
         // An AFTER trigger on external_documents that writes a core table.
         refused(
@@ -462,6 +498,23 @@ mod tests {
         conn.execute_batch("DROP TRIGGER gl_core_guard;").unwrap();
         // Tables outside the prefix are drift too.
         refused("CREATE TABLE ledger_like(id TEXT);");
+        conn.execute_batch("DROP TABLE ledger_like;").unwrap();
+        // The unshipped retention guard the Python test book once carried.
+        refused_as(
+            "CREATE TABLE gl_lines(entry_id TEXT, ordinal INTEGER);
+             CREATE TRIGGER gl_lines_no_delete BEFORE DELETE ON gl_lines BEGIN
+                SELECT RAISE(ABORT,'accounting_entry_immutable'); END;",
+            "gl_lines_no_delete",
+            "unexpected",
+        );
+        conn.execute_batch("DROP TRIGGER gl_lines_no_delete;")
+            .unwrap();
+        // A current table that is gone.
+        refused_as(
+            "DROP TABLE ai_provider_checks;",
+            "ai_provider_checks",
+            "missing",
+        );
     }
 
     #[test]

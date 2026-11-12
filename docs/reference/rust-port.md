@@ -1,5 +1,9 @@
 # Rust port verification inventory
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 R0 inventories Python tests before moving each [plan 21](../plan/21-rust-backend.md)
 service group. The [contract inventory](rust-port-contracts.md) records startup,
 storage, environment and wire details that a replacement can easily miss.
@@ -64,19 +68,19 @@ the classifier's `summary` output and is checked by preflight.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | store | 2 | 17 | 191 | 73 | 0 | 283 |
 | custody | 0 | 43 | 401 | 185 | 1 | 630 |
-| journals | 16 | 31 | 314 | 239 | 9 | 609 |
-| imports | 67 | 51 | 227 | 55 | 2 | 402 |
+| journals | 14 | 30 | 317 | 239 | 9 | 609 |
+| imports | 67 | 51 | 226 | 55 | 2 | 401 |
 | reports | 56 | 39 | 259 | 176 | 0 | 530 |
-| chain/sync | 42 | 103 | 1462 | 216 | 0 | 1823 |
-| network/egress | 20 | 15 | 108 | 36 | 10 | 189 |
+| chain/sync | 42 | 86 | 1479 | 216 | 0 | 1823 |
+| network/egress | 14 | 15 | 108 | 36 | 10 | 183 |
 | transactions/metadata/transfers/reviews | 46 | 123 | 633 | 67 | 2 | 871 |
 | source-funds | 51 | 50 | 144 | 0 | 0 | 245 |
 | secrets/backup | 7 | 18 | 106 | 61 | 0 | 192 |
 | daemon runtime | 8 | 26 | 237 | 122 | 1 | 394 |
 | AI/MCP/operator | 64 | 179 | 730 | 66 | 3 | 1042 |
-| CLI shell | 20 | 4 | 32 | 193 | 3 | 252 |
-| packaging/CI | 0 | 2 | 170 | 10 | 35 | 217 |
-| **Total** | **399** | **701** | **5014** | **1499** | **66** | **7679** |
+| CLI shell | 20 | 4 | 32 | 192 | 3 | 251 |
+| packaging/CI | 0 | 2 | 169 | 10 | 34 | 215 |
+| **Total** | **391** | **683** | **5030** | **1498** | **65** | **7667** |
 <!-- disposition-counts:end -->
 
 Plan 21's five migration choices include Python-only retirement explicitly;

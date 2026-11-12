@@ -15,10 +15,12 @@ Projection publication participates in the caller's transaction and rolls back
 with it. `rebuild_index` atomically recovers derived state; `build_index` remains
 the independent full-build correctness oracle. Frozen saved cases remain valid.
 
-The synthetic, local-only `scripts/benchmark-chain-index.py` measures cold
-projection, warm bounded public queries and one-transaction updates against the
-full rebuild. It uses unencrypted in-memory fixtures, not a full-chain capacity
-or production throughput estimate.
+The synthetic, local-only Python benchmark `scripts/benchmark-chain-index.py`
+measured cold projection, warm bounded public queries and one-transaction
+updates against the full rebuild, on unencrypted in-memory fixtures, not as a
+full-chain capacity or production throughput estimate. It drove the Python
+implementation and went with Python
+([plan 22](../plan/22-python-removal.md)); no Rust benchmark replaces it yet.
 
 Open **Extras → Chain analysis** (`/chain-analysis`). The investigation workspace
 is available without developer mode. It reads the active book and its local
@@ -465,13 +467,15 @@ list/get/exact-query reads through both CLI and daemon adapters. The
 records exact envelope and all-table comparisons. The
 [completion checkpoint](rust-shell.md#chain-analysis-psbt-preview-and-receipt-completion-r5)
 adds PSBT analysis/comparison/entropy, dataset preview, staged source grants and
-the bounded receipt runtime. AI projections remain in Python.
+the bounded receipt runtime. The AI projection (`crates/ai/src/analysis.rs`)
+serves the assistant's view of an investigation.
 
-`core/chain_analysis/` owns immutable evidence indexing, bounded traversal and
-pure analytical algorithms. `chain_analysis_api.py` dispatches explicit
-operations; storage, acquisition and AI projection have separate modules. The
-CLI and daemon contain thin adapters. Accounting still comes from
-`custody_journal`; no investigation-specific accounting interpreter exists.
+`crates/wallets` owns immutable evidence indexing (`analysis_index`), the
+closed public structure features (`analysis_features`) and authored
+investigation operations (`analysis_ops`); acquisition and the AI
+projection have separate modules. The CLI and daemon contain thin adapters.
+Accounting still comes from journal processing; no investigation-specific
+accounting interpreter exists.
 
 Tests include independent topology and partition-count oracles, collaborative
 counterexamples, cross-network isolation, confidential values, observer

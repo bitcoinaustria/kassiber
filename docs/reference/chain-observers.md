@@ -1,9 +1,22 @@
 # Chain observers
 
-This document is the current-truth migration map for Kassiber's Bitcoin and
-Liquid chain observers. `TODO.md` remains the executable checklist. This file
-defines the supported capability boundary, the code being replaced, and the
+This document is the migration map for Kassiber's Bitcoin and Liquid chain
+observers. `TODO.md` remains the executable checklist. This file defines the
+supported capability boundary, the code that was replaced, and the
 persistence and privacy contracts that the replacement must preserve.
+
+> **Python removed.** The observers were first built in the Python backend on
+> the `bdkpython` 3.0.0 and `lwk` 0.18.0 bindings. The Rust backend
+> (`crates/wallets`) now runs them on the same releases' Rust crates
+> (`bdk_wallet` 3.0.0 in `bdk.rs` and `bdk_state.rs`, `lwk_wollet` 0.18.0 in
+> `lwk.rs`) over Kassiber's own transports (`kassiber-net`), with the named
+> compatibility fetchers in `fetch/`. It keeps the Python binding's stored
+> values, so older books restore. Python was removed under
+> [plan 22](../plan/22-python-removal.md): the `kassiber/*.py` paths, the
+> binding platform notes and the Python test inventory below are historical
+> and exist only at the `archive/python-backend` tag. The capability
+> boundary, route reasons, persistence representation and privacy contracts
+> are current.
 
 The migration started from commit
 `5d232097506c6cab904bd02c5b5e2e94404c5ed4` on
@@ -296,8 +309,9 @@ primitives not replaced by BDK/LWK.
 
 ### BDK persistence representation
 
-`kassiber/core/chain_observer/bdk_persistence.py` implements BDK's custom
-`Persistence` callback without giving BDK a database path. Schema version 1
+`crates/wallets/src/bdk_state.rs` converts between this representation and
+BDK without giving BDK a database path (the Python backend's
+`bdk_persistence.py` callback wrote the same format). Schema version 1
 serializes every aggregate `ChangeSet` component explicitly: public
 descriptors, network, local-chain changes, full transactions, floating txouts,
 anchors, first/last-seen and eviction times, descriptor-index state, and locked
@@ -361,8 +375,9 @@ former second full scan.
 
 ### LWK persistence representation
 
-`kassiber/core/chain_observer/lwk_persistence.py` implements LWK 0.18.0's
-`ForeignStore` without a side database or data directory. The callback buffers
+`crates/wallets/src/lwk.rs` serves LWK 0.18.0's store without a side database
+or data directory, with the values the Python backend's `lwk_persistence.py`
+wrote. The callback buffers
 opaque string-keyed byte values in a request-local map during fetch and scan.
 Only a successful observer apply copies that map into version-1
 `chain_observer_values` rows under the same wallet savepoint as normalized
@@ -613,8 +628,9 @@ private blinding/view keys are allowed but classified as sensitive.
 
 ## Watch-only enforcement
 
-Phase 2 centralizes the spending-key boundary in
-`kassiber/wallet_security.py`. Wallet-export normalization performs a
+Phase 2 centralized the spending-key boundary, which the Rust backend keeps in
+`crates/wallets/src/descriptors.rs` (plans) and `material.rs` (wallet-export
+intake); the description below names the Python functions it ported. Wallet-export normalization performs a
 best-effort parsed-key preflight without breaking placeholder-only legacy
 exports; `load_descriptor_plan` performs the authoritative strict parse and
 checks every spending key before derivation or network access. The check covers
@@ -730,11 +746,19 @@ custom timeouts, use
 desktop refresh summary displays the reason.
 
 The required Linux `chain-observers` CI job is path-aware for observer,
-descriptor, sync, persistence, dependency, and regtest changes. Packaging
-smokes import both pinned bindings in macOS ARM64, Linux x86_64, and Windows
-x86_64 sidecars before desktop bundling.
+descriptor, sync, persistence, dependency, and regtest changes. The Rust
+sidecar links both pinned crates statically on every packaged platform.
 
 ## Existing test inventory
+
+The Rust observers are tested in `crates/wallets`: `bdk/tests.rs`,
+`lwk/tests.rs` and `fetch/tests.rs` (route reasons, the compatibility
+fetchers, Core and Silent Payments), the observer-state and publication
+tests, and the recorded wallet-sync sessions that `scripts/replay-sessions.sh`
+replays. The regtest lanes ([testing](testing.md)) keep the live
+restart, reorg and replacement checks. The list below is the Python
+inventory at the time of the migration (historical; see the note at the
+top):
 
 - Descriptor parsing/derivation: `tests/test_wallet_setup.py`,
   `tests/test_wallet_descriptors.py`, `tests/test_wallet_config_multi_script.py`,
@@ -778,11 +802,10 @@ every apply stage, and packaged-binary smoke on each supported release target.
 Compatibility routes remain narrow, named and tested; unsupported
 configurations are never described as migrated.
 
-The plan-21 Rust port now has an unregistered native fetch assembler for the
-single-wallet Bitcoin descriptor scope: native BDK on ordinary Electrum and
-the named compatibility route on Esplora. Its complete native preparation and
-publication match Python across the existing fixture/restart/reviewed corpus.
-Shared product services and route acceptance remain pending; see the
+The plan-21 Rust port's native fetch assembler for the single-wallet Bitcoin
+descriptor scope runs native BDK on ordinary Electrum and the named
+compatibility route on Esplora. Its preparation and publication matched
+Python across the fixture/restart/reviewed corpus; see the historical
 [native fetch handoff](rust-shell.md#bitcoin-native-fetch-assembly-r5).
 
 ### Rust compatibility cache anchors
@@ -816,20 +839,18 @@ retain their skip result and book-network guards.
 
 The service has request-bound consent and revalidates book, wallet, backend,
 network and observer inputs before preparation and publication. Cancellation,
-revocation and offline changes roll back every publication stage. Progress
-callbacks, daemon freshness queues and journal refresh remain pending. The CLI
-`wallets sync` is registered for the supported service boundary. Its live oracle
-compares complete Python/native CLI envelopes and every normalized table through
-the hybrid runner, with zero supported-shape fallbacks. Python's CLI does not
-refresh journals after sync; it retains the same journal-staleness writes.
-The daemon routes remain unregistered because their queue, progress and default
-local journal-refresh contracts require further implementation.
+revocation and offline changes roll back every publication stage. The CLI
+`wallets sync` does not refresh journals after sync, as Python's did not; it
+writes the journal-staleness marks. The daemon's `ui.wallets.sync` runs
+through the freshness queue (`crates/daemon/src/freshness/product.rs`). At
+the port, a live oracle compared complete Python and Rust CLI envelopes and
+every normalized table, with zero supported-shape fallbacks.
 
 ### Rust Liquid observer
 
 The plan-21 Rust port runs Liquid descriptor wallets on `lwk_wollet` 0.18.0
-over Kassiber's own Electrum client, with the binding's store values, so books
-restore in either runtime. Every compatibility reason above refuses natively
-before connecting. See [Rust Liquid sync](rust-liquid-sync.md) for the step
+over Kassiber's own Electrum client, with the Python binding's store values,
+so books the Python backend wrote restore. Every compatibility reason above
+refuses natively before connecting. See [Rust Liquid sync](rust-liquid-sync.md) for the step
 inventory, egress sequence, refusals and the Python reference fixes it
 prompted.

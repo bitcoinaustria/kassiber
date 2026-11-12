@@ -151,7 +151,7 @@ Not every command produces CSV-friendly output, but list-style commands generall
 
 ## Stability
 
-The machine envelope is one of Kassiber's key contracts and is pinned by `tests/test_cli_smoke.py`.
+The machine envelope is one of Kassiber's key contracts. `crates/envelope/tests/golden.rs` pins its builders, and the recorded CLI smoke sessions that `scripts/replay-sessions.sh` replays pin whole command envelopes.
 
 For automation:
 

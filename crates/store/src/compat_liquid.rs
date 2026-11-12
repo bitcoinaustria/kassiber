@@ -2,7 +2,7 @@
 //! in fingerprints. No current observation is upgraded to ownership evidence.
 use super::{
     backfills, data,
-    ownership::{json, normalize, text, unsupported},
+    ownership::{json, normalize, surrogate, text, unsupported},
     python_json as py,
 };
 use crate::{map_sqlite_error, Result};
@@ -22,14 +22,16 @@ fn decimal(raw: &Value, key: &str, msat: i64) -> Result<String> {
     {
         // Decimal(str(value)); booleans and collections are invalid decimals.
         let rendered = match value {
-            Value::Str(v) => v.as_str().ok_or_else(unsupported)?.to_owned(),
+            Value::Str(v) => v.as_str().ok_or_else(surrogate)?.to_owned(),
             Value::Int(v) => v.to_string(),
             Value::Float(v) => kassiber_pyjson::float_repr(*v),
             _ => String::new(),
         };
         let parsed = Decimal::from_str(rendered.trim_matches(backfills::whitespace));
         if matches!(parsed, Err(DecimalError::NonFinite)) {
-            return Err(unsupported());
+            return Err(crate::stored_values::refusal(
+                crate::stored_values::Shape::NonFinite,
+            ));
         }
         if let Ok(value) = parsed {
             let value = value.abs(&Context::RP2).map_err(|_| unsupported())?;

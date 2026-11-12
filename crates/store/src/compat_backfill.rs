@@ -4,15 +4,12 @@ use super::{
     data, python_json as py,
     repairs::{statement, statements},
 };
-use crate::{map_sqlite_error, Error, ErrorKind, Result};
+use crate::{map_sqlite_error, stored_values::Shape, Error, Result};
 use kassiber_pyjson::{BigInt, Key, Value};
 use rusqlite::{params, Connection, OptionalExtension};
 
 fn unsupported() -> Error {
-    Error::new(
-        ErrorKind::UnsupportedSchemaLayout,
-        "stored migration input requires unsupported Python semantics",
-    )
+    crate::stored_values::refusal(Shape::Other)
 }
 fn object(raw: Option<&str>) -> Result<Vec<(Key, Value)>> {
     match py::loads(raw.filter(|v| !v.is_empty()).unwrap_or("{}")) {
@@ -40,7 +37,7 @@ pub(super) fn integer(value: &Value) -> Result<Option<BigInt>> {
         Value::Bool(value) => Some(BigInt::from(u8::from(*value))),
         Value::Float(value) => {
             if !value.is_finite() {
-                return Err(unsupported());
+                return Err(crate::stored_values::refusal(Shape::NonFinite));
             }
             let bits = value.to_bits();
             let exponent = ((bits >> 52) & 0x7ff) as i32 - 1023 - 52;
@@ -102,7 +99,7 @@ pub(super) fn integer(value: &Value) -> Result<Option<BigInt>> {
     })
 }
 fn sql_integer(value: BigInt) -> Result<i64> {
-    i64::try_from(value).map_err(|_| unsupported())
+    i64::try_from(value).map_err(|_| crate::stored_values::refusal(Shape::BeyondI64))
 }
 pub(super) fn whitespace(c: char) -> bool {
     c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
@@ -502,6 +499,7 @@ pub(crate) fn swap_schema(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ErrorKind;
     fn fixture(step_name: &str) -> (tempfile::TempDir, crate::Book) {
         let root = tempfile::tempdir().unwrap();
         let book = crate::Book::create(root.path(), None).unwrap();

@@ -154,20 +154,18 @@ fn parse_compat_json(raw: Option<&str>) -> Result<Value> {
             if (floating && token.parse::<f64>().is_ok_and(|n| !n.is_finite()))
                 || (!floating && token.parse::<i64>().is_err() && token.parse::<u64>().is_err())
             {
-                return Err(unsupported_json());
+                return Err(crate::stored_values::refusal(if floating {
+                    crate::stored_values::Shape::NonFinite
+                } else {
+                    crate::stored_values::Shape::BeyondI64
+                }));
             }
         } else {
             position += 1;
         }
     }
-    serde_json::from_str(raw).map_err(|_| unsupported_json())
-}
-fn unsupported_json() -> Error {
-    Error::new(
-        crate::ErrorKind::UnsupportedSchemaLayout,
-        "stored JSON requires Python-compatible parsing before Rust admission",
-    )
-    .details(json!({"reason":"unsupported_python_json"}))
+    serde_json::from_str(raw)
+        .map_err(|_| crate::stored_values::refusal(crate::stored_values::json_shape(raw)))
 }
 fn asset_code(value: &str) -> String {
     let text = value.trim_matches(python_whitespace);
@@ -338,7 +336,11 @@ fn value_text(value: &Value) -> Result<String> {
         Value::Array(v) if v.is_empty() => String::new(),
         Value::Object(v) if v.is_empty() => String::new(),
         Value::String(s) => s.clone(),
-        Value::Array(_) | Value::Object(_) => return Err(unsupported_json()),
+        Value::Array(_) | Value::Object(_) => {
+            return Err(crate::stored_values::refusal(
+                crate::stored_values::Shape::Other,
+            ))
+        }
         _ => value.to_string(),
     })
 }
@@ -390,7 +392,8 @@ fn migration_detail(name: &str) -> Error {
 }
 fn verify_gap_relations(conn: &Connection) -> Result<()> {
     // Derive only the durable IDs Python's low-level backfill reads. It never
-    // grants accounting authority. Candidate recovery remains Python-only.
+    // grants accounting authority. The custody layer recovers componentless
+    // dismissals from an exact candidate during the migrating open.
     let mut stmt = conn.prepare("SELECT id,workspace_id,profile_id,component_id,snapshot_json,action,event_kind FROM custody_gap_reviews").map_err(map_sqlite_error)?;
     let rows = stmt
         .query_map([], |r| {
@@ -406,7 +409,7 @@ fn verify_gap_relations(conn: &Connection) -> Result<()> {
         })
         .map_err(map_sqlite_error)?;
     for row in rows {
-        let (review, workspace, profile, component, snapshot, action, event) =
+        let (review, workspace, profile, component, snapshot, _action, _event) =
             row.map_err(map_sqlite_error)?;
         let mut relations = BTreeSet::<(String, String)>::new();
         let parsed: Value = parse_compat_json(snapshot.as_deref())?;
@@ -463,22 +466,10 @@ fn verify_gap_relations(conn: &Connection) -> Result<()> {
         if !relations.is_empty() && header.is_none() {
             return Err(Error::migration("gap_review_relation_set"));
         }
-        if component.is_none() && action == "dismissed" && event == "review_decision" {
-            let count = |role: &str| existing.iter().filter(|(r, _)| r == role).count() as i64;
-            if header != Some((count("source"), count("return"))) {
-                let observations:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM transactions WHERE profile_id=? AND coalesce(excluded,0)=0)",[&profile],|r|r.get(0)).map_err(map_sqlite_error)?;
-                if observations {
-                    // Exact recovery depends on the custody candidate matcher.
-                    // Do not claim Python migration can repair an unmatched
-                    // historical fingerprint, or silently admit a recoverable one.
-                    return Err(Error::new(
-                        crate::ErrorKind::UnsupportedSchemaLayout,
-                        "legacy gap candidate recovery requires a ported custody matcher",
-                    )
-                    .details(json!({"reason":"legacy_gap_candidate_recovery"})));
-                }
-            }
-        }
+        // A dismissed componentless review without a complete relation set
+        // is admitted, as Python admits it: the migrating open recovers it
+        // only from an exact current candidate, and an unscoped dismissal
+        // never grants authority (it only fails to suppress a candidate).
     }
     Ok(())
 }

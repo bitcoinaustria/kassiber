@@ -16,7 +16,7 @@ pub use provider::{local_reader, DocumentConsent, DocumentPreview, Providers};
 /// file, its size and its media type. Callers treat any failure as an
 /// unavailable document.
 pub fn staged_source(raw: &str) -> Result<(std::path::PathBuf, u64, &'static str), AppError> {
-    let path = files::source_path(raw)?.canonicalize().map_err(files::io)?;
+    let path = kassiber_paths::canonicalize(&files::source_path(raw)?).map_err(files::io)?;
     let size = std::fs::metadata(&path).map_err(files::io)?.len();
     Ok((path.clone(), size, files::mime(&path)))
 }

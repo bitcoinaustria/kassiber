@@ -1,0 +1,364 @@
+# Secrets and Backup
+
+Use this reference for SQLCipher database encryption (`kassiber secrets ...`),
+`tar | age` backups (`kassiber backup ...`), passphrase entry through the
+global `--db-passphrase-fd` flag, and the `--*-stdin` / `--*-fd` channels for
+secret-bearing CLI input.
+
+These features were added in V4.1. Before then the local SQLite store was
+plaintext on disk and credentials were collected via argv flags.
+
+## Passphrase entry
+
+The SQLCipher passphrase has no argv form — by design. Agents never handle it:
+for agent or scripted sessions the user runs `kassiber operator unlock` in
+their own terminal and commands run through the brokered lease (see
+[the operator broker](../../../docs/reference/operator-broker.md)). Outside
+brokered mode, CLI unlock has three channels, in priority order:
+
+- `--db-passphrase-fd <FD>` global flag (any non-negative integer) reads raw
+  UTF-8 bytes from an already-open file descriptor. Strips one trailing
+  newline so shell redirects work without trimming.
+- An explicitly enrolled native OS credential-store copy.
+- Interactive `getpass()` against the controlling TTY when one is attached.
+
+```bash
+# interactive
+kassiber status
+
+# script-friendly: the parent shell opens fd 3 from a file
+kassiber --db-passphrase-fd 3 status 3< /tmp/passphrase
+
+# pipe-friendly: useful from password managers
+gopass show kassiber/db-pass | kassiber --db-passphrase-fd 0 status
+```
+
+Behavior to remember:
+
+- A wrong passphrase surfaces as the structured `unlock_failed` envelope, not
+  a generic SQLite error.
+- A missing passphrase against an encrypted DB in machine/non-interactive mode
+  produces `interaction_required` with `details.reason = database_passphrase`.
+- The plaintext code path is preserved: when the on-disk file looks like a
+  vanilla SQLite database, no passphrase is asked for and the legacy behavior
+  is unchanged.
+- Remembered unlock is opt-in and stores a convenience copy in macOS Keychain,
+  Windows Credential Manager, or available/unlocked Linux Secret Service. It is
+  not recovery: the passphrase remains the perimeter and losing it means data
+  loss.
+
+## Encrypted books and agent sessions
+
+Agents never ask for, receive, or relay the database passphrase. When a
+command on an encrypted book returns `interaction_required`, read
+`error.details.reason`:
+
+- `database_passphrase`: the book is encrypted and nothing unlocked it. Run
+  `kassiber --machine operator status` (it never starts a broker), then ask the
+  user to run `kassiber operator unlock` in their own terminal (add
+  `--capability read` for a read-only session), and retry.
+- `operator_lease_required`: brokered mode is selected but no lease is active.
+  Ask the user to unlock again, in their terminal or with *Unlock for agents*
+  in Kassiber (Settings, AI, External agents).
+- `agent_pairing_required`: the book is unlocked for agents from the desktop,
+  and this MCP server is waiting for the user's approval. Ask the user to
+  click Allow for it in that same row, then retry. `agent_pairing_denied`
+  means the user refused it; stop.
+- `operator_capability_insufficient`: the lease does not cover this MCP tool.
+  Ask the user to unlock again with the `details.user_command` capability (or
+  to lock and unlock for agents in Kassiber after choosing that grant).
+- `fresh_local_authentication`: admin work (reveal, delete, backup, passphrase
+  or unlock-policy changes) needs the user's own fresh authentication. Ask the
+  user to run that exact command themselves.
+
+Under a brokered lease every command runs as a queued broker operation. Pass
+`--workspace` and `--profile` explicitly. Relative paths resolve in your
+working directory. In `--machine` mode an
+`operator.operation.accepted` JSON line on stderr carries the operation id. If
+you lose track of a mutation, inspect it with `kassiber operator operation
+status <id>` before retrying. `kassiber chat` is refused in brokered mode;
+`kassiber mcp serve` works with a lease. A desktop *Unlock for agents* session
+admits only `kassiber mcp` tool calls from the server the user allowed; other
+commands, including CLI reads from a shell, return `agent_session_scope` or
+`agent_session_required`.
+
+## Remembered CLI unlock
+
+```bash
+kassiber secrets remember-unlock
+kassiber secrets remember-unlock --passphrase-fd 3 3< /tmp/passphrase
+kassiber secrets status
+kassiber secrets forget-unlock
+```
+
+Enrollment verifies the encrypted database before storing anything. The CLI
+uses its own per-data-root credential entry only after setting
+`cli_remembered_unlock: true` in managed `config/settings.json`; desktop Touch ID
+uses a separate entry and lifecycle. `secrets status` never reads the desktop
+entry. Kassiber
+accepts only the native keyring backend for macOS, Windows, or Linux Secret
+Service; configured third-party/file backends are treated as unavailable. CLI
+reads are not biometric-gated. If the stored copy is stale, Kassiber
+writes `remembered_unlock_stale` to stderr and falls through to the existing
+prompt or `interaction_required` behavior. Headless systems should keep using
+`--db-passphrase-fd`. `kassiber secrets status` reports `platform`,
+`access_policy`, `available`, `configured`, and `cli_enabled` under
+`remembered_unlock`. The stable access-policy codes are
+`macos_keychain_application_acl`, `windows_dpapi_user_scope`,
+`linux_secret_service_session`, and `unsupported`; CLI reads are never described
+as biometric-gated.
+
+Upgrades from the former shared entry are marker-driven: successful explicit CLI
+enrollment removes `Kassiber Database Passphrase` after writing the CLI-only
+service and marker; a cleanup failure rolls that enrollment back when possible.
+Without the marker the desktop owns migration. Desktop Settings can forget only
+Touch ID or remove all saved unlock methods, including both current entries and
+any legacy shared item. Passphrase rotation arms the non-secret
+`desktop_biometric_stale` managed-settings guard before rekey and clears it only
+after Tauri successfully refreshes/removes the desktop copy. The opaque guard
+generation is compare-and-cleared by refresh so an older callback cannot erase a
+newer rotation. It deliberately stays armed after any ambiguous rotation error,
+so an interrupted or post-verification failure cannot keep offering a known-stale
+Touch ID credential.
+If a CLI-owned legacy item cannot be deleted, status reports
+`legacy_quarantined: true`: the CLI marker is disabled, neither CLI nor desktop
+may consume that item, and manual credential-manager cleanup plus a retry is
+required.
+
+`--machine` implies `--non-interactive`, so passphrase-requiring commands need
+their documented fd/identity/recipient input and return `interaction_required`
+instead of opening a prompt. The one-shot `chat` bootstrap sends a resolved DB
+passphrase only in a private `daemon.unlock` request over the child stdin pipe;
+it never appears in argv, environment variables, stdout, or `--transcript`.
+
+## First-time encryption
+
+`kassiber secrets init` migrates an existing plaintext database in place
+using the SQLCipher-recommended `sqlcipher_export()` recipe. It preserves
+`user_version` and `auto_vacuum`, scans the encrypted output for credential
+markers as a sanity check, and runs `cipher_integrity_check` when the bundled
+SQLCipher build supports it.
+
+```bash
+# interactive prompt + confirm
+kassiber secrets init
+
+# fd-based prompt (parent shell opens fd 4 with the new passphrase)
+kassiber secrets init --new-passphrase-fd 4 4< /tmp/new
+
+# inspect what is on disk before deciding
+kassiber secrets status
+```
+
+After a successful migration:
+
+- `<data-root>/kassiber.sqlite3` is the encrypted file.
+- `<data-root>/kassiber.pre-encryption.sqlite3.bak` is the original
+  plaintext file, preserved so a manual rollback is one `mv` away.
+- Kassiber refuses to overwrite an existing `.pre-encryption.sqlite3.bak`;
+  inspect, move, or delete the old rollback file before retrying.
+- Advise the user to run `kassiber secrets verify` and then delete the `.bak`
+  file once they trust the encrypted DB. Kassiber does not auto-delete it.
+
+If a previous migration failed mid-flight, `kassiber secrets init-resume`
+describes the state and points at the leftover `*.encrypted.sqlite3` file.
+
+## Rotating the passphrase
+
+```bash
+kassiber secrets change-passphrase
+kassiber secrets change-passphrase --db-passphrase-fd 3 --new-passphrase-fd 4 \
+  3< /tmp/old 4< /tmp/new
+```
+
+Rotation runs `PRAGMA rekey` and then re-opens the file with the new
+passphrase to verify. The old passphrase will not unlock the file after this
+returns successfully. CLI rotation and desktop rotation both refresh the
+CLI-only remembered copy. Desktop rotation also refreshes its biometric copy;
+CLI rotation marks that copy invalid so the desktop requires re-enrollment.
+If an update is rejected, that enrollment is disabled rather than left stale.
+
+## What stays plaintext on disk
+
+The SQLCipher boundary covers `kassiber.sqlite3` only. Everything else under
+the data root remains plaintext on disk:
+
+- `<project-root>/config/backends.env` — backend bootstrap dotenv. URLs,
+  `KIND`, chain, network, batch sizes, and other addressing metadata
+  may stay here in plaintext. Tokens, passwords, auth headers, and
+  basic-auth usernames must NOT — those are secret-shaped fields that
+  belong in the encrypted DB. Seed new credentials with `--token-stdin`
+  / `--token-fd FD` so they go straight into the DB, and run
+  `kassiber secrets migrate-credentials` once to lift any pre-existing
+  secret entries out of the file (see "Migrating credentials" below).
+- `<project-root>/config/settings.json` — path layout manifest. Not secret, but
+  it discloses where the rest of the local state lives.
+- `<project-root>/attachments/` — copied attachment files for transactions.
+  Treat the directory as user data.
+- `<project-root>/exports/` — generated reports (PDF/CSV/XLSX) and saved
+  diagnostics. Reports contain full transaction detail; diagnostics are
+  designed to be public-safe.
+- `kassiber.pre-encryption.sqlite3.bak` — pre-migration plaintext snapshot.
+  Tell the user to remove it after verifying the encrypted DB.
+
+When a user asks "is my data encrypted now," this list is the honest answer.
+
+## Migrating credentials out of `backends.env`
+
+`kassiber secrets migrate-credentials` moves the secret-shaped dotenv
+entries (`*_TOKEN`, `*_PASSWORD`, `*_AUTH_HEADER`, `*_USERNAME`,
+`*_RPCPASSWORD`, `*_RPCUSER`) into the encrypted `backends` table. URL,
+kind, chain, network, and other addressing fields stay where they are.
+
+```bash
+# preview what would migrate, without touching the file
+kassiber secrets migrate-credentials --dry-run
+
+# perform the migration (requires the DB passphrase)
+kassiber secrets migrate-credentials
+kassiber secrets migrate-credentials --db-passphrase-fd 3 3< /tmp/pass
+```
+
+Behavior:
+
+- Each secret-shaped entry is written to the matching `backends` row.
+  If the row does not exist yet, that entry is reported in `skipped`
+  with `reason="backend_not_in_db"` — create the backend first with
+  `kassiber backends create`, then re-run.
+- The original dotenv is copied to
+  `backends.env.pre-credentials-migration-<timestamp>.bak` before any
+  rewrite. Inspect and delete the backup once you trust the new state.
+- Non-secret rows (URLs, `KIND`, `KASSIBER_DEFAULT_BACKEND`, comments,
+  blank lines) survive the rewrite untouched.
+
+Whenever the database is encrypted but `backends.env` still contains
+secret-shaped entries, every Kassiber command writes a one-line warning
+to stderr pointing at this command. `kassiber secrets status` lists the
+exact entries that would migrate.
+
+## `--*-stdin` and `--*-fd` for secret-bearing fields
+
+Every secret-bearing CLI value now has matching `--<name>-stdin` and
+`--<name>-fd FD` variants. The argv form (e.g. `--token <value>`) still works
+but emits a deprecation warning and leaks to shell history. Prefer the safe
+forms.
+
+Covered fields include `--token`, `--password`, `--username`, `--auth-header`,
+`--descriptor`, and `--change-descriptor`. Pattern:
+
+| Argv form (warns)                     | Safe replacement                              |
+|---------------------------------------|-----------------------------------------------|
+| `--token <value>`                     | `--token-stdin` or `--token-fd FD`            |
+| `--password <value>`                  | `--password-stdin` or `--password-fd FD`      |
+| `--descriptor <value>`                | `--descriptor-stdin` or `--descriptor-fd FD`  |
+| `--change-descriptor <value>`         | `--change-descriptor-stdin` or `--change-descriptor-fd FD` |
+
+Constraints:
+
+- Only one `--*-stdin` option may be active per invocation (it consumes
+  the regular `stdin` channel). Use `--*-fd` for additional inputs.
+- Multiple `--*-fd` options may coexist; each reads from the indicated
+  fd and closes it.
+- Empty values and NUL bytes are rejected up front.
+
+Examples:
+
+```bash
+# create a BTCPay backend without putting the token in shell history
+printf %s "$BTCPAY_TOKEN" | kassiber backends create btcpay-prod \
+  --kind btcpay --url https://btcpay.example.com --token-stdin
+
+# create a descriptor wallet, reading both descriptors from fds
+kassiber wallets create \
+  --label vault --kind descriptor --account treasury --backend mempool \
+  --descriptor-fd 3 --change-descriptor-fd 4 \
+  3< /path/to/receive.desc 4< /path/to/change.desc
+```
+
+When you hand the user a paste-ready local template, prefer the `--*-stdin`
+form with a `printf %s "$VAR" | kassiber ...` pipe rather than collecting
+the secret in chat.
+
+## Reveal: pulling a secret back out of the DB
+
+The desktop daemon refuses to return raw descriptor or token material without
+a fresh passphrase round-trip even if the DB is already unlocked in the
+running process. Each reveal request requires an `auth_response` carrying
+the passphrase; a wrong passphrase produces `local_auth_denied`. The CLI
+prints the secret directly on plaintext and unattended books and needs fresh
+admin authentication under a brokered lease. Agents never run reveal commands.
+
+CLI surfaces:
+
+```bash
+kassiber backends reveal-token <name>
+kassiber wallets reveal-descriptor --wallet <wallet-label> --workspace personal --profile main
+```
+
+These exist for legitimate recovery and rotation workflows. Do not pipe the
+output into chat — it is the raw secret.
+
+## Backup: `tar | age` with a SQLCipher inner DB
+
+`kassiber backup export` writes a single file containing:
+
+- `manifest.json` — schema version, kassiber version, paths, entry counts.
+- `kassiber.sqlite3` — a SQLCipher copy of the live DB (still encrypted with
+  the same DB passphrase).
+- `attachments/` — mirror of the live attachments tree.
+- `config/backends.env` — mirror of the live env file when present.
+
+The whole tar stream is then encrypted by `age` with an outer passphrase
+(or a recipient public key, if you pass `--recipient`). The two passphrases
+are independent: the outer age passphrase only protects the bundle in
+transit / at rest off-box; the inner DB passphrase still gates the data
+inside it.
+
+```bash
+# export with a fresh outer passphrase (interactive prompt)
+kassiber backup export --file /tmp/snap.kassiber
+
+# export with the outer passphrase from fd 4
+kassiber backup export --file /tmp/snap.kassiber --backup-passphrase-fd 4 4< /tmp/outer
+
+# export to an age recipient (public-key mode, streams through binary `age`)
+kassiber backup export --file /tmp/snap.kassiber --recipient "age1..."
+```
+
+`kassiber backup import` reverses the process. It decrypts to a temp tarball,
+runs the strict tar member validator (rejects symlinks, hardlinks, device
+nodes, FIFOs, traversal, duplicates, oversized members), extracts into a
+staging directory, validates the manifest against the staged files, and
+optionally installs the staged tree with `--install`.
+
+```bash
+# stage only — leave the tree under a temp directory
+kassiber backup import /tmp/snap.kassiber --backup-passphrase-fd 4 4< /tmp/outer
+
+# install over the active data root (creates a pre-restore snapshot first)
+kassiber backup import /tmp/snap.kassiber --backup-passphrase-fd 4 \
+  --install --target-data-root /custom/kassiber/data 4< /tmp/outer
+```
+
+`--install` moves any pre-existing live data into a sibling
+`pre-restore-<timestamp>/` directory before overwriting, so an accidental
+restore over a populated data root is recoverable. After a successful
+install, Kassiber removes the decrypted temp restore directory. Stage-only
+imports intentionally leave the extracted staging tree in the returned temp
+path for manual inspection.
+
+A `.kassiber` file does **not** include or recover the inner DB passphrase.
+You still need it to read the database after restore.
+
+## age backend selection
+
+Recipient-mode backups use the stand-alone `age` (or `rage`) binary on
+`PATH` because it streams arbitrary archive sizes; without one they fail with
+`age_unavailable`. Passphrase-mode backups encrypt in process with the age
+library built into Kassiber and need no binary. The export result's
+`age_backend` field still names that in-process backend `pyrage`, the value
+earlier versions reported.
+
+Recovery without Kassiber: any stranded user can decrypt a `.kassiber` file
+with stock `age` + `tar` + `sqlcipher` and recover everything that was inside
+the bundle, given both passphrases. The format is intentionally boring.

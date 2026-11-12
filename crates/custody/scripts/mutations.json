@@ -20084,66 +20084,6 @@
     "rule": "The target slice constructor retains Python's empty-hash refusal message."
   },
   {
-    "id": "R2-review-live-refusal",
-    "file": "tests/custody_engine_compare.py",
-    "find": "            compare_outcome(exc)",
-    "replace": "            pass",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_quantity_refusal_compared_after_gaps"
-    ],
-    "rule": "Late Python refusals must be compared and recorded in both live modes."
-  },
-  {
-    "id": "R2-review-live-stage-inventory",
-    "file": "tests/custody_engine_compare.py",
-    "find": "        errors.append(\"custody stage inventory is incomplete\")",
-    "replace": "        pass",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_session_rejects_unaccounted_quantity_stage"
-    ],
-    "rule": "Sessions reject unaccounted implemented stages."
-  },
-  {
-    "id": "R2-review-raw-activity",
-    "file": "tests/test_custody_quantity_stage.py",
-    "find": "counts[case] > 0",
-    "replace": "counts[case] >= 0",
-    "expect_failing": [
-      "tests/test_custody_quantity_stage.py::test_vacuous_quantity_scenario_fails_activity_check"
-    ],
-    "rule": "Raw activity assertions reject zero activity."
-  },
-  {
-    "id": "R2-review-distinct-runtime",
-    "file": "tests/custody_quantity_runtime_generator.py",
-    "find": "        if key not in seen:",
-    "replace": "        if True:",
-    "expect_failing": [
-      "tests/test_custody_quantity_port.py::test_generated_quantity_variants_are_distinct[runtime]"
-    ],
-    "rule": "Repeated variants do not count as independent operands."
-  },
-  {
-    "id": "R2-review-distinct-composition",
-    "file": "tests/custody_quantity_composition_generator.py",
-    "find": "        if key not in seen:",
-    "replace": "        if True:",
-    "expect_failing": [
-      "tests/test_custody_quantity_port.py::test_generated_quantity_variants_are_distinct[composition]"
-    ],
-    "rule": "Repeated variants do not count as independent operands."
-  },
-  {
-    "id": "R2-review-distinct-calls",
-    "file": "tests/test_custody_quantity_port.py",
-    "find": "driver(list(unique.values()))",
-    "replace": "driver(values)",
-    "expect_failing": [
-      "tests/test_custody_quantity_port.py::test_quantity_duplicate_operands_are_not_counted_as_calls"
-    ],
-    "rule": "Duplicate operands produce one actual compiler invocation."
-  },
-  {
     "id": "R2-review-bundle-min",
     "file": "crates/custody/src/quantity/runtime.rs",
     "find": "involved.iter().map(|o|text(&o[\"occurred_at\"])).min()",
@@ -20152,146 +20092,6 @@
       "quantity_bundle_earliest_timestamp"
     ],
     "rule": "Malformed bundles retain the earliest involved observation timestamp."
-  },
-  {
-    "id": "R2-review-runtime-evaluate-once",
-    "file": "tests/custody_quantity_runtime_generator.py",
-    "find": "if key not in _evaluated:",
-    "replace": "if True:",
-    "expect_failing": [
-      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[runtime]"
-    ],
-    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
-  },
-  {
-    "id": "R2-review-runtime-copy-outcome",
-    "file": "tests/custody_quantity_runtime_generator.py",
-    "find": "return deepcopy(_evaluated[key])",
-    "replace": "return _evaluated[key]",
-    "expect_failing": [
-      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[runtime]"
-    ],
-    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
-  },
-  {
-    "id": "R2-review-runtime-operand-key",
-    "file": "tests/custody_quantity_runtime_generator.py",
-    "find": "key = json.dumps(value, sort_keys=True, separators=(',', ':'))",
-    "replace": "key = 'constant'",
-    "expect_failing": [
-      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[runtime]"
-    ],
-    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
-  },
-  {
-    "id": "R2-review-composition-evaluate-once",
-    "file": "tests/custody_quantity_composition_generator.py",
-    "find": "if key not in _evaluated:",
-    "replace": "if True:",
-    "expect_failing": [
-      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[composition]"
-    ],
-    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
-  },
-  {
-    "id": "R2-review-composition-copy-outcome",
-    "file": "tests/custody_quantity_composition_generator.py",
-    "find": "return deepcopy(_evaluated[key])",
-    "replace": "return _evaluated[key]",
-    "expect_failing": [
-      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[composition]"
-    ],
-    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
-  },
-  {
-    "id": "R2-review-composition-operand-key",
-    "file": "tests/custody_quantity_composition_generator.py",
-    "find": "key = json.dumps(value, sort_keys=True, separators=(',', ':'))",
-    "replace": "key = 'constant'",
-    "expect_failing": [
-      "tests/test_custody_quantity_port.py::test_quantity_python_duplicate_operands_are_evaluated_once[composition]"
-    ],
-    "rule": "Independent Python comparisons evaluate each distinct operand once and isolate cached results from caller mutation."
-  },
-  {
-    "id": "R2-review-raw-refusal-branch",
-    "file": "tests/test_custody_quantity_stage.py",
-    "find": "        if seed == 2000:",
-    "replace": "        if False:",
-    "expect_failing": [
-      "tests/test_custody_quantity_stage.py::test_every_quantity_raw_generator_matches_both_engines[evidence-scenarios0-snapshot]"
-    ],
-    "rule": "The raw corpus comparison loop must execute and count its refusal scenario."
-  },
-  {
-    "id": "R2-review-injection-stage",
-    "file": "tests/custody_engine_compare.py",
-    "find": "injection[0] == failed and injection[1] is error",
-    "replace": "injection[1] is error",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_injected_failure_requires_exact_stage_and_exception"
-    ],
-    "rule": "Only the explicitly declared failing stage may skip comparison."
-  },
-  {
-    "id": "R2-review-injection-identity",
-    "file": "tests/custody_engine_compare.py",
-    "find": "injection[1] is error",
-    "replace": "type(injection[1]) is type(error)",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_injected_failure_requires_exact_stage_and_exception"
-    ],
-    "rule": "Only the declared exception instance is an injected failure."
-  },
-  {
-    "id": "R2-review-injection-scope",
-    "file": "tests/custody_engine_compare.py",
-    "find": "        _INJECTED_FAILURE.reset(token)",
-    "replace": "        pass",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_injected_failure_requires_exact_stage_and_exception"
-    ],
-    "rule": "Injection annotations cannot leak to later builds."
-  },
-  {
-    "id": "R2-review-injection-reason",
-    "file": "tests/custody_engine_compare.py",
-    "find": "reason=\"injected\"",
-    "replace": "reason=\"patched\"",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_injected_failure_requires_exact_stage_and_exception"
-    ],
-    "rule": "Injected skips carry an explicit stable reason."
-  },
-  {
-    "id": "R2-review-injection-record-validation",
-    "file": "tests/custody_engine_compare.py",
-    "find": "        errors.append(\"custody injected skip record is invalid\")",
-    "replace": "        pass",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_session_rejects_invalid_injected_skip"
-    ],
-    "rule": "Session reports reject malformed injected skip inventories."
-  },
-  {
-    "id": "R2-review-injection-count",
-    "file": "tests/custody_engine_compare.py",
-    "find": "{len(injected)} (all stages skipped)",
-    "replace": "{0} (all stages skipped)",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_injected_failure_requires_exact_stage_and_exception"
-    ],
-    "rule": "Session reporting counts each annotated injected build."
-  },
-  {
-    "id": "R2-review-injection-recorder-optout",
-    "file": "tests/test_custody_snapshot.py",
-    "find": "with injected_stage_failure(\"gaps\", error), patch.object",
-    "replace": "with patch.object",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_recorder_failure_has_explicit_injected_skip"
-    ],
-    "rule": "Recorder error capture explicitly annotates its deliberate stage failure in both live modes."
   },
   {
     "id": "projection-row-marker",
@@ -22732,16 +22532,6 @@
       "projection_unknown_surrogate_blocker_is_irrelevant"
     ],
     "rule": "Unknown surrogate blocker ids cannot refuse unrelated observed rows; their interpreter diagnostics remain lossless."
-  },
-  {
-    "id": "projection-review-earlier-refusal-identity",
-    "file": "tests/custody_engine_compare.py",
-    "find": "if (response[\"error\"].get(\"code\"), response[\"error\"].get(\"stage\")) != (code, stage):",
-    "replace": "if False:",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_earlier_stages_account_matching_finalized_refusal"
-    ],
-    "rule": "Earlier-stage comparisons can only bypass a finalized refusal after matching both Python code and stage."
   },
   {
     "id": "FUSION-ORDER-assets",
@@ -25708,26 +25498,6 @@
       "loaded_encoding_answers_like_the_v1_adapter_for_v1_books"
     ],
     "rule": "A finalized loaded comparison skips no stage."
-  },
-  {
-    "id": "shadow-routes-legacy-scalars",
-    "file": "tests/custody_engine_compare.py",
-    "find": "    return quantities and no_bytes(snapshot)",
-    "replace": "    return True",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_legacy_scalars_compare_through_the_loaded_path"
-    ],
-    "rule": "Books the strict v1 adapter cannot carry are compared through the loaded encoding."
-  },
-  {
-    "id": "shadow-loaded-encoding-escapes-tags",
-    "file": "tests/custody_engine_compare.py",
-    "find": "            return {_DICT_TAG: encoded}",
-    "replace": "            return encoded",
-    "expect_failing": [
-      "tests/test_custody_shadow_harness.py::test_loaded_encoding_tags_bytes_and_escapes_literal_tags"
-    ],
-    "rule": "A literal mapping whose sole key is a codec tag is escaped, so it never forges bytes."
   },
   {
     "id": "price-currency-hold-compare",

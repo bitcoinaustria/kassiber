@@ -11,6 +11,7 @@ mod gap_review;
 mod gap_review_store;
 mod gap_snapshot;
 mod history;
+pub mod legacy_migration;
 pub mod legacy_refresh;
 mod pair_authoring;
 pub mod pair_guidance;

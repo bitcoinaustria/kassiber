@@ -12,33 +12,28 @@ remains the execution backlog.
 ## Frozen TLS trust
 
 The Linux CLI and AppImage sidecar (the Rust binary, previously a
-PyInstaller bundle) use the host's installed CA bundle when one is available, including Fedora's `/etc/pki` and Debian's
-`/etc/ssl` layouts. An explicit `SSL_CERT_FILE` remains authoritative, including
-for built-in endpoints; minimal images without a host bundle fall back to
-Kassiber's bundled certifi roots for Python/OpenSSL transports.
+PyInstaller bundle) use the host's installed CA bundle when one is available,
+including Fedora's `/etc/pki` and Debian's `/etc/ssl` layouts. An explicit
+`SSL_CERT_FILE` remains authoritative, including for built-in endpoints;
+minimal images without a host bundle fall back to the bundled Mozilla roots
+(`TlsTrust::python_default` in `crates/net/src/tls.rs`, which keeps the frozen
+Python bootstrap's order).
 
-Native BDK/LWK Esplora clients use Rustls roots and do not consume Python's
-`SSL_CERT_FILE`, so a trust set Kassiber selected for OpenSSL is not enforced on
-the native observer route. When the operator pinned `SSL_CERT_FILE` themselves,
-HTTPS Esplora backends therefore move to Kassiber's Python compatibility
-transport, where the pinned roots are actually enforced — built-in endpoints
-included, because an explicit override is authoritative everywhere.
-
-An auto-discovered host bundle does **not** reroute anything. Those bundles exist
-on essentially every Linux install, so treating one as a routing signal would
-take every HTTPS Esplora backend off the native observer to serve the few
-endpoints whose certificate chains to a root outside WebPKI. Those endpoints set
-a per-backend `CERTIFICATE` instead (see
-[backends.md](backends.md)), which keeps verification on and reroutes that one
-backend. `KASSIBER_HOST_CA_BUNDLE` carries this decision between the frozen entry
-point and the observers; it is internal and not a supported knob.
+Esplora backends on both chains always use the compatibility HTTP transport
+(`esplora_reason` in `crates/wallets/src/fetch.rs`, `compatibility_reason` in
+`crates/wallets/src/lwk/descriptor.rs`), so these roots, and an operator's
+`SSL_CERT_FILE`, are enforced for them. Endpoints whose certificate chains to a
+root outside WebPKI and outside the host bundle set a per-backend `CERTIFICATE`
+instead (see [backends.md](backends.md)), which keeps verification on for that
+one backend. `KASSIBER_HOST_CA_BUNDLE=explicit` only changes the route reason a
+sync records (`system_ca_trust`); it is internal and not a supported knob.
 
 ## Release gates
 
 Every package-manager channel must fail closed unless all of these checks pass:
 
-1. The release tag without its leading `v`, the Python package version, the
-   desktop package version, every native package version, and the embedded
+1. The release tag without its leading `v`, the product version
+   (`crates/kassiber/Cargo.toml`), the desktop package version, every native package version, and the embedded
    `BUILD_INFO.json` version are identical.
 2. Every artifact is built from the tag commit, has a published SHA-256, and
    has build provenance. Repository metadata is generated only after the
@@ -133,7 +128,7 @@ snapshots below the selected `stable` or `prerelease` suite before changing its
 mirrorlist pointer. Fedora 43 and 44 CI builds, signs, installs, swaps CLI to
 desktop, and removes the packages with DNF in disposable containers.
 
-`scripts/render_aur.py` generates separate project-owned `kassiber-bin` and
+`kassiber-release render-aur` (crates/release) generates separate project-owned `kassiber-bin` and
 `kassiber-cli-bin` repositories with pinned release URLs, SHA-256 checksums,
 conflicts/provides metadata, license files, and launchers. CI compares
 the rendered `.SRCINFO` to `makepkg --printsrcinfo` and runs `namcap`. Before
@@ -141,7 +136,7 @@ publication credentials are configured, the guarded release job also builds,
 installs, smokes, and removes both recipes against their real release assets in
 a clean pinned Arch container.
 
-`scripts/render_nix.py` generates an x86_64-only binary flake with explicit
+`kassiber-release render-nix` generates an x86_64-only binary flake with explicit
 `binaryNativeCode` provenance, pinned release hashes, a desktop AppImage
 wrapper, and an auto-patched GUI-free CLI derivation. The external
 channel workflow locks, checks, builds both outputs, and smokes the CLI in a
@@ -233,7 +228,7 @@ Linux ARM64 is a release matrix, not a filename change:
 
 1. Build the Rust binary natively for `aarch64-unknown-linux-gnu`
    (`scripts/build-rust-cli.sh` already accepts the triple); BDK, LWK and
-   SQLCipher are crates now, so no Python wheels are involved.
+   SQLCipher are crates, so no Python wheels are involved.
 2. Use GitHub's native Ubuntu 22.04 ARM runner for both the Rust CLI and
    Tauri desktop build. Tauri's AppImage tooling does not cross-compile ARM;
    native ARM or emulation is required.

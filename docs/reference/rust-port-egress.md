@@ -1,5 +1,9 @@
 # Rust port: connection inventory and R0 gate
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 Audited against Python commit `8709d430`, before porting transports. This is
 an implementation inventory, not additional network permission. The owning
 contracts are [privacy and security](privacy-and-security.md#external-requests-complete-list)

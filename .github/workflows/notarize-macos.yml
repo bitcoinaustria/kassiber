@@ -49,9 +49,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
       - name: Download draft and bind source commit
         id: release
         env:
@@ -76,7 +75,8 @@ jobs:
             remote_tag="$(git ls-remote --tags origin "refs/tags/$TAG")"
             test -z "$remote_tag"
             commit="$SOURCE_COMMIT"
-            version="$(git show "$commit:pyproject.toml" | python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])')"
+            # The app's CFBundleShortVersionString comes from this version.
+            version="$(git show "$commit:ui-tauri/src-tauri/tauri.conf.json" | jq -r .version)"
             echo "candidate_id=$TAG" >> "$GITHUB_OUTPUT"
           else
             test -z "$SOURCE_COMMIT"
@@ -157,7 +157,7 @@ jobs:
           IDENTITY: ${{ steps.credentials.outputs.identity }}
         run: |
           set -euo pipefail
-          python3 scripts/prepare_macos_release.py \
+          "$KASSIBER_RELEASE_TOOL" macos prepare \
             --tag "$TAG" --run-id "$BUILD_RUN_ID" --identity "$IDENTITY" \
             --provisioning-profile "$RUNNER_TEMP/DeveloperID.provisionprofile" \
             --work-dir "$RUNNER_TEMP/release-signing"
@@ -182,20 +182,20 @@ jobs:
           set -euo pipefail
           EXPECTED_SHA256="${CI_SHA256:-$LOCAL_SHA256}"
           test -n "$EXPECTED_SHA256"
-          python3 scripts/macos_release.py notarize \
+          "$KASSIBER_RELEASE_TOOL" macos notarize \
             --image incoming/kassiber-macos-signing-input.dmg \
             --sha256 "$EXPECTED_SHA256" --commit "$COMMIT" --version "$VERSION" \
             --candidate-id "$CANDIDATE_ID" \
             --submission-id "$SUBMISSION_ID" --wait-seconds 120 --pending-ok \
             --profile kassiber-notary --keychain "$RUNNER_TEMP/notary.keychain-db" --output notarized
-          status="$(python3 -c 'import json; print(json.load(open("notarized/notarization.json"))["status"])')"
+          status="$(jq -r .status notarized/notarization.json)"
           echo "status=$status" >> "$GITHUB_OUTPUT"
           if [ "$status" = 'In Progress' ]; then
             echo 'Apple is still processing. No artifacts promoted. Resume with submission_id from notarization-evidence and the same input_sha256; omit build_run_id.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           test "$status" = Accepted
-          python3 scripts/macos_release.py verify \
+          "$KASSIBER_RELEASE_TOOL" macos verify \
             --release-dir notarized --commit "$COMMIT" --version "$VERSION" --candidate-id "$CANDIDATE_ID"
       - name: Preserve notarization evidence
         if: always()
@@ -238,7 +238,7 @@ jobs:
               incoming/kassiber-cli-macos-arm64.tar.gz
             echo 'Notarized candidate remains unpublished in its draft. No version tag, finalizer or package-channel update was created.' >> "$GITHUB_STEP_SUMMARY"
           else
-            python3 scripts/release_manifest.py generate --release-dir incoming --version "$VERSION"
+            "$KASSIBER_RELEASE_TOOL" manifest generate --release-dir incoming --version "$VERSION"
             gh release upload "$TAG" --clobber \
               incoming/kassiber-macos-arm64.app.zip incoming/kassiber-macos-arm64.dmg \
               incoming/kassiber-cli-macos-arm64.tar.gz "incoming/kassiber-$VERSION-manifest.txt"

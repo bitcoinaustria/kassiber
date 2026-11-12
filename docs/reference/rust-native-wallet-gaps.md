@@ -1,5 +1,9 @@
 # Rust wallet-sync gaps
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 Every wallet-sync or freshness path where the Rust backend still answers
 `native_fallback_required` (or a `not_implemented` stand-in for it) instead of
 doing what Python does. Production has no Python handoff
@@ -230,7 +234,7 @@ type the planner builds, so the plan no longer refuses `freshness_source`.
   transaction-need sync without idle warming. `bundled_seed.path` is the
   compiled-in seed directory with `..` resolved
   (`kassiber_rates::bundled_seed_path`); Python reports its package's
-  `kassiber/data/rates/kraken/btc_hourly`, the same directory in a source
+  `crates/rates/data/kraken/btc_hourly`, the same directory in a source
   checkout. That stored path is environment-specific in both and is masked
   in the parity tests.
 

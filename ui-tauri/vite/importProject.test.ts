@@ -6,8 +6,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BridgeDataRoot, devDataRootSeed } from "./bridgeDataRoot";
 import { runImportProjectAction } from "./importProject";
 
-const RUNNER_ARGS = ["-m", "kassiber"];
-
 // A plaintext database only has to carry the SQLite header and the table
 // names the inspector looks for; no daemon ever opens it here.
 function writeProject(root: string) {
@@ -68,8 +66,7 @@ describe("runImportProjectAction", () => {
   it("clear returns to the env-seeded book, not the implicit default root", async () => {
     const seed = path.join(tmp, "scratch", "data");
     const { dataRoot, run } = bridge(seed);
-    expect(dataRoot.daemonArgs(RUNNER_ARGS)).toEqual([
-      ...RUNNER_ARGS,
+    expect(dataRoot.daemonArgs()).toEqual([
       "--data-root",
       seed,
       "daemon",
@@ -83,8 +80,7 @@ describe("runImportProjectAction", () => {
     await expect(run({ action: "clear" })).resolves.toEqual({ ok: true });
     expect(dataRoot.get()).toBe(seed);
     expect(restarts).toBe(2);
-    expect(dataRoot.daemonArgs(RUNNER_ARGS)).toEqual([
-      ...RUNNER_ARGS,
+    expect(dataRoot.daemonArgs()).toEqual([
       "--data-root",
       seed,
       "daemon",
@@ -98,11 +94,11 @@ describe("runImportProjectAction", () => {
   it("clear drops --data-root only when the bridge was never seeded", async () => {
     const { dataRoot, run } = bridge(null);
     await run({ action: "select" });
-    expect(dataRoot.daemonArgs(RUNNER_ARGS)).toContain(importedDataRoot);
+    expect(dataRoot.daemonArgs()).toContain(importedDataRoot);
 
     await run({ action: "clear" });
     expect(dataRoot.get()).toBeNull();
-    expect(dataRoot.daemonArgs(RUNNER_ARGS)).toEqual([...RUNNER_ARGS, "daemon"]);
+    expect(dataRoot.daemonArgs()).toEqual(["daemon"]);
   });
 
   it("activate refuses a root the picker never approved", async () => {

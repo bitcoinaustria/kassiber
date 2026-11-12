@@ -2,6 +2,7 @@ pub(crate) mod product;
 
 use std::collections::{HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 #[cfg(any(test, feature = "test-kinds"))]
@@ -27,6 +28,11 @@ struct Active {
     cancel: Cancellation,
     consent: Option<Arc<Consent>>,
     worker: JoinHandle<Finished>,
+    /// The worker already wrote its response (a journal refresh replies
+    /// before its deferred checkpoint and close). A client may answer that
+    /// reply at once, so the next request waits for this short tail instead
+    /// of being refused as if the refresh were still running.
+    replied: Arc<AtomicBool>,
 }
 
 struct Finished {
@@ -107,7 +113,7 @@ impl Requests {
         if self
             .active
             .as_ref()
-            .is_some_and(|v| stop || v.worker.is_finished())
+            .is_some_and(|v| stop || v.worker.is_finished() || v.replied.load(Ordering::SeqCst))
         {
             self.active.take()
         } else {
@@ -500,6 +506,8 @@ impl Daemon {
         let progress_id = request_id.clone();
         let worker_cancel = cancel.clone();
         let worker_consent = consent.clone();
+        let replied = Arc::new(AtomicBool::new(false));
+        let worker_replied = Arc::clone(&replied);
         self.freshness_requests.used.insert(id.to_owned());
         let worker = std::thread::Builder::new()
             .name("kassiber-freshness-request".into())
@@ -534,6 +542,7 @@ impl Daemon {
                             ))
                             .map_err(|_| AppError::new("cancelled", "Freshness output closed"))?;
                         response_written = true;
+                        worker_replied.store(true, Ordering::SeqCst);
                         result.after_reply()?;
                         return Ok(None);
                     }
@@ -586,6 +595,7 @@ impl Daemon {
             cancel,
             consent,
             worker,
+            replied,
         });
         if automatic_graph {
             self.freshness_requests.graph_enabled = true;
@@ -597,6 +607,50 @@ impl Daemon {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn active(replied: bool, hold: std::sync::mpsc::Receiver<()>) -> Active {
+        Active {
+            id: "process".into(),
+            cancel: Cancellation::default(),
+            consent: None,
+            worker: std::thread::spawn(move || {
+                // The worker's tail: still running until released.
+                let _ = hold.recv();
+                Finished {
+                    response: None,
+                    after_reply_error: None,
+                    closing: None,
+                    graph_grants: vec![],
+                }
+            }),
+            replied: Arc::new(AtomicBool::new(replied)),
+        }
+    }
+
+    #[test]
+    fn a_request_after_the_reply_waits_for_the_worker_instead_of_refusing() {
+        // Not yet replied and still running: a new request is refused.
+        let (release, hold) = std::sync::mpsc::channel();
+        let mut requests = Requests {
+            active: Some(active(false, hold)),
+            ..Requests::default()
+        };
+        assert!(requests.take(false).is_none());
+        assert!(requests.running());
+        release.send(()).unwrap();
+        while requests.take(false).is_none() {
+            std::thread::yield_now();
+        }
+
+        // Replied but still in its tail: taken for joining at once, so the
+        // next request waits for it rather than seeing `busy`.
+        let (release, hold) = std::sync::mpsc::channel();
+        requests.active = Some(active(true, hold));
+        let taken = requests.take(false).expect("a replied worker is reaped");
+        assert!(!requests.running());
+        release.send(()).unwrap();
+        assert!(taken.worker.join().is_ok());
+    }
 
     #[test]
     fn early_cancels_expire_and_never_rearm_used_requests() {

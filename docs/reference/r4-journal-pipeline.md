@@ -1,5 +1,9 @@
 # R4 journal pipeline design
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 **Status:** R4-0 round 4 integrated, 2026-10-31; the R4-1 bench harness and
 four recovered baseline records are committed. The typed row and admission
 continuation is an **R4-2 checkpoint**, with acceptance still open; R4-3's

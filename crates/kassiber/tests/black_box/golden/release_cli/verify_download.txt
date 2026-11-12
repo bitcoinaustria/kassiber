@@ -1,0 +1,391 @@
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 0
+--- stdout
+{
+  "kind": "verify-download",
+  "schema_version": 1,
+  "data": {
+    "verified": true,
+    "artifact": "kassiber-cli-linux-x64.tar.gz",
+    "sha256": "9cf43d7a982a7daa9e1e6dcef4b4875a171c42fe631835c86202c38d7bbb4fd2",
+    "manifest": "kassiber-9.8.7-rc.1-manifest.txt",
+    "signature": "kassiber-9.8.7-rc.1-manifest.txt.sig",
+    "signer_fingerprint": "SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo",
+    "signer_principal": "release@kassiber",
+    "signature_namespace": "kassiber-release"
+  }
+}
+=== preference files
+
+<no newline>
+$ --format table verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 0
+--- stdout
+field                value                                                           
+-------------------  ----------------------------------------------------------------
+verified             True                                                            
+artifact             kassiber-cli-linux-x64.tar.gz                                   
+sha256               9cf43d7a982a7daa9e1e6dcef4b4875a171c42fe631835c86202c38d7bbb4fd2
+manifest             kassiber-9.8.7-rc.1-manifest.txt                                
+signature            kassiber-9.8.7-rc.1-manifest.txt.sig                            
+signer_fingerprint   SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo              
+signer_principal     release@kassiber                                                
+signature_namespace  kassiber-release                                                
+=== preference files
+
+<no newline>
+$ --format plain verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 0
+--- stdout
+verified: True
+artifact: kassiber-cli-linux-x64.tar.gz
+sha256: 9cf43d7a982a7daa9e1e6dcef4b4875a171c42fe631835c86202c38d7bbb4fd2
+manifest: kassiber-9.8.7-rc.1-manifest.txt
+signature: kassiber-9.8.7-rc.1-manifest.txt.sig
+signer_fingerprint: SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+signer_principal: release@kassiber
+signature_namespace: kassiber-release
+=== preference files
+
+<no newline>
+$ --machine verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 0
+--- stdout
+{
+  "kind": "verify-download",
+  "schema_version": 1,
+  "data": {
+    "verified": true,
+    "artifact": "kassiber-cli-linux-x64.tar.gz",
+    "sha256": "9cf43d7a982a7daa9e1e6dcef4b4875a171c42fe631835c86202c38d7bbb4fd2",
+    "manifest": "kassiber-9.8.7-rc.1-manifest.txt",
+    "signature": "kassiber-9.8.7-rc.1-manifest.txt.sig",
+    "signer_fingerprint": "SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo",
+    "signer_principal": "release@kassiber",
+    "signature_namespace": "kassiber-release"
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint   SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+
+exit 0
+--- stdout
+{
+  "kind": "verify-download",
+  "schema_version": 1,
+  "data": {
+    "verified": true,
+    "artifact": "kassiber-cli-linux-x64.tar.gz",
+    "sha256": "9cf43d7a982a7daa9e1e6dcef4b4875a171c42fe631835c86202c38d7bbb4fd2",
+    "manifest": "kassiber-9.8.7-rc.1-manifest.txt",
+    "signature": "kassiber-9.8.7-rc.1-manifest.txt.sig",
+    "signer_fingerprint": "SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo",
+    "signer_principal": "release@kassiber",
+    "signature_namespace": "kassiber-release"
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:short
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "invalid_release_fingerprint",
+    "message": "Release-key fingerprint must be a complete OpenSSH SHA256 fingerprint",
+    "hint": "Copy the complete SHA256:... Kassiber release-key fingerprint from an independent trusted source.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:LTB9IAVRmyaeAiLvOSIqyWgpjCNLMhPHQJQO6YRtFb0
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "release_fingerprint_mismatch",
+    "message": "Release public key does not match the expected fingerprint",
+    "hint": "Obtain the public key and full fingerprint again from independent trusted sources.",
+    "details": {
+      "expected_fingerprint": "SHA256:LTB9IAVRmyaeAiLvOSIqyWgpjCNLMhPHQJQO6YRtFb0"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/other.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "release_signature_verification_failed",
+    "message": "Release manifest has no valid signature from the expected Kassiber release key",
+    "hint": "Do not install or run the release artifact.",
+    "details": {
+      "expected_fingerprint": "SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/namespace.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "release_signature_verification_failed",
+    "message": "Release manifest has no valid signature from the expected Kassiber release key",
+    "hint": "Do not install or run the release artifact.",
+    "details": {
+      "expected_fingerprint": "SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/garbage.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "release_signature_verification_failed",
+    "message": "Release signature is not a detached OpenSSH signature",
+    "hint": "Do not install or run the release artifact.",
+    "details": {
+      "expected_fingerprint": "SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/two.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "invalid_release_public_key",
+    "message": "Release public key must contain exactly one key entry",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/rsa.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "invalid_release_public_key",
+    "message": "Release public key must be one OpenSSH Ed25519 or Ed25519-SK public key",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/missing.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "release_verification_file_error",
+    "message": "Could not read release public key: <SANDBOX>/release/missing.pub",
+    "hint": null,
+    "details": {
+      "path": "<SANDBOX>/release/missing.pub",
+      "label": "release public key"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/manifest-link.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "release_verification_file_error",
+    "message": "Could not read release manifest: <SANDBOX>/release/manifest-link.txt",
+    "hint": null,
+    "details": {
+      "path": "<SANDBOX>/release/manifest-link.txt",
+      "label": "release manifest"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "release_verification_file_error",
+    "message": "Release manifest is not a regular file: <SANDBOX>/release",
+    "hint": null,
+    "details": {
+      "path": "<SANDBOX>/release",
+      "label": "release manifest"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/renamed/kassiber-9.9.9-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "release_manifest_version_mismatch",
+    "message": "Signed release version does not match the manifest filename",
+    "hint": "Do not install or run artifacts from this release.",
+    "details": {
+      "path": "<SANDBOX>/release/renamed/kassiber-9.9.9-manifest.txt",
+      "expected_version": "9.9.9",
+      "signed_version": "9.8.7-rc.1"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/renamed/release-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "invalid_release_manifest",
+    "message": "Invalid Kassiber release manifest filename: release-manifest.txt",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/tampered.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "artifact_not_in_release_manifest",
+    "message": "Release manifest does not contain tampered.tar.gz",
+    "hint": null,
+    "details": {
+      "artifact": "tampered.tar.gz",
+      "manifest": "kassiber-9.8.7-rc.1-manifest.txt"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/tampered/kassiber-cli-linux-x64.tar.gz --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "release_artifact_hash_mismatch",
+    "message": "SHA-256 mismatch for kassiber-cli-linux-x64.tar.gz",
+    "hint": "Do not install or run this file. Delete it and download the release again.",
+    "details": {
+      "artifact": "kassiber-cli-linux-x64.tar.gz",
+      "expected_sha256": "9cf43d7a982a7daa9e1e6dcef4b4875a171c42fe631835c86202c38d7bbb4fd2",
+      "actual_sha256": "d121be3103007b41edf96f8262925f8c7d61894afe9a041843b631f69445bc57"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json verify-download <SANDBOX>/release/kassiber-macos-arm64.dmg --manifest <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt --signature <SANDBOX>/release/kassiber-9.8.7-rc.1-manifest.txt.sig --public-key <SANDBOX>/release/release.pub --fingerprint SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo
+exit 0
+--- stdout
+{
+  "kind": "verify-download",
+  "schema_version": 1,
+  "data": {
+    "verified": true,
+    "artifact": "kassiber-macos-arm64.dmg",
+    "sha256": "0fa3beee953223a7fe82dee333ccbeab51416b218e67978c7751fbda96f7ed63",
+    "manifest": "kassiber-9.8.7-rc.1-manifest.txt",
+    "signature": "kassiber-9.8.7-rc.1-manifest.txt.sig",
+    "signer_fingerprint": "SHA256:fnuhHfujq6bNR0aDWfoOhoXY486ALLHUkAtXxk9SKwo",
+    "signer_principal": "release@kassiber",
+    "signature_namespace": "kassiber-release"
+  }
+}
+=== preference files
+
+<no newline>

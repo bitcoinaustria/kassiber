@@ -478,5 +478,69 @@
     "replace": "        generator: \"ch.form\",",
     "expect_failing": ["every_country_generator_has_its_layer"],
     "rule": "Switzerland's layer provides the generator its registry entry lists."
+  },
+  {
+    "id": "csv-btc-eight-places",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "    format!(\"{whole}.{fraction:0<8}\")",
+    "replace": "    format!(\"{whole}.{fraction}\")",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value", "btc_columns_have_eight_places_and_sub_satoshi_digits_only_when_present", "quantity_btc_has_eight_places_unless_sub_satoshi"],
+    "rule": "CSV BTC text has eight decimal places for whole satoshis and zero."
+  },
+  {
+    "id": "csv-btc-sub-satoshi-only",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "    let fraction = fraction.trim_end_matches('0');",
+    "replace": "",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value", "btc_columns_have_eight_places_and_sub_satoshi_digits_only_when_present", "quantity_btc_has_eight_places_unless_sub_satoshi"],
+    "rule": "CSV BTC text carries more than eight places only for sub-satoshi digits."
+  },
+  {
+    "id": "csv-btc-cell-rule",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "            Cell::Btc(d) => btc_text(d),",
+    "replace": "            Cell::Btc(d) => plain(d),",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value"],
+    "rule": "Every design CSV writes BTC cells by the BTC text rule."
+  },
+  {
+    "id": "csv-btc-transaction-amount",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "                    s(crate::report_design::btc_text(&amount_btc)),",
+    "replace": "                    s(crate::report_design::plain(&amount_btc)),",
+    "expect_failing": ["btc_columns_have_eight_places_and_sub_satoshi_digits_only_when_present"],
+    "rule": "The transactions CSV writes amount_btc by the BTC text rule."
+  },
+  {
+    "id": "csv-btc-transaction-fee",
+    "file": "crates/reports/src/transaction_csv.rs",
+    "find": "                (\"fee_exact\", s(crate::report_design::btc_text(&fee_btc))),",
+    "replace": "                (\"fee_exact\", s(crate::report_design::plain(&fee_btc))),",
+    "expect_failing": ["btc_columns_have_eight_places_and_sub_satoshi_digits_only_when_present"],
+    "rule": "The transactions CSV writes fee_btc by the BTC text rule."
+  },
+  {
+    "id": "csv-btc-capital-quantity",
+    "file": "crates/reports/src/capital_csv.rs",
+    "find": "                report_design::btc_text(&btc(quantity)?),",
+    "replace": "                report_design::plain(&btc(quantity)?),",
+    "expect_failing": ["quantity_btc_has_eight_places_unless_sub_satoshi"],
+    "rule": "The capital-gains CSV writes quantity_btc by the BTC text rule."
+  },
+  {
+    "id": "transactions-csv-status-values",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "    let status = if reasons.is_empty() { \"final\" } else { \"draft\" };",
+    "replace": "    let status = if reasons.is_empty() { \"draft\" } else { \"final\" };",
+    "expect_failing": ["the_status_column_says_whether_the_file_is_a_draft", "standalone_transactions_csv_artifact_vectors"],
+    "rule": "A draft transactions CSV says draft on every row, any other says final."
+  },
+  {
+    "id": "transactions-csv-status-written",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "        replace(row, \"status\", s(status));",
+    "replace": "        replace(row, \"status\", s(\"\"));",
+    "expect_failing": ["the_status_column_says_whether_the_file_is_a_draft", "standalone_transactions_csv_artifact_vectors"],
+    "rule": "Every transactions CSV row carries the file's status."
   }
 ]

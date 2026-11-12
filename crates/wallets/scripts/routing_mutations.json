@@ -5,7 +5,7 @@
     "find": "    \"wallets.sync\",\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_probe_does_not_bootstrap"
+      "test_sync_cli_probe_does_not_bootstrap"
     ],
     "rule": "Register wallet sync in the native catalog without bootstrapping the probe."
   },
@@ -15,7 +15,7 @@
     "find": "dotted == \"wallets.sync\" && env.test_sync_handoff",
     "replace": "dotted == \"wallets.sync\"",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_handoff_requires_the_test_only_opt_in"
+      "test_sync_cli_handoff_requires_the_test_only_opt_in"
     ],
     "rule": "Only the test hybrid opt-in may request a silent unsupported handoff."
   },
@@ -25,7 +25,7 @@
     "find": "if !book.wallet_sync_supported(",
     "replace": "if book.wallet_sync_supported(",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_fixture_books_match_python[receive-change-wallet-electrum]"
+      "test_sync_cli_fixture_books_match_python_receive_change_wallet_electrum"
     ],
     "rule": "A supported local capability decision continues through native sync."
   },
@@ -35,7 +35,8 @@
     "find": "                        sync_handoff = true;",
     "replace": "                        sync_handoff = false;",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_unsupported_capability_handoff_has_no_traffic"
+      "test_sync_cli_unsupported_capability_handoff_has_no_traffic_false",
+      "test_sync_cli_unsupported_capability_handoff_has_no_traffic_true"
     ],
     "rule": "Unsupported pre-consent capability produces the distinct silent handoff status."
   },
@@ -45,7 +46,8 @@
     "find": "Err(error) if error.code == \"native_fallback_required\" => Ok(false),",
     "replace": "Err(error) if error.code == \"native_fallback_required\" => Ok(true),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_unsupported_capability_handoff_has_no_traffic"
+      "test_sync_cli_unsupported_capability_handoff_has_no_traffic_false",
+      "test_sync_cli_unsupported_capability_handoff_has_no_traffic_true"
     ],
     "rule": "Saved unsupported capabilities are rejected before granting consent."
   },
@@ -55,7 +57,8 @@
     "find": "Err(error) if error.code == \"native_fallback_required\" => Ok(false),\n            Err(error) => Err(error),",
     "replace": "Err(error) if error.code == \"native_fallback_required\" => Ok(false),\n            Err(_) => Ok(false),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_capability_errors_are_not_handoff"
+      "test_sync_cli_capability_errors_are_not_handoff_false",
+      "test_sync_cli_capability_errors_are_not_handoff_true"
     ],
     "rule": "Validation failures never authorize a Python retry."
   },
@@ -65,59 +68,9 @@
     "find": "            Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,\n",
     "replace": "            Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Online,\n",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_native_failure_never_falls_back[offline-esplora]"
+      "test_sync_cli_native_failure_never_falls_back_offline_esplora"
     ],
     "rule": "The registered route reads the current persisted offline policy before egress."
-  },
-  {
-    "id": "routing-hybrid-unlock-fd",
-    "file": "tests/rust_port/hybrid_cli.py",
-    "find": "os.isatty(0) or any(arg.split(\"=\", 1)[0] == \"--db-passphrase-fd\" for arg in args)",
-    "replace": "os.isatty(0)",
-    "expect_failing": [
-      "tests/test_rust_sync_hybrid_routing.py::test_sync_hybrid_keeps_consumable_unlock_inputs_on_python[--db-passphrase-fd]"
-    ],
-    "rule": "A passphrase descriptor is never consumed before a fallback decision."
-  },
-  {
-    "id": "routing-hybrid-tty",
-    "file": "tests/rust_port/hybrid_cli.py",
-    "find": "os.isatty(0) or any(arg.split(\"=\", 1)[0] == \"--db-passphrase-fd\" for arg in args)",
-    "replace": "any(arg.split(\"=\", 1)[0] == \"--db-passphrase-fd\" for arg in args)",
-    "expect_failing": [
-      "tests/test_rust_sync_hybrid_routing.py::test_sync_hybrid_keeps_consumable_unlock_inputs_on_python[tty]"
-    ],
-    "rule": "Interactive unlock input stays with a single runtime."
-  },
-  {
-    "id": "routing-hybrid-execution-error",
-    "file": "tests/rust_port/hybrid_cli.py",
-    "find": "if sync_result.returncode == SYNC_HANDOFF:",
-    "replace": "if sync_result.returncode != 0:",
-    "expect_failing": [
-      "tests/test_rust_sync_hybrid_routing.py::test_sync_hybrid_never_retries_a_native_result"
-    ],
-    "rule": "Native failures, including internal capability errors, never become retries."
-  },
-  {
-    "id": "routing-hybrid-empty-handoff",
-    "file": "tests/rust_port/hybrid_cli.py",
-    "find": "if sync_result.stdout or sync_result.stderr:",
-    "replace": "if False:",
-    "expect_failing": [
-      "tests/test_rust_sync_hybrid_routing.py::test_sync_hybrid_requires_an_empty_explicit_handoff"
-    ],
-    "rule": "An output-bearing handoff is refused instead of starting Python."
-  },
-  {
-    "id": "routing-hybrid-request-handoff",
-    "file": "tests/rust_port/hybrid_cli.py",
-    "find": "\"KASSIBER_RUST_TEST_SYNC_HANDOFF\": \"1\"",
-    "replace": "\"KASSIBER_RUST_TEST_SYNC_HANDOFF\": \"0\"",
-    "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_unsupported_hybrid_selection_falls_back_before_traffic"
-    ],
-    "rule": "The hybrid explicitly requests the inert local capability handoff."
   },
   {
     "id": "routing-missing-capability",
@@ -125,7 +78,7 @@
     "find": "Err(not_implemented(\"wallets\", \"wallet sync capability\"))",
     "replace": "Ok(true)",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_missing_capability_implementation_fails_closed"
+      "test_sync_cli_missing_capability_implementation_fails_closed"
     ],
     "rule": "A store without an implemented capability check fails closed instead of assuming support."
   },
@@ -135,7 +88,10 @@
     "find": "        if self.reason.is_empty()\n            && !self.core\n            && self.plan.is_some()",
     "replace": "        if !self.reason.is_empty()\n            && !self.core\n            && self.plan.is_some()",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_native_failure_never_falls_back"
+      "test_sync_cli_native_failure_never_falls_back_no_egress_electrum",
+      "test_sync_cli_native_failure_never_falls_back_no_egress_esplora",
+      "test_sync_cli_native_failure_never_falls_back_offline_electrum",
+      "test_sync_cli_native_failure_never_falls_back_offline_esplora"
     ],
     "rule": "Match Python observer-specific egress messages without changing compatibility transport messages."
   },
@@ -145,7 +101,7 @@
     "find": "if publishing.is_none_or(|selected| selected == index) {",
     "replace": "if true {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_two_descriptor_wallets_match_python[all-electrum]"
+      "test_two_descriptor_wallets_match_python_all_electrum"
     ],
     "rule": "Only the wallet about to publish is revalidated; published wallets have moved on."
   },
@@ -155,7 +111,7 @@
     "find": "if publishing.is_some_and(|selected| index < selected) {",
     "replace": "if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_two_descriptor_wallets_match_python[all-electrum]"
+      "test_two_descriptor_wallets_match_python_all_electrum"
     ],
     "rule": "A published wallet's row records its sync time."
   },
@@ -165,7 +121,7 @@
     "find": ".dropped(online, &self.chain, &self.network, false);",
     "replace": ".dropped(&[], &self.chain, &self.network, false);",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_inventory_owner_trims_a_descriptor[esplora]"
+      "test_inventory_owner_trims_a_descriptor_esplora"
     ],
     "rule": "Esplora's online targets are re-filtered for ownership."
   },
@@ -175,8 +131,8 @@
     "find": "            if overlapping {\n",
     "replace": "            if false {\n",
     "expect_failing": [
-      "tests/test_rust_electrum_compatibility.py::test_dependency_discovery_overlap_matches_python",
-      "tests/test_rust_liquid_compatibility.py::test_liquid_dependency_discovery_overlap_matches_python"
+      "test_dependency_discovery_overlap_matches_python",
+      "test_liquid_dependency_discovery_overlap_matches_python"
     ],
     "rule": "An owned script discovered past the horizon that a better wallet owns discards the dependency updates for the compatibility route."
   },
@@ -186,7 +142,7 @@
     "find": "    if events.is_empty() {\n        return Ok(fetch);",
     "replace": "    if true {\n        return Ok(fetch);",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_negative_balance_repair_matches_python[electrum]"
+      "test_negative_balance_repair_matches_python_electrum"
     ],
     "rule": "A prospective deficit refetches once at the widened gap before publishing."
   },
@@ -196,7 +152,7 @@
     "find": ".clamp(500, 5_000)",
     "replace": ".clamp(400, 5_000)",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_negative_balance_repair_matches_python[electrum]"
+      "test_negative_balance_repair_matches_python_electrum"
     ],
     "rule": "The repair gap is at least 500."
   },
@@ -206,7 +162,7 @@
     "find": "(\"resolved\", Value::Bool(remaining.is_empty())),",
     "replace": "(\"resolved\", Value::Bool(true)),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_negative_balance_repair_matches_python[electrum]"
+      "test_negative_balance_repair_matches_python_electrum"
     ],
     "rule": "The repair reports whether a deficit remains."
   },
@@ -216,7 +172,7 @@
     "find": "        && !repaired\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_negative_balance_repair_matches_python[electrum]"
+      "test_negative_balance_repair_matches_python_electrum"
     ],
     "rule": "A repaired dependency fetch publishes instead of refusing."
   },
@@ -226,7 +182,7 @@
     "find": "        let route = if reason == \"address_list\" {\n            \"bitcoin_script\"",
     "replace": "        let route = if reason == \"address_list\" {\n            \"compatibility\"",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_address_list_wallet[esplora]"
+      "test_address_list_wallet_esplora"
     ],
     "rule": "An address list's route is bitcoin_script."
   },
@@ -236,7 +192,7 @@
     "find": "    } else if addresses {\n        \"addresses\"",
     "replace": "    } else if false {\n        \"addresses\"",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_address_list_wallet[esplora]"
+      "test_address_list_wallet_esplora"
     ],
     "rule": "An address list reports sync_mode addresses."
   },
@@ -246,7 +202,7 @@
     "find": "        || !crate::config::addresses(json(&config)?.get(\"addresses\"))?.is_empty())",
     "replace": "        || false)",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_address_list_wallet[esplora]"
+      "test_address_list_wallet_esplora"
     ],
     "rule": "Address lists publish natively."
   },
@@ -256,7 +212,7 @@
     "find": "            let c = crate::freshness::sources::stored_wallet_config(&row)?;",
     "replace": "            let c: Json = serde_json::from_str(&or_text(field(&row, \"config_json\")))\n                .map_err(|_| AppError::new(\"internal_error\", \"Invalid wallet configuration JSON\"))?;",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_cli.py::test_sync_cli_explicit_unreadable_wallet_config_is_typed[bad]"
+      "test_sync_cli_explicit_unreadable_wallet_config_is_typed_bad"
     ],
     "rule": "An explicit sync refuses an unreadable configuration typed, as --all does."
   },
@@ -266,7 +222,7 @@
     "find": "                && current.names().is_empty()",
     "replace": "                && current.kinds().is_empty()",
     "expect_failing": [
-      "tests/test_rust_report_read_unconfigured.py::RustReportReadWithoutBackendsTest::test_report_read_runs_the_wallet_sources_like_python"
+      "test_report_read_runs_the_wallet_sources_like_python"
     ],
     "rule": "A book with no backend in its merged view takes Python's wallets-sync report-read path."
   },
@@ -276,7 +232,7 @@
     "find": "            journals: (!unconfigured || !force).then_some(false),",
     "replace": "            journals: (!unconfigured).then_some(false),",
     "expect_failing": [
-      "tests/test_rust_report_read_unconfigured.py::RustReportReadWithoutBackendsTest::test_report_read_runs_the_wallet_sources_like_python"
+      "test_report_read_runs_the_wallet_sources_like_python"
     ],
     "rule": "An automatic report read adds no journal step."
   },
@@ -286,7 +242,7 @@
     "find": "                filtered = sources::filter_by_policy(specs.clone(), policy, false);",
     "replace": "                filtered = specs.clone();",
     "expect_failing": [
-      "tests/test_rust_report_read_unconfigured.py::RustReportReadWithoutBackendsTest::test_disabled_source_class_queues_nothing_like_python"
+      "test_disabled_source_class_queues_nothing_like_python"
     ],
     "rule": "An automatic run enqueues only the source classes the policy enables."
   },
@@ -296,7 +252,7 @@
     "find": "    } else if !dependency_prepared && !matches!(rescan, AfterApply::Skip) {",
     "replace": "    } else if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_address_list_rescan_after_apply_matches_python[esplora]"
+      "test_address_list_rescan_after_apply_matches_python_esplora"
     ],
     "rule": "A deficit left after applying a compatibility fetch re-syncs inside the savepoint, as Python does."
   },
@@ -306,7 +262,7 @@
     "find": "    } else if !dependency_prepared && !matches!(rescan, AfterApply::Skip) {",
     "replace": "    } else if !dependency_prepared {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_address_list_rescan_after_apply_matches_python[esplora]"
+      "test_address_list_rescan_after_apply_matches_python_esplora"
     ],
     "rule": "The rescan pass itself does not rescan or refuse (`_allow_negative_balance_rescan=False`)."
   },
@@ -316,7 +272,7 @@
     "find": "                .get(\"freshness_checkpoint\")",
     "replace": "                .get(\"unpublished_checkpoint\")",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_rescan_starts_from_the_published_checkpoint"
+      "test_rescan_starts_from_the_published_checkpoint"
     ],
     "rule": "The rescan starts from the checkpoint the first pass published."
   },
@@ -326,7 +282,7 @@
     "find": "                    (\"resolved\", Value::Bool(resolved)),",
     "replace": "                    (\"resolved\", Value::Bool(true)),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_address_list_rescan_after_apply_matches_python[esplora]"
+      "test_address_list_rescan_after_apply_matches_python_esplora"
     ],
     "rule": "The after-apply rescan reports whether a deficit remains."
   },
@@ -336,7 +292,7 @@
     "find": "                        gap(original.map(crate::fetch::rescan_gap_limit)),",
     "replace": "                        gap(original),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_descriptor_rescan_after_apply_matches_python[esplora]"
+      "test_descriptor_rescan_after_apply_matches_python_esplora"
     ],
     "rule": "The after-apply rescan reports the widened gap."
   },
@@ -346,7 +302,7 @@
     "find": "                gap: self.rescan_gap(),\n                history: Some(json!({})),",
     "replace": "                gap: None,\n                history: Some(json!({})),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_descriptor_rescan_after_apply_matches_python[esplora]"
+      "test_descriptor_rescan_after_apply_matches_python_esplora"
     ],
     "rule": "The after-apply rescan widens the descriptor gap."
   },
@@ -356,7 +312,7 @@
     "find": "            lwk::descriptor::compatibility_reason(backend, &plan)?.unwrap_or(\"\")",
     "replace": "            \"\"",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "`lwk_compatibility_reason` selects Python's Liquid compatibility observer."
   },
@@ -366,7 +322,7 @@
     "find": "                if self.compatibility.is_none() {",
     "replace": "                if true {",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_dependency_discovery_overlap_matches_python"
+      "test_liquid_dependency_discovery_overlap_matches_python"
     ],
     "rule": "An overlap LWK discovers moves the wallet to the compatibility observer."
   },
@@ -376,7 +332,7 @@
     "find": "        if !matches!(plan.chain.as_str(), \"bitcoin\" | \"liquid\") {",
     "replace": "        if !matches!(plan.chain.as_str(), \"bitcoin\") {",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "Liquid descriptors discover their compatibility targets online."
   },
@@ -386,7 +342,7 @@
     "find": "        let chain = if matches!(network, \"liquidv1\" | \"liquidtestnet\" | \"elementsregtest\") {",
     "replace": "        let chain = if false {",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "A cached acquisition observes Liquid targets."
   },
@@ -396,7 +352,7 @@
     "find": "    if header.len() < 72 {",
     "replace": "    if header.len() != 80 {",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "Elements block headers keep their time at bytes 68..72."
   },
@@ -406,7 +362,7 @@
     "find": "            if liquid {\n                fetch_liquid(client, ids, into, deadline, cancel)",
     "replace": "            if false {\n                fetch_liquid(client, ids, into, deadline, cancel)",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "Liquid Electrum transactions keep their verified raw bytes."
   },
@@ -416,7 +372,7 @@
     "find": "                parents.extend(liquid_parents(&transactions[id])?);",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "Every Liquid input's previous transaction is fetched for its prevout."
   },
@@ -426,7 +382,7 @@
     "find": "                .filter(|_| liquid)",
     "replace": "                .filter(|_| false)",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "Each Liquid Electrum output's transaction is fetched on the output connection."
   },
@@ -436,7 +392,7 @@
     "find": "        if liquid {\n            let mut ordered: Vec<(i64, &String)> = transactions",
     "replace": "        if false {\n            let mut ordered: Vec<(i64, &String)> = transactions",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[esplora-extra1-http_route_policy-fresh]"
+      "test_liquid_compatibility_books_match_python_esplora_extra1_http_route_policy_fresh"
     ],
     "rule": "Liquid Esplora records decode `tx/<txid>/hex`."
   },
@@ -446,7 +402,7 @@
     "find": "                if liquid {\n                    // Each Liquid output decodes its transaction.",
     "replace": "                if false {\n                    // Each Liquid output decodes its transaction.",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[esplora-extra1-http_route_policy-extend]"
+      "test_liquid_compatibility_books_match_python_esplora_extra1_http_route_policy_extend"
     ],
     "rule": "An unchanged script's Liquid output still decodes its transaction."
   },
@@ -456,7 +412,7 @@
     "find": "        if output.nonce != confidential::Nonce::Null {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "Owned confidential outputs unblind with the script's SLIP-77 key."
   },
@@ -466,7 +422,7 @@
     "find": "            fees.clear();",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "Only a wallet that funded a Liquid transaction books its fee."
   },
@@ -476,7 +432,7 @@
     "find": "            } else if let Ok((value, asset)) = self.amount_asset(output, None) {",
     "replace": "            } else if let Some((value, asset)) = None::<(u64, String)> {",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "Explicit foreign outputs keep their values as evidence."
   },
@@ -486,7 +442,7 @@
     "find": "        crate::lwk::facts::asset_code(asset, self.policy)",
     "replace": "        asset.to_owned()",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "The policy asset reads as LBTC."
   },
@@ -496,7 +452,7 @@
     "find": "        bitcoin_records::witness_evidence(&json!({\"vin\": evidence}), &mut links);",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "Liquid claim and refund witnesses link the swap like Python."
   },
@@ -506,7 +462,7 @@
     "find": "            .map(|(h, t)| t - h + 1);",
     "replace": "            .map(|(h, t)| t - h);",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_compatibility_books_match_python[electrum-extra0-custom_timeout-fresh]"
+      "test_liquid_compatibility_books_match_python_electrum_extra0_custom_timeout_fresh"
     ],
     "rule": "A Liquid output's depth counts its own block."
   },
@@ -516,7 +472,7 @@
     "find": "        let core = backend[\"kind\"] == \"bitcoinrpc\";\n        let reason = if core {",
     "replace": "        let core = false;\n        let reason = if core {",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_descriptor_wallet_rounds_match_python"
+      "test_descriptor_wallet_rounds_match_python"
     ],
     "rule": "Bitcoin Core backends take Python's Core adapter, not BDK."
   },
@@ -526,7 +482,7 @@
     "find": "        let core = backend[\"kind\"] == \"bitcoinrpc\";\n        // `sync_target_from_address`.",
     "replace": "        let core = false;\n        // `sync_target_from_address`.",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_address_list_matches_python"
+      "test_address_list_matches_python"
     ],
     "rule": "Core address lists take the Core adapter too."
   },
@@ -536,7 +492,7 @@
     "find": "            self::core::checkpoint_targets(&plan, &checkpoint)?\n",
     "replace": "            offline_targets(&plan, &checkpoint)?\n",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_deficit_rescan_and_the_widened_range_match_python"
+      "test_deficit_rescan_and_the_widened_range_match_python"
     ],
     "rule": "Core's targets are its import range (`_bitcoinrpc_descriptor_targets_for_checkpoint`)."
   },
@@ -546,7 +502,7 @@
     "find": "        let name = backend_value(self.backend, &[\"wallet\"]).unwrap_or_else(|| {",
     "replace": "        let name = None::<String>.unwrap_or_else(|| {",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_address_list_matches_python"
+      "test_address_list_matches_python"
     ],
     "rule": "A configured node wallet name wins over the derived one."
   },
@@ -556,7 +512,7 @@
     "find": "            .is_some_and(|names| names.contains(&json!(name)))",
     "replace": "            .is_some_and(|_| false)",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_descriptor_wallet_rounds_match_python"
+      "test_descriptor_wallet_rounds_match_python"
     ],
     "rule": "An already loaded node wallet is not loaded again."
   },
@@ -566,7 +522,7 @@
     "find": "        let load = match self.call(\"loadwallet\", json!([name, true]), None) {\n            Ok(_) => return Ok((name, false)),",
     "replace": "        let load = match self.call(\"loadwallet\", json!([name, true]), None) {\n            Ok(_) => return Ok((name, true)),",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_existing_node_wallet_is_loaded_like_python"
+      "test_existing_node_wallet_is_loaded_like_python"
     ],
     "rule": "A loaded wallet is not reported as created."
   },
@@ -576,7 +532,7 @@
     "find": "    let checkpoint = if created {",
     "replace": "    let checkpoint = if false {",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_recreated_node_wallet_replays_like_python"
+      "test_recreated_node_wallet_replays_like_python"
     ],
     "rule": "A recreated node wallet ignores the stored checkpoint."
   },
@@ -586,7 +542,7 @@
     "find": "    let attested = checkpoint[\"bitcoinrpc_history_attestation\"] == attestation;",
     "replace": "    let attested = false;",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_descriptor_wallet_rounds_match_python"
+      "test_descriptor_wallet_rounds_match_python"
     ],
     "rule": "A matching attestation skips the forced re-import."
   },
@@ -596,7 +552,7 @@
     "find": "            request[\"range\"] = json!([0, end]);",
     "replace": "            request[\"range\"] = json!([0, 0]);",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_descriptor_wallet_rounds_match_python"
+      "test_descriptor_wallet_rounds_match_python"
     ],
     "rule": "Each ranged branch is imported up to its gap-limited end."
   },
@@ -606,7 +562,7 @@
     "find": "        if !force && end <= previous.get(&key).copied().unwrap_or(-1) {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_descriptor_wallet_rounds_match_python"
+      "test_descriptor_wallet_rounds_match_python"
     ],
     "rule": "A branch whose range is already imported is skipped."
   },
@@ -616,7 +572,7 @@
     "find": "        if (descriptors::truthy(&info[\"iswatchonly\"]) || descriptors::truthy(&info[\"ismine\"]))\n            && !force",
     "replace": "        if false\n            && !force",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_address_list_matches_python"
+      "test_address_list_matches_python"
     ],
     "rule": "Addresses the node already watches are not imported again."
   },
@@ -626,7 +582,7 @@
     "find": "        if coverage[\"pruned\"] == true && birthday <= 0 {",
     "replace": "        if false && birthday <= 0 {",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_pruned_node_without_a_birthday_refuses_like_python"
+      "test_pruned_node_without_a_birthday_refuses_like_python"
     ],
     "rule": "A pruned node needs a birthday before importing."
   },
@@ -636,7 +592,7 @@
     "find": "    let since = (imported == 0 && current).then_some(checkpoint);",
     "replace": "    let since = None::<&Value>;",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_descriptor_wallet_rounds_match_python"
+      "test_descriptor_wallet_rounds_match_python"
     ],
     "rule": "A stable range reads only what follows the last block."
   },
@@ -646,7 +602,7 @@
     "find": "        == Some(GRAPH_NORMALIZATION_VERSION);",
     "replace": "        == Some(0);",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_descriptor_wallet_rounds_match_python"
+      "test_descriptor_wallet_rounds_match_python"
     ],
     "rule": "History is replayed once after a graph normalization change only."
   },
@@ -656,7 +612,7 @@
     "find": "                        if code == Some(-5) {",
     "replace": "                        if false {",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_collaborative_spend_and_foreign_parents_match_python"
+      "test_collaborative_spend_and_foreign_parents_match_python"
     ],
     "rule": "A parent outside the node wallet stays an explicit unknown."
   },
@@ -666,7 +622,7 @@
     "find": "        payload[\"component\"] = json!({\"fee_attribution\": \"implicit_wallet_delta\"});\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_collaborative_spend_and_foreign_parents_match_python"
+      "test_collaborative_spend_and_foreign_parents_match_python"
     ],
     "rule": "Without every previous output the wallet delta is booked."
   },
@@ -676,7 +632,7 @@
     "find": "    if claim.is_some() == refund {",
     "replace": "    if true {",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_htlc_claim_and_refund_match_python"
+      "test_htlc_claim_and_refund_match_python"
     ],
     "rule": "A single-input HTLC claim or refund carries its spend proof."
   },
@@ -686,7 +642,7 @@
     "find": "        fields.extend(super::electrum::target_metadata(target));\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_descriptor_wallet_rounds_match_python"
+      "test_descriptor_wallet_rounds_match_python"
     ],
     "rule": "Unspent outputs carry their target's derivation."
   },
@@ -696,7 +652,7 @@
     "find": "            if previous.is_none_or(|p| index > p) {",
     "replace": "            if previous.is_none() {",
     "expect_failing": [
-      "tests/test_rust_core_rpc_sync.py::test_spent_receive_raises_the_highest_used_index_like_python"
+      "test_spent_receive_raises_the_highest_used_index_like_python"
     ],
     "rule": "Used scripts raise the highest used index the next range derives from."
   },
@@ -706,8 +662,8 @@
     "find": "        \"liquid-esplora\" | \"mempool\" => \"esplora\",",
     "replace": "        \"liquid-esplora\" => \"esplora\",",
     "expect_failing": [
-      "tests/test_rust_backend_kind_aliases.py::test_mempool_kind_descriptor_matches_python[receive-change]",
-      "tests/test_rust_backend_kind_aliases.py::test_mempool_kind_address_list_matches_python"
+      "test_mempool_kind_descriptor_matches_python_receive_change",
+      "test_mempool_kind_address_list_matches_python"
     ],
     "rule": "A `mempool` backend routes as Esplora (`normalize_backend_kind`)."
   },
@@ -717,7 +673,7 @@
     "find": "        \"liquid-esplora\" | \"mempool\" => \"esplora\",",
     "replace": "        \"mempool\" => \"esplora\",",
     "expect_failing": [
-      "tests/test_rust_backend_kind_aliases.py::test_liquid_esplora_kind_matches_python"
+      "test_liquid_esplora_kind_matches_python"
     ],
     "rule": "A `liquid-esplora` backend routes as Esplora."
   },
@@ -727,7 +683,7 @@
     "find": "json!({\"backend\":self.given,\"kind\":self.backend[\"kind\"],\"force_full\":self.force_full,\"authoritative_chain_observer\":true,",
     "replace": "json!({\"backend\":self.backend,\"kind\":self.backend[\"kind\"],\"force_full\":self.force_full,\"authoritative_chain_observer\":true,",
     "expect_failing": [
-      "tests/test_rust_backend_kind_aliases.py::test_mempool_kind_descriptor_matches_python[receive-change]"
+      "test_mempool_kind_descriptor_matches_python_receive_change"
     ],
     "rule": "The fetch reports the backend as resolved; inventory rows keep its kind."
   },
@@ -737,7 +693,7 @@
     "find": "json!({\"backend\":self.given,\"kind\":self.backend[\"kind\"],\"force_full\":self.force_full,\"authoritative_chain_observer\":true,",
     "replace": "json!({\"backend\":self.given,\"kind\":self.given[\"kind\"],\"force_full\":self.force_full,\"authoritative_chain_observer\":true,",
     "expect_failing": [
-      "tests/test_rust_backend_kind_aliases.py::test_mempool_kind_descriptor_matches_python[receive-change]"
+      "test_mempool_kind_descriptor_matches_python_receive_change"
     ],
     "rule": "The fetch's kind is the normalized one, as Python's `fetch.kind`."
   },
@@ -747,7 +703,7 @@
     "find": "        let (secret, _) = self.derived(index)?;",
     "replace": "        let (secret, _) = self.derived(0)?;",
     "expect_failing": [
-      "tests/test_rust_liquid_view_keys.py::test_view_key_books_match_python[electrum-fresh]"
+      "test_view_key_books_match_python_electrum_fresh"
     ],
     "rule": "Owned outputs unblind with the view key derived at their index."
   },
@@ -757,7 +713,7 @@
     "find": "let id = observer_state::instance_id(&logical_wallet_id, wallet_id, &source_key);",
     "replace": "let id = observer_state::instance_id(wallet_id, wallet_id, &source_key);",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_samourai_child_matches_python[wpkh-pair-electrum]"
+      "test_samourai_child_matches_python_wpkh_pair_electrum"
     ],
     "rule": "A Samourai child's observer instance id binds its parent's logical wallet."
   },
@@ -767,7 +723,7 @@
     "find": "                                btcpay,\n                            },",
     "replace": "                                btcpay: None,\n                            },",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_btcpay.py::test_btcpay_provenance_enriches_a_descriptor_wallet_like_python[wallet]"
+      "test_btcpay_provenance_enriches_a_descriptor_wallet_like_python_wallet"
     ],
     "rule": "wallets sync gives a descriptor wallet's publication its Greenfield access."
   },
@@ -777,7 +733,7 @@
     "find": "                | \"btcpay_wallet_source\"\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_freshness_sources.py::test_btcpay_freshness_jobs_match_python[source-and-wallet-route-sqlite]"
+      "test_btcpay_freshness_jobs_match_python_source_and_wallet_route_sqlite"
     ],
     "rule": "The native freshness handler runs BTCPay wallet source jobs."
   },
@@ -787,7 +743,7 @@
     "find": "        return Ok(checkpoint);",
     "replace": "        return Ok(dict::<&str>([]));",
     "expect_failing": [
-      "tests/test_rust_freshness_sources.py::test_btcpay_freshness_jobs_match_python[source-and-wallet-route-sqlite]"
+      "test_btcpay_freshness_jobs_match_python_source_and_wallet_route_sqlite"
     ],
     "rule": "A BTCPay freshness job reads its source's stored checkpoint."
   },
@@ -797,7 +753,7 @@
     "find": "        if !route_id.is_empty() {",
     "replace": "        if route_id.is_empty() && route_id != \"\" {",
     "expect_failing": [
-      "tests/test_rust_freshness_sources.py::test_btcpay_freshness_jobs_match_python[ledger-and-account-route-sqlite]"
+      "test_btcpay_freshness_jobs_match_python_ledger_and_account_route_sqlite"
     ],
     "rule": "A provenance job with an account route refreshes the store, not a wallet."
   },
@@ -807,7 +763,7 @@
     "find": "kassiber_rates::ensure_bundled_seed(conn, None, true);",
     "replace": "Ok::<_, AppError>(Value::List(vec![]));",
     "expect_failing": [
-      "tests/test_rust_freshness_sources.py::test_market_rate_coverage_seeds_then_refuses_live_lookups_without_egress[coingecko]"
+      "test_market_rate_coverage_seeds_then_refuses_live_lookups_without_egress_coingecko"
     ],
     "rule": "The market-rate job fills the bundled hourly seed before any live lookup."
   },
@@ -817,7 +773,7 @@
     "find": "        if index % 200 == 0 || index == total {\n            import_progress(",
     "replace": "        if false {\n            import_progress(",
     "expect_failing": [
-      "tests/test_rust_freshness_sources.py::test_file_sourced_wallet_selection_syncs_directly_like_python"
+      "test_file_sourced_wallet_selection_syncs_directly_like_python"
     ],
     "rule": "Record imports under a progress collector emit Python's importing events."
   },
@@ -827,7 +783,7 @@
     "find": "            let action = action?;\n",
     "replace": "            let action = action?;\n            if let Some(error) = action.refusal(None) {\n                return Err(error.clone());\n            }\n",
     "expect_failing": [
-      "tests/test_rust_freshness_sources.py::test_wallets_without_freshness_sources_do_not_refuse_a_run[core-silent-payment]"
+      "freshness_run_beside_a_sourceless_wallet_refusing_natively_completes"
     ],
     "rule": "A wallet without a freshness source refuses only the direct sync it would need."
   },
@@ -837,7 +793,7 @@
     "find": "    kassiber_wallets::identify::register_bip329_ownership();\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_bip329_services.py::RustBip329ServicesTest::test_descriptor_wallets_match_through_the_derived_ownership_index"
+      "test_descriptor_wallets_match_through_the_derived_ownership_index"
     ],
     "rule": "BIP329 matching reads the derived ownership index."
   },
@@ -847,7 +803,7 @@
     "find": "s(if ambiguous { \"ambiguous\" } else { \"exact\" }),",
     "replace": "s(\"exact\"),",
     "expect_failing": [
-      "tests/test_rust_bip329_services.py::RustBip329ServicesTest::test_descriptor_wallets_match_through_the_derived_ownership_index"
+      "test_descriptor_wallets_match_through_the_derived_ownership_index"
     ],
     "rule": "An address two wallets own is ambiguous, as classify_address says."
   },
@@ -857,7 +813,7 @@
     "find": "        let Some((outpoint, script)) = legs.inputs.get(position) else {",
     "replace": "        let Some((outpoint, script)) = legs.inputs.get(position + 1) else {",
     "expect_failing": [
-      "tests/test_rust_bip329_services.py::RustBip329ServicesTest::test_descriptor_wallets_match_through_the_derived_ownership_index"
+      "test_descriptor_wallets_match_through_the_derived_ownership_index"
     ],
     "rule": "An input reference names the stored graph's input at that position."
   },
@@ -867,8 +823,8 @@
     "find": "let node = (!btcpay && node_backend).then(|| backend(conn, &backend_name));",
     "replace": "let node = (!btcpay && node_backend && false).then(|| backend(conn, &backend_name));",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_lightning.py::test_core_lightning_wallet_sync_matches_python[wallet]",
-      "tests/test_rust_wallet_sync_lightning.py::test_lnd_wallet_sync_matches_python[wallet]"
+      "test_core_lightning_wallet_sync_matches_python_wallet",
+      "test_lnd_wallet_sync_matches_python_wallet"
     ],
     "rule": "A Core Lightning or LND wallet with a backend syncs its node natively."
   },
@@ -878,7 +834,7 @@
     "find": "if node_route && kassiber_envelope::get(&result, \"status\") != Some(&s(\"synced\")) {",
     "replace": "if node_route && kassiber_envelope::get(&result, \"status\") == Some(&s(\"never\")) {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_lightning.py::test_core_lightning_method_failures_match_python[listinvoices]"
+      "test_core_lightning_method_failures_match_python_listinvoices"
     ],
     "rule": "Only a synced node outcome stamps the wallet; a partial one does not."
   },
@@ -888,7 +844,7 @@
     "find": "    if ![\"lnd\", \"core-lightning\"].contains(&label.as_str()) {",
     "replace": "    if true {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_lightning.py::test_core_lightning_wallet_sync_matches_python[wallet]"
+      "test_core_lightning_wallet_sync_matches_python_wallet"
     ],
     "rule": "Node adapter imports stamp the reserved _kassiber_provenance marker."
   },
@@ -898,7 +854,7 @@
     "find": "if tag != \"invoice\" || stripped(field(row, \"txid\")).is_some() {",
     "replace": "if tag != \"invoice\" {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_lightning.py::test_core_lightning_wallet_sync_matches_python[wallet]"
+      "test_core_lightning_wallet_sync_matches_python_wallet"
     ],
     "rule": "Bookkeeper income with an L1 txid stays out of the Lightning ledger."
   },
@@ -908,7 +864,7 @@
     "find": "if or_text(field(row, \"kind\")) == \"lnd\" {",
     "replace": "if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_lightning.py::test_lnd_wallet_sync_matches_python[wallet]"
+      "test_lnd_wallet_sync_matches_python_wallet"
     ],
     "rule": "An LND wallet runs the LND sync hook, not Core Lightning's."
   },
@@ -918,7 +874,7 @@
     "find": "(kind == \"lnd\").then_some(spec.settlement_ids),",
     "replace": "None,",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_lightning.py::test_lnd_wallet_sync_matches_python[wallet]"
+      "test_lnd_wallet_sync_matches_python_wallet"
     ],
     "rule": "Live LND HTLC settlement timing may correct a stored payment's date."
   },
@@ -928,7 +884,7 @@
     "find": "            if existing.get(\"occurred_at\") != incoming.get(\"occurred_at\") {",
     "replace": "            if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_lightning.py::test_lnd_wallet_sync_matches_python[wallet]"
+      "test_lnd_wallet_sync_matches_python_wallet"
     ],
     "rule": "A settlement correction rewrites occurred_at with confirmed_at."
   },
@@ -938,7 +894,7 @@
     "find": ".filter(|a| matches!(a, Value::Dict(_)) && *field(a, \"status\") == s(\"SUCCEEDED\"))",
     "replace": ".filter(|a| matches!(a, Value::Dict(_)) && *field(a, \"status\") != s(\"SUCCEEDED\"))",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_lightning.py::test_lnd_wallet_sync_matches_python[wallet]"
+      "test_lnd_wallet_sync_matches_python_wallet"
     ],
     "rule": "Only succeeded HTLC attempts settle a payment."
   },
@@ -948,7 +904,7 @@
     "find": "if !(lnd_truthy(field(row, \"settled\")) || state == \"SETTLED\") {",
     "replace": "if !(lnd_truthy(field(row, \"settled\"))) {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_lightning.py::test_lnd_wallet_sync_matches_python[wallet]"
+      "test_lnd_wallet_sync_matches_python_wallet"
     ],
     "rule": "An invoice in state SETTLED imports without the legacy settled flag."
   },
@@ -958,7 +914,7 @@
     "find": "raw = floor_div(integer(field(row, \"timestamp_ns\"))?, 1_000_000_000);",
     "replace": "raw = integer(field(row, \"timestamp_ns\"))?;",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_lightning.py::test_lnd_wallet_sync_matches_python[wallet]"
+      "test_lnd_wallet_sync_matches_python_wallet"
     ],
     "rule": "A forward without seconds dates from its nanosecond timestamp."
   },
@@ -968,7 +924,7 @@
     "find": "        if crate::silent_payments::has_material(&config) {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_local_scanner_receive_spend_and_partial_match_python[custom]"
+      "test_local_scanner_receive_spend_and_partial_match_python_custom"
     ],
     "rule": "Silent-payment material takes the native scanner route."
   },
@@ -978,7 +934,7 @@
     "find": "        || crate::silent_payments::has_material(c)",
     "replace": "        || false",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_local_scanner_receive_spend_and_partial_match_python[custom]"
+      "test_local_scanner_receive_spend_and_partial_match_python_custom"
     ],
     "rule": "A silent-payment wallet has a sync source; it is not skipped."
   },
@@ -988,7 +944,7 @@
     "find": "    if !authoritative && !silent {",
     "replace": "    if !authoritative {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_local_scanner_receive_spend_and_partial_match_python[custom]"
+      "test_local_scanner_receive_spend_and_partial_match_python_custom"
     ],
     "rule": "An incomplete or custom-backend silent-payment scan publishes without observer authority."
   },
@@ -998,7 +954,7 @@
     "find": "        let authoritative = (compatibility || self.kind == \"bitcoinrpc\")",
     "replace": "        let authoritative = (true || self.kind == \"bitcoinrpc\")",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_local_scanner_receive_spend_and_partial_match_python[custom]"
+      "test_local_scanner_receive_spend_and_partial_match_python_custom"
     ],
     "rule": "Only the Esplora/Electrum compatibility route or Core RPC may make a scan authoritative; a custom backend never."
   },
@@ -1008,7 +964,7 @@
     "find": "        let authoritative = (compatibility || self.kind == \"bitcoinrpc\")",
     "replace": "        let authoritative = (!compatibility && self.kind == \"bitcoinrpc\")",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_local_scanner_receive_spend_and_partial_match_python[esplora]"
+      "test_local_scanner_receive_spend_and_partial_match_python_esplora"
     ],
     "rule": "A complete timestamped Esplora scan is an authoritative chain observation."
   },
@@ -1018,7 +974,7 @@
     "find": "        if info.mode() & 0o077 != 0 {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_scanner_failures_match_python[mode]"
+      "test_scanner_failures_match_python_mode"
     ],
     "rule": "A scanner file other users can read or write is refused."
   },
@@ -1028,7 +984,7 @@
     "find": "kassiber_paths::open_read_nofollow(&path)",
     "replace": "std::fs::File::open(&path)",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_scanner_failures_match_python[symlink]"
+      "test_scanner_failures_match_python_symlink"
     ],
     "rule": "A scanner file path that is a symlink is not followed."
   },
@@ -1038,7 +994,7 @@
     "find": "        if kassiber_pytext::lower(&fingerprint) != plan.descriptor_fingerprint {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_scanner_failures_match_python[mismatch]"
+      "test_scanner_failures_match_python_mismatch"
     ],
     "rule": "Scanner output for another descriptor fingerprint is refused."
   },
@@ -1048,7 +1004,7 @@
     "find": "        if from_height.as_ref().is_none_or(|height| height > start) {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_scan_payload_shapes_match_python[range]"
+      "test_scan_payload_shapes_match_python_range"
     ],
     "rule": "A scan range starting after the wallet's start height is incomplete."
   },
@@ -1058,7 +1014,7 @@
     "find": "    if degraded {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_local_scanner_receive_spend_and_partial_match_python[custom]"
+      "test_local_scanner_receive_spend_and_partial_match_python_custom"
     ],
     "rule": "A degraded scan skips the output inventory and marks partial success."
   },
@@ -1068,7 +1024,7 @@
     "find": "            set(output, \"spent_by\", s(spender.as_str()));",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_local_scanner_receive_spend_and_partial_match_python[custom]"
+      "test_local_scanner_receive_spend_and_partial_match_python_custom"
     ],
     "rule": "An output an owned input spends records its spender."
   },
@@ -1078,7 +1034,7 @@
     "find": "        .mul(&Decimal::from(100_000_000_u64), &context)",
     "replace": "        .mul(&Decimal::from(10_000_000_u64), &context)",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_scan_payload_shapes_match_python[amount]"
+      "test_scan_payload_shapes_match_python_amount"
     ],
     "rule": "A BTC amount converts to sats exactly."
   },
@@ -1088,7 +1044,7 @@
     "find": "    let mode = if state[\"descriptor_kind\"] == \"silent-payment\" {",
     "replace": "    let mode = if state[\"descriptor_kind\"] == \"silent_payment\" {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_local_scanner_receive_spend_and_partial_match_python[custom]"
+      "test_local_scanner_receive_spend_and_partial_match_python_custom"
     ],
     "rule": "A silent-payment sync reports sync_mode silent_payment."
   },
@@ -1098,7 +1054,7 @@
     "find": "        let transport = if plan.scan_mode == \"server_assisted\" && path.is_some() {",
     "replace": "        let transport = if path.is_none() {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_offline_mode_matches_python[esplora]"
+      "test_offline_mode_matches_python_esplora"
     ],
     "rule": "A local scanner file needs no transport, so offline mode does not refuse it."
   },
@@ -1108,7 +1064,7 @@
     "find": "                (\"full_history\", Py::Bool(self.plan.full_history)),",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_server_assisted_scan_matches_python[complete]"
+      "test_server_assisted_scan_matches_python_complete"
     ],
     "rule": "The server-assisted request carries Python's scan fields."
   },
@@ -1118,7 +1074,7 @@
     "find": "        (None, Some(_)) => 0,",
     "replace": "        (None, Some(_)) => return Ok(fetch),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_scan_payload_shapes_match_python[spend-only]"
+      "test_scan_payload_shapes_match_python_spend_only"
     ],
     "rule": "A silent-payment fetch with a prospective deficit takes the widened repair scan."
   },
@@ -1128,7 +1084,7 @@
     "find": "                action.emit_silent_progress();",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_direct_wallet_sync_events_match_python[custom]"
+      "test_direct_wallet_sync_events_match_python_custom"
     ],
     "rule": "The direct sync streams discovery and backend_fetch for a silent-payment scan."
   },
@@ -1138,7 +1094,7 @@
     "find": "pub(crate) fn silenced<R>(f: impl FnOnce() -> R) -> R {\n",
     "replace": "#[allow(unreachable_code, unused_variables)]\npub(crate) fn silenced<R>(f: impl FnOnce() -> R) -> R {\n    return f();\n",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_direct_wallet_sync_events_match_python[custom]"
+      "test_direct_wallet_sync_events_match_python_custom"
     ],
     "rule": "A chain wallet's publication emits no import progress, as Python's reset emitter does."
   },
@@ -1148,7 +1104,7 @@
     "find": "    if !DEFAULT_BACKENDS.contains(&name.as_str()) || chosen.contains(&name) {",
     "replace": "    if true {",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_backend_choice_matches_python"
+      "test_backend_choice_matches_python"
     ],
     "rule": "A shipped default backend the user never chose is not asked."
   },
@@ -1158,7 +1114,7 @@
     "find": "const GRAPH_CACHE_SCHEMA_VERSION: i64 = 2;",
     "replace": "const GRAPH_CACHE_SCHEMA_VERSION: i64 = 1;",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_explorer_lookup_matches_python"
+      "test_explorer_lookup_matches_python"
     ],
     "rule": "Fetched references are cached at Python's schema version 2."
   },
@@ -1168,7 +1124,7 @@
     "find": "params![CACHE_SCHEMA_VERSION, chain, network, id])?;",
     "replace": "params![1_i64, chain, network, id])?;",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_explorer_lookup_matches_python"
+      "test_explorer_lookup_matches_python"
     ],
     "rule": "Only schema-version-2 cache rows answer a later read."
   },
@@ -1178,7 +1134,7 @@
     "find": "            set(entry, \"prevout\", prevout);",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_electrum_lookup_attaches_parents_like_python"
+      "test_electrum_lookup_attaches_parents_like_python"
     ],
     "rule": "Electrum parents supply each input's previous output."
   },
@@ -1188,7 +1144,7 @@
     "find": "    if !tx.compute_txid().to_string().eq_ignore_ascii_case(id) {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_electrum_missing_parent_and_wrong_bytes_warn_like_python"
+      "test_electrum_missing_parent_and_wrong_bytes_warn_like_python"
     ],
     "rule": "Electrum bytes must hash to the requested txid."
   },
@@ -1198,7 +1154,7 @@
     "find": "                (confidential::Value::Explicit(value), confidential::Nonce::Null) => {",
     "replace": "                (confidential::Value::Explicit(value), confidential::Nonce::Null) if false => {",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_liquid_electrum_lookup_matches_python"
+      "test_liquid_electrum_lookup_matches_python"
     ],
     "rule": "A Liquid explicit unblinded output without a script is the fee."
   },
@@ -1208,7 +1164,7 @@
     "find": "    if string_or_none(g(&clean, \"txid\")).is_some_and(|id| lower(&id) != lower(txid)) {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_explorer_failures_warn_like_python"
+      "test_explorer_failures_warn_like_python"
     ],
     "rule": "An explorer answer for another txid is a warning, not a graph."
   },
@@ -1218,7 +1174,7 @@
     "find": "    let node =\n        matches!(kind.as_str(), \"coreln\" | \"lnd\") && get(&config, \"backend\").is_some_and(truthy);",
     "replace": "    let node =\n        matches!(kind.as_str(), \"coreln\" | \"lnd\");",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_gaps.py::test_node_kind_without_a_backend_syncs_its_chain_material[lnd]"
+      "test_node_kind_without_a_backend_syncs_its_chain_material_lnd"
     ],
     "rule": "A node-kind wallet without a node backend syncs its chain material."
   },
@@ -1228,7 +1184,7 @@
     "find": "        let authoritative = (compatibility || self.kind == \"bitcoinrpc\")\n            && normalized.complete",
     "replace": "        let authoritative = self.kind == \"bitcoinrpc\"\n            || compatibility && normalized.complete",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_core_rpc_scans_are_authoritative_only_when_complete[incomplete]"
+      "test_core_rpc_scans_are_authoritative_only_when_complete_incomplete"
     ],
     "rule": "An incomplete Core RPC scan is not authoritative (Python round 14)."
   },
@@ -1238,7 +1194,7 @@
     "find": "        let authoritative = (compatibility || self.kind == \"bitcoinrpc\")",
     "replace": "        let authoritative = (compatibility || self.kind == \"custom\")",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_silent_payments.py::test_core_rpc_scans_are_authoritative_only_when_complete[untimestamped]"
+      "test_core_rpc_scans_are_authoritative_only_when_complete_untimestamped"
     ],
     "rule": "A complete timestamped Core RPC scan is authoritative."
   },
@@ -1248,7 +1204,7 @@
     "find": "if kind == \"bitcoinrpc\" && !liquid {",
     "replace": "if kind == \"bitcoinrpcx\" && !liquid {",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_core_lookup_attaches_parents_like_python"
+      "test_core_lookup_attaches_parents_like_python"
     ],
     "rule": "A Bitcoin Core backend answers the public lookup through getrawtransaction."
   },
@@ -1258,7 +1214,7 @@
     "find": "== Some(&Value::Int((-5).into())) => {}",
     "replace": "== Some(&Value::Int((-6).into())) => {}",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_core_parent_failures_continue_or_stop_like_python"
+      "test_core_parent_failures_continue_or_stop_like_python"
     ],
     "rule": "A missing parent (-5) does not stop the other parents."
   },
@@ -1268,7 +1224,7 @@
     "find": "                    Err(_) => break,\n                }\n            }\n            Ok(fetched)",
     "replace": "                    Err(_) => {}\n                }\n            }\n            Ok(fetched)",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_core_parent_failures_continue_or_stop_like_python"
+      "test_core_parent_failures_continue_or_stop_like_python"
     ],
     "rule": "Any other parent failure stops asking that backend."
   },
@@ -1278,7 +1234,7 @@
     "find": "                set(&mut input, \"prevout\", core_vout(g(entry, \"prevout\")));",
     "replace": "                let _ = core_vout(g(entry, \"prevout\"));",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_core_inline_prevouts_need_no_parent_like_python"
+      "test_core_inline_prevouts_need_no_parent_like_python"
     ],
     "rule": "An inlined (verbosity 2) prevout needs no parent request."
   },
@@ -1288,7 +1244,7 @@
     "find": "        (\"value\", g(source, \"value\").clone()),",
     "replace": "        (\"value\", Value::Null),",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_core_lookup_attaches_parents_like_python"
+      "test_core_lookup_attaches_parents_like_python"
     ],
     "rule": "Core's BTC values reach the graph."
   },
@@ -1298,7 +1254,7 @@
     "find": "\"bitcoin_reference_lookup_failed_bitcoinrpc\"",
     "replace": "\"bitcoin_reference_lookup_failed_explorer\"",
     "expect_failing": [
-      "tests/test_rust_transaction_graph_public.py::RustTransactionGraphPublicLookupTest::test_core_failures_warn_like_python"
+      "test_core_failures_warn_like_python"
     ],
     "rule": "A failed Core lookup names the Bitcoin Core backend."
   },
@@ -1308,7 +1264,7 @@
     "find": "            format!(\"/<{}>\", m[1].replace(',', \";\"))",
     "replace": "            format!(\"/{{{}}}\", &m[1])",
     "expect_failing": [
-      "tests/test_rust_liquid_view_keys.py::test_legacy_set_view_key_matches_python[esplora]"
+      "test_legacy_set_view_key_matches_python_esplora"
     ],
     "rule": "A legacy `{a,b}` view-key set syncs like `<a;b>`."
   },
@@ -1318,7 +1274,7 @@
     "find": "            set(&mut method, \"preview_error\", s(\"missing_permission\"));\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_connections.py::test_btcpay_discover_daemon_bytes_requests_and_all_tables[btcpay24_store_only_key-sqlite]"
+      "test_btcpay_discover_daemon_bytes_requests_and_all_tables_btcpay24_store_only_key_sqlite"
     ],
     "rule": "A key that cannot read the wallet preview reports missing_permission instead of asking (#692)."
   },
@@ -1328,7 +1284,7 @@
     "find": "    let wallet_version = server_version(field(&server, \"version\"));",
     "replace": "    let wallet_version = server_version(&Value::Null);",
     "expect_failing": [
-      "tests/test_rust_connections.py::test_btcpay_discover_daemon_bytes_requests_and_all_tables[btcpay24_store_only_key-sqlite]"
+      "test_btcpay_discover_daemon_bytes_requests_and_all_tables_btcpay24_store_only_key_sqlite"
     ],
     "rule": "Discovery judges the key against the server's version."
   },
@@ -1338,7 +1294,7 @@
     "find": "    let mut missing: Vec<&str> = capability_permissions(version)[0]",
     "replace": "    let mut missing: Vec<&str> = CAPABILITY_PERMISSIONS",
     "expect_failing": [
-      "tests/test_rust_connections.py::test_btcpay_discover_daemon_bytes_requests_and_all_tables[wallet_history-sqlite]"
+      "test_btcpay_discover_daemon_bytes_requests_and_all_tables_wallet_history_sqlite"
     ],
     "rule": "Missing permissions name the server version's permission."
   },
@@ -1348,7 +1304,7 @@
     "find": "        setup_guide(server.as_deref(), wallet_history_preset(version), None)?,",
     "replace": "        setup_guide(server.as_deref(), \"wallet_history\", None)?,",
     "expect_failing": [
-      "tests/test_rust_connections.py::test_btcpay_discover_daemon_bytes_requests_and_all_tables[btcpay24_read_only-sqlite]"
+      "test_btcpay_discover_daemon_bytes_requests_and_all_tables_btcpay24_read_only_sqlite"
     ],
     "rule": "On BTCPay 2.4 the key upgrade is the read-only key (#692)."
   },
@@ -1358,7 +1314,7 @@
     "find": "    ([MODIFY_STORE_SETTINGS, VIEW_WALLET].contains(&name)",
     "replace": "    ([MODIFY_STORE_SETTINGS].contains(&name)",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_btcpay.py::test_btcpay_sources_and_enrichment_sync_like_python"
+      "test_btcpay_sources_and_enrichment_sync_like_python"
     ],
     "rule": "A 2.4 read-only key's wallet-history 403 degrades to invoice provenance (#692)."
   },
@@ -1368,7 +1324,7 @@
     "find": "    if bark::is_bark_ledger(config) {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_ledger_switches_to_the_bark_wallet_like_python"
+      "test_a_ledger_switches_to_the_bark_wallet_like_python"
     ],
     "rule": "A BTC-ARK ledger probes the plugin and switches when it serves wallet history."
   },
@@ -1378,7 +1334,7 @@
     "find": "        Ok((_, None)) => Ok(None),",
     "replace": "        Ok((_, None)) => Ok(Some(\"not_served\")),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_ledger_switches_to_the_bark_wallet_like_python"
+      "test_a_ledger_switches_to_the_bark_wallet_like_python"
     ],
     "rule": "A served wallet endpoint means the plugin serves wallet history."
   },
@@ -1388,7 +1344,7 @@
     "find": "    if !problems.is_empty() {",
     "replace": "    if problems.is_empty() && false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_ledger_that_cannot_switch_stays_like_python[unmatched]"
+      "test_a_ledger_that_cannot_switch_stays_like_python_unmatched"
     ],
     "rule": "A booked payment without a Bark row refuses the switch, book unchanged."
   },
@@ -1398,7 +1354,7 @@
     "find": "    (record.amount_msat != int(field(row, \"amount\"))).then_some(\"amount_mismatch\")",
     "replace": "    None",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_ledger_that_cannot_switch_stays_like_python[amount]"
+      "test_a_ledger_that_cannot_switch_stays_like_python_amount"
     ],
     "rule": "A booked payment of another amount is not the Bark row."
   },
@@ -1408,7 +1364,7 @@
     "find": "    if migrated.is_some() && get(&provenance, \"status\") != Some(&s(\"synced\")) {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_ledger_that_cannot_switch_stays_like_python[provenance]"
+      "test_a_ledger_that_cannot_switch_stays_like_python_provenance"
     ],
     "rule": "The switch needs current provenance to match booked payments."
   },
@@ -1418,7 +1374,7 @@
     "find": "            if !ledger_row {",
     "replace": "            if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_lightning_payment_that_cannot_move_refuses_like_python[node]"
+      "test_a_lightning_payment_that_cannot_move_refuses_like_python_node"
     ],
     "rule": "Another wallet booking the payment refuses; only a BTC-LN ledger row moves."
   },
@@ -1428,7 +1384,7 @@
     "find": "            if reason.is_none() && !bound.is_empty() {",
     "replace": "            if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_lightning_payment_that_cannot_move_refuses_like_python[evidence]"
+      "test_a_lightning_payment_that_cannot_move_refuses_like_python_evidence"
     ],
     "rule": "A row bound by review evidence does not move."
   },
@@ -1438,7 +1394,7 @@
     "find": "            record.fee_msat,\n            py_str(field(&record.record, \"raw_json\")),",
     "replace": "            0i64,\n            py_str(field(&record.record, \"raw_json\")),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_lightning_settled_into_bark_is_booked_once_like_python[ledger-first]"
+      "test_lightning_settled_into_bark_is_booked_once_like_python_ledger_first"
     ],
     "rule": "A moved refund takes Bark's routing fee."
   },
@@ -1448,7 +1404,7 @@
     "find": "            let moved = bark::adopt_lightning_ledger_rows(\n                conn,\n                scope.profile_id,\n                &wallet_id,\n                &name,\n                &store,\n                &records,\n            )?;",
     "replace": "            let moved = 0;",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_lightning_settled_into_bark_is_booked_once_like_python[ledger-first]"
+      "test_lightning_settled_into_bark_is_booked_once_like_python_ledger_first"
     ],
     "rule": "Lightning settled into Bark moves out of the BTC-LN ledger."
   },
@@ -1458,7 +1414,7 @@
     "find": "        if key.as_ref().is_some_and(|k| claims[k] > 1) {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_bark_rows_refuse_or_stay_unlinked_like_python[ambiguous]"
+      "test_bark_rows_refuse_or_stay_unlinked_like_python_ambiguous"
     ],
     "rule": "A payment two rows could be stays unlinked."
   },
@@ -1468,7 +1424,7 @@
     "find": "            && is_fallback_identity(store_id, &current)",
     "replace": "            && false",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_the_bark_wallet_books_like_python"
+      "test_the_bark_wallet_books_like_python"
     ],
     "rule": "A row booked before its invoice moves to the payment's key."
   },
@@ -1478,7 +1434,7 @@
     "find": "                && method != methods::BARK_PAYMENT_METHOD_ID =>",
     "replace": "                =>",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_bark_wallet_whose_plugin_stops_serving_fails_like_python"
+      "test_a_bark_wallet_whose_plugin_stops_serving_fails_like_python"
     ],
     "rule": "BTC-ARK never falls back to BTCPay 1.x's on-chain path."
   },
@@ -1488,7 +1444,7 @@
     "find": "    if method == BARK_PAYMENT_METHOD_ID {\n        return Err(",
     "replace": "    if false {\n        return Err(",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_bark_cli_routes_like_python[attach-refused]"
+      "test_bark_cli_routes_like_python_attach_refused"
     ],
     "rule": "BTC-ARK cannot enrich another wallet."
   },
@@ -1498,7 +1454,7 @@
     "find": "                        None => (Value::Bool(true), Value::Null),",
     "replace": "                        None => (Value::Bool(false), Value::Null),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_bark_setup_and_inspection_like_python"
+      "test_bark_setup_and_inspection_like_python"
     ],
     "rule": "A plugin serving wallet history makes the Bark store a wallet source."
   },
@@ -1508,7 +1464,7 @@
     "find": "        crate::progress::silenced(|| {\n            let identities =",
     "replace": "        crate::progress::for_wallet(&Value::Null, || {\n            let identities =",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_bark_freshness_jobs_match_python[sqlite]"
+      "test_bark_freshness_jobs_match_python_sqlite"
     ],
     "rule": "The Bark import emits no progress inside its savepoint."
   },
@@ -1518,7 +1474,7 @@
     "find": "        Some(config) => config.unwrap_or_default(),",
     "replace": "        Some(_) => or_text(field(wallet, \"config_json\")),",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_ledger_switches_in_its_freshness_job_like_python[sqlite]"
+      "test_a_ledger_switches_in_its_freshness_job_like_python_sqlite"
     ],
     "rule": "A freshness job stamps the stored config, keeping a ledger's switch."
   },
@@ -1528,7 +1484,7 @@
     "find": "        if same.len() == 1 {",
     "replace": "        if same.len() == 99 {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_movement_paying_two_payments_links_each_like_python"
+      "test_a_movement_paying_two_payments_links_each_like_python"
     ],
     "rule": "The amount tells apart the payments one movement's VTXOs settled."
   },
@@ -1538,7 +1494,7 @@
     "find": "    if !networks.is_empty() && networks != [scope] {",
     "replace": "    if networks.is_empty() && networks != [scope] {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_recorded_store_meets_the_books_network_like_python[main]"
+      "test_a_recorded_store_meets_the_books_network_like_python_main"
     ],
     "rule": "A Bark wallet on another network than the book refuses."
   },
@@ -1548,7 +1504,7 @@
     "find": "        if destination.starts_with(\"tark1\") {",
     "replace": "        if destination.starts_with(\"tark1x\") {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_recorded_store_meets_the_books_network_like_python[main]"
+      "test_a_recorded_store_meets_the_books_network_like_python_main"
     ],
     "rule": "`tark1` Ark addresses are a test network."
   },
@@ -1558,7 +1514,7 @@
     "find": "    bark::require_book_network(conn, scope.profile_id, &store)?;",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_a_recorded_store_meets_the_books_network_like_python[main]"
+      "test_a_recorded_store_meets_the_books_network_like_python_main"
     ],
     "rule": "Every Bark sync checks the book's network first."
   },
@@ -1568,7 +1524,7 @@
     "find": "        } else if action == \"payment_ledger\" || bark_source {",
     "replace": "        } else if action == \"payment_ledger\" {",
     "expect_failing": [
-      "tests/test_rust_wallet_sync_bark.py::test_bark_setup_and_inspection_like_python"
+      "test_bark_setup_and_inspection_like_python"
     ],
     "rule": "A Bark wallet source takes the server's on-chain network."
   }

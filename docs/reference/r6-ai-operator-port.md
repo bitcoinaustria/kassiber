@@ -1,5 +1,9 @@
 # R6 port design: AI, MCP and the operator broker
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 Design for stage R6 of [plan 21](../plan/21-rust-backend.md#stages): AI chat,
 the provider broker client, AI tool execution with consent and the AI
 projections, the MCP server, and the operator broker (queues, agent sessions,
@@ -668,7 +672,7 @@ Two runs:
   stale-context check.
 - **The auto-read planner and context trimming.**
 - **Provenance and the privacy receipt.**
-- **Skill references,** embedded from `kassiber/ai/skill_references/`.
+- **Skill references,** embedded from `crates/ai/skill_references/`.
 - **The projections** in §1.7. The `ca-ref:` handles reuse the existing
   registry.
 - **The custody AI audit writer.**

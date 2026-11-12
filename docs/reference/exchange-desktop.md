@@ -4,8 +4,7 @@ The desktop connects Kraken, Coinbase, Binance and Bitpanda through a
 read-only API key and syncs their history on request. Each setup and sync runs
 the [exchange API framework](rust-exchange-sync.md) the CLI's
 `wallets sync-<kind>` commands use ([Bitpanda](bitpanda.md) has its own
-page). This is a Rust backend feature: the Python daemon refuses its kinds
-(see [Python](#python)).
+page).
 
 ## Flow
 
@@ -62,7 +61,6 @@ code, then the daemon's own message and hint:
 | `validation` | an entry Kassiber cannot book safely, such as Bitpanda's unrecognised types; nothing imported, please report it |
 | `config_error` | the saved key is incomplete |
 | `backend_timeout`, `network_error`, `app_error` | unreachable, slow, or an HTTP error |
-| `daemon_unavailable`, `unsupported_kind` | the Python backend; see [Python](#python) |
 
 The last sync result lives in the open book's memory only
 (`ui.connections.exchange.status`), so it resets when Kassiber restarts or the
@@ -105,15 +103,6 @@ proxies; the desktop never sends it.
   kinds: exchange syncs stay out of the assistant's surface, as before. Only
   the user's click on Sync now contacts the exchange.
 
-## Python
-
-Python has no handler for these kinds and does not advertise them. Its daemon
-answers each with an error envelope (`daemon_unavailable`, details `{kind}`)
-without writing or contacting anything. The desktop maps that answer, and
-`unsupported_kind`, to "exchange API connections need the Rust backend" and
-disables Sync now. A connection the Rust backend created still lists in
-Python, and `wallets sync` skips it as sourceless.
-
 ## Verification
 
 - `crates/wallets/src/file_import/exchange_api/tests/desktop_api.rs`: each
@@ -122,14 +111,14 @@ Python, and `wallets sync` skips it as sourceless.
   trading-key refusal), consent, offline and missing-key refusals before any
   request, echoed credentials withheld, and a new connection's wallet plus
   sync leaving exactly the CLI sync's rows.
-- `tests/test_rust_exchange_desktop.py` (needs `KASSIBER_RUST_BIN`): the
+- The recorded `test_rust_exchange_desktop` sessions
+  (`scripts/replay-sessions.sh --only test_rust_exchange_desktop`): the
   daemon's create + sync against the CLI's `backends create` + `wallets
   sync-<kind>` for all four exchanges (both SQLCipher and plaintext for Kraken
   and Bitpanda): every table, the sync data and the request sequence are
   equal. It also pins that only the explicit test and sync contact the fake,
   that offline mode stops both, the Binance trading-key refusal, the key
   scrub in output, tables and status, and the argument refusals.
-- `tests/test_python_rust_only_exchange_desktop.py`: Python's refusals.
 - `ui-tauri/src/components/kb/exchange/*.dom.test.tsx`: the setup panel
   (guides, exact test arguments, retest after a change, explained errors,
   German), the dialog flow (no request before Test connection, create without

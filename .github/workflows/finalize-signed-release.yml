@@ -54,9 +54,8 @@ jobs:
           persist-credentials: false
           # Execute the reviewed current workflow tooling, not old tag scripts.
           ref: ${{ github.sha }}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
       - name: Require the release tag to come from trusted main history
         env:
           RELEASE_TAG_NAME: ${{ inputs.tag_name }}
@@ -85,11 +84,11 @@ jobs:
         id: release-signing
         run: |
           set -euo pipefail
-          policy_json="$(python3 scripts/release_manifest.py policy \
+          policy_json="$("$KASSIBER_RELEASE_TOOL" manifest policy \
             --policy packaging/release/signing-policy.json \
             --require-enabled)"
-          echo "fingerprint=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["fingerprint"])' "$policy_json")" >> "$GITHUB_OUTPUT"
-          echo "public_key_path=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["public_key_path"])' "$policy_json")" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=$(jq -r '.fingerprint' <<< "$policy_json")" >> "$GITHUB_OUTPUT"
+          echo "public_key_path=$(jq -r '.public_key_path' <<< "$policy_json")" >> "$GITHUB_OUTPUT"
       - name: Inspect and download existing release assets
         id: release
         env:
@@ -140,7 +139,7 @@ jobs:
           RELEASE_PUBLIC_KEY_PATH: ${{ steps.release-signing.outputs.public_key_path }}
           RELEASE_SIGNING_FINGERPRINT: ${{ steps.release-signing.outputs.fingerprint }}
         run: |
-          python3 scripts/release_manifest.py verify-release \
+          "$KASSIBER_RELEASE_TOOL" manifest verify-release \
             --release-dir release \
             --manifest "$RELEASE_MANIFEST" \
             --signature "$RELEASE_SIGNATURE" \
@@ -151,7 +150,7 @@ jobs:
           RELEASE_TAG_NAME: ${{ inputs.tag_name }}
           VERSION: ${{ steps.release.outputs.version }}
         run: |
-          python3 scripts/macos_release.py verify --release-dir release \
+          "$KASSIBER_RELEASE_TOOL" macos verify --release-dir release \
             --commit "$(git rev-parse "refs/tags/$RELEASE_TAG_NAME^{commit}")" \
             --version "$VERSION" --smoke
       - name: Require Homebrew publication credentials
@@ -182,11 +181,11 @@ jobs:
             test -n "$sha256"
             printf '%s' "$sha256"
           }
-          python3 scripts/render_homebrew.py cask \
+          "$KASSIBER_RELEASE_TOOL" render-homebrew cask \
             --version "$RELEASE_VERSION" \
             --sha256 "$(release_sha256 kassiber-macos-arm64.dmg)" \
             --output "homebrew-tap/${HOMEBREW_CASK_PATH}"
-          python3 scripts/render_homebrew.py cli-formula \
+          "$KASSIBER_RELEASE_TOOL" render-homebrew cli-formula \
             --version "$RELEASE_VERSION" \
             --sha256-macos-arm64 "$(release_sha256 kassiber-cli-macos-arm64.tar.gz)" \
             --sha256-linux-x64 "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \

@@ -62,7 +62,7 @@ per-asset pool, so no per-account balance can go negative.
 - Storage: one row per mark in `loan_legs` (`transaction_id`, `role`, optional
   `loan_id`); journal processing reads only `(transaction_id → role)`.
   `loan_id` is UI/audit grouping metadata and has no tax effect.
-- Engine: none. Custody interpretation (`kassiber/core/custody_interpreters.py`)
+- Engine: none. Custody interpretation (`crates/custody/src/interpretation/`)
   reports marked legs as non-event transactions, which the finalized tax
   projection leaves out, so the tax engine sees at most their network fee.
 - CLI: `kassiber loans mark|link|unmark|list`.

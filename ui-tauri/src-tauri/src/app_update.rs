@@ -127,7 +127,8 @@ async fn run_sidecar_update_check(resource_dir: Option<&Path>) -> Result<AppUpda
     let (program, args, cwd) = crate::supervisor::cli_invocation(
         resource_dir,
         vec!["--format".into(), "json".into(), "update".into()],
-    );
+    )
+    .map_err(|error| format!("Could not check for updates: {}.", error.message))?;
     let mut child = tokio::process::Command::new(&program)
         .args(&args)
         .current_dir(&cwd)

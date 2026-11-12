@@ -248,20 +248,29 @@ impl Context {
                 "--project and --data-root cannot be used together",
             ).hint("Use --project for a catalog project or --data-root for an explicit project data directory, not both."));
         }
+        // A hidden-home root (`~/.kassiber`) the cutover left in place (it is
+        // a symlink, holds one, lives on another file system or its proof
+        // is invalid) stays the state root, as in Python.
         let global = self.default_state_root()?;
         // Explicit data roots bypass default-state-root migration entirely.
+        // Without one, a hidden-home root the cutover left in place (or that
+        // a caller such as `--env-file` never offered to it) is used where it
+        // is, as Python's default_state_root does; resolution never moves it.
         if options.data_root.is_none() {
             let native = self.native_state_root();
             let legacy = self.home.join(".kassiber");
-            if global == legacy && !native.exists() {
-                return Err(Error::migration("legacy_state_root"));
-            }
             if native.join(MIGRATION_MARKER).exists() && movable_state(&legacy)? {
                 return Err(Error::migration("state_root_conflict"));
             }
         }
-        let catalog = load_catalog(&global.join("config/projects.json"), self)?;
+        let catalog_path = global.join("config/projects.json");
         let project = if let Some(data) = &options.data_root {
+            // The explicit root is the selection; the default root's catalog
+            // only names it (Python's project_metadata_for_data_root). A
+            // catalog Python would read as empty, or one Rust refuses to
+            // trust, names nothing: it neither blocks nor redirects the
+            // explicit root, and nothing is written back to it.
+            let catalog = load_catalog(&catalog_path, self).unwrap_or_default();
             let target = canonicalize_allow_missing(&self.effective_data_root(data)?)?;
             catalog
                 .projects
@@ -271,6 +280,7 @@ impl Context {
                 })
                 .cloned()
         } else {
+            let catalog = load_catalog(&catalog_path, self)?;
             if catalog.projects.is_empty() {
                 if options.project.is_some() {
                     return Err(Error::new(
@@ -349,7 +359,7 @@ impl Context {
         {
             return Err(Error::new(
                 ErrorKind::NotInitialized,
-                "runtime layout requires Python initialization",
+                "runtime layout is not initialized",
             ));
         }
         Ok(RuntimePaths {
@@ -650,6 +660,16 @@ fn movable_state(path: &Path) -> Result<bool> {
         Err(_) => Ok(path.exists() || path.is_symlink()),
     }
 }
+/// `os.path.realpath(path, strict=True)`: std's canonicalize, without the
+/// verbatim prefix (`\\?\`) Windows adds, so a path Kassiber shows or stores
+/// reads as the user wrote it.
+pub fn canonicalize(path: &Path) -> std::io::Result<PathBuf> {
+    let resolved = fs::canonicalize(path)?;
+    #[cfg(windows)]
+    let resolved = windows::python_resolved_path(&resolved);
+    Ok(resolved)
+}
+
 /// Path.resolve(strict=False), including symlink parents and missing leaves.
 pub fn canonicalize_allow_missing(path: &Path) -> Result<PathBuf> {
     canonicalize_with_depth(path, 0)
@@ -666,6 +686,11 @@ fn canonicalize_with_depth(path: &Path, depth: usize) -> Result<PathBuf> {
     } else {
         std::env::current_dir().map_err(Error::io)?.join(path)
     };
+    // A verbatim input (`\\?\C:\...`, what std's canonicalize returns) names
+    // the same path as its plain spelling, which is what this resolves to;
+    // walking the bare `\\?\C:` prefix component would fail instead.
+    #[cfg(windows)]
+    let absolute = windows::python_resolved_path(&absolute);
     let mut resolved = PathBuf::new();
     for component in absolute.components() {
         match component {
@@ -819,9 +844,21 @@ mod tests {
         fs::create_dir_all(temp.path().join(".kassiber/run")).unwrap();
         assert_eq!(c.default_state_root().unwrap(), c.native_state_root());
         fs::write(temp.path().join(".kassiber/unknown"), "").unwrap();
+        // A hidden-home root the cutover left in place stays the state root,
+        // as in Python: it resolves there (here, to an uninitialized layout).
+        assert_eq!(
+            c.default_state_root().unwrap(),
+            temp.path().join(".kassiber")
+        );
         assert_eq!(
             c.resolve(&ResolveOptions::default()).unwrap_err().kind,
-            ErrorKind::RequiresPythonMigration
+            ErrorKind::NotInitialized
+        );
+        fs::create_dir_all(temp.path().join(".kassiber/data")).unwrap();
+        fs::write(temp.path().join(".kassiber/data/kassiber.sqlite3"), "").unwrap();
+        assert_eq!(
+            c.resolve(&ResolveOptions::default()).unwrap_err().details,
+            serde_json::json!({"reason": "legacy_project_layout"})
         );
         assert!(!c.native_state_root().exists());
         fs::write(temp.path().join(LEGACY_DB_FILENAME), "").unwrap();

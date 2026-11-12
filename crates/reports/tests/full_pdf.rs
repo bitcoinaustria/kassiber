@@ -82,6 +82,24 @@ fn full_report_model_matches_python_and_renders_deterministically() {
                     "{name}: disposal sums per wallet and asset"
                 );
                 income_rows += python_rows(&ok["model"], "income").len();
+                // Nothing runs off a page, and no figure ever does. Two stress
+                // cases are wider than any page: a 400-character unbroken
+                // description, and a 40-character unbroken wallet label
+                // beside which the Transactions table's last header still
+                // runs out of room (its flow figures once ran off page 2).
+                let shown = kassiber_reports::report_design::rendered_pdf(&document).unwrap();
+                let figure = |run: &String| {
+                    let text = run.split_once(": ").map_or(run.as_str(), |(_, t)| t);
+                    text.contains(|c: char| c.is_ascii_digit())
+                };
+                match name {
+                    "long-lines" | "label-width" => assert!(
+                        !shown.off_page.iter().any(figure),
+                        "{name}: {:?}",
+                        shown.off_page
+                    ),
+                    _ => assert_eq!(shown.off_page, Vec::<String>::new(), "{name}"),
+                }
                 // Each total sums its own rows only.
                 for (id, entry_type, column, key) in [
                     ("disposals_by_wallet", "disposal", 5, "gain_loss"),

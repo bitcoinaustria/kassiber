@@ -6,29 +6,24 @@ cd "$ROOT"
 
 TARGET_TRIPLE="aarch64-apple-darwin"
 SIDECAR_NAME="kassiber-cli-${TARGET_TRIPLE}"
-# A separate name and bundle identifier, so this app installs and runs beside
-# the Python-backed "Kassiber Dev" from scripts/build-macos-arm64-app.sh.
+# A separate name and bundle identifier, so this local build installs beside
+# a released Kassiber.
 APP_PRODUCT_NAME="Kassiber Rust Dev"
 APP_IDENTIFIER="at.bitcoinaustria.kassiber.rust-dev"
-PYTHON_PRODUCT_NAME="Kassiber Dev"
 BINARIES_DIR="$ROOT/ui-tauri/src-tauri/binaries"
 BUNDLE_DIR="$ROOT/ui-tauri/src-tauri/target/$TARGET_TRIPLE/release/bundle"
 OUTPUT_DIR="$ROOT/dist/macos-arm64"
 BUNDLES="${BUNDLES:-app,dmg}"
-WITH_PYTHON_APP=0
 BACKUP=1
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/build-macos-arm64-rust-app.sh [--with-python-app] [--no-backup]
+Usage: ./scripts/build-macos-arm64-rust-app.sh [--no-backup]
 
 Build the local ad-hoc-signed macOS arm64 app with the Rust backend as its
 sidecar: "Kassiber Rust Dev" (at.bitcoinaustria.kassiber.rust-dev). It installs
-beside the Python-backed "Kassiber Dev" and opens the same books.
+beside a released Kassiber and opens the same books.
 
-  --with-python-app  First build the Python-backed "Kassiber Dev" from this
-                     same commit (scripts/build-macos-arm64-app.sh), so both
-                     apps agree on the book format and you can switch freely.
   --no-backup        Skip the snapshot of your Kassiber data. By default the
                      script snapshots every local book (only when it changed
                      since the last snapshot) before the Rust app can open it;
@@ -40,7 +35,6 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --with-python-app) WITH_PYTHON_APP=1 ;;
     --no-backup) BACKUP=0 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -81,9 +75,6 @@ require_command osascript
 require_command pnpm
 require_command rustup
 require_command cargo
-if [ "$WITH_PYTHON_APP" -eq 1 ]; then
-  require_command uv
-fi
 
 DATA_HELPER="$ROOT/scripts/macos-kassiber-data.sh"
 # Fail before the long build rather than after it: the snapshot needs every
@@ -99,12 +90,10 @@ if [ "$BACKUP" -eq 1 ]; then
   fi
 fi
 
-# The product version lives in pyproject.toml and the backend crate; they are
-# bumped together. The Rust build must not need Python, so read the crate.
+# The product version lives in the backend crate.
 APP_VERSION="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' crates/kassiber/Cargo.toml | head -n 1)"
-PYPROJECT_VERSION="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' pyproject.toml | head -n 1)"
-if [ -z "$APP_VERSION" ] || [ "$APP_VERSION" != "$PYPROJECT_VERSION" ]; then
-  echo "crates/kassiber ($APP_VERSION) and pyproject.toml ($PYPROJECT_VERSION) disagree on the version." >&2
+if [ -z "$APP_VERSION" ]; then
+  echo "crates/kassiber/Cargo.toml names no version." >&2
   exit 1
 fi
 APP_COMMIT_FULL="$(git rev-parse HEAD 2>/dev/null || printf unknown)"
@@ -121,22 +110,6 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 
-# Optional Python twin from this exact commit. It is built first because it
-# repopulates the shared sidecar directory; its finished app is copied out
-# before the Rust build reuses the bundle directory.
-if [ "$WITH_PYTHON_APP" -eq 1 ]; then
-  run env BUNDLES="$BUNDLES" "$ROOT/scripts/build-macos-arm64-app.sh"
-  python_app="$BUNDLE_DIR/macos/$PYTHON_PRODUCT_NAME.app"
-  if [ -d "$python_app" ]; then
-    rm -rf "${OUTPUT_DIR:?}/$PYTHON_PRODUCT_NAME.app"
-    run ditto "$python_app" "$OUTPUT_DIR/$PYTHON_PRODUCT_NAME.app"
-  fi
-  for dmg in "$BUNDLE_DIR/dmg/$PYTHON_PRODUCT_NAME"_*.dmg; do
-    if [ -f "$dmg" ]; then
-      run ditto "$dmg" "$OUTPUT_DIR/$(basename "$dmg")"
-    fi
-  done
-fi
 
 # The desktop shell and the backend both use the toolchain rust-toolchain.toml
 # pins; install it before the first build.
@@ -179,7 +152,7 @@ run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$RUST_BIN" --scratch "$smoke_ro
 # it (<executable dir>/provider_broker/index.mjs).
 run pnpm --dir ui-tauri install --frozen-lockfile
 run pnpm --dir ui-tauri run broker:build
-test -s "$ROOT/kassiber/ai/provider_broker/index.mjs"
+test -s "$ROOT/ui-tauri/provider-broker/dist/index.mjs"
 
 # Same one-dir location and file name the Python sidecar uses: the supervisor,
 # the CLI launcher, and the Touch ID helper's identity check all look there.
@@ -190,7 +163,7 @@ rm -rf "${BINARIES_DIR:?}/kassiber-cli" "${BINARIES_DIR:?}/provider_broker"
 mkdir -p "$BINARIES_DIR/kassiber-cli/provider_broker"
 run cp "$RUST_BIN" "$BINARIES_DIR/kassiber-cli/$SIDECAR_NAME"
 run chmod 755 "$BINARIES_DIR/kassiber-cli/$SIDECAR_NAME"
-run cp "$ROOT/kassiber/ai/provider_broker/index.mjs" "$BINARIES_DIR/kassiber-cli/provider_broker/index.mjs"
+run cp "$ROOT/ui-tauri/provider-broker/dist/index.mjs" "$BINARIES_DIR/kassiber-cli/provider_broker/index.mjs"
 
 TAURI_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-tauri-config.XXXXXX")"
 trap 'rm -rf "$smoke_root" "$TAURI_CONFIG_DIR"' EXIT
@@ -198,8 +171,8 @@ TAURI_BUILD_CONFIG="$TAURI_CONFIG_DIR/build.json"
 printf '{ "version": "%s", "productName": "%s", "identifier": "%s" }\n' \
   "$APP_VERSION" "$APP_PRODUCT_NAME" "$APP_IDENTIFIER" > "$TAURI_BUILD_CONFIG"
 
-# CI=true makes Tauri skip create-dmg's flaky Finder styling step; see
-# scripts/build-macos-arm64-app.sh for the full story.
+# CI=true makes Tauri skip create-dmg's flaky Finder styling step (it scripts
+# Finder through AppleScript and fails without a logged-in GUI session).
 run env CI=true KASSIBER_BUILD_VERSION="$APP_DISPLAY_VERSION" KASSIBER_BUILD_COMMIT="$APP_COMMIT" \
   pnpm --dir ui-tauri tauri build --target "$TARGET_TRIPLE" --bundles "$BUNDLES" --ci --config "$TAURI_BUILD_CONFIG"
 
@@ -254,27 +227,14 @@ for dmg in "$BUNDLE_DIR/dmg/$APP_PRODUCT_NAME"_*.dmg; do
   fi
 done
 
-# With --with-python-app, probe the Python twin just built, not an installed
-# copy.
-if [ "$WITH_PYTHON_APP" -eq 1 ] && [ -x "$OUTPUT_DIR/$PYTHON_PRODUCT_NAME.app/Contents/Resources/bin/kassiber" ]; then
-  python_version="$("$OUTPUT_DIR/$PYTHON_PRODUCT_NAME.app/Contents/Resources/bin/kassiber" --version)"
-  echo "$python_version"
-  case "$python_version" in
-    *"commit $APP_COMMIT"*) ;;
-    *) echo "The Python twin reports '$python_version', not commit $APP_COMMIT." >&2; exit 1 ;;
-  esac
-fi
-
-# Warn when an installed Python-backed app comes from another commit: whichever
-# app is newer may upgrade the books, and an older build then refuses them.
-# Read its embedded build record rather than executing an installed app.
-for python_app in \
-  "/Applications/$PYTHON_PRODUCT_NAME.app" \
-  "$HOME/Applications/$PYTHON_PRODUCT_NAME.app" \
+# Warn when an installed Kassiber comes from another commit: whichever app is
+# newer may upgrade the books, and an older build then refuses them. Read its
+# embedded build record rather than executing an installed app.
+for installed_app in \
   "/Applications/Kassiber.app" \
   "$HOME/Applications/Kassiber.app"; do
-  [ -d "$python_app" ] || continue
-  build_info="$(find "$python_app/Contents/Resources" -name BUILD_INFO.json -print -quit 2>/dev/null || true)"
+  [ -d "$installed_app" ] || continue
+  build_info="$(find "$installed_app/Contents/Resources" -name BUILD_INFO.json -print -quit 2>/dev/null || true)"
   installed_commit=""
   if [ -n "$build_info" ]; then
     installed_commit="$(sed -n 's/.*"commit": *"\([0-9a-f]*\)".*/\1/p' "$build_info" | head -n 1)"
@@ -283,11 +243,9 @@ for python_app in \
     "$APP_COMMIT"*) ;;
     *)
       echo
-      echo "WARNING: $python_app was built from commit '${installed_commit:-unknown}',"
-      echo "not $APP_COMMIT. Opening your books in the Rust app can upgrade"
-      echo "them to a format that older build refuses. To switch back and forth"
-      echo "safely, install the Python app from this commit as well:"
-      echo "  ./scripts/build-macos-arm64-rust-app.sh --with-python-app"
+      echo "WARNING: $installed_app was built from commit '${installed_commit:-unknown}',"
+      echo "not $APP_COMMIT. Opening your books in this build can upgrade them to a"
+      echo "format that older build refuses."
       ;;
   esac
 done
@@ -315,12 +273,11 @@ Look under:
   $OUTPUT_DIR
 
 $APP_PRODUCT_NAME uses the Rust backend ($version_text) and the same books
-as $PYTHON_PRODUCT_NAME:
+as an installed Kassiber:
   ~/Library/Application Support/at.bitcoinaustria.kassiber
 Both apps can be open at once, but one book opens in one desktop app at a
 time: the other app reports that another desktop app owns the project. Quit
-one app to open that book in the other. Desktop requests the Rust backend does
-not serve yet answer with a not_implemented error.
+one app to open that book in the other.
 
 $snapshot_note
 

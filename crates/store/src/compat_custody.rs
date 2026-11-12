@@ -18,11 +18,11 @@ fn identifier(parts: Vec<Value>) -> Result<String> {
         &Value::List(parts),
         &kassiber_pyjson::Options::default().compact(),
     )
-    .map_err(|_| {
-        Error::new(
-            ErrorKind::UnsupportedSchemaLayout,
-            "invalid custody identity",
-        )
+    .map_err(|error| {
+        crate::stored_values::refusal(match error {
+            kassiber_pyjson::Error::Surrogate => crate::stored_values::Shape::LoneSurrogate,
+            _ => crate::stored_values::Shape::Other,
+        })
     })?;
     Ok(hash(encoded.as_bytes()))
 }
@@ -38,9 +38,8 @@ fn read_json(raw: &str, invalid_empty: bool) -> Result<Value> {
     match py::loads(if raw.is_empty() { "{}" } else { raw }) {
         Ok(value) => Ok(value),
         Err(py::ParseError::Invalid) if invalid_empty => Ok(Value::Null),
-        Err(_) => Err(Error::new(
-            ErrorKind::UnsupportedSchemaLayout,
-            "stored custody JSON requires compatible parsing",
+        Err(_) => Err(crate::stored_values::refusal(
+            crate::stored_values::Shape::Other,
         )),
     }
 }
@@ -181,9 +180,8 @@ pub(crate) fn review_relations(
                 for item in items {
                     if let Value::Str(text) = item {
                         let text = text.as_str().ok_or_else(|| {
-                            Error::new(
-                                ErrorKind::UnsupportedSchemaLayout,
-                                "authored custody identity contains an unsupported surrogate",
+                            crate::stored_values::refusal(
+                                crate::stored_values::Shape::LoneSurrogate,
                             )
                         })?;
                         if !text.is_empty() {

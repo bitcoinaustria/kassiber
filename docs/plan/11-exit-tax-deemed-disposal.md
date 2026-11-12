@@ -1,10 +1,12 @@
 # Exit Tax / Deemed-Disposal Report
 
 **Status:** Implemented (v1). Core + CLI + daemon + desktop GUI shipped; see
-`kassiber/core/exit_tax.py`, `tests/test_exit_tax.py`, and the surfaces below.
-**Current source of truth:** `kassiber/core/exit_tax.py`, `tests/test_exit_tax.py`,
+`crates/reports/src/exit_tax.rs` (with `exit_pdf.rs` and `exit_xlsx.rs`) and
+the surfaces below. The function names below are the original Python design
+(tag `archive/python-backend`); the Rust port keeps its behavior.
+**Current source of truth:** `crates/reports/src/exit_tax.rs` and its tests,
 this file plus `06-austrian-tax-engine.md`, `07-austrian-tax-open-questions.md`,
-`kassiber/core/austrian.py`, and the [tax engine](../reference/tax-engine.md)'s
+`crates/reports/src/austrian.rs`, and the [tax engine](../reference/tax-engine.md)'s
 Austrian rules, which reproduce RP2's AT plugin.
 **Legal gate:** Kassiber is not tax advice. An exit-tax estimate is a draft a
 Steuerberater reviews and stamps; the final exit-tax liability across all of a
@@ -77,7 +79,7 @@ No new tax math — the report reads the engine's own numbers.
 | Alt/Neu attribution | persisted consumed-regime marker first, then legacy category/date fallback; disposal and fee markers reflect matched lots before tax overrides |
 | FMV at the departure date | closest cached or transaction quote strictly before the cutoff and within the preceding 24 hours, disclosing source and actual quote timestamp (`_fmv_at`) |
 | 27.5% rate, Kennzahl mapping | `AT_SONDERSTEUERSATZ` (estimate constant) + `kennzahl_for_disposal_category()` |
-| PDF / XLSX adviser handoff | `hooks.write_text_pdf` + the generic XLSX writer in `kassiber/core/reports.py` |
+| PDF / XLSX adviser handoff | `crates/reports/src/exit_pdf.rs` and `exit_xlsx.rs` |
 
 Kassiber does not grow a second Austrian tax engine: the regime classification
 and per-disposal cost basis are RP2's, read back off the journal entries.
@@ -85,7 +87,7 @@ and per-disposal cost basis are RP2's, read back off the journal entries.
 ## Engine Boundary
 
 `compute_deemed_disposal(conn, profile, state, *, departure_date, destination)`
-in `kassiber/core/exit_tax.py` is the keystone. `report_exit_tax()` resolves
+(originally in `kassiber/core/exit_tax.py`, now `crates/reports/src/exit_tax.rs`) is the keystone. `report_exit_tax()` resolves
 scope, requires processed journals, fetches the ledger `state`, and calls it.
 The output is the frozen `ui.reports.exit_tax_preview` payload (camelCase),
 reused verbatim by the CLI JSON output.
@@ -103,7 +105,7 @@ reused verbatim by the CLI JSON output.
   (§27a Abs 1 Z 2). Regime in force since 1 March 2022.
 - **Altbestand cutoff is 1 March 2021** (one year before the regime start; do
   not confuse the two). Acquired before `2021-03-01 Europe/Vienna` =
-  Altbestand. Already encoded as `AT_NEU_CUTOFF` in `kassiber/core/austrian.py`.
+  Altbestand. Already encoded in the tax engine's Austrian rules (`tax-engine/core/src/austria.rs`).
 - **Altbestand is tax-free on realization → excluded from the exit-tax base.**
   Only Neubestand unrealized gains are deemed-disposed.
 - **Trigger:** §27 Abs 6 Z 1 — deemed disposal at gemeiner Wert when Austria

@@ -5,7 +5,7 @@
   "find": "vec![s(\"accept_coarse_prices\"), s(\"price_override\")]",
   "replace": "vec![s(\"price_override\")]",
   "expect_failing": [
-   "tests/test_rust_review_terms.py::ReviewCoarseParity::test_cases_offer_acceptance_and_plans_name_the_cases"
+   "review_coarse_cases_offer_acceptance_and_plans_name_the_cases"
   ],
   "rule": "A case held for its own coarse price offers accept_coarse_prices (#708)."
  },
@@ -15,7 +15,7 @@
   "find": "                \"fiat_currency\",\n",
   "replace": "                \"currency\",\n",
   "expect_failing": [
-   "tests/test_rust_review_terms.py::ReviewCoarseParity::test_cases_offer_acceptance_and_plans_name_the_cases"
+   "review_coarse_cases_offer_acceptance_and_plans_name_the_cases"
   ],
   "rule": "Review cases name the book's currency (#711)."
  },
@@ -25,7 +25,7 @@
   "find": "        Value::Int(swaps) => Value::Int(swaps + attention),\n",
   "replace": "        Value::Int(swaps) => Value::Int(swaps.clone()),\n",
   "expect_failing": [
-   "tests/test_rust_review_terms.py::ReviewCountParity::test_journal_runs_recount_and_badges_match_python"
+   "review_count_journal_runs_recount_and_badges_match_python"
   ],
   "rule": "The review count is the attention count plus the cached moves (#707)."
  },
@@ -35,7 +35,7 @@
   "find": "            dict(REVIEW_BADGE_DEFINITIONS.map(|(key, text)| (key, s(text)))),\n",
   "replace": "            dict(REVIEW_BADGE_DEFINITIONS[..4].iter().map(|(key, text)| (*key, s(*text)))),\n",
   "expect_failing": [
-   "tests/test_rust_review_terms.py::ReviewCountParity::test_journal_runs_recount_and_badges_match_python"
+   "review_count_journal_runs_recount_and_badges_match_python"
   ],
   "rule": "Badges define every count they report, review included."
  },
@@ -45,7 +45,7 @@
   "find": "    if paired.unwrap_or(true) {\n",
   "replace": "    if paired.unwrap_or(false) {\n",
   "expect_failing": [
-   "tests/test_rust_journal_desktop.py::test_desktop_journals_without_auto_pair_recount_like_python[exact-False-False]"
+   "journals_desktop_without_auto_pair_recount_like_python"
   ],
   "rule": "A rebuild without automatic pairing recounts the cached moves."
  },
@@ -55,7 +55,7 @@
   "find": "            book.recount_transfer_candidates(namespace.get(\"workspace\"), namespace.get(\"profile\"))?;\n",
   "replace": "",
   "expect_failing": [
-   "tests/test_rust_review_terms.py::ReviewCountParity::test_journal_runs_recount_and_badges_match_python"
+   "review_count_journal_runs_recount_and_badges_match_python"
   ],
   "rule": "`journals process` without --auto-pair recounts the cached moves."
  },
@@ -65,7 +65,7 @@
   "find": "            if review_operations::changes_transfer_candidates(&artifact) {\n",
   "replace": "            if false {\n",
   "expect_failing": [
-   "tests/test_rust_review_terms.py::ReviewTermApplyParity::test_pair_apply_recounts_candidates_like_python"
+   "review_term_apply_pair_apply_recounts_candidates_like_python"
   ],
   "rule": "A review apply that pairs or dismisses recounts the cached moves."
  },
@@ -75,7 +75,7 @@
   "find": "            auto_pair = !matches!(flag, Some(Value::Bool(false)));\n",
   "replace": "",
   "expect_failing": [
-   "tests/test_rust_journal_desktop.py::test_desktop_journals_without_auto_pair_recount_like_python[exact-False-False]"
+   "journals_desktop_without_auto_pair_recount_like_python"
   ],
   "rule": "ui.journals.process with auto_pair false pairs nothing."
  },
@@ -85,7 +85,7 @@
   "find": "            fiat_currency: currency,\n",
   "replace": "",
   "expect_failing": [
-   "tests/test_rust_review_terms.py::AustrianTaxDeltaParity::test_reviewed_prices_are_stored_in_the_book_currency"
+   "review_austrian_reviewed_prices_are_stored_in_the_book_currency"
   ],
   "rule": "A quarantine price override is stored in the book's currency (#711)."
  },
@@ -95,7 +95,7 @@
   "find": "    if get(args, \"action\").is_some_and(|action| !matches!(action, Value::Str(_))) {\n",
   "replace": "    if false {\n",
   "expect_failing": [
-   "tests/test_rust_component_remediation.py::ComponentRemediationParity::test_non_text_actions_are_refused_like_python"
+   "review_component_non_text_actions_are_refused_like_python"
   ],
   "rule": "The desktop component kinds refuse a non-text action before the apply's input version (Python fix b2c0d9447)."
  },
@@ -105,7 +105,7 @@
   "find": "                Some(kind) if *kind == s(\"review.plan\") || *kind == s(\"ui.review.plan\")\n",
   "replace": "                Some(kind) if !matches!(kind, Value::Str(_)) || *kind == s(\"review.plan\") || *kind == s(\"ui.review.plan\")\n",
   "expect_failing": [
-   "tests/test_rust_review_workflow.py::ReviewCliParity::test_apply_artifacts_envelopes_and_retries_match_python"
+   "review_cli_apply_artifacts_envelopes_and_retries_match_python"
   ],
   "rule": "Only a string kind names the review plan envelope; another kind is a malformed artifact (Python fix c53939f17)."
  }

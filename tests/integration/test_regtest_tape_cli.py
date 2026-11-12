@@ -1,26 +1,25 @@
-"""Core RPC tape replay through the CLI, for either runtime and across both.
+"""Core RPC tape replay through the Rust binary's CLI.
 
-`RegtestTapeCliTest` builds the replay book with whichever runtime
-`tests/cli_runner.py` starts, so `integration-harness.sh fast` with
-`KASSIBER_RUNTIME=rust` runs it against the Rust binary. It pins the same
-numbers as the in-process replay in `tests/test_regtest_harness.py`.
+`RegtestTapeCliTest` builds the replay book with the binary
+`tests/integration/cli.py` starts and pins the replay's numbers.
 
-`RegtestTapeRuntimeParityTest` needs `KASSIBER_RUST_BIN` and compares the two
-runtimes on one book: setup, sync, `rates set`, `journals process`, every
-report read and the CSV/XLSX/PDF exports. Envelopes and every table of the
-store's schema manifest must match after masking fresh identities and clocks.
-Export artifacts follow the shared report design (docs/reference/report-design.md),
-so their bytes, layout keys and digests are masked and only their validity is
-checked. Where Rust refuses Core RPC wallet sync, the test requires a clean
-refusal that leaves the book untouched; where it syncs, both syncs and synced
-books must match. Everything after sync runs on copies of the Python-synced
-book.
+`RegtestTapeGoldenTest` once compared the Python and the Rust runtime on one
+book: setup, sync, `rates set`, `journals process`, every report read and the
+CSV/XLSX/PDF exports. The Python half is frozen (docs/plan/22-python-removal.md,
+D5): `goldens/tape_<name>.json` holds Python's masked envelopes and books, and
+`goldens/tape_<name>_synced.sqlite3.gz` the book Python's sync left, from
+which the post-sync steps start, so they compare strictly as before. Export
+artifacts follow the shared report design (docs/reference/report-design.md),
+so their bytes, layout keys and digests are masked and only their validity
+is checked. `KASSIBER_RECORD_GOLDENS=1` rewrites the goldens from the binary
+under test after a reviewed change.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+import gzip
 import hashlib
-import json
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -28,31 +27,30 @@ import tempfile
 import unittest
 import zipfile
 
-from tests import cli_runner
+from tests.integration import cli
 from tests.integration import regtest_tape_cli as tape_cli
 from tests.integration.runtime_parity import (
-    RUST_BIN, Masker, book_identities, canonical, child_env, envelope, mask_design, masked_book,
+    GOLDENS, Masker, book_identities, canonical, child_env, envelope, jsonable, load_golden,
+    mask_design, masked_book, scrub_paths, write_golden,
 )
 
-# Rust refuses Core RPC sync until the route is ported; any other outcome
-# means the gap closed and the synced books must then be compared directly.
-NATIVE_SYNC_GAP_CODES = {"native_fallback_required", "not_implemented", "unsupported"}
+RECORD = os.environ.get("KASSIBER_RECORD_GOLDENS") == "1"
 
 
+@unittest.skipUnless(cli.configured(), cli.NO_BINARY)
 class RegtestTapeCliTest(unittest.TestCase):
-    """The replay on the runtime `cli_runner` selects."""
+    """The replay on the binary `tests/integration/cli.py` selects."""
 
     def setUp(self):
         directory = tempfile.TemporaryDirectory(prefix="kassiber-tape-cli-")
         self.addCleanup(directory.cleanup)
         self.base = Path(directory.name).resolve()
         self.root = self.base / "data"
-        self.env = child_env(self.base / "home", python_child=cli_runner.candidate_prefix() is None,
-                             rust_bin=(cli_runner.candidate_prefix() or [None])[0])
+        self.env = child_env(self.base / "home", rust_bin=cli.binary())
 
     def cli(self, *args, ok=True):
-        result = cli_runner.run(["--machine", "--data-root", str(self.root), *args],
-                                env=self.env, capture_output=True, text=True, timeout=300)
+        result = cli.run(["--machine", "--data-root", str(self.root), *args],
+                         env=self.env, capture_output=True, text=True, timeout=300)
         payload = envelope(result)
         if ok:
             self.assertEqual(result.returncode, 0, f"kassiber {' '.join(map(str, args))}: {result.stdout}{result.stderr}")
@@ -111,8 +109,8 @@ class RegtestTapeCliTest(unittest.TestCase):
         self.assertEqual(utxo, [("b" * 64, 0, 19_999_000_000, 102)])
 
     def test_sync_reports_its_wall_time(self):
-        # `elapsed_ms` covers the fetch and its publication (Python's
-        # `sync_wallet_from_backend`); Rust once reported a constant 0.
+        # `elapsed_ms` covers the fetch and its publication; Rust once
+        # reported a constant 0.
         with tape_cli.serve("bitcoin_core_address_baseline") as server:
             self.build(server, tape_cli.BASELINE_ADDRESSES)
             server.delay = 0.05
@@ -144,26 +142,32 @@ class RegtestTapeCliTest(unittest.TestCase):
         self.assertEqual(summary["metrics"]["active_transactions"], 5)
 
 
-@unittest.skipUnless(RUST_BIN, "KASSIBER_RUST_BIN names the Rust binary to compare")
-class RegtestTapeRuntimeParityTest(unittest.TestCase):
+def _mask_keys(value, keys: set[str]):
+    if isinstance(value, dict):
+        return {key: f"<{key}>" if key in keys else _mask_keys(item, keys) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_mask_keys(item, keys) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_mask_keys(item, keys) for item in value)
+    return value
+
+
+@unittest.skipUnless(cli.configured(), cli.NO_BINARY)
+class RegtestTapeGoldenTest(unittest.TestCase):
     maxDiff = None
 
     def setUp(self):
-        directory = tempfile.TemporaryDirectory(prefix="kassiber-tape-parity-")
+        directory = tempfile.TemporaryDirectory(prefix="kassiber-tape-golden-")
         self.addCleanup(directory.cleanup)
         self.base = Path(directory.name).resolve()
         self.work = self.base / "work"
         self.root = self.work / "data"
         self.today = datetime.now(timezone.utc)
-        self.py_env = child_env(self.base / "home-python", python_child=True)
-        self.rs_env = child_env(self.base / "home-rust", python_child=False, rust_bin=RUST_BIN)
+        self.env = child_env(self.base / "home", rust_bin=cli.binary())
 
-    def run_cli(self, rust: bool, *args):
+    def run_cli(self, *args):
         argv = ["--machine", "--data-root", str(self.root), *args]
-        if rust:
-            from tests.rust_desktop_parity import run_candidate
-            return run_candidate(argv, env=self.rs_env, input=None)
-        return cli_runner.run(argv, reference=True, env=self.py_env, capture_output=True, timeout=300)
+        return cli.run(argv, env=self.env, capture_output=True, timeout=300)
 
     def restore(self, saved: Path | None):
         if self.work.exists():
@@ -176,6 +180,15 @@ class RegtestTapeRuntimeParityTest(unittest.TestCase):
         saved = self.base / "saved" / name
         shutil.copytree(self.root, saved)
         return saved
+
+    def scrub(self, value, server):
+        """Paths under the scratch root and the tape server's port vary by run,
+        and so does the endpoint fingerprint a sync reports over that URL."""
+        value = scrub_paths(value, self.base)
+        if server is None:
+            return value
+        value = scrub_paths(value, server.url, "<tape-url>")
+        return _mask_keys(value, {"backend_endpoint_fingerprint"})
 
     def export_artifacts(self, payload: dict, masker: Masker) -> None:
         """Check the artifact an export wrote and mask what the design changes."""
@@ -199,98 +212,106 @@ class RegtestTapeRuntimeParityTest(unittest.TestCase):
             self.assertEqual(snapshot["content_sha256"], hashlib.sha256(raw).hexdigest())
         masker.digests |= mask_design(payload)
 
-    def run_steps(self, rust: bool, start: Path | None, steps, known: set[str]):
+    def run_steps(self, start: Path | None, steps, masker: Masker, server=None):
         self.restore(start)
-        masker = Masker(known, self.today)
         outputs = []
         for step in steps:
-            result = self.run_cli(rust, *step)
+            result = self.run_cli(*step)
             payload = envelope(result)
             self.export_artifacts(payload, masker)
-            outputs.append((result.returncode, masker.value(payload)))
+            outputs.append((result.returncode, masker.value(self.scrub(payload, server))))
         masker.freeze()
-        return outputs, masked_book(self.root, masker), masker
+        for index, (code, payload) in enumerate(outputs):
+            self.assertEqual(code, 0, f"step {index} {steps[index][:2]} failed: {payload}")
+        book = masked_book(self.root, masker, scrub=lambda rows: self.scrub(rows, server))
+        return jsonable({"steps": outputs, "book": book})
 
-    def assert_same(self, label, python, rust):
-        # Every step must succeed, or two identical refusals would pass.
-        for index, (code, payload) in enumerate(python[0]):
-            self.assertEqual(code, 0, f"{label}: Python step {index} failed: {payload}")
-        for index, (expected, actual) in enumerate(zip(python[0], rust[0])):
-            self.assertEqual(actual, expected, f"{label}: step {index} envelope differs")
-        self.assertEqual(len(rust[0]), len(python[0]))
-        for table in python[1]:
-            self.assertEqual(rust[1][table], python[1][table], f"{label}: table {table} differs")
+    def assert_same(self, label, expected, actual):
+        for index, (want, got) in enumerate(zip(expected["steps"], actual["steps"])):
+            self.assertEqual(got, want, f"{label}: step {index} envelope differs")
+        self.assertEqual(len(actual["steps"]), len(expected["steps"]))
+        self.assertEqual(sorted(actual["book"]), sorted(expected["book"]))
+        for table in expected["book"]:
+            self.assertEqual(actual["book"][table], expected["book"][table], f"{label}: table {table} differs")
 
     def check_tape(self, tape_name):
         addresses, rates = tape_cli.TAPE_CASES[tape_name]
+        synced_book = GOLDENS / f"tape_{tape_name}_synced.sqlite3.gz"
+        golden_name = f"tape_{tape_name}.json.gz"
         with tape_cli.serve(tape_name) as server:
             steps = tape_cli.setup_steps(server, addresses)
-            python = self.run_steps(False, None, steps, set())
-            python_setup = self.save("python-setup")
-            rust = self.run_steps(True, None, steps, set())
-            rust_setup = self.save("rust-setup")
-            self.assert_same(f"{tape_name} setup", python, rust)
+            setup = self.run_steps(None, steps, Masker(set(), self.today), server)
+            setup_book = self.save("setup")
 
-            def sync(rust_runtime, saved):
-                self.restore(saved)
-                conn = sqlite3.connect(self.root / "kassiber.sqlite3")
-                try:
-                    wallet_id = conn.execute("SELECT id FROM wallets WHERE label='Core replay'").fetchone()[0]
-                finally:
-                    conn.close()
-                server.client_wallet = tape_cli.core_wallet_name(wallet_id)
-                server.misses.clear()
-                results = [self.run_cli(rust_runtime, "wallets", "sync", "--wallet", "Core replay") for _ in range(2)]
-                return results, list(server.misses)
-
-            python_sync, python_misses = sync(False, python_setup)
-            self.assertEqual(python_misses, [])
-            for result in python_sync:
+            self.restore(setup_book)
+            conn = sqlite3.connect(self.root / "kassiber.sqlite3")
+            try:
+                wallet_id = conn.execute("SELECT id FROM wallets WHERE label='Core replay'").fetchone()[0]
+            finally:
+                conn.close()
+            server.client_wallet = tape_cli.core_wallet_name(wallet_id)
+            server.misses.clear()
+            results = [self.run_cli("wallets", "sync", "--wallet", "Core replay") for _ in range(2)]
+            self.assertEqual(server.misses, [], "Core RPC sync asked for requests the tape lacks")
+            for result in results:
                 self.assertEqual(result.returncode, 0, result.stdout)
-            python_synced = self.save("python-synced")
+            # Each sync numbers its own fresh identities; the synced book is
+            # compared identity- and order-blind, as the two runtimes'
+            # independent setups always were.
+            sync = jsonable({
+                "steps": [(r.returncode, Masker(set(), self.today).value(self.scrub(envelope(r), server)))
+                          for r in results],
+                "book": canonical(masked_book(self.root, Masker(set(), self.today, anonymous=True),
+                                              scrub=lambda rows: self.scrub(rows, server))),
+            })
+            synced = self.save("synced")
 
-            before = masked_book(rust_setup, Masker(set(), self.today))
-            rust_sync, rust_misses = sync(True, rust_setup)
-            first = envelope(rust_sync[0])
-            code = (first.get("error") or {}).get("code") if first.get("kind") == "error" else None
-            if code in NATIVE_SYNC_GAP_CODES:
-                # Known gap: the refusal must leave the book exactly as it was.
-                self.assertNotEqual(rust_sync[0].returncode, 0)
-                self.assertEqual(masked_book(self.root, Masker(set(), self.today)), before)
-                self.assertEqual(rust_misses, [])
-            else:
-                self.assertEqual(rust_misses, [], "Rust Core RPC sync asked for requests the tape lacks")
-                # Each side synced its own setup book, so every identity is fresh.
-                python_view = ([(r.returncode, Masker(set(), self.today).value(envelope(r))) for r in python_sync],)
-                rust_view = ([(r.returncode, Masker(set(), self.today).value(envelope(r))) for r in rust_sync],)
-                self.assertEqual(rust_view, python_view)
-                # Different setup books mean different row identities: compare
-                # the synced books identity- and order-blind.
-                blind = lambda root: canonical(masked_book(root, Masker(set(), self.today, anonymous=True)))
-                rust_synced = blind(self.root)
-                python_synced_view = blind(python_synced)
-                for table in python_synced_view:
-                    self.assertEqual(rust_synced[table], python_synced_view[table], f"{tape_name} sync: table {table} differs")
+        if RECORD:
+            conn = sqlite3.connect(synced / "kassiber.sqlite3")
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            conn.close()
+            GOLDENS.mkdir(parents=True, exist_ok=True)
+            synced_book.write_bytes(gzip.compress((synced / "kassiber.sqlite3").read_bytes(), mtime=0))
+            recorded_on = self.today.date().isoformat()
+        else:
+            golden = load_golden(golden_name)
+            recorded_on = golden["recorded_on"]
+        # The post-sync steps start from the frozen synced book.
+        start = self.base / "frozen" / "data"
+        start.mkdir(parents=True)
+        (start / "kassiber.sqlite3").write_bytes(gzip.decompress(synced_book.read_bytes()))
 
         out = self.work
         after = [("rates", "set", "BTC-EUR", at, rate) for at, rate in rates]
         after += [("journals", "process"), ("transactions", "list", "--limit", "100")]
-        after += [("reports", name) for name in tape_cli.REPORTS]
+        # Balance history runs up to now unless told otherwise; a frozen
+        # record needs a fixed end after the tape's last block.
+        end = ("--end", "2023-11-16T00:00:00Z")
+        after += [("reports", name) for name in tape_cli.REPORTS if name != "balance-history"]
         after += [
-            ("reports", "balance-history", "--interval", "hour"),
+            ("reports", "balance-history", *end),
+            ("reports", "balance-history", "--interval", "hour", *end),
             ("reports", "export-csv", "--file", str(out / "report.csv")),
             ("reports", "export-xlsx", "--file", str(out / "report.xlsx")),
             ("reports", "export-pdf", "--file", str(out / "report.pdf")),
         ]
-        known = book_identities(python_synced)
-        python = self.run_steps(False, python_synced, after, known)
-        rust = self.run_steps(True, python_synced, after, known)
-        self.assert_same(f"{tape_name} after sync", python, rust)
+        known = book_identities(start)
+        masker = Masker(known, self.today, also=(date.fromisoformat(recorded_on),))
+        post = self.run_steps(start, after, masker)
+        actual = {"recorded_on": recorded_on, "setup": setup, "sync": sync, "after": post}
+        if RECORD:
+            write_golden(golden_name, actual)
+            self.skipTest(f"recorded {golden_name} from {cli.binary()}")
+        self.assert_same(f"{tape_name} setup", golden["setup"], setup)
+        self.assertEqual(sync["steps"], golden["sync"]["steps"], f"{tape_name} sync envelopes differ")
+        for table in golden["sync"]["book"]:
+            self.assertEqual(sync["book"][table], golden["sync"]["book"][table], f"{tape_name} sync: table {table} differs")
+        self.assert_same(f"{tape_name} after sync", golden["after"], post)
 
-    def test_baseline_tape_matches_python(self):
+    def test_baseline_tape_matches_frozen_python_run(self):
         self.check_tape("bitcoin_core_address_baseline")
 
-    def test_edge_tape_matches_python(self):
+    def test_edge_tape_matches_frozen_python_run(self):
         self.check_tape("bitcoin_core_edge_cases")
 
 

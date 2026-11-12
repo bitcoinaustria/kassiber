@@ -1,5 +1,9 @@
+"""Linux channel renderers, publication workflows and the repository
+publisher. Standard library only, run with `python3 -I` (plan 22, D2); the
+AUR and Nix renderers are the release tool's `render-aur` and `render-nix`,
+found through KASSIBER_RELEASE_TOOL as in the workflows."""
+
 import hashlib
-import importlib.util
 import os
 import subprocess
 import tempfile
@@ -10,14 +14,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def load_script(name: str):
-    path = ROOT / "scripts" / name
-    spec = importlib.util.spec_from_file_location(path.stem, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"could not load {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def release_tool() -> str:
+    """The `kassiber-release` binary; CI must provide it, a local run skips."""
+    tool = os.environ.get("KASSIBER_RELEASE_TOOL")
+    if not tool:
+        if os.environ.get("CI"):
+            raise RuntimeError("KASSIBER_RELEASE_TOOL is required under CI")
+        raise unittest.SkipTest("set KASSIBER_RELEASE_TOOL to the kassiber-release binary")
+    return tool
+
+
+def render(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [release_tool(), *args], capture_output=True, text=True, check=False
+    )
 
 
 def sha256(path: Path) -> str:
@@ -31,10 +41,11 @@ def dnf_snapshot_id(metadata: Path, signature: Path) -> str:
 
 class AurRendererTest(unittest.TestCase):
     def test_desktop_recipe_uses_the_appimage(self):
-        renderer = load_script("render_aur.py")
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir)
-            renderer.render_desktop("v1.2.3", "a" * 64, output)
+            done = render("render-aur", "desktop", "--version", "v1.2.3",
+                          "--sha256", "a" * 64, "--output", str(output))
+            self.assertEqual(done.returncode, 0, done.stderr)
 
             pkgbuild = (output / "PKGBUILD").read_text(encoding="utf-8")
             srcinfo = (output / ".SRCINFO").read_text(encoding="utf-8")
@@ -47,10 +58,11 @@ class AurRendererTest(unittest.TestCase):
             self.assertIn("sha256sums = " + sha256(output / "kassiber"), srcinfo)
 
     def test_cli_recipe_uses_the_frozen_archive(self):
-        renderer = load_script("render_aur.py")
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir)
-            renderer.render_cli("1.2.3", "b" * 64, output)
+            done = render("render-aur", "cli", "--version", "1.2.3",
+                          "--sha256", "b" * 64, "--output", str(output))
+            self.assertEqual(done.returncode, 0, done.stderr)
 
             pkgbuild = (output / "PKGBUILD").read_text(encoding="utf-8")
             self.assertIn("pkgname=kassiber-cli-bin", pkgbuild)
@@ -62,20 +74,26 @@ class AurRendererTest(unittest.TestCase):
             )
 
     def test_rejects_invalid_versions_and_checksums(self):
-        renderer = load_script("render_aur.py")
         with tempfile.TemporaryDirectory() as temp_dir:
-            with self.assertRaises(ValueError):
-                renderer.render_cli("not a version", "a" * 64, Path(temp_dir))
-            with self.assertRaises(ValueError):
-                renderer.render_desktop("1.2.3", "not-a-sha", Path(temp_dir))
+            for package, version, digest in (
+                ("cli", "not a version", "a" * 64),
+                ("desktop", "1.2.3", "not-a-sha"),
+            ):
+                output = Path(temp_dir) / package
+                done = render("render-aur", package, "--version", version,
+                              "--sha256", digest, "--output", str(output))
+                self.assertNotEqual(done.returncode, 0, done.stdout)
+                self.assertFalse((output / "PKGBUILD").exists())
 
 
 class NixRendererTest(unittest.TestCase):
     def test_flake_is_release_pinned_and_declares_binary_provenance(self):
-        renderer = load_script("render_nix.py")
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir)
-            renderer.render_flake("v1.2.3", "a" * 64, "b" * 64, output)
+            done = render("render-nix", "--version", "v1.2.3",
+                          "--sha256-desktop", "a" * 64, "--sha256-cli", "b" * 64,
+                          "--output", str(output))
+            self.assertEqual(done.returncode, 0, done.stderr)
 
             flake = (output / "flake.nix").read_text(encoding="utf-8")
             self.assertIn("/v1.2.3/kassiber-linux-x64.AppImage", flake)
@@ -99,7 +117,7 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertNotIn("\n  push:", workflow)
         self.assertNotIn("apt upgrade", workflow)
         self.assertNotIn("dnf upgrade", workflow)
-        self.assertIn("scripts/release_manifest.py verify-release", workflow)
+        self.assertIn('"$KASSIBER_RELEASE_TOOL" manifest verify-release', workflow)
         self.assertIn("packaging/release/signing-policy.json", workflow)
         self.assertIn('--signature "release/$manifest_name.sig"', workflow)
         self.assertNotIn('$manifest_name.asc', workflow)
@@ -134,7 +152,7 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
 
         self.assertLess(
             repositories.index("ref: ${{ needs.prepare.outputs.release_commit }}"),
-            repositories.index("scripts/release_manifest.py policy"),
+            repositories.index('"$KASSIBER_RELEASE_TOOL" manifest policy'),
         )
 
     def test_release_workflow_uploads_rpms(self):
@@ -152,7 +170,7 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("environment: release-production", workflow)
-        self.assertIn("scripts/release_manifest.py verify-release", workflow)
+        self.assertIn('"$KASSIBER_RELEASE_TOOL" manifest verify-release', workflow)
         self.assertIn('manifest.txt.sig" >> "$GITHUB_OUTPUT"', workflow)
         self.assertNotIn("gnupg", workflow)
         self.assertNotIn(".asc", workflow)
@@ -165,7 +183,7 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn('ref: ${{ github.sha }}', workflow)
         self.assertLess(
             workflow.index(tag_guard),
-            workflow.index("scripts/release_manifest.py policy"),
+            workflow.index('"$KASSIBER_RELEASE_TOOL" manifest policy'),
         )
         self.assertNotIn("gh release upload", workflow)
         self.assertNotIn("--clobber", workflow)
@@ -196,7 +214,7 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn("git merge-base --is-ancestor HEAD origin/main", publish)
         self.assertLess(
             publish.index("git merge-base --is-ancestor HEAD origin/main"),
-            publish.index("scripts/release_manifest.py policy"),
+            publish.index('"$KASSIBER_RELEASE_TOOL" manifest policy'),
         )
 
 

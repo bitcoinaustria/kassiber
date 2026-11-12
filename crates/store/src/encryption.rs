@@ -65,6 +65,7 @@ pub(crate) fn create_empty_with_observer(
         &state.encrypted_temp_path,
     )?)?);
     observer("empty.after_candidate_create")?;
+    crate::seed_test_prng();
     let conn = Connection::open(&state.encrypted_temp_path).map_err(map_sqlite_error)?;
     apply_keying(&conn, passphrase)?;
     conn.execute_batch("CREATE TABLE IF NOT EXISTS kassiber_init_marker(x INTEGER); DROP TABLE kassiber_init_marker;")
@@ -84,6 +85,7 @@ pub(crate) fn create_empty_with_observer(
     {
         return Err(verification());
     }
+    crate::seed_test_prng();
     let fresh = Connection::open_with_flags(
         &state.encrypted_temp_path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -209,6 +211,7 @@ pub fn open_backup_container(path: &Path, pass: &str) -> Result<Connection> {
 
 fn open_container_inner(path: &Path, pass: Option<&str>, backup: bool) -> Result<Connection> {
     validate(path)?;
+    crate::seed_test_prng();
     let conn = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -290,6 +293,7 @@ pub fn backup_encrypted(source: &Path, destination: &Path, passphrase: &str) -> 
         options.mode(0o600);
     }
     options.open(destination).map_err(Error::io)?;
+    crate::seed_test_prng();
     let mut target = Connection::open(destination).map_err(map_sqlite_error)?;
     apply_keying(&target, passphrase)?;
     crate::backup_connection(&source, &mut target)?;
@@ -395,9 +399,38 @@ fn no_sidecars(path: &Path) -> Result<()> {
     }
     Ok(())
 }
-fn marker_scan(path: &Path) -> Result<()> {
-    let mut file = File::open(path).map_err(Error::io)?;
-    let overlap = MARKERS.iter().map(|v| v.len()).max().expect("markers") - 1;
+/// Plaintext bytes kept around each credential marker when looking for it in
+/// the encrypted file: 32 bytes, so random ciphertext matches one with odds
+/// near 2^-256, while leaked plaintext (an unencrypted page, a copied
+/// journal) carries the source's own bytes around the marker.
+const LEAK_CONTEXT: usize = 32;
+
+/// Refuse an encrypted candidate that still holds the plaintext's credential
+/// markers. A bare five-byte marker (`xprv9`) turns up in a few megabytes of
+/// fresh ciphertext often enough to refuse a sound migration now and then,
+/// and the candidate can only leak bytes the source holds, so each marker
+/// occurrence in the source is looked for with its surrounding source bytes.
+fn marker_scan(encrypted: &Path, plaintext: &Path) -> Result<()> {
+    let source = std::fs::read(plaintext).map_err(Error::io)?;
+    let mut needles: Vec<&[u8]> = Vec::new();
+    for marker in MARKERS {
+        for (at, _) in source
+            .windows(marker.len())
+            .enumerate()
+            .filter(|(_, window)| window == marker)
+        {
+            let start = at.min(source.len().saturating_sub(LEAK_CONTEXT));
+            let needle = &source[start..(start + LEAK_CONTEXT).min(source.len())];
+            if !needles.contains(&needle) {
+                needles.push(needle);
+            }
+        }
+    }
+    if needles.is_empty() {
+        return Ok(());
+    }
+    let mut file = File::open(encrypted).map_err(Error::io)?;
+    let overlap = LEAK_CONTEXT - 1;
     let mut buffer = vec![0; 4 * 1024 * 1024 + overlap];
     let mut tail = 0;
     loop {
@@ -406,9 +439,9 @@ fn marker_scan(path: &Path) -> Result<()> {
             break;
         }
         let total = tail + n;
-        if MARKERS
+        if needles
             .iter()
-            .any(|m| buffer[..total].windows(m.len()).any(|window| window == *m))
+            .any(|needle| buffer[..total].windows(needle.len()).any(|w| w == *needle))
         {
             return Err(Error::new(
                 ErrorKind::MigrationLeaksPlaintext,
@@ -590,7 +623,7 @@ pub(crate) fn encrypt_with_observer(
     integrity(&fresh)?;
     same_contents(&open(&path, None)?, &fresh)?;
     fresh.close().map_err(|(_, e)| map_sqlite_error(e))?;
-    marker_scan(&state.encrypted_temp_path)?;
+    marker_scan(&state.encrypted_temp_path, &path)?;
     observer("encryption.before_verified_sync")?;
     sync(&state.encrypted_temp_path)?;
     durable::sync_directory(root)?;
@@ -653,7 +686,7 @@ pub fn resume_encryption(namespace: &OwnerNamespace, root: &Path, passphrase: &s
     integrity(&candidate)?;
     same_contents(&open(source, None)?, &candidate)?;
     candidate.close().map_err(|(_, e)| map_sqlite_error(e))?;
-    marker_scan(&state.encrypted_temp_path)?;
+    marker_scan(&state.encrypted_temp_path, source)?;
     sync(&state.encrypted_temp_path)?;
     publish(&state, &mut |_| Ok(()))
 }
@@ -731,6 +764,59 @@ pub fn rekey_with_observer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Bytes that stand in for ciphertext: a fixed pseudo-random stream.
+    fn noise(len: usize, seed: u64) -> Vec<u8> {
+        let mut state = seed;
+        (0..len)
+            .map(|_| {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                (state >> 56) as u8
+            })
+            .collect()
+    }
+
+    fn scan(source: &[u8], encrypted: &[u8]) -> Result<()> {
+        let dir = tempfile::tempdir().unwrap();
+        let (plain, sealed) = (dir.path().join("plain"), dir.path().join("sealed"));
+        std::fs::write(&plain, source).unwrap();
+        std::fs::write(&sealed, encrypted).unwrap();
+        marker_scan(&sealed, &plain)
+    }
+
+    #[test]
+    fn a_leaked_plaintext_page_with_a_credential_is_refused() {
+        let mut source = noise(8192, 1);
+        let row = b"descriptor wpkh(tprv8ZgxMBicQKsPd...synthetic.../84h/1h/0h/0/*)";
+        source[5000..5000 + row.len()].copy_from_slice(row);
+        // The candidate carries one page of the source unencrypted.
+        let mut encrypted = noise(16384, 2);
+        encrypted[8192..12288].copy_from_slice(&source[4096..8192]);
+        let error = scan(&source, &encrypted).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::MigrationLeaksPlaintext);
+        // A marker at the very end of the source is still looked for.
+        let mut tail = noise(4096, 3);
+        tail[4096 - 5..].copy_from_slice(b"xprv9");
+        let mut leaked = noise(8192, 4);
+        leaked[100..100 + 64].copy_from_slice(&tail[4096 - 64..]);
+        assert!(scan(&tail, &leaked).is_err());
+    }
+
+    #[test]
+    fn a_marker_that_ciphertext_happens_to_contain_is_not_a_leak() {
+        let mut source = noise(8192, 5);
+        source[3000..3005].copy_from_slice(b"xprv9");
+        // Random ciphertext that happens to hold the bare marker, as fresh
+        // salts make it do now and then, but not the source's bytes around it.
+        let mut encrypted = noise(16384, 6);
+        encrypted[777..782].copy_from_slice(b"xprv9");
+        encrypted[9000..9005].copy_from_slice(b"tprv8");
+        scan(&source, &encrypted).unwrap();
+        // A source without markers can leak none.
+        scan(&noise(8192, 7), &encrypted).unwrap();
+    }
     #[test]
     fn empty_verification_never_recreates_a_missing_or_zero_byte_candidate() {
         for remove in [false, true] {

@@ -21,14 +21,16 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib import error, request
 
-from kassiber.core import rates as core_rates
-from kassiber.core import silent_payments as core_silent_payments
-from kassiber.core.sync_backends import sanitize_wallet_segment
-from kassiber.db import open_db
-from kassiber.importers import GENERIC_LEDGER_COLUMNS
-from kassiber.msat import btc_to_msat, dec
-from tests import cli_runner
-from tests.integration.test_live_bdk_observer import _wait_for_electrum_height
+from tests.integration import cli as cli_runner
+from tests.integration import book as product
+from tests.integration.book import (
+    GENERIC_LEDGER_COLUMNS,
+    btc_to_msat,
+    dec,
+    sanitize_wallet_segment,
+)
+from tests.integration.book import open_book as open_db
+from tests.integration.book import wait_for_electrum_height as _wait_for_electrum_height
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,7 +57,7 @@ def _is_liquid_live_wallet_spec(wallet_spec: dict[str, Any]) -> bool:
 
 
 def _is_silent_payment_wallet_spec(wallet_spec: dict[str, Any]) -> bool:
-    return _wallet_kind(wallet_spec) == core_silent_payments.WALLET_KIND
+    return _wallet_kind(wallet_spec) == product.SILENT_PAYMENTS_WALLET_KIND
 
 
 def _bitcoin_wallet_backend_name(scenario: dict[str, Any], wallet_spec: dict[str, Any]) -> str:
@@ -67,7 +69,7 @@ def _is_core_wallet(wallet: "DemoWallet") -> bool:
 
 
 def _is_silent_payment_wallet(wallet: "DemoWallet") -> bool:
-    return wallet.kind == core_silent_payments.WALLET_KIND
+    return wallet.kind == product.SILENT_PAYMENTS_WALLET_KIND
 
 
 def _is_liquid_live_wallet(wallet: "DemoWallet") -> bool:
@@ -269,20 +271,15 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         chain = _wallet_chain(wallet)
         if chain not in {"bitcoin", "liquid"}:
             raise ValueError(f"Scenario wallet {wallet['key']!r} has unsupported chain: {chain}")
-        if kind not in {"address", "custom", "descriptor", core_silent_payments.WALLET_KIND}:
+        if kind not in {"address", "custom", "descriptor", product.SILENT_PAYMENTS_WALLET_KIND}:
             raise ValueError(f"Scenario wallet {wallet['key']!r} has unsupported kind: {kind}")
-        if kind == core_silent_payments.WALLET_KIND:
+        if kind == product.SILENT_PAYMENTS_WALLET_KIND:
             if chain != "bitcoin":
                 raise ValueError(f"Scenario Silent Payments wallet {wallet['key']!r} must be Bitcoin")
             descriptor = str(wallet.get("sp_descriptor") or "")
-            try:
-                core_silent_payments.validate_watch_only_descriptor(
-                    descriptor,
-                    chain=chain,
-                    network=wallet.get("network") or "regtest",
-                )
-            except Exception as exc:
-                raise ValueError(f"Scenario Silent Payments wallet {wallet['key']!r} has invalid material") from exc
+            # The product validates the key material when it creates the wallet.
+            if not product.looks_like_sp_descriptor(descriptor):
+                raise ValueError(f"Scenario Silent Payments wallet {wallet['key']!r} has invalid material")
             if int(wallet.get("sp_scan_start_height") or 0) < 0:
                 raise ValueError(
                     f"Scenario Silent Payments wallet {wallet['key']!r} has invalid sp_scan_start_height"
@@ -646,7 +643,7 @@ def _load_bundled_daily_rates(pair: str) -> list[tuple[int, Decimal]]:
     kraken_pair = {"BTCEUR": "XBTEUR", "BTCUSD": "XBTUSD"}.get(normalized)
     if not kraken_pair:
         raise ValueError(f"No bundled Kraken daily history for recurring denomination pair {pair!r}")
-    path = ROOT / "kassiber" / "data" / "rates" / "kraken" / "btc_daily" / f"{kraken_pair}_1440.csv"
+    path = ROOT / "crates" / "rates" / "data" / "kraken" / "btc_daily" / f"{kraken_pair}_1440.csv"
     rows: list[tuple[int, Decimal]] = []
     with path.open("r", encoding="utf-8", newline="") as handle:
         for line_number, row in enumerate(csv.reader(handle), start=1):
@@ -1006,7 +1003,7 @@ def _write_silent_payment_scan_files(
         payload = {
             "schema_version": 1,
             "complete": True,
-            "descriptor_fingerprint": core_silent_payments.descriptor_fingerprint(wallet.sp_descriptor),
+            "descriptor_fingerprint": product.descriptor_fingerprint(wallet.sp_descriptor),
             "range": {
                 "from_height": wallet.sp_scan_start_height,
                 "to_height": block_height,
@@ -2797,7 +2794,7 @@ def _create_kassiber_book(
                 "--label",
                 wallet.label,
                 "--kind",
-                core_silent_payments.WALLET_KIND,
+                product.SILENT_PAYMENTS_WALLET_KIND,
                 "--account",
                 wallet.account,
                 "--backend",
@@ -2923,7 +2920,7 @@ def _seed_real_price_cache(
             "fallback_reason": f"unsupported pricing source {source!r}",
         }
 
-    archive_path = ROOT / "kassiber" / "data" / "rates" / "kraken" / "btc_daily"
+    archive_path = ROOT / "crates" / "rates" / "data" / "kraken" / "btc_daily"
     seed = run_cli(
         data_root,
         "rates",
@@ -2948,22 +2945,22 @@ def _seed_real_price_cache(
         os.environ.get(live_env) or pricing.get("live_source") or ""
     ).strip().lower()
     if live_source and live_source not in {"0", "false", "no", "off"}:
+        if live_source not in product.LIVE_MARKET_RATE_SOURCES:
+            raise ValueError(
+                f"{live_env}={live_source!r} is not a live market-rate provider: "
+                f"{', '.join(product.LIVE_MARKET_RATE_SOURCES)}"
+            )
+        # An explicit opt-in: the product fetches the latest quote itself.
+        result["live"] = {
+            "source": live_source,
+            "pair": pair,
+            "latest": product.latest_rate(data_root, pair, live_source),
+        }
         conn = open_db(data_root)
         try:
-            normalized_live_source = core_rates.normalize_market_rate_provider(live_source)
-            result["live"] = {
-                "source": normalized_live_source,
-                "pair": pair,
-                "latest": core_rates.sync_latest_rates(
-                    conn,
-                    pair=pair,
-                    source=normalized_live_source,
-                    commit=True,
-                ),
-            }
             conn.execute(
                 "DELETE FROM settings WHERE key = ? AND value = ?",
-                (core_rates.MARKET_RATE_PROVIDER_SETTING, core_rates.RATE_SOURCE_MEMPOOL),
+                (product.MARKET_RATE_PROVIDER_SETTING, product.RATE_SOURCE_MEMPOOL),
             )
             conn.commit()
         finally:
@@ -2971,14 +2968,14 @@ def _seed_real_price_cache(
     else:
         conn = open_db(data_root)
         try:
-            for source in core_rates.LIVE_MARKET_RATE_SOURCES:
+            for source in product.LIVE_MARKET_RATE_SOURCES:
                 conn.execute(
                     "DELETE FROM rates_cache WHERE pair = ? AND source = ? AND granularity = 'latest'",
                     (pair, source),
                 )
             conn.execute(
                 "DELETE FROM settings WHERE key = ? AND value = ?",
-                (core_rates.MARKET_RATE_PROVIDER_SETTING, core_rates.RATE_SOURCE_MEMPOOL),
+                (product.MARKET_RATE_PROVIDER_SETTING, product.RATE_SOURCE_MEMPOOL),
             )
             conn.commit()
         finally:
@@ -3289,20 +3286,22 @@ def _export_reports(data_root: Path, export_dir: Path, scenario: dict[str, Any])
         run_cli(data_root, "reports", "portfolio-summary", *scope)["data"],
         results["summary_pdf"],
     )
-    try:
-        import openpyxl
-    except ImportError:
-        pass
-    else:
-        workbook = openpyxl.load_workbook(exports["report_xlsx"], read_only=True, data_only=False)
-        try:
-            required_sheets = {"Verify", "Control", "Acquisitions", "Disposals"}
-            missing_sheets = sorted(required_sheets.difference(workbook.sheetnames))
-            if missing_sheets:
-                raise RuntimeError(f"XLSX export is missing verification sheets: {missing_sheets}")
-        finally:
-            workbook.close()
+    required_sheets = {"Verify", "Control", "Acquisitions", "Disposals"}
+    missing_sheets = sorted(required_sheets.difference(_xlsx_sheet_names(exports["report_xlsx"])))
+    if missing_sheets:
+        raise RuntimeError(f"XLSX export is missing verification sheets: {missing_sheets}")
     return {name: {"path": str(exports[name]), **results[name]} for name in exports}
+
+
+def _xlsx_sheet_names(path: Path) -> list[str]:
+    """Sheet names from `xl/workbook.xml`, without a spreadsheet library."""
+    import zipfile
+    from xml.etree import ElementTree
+
+    namespace = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    with zipfile.ZipFile(path) as archive:
+        root = ElementTree.fromstring(archive.read("xl/workbook.xml"))
+    return [sheet.get("name", "") for sheet in root.iter(f"{namespace}sheet")]
 
 
 def _assert_summary_pdf_wallet_snapshot(
@@ -4958,6 +4957,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--payments", type=int, default=1)
     parser.add_argument("--transfers", type=int, default=1)
     args = parser.parse_args(argv)
+    try:
+        cli_runner.prefix()
+    except cli_runner.CandidateConfigError as exc:
+        parser.error(f"{exc}; there is no Python product to fall back to")
 
     if args.tick:
         if not args.summary:

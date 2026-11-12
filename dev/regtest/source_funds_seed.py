@@ -10,7 +10,7 @@ import sqlite3
 from decimal import Decimal
 from pathlib import Path
 
-from tests import cli_runner
+from tests.integration import cli as cli_runner
 
 LABEL = "SYNTHETIC — Strike purchase to own wallet"
 DESCRIPTION = (

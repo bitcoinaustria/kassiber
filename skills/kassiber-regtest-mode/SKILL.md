@@ -21,9 +21,10 @@ cannot be reproduced in the fast replay lane.
 | Stop or remove persistent demo | `./scripts/integration-harness.sh demo-down [--purge]` | yes |
 | Time one large wallet's sync and journal step | `./scripts/integration-harness.sh sync-benchmark [--txs N]` | yes |
 
-Set `KASSIBER_RUNTIME=rust` (with `KASSIBER_RUST_BIN`, default
-`target/release/kassiber`) to run a lane's product children on the Rust
-binary; see [runtime selection](../../docs/reference/testing.md#runtime-selection).
+Every lane runs the Rust binary (`KASSIBER_RUST_BIN`, default
+`target/release/kassiber`; build it with `cargo build -p kassiber --release`).
+The harness helpers are standard-library Python run with `python3 -I`; see
+[runtime selection](../../docs/reference/testing.md#runtime-selection).
 
 Use `demo-full` for test proof. Use `demo-up` for interactive development; it
 must leave reports immediately readable. Use `demo-tick` when the app refresh
@@ -133,7 +134,7 @@ the Compose project is running, whether RPC is reachable, the data root for
 - If ports collide, follow the harness message: stop the persistent demo with
   `./scripts/integration-harness.sh demo-down` or choose another
   `KASSIBER_REGTEST_RPC_PORT`.
-- If `uv` cache or Docker socket access fails because of sandboxing, rerun the
+- If Docker socket access fails because of sandboxing, rerun the
   same command with the needed approval rather than changing the command shape.
 - Keep `demo-full` and `demo-up` semantics distinct: `demo-full` proves the
   built-in post-sync refresh path; `demo-up` is the reusable interactive book.

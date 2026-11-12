@@ -10,544 +10,18 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  # uv builds the tax engine's binding with maturin. Never let maturin fetch
-  # its own Rust toolchain mid-build; the setup-rust step installs the pinned one.
-  MATURIN_NO_INSTALL_RUST: "1"
-  # Tests that compare with the frozen tax oracle fail here, instead of
-  # skipping, when its RP2 dev dependency is missing.
-  KASSIBER_CI: "1"
-
 jobs:
-  preflight:
-    name: Preflight
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-
-      - name: Fetch pinned test data
-        shell: bash
-        run: scripts/fetch-test-data.sh
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key: python-binding
-          save-cache: "true"
-
-      - name: Sync Python dependencies
-        run: uv sync --locked
-
-      - name: Compile Python
-        run: uv run --locked python -m compileall -q kassiber tests scripts/python_test_shards.py
-
-      - name: Validate disjoint Python shards
-        run: uv run --locked python scripts/python_test_shards.py validate
-
-      - name: Contract preflight
-        shell: bash
-        run: |
-          mkdir -p test-results
-          set -o pipefail
-          uv run --locked python scripts/python_test_shards.py run preflight --ci -- \
-            --junitxml=test-results/preflight.xml \
-            --durations=50 \
-            -q 2>&1 | tee test-results/preflight.log
-
-      - name: Upload preflight report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: pytest-preflight-${{ github.run_attempt }}
-          path: test-results/
-          if-no-files-found: warn
-          retention-days: 7
-
-  rust-binaries:
-    name: Rust test binaries
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      # The parity suite only runs these; without debug info the build and
-      # the artifact every lane downloads stay small (about 1 GB unpacked).
-      CARGO_PROFILE_DEV_DEBUG: "0"
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-
-      - name: Fetch pinned test data
-        shell: bash
-        run: scripts/fetch-test-data.sh
-
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key: python-binding
-
-      - name: Build the parity suite's Rust binaries
-        run: scripts/build-rust-test-binaries.sh build
-
-      - name: Pack the Rust test binaries
-        run: scripts/build-rust-test-binaries.sh pack rust-test-binaries.tar
-
-      - name: Upload the Rust test binaries
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: rust-test-binaries
-          path: rust-test-binaries.tar
-          if-no-files-found: error
-          retention-days: 1
-
-  python-tests:
-    name: Python (${{ matrix.shard }}${{ matrix.part != '1/1' && format(' {0}', matrix.part) || '' }})
-    needs:
-      - preflight
-      - rust-binaries
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 120 || 60 }}
-    env:
-      # Fail the lane when a test module reaches the tax engine but is
-      # missing from the tax-shadow overlay (docs/reference/testing.md).
-      KASSIBER_TEST_TAX_ENGINE: census
-      KASSIBER_TEST_CUSTODY_ENGINE: census
-      # The parity suite's binaries, built once by the rust-binaries job.
-      KASSIBER_RUST_BIN: ${{ github.workspace }}/target/debug/kassiber
-      KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
-      KASSIBER_TEST_JOURNAL_PROCESS_BIN: ${{ github.workspace }}/target/release/examples/journal-process
-    strategy:
-      fail-fast: false
-      matrix:
-        shard:
-          - core-accounting
-          - wallets-sync
-          - daemon-cli
-          - security-replication
-          - reports-contracts
-          - serial-network
-          - serial-daemon
-          - serial-regressions
-          - serial-integration
-        # serial-daemon holds the subprocess parity suite, hours of tests run
-        # one at a time, and core-accounting about an hour with its parity
-        # modules; their jobs each run one part (`--part K/N`).
-        part: ["1/1"]
-        exclude:
-          - shard: core-accounting
-          - shard: serial-daemon
-        include:
-          - shard: core-accounting
-            part: "1/3"
-          - shard: core-accounting
-            part: "2/3"
-          - shard: core-accounting
-            part: "3/3"
-          - shard: serial-daemon
-            part: "1/8"
-          - shard: serial-daemon
-            part: "2/8"
-          - shard: serial-daemon
-            part: "3/8"
-          - shard: serial-daemon
-            part: "4/8"
-          - shard: serial-daemon
-            part: "5/8"
-          - shard: serial-daemon
-            part: "6/8"
-          - shard: serial-daemon
-            part: "7/8"
-          - shard: serial-daemon
-            part: "8/8"
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-
-      - name: Fetch pinned test data
-        shell: bash
-        run: scripts/fetch-test-data.sh
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key: python-binding
-
-      - name: Sync dependencies
-        run: uv sync --locked
-
-      # The chat and document tests read PDFs through Poppler, as the product
-      # does; without it they would skip.
-      - name: Install Poppler
-        # The runners' Ubuntu mirror has had resolver outages of several
-        # minutes; retry with backoff instead of failing the lane.
-        run: |
-          for attempt in 1 2 3 4 5; do
-            if sudo apt-get -o Acquire::Retries=3 update \
-              && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends poppler-utils; then
-              break
-            fi
-            if [ "$attempt" -eq 5 ]; then exit 1; fi
-            sleep $((attempt * 30))
-          done
-          command -v pdftotext pdfinfo pdftoppm
-
-      # Some parity tests build a small example with `cargo build --offline`;
-      # the lane no longer builds anything that would download the crates.
-      - name: Fetch Rust crates
-        run: cargo fetch --locked
-
-      - name: Download the Rust test binaries
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: rust-test-binaries
-
-      - name: Unpack the Rust test binaries
-        run: scripts/build-rust-test-binaries.sh unpack rust-test-binaries.tar
-
-      - name: Run Python shard
-        shell: bash
-        run: |
-          mkdir -p test-results
-          set -o pipefail
-          uv run --locked python scripts/python_test_shards.py run "${{ matrix.shard }}" --ci --part "${{ matrix.part }}" -- \
-            --junitxml="test-results/${{ matrix.shard }}.xml" \
-            --durations=50 \
-            -q 2>&1 | tee "test-results/${{ matrix.shard }}.log"
-
-      - name: Summarize Python shard
-        if: always()
-        shell: bash
-        run: |
-          echo "### Python shard: ${{ matrix.shard }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
-          if [ -f "test-results/${{ matrix.shard }}.log" ]; then
-            echo '<details><summary>Slowest tests / final output</summary>' >> "$GITHUB_STEP_SUMMARY"
-            echo '' >> "$GITHUB_STEP_SUMMARY"
-            echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            awk '/slowest 50 durations/{found=1} found && shown++ < 60' "test-results/${{ matrix.shard }}.log" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            echo '</details>' >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload Python test report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: pytest-${{ matrix.shard }}-${{ strategy.job-index }}-${{ github.run_attempt }}
-          path: test-results/
-          if-no-files-found: warn
-          retention-days: 7
-
-  tax-shadow:
-    name: Tax shadow (${{ matrix.shard }}${{ matrix.part != '1/1' && format(' {0}', matrix.part) || '' }})
-    needs:
-      - preflight
-      - rust-binaries
-    env:
-      # The parity suite's binaries, built once by the rust-binaries job.
-      KASSIBER_RUST_BIN: ${{ github.workspace }}/target/debug/kassiber
-      KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
-      KASSIBER_TEST_JOURNAL_PROCESS_BIN: ${{ github.workspace }}/target/release/examples/journal-process
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 120 || 60 }}
-    strategy:
-      fail-fast: false
-      matrix:
-        # The lanes holding a module of the tax-shadow overlay
-        # (`python scripts/python_test_shards.py list-shadow`).
-        shard:
-          - core-accounting
-          - wallets-sync
-          - daemon-cli
-          - security-replication
-          - reports-contracts
-          - serial-network
-          - serial-daemon
-          - serial-regressions
-          - serial-integration
-        # serial-daemon holds the subprocess parity suite, hours of tests run
-        # one at a time, and core-accounting about an hour with its parity
-        # modules; their jobs each run one part (`--part K/N`).
-        part: ["1/1"]
-        exclude:
-          - shard: core-accounting
-          - shard: serial-daemon
-        include:
-          - shard: core-accounting
-            part: "1/3"
-          - shard: core-accounting
-            part: "2/3"
-          - shard: core-accounting
-            part: "3/3"
-          - shard: serial-daemon
-            part: "1/8"
-          - shard: serial-daemon
-            part: "2/8"
-          - shard: serial-daemon
-            part: "3/8"
-          - shard: serial-daemon
-            part: "4/8"
-          - shard: serial-daemon
-            part: "5/8"
-          - shard: serial-daemon
-            part: "6/8"
-          - shard: serial-daemon
-            part: "7/8"
-          - shard: serial-daemon
-            part: "8/8"
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-
-      - name: Fetch pinned test data
-        shell: bash
-        run: scripts/fetch-test-data.sh
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key: python-binding
-
-      - name: Sync dependencies
-        run: uv sync --locked
-
-      # The chat and document tests read PDFs through Poppler, as the product
-      # does; without it they would skip.
-      - name: Install Poppler
-        # The runners' Ubuntu mirror has had resolver outages of several
-        # minutes; retry with backoff instead of failing the lane.
-        run: |
-          for attempt in 1 2 3 4 5; do
-            if sudo apt-get -o Acquire::Retries=3 update \
-              && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends poppler-utils; then
-              break
-            fi
-            if [ "$attempt" -eq 5 ]; then exit 1; fi
-            sleep $((attempt * 30))
-          done
-          command -v pdftotext pdfinfo pdftoppm
-
-      # Some parity tests build a small example with `cargo build --offline`;
-      # the lane no longer builds anything that would download the crates.
-      - name: Fetch Rust crates
-        run: cargo fetch --locked
-
-      - name: Download the Rust test binaries
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: rust-test-binaries
-
-      - name: Unpack the Rust test binaries
-        run: scripts/build-rust-test-binaries.sh unpack rust-test-binaries.tar
-
-      - name: Compare production with the tax oracle
-        shell: bash
-        run: |
-          mkdir -p test-results
-          set -o pipefail
-          uv run --locked python scripts/python_test_shards.py run-shadow "${{ matrix.shard }}" --ci --part "${{ matrix.part }}" -- \
-            --junitxml="test-results/tax-shadow-${{ matrix.shard }}.xml" \
-            --durations=50 \
-            -q 2>&1 | tee "test-results/tax-shadow-${{ matrix.shard }}.log"
-
-      - name: Summarize tax shadow
-        if: always()
-        shell: bash
-        run: |
-          echo "### Tax shadow: ${{ matrix.shard }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
-          if [ -f "test-results/tax-shadow-${{ matrix.shard }}.log" ]; then
-            echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            awk '/tax engine shadow/{found=1} found && shown++ < 30' "test-results/tax-shadow-${{ matrix.shard }}.log" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload tax shadow report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: pytest-tax-shadow-${{ matrix.shard }}-${{ strategy.job-index }}-${{ github.run_attempt }}
-          path: test-results/
-          if-no-files-found: warn
-          retention-days: 7
-
-  custody-shadow:
-    name: Custody shadow (${{ matrix.shard }}${{ matrix.part != '1/1' && format(' {0}', matrix.part) || '' }})
-    env:
-      # The parity suite's binaries, built once by the rust-binaries job.
-      KASSIBER_RUST_BIN: ${{ github.workspace }}/target/debug/kassiber
-      KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
-      KASSIBER_TEST_JOURNAL_PROCESS_BIN: ${{ github.workspace }}/target/release/examples/journal-process
-    needs:
-      - preflight
-      - rust-binaries
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 120 || 60 }}
-    strategy:
-      fail-fast: false
-      matrix:
-        # The same complete overlay and ordering policy as the tax-shadow lane.
-        shard:
-          - core-accounting
-          - wallets-sync
-          - daemon-cli
-          - security-replication
-          - reports-contracts
-          - serial-network
-          - serial-daemon
-          - serial-regressions
-          - serial-integration
-        # serial-daemon holds the subprocess parity suite, hours of tests run
-        # one at a time, and core-accounting about an hour with its parity
-        # modules; their jobs each run one part (`--part K/N`).
-        part: ["1/1"]
-        exclude:
-          - shard: core-accounting
-          - shard: serial-daemon
-        include:
-          - shard: core-accounting
-            part: "1/3"
-          - shard: core-accounting
-            part: "2/3"
-          - shard: core-accounting
-            part: "3/3"
-          - shard: serial-daemon
-            part: "1/8"
-          - shard: serial-daemon
-            part: "2/8"
-          - shard: serial-daemon
-            part: "3/8"
-          - shard: serial-daemon
-            part: "4/8"
-          - shard: serial-daemon
-            part: "5/8"
-          - shard: serial-daemon
-            part: "6/8"
-          - shard: serial-daemon
-            part: "7/8"
-          - shard: serial-daemon
-            part: "8/8"
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-
-      - name: Fetch pinned test data
-        shell: bash
-        run: scripts/fetch-test-data.sh
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key: python-binding
-
-      - name: Sync dependencies
-        run: uv sync --locked
-
-      # The chat and document tests read PDFs through Poppler, as the product
-      # does; without it they would skip.
-      - name: Install Poppler
-        # The runners' Ubuntu mirror has had resolver outages of several
-        # minutes; retry with backoff instead of failing the lane.
-        run: |
-          for attempt in 1 2 3 4 5; do
-            if sudo apt-get -o Acquire::Retries=3 update \
-              && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends poppler-utils; then
-              break
-            fi
-            if [ "$attempt" -eq 5 ]; then exit 1; fi
-            sleep $((attempt * 30))
-          done
-          command -v pdftotext pdfinfo pdftoppm
-
-      # Some parity tests build a small example with `cargo build --offline`;
-      # the lane no longer builds anything that would download the crates.
-      - name: Fetch Rust crates
-        run: cargo fetch --locked
-
-      - name: Download the Rust test binaries
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: rust-test-binaries
-
-      - name: Unpack the Rust test binaries
-        run: scripts/build-rust-test-binaries.sh unpack rust-test-binaries.tar
-
-      - name: Compare pure production with frozen SQL composition
-        shell: bash
-        run: |
-          mkdir -p test-results
-          set -o pipefail
-          uv run --locked python scripts/python_test_shards.py run-custody-shadow "${{ matrix.shard }}" --ci --part "${{ matrix.part }}" -- \
-            --junitxml="test-results/custody-shadow-${{ matrix.shard }}.xml" \
-            --durations=50 \
-            -q 2>&1 | tee "test-results/custody-shadow-${{ matrix.shard }}.log"
-
-      - name: Summarize custody shadow
-        if: always()
-        shell: bash
-        run: |
-          echo "### Custody shadow (${{ matrix.shard }})" >> "$GITHUB_STEP_SUMMARY"
-          echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
-          if [ -f "test-results/custody-shadow-${{ matrix.shard }}.log" ]; then
-            echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            awk '/custody engine shadow/{found=1} found && shown++ < 30' "test-results/custody-shadow-${{ matrix.shard }}.log" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload custody shadow report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: pytest-custody-shadow-${{ matrix.shard }}-${{ strategy.job-index }}-${{ github.run_attempt }}
-          path: test-results/
-          if-no-files-found: warn
-          retention-days: 7
-
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      # The redaction corpora the Vitest suites read are locked test data.
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
 
       - name: Install pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
@@ -587,67 +61,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  cli-smoke:
-    name: CLI smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-
-      - name: Fetch pinned test data
-        shell: bash
-        run: scripts/fetch-test-data.sh
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key: python-binding
-
-      - name: Sync dependencies
-        run: uv sync --locked
-
-      - name: Run CLI smoke
-        shell: bash
-        run: |
-          mkdir -p test-results
-          set -o pipefail
-          uv run --locked python scripts/python_test_shards.py run cli-smoke --ci -- \
-            --junitxml=test-results/cli-smoke.xml \
-            --durations=50 \
-            -q 2>&1 | tee test-results/cli-smoke.log
-
-      - name: Summarize CLI smoke
-        if: always()
-        shell: bash
-        run: |
-          echo "### CLI smoke" >> "$GITHUB_STEP_SUMMARY"
-          echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
-          if [ -f test-results/cli-smoke.log ]; then
-            echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            awk '/slowest 50 durations/{found=1} found && shown++ < 60' test-results/cli-smoke.log >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Upload CLI smoke report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: pytest-cli-smoke-${{ github.run_attempt }}
-          path: test-results/
-          if-no-files-found: warn
-          retention-days: 7
-
   tax-engine:
     name: Rust crates
     runs-on: ubuntu-latest
@@ -675,6 +88,22 @@ jobs:
           cache-key: rust-workspace
           save-cache: "true"
 
+      # The document import and chat PDF paths run Poppler, as the product
+      # does; without it their tests skip and recorded sessions differ.
+      - name: Install Poppler
+        # The runners' Ubuntu mirror has had resolver outages of several
+        # minutes; retry with backoff instead of failing the job.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if sudo apt-get -o Acquire::Retries=3 update \
+              && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends poppler-utils; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then exit 1; fi
+            sleep $((attempt * 30))
+          done
+          command -v pdftotext pdfinfo pdftoppm
+
       - name: Check formatting
         run: cargo fmt --all --check
 
@@ -685,43 +114,167 @@ jobs:
         run: cargo test --workspace --features kassiber-journals/test-harness --locked
 
       - name: Verify ledger bytes under custody JSON features
-        run: python3 crates/custody/scripts/check_ledger_features.py
+        run: scripts/check-ledger-features.sh
+
+      # Release CI packages into a relative output directory; both archive
+      # formats must land there.
+      - name: Check the CLI archive packaging
+        run: scripts/check-cli-archive.sh
+
+      # Every catalog entry applies to the tree and belongs to a suite.
+      - name: Validate mutation catalogs
+        run: cargo run --locked -p kassiber-mutation-check -- check
+
+      # The network tape (crates/net/src/tape.rs) is test-observer code; a
+      # product build of the binary must not contain it.
+      - name: Product build carries no test network tape
+        run: |
+          cargo build --locked -p kassiber
+          scripts/check-no-test-tape.sh target/debug/kassiber
 
       # The egress observer only exists in harness builds; test it there too.
       - name: Run egress observer tests
         run: cargo test -p kassiber-net --features test-observer --locked
-
-      # The shell harness's parity tests (legacy_privacy_transport,
-      # privacy_reports, psbt_privacy) compare against the Python reference
-      # through `.venv/bin/python`; the steps above need no Python.
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-
-      - name: Sync dependencies
-        run: uv sync --locked
 
       # The binary's harness build adds the observer, the in-memory store, and
       # the daemon's protocol test kinds; the supervisor-rule tests need it.
       - name: Lint and test the Rust shell harness
         run: |
           cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-targets --features kassiber/test-harness --locked -- -D warnings
-          # `cargo build` writes target/debug/kassiber.d; `cargo test` alone
-          # does not, and the Python reference refuses a binary without it.
-          cargo build -p kassiber --bin kassiber --features test-harness --locked
           cargo test -p kassiber --features test-harness --locked
+
+  tooling:
+    name: Tooling scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      # Standard-library tests of the packaging, publishing and harness
+      # scripts, run isolated like the regtest harness (plan 22, D2); the
+      # product-free check keeps every such module off the Python product.
+      - name: Run the tooling tests
+        run: |
+          python3 -I -m unittest discover -s tests/tooling -t . -v
+          python3 -I -m unittest discover -s tests/integration -t . -p test_product_free.py -v
+
+  session-replay-build:
+    name: Recorded sessions (build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # The binary and every example the recordings name, built without debug
+      # info so the build fits the runner's disk and the artifact stays small.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: rust-session-replay
+          save-cache: "true"
+
+      - name: Build the replayed binaries
+        run: scripts/replay-sessions.sh build
+
+      - name: Pack the replayed binaries
+        run: scripts/replay-sessions.sh pack replay-binaries.tar
+
+      - name: Upload the replayed binaries
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: replay-binaries
+          path: replay-binaries.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  session-replay:
+    name: Recorded sessions (${{ matrix.part }})
+    needs: session-replay-build
+    runs-on: ubuntu-latest
+    # About 24,000 sessions take hours on one 4-core runner. Each part
+    # replays every 32nd session (session-replay --part K/N): about 760
+    # sessions, 16 minutes with 4 jobs locally, about 20-25 on a runner.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ["1/32", "2/32", "3/32", "4/32", "5/32", "6/32", "7/32", "8/32",
+               "9/32", "10/32", "11/32", "12/32", "13/32", "14/32", "15/32", "16/32",
+               "17/32", "18/32", "19/32", "20/32", "21/32", "22/32", "23/32",
+               "24/32", "25/32", "26/32", "27/32", "28/32", "29/32", "30/32",
+               "31/32", "32/32"]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
+
+      - name: Download the replayed binaries
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: replay-binaries
+
+      - name: Unpack the replayed binaries
+        run: scripts/replay-sessions.sh unpack replay-binaries.tar
+
+      # Debug builds of age read its message catalogue (rust-embed) from the
+      # crate's registry source at run time; without it the first age error
+      # message panics. The pinned toolchain fetches the same registry path
+      # the build job compiled against.
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+
+      - name: Fetch Rust crates
+        run: cargo fetch --locked
+
+      # The document import and chat PDF paths run Poppler, as the product
+      # does; without it their tests skip and recorded sessions differ.
+      - name: Install Poppler
+        # The runners' Ubuntu mirror has had resolver outages of several
+        # minutes; retry with backoff instead of failing the job.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if sudo apt-get -o Acquire::Retries=3 update \
+              && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends poppler-utils; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then exit 1; fi
+            sleep $((attempt * 30))
+          done
+          command -v pdftotext pdfinfo pdftoppm
+
+      # A replay recreates each session's recorded paths under /mnt in a
+      # user and mount namespace (docs/plan/22-python-removal.md#session-replay).
+      # Ubuntu runners restrict unprivileged user namespaces through
+      # AppArmor; this job lifts that restriction for its own runner only.
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Replay this part of the recorded product sessions
+        env:
+          KASSIBER_REPLAY_PREBUILT: "1"
+        run: scripts/replay-sessions.sh --part "${{ matrix.part }}"
+
+      - name: Upload the replay report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: session-replay-${{ strategy.job-index }}-${{ github.run_attempt }}
+          path: target/session-replay-report.tsv
+          if-no-files-found: warn
+          retention-days: 7
 
   chain-observers:
     name: Chain observers (Linux Docker)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -741,52 +294,39 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif git diff --quiet "$BASE_SHA"...HEAD -- \
             .github/workflows/ci.yml \
-            kassiber/core/chain_observer \
-            kassiber/core/chain_analysis \
-            'kassiber/core/chain_analysis_*.py' \
-            'kassiber/chain_analysis_*_schema.py' \
+            crates/chain \
+            crates/wallets \
+            crates/store \
+            crates/net \
+            crates/cli \
+            crates/kassiber \
+            Cargo.toml \
+            Cargo.lock \
+            rust-toolchain.toml \
             scripts/chain-analysis-regtest.sh \
-            kassiber/core/esplora_history.py \
-            kassiber/core/sync.py \
-            kassiber/core/sync_backends.py \
-            kassiber/proxy.py \
-            kassiber/wallet_descriptors.py \
-            kassiber/wallet_security.py \
-            kassiber/db.py \
             dev/regtest \
             scripts/integration-harness.sh \
-            tests/integration \
-            pyproject.toml \
-            uv.lock; then
+            tests/integration; then
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Set up Python
-        if: steps.observer_paths.outputs.run == 'true'
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-
-      - name: Install uv
-        if: steps.observer_paths.outputs.run == 'true'
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-
       - name: Set up Rust
         if: steps.observer_paths.outputs.run == 'true'
         uses: ./.github/actions/setup-rust
         with:
-          cache-key: python-binding
+          cache-key: rust-chain-observers
+          save-cache: "true"
 
-      - name: Sync dependencies
+      # The harness drives this binary (its default, target/release/kassiber);
+      # the harness itself is standard-library python3 -I on the runner's
+      # interpreter, with no uv and no virtual environment.
+      - name: Build the kassiber binary
         if: steps.observer_paths.outputs.run == 'true'
-        run: uv sync --locked
+        run: cargo build --locked --release -p kassiber
 
-      - name: Dependency-backed chain-observer oracle
+      - name: Chain-observer node-truth oracle and live BDK/LWK observers
         if: steps.observer_paths.outputs.run == 'true'
         run: ./scripts/integration-harness.sh chain-observers
 
@@ -802,14 +342,10 @@ jobs:
     name: required
     if: always()
     needs:
-      - preflight
-      - rust-binaries
-      - python-tests
-      - tax-shadow
-      - custody-shadow
       - frontend
-      - cli-smoke
       - tax-engine
+      - session-replay
+      - tooling
       - chain-observers
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -817,16 +353,12 @@ jobs:
       - name: Record required-check results
         run: |
           echo "### Required CI" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Preflight: ${{ needs.preflight.result }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Rust test binaries: ${{ needs.rust-binaries.result }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Python shards: ${{ needs.python-tests.result }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Custody shadow: ${{ needs.custody-shadow.result }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Tax shadow: ${{ needs.tax-shadow.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- CLI smoke: ${{ needs.cli-smoke.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Rust crates: ${{ needs.tax-engine.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Recorded sessions: ${{ needs.session-replay.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tooling scripts: ${{ needs.tooling.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce required checks
-        if: ${{ needs.preflight.result != 'success' || needs.rust-binaries.result != 'success' || needs.python-tests.result != 'success' || needs.tax-shadow.result != 'success' || needs.custody-shadow.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' || needs.tax-engine.result != 'success' || needs.chain-observers.result != 'success' }}
+        if: ${{ needs.frontend.result != 'success' || needs.tax-engine.result != 'success' || needs.session-replay.result != 'success' || needs.tooling.result != 'success' || needs.chain-observers.result != 'success' }}
         run: exit 1

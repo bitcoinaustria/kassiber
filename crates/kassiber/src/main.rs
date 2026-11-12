@@ -48,9 +48,14 @@ fn main() -> ExitCode {
     // Arm the process-wide attempt observer before dispatch. Service clients
     // supply their own fresh offline preference reader and exact-action grant.
     let _gate = Gate::new(|| Offline::Unavailable, Ledger::process());
+    // Test builds only: a recorded session's SQLite seed (no-op otherwise).
+    kassiber_store::seed_test_prng();
     // BIP329 label matching reads the derived ownership index, which lives
     // above the metadata service it serves.
     kassiber_wallets::identify::register_bip329_ownership();
+    // Book opens migrate legacy custody reviews through the custody layer,
+    // which lives above the store that runs the compatibility pass.
+    kassiber_transfers::legacy_migration::install();
 
     let mut argv = Vec::new();
     for argument in std::env::args_os().skip(1) {

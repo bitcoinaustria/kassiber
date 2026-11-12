@@ -7,9 +7,11 @@ Verify behavior against code when these disagree and update the affected docs.
 
 ## Shared boundaries
 
-The CLI and desktop delegate to the same Python core. Keep business decisions
-there so the CLI, desktop, and in-product AI cannot produce different accounting.
-Read [Python guidance](kassiber/AGENTS.md) for backend work and
+The CLI and desktop delegate to the same Rust core: one `kassiber` binary
+serves the command line, the desktop daemon, the MCP server, and the operator
+broker. Keep business decisions in its crates so the CLI, desktop, and
+in-product AI cannot produce different accounting. Read
+[backend guidance](crates/AGENTS.md) for Rust crate work and
 [desktop guidance](ui-tauri/AGENTS.md) for React, Tauri, or bridge work. Changes to
 a shared contract need verification across its callers, including AI projections.
 
@@ -66,6 +68,11 @@ changing external I/O, storage, credentials, diagnostics, or AI disclosure.
   that specific run. Do not bypass the pnpm minimum release-age policy without
   owner approval. Keep generated changes separate from handwritten behavior
   when practical. Report accidental replacement of unrelated work immediately.
+- Kassiber is Rust only; Python was removed under
+  [plan 22](docs/plan/22-python-removal.md). Do not add Python to the product or
+  the gate; the regtest harness scripts are stdlib-only and run with
+  `python3 -I`. Goldens the Python reference produced are frozen; change them
+  only through the [reviewed regeneration flow](docs/plan/22-python-removal.md#generators-become-frozen-goldens).
 - Command/flag reshaping is allowed during development without deprecation
   aliases. Update behavior docs, affected AI references, and completed or
   reshaped TODO entries in the same change. Do not grow root instructions into
@@ -98,7 +105,7 @@ its helper scripts and intake references form one bundle. The
 [regtest skill](skills/kassiber-regtest-mode/SKILL.md) covers the integration harness.
 Installed external skills may also be available; verify their commands against
 this checkout. The in-product AI's allowlisted references live separately in
-[kassiber/ai/skill_references/](kassiber/ai/skill_references/).
+[crates/ai/skill_references/](crates/ai/skill_references/).
 
 Keep shared instructions here, subsystem rules in scoped `AGENTS.md` files,
 and procedures in references or skills. `CLAUDE.md` adapters import these files.

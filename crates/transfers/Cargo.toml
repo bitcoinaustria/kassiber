@@ -33,6 +33,9 @@ serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtri
 [dev-dependencies]
 # Review composition lives above transfers to avoid a runtime dependency cycle.
 kassiber-journals = { path = "../journals", features = ["test-harness"] }
+# Deterministic migrating opens for the frozen legacy migration vectors.
+kassiber-store = { path = "../store", features = ["test-hooks"] }
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 tempfile = "3"
 
 [lints.rust]

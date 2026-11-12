@@ -37,7 +37,7 @@ executors, and result redaction, within the access the user grants.
 
   Each tool is classified through the broker's exact-path registry by the
   daemon kind it executes (`call_capability` and `mcp_tools` in
-  [the MCP tools module](../../kassiber/mcp/tools.py)). Read tools whose
+  [`crates/mcp/src/tools.rs`](../../crates/mcp/src/tools.rs)). Read tools whose
   daemon kind is `operator` only because a direct read refreshes journals
   (reports, report blockers, review contexts) are reads here; anything that
   leaves the machine needs at least `operator`. Tools above the grant are not
@@ -190,7 +190,8 @@ The server instructions describe the grant in force: at `read`, that nothing
 can change; above it, that changes follow the user's request, plans are
 passed unchanged, and stale plans are replanned.
 
-The implementation uses only the standard library (`kassiber/mcp/`). It
+The implementation is the `kassiber-mcp` crate (`crates/mcp/`), with no MCP
+SDK dependency. It
 elicits nothing, samples nothing, and sends no requests to the client. The
 client's self-reported name (legacy `initialize` `clientInfo.name`, or a
 modern request's `io.modelcontextprotocol/clientInfo` metadata) is used only

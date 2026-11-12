@@ -3,7 +3,9 @@
 //! real listener in a disposable runtime directory.
 
 use super::*;
-use crate::service::tests::{argv, code, ok_runner, root, text, unlock, Closing, Fake};
+use crate::service::tests::{
+    argv, canonical_root, code, ok_runner, root, text, unlock, Closing, Fake,
+};
 use std::collections::VecDeque;
 
 /// A channel that replays queued client frames and records what the
@@ -1033,7 +1035,7 @@ fn test_touch_id_unlock_checks_the_binding_before_lease_arguments() {
         ]),
     );
     assert_eq!(code(result), "operator_policy_binding_required");
-    let canonical = root(&tmp);
+    let canonical = canonical_root(&tmp);
     assert_eq!(
         native.calls(),
         [
@@ -1051,7 +1053,7 @@ fn test_touch_id_unlock_checks_the_binding_before_lease_arguments() {
 fn test_touch_id_configuration_is_challenge_bound_and_binds_the_policy() {
     let tmp = tempfile::tempdir().unwrap();
     let fake = Fake::new();
-    let canonical = root(&tmp);
+    let canonical = canonical_root(&tmp);
     for configured in [true, false] {
         let native = Arc::new(Signed::default());
         let (server, _closing) = broker(&fake, Arc::clone(&native) as Arc<dyn NativeAuth>);

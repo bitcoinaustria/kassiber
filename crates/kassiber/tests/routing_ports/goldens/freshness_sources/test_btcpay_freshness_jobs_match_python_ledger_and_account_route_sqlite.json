@@ -1,0 +1,1195 @@
+{
+ "pytest": "tests/test_rust_freshness_sources.py::test_btcpay_freshness_jobs_match_python[ledger-and-account-route-sqlite]",
+ "sessions": [
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "daemon"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333608303239,
+    1794333608303239,
+    1794333611064907
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/attachments\",\n    \"config_root\": \"{tmp}/config\",\n    \"data_root\": \"{tmp}/data\",\n    \"database\": \"{tmp}/data/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/config/backends.env\",\n    \"exports_root\": \"{tmp}/exports\",\n    \"settings_file\": \"{tmp}/config/settings.json\",\n    \"state_root\": \"{tmp}\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/data",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/data/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "accounts": {
+        "upsert": [
+         [
+          1,
+          "acct",
+          "w",
+          "p",
+          "treasury",
+          "Treasury",
+          "asset",
+          "BTC",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "backends": {
+        "upsert": [
+         [
+          1,
+          "merchant",
+          "btcpay",
+          null,
+          null,
+          "http://127.0.0.1:39793",
+          null,
+          "synthetic-btcpay-secret",
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ],
+         [
+          2,
+          "chain",
+          "esplora",
+          null,
+          null,
+          "http://127.0.0.1:1",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ]
+        ]
+       },
+       "btcpay_account_routes": {
+        "upsert": [
+         [
+          1,
+          "route-1",
+          "w",
+          "p",
+          "merchant",
+          "shop",
+          "BTC-LN",
+          "provenance_only",
+          "Shop LN",
+          "2026-01-01T00:00:00Z",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          19
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "transactions",
+          -1,
+          1
+         ],
+         [
+          2,
+          "transaction_graph_cache",
+          -1,
+          2
+         ],
+         [
+          3,
+          "wallet_utxos",
+          -1,
+          3
+         ],
+         [
+          4,
+          "chain_analysis_observations",
+          -1,
+          4
+         ],
+         [
+          5,
+          "chain_analysis_reference_assertions",
+          -1,
+          5
+         ],
+         [
+          6,
+          "wallets",
+          -1,
+          19
+         ],
+         [
+          7,
+          "profiles",
+          -1,
+          15
+         ],
+         [
+          8,
+          "journal_custody_decisions",
+          -1,
+          8
+         ],
+         [
+          9,
+          "journal_custody_economic_relations",
+          -1,
+          9
+         ],
+         [
+          10,
+          "chain_analysis_labels",
+          -1,
+          10
+         ],
+         [
+          11,
+          "chain_analysis_datasets",
+          -1,
+          11
+         ],
+         [
+          12,
+          "chain_analysis_dataset_claims",
+          -1,
+          12
+         ],
+         [
+          13,
+          "book_network_bindings",
+          -1,
+          13
+         ],
+         [
+          14,
+          "chain_analysis_acquisition_grants",
+          -1,
+          14
+         ],
+         [
+          15,
+          "transactions",
+          1,
+          17
+         ],
+         [
+          16,
+          "transactions",
+          2,
+          18
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "w",
+          "Book",
+          "USD",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "2026-01-01T00:00:00Z",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T18:00:06.354Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:06.358Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:06.358Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:06.358Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:06.553Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T18:00:06.553Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T18:00:06.554Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T18:00:06.573Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T18:00:06.579Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T18:00:06Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T18:00:06.580Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T18:00:06.582Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          1,
+          "database_instance_id",
+          "6652728905434769a22ffb864e4278ff"
+         ],
+         [
+          2,
+          "context_workspace",
+          "w"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ]
+        ]
+       },
+       "transactions": {
+        "upsert": [
+         [
+          1,
+          "tx-in",
+          "w",
+          "p",
+          "a",
+          "abababababababababababababababababababababababababababababababab",
+          null,
+          "fp-in",
+          "2023-11-14T22:15:00Z",
+          null,
+          "inbound",
+          "BTC",
+          100000000,
+          0,
+          0,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "2026-01-01T00:00:00Z"
+         ],
+         [
+          2,
+          "tx-out",
+          "w",
+          "p",
+          "a",
+          "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          null,
+          "fp-out",
+          "2023-11-14T22:21:40Z",
+          null,
+          "outbound",
+          "BTC",
+          50000000,
+          0,
+          0,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "a",
+          "w",
+          "p",
+          null,
+          "Cold",
+          "custom",
+          "{}",
+          "2026-01-01T00:00:00Z"
+         ],
+         [
+          2,
+          "ledger",
+          "w",
+          "p",
+          null,
+          "Ledger",
+          "custom",
+          "{\"sync_source\": \"btcpay\", \"backend\": \"merchant\", \"store_id\": \"shop\", \"source_mode\": \"payments\", \"payment_method_ids\": [\"BTC-LN\", \"btc-chain\"]}",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "w",
+          "Main",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       }
+      }
+     }
+    },
+    {
+     "mkdir": "{tmp}/exports",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/exports/mapped.csv",
+     "mode": 420,
+     "text": "txid,occurred_at,direction,asset,amount,fee,description\nabababababababababababababababababababababababababababababababab,2023-11-14T22:15:00Z,inbound,BTC,0.001,0,Mapped\n"
+    }
+   ],
+   "stdin": [
+    {
+     "after_lines": 1,
+     "text": "{\"kind\": \"ui.freshness.run\", \"request_id\": \"0\", \"args\": {\"rates\": false, \"journals\": false}}\n"
+    },
+    {
+     "after_lines": 12,
+     "text": "{\"kind\": \"ui.freshness.run\", \"request_id\": \"1\", \"args\": {\"rates\": false, \"journals\": false}}\n"
+    },
+    {
+     "after_lines": 23,
+     "text": "{\"kind\": \"ui.freshness.run\", \"request_id\": \"2\", \"args\": {\"rates\": false, \"journals\": false, \"force_full\": true}}\n"
+    },
+    {
+     "after_lines": 34,
+     "text": "{\"kind\": \"daemon.shutdown\", \"request_id\": \"stop\"}\n"
+    },
+    {
+     "after_lines": 35,
+     "close": true
+    }
+   ],
+   "tape": {"templates":["GET /api/v1/stores/shop/invoices?skip=0&take=100&includePaymentMethods=true HTTP/1.1\r\nHost: 127.0.0.1:39793\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 917\r\n\r\n","[{\"id\": \"inv-paid\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"30.00\", \"createdTime\": 1700000000, \"metadata\": {\"orderId\": \"PAY_REQUEST_req1\", \"itemDesc\": \"\"}, \"paymentMethods\": [{\"paymentMethodId\": \"BTC-CHAIN\", \"rate\": \"30000\", \"payments\": [{\"id\": \"\u0001-0\", \"value\": \"0.001\", \"receivedDate\": 1700000100, \"status\": \"Settled\"}]}]}, {\"id\": \"inv-hydrate\", \"status\": \"Processing\", \"currency\": \"USD\", \"amount\": \"5\", \"metadata\": {\"orderUrl\": \"https://shop.example/apps/App1/pos\", \"posData\": {\"cart\": [{\"title\": \"Tea\"}]}}}, {\"id\": \"inv-new\", \"status\": \"New\", \"additionalStatus\": \"None\", \"currency\": \"BTC\", \"amount\": \"0.1\"}, {\"id\": \"inv-ln\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"1\", \"paymentMethods\": [{\"paymentMethodId\": \"BTC-LN\", \"payments\": [{\"id\": \"\u0001\", \"value\": \"0.00002\"}]}]}]","GET /api/v1/stores/shop/invoices/inv-hydrate/payment-methods?onlyAccountedPayments=true HTTP/1.1\r\nHost: 127.0.0.1:39793\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 191\r\n\r\n","[{\"paymentMethodId\": \"BTC_LightningLike\", \"payments\": [{\"id\": \"\u0001\", \"value\": \"0.0001\", \"receivedDate\": \"2024-01-02T00:00:00Z\"}]}]","GET /api/v1/stores/shop/payment-requests HTTP/1.1\r\nHost: 127.0.0.1:39793\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 48\r\n\r\n","[{\"id\": \"req1\", \"title\": \"Consulting retainer\"}]","GET /api/v1/stores/shop/payouts?includeCancelled=false HTTP/1.1\r\nHost: 127.0.0.1:39793\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 487\r\n\r\n[{\"id\": \"po1\", \"payoutMethodId\": \"BTC-CHAIN\", \"state\": \"Completed\", \"date\": 1700000500, \"payoutAmount\": \"0.0005\", \"payoutCurrency\": \"BTC\", \"originalCurrency\": \"EUR\", \"originalAmount\": \"15\", \"paymentProof\": {\"proofType\": \"PayoutTransactionOnChainBlob\", \"transactionId\": \"\u0001\"}, \"destination\": \"bc1qdest\", \"pullPaymentId\": \"pp1\"}, {\"id\": \"po2\", \"payoutMethodId\": \"BTC-LN\", \"state\": \"AwaitingPayment\", \"destination\": \"lnbc1xyz\"}]","GET /api/v1/stores/shop/pull-payments?includeArchived=true HTTP/1.1\r\nHost: 127.0.0.1:39793\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 56\r\n\r\n","[{\"id\": \"pp1\", \"name\": \"Refund 5ZbLqJLTwm9ZbDtZzkB3Yp\"}]","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 917\r\n\r\n[{\"id\": \"inv-paid\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"30.00\", \"createdTime\": 1700000000, \"metadata\": {\"orderId\": \"PAY_REQUEST_req1\", \"itemDesc\": \"\"}, \"paymentMethods\": [{\"paymentMethodId\": \"BTC-CHAIN\", \"rate\": \"30000\", \"payments\": [{\"id\": \"\u0001-0\", \"value\": \"0.001\", \"receivedDate\": 1700000100, \"status\": \"Settled\"}]}]}, {\"id\": \"inv-hydrate\", \"status\": \"Processing\", \"currency\": \"USD\", \"amount\": \"5\", \"metadata\": {\"orderUrl\": \"https://shop.example/apps/App1/pos\", \"posData\": {\"cart\": [{\"title\": \"Tea\"}]}}}, {\"id\": \"inv-new\", \"status\": \"New\", \"additionalStatus\": \"None\", \"currency\": \"BTC\", \"amount\": \"0.1\"}, {\"id\": \"inv-ln\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"1\", \"paymentMethods\": [{\"paymentMethodId\": \"BTC-LN\", \"payments\": [{\"id\": \"\u0001\", \"value\": \"0.00002\"}]}]}]","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 191\r\n\r\n[{\"paymentMethodId\": \"BTC_LightningLike\", \"payments\": [{\"id\": \"\u0001\", \"value\": \"0.0001\", \"receivedDate\": \"2024-01-02T00:00:00Z\"}]}]","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 487\r\n\r\n","[{\"id\": \"po1\", \"payoutMethodId\": \"BTC-CHAIN\", \"state\": \"Completed\", \"date\": 1700000500, \"payoutAmount\": \"0.0005\", \"payoutCurrency\": \"BTC\", \"originalCurrency\": \"EUR\", \"originalAmount\": \"15\", \"paymentProof\": {\"proofType\": \"PayoutTransactionOnChainBlob\", \"transactionId\": \"\u0001\"}, \"destination\": \"bc1qdest\", \"pullPaymentId\": \"pp1\"}, {\"id\": \"po2\", \"payoutMethodId\": \"BTC-LN\", \"state\": \"AwaitingPayment\", \"destination\": \"lnbc1xyz\"}]"],"connections":[[1,false,"127.0.0.1",39793,1,null,[["w",229,[0]],["r",[1]],["r",[2,"abababababababababababababababababababababababababababababababab","efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"]]]],[2,false,"127.0.0.1",39793,1,null,[["w",241,[3]],["r",[4]],["r",[5,"1212121212121212121212121212121212121212121212121212121212121212"]]]],[3,false,"127.0.0.1",39793,1,null,[["w",194,[6]],["r",[7]],["r",[8]]]],[4,false,"127.0.0.1",39793,1,null,[["w",208,[9]],["r",[10,"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"]]]],[5,false,"127.0.0.1",39793,1,null,[["w",212,[11]],["r",[12]],["r",[13]]]],[6,false,"127.0.0.1",39793,1,null,[["w",229,[0]],["r",[14,"abababababababababababababababababababababababababababababababab","efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"]]]],[7,false,"127.0.0.1",39793,1,null,[["w",241,[3]],["r",[15,"1212121212121212121212121212121212121212121212121212121212121212"]]]],[8,false,"127.0.0.1",39793,1,null,[["w",194,[6]],["r",[7]],["r",[8]]]],[9,false,"127.0.0.1",39793,1,null,[["w",208,[9]],["r",[10,"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"]]]],[10,false,"127.0.0.1",39793,1,null,[["w",212,[11]],["r",[12]],["r",[13]]]],[11,false,"127.0.0.1",39793,1,null,[["w",229,[0]],["r",[1]],["r",[2,"abababababababababababababababababababababababababababababababab","efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"]]]],[12,false,"127.0.0.1",39793,1,null,[["w",241,[3]],["r",[15,"1212121212121212121212121212121212121212121212121212121212121212"]]]],[13,false,"127.0.0.1",39793,1,null,[["w",194,[6]],["r",[7]],["r",[8]]]],[14,false,"127.0.0.1",39793,1,null,[["w",208,[9]],["r",[10,"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"]]]],[15,false,"127.0.0.1",39793,1,null,[["w",212,[11]],["r",[12]],["r",[13]]]],[16,false,"127.0.0.1",39793,1,null,[["w",229,[0]],["r",[1]],["r",[2,"abababababababababababababababababababababababababababababababab","efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"]]]],[17,false,"127.0.0.1",39793,1,null,[["w",241,[3]],["r",[4]],["r",[5,"1212121212121212121212121212121212121212121212121212121212121212"]]]],[18,false,"127.0.0.1",39793,1,null,[["w",194,[6]],["r",[7]],["r",[8]]]],[19,false,"127.0.0.1",39793,1,null,[["w",208,[9]],["r",[16]],["r",[17,"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"]]]],[20,false,"127.0.0.1",39793,1,null,[["w",212,[11]],["r",[12]],["r",[13]]]],[21,false,"127.0.0.1",39793,1,null,[["w",229,[0]],["r",[14,"abababababababababababababababababababababababababababababababab","efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"]]]],[22,false,"127.0.0.1",39793,1,null,[["w",241,[3]],["r",[4]],["r",[5,"1212121212121212121212121212121212121212121212121212121212121212"]]]],[23,false,"127.0.0.1",39793,1,null,[["w",194,[6]],["r",[7]],["r",[8]]]],[24,false,"127.0.0.1",39793,1,null,[["w",208,[9]],["r",[16]],["r",[17,"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"]]]],[25,false,"127.0.0.1",39793,1,null,[["w",212,[11]],["r",[12]],["r",[13]]]],[26,false,"127.0.0.1",39793,1,null,[["w",229,[0]],["r",[1]],["r",[2,"abababababababababababababababababababababababababababababababab","efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"]]]],[27,false,"127.0.0.1",39793,1,null,[["w",241,[3]],["r",[4]],["r",[5,"1212121212121212121212121212121212121212121212121212121212121212"]]]],[28,false,"127.0.0.1",39793,1,null,[["w",194,[6]],["r",[7]],["r",[8]]]],[29,false,"127.0.0.1",39793,1,null,[["w",208,[9]],["r",[16]],["r",[17,"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"]]]],[30,false,"127.0.0.1",39793,1,null,[["w",212,[11]],["r",[12]],["r",[13]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\"kind\":\"daemon.ready\",\"schema_version\":1,\"data\":{\"version\":\"0.22.78\",\"supported_kinds\":[\"ui.chain_analysis.acquire.apply\",\"ui.chain_analysis.acquire.plan\",\"ui.chain_analysis.ai_context\",\"ui.chain_analysis.cases.compare\",\"ui.chain_analysis.cases.delete\",\"ui.chain_analysis.cases.get\",\"ui.chain_analysis.cases.list\",\"ui.chain_analysis.cases.save\",\"ui.chain_analysis.datasets.discard\",\"ui.chain_analysis.datasets.discard.start\",\"ui.chain_analysis.datasets.get\",\"ui.chain_analysis.datasets.import\",\"ui.chain_analysis.datasets.import.start\",\"ui.chain_analysis.datasets.list\",\"ui.chain_analysis.datasets.preview\",\"ui.chain_analysis.datasets.preview.start\",\"ui.chain_analysis.datasets.query\",\"ui.chain_analysis.datasets.revoke\",\"ui.chain_analysis.entropy\",\"ui.chain_analysis.entropy.start\",\"ui.chain_analysis.jobs.cancel\",\"ui.chain_analysis.jobs.get\",\"ui.chain_analysis.labels.delete\",\"ui.chain_analysis.labels.import\",\"ui.chain_analysis.labels.list\",\"ui.chain_analysis.labels.upsert\",\"ui.chain_analysis.psbt.analyze\",\"ui.chain_analysis.psbt.compare\",\"ui.chain_analysis.psbt.entropy\",\"ui.chain_analysis.psbt.entropy.start\",\"ui.chain_analysis.query\",\"ui.chain_analysis.sources.authorize\",\"ui.chain_analysis.sources.list\",\"ui.chain_analysis.sources.plan\",\"ui.chain_analysis.sources.revoke\",\"ui.chain_analysis.sources.run\",\"ui.chain_analysis.watches.acknowledge\",\"ui.chain_analysis.watches.configure\",\"ui.chain_analysis.watches.create\",\"ui.chain_analysis.watches.delete\",\"ui.chain_analysis.watches.evaluate\",\"ui.chain_analysis.watches.inbox\",\"ui.chain_analysis.watches.list\",\"ui.chain_analysis.watches.preview\",\"status\",\"ui.logs.snapshot\",\"ui.agent_access.status\",\"ui.agent_access.configure\",\"ui.agent_access.unlock\",\"ui.agent_access.lock\",\"ui.agent_access.pairing\",\"ui.egress.snapshot\",\"ui.network.offline\",\"ui.network.offline.set\",\"ui.overview.snapshot\",\"ui.workspace.overview.snapshot\",\"ui.transactions.list\",\"ui.transactions.dashboard\",\"ui.transactions.extremes\",\"ui.transactions.resolve\",\"ui.transactions.graph\",\"ui.transactions.review_context\",\"ui.transactions.search\",\"ui.transactions.export_csv\",\"ui.transactions.export_xlsx\",\"ui.transactions.export_platform_csv\",\"ui.transactions.ledger_template\",\"ui.transactions.metadata.update\",\"ui.transactions.history\",\"ui.transactions.history.revert\",\"ui.activity.history\",\"ui.activity.stale\",\"ui.attachments.list\",\"ui.attachments.add\",\"ui.attachments.copy\",\"ui.attachments.rename\",\"ui.attachments.remove\",\"ui.attachments.open\",\"ui.wallets.list\",\"ui.wallets.utxos\",\"ui.privacy_hygiene.snapshot\",\"ui.wallets.identify\",\"ui.wallets.identify_onchain\",\"ui.wallets.identify_onchain.cancel\",\"ui.loans.list\",\"ui.loans.link\",\"ui.loans.mark\",\"ui.loans.unmark\",\"ui.backends.list\",\"ui.backends.options\",\"ui.backends.public_defaults\",\"ui.backends.settings.list\",\"ui.backends.create\",\"ui.backends.update\",\"ui.backends.delete\",\"ui.backends.set_default\",\"ui.backends.bitcoinrpc.test\",\"ui.backends.btcpay.test\",\"ui.backends.detect_core\",\"ui.backends.electrum.test\",\"ui.backends.http.test\",\"ui.backends.lightning.test\",\"ui.reports.capital_gains\",\"ui.reports.explain_capital_gain\",\"ui.reports.summary\",\"ui.reports.balance_sheet\",\"ui.reports.portfolio_summary\",\"ui.reports.tax_summary\",\"ui.reports.balance_history\",\"ui.reports.privacy_hygiene\",\"ui.reports.privacy_mirror\",\"ui.reports.psbt_privacy\",\"ui.reports.exit_tax_preview\",\"ui.reports.export_pdf\",\"ui.reports.export_summary_pdf\",\"ui.reports.export_csv\",\"ui.reports.export_xlsx\",\"ui.reports.export_capital_gains_csv\",\"ui.reports.export_austrian_e1kv_pdf\",\"ui.reports.export_austrian_e1kv_xlsx\",\"ui.reports.export_austrian_e1kv_csv\",\"ui.reports.export_exit_tax_pdf\",\"ui.reports.export_exit_tax_xlsx\",\"ui.reports.export_year_handoff\",\"ui.reports.export_cross_check\",\"ui.reports.export_audit_package\",\"ui.source_funds.preview\",\"ui.source_funds.review_context\",\"ui.source_funds.request_input\",\"ui.source_funds.cases.save\",\"ui.source_funds.cases.list\",\"ui.source_funds.sources.list\",\"ui.source_funds.sources.create\",\"ui.source_funds.sources.attach\",\"ui.source_funds.links.list\",\"ui.source_funds.links.create\",\"ui.source_funds.links.review\",\"ui.source_funds.links.bulk_review\",\"ui.source_funds.links.attach\",\"ui.source_funds.suggest\",\"ui.source_funds.assemble\",\"ui.source_funds.evidence.list\",\"ui.source_funds.export_pdf\",\"ui.source_funds.export_bundle\",\"ui.source_funds.coverage\",\"ui.source_funds.recipients.list\",\"ui.source_funds.recipients.create\",\"ui.source_funds.recipients.update\",\"ui.source_funds.recipients.delete\",\"ui.btcpay.provenance.sync\",\"ui.btcpay.provenance.list\",\"ui.btcpay.provenance.suggest\",\"ui.btcpay.provenance.links\",\"ui.btcpay.provenance.review\",\"ui.transactions.commercial_context\",\"ui.documents.list\",\"ui.documents.create\",\"ui.documents.attach\",\"ui.documents.import_report\",\"ui.journals.snapshot\",\"ui.journals.events.list\",\"ui.journals.quarantine\",\"ui.journals.quarantine.resolve\",\"ui.journals.transfers.list\",\"ui.journals.process\",\"ui.transfers.suggest\",\"ui.transfers.review_context\",\"ui.transfers.list\",\"ui.transfers.payouts.list\",\"ui.transfers.payouts.create\",\"ui.transfers.payouts.delete\",\"ui.transfers.pair\",\"ui.transfers.unpair\",\"ui.transfers.update\",\"ui.transfers.bulk_pair\",\"ui.transfers.dismiss\",\"ui.transfers.dismissals.list\",\"ui.transfers.dismissals.delete\",\"ui.transfers.components.list\",\"ui.transfers.components.get\",\"ui.transfers.components.plan\",\"ui.transfers.components.apply\",\"ui.custody.coverage.snapshot\",\"ui.custody.lineage.snapshot\",\"ui.custody.gaps.list\",\"ui.custody.gaps.review_context\",\"ui.custody.gaps.history\",\"ui.custody.review.plan\",\"ui.custody.review.apply\",\"ui.transfers.rules.list\",\"ui.transfers.rules.create\",\"ui.transfers.rules.delete\",\"ui.transfers.rules.set_enabled\",\"ui.transfers.rules.apply\",\"ui.saved_views.list\",\"ui.saved_views.create\",\"ui.saved_views.delete\",\"ui.networks.partition_plan\",\"ui.networks.partition_export\",\"ui.networks.binding\",\"ui.networks.inventory\",\"ui.networks.plan\",\"ui.networks.bind\",\"ui.profiles.snapshot\",\"ui.onboarding.complete\",\"ui.profiles.create\",\"ui.profiles.rename\",\"ui.profiles.update\",\"ui.profiles.switch\",\"ui.rates.summary\",\"ui.rates.coverage\",\"ui.rates.kraken_csv.import\",\"ui.rates.latest\",\"ui.rates.rebuild\",\"ui.report.blockers\",\"ui.audit.changes_since_last_answer\",\"ui.audit.evidence.summary\",\"ui.review.worklist\",\"ui.review.cases\",\"ui.review.request_input\",\"ui.review.plan\",\"ui.review.apply\",\"ui.review.receipt\",\"ui.maintenance.settings\",\"ui.maintenance.configure\",\"ui.maintenance.run\",\"ui.freshness.status\",\"ui.freshness.configure\",\"ui.freshness.run\",\"ui.freshness.cancel\",\"ui.freshness.pause\",\"ui.freshness.resume\",\"ui.workspace.health\",\"ui.workspace.freshness.run\",\"ui.workspace.create\",\"ui.workspace.rename\",\"ui.workspace.delete\",\"ui.profiles.reset_data\",\"ui.projects.list\",\"ui.projects.create\",\"ui.projects.select\",\"ui.backup.export\",\"ui.backup.preview\",\"ui.backup.apply\",\"ui.backup.cancel\",\"ui.secrets.init\",\"ui.secrets.change_passphrase\",\"ui.secrets.forget_cli_unlock\",\"ui.next_actions\",\"ui.review.badges\",\"ui.wallets.create\",\"ui.wallets.import_file\",\"internal.document_import.stage\",\"ui.chat.attachments.upload\",\"internal.chain_analysis.stage\",\"ui.wallets.document_import.preview\",\"ui.wallets.document_import.import\",\"ui.wallets.import_samourai\",\"ui.wallets.ledger_preview\",\"ui.wallets.analyze_file\",\"ui.imports.list\",\"ui.imports.rollback\",\"ui.wallets.preview_descriptor\",\"ui.wallets.detect_script_types\",\"ui.connections.sources\",\"ui.connections.btcpay.create\",\"ui.connections.bullbitcoin_wallet.create\",\"ui.connections.btcpay.discover\",\"ui.connections.btcpay.key_guide\",\"ui.connections.btcpay.test\",\"ui.connections.node.snapshot\",\"ui.reports.lightning_profitability\",\"ui.metadata.bip329.preview\",\"ui.metadata.bip329.import\",\"ui.metadata.bip329.export\",\"ui.exports.preview\",\"ui.reports.cross_check\",\"ui.wallets.update\",\"ui.wallets.delete\",\"ui.wallets.sync\",\"daemon.lock\",\"daemon.unlock\",\"ai.providers.list\",\"ai.providers.get\",\"ai.providers.create\",\"ai.providers.update\",\"ai.providers.set_api_key\",\"ai.providers.move_api_key\",\"ai.providers.delete\",\"ai.providers.set_default\",\"ai.providers.clear_default\",\"ai.providers.acknowledge\",\"ai.provider_runtime.status\",\"ai.list_models\",\"ai.test_connection\",\"ai.chat\",\"ai.chat.cancel\",\"ai.tool_call.consent\",\"ai.chat.permission_mode\",\"ui.chat.sessions.list\",\"ui.chat.sessions.get\",\"ui.chat.sessions.delete\",\"ui.chat.sessions.clear\",\"ui.chat.history.configure\",\"wallets.reveal_descriptor\",\"backends.reveal_token\",\"daemon.shutdown\",\"ui.connections.exchange.status\",\"ui.connections.exchange.test\",\"ui.connections.exchange.create\",\"ui.connections.exchange.sync\",\"test.stream\",\"test.journals.refresh\",\"test.emit_event\",\"test.late\",\"test.secret_store\",\"test.freshness.plan\",\"test.freshness.select\",\"test.freshness.invoke\",\"test.freshness.execute\",\"test.freshness.product.execute\",\"test.freshness.cancel\",\"test.freshness.pause\",\"test.freshness.resume\",\"test.freshness.request.cancel\",\"test.freshness.request.revoke\",\"test.freshness.graph.pending\",\"test.freshness.graph.start\",\"test.ai_tool\",\"test.ai_auto_read\",\"test.ai_consent_preview\",\"test.ai_custody_record\"]}}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"0fb894e3-20dd-4825-bec4-c07c3fd48eb8\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"discovery\",\"wallet\":\"Ledger\",\"job_index\":1,\"job_total\":2},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"0fb894e3-20dd-4825-bec4-c07c3fd48eb8\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"backend_fetch\",\"wallet\":\"Ledger\",\"job_index\":1,\"job_total\":2},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"0fb894e3-20dd-4825-bec4-c07c3fd48eb8\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"backend_fetch\",\"job_index\":1,\"job_total\":2},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"0fb894e3-20dd-4825-bec4-c07c3fd48eb8\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"backend_fetch\",\"pages_fetched\":1,\"page_size\":100,\"job_index\":1,\"job_total\":2},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"0fb894e3-20dd-4825-bec4-c07c3fd48eb8\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"importing\",\"wallet\":\"Ledger\",\"processed\":0,\"total\":0,\"job_index\":1,\"job_total\":2},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"0fb894e3-20dd-4825-bec4-c07c3fd48eb8\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"import\",\"wallet\":\"Ledger\",\"job_index\":1,\"job_total\":2},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"9da37513-675f-4c80-bf7b-ce85b9e3e86f\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"backend_fetch\",\"store_id\":\"shop\",\"job_index\":2,\"job_total\":2},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"9da37513-675f-4c80-bf7b-ce85b9e3e86f\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"backend_fetch\",\"job_index\":2,\"job_total\":2},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"9da37513-675f-4c80-bf7b-ce85b9e3e86f\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"backend_fetch\",\"pages_fetched\":1,\"page_size\":100,\"job_index\":2,\"job_total\":2},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"9da37513-675f-4c80-bf7b-ce85b9e3e86f\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"decode_enrich\",\"store_id\":\"shop\",\"job_index\":2,\"job_total\":2},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run\",\"schema_version\":1,\"data\":{\"profile\":{\"id\":\"p\",\"label\":\"Book\"},\"results\":[{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"fetched\":0,\"has_backend_url\":true,\"imported\":0,\"inserted_records\":[],\"invoice_provenance\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":2,\"payout_records_updated\":0,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":7,\"records_updated\":0,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":2,\"total\":2}},\"journal_invalidated\":false,\"ledger\":{\"held_tracked_elsewhere\":0,\"payments\":0,\"payouts\":0,\"pending\":1},\"payment_method_ids\":[\"BTC-LN\"],\"payouts_permission_missing\":false,\"skipped\":0,\"source\":\"btcpay-ledger:merchant:shop\",\"source_mode\":\"payments\",\"status\":\"synced\",\"store_id\":\"shop\",\"unchanged\":0,\"updated_records\":[],\"wallet\":\"Ledger\"},{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}}],\"force_full\":false,\"recovered\":[],\"enqueued\":[{\"id\":\"0fb894e3-20dd-4825-bec4-c07c3fd48eb8\",\"profile_id\":\"p\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"status\":\"queued\",\"phase\":\"discovery\",\"priority\":20,\"attempts\":0,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:08Z\",\"started_at\":null,\"finished_at\":null,\"updated_at\":\"2026-11-10T18:00:08Z\",\"payload\":{\"wallet_id\":\"ledger\",\"wallet_label\":\"Ledger\"},\"progress\":{},\"result\":{},\"error\":{}},{\"id\":\"9da37513-675f-4c80-bf7b-ce85b9e3e86f\",\"profile_id\":\"p\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"status\":\"queued\",\"phase\":\"discovery\",\"priority\":40,\"attempts\":0,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:08Z\",\"started_at\":null,\"finished_at\":null,\"updated_at\":\"2026-11-10T18:00:08Z\",\"payload\":{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"payment_method_id\":\"BTC-LN\",\"store_id\":\"shop\"},\"progress\":{},\"result\":{},\"error\":{}}],\"completed\":[{\"id\":\"0fb894e3-20dd-4825-bec4-c07c3fd48eb8\",\"profile_id\":\"p\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"status\":\"done\",\"phase\":\"done\",\"priority\":20,\"attempts\":1,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:08Z\",\"started_at\":\"2026-11-10T18:00:08Z\",\"finished_at\":\"2026-11-10T18:00:08Z\",\"updated_at\":\"2026-11-10T18:00:08Z\",\"payload\":{\"wallet_id\":\"ledger\",\"wallet_label\":\"Ledger\"},\"progress\":{\"phase\":\"import\",\"wallet\":\"Ledger\"},\"result\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"fetched\":0,\"has_backend_url\":true,\"imported\":0,\"inserted_records\":[],\"invoice_provenance\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":2,\"payout_records_updated\":0,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":7,\"records_updated\":0,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":2,\"total\":2}},\"journal_invalidated\":false,\"ledger\":{\"held_tracked_elsewhere\":0,\"payments\":0,\"payouts\":0,\"pending\":1},\"payment_method_ids\":[\"BTC-LN\"],\"payouts_permission_missing\":false,\"skipped\":0,\"source\":\"btcpay-ledger:merchant:shop\",\"source_mode\":\"payments\",\"status\":\"synced\",\"store_id\":\"shop\",\"unchanged\":0,\"updated_records\":[],\"wallet\":\"Ledger\"},\"error\":{}},{\"id\":\"9da37513-675f-4c80-bf7b-ce85b9e3e86f\",\"profile_id\":\"p\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"status\":\"done\",\"phase\":\"done\",\"priority\":40,\"attempts\":1,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:08Z\",\"started_at\":\"2026-11-10T18:00:08Z\",\"finished_at\":\"2026-11-10T18:00:08Z\",\"updated_at\":\"2026-11-10T18:00:08Z\",\"payload\":{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"payment_method_id\":\"BTC-LN\",\"store_id\":\"shop\"},\"progress\":{\"phase\":\"decode_enrich\",\"store_id\":\"shop\"},\"result\":{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}},\"error\":{}}],\"policy\":{\"background_enabled\":false,\"source_classes\":{\"btcpay_provenance\":false,\"btcpay_wallet\":false,\"journals\":true,\"market_rates\":false,\"onchain_wallet\":false},\"report_read_sync\":false},\"sources\":[{\"profile_id\":\"p\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"status\":\"fresh\",\"state\":\"fresh\",\"stale_reason\":null,\"blocking_reports\":false,\"paused\":false,\"rate_limited_until\":null,\"cooldown_reason\":null,\"retry_count\":0,\"last_success_at\":\"2026-11-10T18:00:08Z\",\"last_error_at\":null,\"last_error_code\":null,\"last_error_message\":null,\"last_phase\":\"done\",\"updated_at\":\"2026-11-10T18:00:08Z\",\"progress\":{\"phase\":\"done\"}},{\"profile_id\":\"p\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"status\":\"fresh\",\"state\":\"fresh\",\"stale_reason\":null,\"blocking_reports\":false,\"paused\":false,\"rate_limited_until\":null,\"cooldown_reason\":null,\"retry_count\":0,\"last_success_at\":\"2026-11-10T18:00:08Z\",\"last_error_at\":null,\"last_error_code\":null,\"last_error_message\":null,\"last_phase\":\"done\",\"updated_at\":\"2026-11-10T18:00:08Z\",\"progress\":{\"phase\":\"done\"}}],\"jobs\":[],\"summary\":{\"sources\":2,\"active_jobs\":0,\"blocking_reports\":0,\"rate_limited\":0},\"ok\":true},\"request_id\":\"0\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"54822fe7-e2c4-41fa-a575-17509fc3f6a7\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"discovery\",\"wallet\":\"Ledger\",\"job_index\":1,\"job_total\":2},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"54822fe7-e2c4-41fa-a575-17509fc3f6a7\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"backend_fetch\",\"wallet\":\"Ledger\",\"job_index\":1,\"job_total\":2},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"54822fe7-e2c4-41fa-a575-17509fc3f6a7\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"backend_fetch\",\"job_index\":1,\"job_total\":2},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"54822fe7-e2c4-41fa-a575-17509fc3f6a7\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"backend_fetch\",\"pages_fetched\":1,\"page_size\":100,\"job_index\":1,\"job_total\":2},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"54822fe7-e2c4-41fa-a575-17509fc3f6a7\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"importing\",\"wallet\":\"Ledger\",\"processed\":0,\"total\":0,\"job_index\":1,\"job_total\":2},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"54822fe7-e2c4-41fa-a575-17509fc3f6a7\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"import\",\"wallet\":\"Ledger\",\"job_index\":1,\"job_total\":2},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"156a2695-0d33-40b3-9822-1321c841382d\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"backend_fetch\",\"store_id\":\"shop\",\"job_index\":2,\"job_total\":2},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"156a2695-0d33-40b3-9822-1321c841382d\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"backend_fetch\",\"job_index\":2,\"job_total\":2},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"156a2695-0d33-40b3-9822-1321c841382d\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"backend_fetch\",\"pages_fetched\":1,\"page_size\":100,\"job_index\":2,\"job_total\":2},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"156a2695-0d33-40b3-9822-1321c841382d\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"decode_enrich\",\"store_id\":\"shop\",\"job_index\":2,\"job_total\":2},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run\",\"schema_version\":1,\"data\":{\"profile\":{\"id\":\"p\",\"label\":\"Book\"},\"results\":[{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"fetched\":0,\"has_backend_url\":true,\"imported\":0,\"inserted_records\":[],\"invoice_provenance\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}},\"journal_invalidated\":false,\"ledger\":{\"held_tracked_elsewhere\":0,\"payments\":0,\"payouts\":0,\"pending\":1},\"payment_method_ids\":[\"BTC-LN\"],\"payouts_permission_missing\":false,\"skipped\":0,\"source\":\"btcpay-ledger:merchant:shop\",\"source_mode\":\"payments\",\"status\":\"synced\",\"store_id\":\"shop\",\"unchanged\":0,\"updated_records\":[],\"wallet\":\"Ledger\"},{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}}],\"force_full\":false,\"recovered\":[],\"enqueued\":[{\"id\":\"54822fe7-e2c4-41fa-a575-17509fc3f6a7\",\"profile_id\":\"p\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"status\":\"queued\",\"phase\":\"discovery\",\"priority\":20,\"attempts\":0,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:09Z\",\"started_at\":null,\"finished_at\":null,\"updated_at\":\"2026-11-10T18:00:09Z\",\"payload\":{\"wallet_id\":\"ledger\",\"wallet_label\":\"Ledger\"},\"progress\":{},\"result\":{},\"error\":{}},{\"id\":\"156a2695-0d33-40b3-9822-1321c841382d\",\"profile_id\":\"p\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"status\":\"queued\",\"phase\":\"discovery\",\"priority\":40,\"attempts\":0,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:09Z\",\"started_at\":null,\"finished_at\":null,\"updated_at\":\"2026-11-10T18:00:09Z\",\"payload\":{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"payment_method_id\":\"BTC-LN\",\"store_id\":\"shop\"},\"progress\":{},\"result\":{},\"error\":{}}],\"completed\":[{\"id\":\"54822fe7-e2c4-41fa-a575-17509fc3f6a7\",\"profile_id\":\"p\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"status\":\"done\",\"phase\":\"done\",\"priority\":20,\"attempts\":1,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:09Z\",\"started_at\":\"2026-11-10T18:00:09Z\",\"finished_at\":\"2026-11-10T18:00:09Z\",\"updated_at\":\"2026-11-10T18:00:09Z\",\"payload\":{\"wallet_id\":\"ledger\",\"wallet_label\":\"Ledger\"},\"progress\":{\"phase\":\"import\",\"wallet\":\"Ledger\"},\"result\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"fetched\":0,\"has_backend_url\":true,\"imported\":0,\"inserted_records\":[],\"invoice_provenance\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}},\"journal_invalidated\":false,\"ledger\":{\"held_tracked_elsewhere\":0,\"payments\":0,\"payouts\":0,\"pending\":1},\"payment_method_ids\":[\"BTC-LN\"],\"payouts_permission_missing\":false,\"skipped\":0,\"source\":\"btcpay-ledger:merchant:shop\",\"source_mode\":\"payments\",\"status\":\"synced\",\"store_id\":\"shop\",\"unchanged\":0,\"updated_records\":[],\"wallet\":\"Ledger\"},\"error\":{}},{\"id\":\"156a2695-0d33-40b3-9822-1321c841382d\",\"profile_id\":\"p\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"status\":\"done\",\"phase\":\"done\",\"priority\":40,\"attempts\":1,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:09Z\",\"started_at\":\"2026-11-10T18:00:09Z\",\"finished_at\":\"2026-11-10T18:00:09Z\",\"updated_at\":\"2026-11-10T18:00:09Z\",\"payload\":{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"payment_method_id\":\"BTC-LN\",\"store_id\":\"shop\"},\"progress\":{\"phase\":\"decode_enrich\",\"store_id\":\"shop\"},\"result\":{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}},\"error\":{}}],\"policy\":{\"background_enabled\":false,\"source_classes\":{\"btcpay_provenance\":false,\"btcpay_wallet\":false,\"journals\":true,\"market_rates\":false,\"onchain_wallet\":false},\"report_read_sync\":false},\"sources\":[{\"profile_id\":\"p\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"status\":\"fresh\",\"state\":\"fresh\",\"stale_reason\":null,\"blocking_reports\":false,\"paused\":false,\"rate_limited_until\":null,\"cooldown_reason\":null,\"retry_count\":0,\"last_success_at\":\"2026-11-10T18:00:09Z\",\"last_error_at\":null,\"last_error_code\":null,\"last_error_message\":null,\"last_phase\":\"done\",\"updated_at\":\"2026-11-10T18:00:09Z\",\"progress\":{\"phase\":\"done\"}},{\"profile_id\":\"p\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"status\":\"fresh\",\"state\":\"fresh\",\"stale_reason\":null,\"blocking_reports\":false,\"paused\":false,\"rate_limited_until\":null,\"cooldown_reason\":null,\"retry_count\":0,\"last_success_at\":\"2026-11-10T18:00:09Z\",\"last_error_at\":null,\"last_error_code\":null,\"last_error_message\":null,\"last_phase\":\"done\",\"updated_at\":\"2026-11-10T18:00:09Z\",\"progress\":{\"phase\":\"done\"}}],\"jobs\":[],\"summary\":{\"sources\":2,\"active_jobs\":0,\"blocking_reports\":0,\"rate_limited\":0},\"ok\":true},\"request_id\":\"1\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"84ca80e5-978b-4bca-9487-62a6871cadfd\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"discovery\",\"wallet\":\"Ledger\",\"job_index\":1,\"job_total\":2},\"request_id\":\"2\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"84ca80e5-978b-4bca-9487-62a6871cadfd\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"backend_fetch\",\"wallet\":\"Ledger\",\"job_index\":1,\"job_total\":2},\"request_id\":\"2\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"84ca80e5-978b-4bca-9487-62a6871cadfd\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"backend_fetch\",\"job_index\":1,\"job_total\":2},\"request_id\":\"2\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"84ca80e5-978b-4bca-9487-62a6871cadfd\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"backend_fetch\",\"pages_fetched\":1,\"page_size\":100,\"job_index\":1,\"job_total\":2},\"request_id\":\"2\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"84ca80e5-978b-4bca-9487-62a6871cadfd\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"importing\",\"wallet\":\"Ledger\",\"processed\":0,\"total\":0,\"job_index\":1,\"job_total\":2},\"request_id\":\"2\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"84ca80e5-978b-4bca-9487-62a6871cadfd\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"phase\":\"import\",\"wallet\":\"Ledger\",\"job_index\":1,\"job_total\":2},\"request_id\":\"2\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"63a62bdc-e22f-4c7f-b691-62bd97dfe483\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"backend_fetch\",\"store_id\":\"shop\",\"job_index\":2,\"job_total\":2},\"request_id\":\"2\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"63a62bdc-e22f-4c7f-b691-62bd97dfe483\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"backend_fetch\",\"job_index\":2,\"job_total\":2},\"request_id\":\"2\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"63a62bdc-e22f-4c7f-b691-62bd97dfe483\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"backend_fetch\",\"pages_fetched\":1,\"page_size\":100,\"job_index\":2,\"job_total\":2},\"request_id\":\"2\"}\n{\"kind\":\"ui.freshness.run.progress\",\"schema_version\":1,\"data\":{\"job_id\":\"63a62bdc-e22f-4c7f-b691-62bd97dfe483\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"phase\":\"decode_enrich\",\"store_id\":\"shop\",\"job_index\":2,\"job_total\":2},\"request_id\":\"2\"}\n{\"kind\":\"ui.freshness.run\",\"schema_version\":1,\"data\":{\"profile\":{\"id\":\"p\",\"label\":\"Book\"},\"results\":[{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"fetched\":0,\"force_full\":true,\"has_backend_url\":true,\"imported\":0,\"inserted_records\":[],\"invoice_provenance\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}},\"journal_invalidated\":false,\"ledger\":{\"held_tracked_elsewhere\":0,\"payments\":0,\"payouts\":0,\"pending\":1},\"payment_method_ids\":[\"BTC-LN\"],\"payouts_permission_missing\":false,\"skipped\":0,\"source\":\"btcpay-ledger:merchant:shop\",\"source_mode\":\"payments\",\"status\":\"synced\",\"store_id\":\"shop\",\"unchanged\":0,\"updated_records\":[],\"wallet\":\"Ledger\"},{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"force_full\":true,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}}],\"force_full\":true,\"recovered\":[],\"enqueued\":[{\"id\":\"84ca80e5-978b-4bca-9487-62a6871cadfd\",\"profile_id\":\"p\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"status\":\"queued\",\"phase\":\"discovery\",\"priority\":20,\"attempts\":0,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:09Z\",\"started_at\":null,\"finished_at\":null,\"updated_at\":\"2026-11-10T18:00:09Z\",\"payload\":{\"force_full\":true,\"wallet_id\":\"ledger\",\"wallet_label\":\"Ledger\"},\"progress\":{},\"result\":{},\"error\":{}},{\"id\":\"63a62bdc-e22f-4c7f-b691-62bd97dfe483\",\"profile_id\":\"p\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"status\":\"queued\",\"phase\":\"discovery\",\"priority\":40,\"attempts\":0,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:09Z\",\"started_at\":null,\"finished_at\":null,\"updated_at\":\"2026-11-10T18:00:09Z\",\"payload\":{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"force_full\":true,\"payment_method_id\":\"BTC-LN\",\"store_id\":\"shop\"},\"progress\":{},\"result\":{},\"error\":{}}],\"completed\":[{\"id\":\"84ca80e5-978b-4bca-9487-62a6871cadfd\",\"profile_id\":\"p\",\"job_type\":\"btcpay_wallet_source\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"status\":\"done\",\"phase\":\"done\",\"priority\":20,\"attempts\":1,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:09Z\",\"started_at\":\"2026-11-10T18:00:09Z\",\"finished_at\":\"2026-11-10T18:00:10Z\",\"updated_at\":\"2026-11-10T18:00:10Z\",\"payload\":{\"force_full\":true,\"wallet_id\":\"ledger\",\"wallet_label\":\"Ledger\"},\"progress\":{\"phase\":\"import\",\"wallet\":\"Ledger\"},\"result\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"fetched\":0,\"force_full\":true,\"has_backend_url\":true,\"imported\":0,\"inserted_records\":[],\"invoice_provenance\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}},\"journal_invalidated\":false,\"ledger\":{\"held_tracked_elsewhere\":0,\"payments\":0,\"payouts\":0,\"pending\":1},\"payment_method_ids\":[\"BTC-LN\"],\"payouts_permission_missing\":false,\"skipped\":0,\"source\":\"btcpay-ledger:merchant:shop\",\"source_mode\":\"payments\",\"status\":\"synced\",\"store_id\":\"shop\",\"unchanged\":0,\"updated_records\":[],\"wallet\":\"Ledger\"},\"error\":{}},{\"id\":\"63a62bdc-e22f-4c7f-b691-62bd97dfe483\",\"profile_id\":\"p\",\"job_type\":\"btcpay_provenance\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"status\":\"done\",\"phase\":\"done\",\"priority\":40,\"attempts\":1,\"cancel_requested\":false,\"run_after\":null,\"cooldown_until\":null,\"created_at\":\"2026-11-10T18:00:09Z\",\"started_at\":\"2026-11-10T18:00:10Z\",\"finished_at\":\"2026-11-10T18:00:10Z\",\"updated_at\":\"2026-11-10T18:00:10Z\",\"payload\":{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"force_full\":true,\"payment_method_id\":\"BTC-LN\",\"store_id\":\"shop\"},\"progress\":{\"phase\":\"decode_enrich\",\"store_id\":\"shop\"},\"result\":{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"force_full\":true,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}},\"error\":{}}],\"policy\":{\"background_enabled\":false,\"source_classes\":{\"btcpay_provenance\":false,\"btcpay_wallet\":false,\"journals\":true,\"market_rates\":false,\"onchain_wallet\":false},\"report_read_sync\":false},\"sources\":[{\"profile_id\":\"p\",\"source_key\":\"btcpay_provenance:account:route-1\",\"source_type\":\"btcpay_provenance\",\"source_label\":\"BTCPay provenance merchant shop\",\"status\":\"fresh\",\"state\":\"fresh\",\"stale_reason\":null,\"blocking_reports\":false,\"paused\":false,\"rate_limited_until\":null,\"cooldown_reason\":null,\"retry_count\":0,\"last_success_at\":\"2026-11-10T18:00:10Z\",\"last_error_at\":null,\"last_error_code\":null,\"last_error_message\":null,\"last_phase\":\"done\",\"updated_at\":\"2026-11-10T18:00:10Z\",\"progress\":{\"phase\":\"done\"}},{\"profile_id\":\"p\",\"source_key\":\"btcpay_wallet:ledger\",\"source_type\":\"btcpay_wallet\",\"source_label\":\"Ledger BTCPay wallet source\",\"status\":\"fresh\",\"state\":\"fresh\",\"stale_reason\":null,\"blocking_reports\":false,\"paused\":false,\"rate_limited_until\":null,\"cooldown_reason\":null,\"retry_count\":0,\"last_success_at\":\"2026-11-10T18:00:10Z\",\"last_error_at\":null,\"last_error_code\":null,\"last_error_message\":null,\"last_phase\":\"done\",\"updated_at\":\"2026-11-10T18:00:10Z\",\"progress\":{\"phase\":\"done\"}}],\"jobs\":[],\"summary\":{\"sources\":2,\"active_jobs\":0,\"blocking_reports\":0,\"rate_limited\":0},\"ok\":true},\"request_id\":\"2\"}\n{\"kind\":\"daemon.shutdown\",\"schema_version\":1,\"data\":{},\"request_id\":\"stop\"}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "btcpay_provenance_records": {
+         "upsert": [
+          [
+           1,
+           "72fce08b-e0fd-4575-981a-35e0e7f9f04b",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-paid",
+           "inv-paid",
+           null,
+           "PAY_REQUEST_req1",
+           "Settled",
+           "2023-11-14T22:13:20Z",
+           null,
+           null,
+           null,
+           null,
+           null,
+           "req1",
+           "payment_request",
+           null,
+           "Consulting retainer",
+           null,
+           "btcpay_payment_request",
+           "EUR",
+           "30.00",
+           null,
+           "2023-11-14T22:13:20Z",
+           "{\"amount\": \"30.00\", \"createdTime\": 1700000000, \"currency\": \"EUR\", \"id\": \"inv-paid\", \"metadata\": {\"itemDesc\": \"\", \"orderId\": \"PAY_REQUEST_req1\"}, \"paymentMethods\": [{\"paymentMethodId\": \"BTC-CHAIN\", \"payments\": [{\"id\": \"abababababababababababababababababababababababababababababababab-0\", \"receivedDate\": 1700000100, \"status\": \"Settled\", \"value\": \"0.001\"}], \"rate\": \"30000\"}], \"payments\": [{\"id\": \"abababababababababababababababababababababababababababababababab-0\", \"paymentMethodId\": \"BTC-CHAIN\", \"rate\": \"30000\", \"receivedDate\": 1700000100, \"status\": \"Settled\", \"transactionId\": \"abababababababababababababababababababababababababababababababab\", \"value\": \"0.001\"}], \"status\": \"Settled\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           2,
+           "90920f1b-c577-421b-a036-94d42443c564",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-CHAIN",
+           "payment",
+           "btcpay:shop:invoice:inv-paid:payment:abababababababababababababababababababababababababababababababab-0",
+           "inv-paid",
+           "abababababababababababababababababababababababababababababababab-0",
+           "PAY_REQUEST_req1",
+           "Settled",
+           "2023-11-14T22:15:00Z",
+           "BTC",
+           100000000,
+           "abababababababababababababababababababababababababababababababab",
+           null,
+           null,
+           "req1",
+           "payment_request",
+           null,
+           "Consulting retainer",
+           null,
+           "btcpay_payment_request",
+           "EUR",
+           "30.00",
+           "30000",
+           "2023-11-14T22:15:00Z",
+           "{\"id\": \"abababababababababababababababababababababababababababababababab-0\", \"paymentMethodId\": \"BTC-CHAIN\", \"rate\": \"30000\", \"receivedDate\": 1700000100, \"status\": \"Settled\", \"transactionId\": \"abababababababababababababababababababababababababababababababab\", \"value\": \"0.001\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           3,
+           "b15d4cdf-7770-4460-a5e3-e87d2b528535",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-hydrate",
+           "inv-hydrate",
+           null,
+           null,
+           "Processing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "pos",
+           "App1",
+           "Tea",
+           "https://shop.example/apps/App1/pos",
+           "btcpay_pos",
+           "USD",
+           "5",
+           null,
+           null,
+           "{\"amount\": \"5\", \"currency\": \"USD\", \"id\": \"inv-hydrate\", \"metadata\": {\"orderUrl\": \"https://shop.example/apps/App1/pos\", \"posData\": {\"cart\": [{\"title\": \"Tea\"}]}}, \"paymentMethods\": [{\"paymentMethodId\": \"BTC_LightningLike\", \"payments\": [{\"id\": \"1212121212121212121212121212121212121212121212121212121212121212\", \"receivedDate\": \"2024-01-02T00:00:00Z\", \"value\": \"0.0001\"}]}], \"payments\": [{\"id\": \"1212121212121212121212121212121212121212121212121212121212121212\", \"paymentMethodId\": \"BTC-LN\", \"receivedDate\": \"2024-01-02T00:00:00Z\", \"value\": \"0.0001\"}], \"status\": \"Processing\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           4,
+           "fa0534e9-5ce4-47fa-b791-c402c448ebd0",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-LN",
+           "payment",
+           "btcpay:shop:invoice:inv-hydrate:payment:1212121212121212121212121212121212121212121212121212121212121212",
+           "inv-hydrate",
+           "1212121212121212121212121212121212121212121212121212121212121212",
+           null,
+           "Processing",
+           "2024-01-02T00:00:00Z",
+           "BTC",
+           10000000,
+           null,
+           "1212121212121212121212121212121212121212121212121212121212121212",
+           null,
+           null,
+           "pos",
+           "App1",
+           "Tea",
+           "https://shop.example/apps/App1/pos",
+           "btcpay_pos",
+           "USD",
+           "5",
+           "50000",
+           "2024-01-02T00:00:00Z",
+           "{\"id\": \"1212121212121212121212121212121212121212121212121212121212121212\", \"paymentMethodId\": \"BTC-LN\", \"receivedDate\": \"2024-01-02T00:00:00Z\", \"value\": \"0.0001\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           5,
+           "b5bce64c-031b-4a19-ab0c-ee5e9dd051fe",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-new",
+           "inv-new",
+           null,
+           null,
+           "New",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "{\"additionalStatus\": \"None\", \"amount\": \"0.1\", \"currency\": \"BTC\", \"id\": \"inv-new\", \"status\": \"New\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           6,
+           "8c1f9ef2-4df1-4909-a7eb-2a335841bbab",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-ln",
+           "inv-ln",
+           null,
+           null,
+           "Settled",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           "EUR",
+           "1",
+           null,
+           null,
+           "{\"amount\": \"1\", \"currency\": \"EUR\", \"id\": \"inv-ln\", \"paymentMethods\": [{\"paymentMethodId\": \"BTC-LN\", \"payments\": [{\"id\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"value\": \"0.00002\"}]}], \"payments\": [{\"id\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"paymentMethodId\": \"BTC-LN\", \"value\": \"0.00002\"}], \"status\": \"Settled\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           7,
+           "655d909b-d38e-4a4b-b61d-96fee4765ca5",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-LN",
+           "payment",
+           "btcpay:shop:invoice:inv-ln:payment:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+           "inv-ln",
+           "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+           null,
+           "Settled",
+           null,
+           "BTC",
+           2000000,
+           null,
+           "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           "EUR",
+           "1",
+           "50000",
+           null,
+           "{\"id\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"paymentMethodId\": \"BTC-LN\", \"value\": \"0.00002\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           8,
+           "c99571da-4dad-4730-b113-9d88e25ad303",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-CHAIN",
+           "payout",
+           "btcpay:shop:payout:po1",
+           "5ZbLqJLTwm9ZbDtZzkB3Yp",
+           "po1",
+           null,
+           "Completed",
+           "2023-11-14T22:21:40Z",
+           "BTC",
+           50000000,
+           "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+           null,
+           "bc1qdest",
+           null,
+           "refund",
+           "pp1",
+           "Refund 5ZbLqJLTwm9ZbDtZzkB3Yp",
+           null,
+           "btcpay_payout",
+           "EUR",
+           "15",
+           "30000",
+           "2023-11-14T22:21:40Z",
+           "{\"date\": 1700000500, \"destination\": \"bc1qdest\", \"id\": \"po1\", \"originalAmount\": \"15\", \"originalCurrency\": \"EUR\", \"paymentProof\": {\"proofType\": \"PayoutTransactionOnChainBlob\", \"transactionId\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"}, \"payoutAmount\": \"0.0005\", \"payoutCurrency\": \"BTC\", \"payoutMethodId\": \"BTC-CHAIN\", \"pullPaymentId\": \"pp1\", \"state\": \"Completed\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           9,
+           "edd43c3c-5366-4635-bc66-442553a7427f",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-LN",
+           "payout",
+           "btcpay:shop:payout:po2",
+           null,
+           "po2",
+           null,
+           "AwaitingPayment",
+           null,
+           "BTC",
+           null,
+           null,
+           null,
+           null,
+           null,
+           "store_payout",
+           null,
+           null,
+           null,
+           "btcpay_payout",
+           null,
+           null,
+           null,
+           null,
+           "{\"destination\": null, \"id\": \"po2\", \"paymentProof\": null, \"payoutMethodId\": \"BTC-LN\", \"state\": \"AwaitingPayment\"}",
+           "<now>",
+           "<now>"
+          ]
+         ]
+        },
+        "btcpay_store_sync_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "merchant",
+           "shop",
+           "<now>",
+           "<now>",
+           null,
+           null,
+           4,
+           2,
+           "<now>"
+          ]
+         ]
+        },
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           22
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           22
+          ]
+         ]
+        },
+        "commercial_links": {
+         "upsert": [
+          [
+           1,
+           "382570af-52ca-41b0-be82-b57c8324130d",
+           "w",
+           "p",
+           "c99571da-4dad-4730-b113-9d88e25ad303",
+           null,
+           "tx-out",
+           "btcpay_payment_transaction",
+           "suggested",
+           "exact",
+           "payout_proof",
+           50000000,
+           "15",
+           "unreviewed",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "<now>",
+           "<now>"
+          ],
+          [
+           2,
+           "a670ec3a-c4c8-4364-b58e-7a25ad9ce8f6",
+           "w",
+           "p",
+           "90920f1b-c577-421b-a036-94d42443c564",
+           null,
+           "tx-in",
+           "btcpay_payment_transaction",
+           "suggested",
+           "exact",
+           "txid_or_payment_hash",
+           100000000,
+           "30.00",
+           "unreviewed",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "<now>",
+           "<now>"
+          ]
+         ]
+        },
+        "freshness_jobs": {
+         "upsert": [
+          [
+           1,
+           "0fb894e3-20dd-4825-bec4-c07c3fd48eb8",
+           "p",
+           "btcpay_wallet_source",
+           "btcpay_wallet:ledger",
+           "btcpay_wallet",
+           "Ledger BTCPay wallet source",
+           "done",
+           "done",
+           20,
+           "{\"wallet_id\":\"ledger\",\"wallet_label\":\"Ledger\"}",
+           "{\"phase\":\"import\",\"wallet\":\"Ledger\"}",
+           "{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"fetched\":0,\"has_backend_url\":true,\"imported\":0,\"inserted_records\":[],\"invoice_provenance\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":2,\"payout_records_updated\":0,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":7,\"records_updated\":0,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":2,\"total\":2}},\"journal_invalidated\":false,\"ledger\":{\"held_tracked_elsewhere\":0,\"payments\":0,\"payouts\":0,\"pending\":1},\"payment_method_ids\":[\"BTC-LN\"],\"payouts_permission_missing\":false,\"skipped\":0,\"source\":\"btcpay-ledger:merchant:shop\",\"source_mode\":\"payments\",\"status\":\"synced\",\"store_id\":\"shop\",\"unchanged\":0,\"updated_records\":[],\"wallet\":\"Ledger\"}",
+           "{}",
+           1,
+           0,
+           null,
+           null,
+           "<now>",
+           "<now>",
+           "<now>",
+           "<now>"
+          ],
+          [
+           2,
+           "9da37513-675f-4c80-bf7b-ce85b9e3e86f",
+           "p",
+           "btcpay_provenance",
+           "btcpay_provenance:account:route-1",
+           "btcpay_provenance",
+           "BTCPay provenance merchant shop",
+           "done",
+           "done",
+           40,
+           "{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"payment_method_id\":\"BTC-LN\",\"store_id\":\"shop\"}",
+           "{\"phase\":\"decode_enrich\",\"store_id\":\"shop\"}",
+           "{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}}",
+           "{}",
+           1,
+           0,
+           null,
+           null,
+           "<now>",
+           "<now>",
+           "<now>",
+           "<now>"
+          ],
+          [
+           3,
+           "54822fe7-e2c4-41fa-a575-17509fc3f6a7",
+           "p",
+           "btcpay_wallet_source",
+           "btcpay_wallet:ledger",
+           "btcpay_wallet",
+           "Ledger BTCPay wallet source",
+           "done",
+           "done",
+           20,
+           "{\"wallet_id\":\"ledger\",\"wallet_label\":\"Ledger\"}",
+           "{\"phase\":\"import\",\"wallet\":\"Ledger\"}",
+           "{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"fetched\":0,\"has_backend_url\":true,\"imported\":0,\"inserted_records\":[],\"invoice_provenance\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}},\"journal_invalidated\":false,\"ledger\":{\"held_tracked_elsewhere\":0,\"payments\":0,\"payouts\":0,\"pending\":1},\"payment_method_ids\":[\"BTC-LN\"],\"payouts_permission_missing\":false,\"skipped\":0,\"source\":\"btcpay-ledger:merchant:shop\",\"source_mode\":\"payments\",\"status\":\"synced\",\"store_id\":\"shop\",\"unchanged\":0,\"updated_records\":[],\"wallet\":\"Ledger\"}",
+           "{}",
+           1,
+           0,
+           null,
+           null,
+           "<now>",
+           "<now>",
+           "<now>",
+           "<now>"
+          ],
+          [
+           4,
+           "156a2695-0d33-40b3-9822-1321c841382d",
+           "p",
+           "btcpay_provenance",
+           "btcpay_provenance:account:route-1",
+           "btcpay_provenance",
+           "BTCPay provenance merchant shop",
+           "done",
+           "done",
+           40,
+           "{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"payment_method_id\":\"BTC-LN\",\"store_id\":\"shop\"}",
+           "{\"phase\":\"decode_enrich\",\"store_id\":\"shop\"}",
+           "{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}}",
+           "{}",
+           1,
+           0,
+           null,
+           null,
+           "<now>",
+           "<now>",
+           "<now>",
+           "<now>"
+          ],
+          [
+           5,
+           "84ca80e5-978b-4bca-9487-62a6871cadfd",
+           "p",
+           "btcpay_wallet_source",
+           "btcpay_wallet:ledger",
+           "btcpay_wallet",
+           "Ledger BTCPay wallet source",
+           "done",
+           "done",
+           20,
+           "{\"force_full\":true,\"wallet_id\":\"ledger\",\"wallet_label\":\"Ledger\"}",
+           "{\"phase\":\"import\",\"wallet\":\"Ledger\"}",
+           "{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"fetched\":0,\"force_full\":true,\"has_backend_url\":true,\"imported\":0,\"inserted_records\":[],\"invoice_provenance\":{\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}},\"journal_invalidated\":false,\"ledger\":{\"held_tracked_elsewhere\":0,\"payments\":0,\"payouts\":0,\"pending\":1},\"payment_method_ids\":[\"BTC-LN\"],\"payouts_permission_missing\":false,\"skipped\":0,\"source\":\"btcpay-ledger:merchant:shop\",\"source_mode\":\"payments\",\"status\":\"synced\",\"store_id\":\"shop\",\"unchanged\":0,\"updated_records\":[],\"wallet\":\"Ledger\"}",
+           "{}",
+           1,
+           0,
+           null,
+           null,
+           "<now>",
+           "<now>",
+           "<now>",
+           "<now>"
+          ],
+          [
+           6,
+           "63a62bdc-e22f-4c7f-b691-62bd97dfe483",
+           "p",
+           "btcpay_provenance",
+           "btcpay_provenance:account:route-1",
+           "btcpay_provenance",
+           "BTCPay provenance merchant shop",
+           "done",
+           "done",
+           40,
+           "{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"force_full\":true,\"payment_method_id\":\"BTC-LN\",\"store_id\":\"shop\"}",
+           "{\"phase\":\"decode_enrich\",\"store_id\":\"shop\"}",
+           "{\"account_route_id\":\"route-1\",\"backend\":\"merchant\",\"backend_kind\":\"btcpay\",\"deep_audit\":null,\"force_full\":true,\"has_backend_url\":true,\"invoices_hydrated\":1,\"invoices_seen\":4,\"page_size\":100,\"pages_fetched\":1,\"payout_records_inserted\":0,\"payout_records_updated\":2,\"payouts_available\":true,\"payouts_permission_missing\":false,\"payouts_seen\":2,\"records_inserted\":0,\"records_updated\":7,\"status\":\"synced\",\"stop_reason\":\"end_of_results\",\"stopped_by_known_page\":false,\"store_id\":\"shop\",\"suggestions\":{\"created\":0,\"total\":2}}",
+           "{}",
+           1,
+           0,
+           null,
+           null,
+           "<now>",
+           "<now>",
+           "<now>",
+           "<now>"
+          ]
+         ]
+        },
+        "freshness_source_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "btcpay_wallet:ledger",
+           "btcpay_wallet",
+           "Ledger BTCPay wallet source",
+           "fresh",
+           "fresh",
+           null,
+           0,
+           0,
+           null,
+           null,
+           0,
+           "<now>",
+           null,
+           null,
+           null,
+           "done",
+           "{\"phase\":\"done\"}",
+           "{\"invoice_provenance\":{\"backend\":{\"kind\":\"btcpay\",\"name\":\"merchant\"},\"btcpay_invoice_pages\":{\"0\":{\"fingerprint\":\"0aca5ba1abf08723353057980c2eccc608f4d4e0dabd2d82793d0122ab1453a6\",\"page_size\":100,\"rows\":4,\"stable_ids\":[\"inv-hydrate\",\"inv-ln\",\"inv-new\",\"inv-paid\"]}},\"btcpay_invoice_pagination\":{\"deep_audit_pages\":1,\"last_stop_reason\":\"end_of_results\",\"next_deep_audit_skip\":null,\"unchanged_page_window\":5},\"store_id\":\"shop\"}}",
+           "<now>"
+          ],
+          [
+           2,
+           "p",
+           "btcpay_provenance:account:route-1",
+           "btcpay_provenance",
+           "BTCPay provenance merchant shop",
+           "fresh",
+           "fresh",
+           null,
+           0,
+           0,
+           null,
+           null,
+           0,
+           "<now>",
+           null,
+           null,
+           null,
+           "done",
+           "{\"phase\":\"done\"}",
+           "{\"backend\":{\"kind\":\"btcpay\",\"name\":\"merchant\"},\"btcpay_invoice_pages\":{\"0\":{\"fingerprint\":\"0aca5ba1abf08723353057980c2eccc608f4d4e0dabd2d82793d0122ab1453a6\",\"page_size\":100,\"rows\":4,\"stable_ids\":[\"inv-hydrate\",\"inv-ln\",\"inv-new\",\"inv-paid\"]}},\"btcpay_invoice_pagination\":{\"deep_audit_pages\":1,\"last_stop_reason\":\"end_of_results\",\"next_deep_audit_skip\":null,\"unchanged_page_window\":5},\"store_id\":\"shop\"}",
+           "<now>"
+          ]
+         ]
+        },
+        "wallets": {
+         "upsert": [
+          [
+           2,
+           "ledger",
+           "w",
+           "p",
+           null,
+           "Ledger",
+           "custom",
+           "{\"backend\": \"merchant\", \"last_synced_at\": \"<now>\", \"payment_method_ids\": [\"BTC-LN\", \"btc-chain\"], \"source_mode\": \"payments\", \"store_id\": \"shop\", \"sync_source\": \"btcpay\"}",
+           "2026-01-01T00:00:00Z"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

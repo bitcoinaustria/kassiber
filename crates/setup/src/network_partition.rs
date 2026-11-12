@@ -411,9 +411,7 @@ fn age_binary() -> Result<std::path::PathBuf> {
         "age_unavailable",
         "recipient-mode backups require an age or rage binary",
     )
-    .with_hint(
-        "Install `age` or `rage` on PATH, or use passphrase-mode backups with pyrage installed.",
-    ))
+    .with_hint("Install `age` or `rage` on PATH, or use a passphrase-mode backup."))
 }
 pub fn export(
     conn: &Connection,

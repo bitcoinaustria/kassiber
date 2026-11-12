@@ -7,10 +7,10 @@ workflows. The desktop GUI covers most of the same flows with onboarding,
 forms, and inline review — use whichever surface fits the moment. For
 deeper per-topic detail, drill into the [reference docs](reference/).
 
-Examples use `python3 -m kassiber`. When running through `uv`, prefix with
-`uv run --locked`. The installed prerelease binary exposes the same surface as
-`kassiber ...`, and the desktop bundle forwards `--cli ...` to its
-bundled CLI sidecar.
+Examples use the installed `kassiber` binary. From a source checkout, run
+`cargo run -p kassiber -- ...` instead, or use `target/debug/kassiber` after
+`cargo build -p kassiber`. The desktop bundle forwards `--cli ...` to its
+bundled `kassiber` sidecar.
 
 ## Concepts
 
@@ -68,35 +68,35 @@ before reports are trusted again.
 ## 1. Minimal setup
 
 ```bash
-python3 -m kassiber init
-python3 -m kassiber workspaces create personal
-python3 -m kassiber profiles create main \
+kassiber init
+kassiber workspaces create personal
+kassiber profiles create main \
   --workspace personal \
   --fiat-currency USD \
   --tax-country generic \
   --tax-long-term-days 365 \
   --gains-algorithm FIFO
-python3 -m kassiber context set --workspace personal --profile main
+kassiber context set --workspace personal --profile main
 ```
 
 For Austrian books, use `--tax-country at --fiat-currency EUR`.
 
 Coarse (daily/monthly) fallback pricing is **accepted by default** and booked at
 the coarse spot price. To require manual review of coarse-priced events instead,
-set `python3 -m kassiber profiles set --profile main --require-coarse-review`
+set `kassiber profiles set --profile main --require-coarse-review`
 (revert with `--no-require-coarse-review`).
 
 To encrypt the local SQLite database at rest:
 
 ```bash
-python3 -m kassiber secrets init
+kassiber secrets init
 ```
 
 See [Privacy & security](reference/privacy-and-security.md) for the SQLCipher boundary and recovery
 caveats. To produce a single-file portable backup:
 
 ```bash
-python3 -m kassiber backup export --file ~/backups/kassiber-$(date +%F).kassiber
+kassiber backup export --file ~/backups/kassiber-$(date +%F).kassiber
 ```
 
 The same archive moves a book to another device with `backup import`. A
@@ -105,11 +105,11 @@ file-sync tool can carry archives; do not file-sync a live project directory.
 ## 2. Create and sync a wallet
 
 ```bash
-python3 -m kassiber wallets create \
+kassiber wallets create \
   --label donations --kind address \
   --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
 
-python3 -m kassiber wallets sync --wallet donations
+kassiber wallets sync --wallet donations
 ```
 
 Descriptor, BSMS, and xpub wallets work the same way — `wallets kinds` lists
@@ -132,16 +132,16 @@ evidence stays in review before reports are trusted.
 ```bash
 # Surface unpaired candidates (exact only from complete cryptographic/whole-row
 # evidence; incomplete provider metadata and time + amount remain strong):
-python3 -m kassiber transfers suggest
+kassiber transfers suggest
 
 # Auto-apply every solo exact match without further review:
-python3 -m kassiber transfers bulk-pair --confidence exact
+kassiber transfers bulk-pair --confidence exact
 
 # Or apply saved non-conflicted auto-pair rules:
-python3 -m kassiber transfers rules apply
+kassiber transfers rules apply
 
 # Or pair one specific pair by id:
-python3 -m kassiber transfers pair --tx-out <out-id> --tx-in <in-id> \
+kassiber transfers pair --tx-out <out-id> --tx-in <in-id> \
   --kind submarine-swap --policy carrying-value
 ```
 
@@ -154,9 +154,9 @@ wallets, use the atomic custody-component resolver instead of forcing a chain
 of ambiguous pairs:
 
 ```bash
-python3 -m kassiber transfers components plan --action create \
+kassiber transfers components plan --action create \
   --file migrations.json
-python3 -m kassiber transfers components apply --action create \
+kassiber transfers components apply --action create \
   --file migrations.json \
   --expected-input-version <input-version-from-preview>
 ```
@@ -191,7 +191,7 @@ no owned inbound leg exists:
 ```bash
 # --payout-fiat-value is the reviewed sale/disposal proceeds for ordinary
 # taxable reviews. Cross-asset carrying-value keeps supported swap legs neutral.
-python3 -m kassiber transfers payouts create --tx-out <out-id> \
+kassiber transfers payouts create --tx-out <out-id> \
   --payout-asset BTC --payout-amount 0.24990000 \
   --payout-fiat-value 12495 --payout-external-id <recipient-txid> \
   --counterparty "recipient or exchange" --policy carrying-value
@@ -220,18 +220,18 @@ Cross-asset BTC ↔ LBTC peg-ins/peg-outs and submarine swaps:
 ## 4. Process journals and run reports
 
 ```bash
-python3 -m kassiber journals process
+kassiber journals process
 
-python3 -m kassiber reports summary
-python3 -m kassiber reports tax-summary
-python3 -m kassiber reports balance-sheet
-python3 -m kassiber reports capital-gains
+kassiber reports summary
+kassiber reports tax-summary
+kassiber reports balance-sheet
+kassiber reports capital-gains
 
-python3 -m kassiber reports export-pdf --file report.pdf
-python3 -m kassiber reports export-summary-pdf --file summary.pdf \
+kassiber reports export-pdf --file report.pdf
+kassiber reports export-summary-pdf --file summary.pdf \
   --start 2024-01-01T00:00:00Z --end 2024-12-31T23:59:59Z
-python3 -m kassiber reports export-csv --file report.csv
-python3 -m kassiber reports export-xlsx --file report.xlsx
+kassiber reports export-csv --file report.csv
+kassiber reports export-xlsx --file report.xlsx
 ```
 
 For bookkeeping kept outside Kassiber (an Einnahmen-Ausgaben-Rechnung or a
@@ -258,7 +258,7 @@ the configured live market-rate provider for automatic latest-price refresh and
 default pricing-cache rebuilds; Coinbase Exchange remains the default when no
 provider is configured.
 The repository also ships a BTC-only Kraken offline history bundle for EUR and
-USD hourly values under `kassiber/data/rates/kraken/btc_hourly`, which
+USD hourly values under `crates/rates/data/kraken/btc_hourly`, which
 freshness/rate-coverage jobs seed automatically when missing. It can also be
 imported with the same `kraken-csv` path flow, and Desktop Settings → Market
 data exposes it as Kraken offline history → `Bundled hourly values` for offline
@@ -275,16 +275,16 @@ intraday pricing.
 For Austrian books (`--tax-country at --fiat-currency EUR`):
 
 ```bash
-python3 -m kassiber --machine reports austrian-e1kv --year 2024
-python3 -m kassiber --machine reports austrian-tax-summary --year 2024
+kassiber --machine reports austrian-e1kv --year 2024
+kassiber --machine reports austrian-tax-summary --year 2024
 
-python3 -m kassiber reports export-austrian-e1kv-pdf \
+kassiber reports export-austrian-e1kv-pdf \
   --year 2024 --file e1kv-2024.pdf
-python3 -m kassiber reports export-austrian \
+kassiber reports export-austrian \
   --year 2024 --file austria-2024.pdf
-python3 -m kassiber reports export-austrian-e1kv-xlsx \
+kassiber reports export-austrian-e1kv-xlsx \
   --year 2024 --file e1kv-2024.xlsx
-python3 -m kassiber reports export-austrian-e1kv-csv \
+kassiber reports export-austrian-e1kv-csv \
   --year 2024 --dir e1kv-2024-csv
 ```
 
@@ -311,7 +311,7 @@ exposed.
 ```bash
 # Pick a purpose. For a planned exchange sale, the target transaction is the
 # current funds-history anchor, not the future exchange deposit txid.
-python3 -m kassiber --machine reports source-funds \
+kassiber --machine reports source-funds \
   --purpose planned_exchange_sale \
   --target-transaction <current-funds-txid-or-id> \
   --target-amount 1.00000000 \
@@ -321,7 +321,7 @@ python3 -m kassiber --machine reports source-funds \
 # Seed target-scoped suggestions from canonical transfers, reviewed pairs, and
 # provider/import hints. Provider ids and broad heuristics need
 # --include-broad-hints.
-python3 -m kassiber source-funds suggest \
+kassiber source-funds suggest \
   --target-transaction <txid-or-id>
 
 # Bulk-accept deterministic links for this target path. Two kinds qualify, both
@@ -330,35 +330,35 @@ python3 -m kassiber source-funds suggest \
 # spend's own observed inputs are earlier outputs of the same wallet. Provider
 # ids, privacy hints, weak time/amount matches and pairs you already rejected
 # stay manual.
-python3 -m kassiber source-funds links bulk-review \
+kassiber source-funds links bulk-review \
   --target-transaction <target-txid-or-id>
 
 # Add reviewed root evidence and explicit flow allocations.
-python3 -m kassiber source-funds sources create \
+kassiber source-funds sources create \
   --type fiat_purchase --label "Reviewed exchange purchase" \
   --asset BTC --amount 0.10000000
-python3 -m kassiber source-funds links create \
+kassiber source-funds links create \
   --from-source <source-id> --to-transaction <transaction-id> \
   --type manual_source --allocation-amount 0.10000000
 
 # Optional: save recipient-specific disclosure defaults for repeats.
-python3 -m kassiber source-funds recipients create \
+kassiber source-funds recipients create \
   --label "Relationship bank" --kind bank \
   --default-reveal-mode standard
 
 # Auto-assemble everything provable from local evidence (scoped tx
 # inputs/outputs of synced wallets, source-qualified Lightning hashes, and
 # reviewed pairs). Provider/platform ids remain manual suggestions.
-python3 -m kassiber source-funds assemble \
+kassiber source-funds assemble \
   --target-transaction <target-txid-or-id>
 
 # Preview gates and disclosure; save an immutable case before export.
-python3 -m kassiber --machine reports source-funds \
+kassiber --machine reports source-funds \
   --target-transaction <target-txid-or-id> \
   --reveal-mode standard --save-case
 
 # Export only renders the saved case snapshot, never live mutable tables.
-python3 -m kassiber reports export-source-funds-pdf \
+kassiber reports export-source-funds-pdf \
   --case <case-id> --file source-of-funds.pdf
 ```
 
@@ -387,18 +387,8 @@ consolidation hops, target broker or exchange deposit, and immutable
 saved-case export. Full German localization, country-specific legal
 templates, and CoinJoin/PayJoin traversal remain deferred.
 
-A fictitious AT/EUR sample report can be generated locally:
-
-```bash
-uv run --locked python scripts/generate-source-funds-demo-report.py \
-  --output /tmp/kassiber-source-funds-demo.pdf \
-  --json-output /tmp/kassiber-source-funds-demo.json
-```
-
-The generator removes its temporary CSV/evidence inputs and default
-temporary data root after a successful run. Pass `--keep-workdir` or
-`--data-root` to inspect the generated working data. The design intent and
-boundary are documented in [plan/09-source-of-funds.md](plan/09-source-of-funds.md).
+The design intent and boundary are documented in
+[plan/09-source-of-funds.md](plan/09-source-of-funds.md).
 
 ## 7. BTCPay invoice/payment reconciliation
 
@@ -411,13 +401,13 @@ on-chain payment method internally.
 Invoice/payment provenance uses a separate review path from wallet balances:
 
 ```bash
-python3 -m kassiber btcpay provenance sync \
+kassiber btcpay provenance sync \
   --backend btcpay-prod --store-id <store-id>
-python3 -m kassiber btcpay provenance suggest
-python3 -m kassiber btcpay provenance review \
+kassiber btcpay provenance suggest
+kassiber btcpay provenance review \
   --link <link-id> --state reviewed --commercial-kind income
 
-python3 -m kassiber reports export-commercial-subledger-csv \
+kassiber reports export-commercial-subledger-csv \
   --file commercial-subledger.csv
 ```
 

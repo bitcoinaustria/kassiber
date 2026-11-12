@@ -35,7 +35,7 @@ fn copy_in_use() -> Error {
         "legacy project migration requires a closed, checkpointed source database",
     )
     .retryable(true)
-    .hint("Close other Kassiber processes and open then close this book with the Python build before retrying.")
+    .hint("Close other Kassiber processes, open this book once with --data-root set to its current data folder (which checkpoints it), then retry.")
 }
 fn require_no_sidecar(database: &Path) -> Result<()> {
     for suffix in ["-wal", "-journal"] {
@@ -123,6 +123,7 @@ fn workspace_count(path: &Path) -> Result<Option<i64>> {
         return Ok(None);
     }
     // This probe never keys, migrates, or sets journal_mode on the source.
+    crate::seed_test_prng();
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
         .map_err(map_sqlite_error)?;
     let exists: bool = conn

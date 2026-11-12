@@ -200,26 +200,6 @@
     "rule": "A nested config URL cannot inherit saved credentials for another endpoint."
   },
   {
-    "id": "chain-coinbase-prefetch",
-    "file": "kassiber/core/sync_backends.py",
-    "find": "if sync_state.chain == \"bitcoin\" and _is_bitcoin_coinbase_input(vin):",
-    "replace": "if False and sync_state.chain == \"bitcoin\" and _is_bitcoin_coinbase_input(vin):",
-    "expect_failing": [
-      "tests/test_electrum_coinbase.py::test_electrum_coinbase_fetch_and_record_keep_the_observed_receipt"
-    ],
-    "rule": "Bitcoin coinbase inputs never request a previous transaction during compatibility prefetch."
-  },
-  {
-    "id": "chain-coinbase-graph",
-    "file": "kassiber/core/sync_backends.py",
-    "find": "if _is_bitcoin_coinbase_input(entry):",
-    "replace": "if False and _is_bitcoin_coinbase_input(entry):",
-    "expect_failing": [
-      "tests/test_electrum_coinbase.py::test_electrum_coinbase_graph_does_not_lookup_the_null_outpoint"
-    ],
-    "rule": "Coinbase graph normalization leaves the null outpoint without a fabricated prevout."
-  },
-  {
     "id": "chain-lnd-report-binding",
     "file": "crates/chain/src/lightning.rs",
     "find": ".with_action_binding(binding(&config)?);",

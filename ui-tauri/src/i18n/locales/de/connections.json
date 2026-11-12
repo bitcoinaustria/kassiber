@@ -1457,7 +1457,7 @@
       "network": "Kassiber konnte {{provider}} nicht erreichen. Prüfe die Netzwerkverbindung und etwaige Proxy-Einstellungen.",
       "http": "{{provider}} hat mit einem Fehler geantwortet.",
       "conflict": "In diesem Buch gibt es schon eine Wallet mit diesem Namen. Wähle einen anderen Namen.",
-      "needsRust": "Börsen-API-Verbindungen brauchen das Rust-Backend von Kassiber. Diese App läuft mit dem Python-Backend, das Börsen-Syncs nur über die Kommandozeile anbietet.",
+      "needsRust": "Börsen-API-Verbindungen brauchen ein neueres Kassiber-Backend als das, mit dem diese App spricht. Aktualisiere Kassiber oder synchronisiere über die Kommandozeile.",
       "unknown": "Die Anfrage ist fehlgeschlagen.",
       "permissions": "Noch eingeschaltete Rechte: {{list}}",
       "serverSaid": "Details: {{message}}"

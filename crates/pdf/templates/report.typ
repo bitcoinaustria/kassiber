@@ -90,10 +90,20 @@
     let words = if c.align == "right" { whole } else if c.mono { () } else {
       cells.map(v => v.split(" ").map(w => measure(cell-text(w)).width)).flatten()
     }
-    (need: longest((..label, ..words)) + pad, natural: longest((..label, ..whole)) + pad)
+    (need: longest((..label, ..words)) + pad, natural: longest((..label, ..whole)) + pad,
+      cell-need: longest(words) + pad, cell-natural: longest(whole) + pad)
   })
-  let need = fits.map(f => f.need)
-  let natural = fits.map(f => calc.max(f.need, f.natural))
+  // Headers whose words do not fit the page side by side would push the
+  // last columns past its edge, where a reader never sees them. Such a
+  // table hyphenates its headers instead, and only its cells set the floor.
+  let crowded = fits.map(f => f.need).sum() > size.width
+  let header = if crowded {
+    cols.map(c => text(size: 7pt, weight: 500, fill: muted, hyphenate: true, c.label))
+  } else { header }
+  let need = if crowded { fits.map(f => f.cell-need) } else { fits.map(f => f.need) }
+  let natural = if crowded {
+    fits.map(f => calc.max(f.cell-need, f.cell-natural))
+  } else { fits.map(f => calc.max(f.need, f.natural)) }
   let weight-sum = cols.map(c => c.width).sum()
   let widths = cols.zip(need).map(((c, n)) => calc.max(size.width * c.width / weight-sum, n))
   let give(widths, floor) = {

@@ -45,8 +45,8 @@ pub const RUNTIME_STATUS_TIMEOUT: Duration = Duration::from_secs(35);
 const MODELS_TIMEOUT_CAP: Duration = Duration::from_secs(35);
 
 /// Where a build finds the bundled script without an override:
-/// `<executable dir>/provider_broker/index.mjs` (Python ships it as package
-/// data beside `kassiber/ai/`).
+/// `<executable dir>/provider_broker/index.mjs`; `pnpm broker:build` writes
+/// it to `ui-tauri/provider-broker/dist/`.
 pub fn bundled_script() -> PathBuf {
     std::env::current_exe()
         .ok()

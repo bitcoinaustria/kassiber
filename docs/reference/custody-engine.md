@@ -1,5 +1,9 @@
 # Custody engine
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 R2 is a parity port, described in [plan 21](../plan/21-rust-backend.md).
 Python remains the production reference. Rust receives a versioned, local,
 raw-fact request through `kassiber_tax.custody`, alongside the independent
@@ -733,7 +737,7 @@ Cargo unifies custody's `serde_json/arbitrary_precision` and `float_roundtrip`
 features into the ledger build. The former preserves unbounded JSON integers;
 the latter makes float literal loading agree with CPython. This is an explicit
 shared build contract, not an isolated custody dependency choice.
-`crates/custody/scripts/check_ledger_features.py` builds the ledger example twice,
+`scripts/check-ledger-features.sh` builds the ledger example twice,
 with and without those features, and compares all 145 stored ledger response
 strings byte for byte. CI's Rust job and the quality gate require this check.
 

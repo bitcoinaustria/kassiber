@@ -1,3 +1,6 @@
+"""RPM packages and the signed DNF repository: build, sign, install, swap and
+remove. Standard library only, run with `python3 -I` (plan 22, D2)."""
+
 import os
 import shutil
 import subprocess

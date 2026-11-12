@@ -1,13 +1,14 @@
 # Austrian tax handoff contract (markers ↔ Austrian rules)
 
-Kassiber's Python core sends the reviewed Austrian inputs as typed facts and
-owns the Austrian reporting layer. The ledger layer of Kassiber's
+Kassiber's journal crates send the reviewed Austrian inputs as typed facts, and
+the report crate (`crates/reports`) owns the Austrian reporting layer. The ledger layer of Kassiber's
 [tax engine](reference/tax-engine.md) (`tax-engine/core/src/ledger/`) is the
 marker emitter, and the engine's Austrian country
 (`tax-engine/core/src/austria.rs`) is the tax-semantics interpreter and
 pool-math engine. Together they reproduce the phase-3 adapter on the RP2 AT
-plugin (`rp2.plugin.country.at`) exactly, and RP2 remains the tests' parity
-oracle, so every rule below is unchanged from the RP2 contract. This doc pins
+plugin (`rp2.plugin.country.at`) exactly, and the RP2 results survive as the
+engine's frozen test fixtures, so every rule below is unchanged from the RP2
+contract. This doc pins
 the contract between the markers and the Austrian rules and records v1 scope
 decisions so future commits can tighten the handoff without rediscovering
 them.
@@ -39,14 +40,14 @@ and `at_swap_link` markers on non-`SELL` disposals.
 
 ## Typed source of truth
 
-The request builder (`kassiber/core/engines/ledger_request.py`) sends each
+The request builder (`crates/custody/src/ledger_request.rs`) sends each
 row's time, kind, and reviewed overrides, and the reviewed pairs. The engine's
 normalizer (`tax-engine/core/src/ledger/normalize.rs`) turns them into typed
 events with the fields below: the regime tracker (`ledger/regimes.rs`)
 supplies the regimes, the swap-link selection (`ledger/swaplinks.rs`) the
 links, and `ledger/describe.rs` serializes them into the notes wire format.
-`kassiber/core/austrian.py` keeps the `AT_NEU_CUTOFF` constant and the
-Kennzahl mapping. Carried-basis computation lives in the engine's
+The journal reader (`crates/journals/src/render.rs`) maps categories to
+Kennzahlen, and the report crate keeps its own copy of the cutoff (below). Carried-basis computation lives in the engine's
 country-level `compute_tax_for_assets` hook.
 
 | Field | Type | Populated by |
@@ -286,15 +287,16 @@ The Neu cutoff is declared independently in:
 
 - `tax-engine/core/src/austria.rs` as `NEU_CUTOFF_US`, which the Austrian
   rules and the regime tracker (`ledger/regimes.rs`) both read
-- `kassiber/core/austrian.py` as `AT_NEU_CUTOFF`, which Python's report layer
-  reads (for example the exit-tax and snapshot regime fallbacks)
+- as the literal `2021-02-28T23:00:00Z` in the regime fallbacks of the exit
+  tax (`crates/reports/src/exit_tax.rs`) and the desktop overview
+  (`crates/workspace/src/overview.rs`)
 
-Both must point to `2021-03-01 00:00:00 Europe/Vienna`, and the manifest
-drift test (`tests/test_tax_ledger_contract.py`) checks that they agree. If
-the Austrian legislator ever amends the cutoff, change both in one reviewed
-change, so unmarked events classified via the new cutoff are interpreted
-consistently by the reports. RP2 keeps the old cutoff, so the parity
-comparison must list the change as a reviewed difference.
+All must point to `2021-03-01 00:00:00 Europe/Vienna`. The Python manifest
+drift test that checked this went with Python, and no Rust test compares the
+copies yet. If the Austrian legislator ever amends the cutoff, change every
+copy in one reviewed change, so unmarked events classified via the new cutoff
+are interpreted consistently by the reports. The frozen RP2 fixtures keep the
+old cutoff, so the change must update them as a reviewed difference.
 
 ## Exit-tax departure calendar
 

@@ -2401,15 +2401,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "indoc"
-version = "2.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79cf5c93f93228cf8efb3ba362535fb11199ac548a09ce117c9b1adc3030d706"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "infer"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2489,6 +2480,7 @@ dependencies = [
 name = "kassiber"
 version = "0.22.78"
 dependencies = [
+ "flate2",
  "kassiber-ai",
  "kassiber-backup",
  "kassiber-chain",
@@ -2565,6 +2557,7 @@ dependencies = [
  "kassiber-credentials",
  "kassiber-envelope",
  "kassiber-net",
+ "kassiber-paths",
  "kassiber-pyjson",
  "kassiber-pytext",
  "serde_json",
@@ -2585,6 +2578,7 @@ dependencies = [
  "kassiber-ipc",
  "kassiber-mcp",
  "kassiber-operator",
+ "kassiber-paths",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-release",
@@ -2601,6 +2595,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-clock-shim"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "kassiber-credentials"
 version = "0.1.0"
 dependencies = [
@@ -2614,6 +2615,7 @@ name = "kassiber-custody"
 version = "0.1.0"
 dependencies = [
  "bitcoin_hashes",
+ "flate2",
  "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-tax-core",
@@ -2699,6 +2701,7 @@ dependencies = [
  "bitcoin_hashes",
  "kassiber-custody",
  "kassiber-envelope",
+ "kassiber-paths",
  "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-pytext",
@@ -2727,6 +2730,15 @@ dependencies = [
  "kassiber-pytext",
  "kassiber-runtime",
  "kassiber-setup",
+]
+
+[[package]]
+name = "kassiber-mutation-check"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -2846,6 +2858,7 @@ name = "kassiber-release"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "flate2",
  "kassiber-envelope",
  "kassiber-net",
  "kassiber-paths",
@@ -2854,9 +2867,22 @@ dependencies = [
  "kassiber-setup",
  "kassiber-store",
  "nix 0.30.1",
+ "plist",
  "sha2 0.11.1",
  "signature",
  "ssh-key",
+ "tar",
+ "zip",
+]
+
+[[package]]
+name = "kassiber-repo-checks"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
 ]
 
 [[package]]
@@ -2921,6 +2947,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-session-replay"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "flate2",
+ "kassiber-ownership",
+ "kassiber-paths",
+ "kassiber-store",
+ "libc",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tar",
+ "tempfile",
+ "zip",
+]
+
+[[package]]
 name = "kassiber-setup"
 version = "0.1.0"
 dependencies = [
@@ -2961,15 +3007,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kassiber-tax"
-version = "0.2.0"
-dependencies = [
- "kassiber-custody",
- "kassiber-tax-core",
- "pyo3",
-]
-
-[[package]]
 name = "kassiber-tax-core"
 version = "0.2.0"
 dependencies = [
@@ -3007,6 +3044,7 @@ name = "kassiber-transfers"
 version = "0.1.0"
 dependencies = [
  "bitcoin_hashes",
+ "flate2",
  "kassiber-custody",
  "kassiber-envelope",
  "kassiber-journals",
@@ -4055,68 +4093,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
-name = "pyo3"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8970a78afe0628a3e3430376fc5fd76b6b45c4d43360ffd6cdd40bdde72b682a"
-dependencies = [
- "indoc",
- "libc",
- "memoffset",
- "once_cell",
- "portable-atomic",
- "pyo3-build-config",
- "pyo3-ffi",
- "pyo3-macros",
- "unindent",
-]
-
-[[package]]
-name = "pyo3-build-config"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "458eb0c55e7ece017adeba38f2248ff3ac615e53660d7c71a238d7d2a01c7598"
-dependencies = [
- "once_cell",
- "target-lexicon",
-]
-
-[[package]]
-name = "pyo3-ffi"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7114fe5457c61b276ab77c5055f206295b812608083644a5c5b2640c3102565c"
-dependencies = [
- "libc",
- "pyo3-build-config",
-]
-
-[[package]]
-name = "pyo3-macros"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8725c0a622b374d6cb051d11a0983786448f7785336139c3c94f5aa6bef7e50"
-dependencies = [
- "proc-macro2",
- "pyo3-macros-backend",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "pyo3-macros-backend"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4109984c22491085343c05b0dbc54ddc405c3cf7b4374fc533f5c3313a572ccc"
-dependencies = [
- "heck",
- "proc-macro2",
- "pyo3-build-config",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "qr_code"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5156,12 +5132,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "target-lexicon"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
-
-[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5913,12 +5883,6 @@ name = "unicode-vo"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1d386ff53b415b7fe27b50bb44679e2cc4660272694b7b6f3326d8480823a94"
-
-[[package]]
-name = "unindent"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7264e107f553ccae879d21fbea1d6724ac785e8c3bfc762137959b5802826ef3"
 
 [[package]]
 name = "universal-hash"

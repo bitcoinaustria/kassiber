@@ -421,7 +421,7 @@
     "find": "                kassiber_transfers::custody_ai_audit::append(conn, &failed, None, &sources)?;",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_custody_writes_are_audited_or_rolled_back"
+      "kassiber/black_box:test_custody_writes_are_audited_or_rolled_back"
     ],
     "rule": "A refused custody write still commits its failed audit row."
   },
@@ -431,7 +431,7 @@
     "find": "            bound(bounded_text(&field(\"call_id\"), 256))?,",
     "replace": "            bound(field(\"call_id\"))?,",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_custody_audit_records_match_python"
+      "kassiber/black_box:test_custody_audit_records_match_python"
     ],
     "rule": "The audit row bounds the call id as Python does."
   },
@@ -441,7 +441,7 @@
     "find": "                args,\n                source,\n            );",
     "replace": "                args,\n                \"gui\",\n            );",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_ai_authored_writes_match_python"
+      "kassiber/black_box:test_ai_authored_writes_match_python"
     ],
     "rule": "An AI quarantine resolution is authored ai_tool."
   },
@@ -451,7 +451,7 @@
     "find": "            &kassiber_ai::redact::redact_ai_tool_result(args),",
     "replace": "            args,",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_review_apply_flow_matches_python"
+      "kassiber/black_box:test_review_apply_flow_matches_python"
     ],
     "rule": "An AI input request stores a redacted explanation."
   },
@@ -461,7 +461,7 @@
     "find": "    \"transfers\",\n    \"loans\",\n];",
     "replace": "    \"loans\",\n    \"transfers\",\n];",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_read_tools_match_python_on_every_fixture"
+      "kassiber/black_box:test_read_tools_match_python_on_every_fixture"
     ],
     "rule": "The worklist's default sections are Python's, in Python's order."
   },
@@ -471,7 +471,7 @@
     "find": "                &mut AnalysisSources::default(),\n            );\n        }\n        if lightning::COMMANDS.contains(&command) {",
     "replace": "                &mut kassiber_wallets::publication::wallet::SystemSources::default(),\n            );\n        }\n        if lightning::COMMANDS.contains(&command) {",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_read_tools_match_python_on_every_fixture"
+      "kassiber/black_box:test_read_tools_match_python_on_every_fixture"
     ],
     "rule": "The privacy mirror synchronizes the analysis index with the index's own identity source."
   },
@@ -1568,7 +1568,7 @@
     "find": "            content.push_str(&leg.content);",
     "replace": "            content = leg.content;",
     "expect_failing": [
-      "tests/test_rust_ai_chat.py::RustAiChatParityTest::test_broker_chat_tool_round_and_resumed_cursor"
+      "kassiber/black_box:test_broker_chat_tool_round_and_resumed_cursor"
     ],
     "rule": "A tool turn binds its provider cursor to every leg's text the user saw."
   },
@@ -1578,7 +1578,7 @@
     "find": "                    resume_fingerprint(&self.turn.validated.messages).as_deref(),",
     "replace": "                    Some(history_fingerprint(&self.turn.validated.messages).as_str()),",
     "expect_failing": [
-      "tests/test_rust_ai_chat.py::RustAiChatParityTest::test_broker_chat_tool_round_and_resumed_cursor"
+      "kassiber/black_box:test_broker_chat_tool_round_and_resumed_cursor"
     ],
     "rule": "A tool-free turn looks its cursor up by the transcript before the new prompt."
   },
@@ -1598,7 +1598,7 @@
     "find": "        Err(error) if error.code == \"invalid_wallet_config\" => return Err(error),\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_unreadable_wallet_config_refuses_wallet_sync_typed"
+      "kassiber/black_box:test_unreadable_wallet_config_refuses_wallet_sync_typed"
     ],
     "rule": "The AI wallet sync answers the planner's invalid_wallet_config, not the direct-sync refusal."
   },
@@ -1608,7 +1608,7 @@
     "find": "        kassiber_envelope::set(&mut result, \"hint\", redact_ai_tool_result(&s(hint)));",
     "replace": "        let _ = hint;",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_unreadable_wallet_config_refuses_wallet_sync_typed"
+      "kassiber/black_box:test_unreadable_wallet_config_refuses_wallet_sync_typed"
     ],
     "rule": "A refused AI write carries the error's hint to the model, redacted."
   },
@@ -1660,7 +1660,7 @@
     "find": "                if !self.request.wallets_sync {\n                    if let Some(journals) = journals.take() {",
     "replace": "                if self.request.wallets_sync || !self.request.wallets_sync {\n                    if let Some(journals) = journals.take() {",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_mutating_tools_match_python_on_every_fixture"
+      "kassiber/black_box:test_mutating_tools_match_python_on_every_fixture"
     ],
     "rule": "A wallet sync's journal step follows the snapshot in the payload, as _wallets_sync_payload adds it."
   },
@@ -1670,7 +1670,7 @@
     "find": "\"ROLLBACK TO SAVEPOINT {SAVEPOINT}; RELEASE SAVEPOINT {SAVEPOINT}\"",
     "replace": "\"RELEASE SAVEPOINT {SAVEPOINT}\"",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_flow_matches_python"
+      "kassiber/black_box:test_attachment_import_flow_matches_python"
     ],
     "rule": "Planning an attachment import leaves the book unchanged."
   },
@@ -1680,7 +1680,7 @@
     "find": "    if get(expected, \"plan_digest\") != Some(&s(plan_digest)) {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_flow_matches_python"
+      "kassiber/black_box:test_attachment_import_flow_matches_python"
     ],
     "rule": "An apply runs only the plan whose digest the user approved."
   },
@@ -1690,7 +1690,7 @@
     "find": "        if get(expected, \"expected_content_sha256\") != Some(&s(file.sha256.as_str())) {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_flow_matches_python"
+      "kassiber/black_box:test_attachment_import_flow_matches_python"
     ],
     "rule": "An apply refuses a file that changed since its plan."
   },
@@ -1700,7 +1700,7 @@
     "find": "        if !crate::file_import::attachment::same_int(",
     "replace": "        if false && !crate::file_import::attachment::same_int(",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_flow_matches_python"
+      "kassiber/black_box:test_attachment_import_flow_matches_python"
     ],
     "rule": "An apply refuses a book whose inputs moved since its plan."
   },
@@ -1710,7 +1710,7 @@
     "find": "            if !completeness::FILE_IMPORT_TARGET_CLASSES.contains(&klass.as_str()) {",
     "replace": "            if false {",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_plans_match_python"
+      "kassiber/black_box:test_attachment_import_plans_match_python"
     ],
     "rule": "Only file-backed wallets receive an attached file's rows."
   },
@@ -1720,7 +1720,7 @@
     "find": "        if transfers_only_confirmed {",
     "replace": "        if true {",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_plans_match_python"
+      "kassiber/black_box:test_attachment_import_plans_match_python"
     ],
     "rule": "Row kinds taken from the amount sign block until the user confirms a transfers-only export."
   },
@@ -1730,8 +1730,8 @@
     "find": "        Ok(withhold_cell_values(&payload))",
     "replace": "        Ok(payload)",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_flow_matches_python",
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_plans_match_python"
+      "kassiber/black_box:test_attachment_import_flow_matches_python",
+      "kassiber/black_box:test_attachment_import_plans_match_python"
     ],
     "rule": "A restricted provider gets an import plan without the file's values."
   },
@@ -1751,7 +1751,7 @@
     "find": "        crate::ai_tools::read_document(provider, source_file, pages, expected_fiat_currency)",
     "replace": "        let (provider, source_file, pages, fiat) = (provider.clone(), source_file.to_owned(), pages.clone(), expected_fiat_currency.map(str::to_owned));\n        on_request_loop(&self.tasks, move |_| crate::ai_tools::read_document(&provider, &source_file, &pages, fiat.as_deref())).unwrap_or(Err(ToolError::Unexpected))",
     "expect_failing": [
-      "tests/test_rust_ai_document_import.py::RustAiDocumentReaderOffLoopTest::test_other_requests_are_answered_while_the_model_reads"
+      "kassiber/black_box:test_other_requests_are_answered_while_the_model_reads"
     ],
     "rule": "The document reader's model call never holds the daemon's request loop."
   },
@@ -1761,7 +1761,7 @@
     "find": "\"ROLLBACK TO SAVEPOINT {SAVEPOINT}; RELEASE SAVEPOINT {SAVEPOINT}\"",
     "replace": "\"RELEASE SAVEPOINT {SAVEPOINT}\"",
     "expect_failing": [
-      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+      "kassiber/black_box:test_reading_and_importing_a_chat_photo_matches_python"
     ],
     "rule": "Planning a document import leaves the book unchanged."
   },
@@ -1771,7 +1771,7 @@
     "find": "super::attachment::apply_refusal(&plan, &plan_digest, expected, PLAN_TOOL)",
     "replace": "super::attachment::apply_refusal(&plan, &plan_digest, &dict([(\"plan_digest\", s(plan_digest.as_str()))]), PLAN_TOOL)",
     "expect_failing": [
-      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+      "kassiber/black_box:test_reading_and_importing_a_chat_photo_matches_python"
     ],
     "rule": "A document apply runs only the plan whose digest the user approved."
   },
@@ -1781,7 +1781,7 @@
     "find": "        if get(expected, \"expected_source_sha256\") != Some(&s(source_sha256.as_str())) {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+      "kassiber/black_box:test_reading_and_importing_a_chat_photo_matches_python"
     ],
     "rule": "A document apply refuses a draft of another document."
   },
@@ -1791,7 +1791,7 @@
     "find": "            self.daemon.document_sessions.consume(draft);",
     "replace": "            let _ = draft;",
     "expect_failing": [
-      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+      "kassiber/black_box:test_reading_and_importing_a_chat_photo_matches_python"
     ],
     "rule": "An applied draft cannot be imported twice."
   },
@@ -1801,7 +1801,7 @@
     "find": "        Ok(withhold_values(&payload))",
     "replace": "        Ok(payload)",
     "expect_failing": [
-      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+      "kassiber/black_box:test_reading_and_importing_a_chat_photo_matches_python"
     ],
     "rule": "A restricted provider gets a document plan without values or row ids."
   },
@@ -1811,7 +1811,7 @@
     "find": "    if full_access {\n        keys.push(\"filename\");\n    }",
     "replace": "    keys.push(\"filename\");",
     "expect_failing": [
-      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+      "kassiber/black_box:test_reading_and_importing_a_chat_photo_matches_python"
     ],
     "rule": "A restricted provider never gets the document's file name."
   },
@@ -1821,7 +1821,7 @@
     "find": "    if get(state, \"document_import_sessions\") == Some(&Value::Bool(true)) {",
     "replace": "    if true {",
     "expect_failing": [
-      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+      "kassiber/black_box:test_reading_and_importing_a_chat_photo_matches_python"
     ],
     "rule": "Documents are read only where the daemon keeps document grants: a chat."
   },
@@ -1964,7 +1964,7 @@
     "find": "        answer!(self, Value, |book: &mut HostBook<'_>| book.mutate(\n            &kind,\n            &arguments,\n            authored_source\n        ))",
     "replace": "        let _ = (kind, arguments, authored_source);\n        Err(ToolError::Unexpected)",
     "expect_failing": [
-      "tests/test_rust_ai_chat.py::RustAiChatParityTest::test_writes_ask_apply_and_undo_through_the_executor"
+      "kassiber/black_box:test_writes_ask_apply_and_undo_through_the_executor"
     ],
     "rule": "The chat worker's book forwards writes to the request loop."
   },
@@ -1974,7 +1974,7 @@
     "find": "        \"ui.journals.quarantine.groups\" => crate::quarantine::groups::snapshot(conn, args),\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_formerly_refused_tools_match_python"
+      "kassiber/black_box:test_formerly_refused_tools_match_python"
     ],
     "rule": "The assistant reads quarantine root-cause groups natively."
   },
@@ -1984,7 +1984,7 @@
     "find": "        return transaction_verify_for_ai(daemon, raw);",
     "replace": "        let _ = transaction_verify_for_ai;\n        return Err(AppError::new(\"not_implemented\", \"verify\"));",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_formerly_refused_tools_match_python"
+      "kassiber/black_box:test_formerly_refused_tools_match_python"
     ],
     "rule": "The assistant verifies a row against its import evidence natively."
   },
@@ -1994,7 +1994,7 @@
     "find": "            let wall = super::sql::wall_clock(conn, sources)?;",
     "replace": "            let wall = now.clone();",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_formerly_refused_tools_match_python"
+      "kassiber/black_box:test_formerly_refused_tools_match_python"
     ],
     "rule": "A dismissal's expiry counts from the wall clock, as Python's datetime.now does."
   },
@@ -2004,7 +2004,7 @@
     "find": "        // reference binds `transfer_matching.datetime` and `uuid4`.\n        #[cfg(feature = \"test-harness\")]\n        let sources = journals::Sources;",
     "replace": "        // reference binds `transfer_matching.datetime` and `uuid4`.\n        let sources = kassiber_transfers::SystemSources;",
     "expect_failing": [
-      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_formerly_refused_tools_match_python"
+      "kassiber/black_box:test_formerly_refused_tools_match_python"
     ],
     "rule": "Harness builds bind the transfers route's clock as the Python reference does."
   },
@@ -2014,7 +2014,7 @@
     "find": "        || conn.is_readonly(\"main\")?\n        || conn.query_row(\"PRAGMA query_only\", [], |row| row.get::<_, bool>(0))?\n    {\n        return Ok(None);",
     "replace": "        || conn.is_readonly(\"main\")?\n    {\n        return Ok(None);",
     "expect_failing": [
-      "tests/test_rust_mcp.py::McpTranscriptParityTest::test_every_grant_lists_and_runs_what_it_covers"
+      "kassiber/black_box:test_every_grant_lists_and_runs_what_it_covers"
     ],
     "rule": "An MCP analysis-index read (Privacy Mirror, chain-analysis query and entropy) under the read pin's query_only takes no writer reservation, so it answers as Python round 13 does instead of tool_error."
   },
@@ -2191,7 +2191,7 @@
     "find": "        (\"model\", Value::Str(validated.model.clone())),",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_cli_proxy_daemon.py::RustCliProxyDaemonTest::test_a_cli_proxy_is_set_up_and_chats_in_each_models_format"
+      "kassiber/black_box:test_a_cli_proxy_is_set_up_and_chats_in_each_models_format"
     ],
     "rule": "ai.chat hands its model to the provider resolution, so a CLI proxy chat speaks that model's format."
   },
@@ -2201,7 +2201,7 @@
     "find": "            if kind.as_deref() == Some(cli_proxy::KIND) && !truthy(field(args, \"acknowledge\")) {",
     "replace": "            if false && kind.as_deref() == Some(cli_proxy::KIND) && !truthy(field(args, \"acknowledge\")) {",
     "expect_failing": [
-      "tests/test_rust_cli_proxy_daemon.py::RustCliProxyDaemonTest::test_the_cli_creates_a_cli_proxy_and_contacts_it_only_to_list_or_test"
+      "kassiber/black_box:test_the_cli_creates_a_cli_proxy_and_contacts_it_only_to_list_or_test"
     ],
     "rule": "`ai providers create --kind cli_proxy` is saved only with --acknowledge, as in the desktop wizard."
   },
@@ -2211,7 +2211,7 @@
     "find": "help: Help::AiProviderKind, metavar: None, choices: Some(&[\"local\", \"remote\", \"tee\", \"cli_proxy\"])",
     "replace": "help: Help::AiProviderKind, metavar: None, choices: Some(&[\"local\", \"remote\", \"tee\"])",
     "expect_failing": [
-      "tests/test_rust_cli_proxy_daemon.py::RustCliProxyDaemonTest::test_the_cli_creates_a_cli_proxy_and_contacts_it_only_to_list_or_test"
+      "kassiber/black_box:test_the_cli_creates_a_cli_proxy_and_contacts_it_only_to_list_or_test"
     ],
     "rule": "The Rust CLI grammar takes `ai providers create --kind cli_proxy`, a Rust-only choice."
   },

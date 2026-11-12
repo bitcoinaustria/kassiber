@@ -1,0 +1,229 @@
+# detail_json="not json"
+$ --machine journals quarantined
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "Expecting value: line 1 column 1 (char 0)",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine show --transaction i
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "Expecting value: line 1 column 1 (char 0)",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+# detail_json="[1, 2]"
+$ --machine journals quarantined
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantined",
+  "schema_version": 1,
+  "data": [
+    {
+      "transaction_id": "t",
+      "external_id": "ext-t",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "confirmed_at": null,
+      "wallet": "Wallet",
+      "asset": "BTC",
+      "amount": 0.2,
+… [4247 bytes, 184 lines fnv128 014c3a2e96236df64d05853c804bfb16]
+$ --machine journals quarantine show --transaction i
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.show",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "i",
+    "external_id": "ext-i",
+    "wallet": "Wallet",
+    "occurred_at": "2024-03-02T00:00:00Z",
+    "confirmed_at": null,
+    "direction": "inbound",
+    "asset": "BTC",
+    "amount": 0.01,
+    "amount_msat": 1000000000,
+    "fee": 0.0,
+    "fee_msat": 0,
+    "fiat_rate": 30000.0,
+    "fiat_value": null,
+    "fiat_rate_exact": "30000",
+    "fiat_value_exact": null,
+    "pricing": {
+      "source_kind": "manual",
+      "provider": "reviewed-receipt",
+      "pair": null,
+      "timestamp": null,
+      "granularity": null,
+      "method": null,
+      "quality": "exact"
+    },
+    "excluded": false,
+    "reason": "basis_provenance_incomplete",
+    "detail": [
+      1,
+      2
+    ],
+    "quarantined_at": "2024-05-01T00:00:00Z",
+    "category": "downstream",
+    "blocks_reports": false,
+    "is_downstream": true,
+    "root": null,
+    "reasons": [
+      "basis_provenance_incomplete"
+    ],
+    "evidence": {
+      "wallet_label": "Wallet"
+    },
+    "actions": []
+  }
+}
+# detail_json=""
+$ --machine journals quarantined
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantined",
+  "schema_version": 1,
+  "data": [
+    {
+      "transaction_id": "t",
+      "external_id": "ext-t",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "confirmed_at": null,
+      "wallet": "Wallet",
+      "asset": "BTC",
+      "amount": 0.2,
+… [4219 bytes, 181 lines fnv128 5d7f825668ac86226317fe48ff87825f]
+$ --machine journals quarantine show --transaction i
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.show",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "i",
+    "external_id": "ext-i",
+    "wallet": "Wallet",
+    "occurred_at": "2024-03-02T00:00:00Z",
+    "confirmed_at": null,
+    "direction": "inbound",
+    "asset": "BTC",
+    "amount": 0.01,
+    "amount_msat": 1000000000,
+    "fee": 0.0,
+    "fee_msat": 0,
+    "fiat_rate": 30000.0,
+    "fiat_value": null,
+    "fiat_rate_exact": "30000",
+    "fiat_value_exact": null,
+    "pricing": {
+      "source_kind": "manual",
+      "provider": "reviewed-receipt",
+      "pair": null,
+      "timestamp": null,
+      "granularity": null,
+      "method": null,
+      "quality": "exact"
+    },
+    "excluded": false,
+    "reason": "basis_provenance_incomplete",
+    "detail": {},
+    "quarantined_at": "2024-05-01T00:00:00Z",
+    "category": "downstream",
+    "blocks_reports": false,
+    "is_downstream": true,
+    "root": null,
+    "reasons": [
+      "basis_provenance_incomplete"
+    ],
+    "evidence": {
+      "wallet_label": "Wallet"
+    },
+    "actions": []
+  }
+}
+# detail_json="7"
+$ --machine journals quarantined
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantined",
+  "schema_version": 1,
+  "data": [
+    {
+      "transaction_id": "t",
+      "external_id": "ext-t",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "confirmed_at": null,
+      "wallet": "Wallet",
+      "asset": "BTC",
+      "amount": 0.2,
+… [4218 bytes, 181 lines fnv128 242ad95fe33c457fa031fd5f0499dbe4]
+$ --machine journals quarantine show --transaction i
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.show",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "i",
+    "external_id": "ext-i",
+    "wallet": "Wallet",
+    "occurred_at": "2024-03-02T00:00:00Z",
+    "confirmed_at": null,
+    "direction": "inbound",
+    "asset": "BTC",
+    "amount": 0.01,
+    "amount_msat": 1000000000,
+    "fee": 0.0,
+    "fee_msat": 0,
+    "fiat_rate": 30000.0,
+    "fiat_value": null,
+    "fiat_rate_exact": "30000",
+    "fiat_value_exact": null,
+    "pricing": {
+      "source_kind": "manual",
+      "provider": "reviewed-receipt",
+      "pair": null,
+      "timestamp": null,
+      "granularity": null,
+      "method": null,
+      "quality": "exact"
+    },
+    "excluded": false,
+    "reason": "basis_provenance_incomplete",
+    "detail": 7,
+    "quarantined_at": "2024-05-01T00:00:00Z",
+    "category": "downstream",
+    "blocks_reports": false,
+    "is_downstream": true,
+    "root": null,
+    "reasons": [
+      "basis_provenance_incomplete"
+    ],
+    "evidence": {
+      "wallet_label": "Wallet"
+    },
+    "actions": []
+  }
+}

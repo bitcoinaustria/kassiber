@@ -1,3 +1,6 @@
+"""Debian packages and the signed APT repository: build, sign, install,
+upgrade and remove. Standard library only, run with `python3 -I` (plan 22, D2)."""
+
 import os
 import shutil
 import subprocess
@@ -693,11 +696,12 @@ class PackagingWorkflowVersionGateTest(unittest.TestCase):
             ROOT / ".github/workflows/prerelease-binaries.yml"
         ).read_text(encoding="utf-8")
         # The packaging job checks every version copy against the backend
-        # crate without importing the Python package.
+        # crate, the only place the product version is set.
         self.assertIn("crates/kassiber/Cargo.toml", workflow)
-        for copy in ("pyproject.toml", "ui-tauri/src-tauri/Cargo.toml",
+        self.assertNotIn("pyproject.toml", workflow)
+        for copy in ("ui-tauri/src-tauri/Cargo.toml",
                      "ui-tauri/package.json", "ui-tauri/src-tauri/tauri.conf.json"):
-            self.assertIn(f'"{copy}":', workflow)
+            self.assertIn(f'"{copy}=', workflow)
         self.assertIn('expected_version="${release_tag#v}"', workflow)
         self.assertIn('if [ "$version" != "$expected_version" ]', workflow)
         self.assertIn("does not match package version", workflow)

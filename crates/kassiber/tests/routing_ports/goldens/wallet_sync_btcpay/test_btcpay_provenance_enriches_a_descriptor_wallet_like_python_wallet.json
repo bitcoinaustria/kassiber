@@ -1,0 +1,1455 @@
+{
+ "pytest": "tests/test_rust_wallet_sync_btcpay.py::test_btcpay_provenance_enriches_a_descriptor_wallet_like_python[wallet]",
+ "sessions": [
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Desc"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333613938891,
+    1794333613938891,
+    1794333613951759
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/attachments\",\n    \"config_root\": \"{tmp}/config\",\n    \"data_root\": \"{tmp}/data\",\n    \"database\": \"{tmp}/data/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/config/backends.env\",\n    \"exports_root\": \"{tmp}/exports\",\n    \"settings_file\": \"{tmp}/config/settings.json\",\n    \"state_root\": \"{tmp}\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/data",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/data/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "accounts": {
+        "upsert": [
+         [
+          1,
+          "acct",
+          "w",
+          "p",
+          "treasury",
+          "Treasury",
+          "asset",
+          "BTC",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "backends": {
+        "upsert": [
+         [
+          1,
+          "merchant",
+          "btcpay",
+          null,
+          null,
+          "http://127.0.0.1:35375",
+          null,
+          "synthetic-btcpay-secret",
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ],
+         [
+          2,
+          "chain",
+          "esplora",
+          null,
+          null,
+          "http://127.0.0.1:37779",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ]
+        ]
+       },
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          19
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "transactions",
+          -1,
+          1
+         ],
+         [
+          2,
+          "transaction_graph_cache",
+          -1,
+          2
+         ],
+         [
+          3,
+          "wallet_utxos",
+          -1,
+          3
+         ],
+         [
+          4,
+          "chain_analysis_observations",
+          -1,
+          4
+         ],
+         [
+          5,
+          "chain_analysis_reference_assertions",
+          -1,
+          5
+         ],
+         [
+          6,
+          "wallets",
+          -1,
+          19
+         ],
+         [
+          7,
+          "profiles",
+          -1,
+          15
+         ],
+         [
+          8,
+          "journal_custody_decisions",
+          -1,
+          8
+         ],
+         [
+          9,
+          "journal_custody_economic_relations",
+          -1,
+          9
+         ],
+         [
+          10,
+          "chain_analysis_labels",
+          -1,
+          10
+         ],
+         [
+          11,
+          "chain_analysis_datasets",
+          -1,
+          11
+         ],
+         [
+          12,
+          "chain_analysis_dataset_claims",
+          -1,
+          12
+         ],
+         [
+          13,
+          "book_network_bindings",
+          -1,
+          13
+         ],
+         [
+          14,
+          "chain_analysis_acquisition_grants",
+          -1,
+          14
+         ],
+         [
+          15,
+          "transactions",
+          1,
+          17
+         ],
+         [
+          16,
+          "transactions",
+          2,
+          18
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "w",
+          "Book",
+          "USD",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "2026-01-01T00:00:00Z",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T18:00:08.977Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:08.988Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:08.988Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:08.988Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:08.988Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T18:00:08.988Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T18:00:08.992Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T18:00:09.023Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T18:00:09.033Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T18:00:09Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T18:00:09.034Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T18:00:09.037Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          1,
+          "database_instance_id",
+          "44bd5d13cc1c4b1d9bfc5c1c36b961d7"
+         ],
+         [
+          2,
+          "context_workspace",
+          "w"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ]
+        ]
+       },
+       "transactions": {
+        "upsert": [
+         [
+          1,
+          "tx-in",
+          "w",
+          "p",
+          "a",
+          "abababababababababababababababababababababababababababababababab",
+          null,
+          "fp-in",
+          "2023-11-14T22:15:00Z",
+          null,
+          "inbound",
+          "BTC",
+          100000000,
+          0,
+          0,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "2026-01-01T00:00:00Z"
+         ],
+         [
+          2,
+          "tx-out",
+          "w",
+          "p",
+          "a",
+          "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          null,
+          "fp-out",
+          "2023-11-14T22:21:40Z",
+          null,
+          "outbound",
+          "BTC",
+          50000000,
+          0,
+          0,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "a",
+          "w",
+          "p",
+          null,
+          "Cold",
+          "custom",
+          "{}",
+          "2026-01-01T00:00:00Z"
+         ],
+         [
+          2,
+          "d",
+          "w",
+          "p",
+          null,
+          "Desc",
+          "descriptor",
+          "{\"descriptor\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\", \"gap_limit\": 3, \"backend\": \"chain\", \"btcpay_provenance\": [{\"backend\": \"merchant\", \"store_id\": \"shop\", \"payment_method_id\": \"btc-chain\"}]}",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "w",
+          "Main",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       }
+      }
+     }
+    },
+    {
+     "mkdir": "{tmp}/exports",
+     "mode": 493
+    }
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Desc"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333613938891,
+    1794333614091059,
+    1794333615713594
+   ],
+   "tape": {"templates":["GET /scripthash/\u0001 HTTP/1.1\r\nHost: 127.0.0.1:37779\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 248\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 238\r\n\r\n","{\"chain_stats\": {\"funded_txo_count\": 1, \"funded_txo_sum\": 100000, \"spent_txo_count\": 1, \"spent_txo_sum\": 100000, \"tx_count\": 2}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","{\"chain_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 242\r\n\r\n","{\"chain_stats\": {\"funded_txo_count\": 1, \"funded_txo_sum\": 48000, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 1}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","GET /blocks/tip/hash HTTP/1.1\r\nHost: 127.0.0.1:37779\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: text/plain\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 64\r\n\r\n","GET /blocks/tip/height HTTP/1.1\r\nHost: 127.0.0.1:37779\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: text/plain\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2\r\n\r\n","GET /block-height/20 HTTP/1.1\r\nHost: 127.0.0.1:37779\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: text/plain\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 238\r\n\r\n{\"chain_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","GET /scripthash/\u0001/txs/chain HTTP/1.1\r\nHost: 127.0.0.1:37779\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","GET /scripthash/\u0001/txs/mempool HTTP/1.1\r\nHost: 127.0.0.1:37779\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 1848\r\n\r\n","[{\"txid\": \"\u0001\", \"version\": 2, \"locktime\": 0, \"vin\": [{\"txid\": \"\u0001\", \"vout\": 0, \"scriptsig\": \"\", \"witness\": [\"\u0001\u0001ababababababab\", \"\u0001cd\"], \"is_coinbase\": false, \"sequence\": 4294967293, \"prevout\": {\"scriptpubkey\": \"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\", \"value\": 100000}}], \"vout\": [{\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 50000}, {\"scriptpubkey\": \"0014856de81171334cd8efe4493e4c94a7444cde5005\", \"value\": 48000}], \"size\": 222, \"weight\": 888, \"fee\": 2000, \"status\": {\"confirmed\": true, \"block_height\": 12, \"block_hash\": \"\u0001\", \"block_time\": 1700007200}}, {\"txid\": \"\u0001\", \"version\": 2, \"locktime\": 0, \"vin\": [{\"txid\": \"\u0001\", \"vout\": 0, \"scriptsig\": \"\", \"witness\": [\"\u0001\u0001ababababababab\", \"\u0001cd\"], \"is_coinbase\": false, \"sequence\": 4294967294, \"prevout\": {\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 101000}}], \"vout\": [{\"scriptpubkey\": \"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\", \"value\": 100000}], \"size\": 191, \"weight\": 764, \"fee\": 1000, \"status\": {\"confirmed\": true, \"block_height\": 2, \"block_hash\": \"\u0001\", \"block_time\": 1700001200}}]","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2\r\n\r\n[]","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 965\r\n\r\n","[{\"txid\": \"\u0001\", \"version\": 2, \"locktime\": 0, \"vin\": [{\"txid\": \"\u0001\", \"vout\": 0, \"scriptsig\": \"\", \"witness\": [\"\u0001\u0001ababababababab\", \"\u0001cd\"], \"is_coinbase\": false, \"sequence\": 4294967293, \"prevout\": {\"scriptpubkey\": \"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\", \"value\": 100000}}], \"vout\": [{\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 50000}, {\"scriptpubkey\": \"0014856de81171334cd8efe4493e4c94a7444cde5005\", \"value\": 48000}], \"size\": 222, \"weight\": 888, \"fee\": 2000, \"status\": {\"confirmed\": true, \"block_height\": 12, \"block_hash\": \"\u0001\", \"block_time\": 1700007200}}]","GET /scripthash/\u0001/utxo HTTP/1.1\r\nHost: 127.0.0.1:37779\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 264\r\n\r\n","[{\"txid\": \"\u0001\", \"vout\": 1, \"value\": 48000, \"status\": {\"confirmed\": true, \"block_height\": 12, \"block_hash\": \"\u0001\", \"block_time\": 1700007200}}]","GET /api/v1/stores/shop/payment-methods/BTC-CHAIN/wallet/transactions?statusFilter=Confirmed&skip=0&limit=100 HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 1215\r\n\r\n","[{\"transactionHash\": \"\u0001\", \"amount\": \"0.001\", \"timestamp\": 1700000100, \"confirmations\": 3, \"comment\": \"Invoice paid\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"inv-paid\"}}}, {\"transactionHash\": \"\u0001\", \"amount\": \"-0.00052\", \"timestamp\": 1700000500, \"confirmations\": 2, \"comment\": \"\", \"labels\": [\"payout\", \"Refund Batch\"]}, {\"transactionHash\": \"\u0001\", \"amount\": \"0.001\", \"timestamp\": 1700000100, \"confirmations\": 3, \"comment\": \"Invoice inv-paid\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"inv-paid\"}}}, {\"transactionHash\": \"\u0001\", \"amount\": \"-0.0006\", \"timestamp\": 1700000500, \"confirmations\": \"2\", \"comment\": \"\", \"labels\": [\"payout\", \"Refund Batch\"]}, {\"transactionHash\": \"\u0001\", \"amount\": \"0.5\", \"timestamp\": 1700000900, \"confirmations\": 0}, {\"transactionHash\": \"\u0001\", \"amount\": 0.25, \"timestamp\": 1700000950, \"status\": \"Confirmed\"}]","GET /api/v1/stores/shop/invoices?skip=0&take=100&includePaymentMethods=true HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 917\r\n\r\n","[{\"id\": \"inv-paid\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"30.00\", \"createdTime\": 1700000000, \"metadata\": {\"orderId\": \"PAY_REQUEST_req1\", \"itemDesc\": \"\"}, \"paymentMethods\": [{\"paymentMethodId\": \"BTC-CHAIN\", \"rate\": \"30000\", \"payments\": [{\"id\": \"\u0001-0\", \"value\": \"0.001\", \"receivedDate\": 1700000100, \"status\": \"Settled\"}]}]}, {\"id\": \"inv-hydrate\", \"status\": \"Processing\", \"currency\": \"USD\", \"amount\": \"5\", \"metadata\": {\"orderUrl\": \"https://shop.example/apps/App1/pos\", \"posData\": {\"cart\": [{\"title\": \"Tea\"}]}}}, {\"id\": \"inv-new\", \"status\": \"New\", \"additionalStatus\": \"None\", \"currency\": \"BTC\", \"amount\": \"0.1\"}, {\"id\": \"inv-ln\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"1\", \"paymentMethods\": [{\"paymentMethodId\": \"BTC-LN\", \"payments\": [{\"id\": \"\u0001\", \"value\": \"0.00002\"}]}]}]","GET /api/v1/stores/shop/invoices/inv-hydrate/payment-methods?onlyAccountedPayments=true HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 191\r\n\r\n","[{\"paymentMethodId\": \"BTC_LightningLike\", \"payments\": [{\"id\": \"\u0001\", \"value\": \"0.0001\", \"receivedDate\": \"2024-01-02T00:00:00Z\"}]}]","GET /api/v1/stores/shop/payment-requests HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 48\r\n\r\n","[{\"id\": \"req1\", \"title\": \"Consulting retainer\"}]","GET /api/v1/stores/shop/payouts?includeCancelled=false HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 487\r\n\r\n","[{\"id\": \"po1\", \"payoutMethodId\": \"BTC-CHAIN\", \"state\": \"Completed\", \"date\": 1700000500, \"payoutAmount\": \"0.0005\", \"payoutCurrency\": \"BTC\", \"originalCurrency\": \"EUR\", \"originalAmount\": \"15\", \"paymentProof\": {\"proofType\": \"PayoutTransactionOnChainBlob\", \"transactionId\": \"\u0001\"}, \"destination\": \"bc1qdest\", \"pullPaymentId\": \"pp1\"}, {\"id\": \"po2\", \"payoutMethodId\": \"BTC-LN\", \"state\": \"AwaitingPayment\", \"destination\": \"lnbc1xyz\"}]","GET /api/v1/stores/shop/pull-payments?includeArchived=true HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 56\r\n\r\n","[{\"id\": \"pp1\", \"name\": \"Refund 5ZbLqJLTwm9ZbDtZzkB3Yp\"}]"],"connections":[[1,false,"127.0.0.1",37779,1,null,[["w",218,[0,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[2]],["r",[4]]]],[3,false,"127.0.0.1",37779,1,null,[["w",218,[0,"f9a1e84b5cd53415b9877432f64726fcc1ff12935231a8b1c0838e613ab22ae3"]],["r",[2]],["r",[4]]]],[2,false,"127.0.0.1",37779,1,null,[["w",218,[0,"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300"]],["r",[1]],["r",[3]]]],[4,false,"127.0.0.1",37779,1,null,[["w",218,[0,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[2]],["r",[4]]]],[5,false,"127.0.0.1",37779,1,null,[["w",218,[0,"4708b1855bb278f4d3faf5c568adbe52a8d2e3ec8bc66e1676f52183bad86bbf"]],["r",[2]],["r",[4]]]],[6,false,"127.0.0.1",37779,1,null,[["w",218,[0,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[2]],["r",[4]]]],[7,false,"127.0.0.1",37779,1,null,[["w",218,[0,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[2]],["r",[4]]]],[8,false,"127.0.0.1",37779,1,null,[["w",218,[0,"9d811c15b694047606d8850948d1eb31e536fc92cc586c0aedf5cdb58e7bfdf6"]],["r",[2]],["r",[4]]]],[9,false,"127.0.0.1",37779,1,null,[["w",218,[0,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[2]],["r",[4]]]],[10,false,"127.0.0.1",37779,1,null,[["w",218,[0,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[5]],["r",[6]]]],[11,false,"127.0.0.1",37779,1,null,[["w",218,[0,"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c"]],["r",[2]],["r",[4]]]],[13,false,"127.0.0.1",37779,1,null,[["w",218,[0,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[2]],["r",[4]]]],[12,false,"127.0.0.1",37779,1,null,[["w",218,[0,"e840b1f0404cda5b65c78808fbfe3b4aedcdae629fa9dc9d6122aeb0c7c4058d"]],["r",[2]],["r",[4]]]],[14,false,"127.0.0.1",37779,1,null,[["w",218,[0,"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781"]],["r",[2]],["r",[4]]]],[15,false,"127.0.0.1",37779,1,null,[["w",218,[0,"de071c34826b22d19fbdfc2feb2eebafcd533b67726d2c6646ba51720a788c24"]],["r",[2]],["r",[4]]]],[16,false,"127.0.0.1",37779,1,null,[["w",218,[0,"bc79e32fff61abcdfc89494c5adf3b5bf8adb28b0d4722360abab9605d7d60cb"]],["r",[2]],["r",[4]]]],[17,false,"127.0.0.1",37779,1,null,[["w",152,[7]],["r",[8]],["r","8f9733f2d9829f9cbad038147e33f24a10716ddf19a0ed61e1aa2a687346d9e7"]]],[18,false,"127.0.0.1",37779,1,null,[["w",154,[9]],["r",[10]],["r","20"]]],[19,false,"127.0.0.1",37779,1,null,[["w",152,[11]],["r",[8]],["r","8f9733f2d9829f9cbad038147e33f24a10716ddf19a0ed61e1aa2a687346d9e7"]]],[20,false,"127.0.0.1",37779,1,null,[["w",218,[0,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[2]],["r",[4]]]],[21,false,"127.0.0.1",37779,1,null,[["w",218,[0,"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300"]],["r",[1]],["r",[3]]]],[22,false,"127.0.0.1",37779,1,null,[["w",218,[0,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[2]],["r",[4]]]],[23,false,"127.0.0.1",37779,1,null,[["w",218,[0,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[12]]]],[24,false,"127.0.0.1",37779,1,null,[["w",218,[0,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[12]]]],[25,false,"127.0.0.1",37779,1,null,[["w",218,[0,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[2]],["r",[4]]]],[26,false,"127.0.0.1",37779,1,null,[["w",218,[0,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[5]],["r",[6]]]],[27,false,"127.0.0.1",37779,1,null,[["w",218,[0,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[2]],["r",[4]]]],[28,false,"127.0.0.1",37779,1,null,[["w",218,[0,"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c"]],["r",[2]],["r",[4]]]],[29,false,"127.0.0.1",37779,1,null,[["w",218,[0,"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781"]],["r",[2]],["r",[4]]]],[30,false,"127.0.0.1",37779,1,null,[["w",228,[13,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[10]],["r","[]"]]],[31,false,"127.0.0.1",37779,1,null,[["w",230,[14,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[10]],["r","[]"]]],[32,false,"127.0.0.1",37779,1,null,[["w",218,[0,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[2]],["r",[4]]]],[33,false,"127.0.0.1",37779,1,null,[["w",228,[13,"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300"]],["r",[15]],["r",[16,"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e","17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0","abababababababababababababababababababababababababababababababab","abababababababababababababababababababababababababababababababab","02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","49d40f48d2bc4a0a7b36c6c50848b9a0ff0b512ecaab521e04e0512a2203e8c4","17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0","642a66d50f34e28e2310fbc6b21e7b1d39f4def7e06aedaf9b82105052c2d818","abababababababababababababababababababababababababababababababab","abababababababababababababababababababababababababababababababab","02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","706884ae31bde853b376c78216d20d7aabaa64f51f2477c3ccc56af4433a30ab"]]]],[34,false,"127.0.0.1",37779,1,null,[["w",230,[14,"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300"]],["r",[10]],["r","[]"]]],[35,false,"127.0.0.1",37779,1,null,[["w",218,[0,"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300"]],["r",[1]],["r",[3]]]],[36,false,"127.0.0.1",37779,1,null,[["w",228,[13,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[17]]]],[37,false,"127.0.0.1",37779,1,null,[["w",230,[14,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[10]],["r","[]"]]],[38,false,"127.0.0.1",37779,1,null,[["w",218,[0,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[12]]]],[39,false,"127.0.0.1",37779,1,null,[["w",228,[13,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[10]],["r","[]"]]],[40,false,"127.0.0.1",37779,1,null,[["w",230,[14,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[17]]]],[41,false,"127.0.0.1",37779,1,null,[["w",218,[0,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[2]],["r",[4]]]],[42,false,"127.0.0.1",37779,1,null,[["w",228,[13,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[10]],["r","[]"]]],[43,false,"127.0.0.1",37779,1,null,[["w",230,[14,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[10]],["r","[]"]]],[44,false,"127.0.0.1",37779,1,null,[["w",218,[0,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[2]],["r",[4]]]],[45,false,"127.0.0.1",37779,1,null,[["w",228,[13,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[10]],["r","[]"]]],[46,false,"127.0.0.1",37779,1,null,[["w",230,[14,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[10]],["r","[]"]]],[47,false,"127.0.0.1",37779,1,null,[["w",218,[0,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[2]],["r",[4]]]],[48,false,"127.0.0.1",37779,1,null,[["w",228,[13,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[18]],["r",[19,"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e","17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0","abababababababababababababababababababababababababababababababab","abababababababababababababababababababababababababababababababab","02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","49d40f48d2bc4a0a7b36c6c50848b9a0ff0b512ecaab521e04e0512a2203e8c4"]]]],[49,false,"127.0.0.1",37779,1,null,[["w",230,[14,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[10]],["r","[]"]]],[50,false,"127.0.0.1",37779,1,null,[["w",218,[0,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[5]],["r",[6]]]],[51,false,"127.0.0.1",37779,1,null,[["w",228,[13,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[10]],["r","[]"]]],[52,false,"127.0.0.1",37779,1,null,[["w",230,[14,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[10]],["r","[]"]]],[53,false,"127.0.0.1",37779,1,null,[["w",218,[0,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[2]],["r",[4]]]],[54,false,"127.0.0.1",37779,1,null,[["w",228,[13,"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c"]],["r",[10]],["r","[]"]]],[55,false,"127.0.0.1",37779,1,null,[["w",230,[14,"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c"]],["r",[10]],["r","[]"]]],[56,false,"127.0.0.1",37779,1,null,[["w",218,[0,"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c"]],["r",[2]],["r",[4]]]],[57,false,"127.0.0.1",37779,1,null,[["w",228,[13,"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781"]],["r",[10]],["r","[]"]]],[58,false,"127.0.0.1",37779,1,null,[["w",230,[14,"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781"]],["r",[10]],["r","[]"]]],[59,false,"127.0.0.1",37779,1,null,[["w",218,[0,"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781"]],["r",[2]],["r",[4]]]],[60,false,"127.0.0.1",37779,1,null,[["w",154,[9]],["r",[10]],["r","20"]]],[61,false,"127.0.0.1",37779,1,null,[["w",223,[20,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[10]],["r","[]"]]],[62,false,"127.0.0.1",37779,1,null,[["w",223,[20,"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300"]],["r",[10]],["r","[]"]]],[63,false,"127.0.0.1",37779,1,null,[["w",223,[20,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[10]],["r","[]"]]],[64,false,"127.0.0.1",37779,1,null,[["w",223,[20,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[10]],["r","[]"]]],[65,false,"127.0.0.1",37779,1,null,[["w",223,[20,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[10]],["r","[]"]]],[66,false,"127.0.0.1",37779,1,null,[["w",223,[20,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[10]],["r","[]"]]],[67,false,"127.0.0.1",37779,1,null,[["w",223,[20,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[21]],["r",[22,"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e","49d40f48d2bc4a0a7b36c6c50848b9a0ff0b512ecaab521e04e0512a2203e8c4"]]]],[68,false,"127.0.0.1",37779,1,null,[["w",223,[20,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[10]],["r","[]"]]],[69,false,"127.0.0.1",37779,1,null,[["w",223,[20,"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c"]],["r",[10]],["r","[]"]]],[70,false,"127.0.0.1",37779,1,null,[["w",223,[20,"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781"]],["r",[10]],["r","[]"]]],[71,false,"127.0.0.1",35375,1,null,[["w",263,[23]],["r",[24]],["r",[25,"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0","613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e","abababababababababababababababababababababababababababababababab","cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]]]],[72,false,"127.0.0.1",35375,1,null,[["w",229,[26]],["r",[27]],["r",[28,"abababababababababababababababababababababababababababababababab","efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"]]]],[73,false,"127.0.0.1",35375,1,null,[["w",241,[29]],["r",[30]],["r",[31,"1212121212121212121212121212121212121212121212121212121212121212"]]]],[74,false,"127.0.0.1",35375,1,null,[["w",194,[32]],["r",[33]],["r",[34]]]],[75,false,"127.0.0.1",35375,1,null,[["w",208,[35]],["r",[36]],["r",[37,"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"]]]],[76,false,"127.0.0.1",35375,1,null,[["w",212,[38]],["r",[39]],["r",[40]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Desc\",\n      \"status\": \"synced\",\n      \"source\": \"backend:chain\",\n      \"imported\": 2,\n      \"skipped\": 0,\n      \"unchanged\": 0,\n      \"journal_invalidated\": true,\n      \"inserted_records\": [\n        {\n          \"transaction_id\": \"65e83d29-e527-42ce-81e1-6959a8a33411\",\n          \"external_id\": \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\n          \"wallet\": \"Desc\",\n          \"asset\": \"BTC\",\n          \"direction\": \"inbound\",\n          \"amount_msat\": 100000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        },\n        {\n          \"transaction_id\": \"8c893edb-f44c-4379-b4c0-d61a62a5554e\",\n          \"external_id\": \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\",\n          \"wallet\": \"Desc\",\n          \"asset\": \"BTC\",\n          \"direction\": \"outbound\",\n          \"amount_msat\": 50000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        }\n      ],\n      \"updated_records\": [],\n      \"saved_report_impacts\": 0,\n      \"output_inventory\": {\n        \"observed\": 1,\n        \"active\": 1,\n        \"spent\": 0,\n        \"last_seen_at\": \"2026-11-10T18:00:14Z\"\n      },\n      \"backend\": \"chain\",\n      \"backend_kind\": \"esplora\",\n      \"backend_url\": \"http://127.0.0.1:37779\",\n      \"chain\": \"bitcoin\",\n      \"network\": \"main\",\n      \"sync_mode\": \"descriptor\",\n      \"target_count\": 10,\n      \"records_fetched\": 2,\n      \"updated\": 0,\n      \"gap_limit\": 3,\n      \"esplora_history_complete\": true,\n      \"freshness_checkpoint\": {\n        \"backend\": {\n          \"batch_size\": 100,\n          \"chain\": \"bitcoin\",\n          \"kind\": \"esplora\",\n          \"name\": \"chain\",\n          \"network\": \"main\"\n        },\n        \"compatibility_history_anchor_version\": 2,\n        \"esplora_history_memberships\": {\n          \"backend_key\": \"e46e93d00e624b302dc42502de8eecb4cb8b4dcc615be1cbd29419536fae16a5\",\n          \"scripts\": {\n            \"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300\": {\n              \"complete\": true,\n              \"fingerprint\": \"3c91eb0ef0b0fd7136bba73ba5d0cb89e7bd6f085f6382cbab1ed44d9b66e0f7\",\n              \"txids\": [\n                \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\n                \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"\n              ]\n            },\n            \"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\": {\n              \"complete\": true,\n              \"fingerprint\": \"d660ca303787c31a16d21b38c70b0b1b8f8b40b14f5081ac896e40424ea13b1f\",\n              \"txids\": [\n                \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"\n              ]\n            },\n            \"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            }\n          },\n          \"version\": 1\n        },\n        \"esplora_scripthashes\": {\n          \"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300\": {\n            \"fingerprint\": \"3c91eb0ef0b0fd7136bba73ba5d0cb89e7bd6f085f6382cbab1ed44d9b66e0f7\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 2\n          },\n          \"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\": {\n            \"fingerprint\": \"d660ca303787c31a16d21b38c70b0b1b8f8b40b14f5081ac896e40424ea13b1f\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 1\n          },\n          \"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          }\n        },\n        \"esplora_tip_hash\": \"8f9733f2d9829f9cbad038147e33f24a10716ddf19a0ed61e1aa2a687346d9e7\",\n        \"esplora_tip_height\": 20,\n        \"highest_used\": {\n          \"0\": 1,\n          \"1\": 1\n        }\n      },\n      \"known_txids\": 2,\n      \"observer_compatibility_reason\": \"http_route_policy\",\n      \"observer_route\": \"compatibility\",\n      \"scripts_changed\": 10,\n      \"scripts_unchanged\": 0,\n      \"scripts_checked\": 10,\n      \"utxos_refreshed\": true,\n      \"elapsed_ms\": 0,\n      \"btcpay_provenance\": {\n        \"routes\": 1,\n        \"fetched\": 5,\n        \"btcpay_notes_set\": 1,\n        \"btcpay_tags_added\": 3,\n        \"btcpay_tags_created\": 3,\n        \"labels_unavailable_routes\": 0,\n        \"route_results\": [\n          {\n            \"backend\": \"merchant\",\n            \"backend_kind\": \"btcpay\",\n            \"backend_url\": \"http://127.0.0.1:35375\",\n            \"store_id\": \"shop\",\n            \"payment_method_id\": \"BTC-CHAIN\",\n            \"fetched\": 5,\n            \"labels\": \"synced\",\n            \"pages_fetched\": 1,\n            \"stopped_by_known_page\": false,\n            \"stop_reason\": \"end_of_results\",\n            \"deep_audit\": null,\n            \"btcpay_notes_set\": 1,\n            \"btcpay_tags_added\": 3,\n            \"btcpay_tags_created\": 3,\n            \"invoice_provenance\": {\n              \"invoices_seen\": 4,\n              \"records_inserted\": 7,\n              \"records_updated\": 0,\n              \"payouts_seen\": 2,\n              \"payout_records_inserted\": 2,\n              \"payout_records_updated\": 0,\n              \"backend\": \"merchant\",\n              \"backend_kind\": \"btcpay\",\n              \"backend_url\": \"http://127.0.0.1:35375\",\n              \"store_id\": \"shop\",\n              \"page_size\": 100,\n              \"pages_fetched\": 1,\n              \"invoices_hydrated\": 1,\n              \"stopped_by_known_page\": false,\n              \"stop_reason\": \"end_of_results\",\n              \"deep_audit\": null,\n              \"payouts_available\": true,\n              \"payouts_permission_missing\": false,\n              \"suggestions\": {\n                \"created\": 2,\n                \"total\": 2\n              },\n              \"status\": \"synced\"\n            }\n          }\n        ],\n        \"freshness_checkpoint\": {\n          \"routes\": {\n            \"merchant:shop:BTC-CHAIN\": {\n              \"backend\": {\n                \"name\": \"merchant\",\n                \"kind\": \"btcpay\"\n              },\n              \"btcpay_pages\": {\n                \"0\": {\n                  \"fingerprint\": \"d948f0214d1fa17b937db8b2a4781363df91ce9f162033887830e51ccbe167f6\",\n                  \"stable_ids\": [\n                    \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\n                    \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\",\n                    \"abababababababababababababababababababababababababababababababab\",\n                    \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\n                    \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\n                    \"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"\n                  ],\n                  \"rows\": 6,\n                  \"page_size\": 100\n                }\n              },\n              \"btcpay_pagination\": {\n                \"unchanged_page_window\": 5,\n                \"deep_audit_pages\": 1,\n                \"last_stop_reason\": \"end_of_results\",\n                \"next_deep_audit_skip\": null\n              },\n              \"store_id\": \"shop\",\n              \"payment_method_id\": \"BTC-CHAIN\"\n            }\n          },\n          \"invoice_routes\": {\n            \"merchant:shop\": {\n              \"backend\": {\n                \"name\": \"merchant\",\n                \"kind\": \"btcpay\"\n              },\n              \"btcpay_invoice_pages\": {\n                \"0\": {\n                  \"fingerprint\": \"0aca5ba1abf08723353057980c2eccc608f4d4e0dabd2d82793d0122ab1453a6\",\n                  \"stable_ids\": [\n                    \"inv-hydrate\",\n                    \"inv-ln\",\n                    \"inv-new\",\n                    \"inv-paid\"\n                  ],\n                  \"rows\": 4,\n                  \"page_size\": 100\n                }\n              },\n              \"btcpay_invoice_pagination\": {\n                \"unchanged_page_window\": 5,\n                \"deep_audit_pages\": 1,\n                \"last_stop_reason\": \"end_of_results\",\n                \"next_deep_audit_skip\": null\n              },\n              \"store_id\": \"shop\"\n            }\n          }\n        }\n      }\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "btcpay_provenance_records": {
+         "upsert": [
+          [
+           1,
+           "6ee6afb2-0783-4eb9-925d-06c5c259c91c",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-paid",
+           "inv-paid",
+           null,
+           "PAY_REQUEST_req1",
+           "Settled",
+           "2023-11-14T22:13:20Z",
+           null,
+           null,
+           null,
+           null,
+           null,
+           "req1",
+           "payment_request",
+           null,
+           "Consulting retainer",
+           null,
+           "btcpay_payment_request",
+           "EUR",
+           "30.00",
+           null,
+           "2023-11-14T22:13:20Z",
+           "{\"amount\": \"30.00\", \"createdTime\": 1700000000, \"currency\": \"EUR\", \"id\": \"inv-paid\", \"metadata\": {\"itemDesc\": \"\", \"orderId\": \"PAY_REQUEST_req1\"}, \"paymentMethods\": [{\"paymentMethodId\": \"BTC-CHAIN\", \"payments\": [{\"id\": \"abababababababababababababababababababababababababababababababab-0\", \"receivedDate\": 1700000100, \"status\": \"Settled\", \"value\": \"0.001\"}], \"rate\": \"30000\"}], \"payments\": [{\"id\": \"abababababababababababababababababababababababababababababababab-0\", \"paymentMethodId\": \"BTC-CHAIN\", \"rate\": \"30000\", \"receivedDate\": 1700000100, \"status\": \"Settled\", \"transactionId\": \"abababababababababababababababababababababababababababababababab\", \"value\": \"0.001\"}], \"status\": \"Settled\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           2,
+           "dc3f5729-ccc6-4531-9a48-c51cac591700",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-CHAIN",
+           "payment",
+           "btcpay:shop:invoice:inv-paid:payment:abababababababababababababababababababababababababababababababab-0",
+           "inv-paid",
+           "abababababababababababababababababababababababababababababababab-0",
+           "PAY_REQUEST_req1",
+           "Settled",
+           "2023-11-14T22:15:00Z",
+           "BTC",
+           100000000,
+           "abababababababababababababababababababababababababababababababab",
+           null,
+           null,
+           "req1",
+           "payment_request",
+           null,
+           "Consulting retainer",
+           null,
+           "btcpay_payment_request",
+           "EUR",
+           "30.00",
+           "30000",
+           "2023-11-14T22:15:00Z",
+           "{\"id\": \"abababababababababababababababababababababababababababababababab-0\", \"paymentMethodId\": \"BTC-CHAIN\", \"rate\": \"30000\", \"receivedDate\": 1700000100, \"status\": \"Settled\", \"transactionId\": \"abababababababababababababababababababababababababababababababab\", \"value\": \"0.001\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           3,
+           "38ce6b9f-abbd-4623-a2e8-052ee079bb10",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-hydrate",
+           "inv-hydrate",
+           null,
+           null,
+           "Processing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "pos",
+           "App1",
+           "Tea",
+           "https://shop.example/apps/App1/pos",
+           "btcpay_pos",
+           "USD",
+           "5",
+           null,
+           null,
+           "{\"amount\": \"5\", \"currency\": \"USD\", \"id\": \"inv-hydrate\", \"metadata\": {\"orderUrl\": \"https://shop.example/apps/App1/pos\", \"posData\": {\"cart\": [{\"title\": \"Tea\"}]}}, \"paymentMethods\": [{\"paymentMethodId\": \"BTC_LightningLike\", \"payments\": [{\"id\": \"1212121212121212121212121212121212121212121212121212121212121212\", \"receivedDate\": \"2024-01-02T00:00:00Z\", \"value\": \"0.0001\"}]}], \"payments\": [{\"id\": \"1212121212121212121212121212121212121212121212121212121212121212\", \"paymentMethodId\": \"BTC-LN\", \"receivedDate\": \"2024-01-02T00:00:00Z\", \"value\": \"0.0001\"}], \"status\": \"Processing\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           4,
+           "7360a28c-c009-4c99-9f99-219a631b6ff9",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-LN",
+           "payment",
+           "btcpay:shop:invoice:inv-hydrate:payment:1212121212121212121212121212121212121212121212121212121212121212",
+           "inv-hydrate",
+           "1212121212121212121212121212121212121212121212121212121212121212",
+           null,
+           "Processing",
+           "2024-01-02T00:00:00Z",
+           "BTC",
+           10000000,
+           null,
+           "1212121212121212121212121212121212121212121212121212121212121212",
+           null,
+           null,
+           "pos",
+           "App1",
+           "Tea",
+           "https://shop.example/apps/App1/pos",
+           "btcpay_pos",
+           "USD",
+           "5",
+           "50000",
+           "2024-01-02T00:00:00Z",
+           "{\"id\": \"1212121212121212121212121212121212121212121212121212121212121212\", \"paymentMethodId\": \"BTC-LN\", \"receivedDate\": \"2024-01-02T00:00:00Z\", \"value\": \"0.0001\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           5,
+           "c89adce2-b0c4-4629-a66b-32822547d97c",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-new",
+           "inv-new",
+           null,
+           null,
+           "New",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "{\"additionalStatus\": \"None\", \"amount\": \"0.1\", \"currency\": \"BTC\", \"id\": \"inv-new\", \"status\": \"New\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           6,
+           "fbce2ecc-a093-470e-804b-44f91179ab79",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-ln",
+           "inv-ln",
+           null,
+           null,
+           "Settled",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           "EUR",
+           "1",
+           null,
+           null,
+           "{\"amount\": \"1\", \"currency\": \"EUR\", \"id\": \"inv-ln\", \"paymentMethods\": [{\"paymentMethodId\": \"BTC-LN\", \"payments\": [{\"id\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"value\": \"0.00002\"}]}], \"payments\": [{\"id\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"paymentMethodId\": \"BTC-LN\", \"value\": \"0.00002\"}], \"status\": \"Settled\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           7,
+           "91c64293-b2c2-4ef7-be6d-df1a6d8ccf23",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-LN",
+           "payment",
+           "btcpay:shop:invoice:inv-ln:payment:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+           "inv-ln",
+           "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+           null,
+           "Settled",
+           null,
+           "BTC",
+           2000000,
+           null,
+           "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           "EUR",
+           "1",
+           "50000",
+           null,
+           "{\"id\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"paymentMethodId\": \"BTC-LN\", \"value\": \"0.00002\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           8,
+           "94f63ac9-c13f-4457-ab76-e4117925f2fc",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-CHAIN",
+           "payout",
+           "btcpay:shop:payout:po1",
+           "5ZbLqJLTwm9ZbDtZzkB3Yp",
+           "po1",
+           null,
+           "Completed",
+           "2023-11-14T22:21:40Z",
+           "BTC",
+           50000000,
+           "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+           null,
+           "bc1qdest",
+           null,
+           "refund",
+           "pp1",
+           "Refund 5ZbLqJLTwm9ZbDtZzkB3Yp",
+           null,
+           "btcpay_payout",
+           "EUR",
+           "15",
+           "30000",
+           "2023-11-14T22:21:40Z",
+           "{\"date\": 1700000500, \"destination\": \"bc1qdest\", \"id\": \"po1\", \"originalAmount\": \"15\", \"originalCurrency\": \"EUR\", \"paymentProof\": {\"proofType\": \"PayoutTransactionOnChainBlob\", \"transactionId\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"}, \"payoutAmount\": \"0.0005\", \"payoutCurrency\": \"BTC\", \"payoutMethodId\": \"BTC-CHAIN\", \"pullPaymentId\": \"pp1\", \"state\": \"Completed\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           9,
+           "7c30effa-019d-4828-b7f6-a9789ecbcdca",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-LN",
+           "payout",
+           "btcpay:shop:payout:po2",
+           null,
+           "po2",
+           null,
+           "AwaitingPayment",
+           null,
+           "BTC",
+           null,
+           null,
+           null,
+           null,
+           null,
+           "store_payout",
+           null,
+           null,
+           null,
+           "btcpay_payout",
+           null,
+           null,
+           null,
+           null,
+           "{\"destination\": null, \"id\": \"po2\", \"paymentProof\": null, \"payoutMethodId\": \"BTC-LN\", \"state\": \"AwaitingPayment\"}",
+           "<now>",
+           "<now>"
+          ]
+         ]
+        },
+        "btcpay_store_sync_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "merchant",
+           "shop",
+           "<now>",
+           "<now>",
+           null,
+           null,
+           4,
+           2,
+           "<now>"
+          ]
+         ]
+        },
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           26
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           26
+          ],
+          [
+           7,
+           "profiles",
+           -1,
+           23
+          ],
+          [
+           17,
+           "transactions",
+           3,
+           25
+          ],
+          [
+           18,
+           "transactions",
+           4,
+           21
+          ],
+          [
+           19,
+           "wallet_utxos",
+           1,
+           24
+          ]
+         ]
+        },
+        "chain_observation_provenance": {
+         "upsert": [
+          [
+           1,
+           "65e83d29-e527-42ce-81e1-6959a8a33411",
+           "w",
+           "p",
+           "d",
+           1,
+           "[\"adapter:esplora:d\"]",
+           "[\"esplora\"]",
+           "bitcoin",
+           "main",
+           "9618edd0-850a-47bf-80b2-030cd9d70c62",
+           "8b452d1233f149edf612756054ea5ba4e0d05fa4be8e08f67a1dab8c0b2b5d6a",
+           "63ff685d9eb1da7d21d78e15711d23cbec953c30a719b5bf84b6345b88f4f6da",
+           "unknown",
+           "<now>",
+           "<now>"
+          ],
+          [
+           2,
+           "8c893edb-f44c-4379-b4c0-d61a62a5554e",
+           "w",
+           "p",
+           "d",
+           1,
+           "[\"adapter:esplora:d\"]",
+           "[\"esplora\"]",
+           "bitcoin",
+           "main",
+           "9618edd0-850a-47bf-80b2-030cd9d70c62",
+           "3055cb7bddcd3d28fecd25551e9dfa113067c6016d31df37343fa86ceb0537e2",
+           "0f87a96e54cd0608a33075d33188db982a00b10bb92f70fdbf4fc213a646d3d4",
+           "unknown",
+           "<now>",
+           "<now>"
+          ]
+         ]
+        },
+        "commercial_links": {
+         "upsert": [
+          [
+           1,
+           "fbc16e06-dc6e-4143-b547-ace414dce965",
+           "w",
+           "p",
+           "94f63ac9-c13f-4457-ab76-e4117925f2fc",
+           null,
+           "tx-out",
+           "btcpay_payment_transaction",
+           "suggested",
+           "exact",
+           "payout_proof",
+           50000000,
+           "15",
+           "unreviewed",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "<now>",
+           "<now>"
+          ],
+          [
+           2,
+           "310cf0e7-a92d-45e1-87ce-b2e3a1e4d439",
+           "w",
+           "p",
+           "dc3f5729-ccc6-4531-9a48-c51cac591700",
+           null,
+           "tx-in",
+           "btcpay_payment_transaction",
+           "suggested",
+           "exact",
+           "txid_or_payment_hash",
+           100000000,
+           "30.00",
+           "unreviewed",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "<now>",
+           "<now>"
+          ]
+         ]
+        },
+        "freshness_source_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "onchain_wallet:d",
+           "onchain_wallet",
+           "Desc",
+           "fresh",
+           "fresh",
+           null,
+           0,
+           0,
+           null,
+           null,
+           0,
+           "<now>",
+           null,
+           null,
+           null,
+           "done",
+           "{\"phase\":\"done\"}",
+           "{\"backend\":{\"batch_size\":100,\"chain\":\"bitcoin\",\"kind\":\"esplora\",\"name\":\"chain\",\"network\":\"main\"},\"compatibility_history_anchor_version\":2,\"esplora_history_memberships\":{\"backend_key\":\"e46e93d00e624b302dc42502de8eecb4cb8b4dcc615be1cbd29419536fae16a5\",\"scripts\":{\"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300\":{\"complete\":true,\"fingerprint\":\"3c91eb0ef0b0fd7136bba73ba5d0cb89e7bd6f085f6382cbab1ed44d9b66e0f7\",\"txids\":[\"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"]},\"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\":{\"complete\":true,\"fingerprint\":\"d660ca303787c31a16d21b38c70b0b1b8f8b40b14f5081ac896e40424ea13b1f\",\"txids\":[\"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"]},\"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]}},\"version\":1},\"esplora_scripthashes\":{\"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300\":{\"fingerprint\":\"3c91eb0ef0b0fd7136bba73ba5d0cb89e7bd6f085f6382cbab1ed44d9b66e0f7\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":2},\"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\":{\"fingerprint\":\"d660ca303787c31a16d21b38c70b0b1b8f8b40b14f5081ac896e40424ea13b1f\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":1},\"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0}},\"esplora_tip_hash\":\"8f9733f2d9829f9cbad038147e33f24a10716ddf19a0ed61e1aa2a687346d9e7\",\"esplora_tip_height\":20,\"highest_used\":{\"0\":1,\"1\":1}}",
+           "<now>"
+          ]
+         ]
+        },
+        "profiles": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "w",
+           "Book",
+           "USD",
+           "generic",
+           365,
+           "FIFO",
+           0,
+           1,
+           "global",
+           1,
+           0,
+           1,
+           0,
+           null,
+           0,
+           null,
+           "2026-01-01T00:00:00Z",
+           null
+          ]
+         ]
+        },
+        "tags": {
+         "upsert": [
+          [
+           1,
+           "669c16c3-ba94-4dd4-85ef-87ce823038de",
+           "w",
+           "p",
+           "inv-paid",
+           "inv-paid",
+           "<now>"
+          ],
+          [
+           2,
+           "4858b14c-eb12-4171-8c12-76444ffe9136",
+           "w",
+           "p",
+           "payout",
+           "payout",
+           "<now>"
+          ],
+          [
+           3,
+           "68aab7a1-2503-4c11-8c23-35c5ab2a5b9e",
+           "w",
+           "p",
+           "refund-batch",
+           "Refund Batch",
+           "<now>"
+          ]
+         ]
+        },
+        "transaction_tags": {
+         "upsert": [
+          [
+           1,
+           "65e83d29-e527-42ce-81e1-6959a8a33411",
+           "669c16c3-ba94-4dd4-85ef-87ce823038de"
+          ],
+          [
+           2,
+           "8c893edb-f44c-4379-b4c0-d61a62a5554e",
+           "4858b14c-eb12-4171-8c12-76444ffe9136"
+          ],
+          [
+           3,
+           "8c893edb-f44c-4379-b4c0-d61a62a5554e",
+           "68aab7a1-2503-4c11-8c23-35c5ab2a5b9e"
+          ]
+         ]
+        },
+        "transactions": {
+         "upsert": [
+          [
+           3,
+           "65e83d29-e527-42ce-81e1-6959a8a33411",
+           "w",
+           "p",
+           "d",
+           "17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0",
+           "txid",
+           "ef05737df4d70b95c57488935927ebcda24afda51c0143d7f982e8dbc57bbd87",
+           "2023-11-14T22:33:20Z",
+           "2023-11-14T22:33:20Z",
+           "inbound",
+           "BTC",
+           100000000,
+           0,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Synced from chain",
+           null,
+           "Invoice paid",
+           0,
+           "{\"fee\": 1000, \"locktime\": 0, \"observer_owned_scripts\": [\"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\"], \"size\": 191, \"status\": {\"block_hash\": \"706884ae31bde853b376c78216d20d7aabaa64f51f2477c3ccc56af4433a30ab\", \"block_height\": 2, \"block_time\": 1700001200, \"confirmed\": true}, \"txid\": \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\", \"version\": 2, \"vin\": [{\"is_coinbase\": false, \"prevout\": {\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 101000}, \"scriptsig\": \"\", \"sequence\": 4294967294, \"txid\": \"642a66d50f34e28e2310fbc6b21e7b1d39f4def7e06aedaf9b82105052c2d818\", \"vout\": 0, \"witness\": [\"ababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\", \"02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"]}], \"vout\": [{\"scriptpubkey\": \"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\", \"value\": 100000}], \"weight\": 764}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           4,
+           "8c893edb-f44c-4379-b4c0-d61a62a5554e",
+           "w",
+           "p",
+           "d",
+           "613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e",
+           "txid",
+           "21e1030d289f73520b1befa1fd3f8e2b3727230fa3fa93c1aaebc7a0327f47db",
+           "2023-11-15T00:13:20Z",
+           "2023-11-15T00:13:20Z",
+           "outbound",
+           "BTC",
+           50000000,
+           2000000,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "withdrawal",
+           "Synced from chain",
+           null,
+           null,
+           0,
+           "{\"fee\": 2000, \"locktime\": 0, \"observer_owned_scripts\": [\"0014856de81171334cd8efe4493e4c94a7444cde5005\", \"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\"], \"size\": 222, \"status\": {\"block_hash\": \"49d40f48d2bc4a0a7b36c6c50848b9a0ff0b512ecaab521e04e0512a2203e8c4\", \"block_height\": 12, \"block_time\": 1700007200, \"confirmed\": true}, \"txid\": \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\", \"version\": 2, \"vin\": [{\"is_coinbase\": false, \"prevout\": {\"scriptpubkey\": \"0014ce23876b24b9b9b77040da0ba56324ee62aa5139\", \"value\": 100000}, \"scriptsig\": \"\", \"sequence\": 4294967293, \"txid\": \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\", \"vout\": 0, \"witness\": [\"ababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\", \"02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"]}], \"vout\": [{\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 50000}, {\"scriptpubkey\": \"0014856de81171334cd8efe4493e4c94a7444cde5005\", \"value\": 48000}], \"weight\": 888}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ]
+         ]
+        },
+        "wallet_utxo_refreshes": {
+         "upsert": [
+          [
+           1,
+           "d",
+           "w",
+           "p",
+           "chain",
+           "esplora",
+           "bitcoin",
+           "main",
+           1,
+           1,
+           "<now>"
+          ]
+         ]
+        },
+        "wallet_utxos": {
+         "upsert": [
+          [
+           1,
+           "54decf7fd9e51070dfa09d3ea326804ccab9d589120a6343c2b60f0237b9c509",
+           "w",
+           "p",
+           "d",
+           "chain",
+           "esplora",
+           "bitcoin",
+           "main",
+           "BTC",
+           48000000,
+           "613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e",
+           1,
+           "613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e:1",
+           "confirmed",
+           9,
+           12,
+           "2023-11-15T00:13:20Z",
+           "bc1qs4k7syt3xdxd3mlyfylye998g3xdu5q92k4rt5",
+           "0014856de81171334cd8efe4493e4c94a7444cde5005",
+           "change #1",
+           "change",
+           1,
+           1,
+           null,
+           null,
+           null,
+           null,
+           "[]",
+           "<now>",
+           "<now>",
+           null,
+           "{\"confirmed\": true, \"source\": \"esplora_scripthash_utxo\"}"
+          ]
+         ]
+        },
+        "wallets": {
+         "upsert": [
+          [
+           2,
+           "d",
+           "w",
+           "p",
+           null,
+           "Desc",
+           "descriptor",
+           "{\"backend\": \"chain\", \"btcpay_provenance\": [{\"backend\": \"merchant\", \"payment_method_id\": \"btc-chain\", \"store_id\": \"shop\"}], \"descriptor\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\", \"gap_limit\": 3, \"last_synced_at\": \"<now>\"}",
+           "2026-01-01T00:00:00Z"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Desc"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333613938891,
+    1794333618899396,
+    1794333618913990
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Desc"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333613938891,
+    1794333619037695,
+    1794333620184457
+   ],
+   "tape": {"templates":["GET /scripthash/\u0001 HTTP/1.1\r\nHost: 127.0.0.1:37779\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 238\r\n\r\n","{\"chain_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 238\r\n\r\n{\"chain_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","GET /blocks/tip/hash HTTP/1.1\r\nHost: 127.0.0.1:37779\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: text/plain\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 64\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 248\r\n\r\n","{\"chain_stats\": {\"funded_txo_count\": 1, \"funded_txo_sum\": 100000, \"spent_txo_count\": 1, \"spent_txo_sum\": 100000, \"tx_count\": 2}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 242\r\n\r\n","{\"chain_stats\": {\"funded_txo_count\": 1, \"funded_txo_sum\": 48000, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 1}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","GET /api/v1/stores/shop/payment-methods/BTC-CHAIN/wallet/transactions?statusFilter=Confirmed&skip=0&limit=100 HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 1215\r\n\r\n","[{\"transactionHash\": \"\u0001\", \"amount\": \"0.001\", \"timestamp\": 1700000100, \"confirmations\": 3, \"comment\": \"Invoice paid\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"inv-paid\"}}}, {\"transactionHash\": \"\u0001\", \"amount\": \"-0.00052\", \"timestamp\": 1700000500, \"confirmations\": 2, \"comment\": \"\", \"labels\": [\"payout\", \"Refund Batch\"]}, {\"transactionHash\": \"\u0001\", \"amount\": \"0.001\", \"timestamp\": 1700000100, \"confirmations\": 3, \"comment\": \"Invoice inv-paid\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"inv-paid\"}}}, {\"transactionHash\": \"\u0001\", \"amount\": \"-0.0006\", \"timestamp\": 1700000500, \"confirmations\": \"2\", \"comment\": \"\", \"labels\": [\"payout\", \"Refund Batch\"]}, {\"transactionHash\": \"\u0001\", \"amount\": \"0.5\", \"timestamp\": 1700000900, \"confirmations\": 0}, {\"transactionHash\": \"\u0001\", \"amount\": 0.25, \"timestamp\": 1700000950, \"status\": \"Confirmed\"}]","GET /api/v1/stores/shop/invoices?skip=0&take=100&includePaymentMethods=true HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 917\r\n\r\n","[{\"id\": \"inv-paid\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"30.00\", \"createdTime\": 1700000000, \"metadata\": {\"orderId\": \"PAY_REQUEST_req1\", \"itemDesc\": \"\"}, \"paymentMethods\": [{\"paymentMethodId\": \"BTC-CHAIN\", \"rate\": \"30000\", \"payments\": [{\"id\": \"\u0001-0\", \"value\": \"0.001\", \"receivedDate\": 1700000100, \"status\": \"Settled\"}]}]}, {\"id\": \"inv-hydrate\", \"status\": \"Processing\", \"currency\": \"USD\", \"amount\": \"5\", \"metadata\": {\"orderUrl\": \"https://shop.example/apps/App1/pos\", \"posData\": {\"cart\": [{\"title\": \"Tea\"}]}}}, {\"id\": \"inv-new\", \"status\": \"New\", \"additionalStatus\": \"None\", \"currency\": \"BTC\", \"amount\": \"0.1\"}, {\"id\": \"inv-ln\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"1\", \"paymentMethods\": [{\"paymentMethodId\": \"BTC-LN\", \"payments\": [{\"id\": \"\u0001\", \"value\": \"0.00002\"}]}]}]","GET /api/v1/stores/shop/invoices/inv-hydrate/payment-methods?onlyAccountedPayments=true HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 191\r\n\r\n","[{\"paymentMethodId\": \"BTC_LightningLike\", \"payments\": [{\"id\": \"\u0001\", \"value\": \"0.0001\", \"receivedDate\": \"2024-01-02T00:00:00Z\"}]}]","GET /api/v1/stores/shop/payment-requests HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 48\r\n\r\n","[{\"id\": \"req1\", \"title\": \"Consulting retainer\"}]","GET /api/v1/stores/shop/payouts?includeCancelled=false HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 487\r\n\r\n","[{\"id\": \"po1\", \"payoutMethodId\": \"BTC-CHAIN\", \"state\": \"Completed\", \"date\": 1700000500, \"payoutAmount\": \"0.0005\", \"payoutCurrency\": \"BTC\", \"originalCurrency\": \"EUR\", \"originalAmount\": \"15\", \"paymentProof\": {\"proofType\": \"PayoutTransactionOnChainBlob\", \"transactionId\": \"\u0001\"}, \"destination\": \"bc1qdest\", \"pullPaymentId\": \"pp1\"}, {\"id\": \"po2\", \"payoutMethodId\": \"BTC-LN\", \"state\": \"AwaitingPayment\", \"destination\": \"lnbc1xyz\"}]","GET /api/v1/stores/shop/pull-payments?includeArchived=true HTTP/1.1\r\nHost: 127.0.0.1:35375\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 56\r\n\r\n","[{\"id\": \"pp1\", \"name\": \"Refund 5ZbLqJLTwm9ZbDtZzkB3Yp\"}]"],"connections":[[2,false,"127.0.0.1",37779,1,null,[["w",218,[0,"f9a1e84b5cd53415b9877432f64726fcc1ff12935231a8b1c0838e613ab22ae3"]],["r",[1]],["r",[2]]]],[1,false,"127.0.0.1",37779,1,null,[["w",218,[0,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[3]]]],[4,false,"127.0.0.1",37779,1,null,[["w",218,[0,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[1]],["r",[2]]]],[5,false,"127.0.0.1",37779,1,null,[["w",218,[0,"9d811c15b694047606d8850948d1eb31e536fc92cc586c0aedf5cdb58e7bfdf6"]],["r",[1]],["r",[2]]]],[3,false,"127.0.0.1",37779,1,null,[["w",218,[0,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[1]],["r",[2]]]],[6,false,"127.0.0.1",37779,1,null,[["w",218,[0,"4708b1855bb278f4d3faf5c568adbe52a8d2e3ec8bc66e1676f52183bad86bbf"]],["r",[1]],["r",[2]]]],[7,false,"127.0.0.1",37779,1,null,[["w",218,[0,"52b35c6a3f1429a55d8de4c42cc72e197440cf44d9fe15aff6b13482f49f4dd8"]],["r",[1]],["r",[2]]]],[8,false,"127.0.0.1",37779,1,null,[["w",218,[0,"32c3a3ffa2048fba8d5b70bdce49e7cdeee487e32a6bb07f64c93c4bb9037951"]],["r",[1]],["r",[2]]]],[9,false,"127.0.0.1",37779,1,null,[["w",218,[0,"de071c34826b22d19fbdfc2feb2eebafcd533b67726d2c6646ba51720a788c24"]],["r",[1]],["r",[2]]]],[11,false,"127.0.0.1",37779,1,null,[["w",218,[0,"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c"]],["r",[1]],["r",[2]]]],[10,false,"127.0.0.1",37779,1,null,[["w",218,[0,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[1]],["r",[2]]]],[12,false,"127.0.0.1",37779,1,null,[["w",218,[0,"5e322cd9a5938ba7a5f74a5d834beb58c2620832bd49a05cb485685d36839a8a"]],["r",[1]],["r",[2]]]],[13,false,"127.0.0.1",37779,1,null,[["w",218,[0,"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781"]],["r",[1]],["r",[2]]]],[14,false,"127.0.0.1",37779,1,null,[["w",218,[0,"bc79e32fff61abcdfc89494c5adf3b5bf8adb28b0d4722360abab9605d7d60cb"]],["r",[1]],["r",[2]]]],[15,false,"127.0.0.1",37779,1,null,[["w",218,[0,"958018f0148926e32d0f18b34c9ef66a70b9f5dcd4724cba35cf4da1ac3b864a"]],["r",[1]],["r",[2]]]],[16,false,"127.0.0.1",37779,1,null,[["w",218,[0,"e840b1f0404cda5b65c78808fbfe3b4aedcdae629fa9dc9d6122aeb0c7c4058d"]],["r",[1]],["r",[2]]]],[17,false,"127.0.0.1",37779,1,null,[["w",152,[4]],["r",[5]],["r","8f9733f2d9829f9cbad038147e33f24a10716ddf19a0ed61e1aa2a687346d9e7"]]],[18,false,"127.0.0.1",37779,1,null,[["w",218,[0,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[1]],["r",[2]]]],[19,false,"127.0.0.1",37779,1,null,[["w",218,[0,"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300"]],["r",[6]],["r",[7]]]],[20,false,"127.0.0.1",37779,1,null,[["w",218,[0,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[1]],["r",[2]]]],[21,false,"127.0.0.1",37779,1,null,[["w",218,[0,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[1]],["r",[2]]]],[22,false,"127.0.0.1",37779,1,null,[["w",218,[0,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[1]],["r",[2]]]],[23,false,"127.0.0.1",37779,1,null,[["w",218,[0,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[1]],["r",[2]]]],[24,false,"127.0.0.1",37779,1,null,[["w",218,[0,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[8]],["r",[9]]]],[25,false,"127.0.0.1",37779,1,null,[["w",218,[0,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[1]],["r",[2]]]],[26,false,"127.0.0.1",37779,1,null,[["w",218,[0,"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c"]],["r",[1]],["r",[2]]]],[27,false,"127.0.0.1",37779,1,null,[["w",218,[0,"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781"]],["r",[1]],["r",[2]]]],[28,false,"127.0.0.1",35375,1,null,[["w",263,[10]],["r",[11]],["r",[12,"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0","613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e","abababababababababababababababababababababababababababababababab","cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]]]],[29,false,"127.0.0.1",35375,1,null,[["w",229,[13]],["r",[14]],["r",[15,"abababababababababababababababababababababababababababababababab","efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"]]]],[30,false,"127.0.0.1",35375,1,null,[["w",241,[16]],["r",[17]],["r",[18,"1212121212121212121212121212121212121212121212121212121212121212"]]]],[31,false,"127.0.0.1",35375,1,null,[["w",194,[19]],["r",[20]],["r",[21]]]],[32,false,"127.0.0.1",35375,1,null,[["w",208,[22]],["r",[23]],["r",[24,"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"]]]],[33,false,"127.0.0.1",35375,1,null,[["w",212,[25]],["r",[26]],["r",[27]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Desc\",\n      \"status\": \"synced\",\n      \"source\": \"backend:chain\",\n      \"imported\": 0,\n      \"skipped\": 0,\n      \"unchanged\": 0,\n      \"journal_invalidated\": false,\n      \"inserted_records\": [],\n      \"updated_records\": [],\n      \"saved_report_impacts\": 0,\n      \"backend\": \"chain\",\n      \"backend_kind\": \"esplora\",\n      \"backend_url\": \"http://127.0.0.1:37779\",\n      \"chain\": \"bitcoin\",\n      \"network\": \"main\",\n      \"sync_mode\": \"descriptor\",\n      \"target_count\": 10,\n      \"records_fetched\": 0,\n      \"updated\": 0,\n      \"gap_limit\": 3,\n      \"esplora_history_complete\": true,\n      \"freshness_checkpoint\": {\n        \"backend\": {\n          \"batch_size\": 100,\n          \"chain\": \"bitcoin\",\n          \"kind\": \"esplora\",\n          \"name\": \"chain\",\n          \"network\": \"main\"\n        },\n        \"compatibility_history_anchor_version\": 2,\n        \"esplora_history_memberships\": {\n          \"backend_key\": \"e46e93d00e624b302dc42502de8eecb4cb8b4dcc615be1cbd29419536fae16a5\",\n          \"scripts\": {\n            \"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300\": {\n              \"complete\": true,\n              \"fingerprint\": \"3c91eb0ef0b0fd7136bba73ba5d0cb89e7bd6f085f6382cbab1ed44d9b66e0f7\",\n              \"txids\": [\n                \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\n                \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"\n              ]\n            },\n            \"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\": {\n              \"complete\": true,\n              \"fingerprint\": \"d660ca303787c31a16d21b38c70b0b1b8f8b40b14f5081ac896e40424ea13b1f\",\n              \"txids\": [\n                \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"\n              ]\n            },\n            \"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            }\n          },\n          \"version\": 1\n        },\n        \"esplora_scripthashes\": {\n          \"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300\": {\n            \"fingerprint\": \"3c91eb0ef0b0fd7136bba73ba5d0cb89e7bd6f085f6382cbab1ed44d9b66e0f7\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 2\n          },\n          \"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\": {\n            \"fingerprint\": \"d660ca303787c31a16d21b38c70b0b1b8f8b40b14f5081ac896e40424ea13b1f\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 1\n          },\n          \"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          }\n        },\n        \"esplora_tip_hash\": \"8f9733f2d9829f9cbad038147e33f24a10716ddf19a0ed61e1aa2a687346d9e7\",\n        \"esplora_tip_height\": 20,\n        \"highest_used\": {\n          \"0\": 1,\n          \"1\": 1\n        }\n      },\n      \"known_txids\": 0,\n      \"observer_compatibility_reason\": \"http_route_policy\",\n      \"observer_route\": \"compatibility\",\n      \"scripts_changed\": 0,\n      \"scripts_unchanged\": 10,\n      \"utxos_skipped_unchanged\": true,\n      \"scripts_checked\": 10,\n      \"utxos_refreshed\": false,\n      \"elapsed_ms\": 0,\n      \"btcpay_provenance\": {\n        \"routes\": 1,\n        \"fetched\": 5,\n        \"btcpay_notes_set\": 0,\n        \"btcpay_tags_added\": 0,\n        \"btcpay_tags_created\": 0,\n        \"labels_unavailable_routes\": 0,\n        \"route_results\": [\n          {\n            \"backend\": \"merchant\",\n            \"backend_kind\": \"btcpay\",\n            \"backend_url\": \"http://127.0.0.1:35375\",\n            \"store_id\": \"shop\",\n            \"payment_method_id\": \"BTC-CHAIN\",\n            \"fetched\": 5,\n            \"labels\": \"synced\",\n            \"pages_fetched\": 1,\n            \"stopped_by_known_page\": false,\n            \"stop_reason\": \"end_of_results\",\n            \"deep_audit\": null,\n            \"btcpay_notes_set\": 0,\n            \"btcpay_tags_added\": 0,\n            \"btcpay_tags_created\": 0,\n            \"invoice_provenance\": {\n              \"invoices_seen\": 4,\n              \"records_inserted\": 0,\n              \"records_updated\": 7,\n              \"payouts_seen\": 2,\n              \"payout_records_inserted\": 0,\n              \"payout_records_updated\": 2,\n              \"backend\": \"merchant\",\n              \"backend_kind\": \"btcpay\",\n              \"backend_url\": \"http://127.0.0.1:35375\",\n              \"store_id\": \"shop\",\n              \"page_size\": 100,\n              \"pages_fetched\": 1,\n              \"invoices_hydrated\": 1,\n              \"stopped_by_known_page\": false,\n              \"stop_reason\": \"end_of_results\",\n              \"deep_audit\": null,\n              \"payouts_available\": true,\n              \"payouts_permission_missing\": false,\n              \"suggestions\": {\n                \"created\": 0,\n                \"total\": 2\n              },\n              \"status\": \"synced\"\n            }\n          }\n        ],\n        \"freshness_checkpoint\": {\n          \"backend\": {\n            \"batch_size\": 100,\n            \"chain\": \"bitcoin\",\n            \"kind\": \"esplora\",\n            \"name\": \"chain\",\n            \"network\": \"main\"\n          },\n          \"compatibility_history_anchor_version\": 2,\n          \"esplora_history_memberships\": {\n            \"backend_key\": \"e46e93d00e624b302dc42502de8eecb4cb8b4dcc615be1cbd29419536fae16a5\",\n            \"scripts\": {\n              \"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\": {\n                \"complete\": true,\n                \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n                \"txids\": []\n              },\n              \"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c\": {\n                \"complete\": true,\n                \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n                \"txids\": []\n              },\n              \"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\": {\n                \"complete\": true,\n                \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n                \"txids\": []\n              },\n              \"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781\": {\n                \"complete\": true,\n                \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n                \"txids\": []\n              },\n              \"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\": {\n                \"complete\": true,\n                \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n                \"txids\": []\n              },\n              \"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\": {\n                \"complete\": true,\n                \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n                \"txids\": []\n              },\n              \"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\": {\n                \"complete\": true,\n                \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n                \"txids\": []\n              },\n              \"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300\": {\n                \"complete\": true,\n                \"fingerprint\": \"3c91eb0ef0b0fd7136bba73ba5d0cb89e7bd6f085f6382cbab1ed44d9b66e0f7\",\n                \"txids\": [\n                  \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\n                  \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"\n                ]\n              },\n              \"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\": {\n                \"complete\": true,\n                \"fingerprint\": \"d660ca303787c31a16d21b38c70b0b1b8f8b40b14f5081ac896e40424ea13b1f\",\n                \"txids\": [\n                  \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\"\n                ]\n              },\n              \"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\": {\n                \"complete\": true,\n                \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n                \"txids\": []\n              }\n            },\n            \"version\": 1\n          },\n          \"esplora_scripthashes\": {\n            \"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\": {\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"mempool_dirty\": false,\n              \"mempool_tx_count\": 0,\n              \"tx_count\": 0\n            },\n            \"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c\": {\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"mempool_dirty\": false,\n              \"mempool_tx_count\": 0,\n              \"tx_count\": 0\n            },\n            \"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\": {\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"mempool_dirty\": false,\n              \"mempool_tx_count\": 0,\n              \"tx_count\": 0\n            },\n            \"8007e638d9875718eb33f06c28af4f43696eada4c14ad19f899afcfe2bfdd781\": {\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"mempool_dirty\": false,\n              \"mempool_tx_count\": 0,\n              \"tx_count\": 0\n            },\n            \"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\": {\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"mempool_dirty\": false,\n              \"mempool_tx_count\": 0,\n              \"tx_count\": 0\n            },\n            \"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\": {\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"mempool_dirty\": false,\n              \"mempool_tx_count\": 0,\n              \"tx_count\": 0\n            },\n            \"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\": {\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"mempool_dirty\": false,\n              \"mempool_tx_count\": 0,\n              \"tx_count\": 0\n            },\n            \"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300\": {\n              \"fingerprint\": \"3c91eb0ef0b0fd7136bba73ba5d0cb89e7bd6f085f6382cbab1ed44d9b66e0f7\",\n              \"mempool_dirty\": false,\n              \"mempool_tx_count\": 0,\n              \"tx_count\": 2\n            },\n            \"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\": {\n              \"fingerprint\": \"d660ca303787c31a16d21b38c70b0b1b8f8b40b14f5081ac896e40424ea13b1f\",\n              \"mempool_dirty\": false,\n              \"mempool_tx_count\": 0,\n              \"tx_count\": 1\n            },\n            \"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\": {\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"mempool_dirty\": false,\n              \"mempool_tx_count\": 0,\n              \"tx_count\": 0\n            }\n          },\n          \"esplora_tip_hash\": \"8f9733f2d9829f9cbad038147e33f24a10716ddf19a0ed61e1aa2a687346d9e7\",\n          \"esplora_tip_height\": 20,\n          \"highest_used\": {\n            \"0\": 1,\n            \"1\": 1\n          },\n          \"routes\": {\n            \"merchant:shop:BTC-CHAIN\": {\n              \"backend\": {\n                \"name\": \"merchant\",\n                \"kind\": \"btcpay\"\n              },\n              \"btcpay_pages\": {\n                \"0\": {\n                  \"fingerprint\": \"d948f0214d1fa17b937db8b2a4781363df91ce9f162033887830e51ccbe167f6\",\n                  \"stable_ids\": [\n                    \"17c3a0fad07df412ef1f9a0563f5cb5db5a4680ce485dc048e43207f9ed7d1d0\",\n                    \"613e132a6c252c3c70bd83e19628ad244e3826c517c36f37397e7fba12e98f4e\",\n                    \"abababababababababababababababababababababababababababababababab\",\n                    \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\n                    \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\n                    \"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"\n                  ],\n                  \"rows\": 6,\n                  \"page_size\": 100\n                }\n              },\n              \"btcpay_pagination\": {\n                \"unchanged_page_window\": 5,\n                \"deep_audit_pages\": 1,\n                \"last_stop_reason\": \"end_of_results\",\n                \"next_deep_audit_skip\": null\n              },\n              \"store_id\": \"shop\",\n              \"payment_method_id\": \"BTC-CHAIN\"\n            }\n          },\n          \"invoice_routes\": {\n            \"merchant:shop\": {\n              \"backend\": {\n                \"name\": \"merchant\",\n                \"kind\": \"btcpay\"\n              },\n              \"btcpay_invoice_pages\": {\n                \"0\": {\n                  \"fingerprint\": \"0aca5ba1abf08723353057980c2eccc608f4d4e0dabd2d82793d0122ab1453a6\",\n                  \"stable_ids\": [\n                    \"inv-hydrate\",\n                    \"inv-ln\",\n                    \"inv-new\",\n                    \"inv-paid\"\n                  ],\n                  \"rows\": 4,\n                  \"page_size\": 100\n                }\n              },\n              \"btcpay_invoice_pagination\": {\n                \"unchanged_page_window\": 5,\n                \"deep_audit_pages\": 1,\n                \"last_stop_reason\": \"end_of_results\",\n                \"next_deep_audit_skip\": null\n              },\n              \"store_id\": \"shop\"\n            }\n          }\n        }\n      }\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           28
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           28
+          ],
+          [
+           19,
+           "wallet_utxos",
+           1,
+           27
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

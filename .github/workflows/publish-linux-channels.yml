@@ -42,7 +42,7 @@ jobs:
   prepare:
     name: Verify release and render channel definitions
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     outputs:
       release_commit: ${{ steps.release-ref.outputs.commit }}
     steps:
@@ -62,6 +62,8 @@ jobs:
             exit 1
           fi
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
       - name: Install package inspection and signature tools
         run: |
           sudo apt-get update
@@ -85,13 +87,13 @@ jobs:
           PUBLISH_REQUESTED: ${{ inputs.publish_repositories || inputs.publish_aur || inputs.publish_nix }}
         run: |
           set -euo pipefail
-          policy_json="$(python3 scripts/release_manifest.py policy \
+          policy_json="$("$KASSIBER_RELEASE_TOOL" manifest policy \
             --policy packaging/release/signing-policy.json)"
-          policy_enabled="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["enabled"]).lower())' "$policy_json")"
+          policy_enabled="$(jq -r '.enabled' <<< "$policy_json")"
           # Older tags carry the disabled schema-1 policy, which has no
           # "fingerprint" field; they may still render an unsigned dry run.
-          fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("fingerprint", ""))' "$policy_json")"
-          public_key_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["public_key_path"])' "$policy_json")"
+          fingerprint="$(jq -r '.fingerprint // ""' <<< "$policy_json")"
+          public_key_path="$(jq -r '.public_key_path' <<< "$policy_json")"
           if [ "$policy_enabled" != true ] && [ "$PUBLISH_REQUESTED" = true ]; then
             echo "Linux channel publication requires an enabled, code-reviewed release signing policy." >&2
             exit 1
@@ -145,7 +147,7 @@ jobs:
             gh release download "$RELEASE_TAG_NAME" \
               --repo "$GITHUB_REPOSITORY" --dir release \
               --pattern "$manifest_name.sig"
-            python3 scripts/release_manifest.py verify-release \
+            "$KASSIBER_RELEASE_TOOL" manifest verify-release \
               --release-dir release \
               --manifest "release/$manifest_name" \
               --signature "release/$manifest_name.sig" \
@@ -153,7 +155,7 @@ jobs:
               --fingerprint "$RELEASE_SIGNING_FINGERPRINT" \
               --allow-subset
           else
-            python3 scripts/release_manifest.py verify-artifacts \
+            "$KASSIBER_RELEASE_TOOL" manifest verify-artifacts \
               --release-dir release \
               --manifest "release/$manifest_name" \
               --allow-subset
@@ -190,10 +192,13 @@ jobs:
           tar -xOf release/kassiber-cli-linux-x64.tar.gz \
             kassiber-cli-linux-x64/BUILD_INFO.json \
             > channels/cli-build-info.json
-          python3 -c \
-            'import json,sys; actual=json.load(open(sys.argv[4], encoding="utf-8")); expected={"version":sys.argv[1], "commit":sys.argv[2], "channel":sys.argv[3]}; mismatches={key:(actual.get(key), value) for key,value in expected.items() if actual.get(key) != value}; raise SystemExit(f"CLI build identity mismatch: {mismatches}" if mismatches else 0)' \
-            "$version" "$expected_commit" "$expected_channel" \
-            channels/cli-build-info.json
+          if ! jq -e --arg version "$version" --arg commit "$expected_commit" \
+              --arg channel "$expected_channel" \
+              '.version == $version and .commit == $commit and .channel == $channel' \
+              channels/cli-build-info.json > /dev/null; then
+            echo "CLI build identity mismatch: $(jq -c '{version, commit, channel}' channels/cli-build-info.json)" >&2
+            exit 1
+          fi
           chmod 0755 release/kassiber-linux-x64.AppImage
           appimage_version="$(APPIMAGE_EXTRACT_AND_RUN=1 \
             release/kassiber-linux-x64.AppImage --cli --version)"
@@ -206,15 +211,15 @@ jobs:
           esac
           printf '%s\n' "$appimage_version" | grep -F "$expected_commit_short"
 
-          python3 scripts/render_aur.py desktop \
+          "$KASSIBER_RELEASE_TOOL" render-aur desktop \
             --version "$version" \
             --sha256 "$(release_sha256 kassiber-linux-x64.AppImage)" \
             --output channels/aur/kassiber-bin
-          python3 scripts/render_aur.py cli \
+          "$KASSIBER_RELEASE_TOOL" render-aur cli \
             --version "$version" \
             --sha256 "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \
             --output channels/aur/kassiber-cli-bin
-          python3 scripts/render_nix.py \
+          "$KASSIBER_RELEASE_TOOL" render-nix \
             --version "$version" \
             --sha256-desktop "$(release_sha256 kassiber-linux-x64.AppImage)" \
             --sha256-cli "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \
@@ -233,12 +238,14 @@ jobs:
     needs: prepare
     environment: linux-packaging-production
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           ref: ${{ needs.prepare.outputs.release_commit }}
           persist-credentials: false
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
       - name: Install repository tooling
         run: |
           sudo apt-get update
@@ -329,10 +336,10 @@ jobs:
             echo "Archive signing key does not match LINUX_ARCHIVE_GPG_FINGERPRINT." >&2
             exit 1
           fi
-          release_policy_json="$(python3 scripts/release_manifest.py policy \
+          release_policy_json="$("$KASSIBER_RELEASE_TOOL" manifest policy \
             --policy packaging/release/signing-policy.json \
             --require-enabled)"
-          release_fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["fingerprint"])' "$release_policy_json")"
+          release_fingerprint="$(jq -r '.fingerprint' <<< "$release_policy_json")"
           # The release key is an OpenSSH key, so it cannot share an OpenPGP
           # fingerprint with this key. Also refuse the archive key if any of
           # its (sub)keys is the same key material as the release key.

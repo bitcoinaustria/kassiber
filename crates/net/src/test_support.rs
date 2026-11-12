@@ -197,6 +197,86 @@ impl Drop for FakeElectrum {
     }
 }
 
+/// Owned newline-delimited JSON-RPC fake whose reply to each request line is
+/// whatever `answer` returns for it, on every connection; for replays whose
+/// client orders its requests differently from run to run. Binds `port`
+/// (0 for any).
+pub struct FakeJsonRpc {
+    url: String,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+impl FakeJsonRpc {
+    pub fn start(
+        port: u16,
+        answer: impl Fn(&str) -> String + Send + Sync + 'static,
+    ) -> std::io::Result<Self> {
+        use std::io::{BufRead, BufReader};
+        let listener = TcpListener::bind(("127.0.0.1", port))?;
+        listener.set_nonblocking(true)?;
+        let url = format!("tcp://{}", listener.local_addr()?);
+        let answer = Arc::new(answer);
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopped = stop.clone();
+        let thread = thread::spawn(move || {
+            let mut sessions = Vec::new();
+            while !stopped.load(Ordering::SeqCst) {
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        let _ = stream.set_nonblocking(false);
+                        let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
+                        let answer = answer.clone();
+                        sessions.push(thread::spawn(move || {
+                            let Ok(mut writer) = stream.try_clone() else {
+                                return;
+                            };
+                            for line in BufReader::new(stream).lines() {
+                                let Ok(line) = line else { return };
+                                let reply = answer(&line) + "\n";
+                                if writer.write_all(reply.as_bytes()).is_err() {
+                                    return;
+                                }
+                            }
+                        }));
+                    }
+                    Err(_) => thread::sleep(Duration::from_millis(2)),
+                }
+            }
+            drop(listener);
+            for session in sessions {
+                let _ = session.join();
+            }
+        });
+        Ok(Self {
+            url,
+            stop,
+            thread: Some(thread),
+        })
+    }
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+}
+impl Drop for FakeJsonRpc {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// Shuts the read half of a local stream socket (an AF_UNIX pair, no
+/// address): the peer's next write fails as a write to a closed pipe would,
+/// even while a reader thread still holds a clone of this end. For tests
+/// that hand a child one end of `kassiber_ipc::unix::UnixStream::pair()` as
+/// its stdout and later stop reading under it. `Shutdown` lives in
+/// `std::net`, which only this crate may name.
+#[cfg(unix)]
+pub fn shutdown_read(stream: &std::os::unix::net::UnixStream) -> std::io::Result<()> {
+    stream.shutdown(std::net::Shutdown::Read)
+}
+
 /// One scripted answer of a [`ScriptedProvider`].
 #[derive(Clone)]
 pub struct Reply {
@@ -207,7 +287,14 @@ pub struct Reply {
     pub chunk_size: Option<usize>,
     /// Keep the connection open after the body until the provider drops.
     pub hold: bool,
+    /// Build the reply from the body of the request it answers, as the
+    /// Python suites' `_Computed` replies did (a provider's next leg after a
+    /// tool round, from what that round returned).
+    pub computed: Option<Computed>,
 }
+
+/// A reply built from the request body it answers.
+pub type Computed = Arc<dyn Fn(&[u8]) -> Reply + Send + Sync>;
 
 impl Reply {
     pub fn json(status: u16, body: &str) -> Self {
@@ -233,6 +320,15 @@ impl Reply {
             body: body.to_vec(),
             chunk_size: None,
             hold: false,
+            computed: None,
+        }
+    }
+
+    /// A reply `build` makes from the request body it answers.
+    pub fn computed(build: impl Fn(&[u8]) -> Reply + Send + Sync + 'static) -> Self {
+        Self {
+            computed: Some(Arc::new(build)),
+            ..Self::raw(200, "text/event-stream", b"")
         }
     }
 
@@ -382,7 +478,7 @@ fn serve(mut stream: std::net::TcpStream, script: &Mutex<Script>, stop: &AtomicB
         script.requests.push(Received {
             method: method.clone(),
             path: path.clone(),
-            body,
+            body: body.clone(),
             authorization: header("authorization"),
             accept: header("accept"),
         });
@@ -393,6 +489,10 @@ fn serve(mut stream: std::net::TcpStream, script: &Mutex<Script>, stop: &AtomicB
             .and_then(|(_, queue)| (!queue.is_empty()).then(|| queue.remove(0)))
     }
     .unwrap_or_else(|| Reply::json(404, r#"{"detail": "Not Found"}"#));
+    let reply = match &reply.computed {
+        Some(build) => build(&body),
+        None => reply,
+    };
     write_reply(&mut stream, &reply, stop);
 }
 

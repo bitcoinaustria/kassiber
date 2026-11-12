@@ -555,8 +555,24 @@ fn year(conn: &Connection, page: &[Value]) -> Result<Value> {
         }
     }
     Ok(Value::Int(
-        crate::sql::now(conn)?[..4].parse::<i64>().unwrap().into(),
+        page_now(conn)?[..4].parse::<i64>().unwrap().into(),
     ))
+}
+
+/// The "now" an empty page takes its year from. Test builds may pin it with
+/// `KASSIBER_RUST_TEST_REPORT_TIME`, the clock read transcripts already pin
+/// for reads that run up to now; product builds always read the clock.
+fn page_now(conn: &Connection) -> Result<String> {
+    #[cfg(feature = "test-harness")]
+    if let Ok(stamp) = std::env::var("KASSIBER_RUST_TEST_REPORT_TIME") {
+        if stamp
+            .get(..4)
+            .is_some_and(|y| y.bytes().all(|b| b.is_ascii_digit()))
+        {
+            return Ok(stamp);
+        }
+    }
+    crate::sql::now(conn)
 }
 
 /// `ui.transactions.dashboard` over suggestion candidates the caller computed.

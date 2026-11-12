@@ -28,10 +28,13 @@ members = [
   "crates/ipc",
   "crates/operator",
   "crates/mcp",
+  "crates/mutation-check",
   "crates/store",
   "crates/transactions",
   "crates/transfers",
   "crates/secrets",
+  "crates/session-replay",
+  "crates/session-replay/clock-shim",
   "crates/pydecimal",
   "crates/pyjson",
   "crates/pytext",
@@ -39,10 +42,10 @@ members = [
   "crates/tax-countries",
   "crates/xlsx",
   "crates/reports",
+  "crates/repo-checks",
   "crates/wallets",
   "crates/workspace",
   "tax-engine/core",
-  "tax-engine/python",
 ]
 
 [workspace.package]

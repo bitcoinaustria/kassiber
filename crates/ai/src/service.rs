@@ -1532,7 +1532,8 @@ mod tests {
         broker: Option<(Gate, Locate)>,
     }
 
-    /// A Python script run as the broker, logging each request it reads.
+    /// A POSIX `sh` script run as the broker ("Node" is `/bin/sh`), logging
+    /// each request it reads.
     struct FakeBroker {
         dir: std::path::PathBuf,
         script: std::path::PathBuf,
@@ -1548,17 +1549,15 @@ mod tests {
                 COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
             ));
             std::fs::create_dir_all(&dir).unwrap();
-            let script = dir.join("broker.py");
+            let script = dir.join("broker.sh");
             let log = dir.join("requests.jsonl");
-            let logged = body.replacen(
-                "request = json.loads(sys.stdin.readline())\n",
-                &format!(
-                    "line = sys.stdin.readline()\nopen({:?}, 'a').write(line)\nrequest = json.loads(line)\n",
-                    log.to_str().unwrap()
-                ),
-                1,
-            );
-            std::fs::write(&script, logged).unwrap();
+            let log = log.to_str().unwrap();
+            assert!(!log.contains('\''), "{log}");
+            std::fs::write(
+                &script,
+                format!("IFS= read -r request\nprintf '%s\\n' \"$request\" >> '{log}'\n{body}"),
+            )
+            .unwrap();
             let gate = Gate::new(|| kassiber_net::Offline::Online, Default::default())
                 .with_test_observer(false)
                 .with_broker_fixture(script.clone());
@@ -1566,10 +1565,8 @@ mod tests {
         }
 
         fn host(&self) -> (Gate, Locate) {
-            let program = kassiber_net::BrokerProgram::new(
-                kassiber_net::which("python3"),
-                self.script.clone(),
-            );
+            let program =
+                kassiber_net::BrokerProgram::new(kassiber_net::which("sh"), self.script.clone());
             (
                 self.gate.clone(),
                 std::sync::Arc::new(move || program.clone()),
@@ -1858,13 +1855,21 @@ mod tests {
         assert_eq!(*field(&cached, "checked_at"), Value::Null);
         // Each probe and listing starts the broker once, through the gate.
         let fake = FakeBroker::new(
-            r#"import json, sys
-request = json.loads(sys.stdin.readline())
-if request["command"] == "status":
-    rows = [{"provider": name, "state": "ready"} for name in request.get("providers") or [request.get("provider")]]
-    print(json.dumps({"type": "result", "data": rows + [{"provider": "claude", "state": "ready"}]}), flush=True)
-else:
-    print(json.dumps({"type": "result", "data": [{"id": "gpt-5.4", "check_kind": "binary_presence"}]}), flush=True)
+            r#"case "$request" in
+  '{"command": "status"'*)
+    # Echo a ready row per provider asked for ("provider" or "providers"),
+    # plus one the client must drop.
+    names=$(printf '%s\n' "$request" | sed -n 's/.*"providers\{0,1\}": \[\{0,1\}\([^]}]*\).*/\1/p' | tr -d '",')
+    rows=
+    for name in $names; do
+      rows="$rows{\"provider\": \"$name\", \"state\": \"ready\"}, "
+    done
+    printf '{"type": "result", "data": [%s{"provider": "claude", "state": "ready"}]}\n' "$rows"
+    ;;
+  *)
+    printf '%s\n' '{"type": "result", "data": [{"id": "gpt-5.4", "check_kind": "binary_presence"}]}'
+    ;;
+esac
 "#,
         );
         desk.broker = Some(fake.host());

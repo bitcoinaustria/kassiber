@@ -1,0 +1,1779 @@
+{
+ "pytest": "tests/test_rust_wallet_sync_silent_payments.py::test_core_rpc_scans_are_authoritative_only_when_complete[incomplete]",
+ "sessions": [
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Cold"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "LANG": "en_US.UTF-8",
+    "TMPDIR": "{tmp}/systmp",
+    "XDG_CONFIG_HOME": "{tmp}/config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333572190999,
+    1794333572190999,
+    1794333572204406
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/attachments\",\n    \"config_root\": \"{tmp}/config\",\n    \"data_root\": \"{tmp}/data\",\n    \"database\": \"{tmp}/data/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/config/backends.env\",\n    \"exports_root\": \"{tmp}/exports\",\n    \"settings_file\": \"{tmp}/config/settings.json\",\n    \"state_root\": \"{tmp}\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/data",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/data/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "accounts": {
+        "upsert": [
+         [
+          1,
+          "acct",
+          "ws",
+          "p",
+          "treasury",
+          "Treasury",
+          "asset",
+          null,
+          "fixed"
+         ]
+        ]
+       },
+       "backends": {
+        "upsert": [
+         [
+          1,
+          "fake",
+          "bitcoinrpc",
+          null,
+          null,
+          "http://127.0.0.1:9/",
+          null,
+          "",
+          null,
+          2,
+          null,
+          "{\"chain\": \"bitcoin\", \"network\": \"main\", \"silent_payment_scan_file\": \"{tmp}/scan.json\", \"silent_payments\": true}",
+          null,
+          "fixed",
+          "fixed"
+         ]
+        ]
+       },
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          29
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "transactions",
+          -1,
+          1
+         ],
+         [
+          2,
+          "transaction_graph_cache",
+          -1,
+          2
+         ],
+         [
+          3,
+          "wallet_utxos",
+          -1,
+          3
+         ],
+         [
+          4,
+          "chain_analysis_observations",
+          -1,
+          4
+         ],
+         [
+          5,
+          "chain_analysis_reference_assertions",
+          -1,
+          5
+         ],
+         [
+          6,
+          "wallets",
+          -1,
+          29
+         ],
+         [
+          7,
+          "profiles",
+          -1,
+          16
+         ],
+         [
+          8,
+          "journal_custody_decisions",
+          -1,
+          26
+         ],
+         [
+          9,
+          "journal_custody_economic_relations",
+          -1,
+          27
+         ],
+         [
+          10,
+          "chain_analysis_labels",
+          -1,
+          10
+         ],
+         [
+          11,
+          "chain_analysis_datasets",
+          -1,
+          11
+         ],
+         [
+          12,
+          "chain_analysis_dataset_claims",
+          -1,
+          12
+         ],
+         [
+          13,
+          "book_network_bindings",
+          -1,
+          13
+         ],
+         [
+          14,
+          "chain_analysis_acquisition_grants",
+          -1,
+          14
+         ],
+         [
+          15,
+          "transactions",
+          1,
+          20
+         ],
+         [
+          16,
+          "transactions",
+          2,
+          21
+         ],
+         [
+          17,
+          "transactions",
+          3,
+          22
+         ],
+         [
+          18,
+          "transactions",
+          4,
+          23
+         ],
+         [
+          19,
+          "transactions",
+          5,
+          24
+         ]
+        ]
+       },
+       "journal_account_holdings": {
+        "upsert": [
+         [
+          1,
+          "az",
+          "ws",
+          "p",
+          null,
+          "treasury",
+          "Treasury",
+          "BTC",
+          111111111111,
+          {
+           "real": "40c81cd6e63c53d3"
+          },
+          "fixed"
+         ],
+         [
+          2,
+          "aa",
+          "ws",
+          "p",
+          null,
+          "treasury",
+          "Treasury",
+          "BTC",
+          1,
+          {
+           "real": "3e7ad7f29abcaf48"
+          },
+          "fixed"
+         ],
+         [
+          3,
+          "l",
+          "ws",
+          "p",
+          null,
+          "other",
+          "Other",
+          "LBTC",
+          789001,
+          {
+           "real": "3fbf9add37c11162"
+          },
+          "fixed"
+         ],
+         [
+          4,
+          "zero",
+          "ws",
+          "p",
+          null,
+          null,
+          "Fallback",
+          "BTC",
+          0,
+          {
+           "real": "4014000000000000"
+          },
+          "fixed"
+         ],
+         [
+          5,
+          "negative",
+          "ws",
+          "p",
+          null,
+          null,
+          "Fallback",
+          "BTC",
+          -1,
+          {
+           "real": "4014000000000000"
+          },
+          "fixed"
+         ],
+         [
+          6,
+          "fallback",
+          "ws",
+          "p",
+          null,
+          null,
+          "Fallback",
+          "OTHER",
+          100000000001,
+          {
+           "real": "40c34a4587f00964"
+          },
+          "fixed"
+         ]
+        ]
+       },
+       "journal_custody_decisions": {
+        "upsert": [
+         [
+          1,
+          "0000000000000000000000000000000000000000000000000000000000000001",
+          "ws",
+          "p",
+          "out",
+          "earn",
+          "0000000000000000000000000000000000000000000000000000000000000002",
+          0,
+          10001,
+          "0000000000000000000000000000000000000000000000000000000000000003",
+          0,
+          10001,
+          "cold",
+          "hot",
+          "mainnet",
+          "mainnet",
+          "bitcoin",
+          "liquid",
+          "BTC",
+          "LBTC",
+          "internal_reviewed",
+          "eligible",
+          null,
+          "reviewed",
+          null,
+          null,
+          "2024-12-31T23:30:00Z",
+          "2025-01-02T00:00:00Z",
+          "b"
+         ],
+         [
+          2,
+          "0000000000000000000000000000000000000000000000000000000000000004",
+          "ws",
+          "p",
+          "out",
+          "in",
+          "0000000000000000000000000000000000000000000000000000000000000002",
+          10001,
+          20002,
+          "0000000000000000000000000000000000000000000000000000000000000003",
+          10001,
+          20002,
+          "cold",
+          "cold",
+          "mainnet",
+          "mainnet",
+          "bitcoin",
+          "bitcoin",
+          "BTC",
+          "BTC",
+          "internal_reviewed",
+          "eligible",
+          null,
+          "reviewed",
+          null,
+          null,
+          "2024-12-31T23:30:00Z",
+          "2025-01-02T00:00:00Z",
+          "a"
+         ]
+        ]
+       },
+       "journal_custody_economic_relations": {
+        "upsert": [
+         [
+          1,
+          "0000000000000000000000000000000000000000000000000000000000000005",
+          "ws",
+          "p",
+          "direct_payout",
+          "out",
+          null,
+          null,
+          "BTC",
+          "LBTC",
+          10001,
+          9999,
+          "eligible",
+          "2024-12-31T23:30:00Z",
+          null,
+          "c"
+         ]
+        ]
+       },
+       "journal_entries": {
+        "upsert": [
+         [
+          1,
+          "z",
+          "ws",
+          "p",
+          "out",
+          "cold",
+          "acct",
+          "2024-12-31T23:30:00Z",
+          "disposal",
+          "BTC",
+          -100000001,
+          {
+           "real": "4028ae147ae147ae"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "402400000055e63c"
+          },
+          {
+           "real": "4028ae147ae147ae"
+          },
+          {
+           "real": "4002b851ea2d85ca"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Split z",
+          null,
+          null,
+          "long_term",
+          "same"
+         ],
+         [
+          2,
+          "a",
+          "ws",
+          "p",
+          "out",
+          "cold",
+          "acct",
+          "2024-12-31T23:30:00Z",
+          "disposal",
+          "BTC",
+          -23456788,
+          {
+           "real": "4002a3d70a3d70a4"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "3ff3ae147ae147ae"
+          },
+          {
+           "real": "4002a3d70a3d70a4"
+          },
+          {
+           "real": "3ff199999999999a"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Split a",
+          "neu_gain",
+          174,
+          "short_term",
+          "same"
+         ],
+         [
+          3,
+          "first",
+          "ws",
+          "p",
+          "out",
+          "cold",
+          "acct",
+          "2024-12-31T23:30:00Z",
+          "disposal",
+          "BTC",
+          -3,
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Earlier creation",
+          "alt_taxfree",
+          null,
+          null,
+          "before"
+         ],
+         [
+          4,
+          "income",
+          "ws",
+          "p",
+          "earn",
+          "hot",
+          "acct",
+          "2025-01-02T00:00:00Z",
+          "income",
+          "LBTC",
+          789001,
+          {
+           "real": "3fbf7ced916872b0"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "3fbf7ced916872b0"
+          },
+          {
+           "real": "3fbf7ced916872b0"
+          },
+          {
+           "real": "3fbf7ced916872b0"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Income €",
+          "income_general",
+          172,
+          "income",
+          "fixed"
+         ],
+         [
+          5,
+          "hidden",
+          "ws",
+          "p",
+          "no-tax",
+          "hot",
+          "acct",
+          "2025-02-01T00:00:00Z",
+          "disposal",
+          "BTC",
+          -100001,
+          {
+           "real": "4059000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "4024000000000000"
+          },
+          {
+           "real": "4059000000000000"
+          },
+          {
+           "real": "4056800000000000"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "short_term",
+          "fixed"
+         ],
+         [
+          6,
+          "swap",
+          "ws",
+          "p",
+          "out",
+          "cold",
+          "acct",
+          "2024-12-31T23:30:00Z",
+          "disposal",
+          "BTC",
+          -100001,
+          {
+           "real": "4059000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "4024000000000000"
+          },
+          {
+           "real": "4059000000000000"
+          },
+          {
+           "real": "4056800000000000"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "neu_swap",
+          null,
+          "short_term",
+          "fixed"
+         ],
+         [
+          7,
+          "fee",
+          "ws",
+          "p",
+          "out",
+          "cold",
+          "acct",
+          "2024-12-31T23:30:00Z",
+          "fee",
+          "BTC",
+          -456,
+          {
+           "real": "3f847ae147ae147b"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "3f847ae147ae147b"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Fee",
+          null,
+          null,
+          null,
+          "fixed"
+         ]
+        ]
+       },
+       "journal_quarantines": {
+        "upsert": [
+         [
+          1,
+          "no-tax",
+          "ws",
+          "p",
+          "missing_price",
+          "{}",
+          "fixed"
+         ]
+        ]
+       },
+       "journal_wallet_holdings": {
+        "upsert": [
+         [
+          1,
+          "wz",
+          "ws",
+          "p",
+          "cold",
+          "Cold",
+          "treasury",
+          "BTC",
+          111111111111,
+          {
+           "real": "40c81cd6e63c53d3"
+          },
+          "fixed"
+         ],
+         [
+          2,
+          "wa",
+          "ws",
+          "p",
+          "cold",
+          "Cold",
+          "treasury",
+          "BTC",
+          1,
+          {
+           "real": "3e7ad7f29abcaf48"
+          },
+          "fixed"
+         ],
+         [
+          3,
+          "wh",
+          "ws",
+          "p",
+          "hot",
+          "Hot",
+          "treasury",
+          "LBTC",
+          789001,
+          {
+           "real": "3fbf9add37c11162"
+          },
+          "fixed"
+         ],
+         [
+          4,
+          "wn",
+          "ws",
+          "p",
+          "hot",
+          "Hot",
+          "treasury",
+          "BTC",
+          -1,
+          {
+           "real": "401c000000000000"
+          },
+          "fixed"
+         ],
+         [
+          5,
+          "w0",
+          "ws",
+          "p",
+          "hot",
+          "Hot",
+          "treasury",
+          "BTC",
+          0,
+          {
+           "real": "401c000000000000"
+          },
+          "fixed"
+         ],
+         [
+          6,
+          "wo",
+          "ws",
+          "p",
+          "other",
+          "Other",
+          "treasury",
+          "BTC",
+          100000000001,
+          {
+           "real": "3ff0000000000000"
+          },
+          "fixed"
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "ws",
+          "Book",
+          "EUR",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          7,
+          7,
+          0,
+          0,
+          "2026-01-01T00:00:00Z",
+          4,
+          null,
+          "fixed",
+          null
+         ],
+         [
+          2,
+          "other",
+          "ws",
+          "Other",
+          "USD",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "fixed",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T17:59:30.922Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:30.925Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:30.926Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:30.926Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:30.926Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T17:59:30.926Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T17:59:30.927Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T17:59:30.941Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T17:59:30.947Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T17:59:30Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T17:59:30.970Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T17:59:30.972Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          2,
+          "context_workspace",
+          "ws"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ],
+         [
+          4,
+          "database_instance_id",
+          "0123456789abcdef0123456789abcdef"
+         ]
+        ]
+       },
+       "tags": {
+        "upsert": [
+         [
+          1,
+          "tag1",
+          "ws",
+          "p",
+          "one",
+          "One",
+          "fixed"
+         ],
+         [
+          2,
+          "tag2",
+          "ws",
+          "p",
+          "two",
+          "Two",
+          "fixed"
+         ]
+        ]
+       },
+       "transaction_tags": {
+        "upsert": [
+         [
+          1,
+          "in",
+          "tag1"
+         ],
+         [
+          2,
+          "in",
+          "tag2"
+         ],
+         [
+          3,
+          "excluded",
+          "tag1"
+         ]
+        ]
+       },
+       "transactions": {
+        "upsert": [
+         [
+          1,
+          "in",
+          "ws",
+          "p",
+          "cold",
+          null,
+          null,
+          "in",
+          "2024-01-01T00:00:00Z",
+          null,
+          "inbound",
+          "BTC",
+          123456789001,
+          123,
+          0,
+          null,
+          {
+           "real": "40dd4c0000000000"
+          },
+          null,
+          null,
+          "30000.12345678901234567890123456789",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "deposit",
+          null,
+          null,
+          " Has note ",
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "a"
+         ],
+         [
+          2,
+          "out",
+          "ws",
+          "p",
+          "cold",
+          null,
+          null,
+          "out",
+          "2024-12-31T23:30:00Z",
+          null,
+          "outbound",
+          "BTC",
+          123456789,
+          456,
+          0,
+          null,
+          {
+           "real": "40e3880000000000"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "withdrawal",
+          null,
+          null,
+          "",
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "b"
+         ],
+         [
+          3,
+          "earn",
+          "ws",
+          "p",
+          "hot",
+          null,
+          null,
+          "earn",
+          "2025-01-02T00:00:00Z",
+          null,
+          "inbound",
+          "LBTC",
+          789001,
+          789,
+          0,
+          null,
+          null,
+          {
+           "real": "3fbf7ced916872b0"
+          },
+          null,
+          null,
+          "0.123456789123456789",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "interest",
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "c"
+         ],
+         [
+          4,
+          "no-tax",
+          "ws",
+          "p",
+          "hot",
+          null,
+          null,
+          "no-tax",
+          "2025-02-01T00:00:00Z",
+          null,
+          "outbound",
+          "BTC",
+          100001,
+          0,
+          0,
+          null,
+          {
+           "real": "40ed4c0000000000"
+          },
+          null,
+          null,
+          "60000.123",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          null,
+          null,
+          null,
+          null,
+          "withdrawal",
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "d"
+         ],
+         [
+          5,
+          "excluded",
+          "ws",
+          "p",
+          "cold",
+          null,
+          null,
+          "excluded",
+          "2026-02-01T00:00:00Z",
+          null,
+          "inbound",
+          "BTC",
+          999999,
+          9,
+          0,
+          null,
+          {
+           "real": "40f5f90000000000"
+          },
+          null,
+          null,
+          "90000",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "deposit",
+          null,
+          null,
+          "Excluded",
+          1,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "e"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "cold",
+          "ws",
+          "p",
+          "acct",
+          "Cold",
+          "silent-payment",
+          "{\"sp_descriptor\": \"sp(spscan1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq)\", \"backend\": \"fake\", \"chain\": \"bitcoin\", \"network\": \"main\", \"sp_material_format\": \"bip392-spscan\", \"sp_scan_mode\": \"local_index\", \"sp_scan_start_height\": 850000, \"sp_full_history\": false}",
+          "fixed"
+         ],
+         [
+          2,
+          "hot",
+          "ws",
+          "p",
+          "acct",
+          "Hot",
+          "custom",
+          "{}",
+          "fixed"
+         ],
+         [
+          3,
+          "other",
+          "ws",
+          "other",
+          null,
+          "Other",
+          "custom",
+          "{}",
+          "fixed"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "ws",
+          "Main",
+          "fixed"
+         ]
+        ]
+       }
+      }
+     }
+    },
+    {
+     "mkdir": "{tmp}/exports",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/scan.json",
+     "mode": 384,
+     "text": "{\"complete\": false, \"descriptor_fingerprint\": \"33e840f145a29fbbac4d82a12137071a20b2a4fb08e6880d78e91c92bd925ecd\", \"range\": {\"from_height\": 850000, \"to_height\": 850130}, \"transactions\": [{\"txid\": \"1111111111111111111111111111111111111111111111111111111111111111\", \"block_height\": 850100, \"block_time\": \"2026-06-01T12:00:00Z\", \"outputs\": [{\"txid\": \"1111111111111111111111111111111111111111111111111111111111111111\", \"vout\": 0, \"amount_sats\": 50000, \"script_pubkey\": \"5120abababababababababababababababababababababababababababababababab\", \"silent_payment\": true, \"block_height\": 850100, \"block_time\": \"2026-06-01T12:00:00Z\", \"confirmations\": 6}]}], \"utxos\": [{\"txid\": \"1111111111111111111111111111111111111111111111111111111111111111\", \"vout\": 0, \"amount_sats\": 50000, \"script_pubkey\": \"5120abababababababababababababababababababababababababababababababab\", \"silent_payment\": true, \"block_height\": 850100, \"block_time\": \"2026-06-01T12:00:00Z\", \"confirmations\": 6}]}"
+    }
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Cold"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "LANG": "en_US.UTF-8",
+    "TMPDIR": "{tmp}/systmp",
+    "XDG_CONFIG_HOME": "{tmp}/config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333572190999,
+    1794333572312996,
+    1794333572504821
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Cold\",\n      \"status\": \"synced\",\n      \"source\": \"backend:fake\",\n      \"imported\": 1,\n      \"skipped\": 0,\n      \"unchanged\": 0,\n      \"journal_invalidated\": true,\n      \"inserted_records\": [\n        {\n          \"transaction_id\": \"5fb2c8c1-4f21-457a-b295-3740543c9c32\",\n          \"external_id\": \"1111111111111111111111111111111111111111111111111111111111111111\",\n          \"wallet\": \"Cold\",\n          \"asset\": \"BTC\",\n          \"direction\": \"inbound\",\n          \"amount_msat\": 50000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        }\n      ],\n      \"updated_records\": [],\n      \"saved_report_impacts\": 0,\n      \"backend\": \"fake\",\n      \"backend_kind\": \"bitcoinrpc\",\n      \"backend_url\": \"http://127.0.0.1:9/\",\n      \"chain\": \"bitcoin\",\n      \"network\": \"main\",\n      \"sync_mode\": \"silent_payment\",\n      \"target_count\": 1,\n      \"records_fetched\": 1,\n      \"updated\": 0,\n      \"addresses\": \"\",\n      \"blocking_reports\": true,\n      \"freshness_checkpoint\": {\n        \"backend\": {\n          \"kind\": \"bitcoinrpc\",\n          \"name\": \"fake\"\n        },\n        \"silent_payment\": {\n          \"degraded\": true,\n          \"degraded_reason\": \"scan_incomplete\",\n          \"full_history\": false,\n          \"material_format\": \"bip392-spscan\",\n          \"range\": {\n            \"from_height\": 850000,\n            \"to_height\": 850130\n          },\n          \"scan_complete\": false,\n          \"scan_mode\": \"local_index\",\n          \"start_date\": null,\n          \"start_height\": 850000\n        }\n      },\n      \"observer_route\": \"silent_payments\",\n      \"partial_success\": true,\n      \"silent_payment_degraded\": true,\n      \"silent_payment_degraded_reason\": \"scan_incomplete\",\n      \"silent_payment_outputs_seen\": 1,\n      \"silent_payment_scan_complete\": false,\n      \"silent_payment_transactions_seen\": 1,\n      \"utxos_skipped_partial\": true,\n      \"utxos_refreshed\": false,\n      \"elapsed_ms\": 0\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           33
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           33
+          ],
+          [
+           7,
+           "profiles",
+           -1,
+           32
+          ],
+          [
+           20,
+           "transactions",
+           6,
+           30
+          ]
+         ]
+        },
+        "freshness_source_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "onchain_wallet:cold",
+           "onchain_wallet",
+           "Cold",
+           "blocking_reports",
+           "blocking_reports",
+           "scan_incomplete",
+           1,
+           0,
+           null,
+           null,
+           0,
+           "<now>",
+           null,
+           null,
+           null,
+           "done",
+           "{\"phase\":\"done\"}",
+           "{\"backend\":{\"kind\":\"bitcoinrpc\",\"name\":\"fake\"},\"silent_payment\":{\"degraded\":true,\"degraded_reason\":\"scan_incomplete\",\"full_history\":false,\"material_format\":\"bip392-spscan\",\"range\":{\"from_height\":850000,\"to_height\":850130},\"scan_complete\":false,\"scan_mode\":\"local_index\",\"start_date\":null,\"start_height\":850000}}",
+           "<now>"
+          ]
+         ]
+        },
+        "profiles": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "ws",
+           "Book",
+           "EUR",
+           "generic",
+           365,
+           "FIFO",
+           0,
+           1,
+           "global",
+           8,
+           7,
+           1,
+           0,
+           null,
+           0,
+           null,
+           "fixed",
+           null
+          ]
+         ]
+        },
+        "transactions": {
+         "upsert": [
+          [
+           6,
+           "5fb2c8c1-4f21-457a-b295-3740543c9c32",
+           "ws",
+           "p",
+           "cold",
+           "1111111111111111111111111111111111111111111111111111111111111111",
+           "txid",
+           "fc886a8e95c31589f095de1e635a1bbed9343b8caa89b60bb2fea71f6eca6986",
+           "2026-06-01T12:00:00Z",
+           "2026-06-01T12:00:00Z",
+           "inbound",
+           "BTC",
+           50000000,
+           0,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Silent Payment sync from fake",
+           null,
+           null,
+           0,
+           "{\"block_height\": 850100, \"block_time\": \"2026-06-01T12:00:00Z\", \"outputs\": [{\"amount_sats\": 50000, \"block_height\": 850100, \"block_time\": \"2026-06-01T12:00:00Z\", \"confirmations\": 6, \"script_pubkey\": \"5120abababababababababababababababababababababababababababababababab\", \"silent_payment\": \"[redacted]\", \"txid\": \"1111111111111111111111111111111111111111111111111111111111111111\", \"vout\": 0}], \"txid\": \"1111111111111111111111111111111111111111111111111111111111111111\"}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ]
+         ]
+        },
+        "wallets": {
+         "upsert": [
+          [
+           1,
+           "cold",
+           "ws",
+           "p",
+           "acct",
+           "Cold",
+           "silent-payment",
+           "{\"backend\": \"fake\", \"chain\": \"bitcoin\", \"last_synced_at\": \"<now>\", \"network\": \"main\", \"sp_descriptor\": \"sp(spscan1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq)\", \"sp_full_history\": false, \"sp_material_format\": \"bip392-spscan\", \"sp_scan_mode\": \"local_index\", \"sp_scan_start_height\": 850000}",
+           "fixed"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Cold"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "LANG": "en_US.UTF-8",
+    "TMPDIR": "{tmp}/systmp",
+    "XDG_CONFIG_HOME": "{tmp}/config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333572190999,
+    1794333573472445,
+    1794333573484106
+   ],
+   "setup": [
+    {
+     "write": "{tmp}/scan.json",
+     "mode": 384,
+     "text": "{\"complete\": true, \"descriptor_fingerprint\": \"33e840f145a29fbbac4d82a12137071a20b2a4fb08e6880d78e91c92bd925ecd\", \"range\": {\"from_height\": 850000, \"to_height\": 850130}, \"transactions\": [{\"txid\": \"1111111111111111111111111111111111111111111111111111111111111111\", \"block_height\": 850100, \"block_time\": \"2026-06-01T12:00:00Z\", \"outputs\": [{\"txid\": \"1111111111111111111111111111111111111111111111111111111111111111\", \"vout\": 0, \"amount_sats\": 50000, \"script_pubkey\": \"5120abababababababababababababababababababababababababababababababab\", \"silent_payment\": true, \"block_height\": 850100, \"block_time\": \"2026-06-01T12:00:00Z\", \"confirmations\": 6}]}], \"utxos\": [{\"txid\": \"1111111111111111111111111111111111111111111111111111111111111111\", \"vout\": 0, \"amount_sats\": 50000, \"script_pubkey\": \"5120abababababababababababababababababababababababababababababababab\", \"silent_payment\": true, \"block_height\": 850100, \"block_time\": \"2026-06-01T12:00:00Z\", \"confirmations\": 6}]}"
+    }
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Cold"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "LANG": "en_US.UTF-8",
+    "TMPDIR": "{tmp}/systmp",
+    "XDG_CONFIG_HOME": "{tmp}/config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333572190999,
+    1794333573590559,
+    1794333573784903
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Cold\",\n      \"status\": \"synced\",\n      \"source\": \"backend:fake\",\n      \"imported\": 0,\n      \"skipped\": 1,\n      \"unchanged\": 1,\n      \"journal_invalidated\": false,\n      \"inserted_records\": [],\n      \"updated_records\": [],\n      \"saved_report_impacts\": 0,\n      \"output_inventory\": {\n        \"observed\": 1,\n        \"active\": 1,\n        \"spent\": 0,\n        \"last_seen_at\": \"2026-11-10T17:59:33Z\"\n      },\n      \"backend\": \"fake\",\n      \"backend_kind\": \"bitcoinrpc\",\n      \"backend_url\": \"http://127.0.0.1:9/\",\n      \"chain\": \"bitcoin\",\n      \"network\": \"main\",\n      \"sync_mode\": \"silent_payment\",\n      \"target_count\": 1,\n      \"records_fetched\": 1,\n      \"updated\": 0,\n      \"addresses\": \"\",\n      \"freshness_checkpoint\": {\n        \"backend\": {\n          \"kind\": \"bitcoinrpc\",\n          \"name\": \"fake\"\n        },\n        \"silent_payment\": {\n          \"degraded\": false,\n          \"degraded_reason\": null,\n          \"full_history\": false,\n          \"material_format\": \"bip392-spscan\",\n          \"range\": {\n            \"from_height\": 850000,\n            \"to_height\": 850130\n          },\n          \"scan_complete\": true,\n          \"scan_mode\": \"local_index\",\n          \"start_date\": null,\n          \"start_height\": 850000\n        }\n      },\n      \"observer_route\": \"silent_payments\",\n      \"silent_payment_degraded\": false,\n      \"silent_payment_degraded_reason\": \"\",\n      \"silent_payment_outputs_seen\": 1,\n      \"silent_payment_scan_complete\": true,\n      \"silent_payment_transactions_seen\": 1,\n      \"utxos_refreshed\": true,\n      \"elapsed_ms\": 0\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           35
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           35
+          ],
+          [
+           21,
+           "wallet_utxos",
+           1,
+           34
+          ]
+         ]
+        },
+        "chain_observation_provenance": {
+         "upsert": [
+          [
+           1,
+           "5fb2c8c1-4f21-457a-b295-3740543c9c32",
+           "ws",
+           "p",
+           "cold",
+           1,
+           "[\"adapter:bitcoinrpc:cold\"]",
+           "[\"bitcoinrpc\"]",
+           "bitcoin",
+           "main",
+           "88d34a9c-e316-41e7-ac89-e877eb695a9a",
+           "ccc26ce112b6d39ab7aab64b8c70bbc4c3e69c0b56a4792a29ff169f81d7208f",
+           "d916c3ad76fd45b1a2a98f2a65fc720b5fb8743d92259c14b39c072cc602cb1d",
+           "unknown",
+           "<now>",
+           "<now>"
+          ]
+         ]
+        },
+        "freshness_source_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "onchain_wallet:cold",
+           "onchain_wallet",
+           "Cold",
+           "fresh",
+           "fresh",
+           null,
+           0,
+           0,
+           null,
+           null,
+           0,
+           "<now>",
+           null,
+           null,
+           null,
+           "done",
+           "{\"phase\":\"done\"}",
+           "{\"backend\":{\"kind\":\"bitcoinrpc\",\"name\":\"fake\"},\"silent_payment\":{\"degraded\":false,\"degraded_reason\":null,\"full_history\":false,\"material_format\":\"bip392-spscan\",\"range\":{\"from_height\":850000,\"to_height\":850130},\"scan_complete\":true,\"scan_mode\":\"local_index\",\"start_date\":null,\"start_height\":850000}}",
+           "<now>"
+          ]
+         ]
+        },
+        "wallet_utxo_refreshes": {
+         "upsert": [
+          [
+           1,
+           "cold",
+           "ws",
+           "p",
+           "fake",
+           "bitcoinrpc",
+           "bitcoin",
+           "main",
+           1,
+           1,
+           "<now>"
+          ]
+         ]
+        },
+        "wallet_utxos": {
+         "upsert": [
+          [
+           1,
+           "a703c3cfff83d3c59b5cb2c8f86049ea940e09b1f1658262205a40c602b59787",
+           "ws",
+           "p",
+           "cold",
+           "fake",
+           "bitcoinrpc",
+           "bitcoin",
+           "main",
+           "BTC",
+           50000000,
+           "1111111111111111111111111111111111111111111111111111111111111111",
+           0,
+           "1111111111111111111111111111111111111111111111111111111111111111:0",
+           "confirmed",
+           6,
+           850100,
+           "2026-06-01T12:00:00Z",
+           null,
+           "5120abababababababababababababababababababababababababababababababab",
+           "Silent Payment",
+           "silent-payment",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "[]",
+           "<now>",
+           "<now>",
+           null,
+           "{\"source\": \"silent_payment_scan\"}"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

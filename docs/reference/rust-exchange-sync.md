@@ -1,5 +1,9 @@
 # Rust exchange API sync
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 This page inventories Python's exchange API syncs and records how the Rust
 backend serves them. The Python reference lives in
 `kassiber/core/exchange_imports.py` (fetch and normalize) and

@@ -1,0 +1,19 @@
+$ daemon
+> {"kind":"ui.wallets.list","request_id":"0"}
+< {"kind":"ui.wallets.list","schema_version":1,"data":{"wallets":[{"id":"addr","label":"Addresses","kind":"address","account":{"code":"","label":""},"backend":{"name":"fulcrum","source":"default","kind":"electrum"},"chain":"","network":"","… [29568 bytes fnv128 8b350803ed592b2a17f4fe4be5f02346]
+> {"args":null,"kind":"ui.wallets.list","request_id":"1"}
+< {"kind":"ui.wallets.list","schema_version":1,"data":{"wallets":[{"id":"addr","label":"Addresses","kind":"address","account":{"code":"","label":""},"backend":{"name":"fulcrum","source":"default","kind":"electrum"},"chain":"","network":"","… [29568 bytes fnv128 8b3502e554592b2a17f4fe4be3b82f65]
+> {"args":{},"kind":"ui.wallets.list","request_id":"2"}
+< {"kind":"ui.wallets.list","schema_version":1,"data":{"wallets":[{"id":"addr","label":"Addresses","kind":"address","account":{"code":"","label":""},"backend":{"name":"fulcrum","source":"default","kind":"electrum"},"chain":"","network":"","… [29568 bytes fnv128 8b3511231b592b2a17f4fe4be9afbd70]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+$ daemon
+> {"args":{},"kind":"ui.wallets.list","request_id":"0"}
+< {"kind":"ui.wallets.list","schema_version":1,"data":{"wallets":[{"id":"addr","label":"Addresses","kind":"address","account":{"code":"","label":""},"backend":{"name":"fulcrum","source":"default","kind":"electrum"},"chain":"","network":"","… [29568 bytes fnv128 8b350803ed592b2a17f4fe4be5f02346]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+$ daemon
+> {"args":{},"kind":"ui.wallets.list","request_id":"0"}
+< {"kind":"ui.wallets.list","schema_version":1,"data":{"wallets":[],"summary":{"workspace":null,"profile":null,"count":0,"transaction_count":0,"needs_journals":false}},"request_id":"0"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

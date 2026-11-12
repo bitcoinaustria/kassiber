@@ -6,492 +6,271 @@ regtest infrastructure.
 
 ## Dev Environment
 
-Use the locked `uv` environment for local tests and daemon-backed desktop
-development:
+The repository root is one Cargo workspace: the backend crates under
+`crates/` and the tax engine under `tax-engine/core`, with one `Cargo.lock`
+and one `target/`. `rust-toolchain.toml` pins one Rust release for every
+crate, including `ui-tauri/src-tauri`. rustup selects it inside the
+checkout; with mise, run cargo as `mise exec rust@<pinned release> -- cargo …`.
+`./scripts/bootstrap-dev-env.sh` installs that release through rustup, checks
+the C toolchain, installs the frontend's locked pnpm dependencies, and reports
+whether a `python3` 3.11 or newer is there for the regtest harness (standard
+library only); it sets up no Python environment.
+The quality gate refuses any other `rustc`, and CI and release workflows
+install the pin through `.github/actions/setup-rust`. The storage crate builds
+SQLCipher from source (with a vendored OpenSSL outside macOS), so no SQLite,
+SQLCipher, or OpenSSL system package is needed, only a C compiler.
 
 ```bash
-./scripts/bootstrap-dev-env.sh
-export KASSIBER_PYTHON="$PWD/.venv/bin/python"
-uv run --locked python -m pytest tests/test_wallet_descriptors.py -q
+scripts/fetch-test-data.sh
+cargo test --workspace --features kassiber-journals/test-harness --locked
+cargo test -p kassiber --features test-harness --locked
 ```
 
-The bootstrap script runs `uv sync --locked`, which fails if `uv.lock` no longer
-matches `pyproject.toml` and never rewrites the lock, then
-verifies imports for the packages that most often go missing in ad-hoc shells
-(`embit`, `sqlcipher3`, and the tax engine's `kassiber_tax` binding). On
-Debian/Ubuntu it fails early with the required SQLCipher system package command
-if the development headers are not available.
+Many tests read [locked test data](#generated-test-data); fetch it once after
+checkout and again when `tests/test-data.lock` changes. Run single crates with
+`cargo test -p <crate>` while developing. The `kassiber` crate's
+`test-harness` feature builds the binary with the test-only hooks its
+integration tests need (see [test builds](#test-builds)); a release build
+never has them.
 
-`uv sync --locked` builds the [tax engine](tax-engine.md)'s binding from
-`tax-engine/python` with maturin, so a Rust toolchain must be on `PATH`. The
-repository root is one Cargo workspace holding the engine and the backend
-crates under `crates/`, with one `Cargo.lock` and one `target/`. `rust-toolchain.toml` pins one
-Rust release for every crate, including `ui-tauri/src-tauri`; rustup selects it
-inside the checkout, the bootstrap script installs it, and the quality gate
-refuses any other `rustc`. CI and release workflows install it through
-`.github/actions/setup-rust`. uv rebuilds the binding whenever a Rust source
-file changes. The scripts set `MATURIN_NO_INSTALL_RUST=1` so a missing
-toolchain fails instead of maturin downloading one. The crates' own tests run
-from the root with `cargo test --workspace --locked`.
+Daemon-backed desktop development runs the same binary. Build it with
+`cargo build -p kassiber` (or `--release`); `tauri dev` and the Vite bridge
+start `KASSIBER_BIN` when it is set, else the checkout's
+`target/release/kassiber`, else `target/debug/kassiber`. Desktop dependencies
+come from `pnpm --dir ui-tauri install --frozen-lockfile`. Keep tests and
+exploratory commands on disposable data roots.
 
 ## Tax engine backends
 
-Tests run the tax calculation on production. The reference is a frozen
-oracle in `tests/tax_oracle/`: the phase-3 adapter with its normalizer and
-Austrian rules, running on RP2. Set `KASSIBER_TEST_TAX_ENGINE` to change
-that for a whole pytest run:
+There is one tax engine, `tax-engine/core` (see the [tax engine](tax-engine.md)).
+Until [plan 22](../plan/22-python-removal.md) removed Python, tests could
+rerun every tax calculation against a frozen RP2 oracle (`tests/tax_oracle/`
+and the `KASSIBER_TEST_TAX_ENGINE` shadow and census modes). The oracle and
+those modes are gone. What they certified stays as frozen goldens in
+`tax-engine/core/tests/data/`, which the engine's tests read:
 
-| Value | Meaning |
-| --- | --- |
-| unset | production |
-| `shadow` | production, plus the oracle on every `build_ledger_state` call; any difference fails the call and the session (`tests/tax_engine_compare.py` masks only generated entry ids and the engine identity; failures compare after two listed normalizations: RP2 error class names map to `Engine*`, and RP2's temporary INI path prefix is dropped from messages). Production's request builder may refuse a shape a finalized projection cannot have only where `tests/tax_oracle/projection_range.py` finds the same shape (LD-5); such a refusal is not compared, and any one fails the session |
-| `census` | production, and records which test modules reached the engine; the session fails if one of them is missing from the shadow overlay |
-| `oracle` | every call on the oracle, to show the tests' expectations hold on RP2 |
+| Golden | Test | Holds |
+| --- | --- | --- |
+| `generic_fixtures.json`, `at_fixtures.json` | `engine_fixtures.rs` | engine requests and RP2's response for each, and Austrian adapter runs with RP2's result per step |
+| `us_fixtures.json` | `us_fixtures.rs` | RP2's US plugin results under the universal and per-wallet scopes |
+| `ledger_fixtures.json` | `ledger_fixtures.rs` | the projection goldens below |
 
-Product code reads no such variable. Under `shadow` and `census`,
-`tests/_child_hooks/sitecustomize.py` installs the same mode in Python child
-processes, such as the `python -m kassiber` runs and daemons tests spawn,
-once they load `kassiber.core.engines` (or `tests/tax_engine_compare.py`, when
-a child imports it first); `conftest.py` puts that directory on
-`PYTHONPATH` whenever a mode is set, also under `KASSIBER_INTEGRATION`. A
-shadow difference fails the child's command. Children under `oracle`, and
-children started with an environment of their own, run production. See
-the [tax engine](tax-engine.md) for how the backends relate.
-
-### Shadow overlay
-
-The shadow overlay is the set of test modules that reach the tax engine:
-those whose source, or the source of a `tests` module they import
-(transitively), calls `process_journals`, `build_ledger_state`,
-`CustodyJournalBuilder`, an engine class, or `journals process` through the
-CLI or the daemon, plus the modules the census found through other paths
-(`_SHADOW_EXTRA_MODULES` in `scripts/python_test_shards.py`). It sits across
-the CI lanes instead of being one: each module keeps its lane.
-
-```bash
-uv run --locked python scripts/python_test_shards.py list-shadow [lane]
-uv run --locked python scripts/python_test_shards.py run-shadow [lane] [--ci] [-- pytest args]
-```
-
-`run-shadow` runs the overlay, or its part in one lane, with
-`KASSIBER_TEST_TAX_ENGINE=shadow`; `--ci` adds the lane's xdist workers.
-
-Under `shadow` and `census`, every production call, in the test process, its
-xdist workers, and its child processes, appends a route record (test module,
-capability, route, and whether it returned, raised, or differed) to a file in
-the session's temporary directory; nothing from the book is recorded. Every
-book with projected rows runs on the engine. At the end the session prints,
-per engine capability the book exercises (`generic`, `generic_carry`, `at`,
-`at_swap`, as `classify` in `tests/tax_engine_compare.py` reads them from the
-request), how many calls reached the v2 engine, plus the calls that ended
-before it as `not routed`: a projection without rows counts under its
-country's capability (`generic` or `at`), while raw rows and books the
-request builder refuses (configuration failures and LD-5 shapes) count as
-`unclassified`. It also prints the number of LD-5 refusals. Shadow fails the
-session on any recorded difference, even one a caller caught, on a
-capability that saw calls but none on the engine, on a record of any other
-route, and on any LD-5 refusal, since the suite's books are finalized
-projections. A
-test marked `stubs_tax_engine` replaces parts of the production engine, so
-shadow runs its calls on production without comparing them and lists them in
-the summary.
-`tests/test_tax_shadow_harness.py` pins which tests carry that marker. It
-also proves the child path with the test-only
-`KASSIBER_TEST_TAX_SHADOW_INJECT_DIFFERENCE=1`, which alters production's
-outcome before the comparison: a `journals process` child must fail with the
-shadow error.
+Their generators were Python and went with it; a deliberate change follows
+[changing a frozen golden](#changing-a-frozen-golden).
 
 ### Projection goldens
 
 `tax-engine/core/tests/data/ledger_fixtures.json` stores one case per line:
 a profile and finalized projection (`inputs`), the oracle's outcome on RP2
-(`oracle`), the outcome production must give (`expected`), in the tagged
-codec of `tests/tax_ledger_codec.py`, the engine request production's
-builder makes of the inputs (`request`, `null` when the builder fails), and
-the engine's response to it (`response`, `null` only where `request` is).
-`expected` equals
-`oracle` except where `listed_difference` names one: `LD-4` (RP2 error
-classes), `LD-3` (RP2's configuration prefix too), or `LD-5`: the case has
-the one shape `invariant` names, which a finalized projection cannot have,
-and `expected` is the builder's refusal. The cases are the named
-shapes, one LD-5 case per such shape, and seeded books of
-`tests/tax_ledger_generator.py`'s `corpus()`.
+(`oracle`), the outcome production must give (`expected`), the engine
+request production's builder made of the inputs (`request`, `null` when the
+builder failed), and the engine's response to it (`response`, `null` only
+where `request` is). `expected` equals `oracle` except where
+`listed_difference` names one: `LD-4` (RP2 error classes), `LD-3` (RP2's
+configuration prefix too), or `LD-5`: the case has the one shape `invariant`
+names, which a finalized projection cannot have, and `expected` is the
+builder's refusal. The cases are named shapes, one LD-5 case per such shape,
+and seeded generic and Austrian books, some with non-default holding periods
+or Austrian methods.
 
-```bash
-uv run --locked python tax-engine/scripts/gen_ledger_fixtures.py [--accept CASE ...]
-```
-
-The generator certifies each case before writing: the inputs survive the
-codec and stay inside what a finalized projection can be (an LD-5 case has
-exactly its one shape), the oracle reaches the shape the case is named for,
-`expected` follows from `oracle`, the builder gives the same request on
-the stored and the original inputs or fails with `expected`, and production's
-reader renders a stored response into `expected` exactly. It refuses to
-change or drop a stored case's inputs, outcomes, listed difference, or
-invariant unless that case is named with `--accept`; review the change before
-accepting it. Adding cases, or a changed request or response, needs no
-`--accept`; `tests/test_tax_ledger_contract.py` checks the builder against
-the stored requests and the engine and the reader against the stored
-responses (the engine's bytes, and the reader's outcome against `expected`),
-and `tax-engine/core/tests/ledger_fixtures.rs` checks that the engine reads
-each request and replays each response. Its output depends only on the code,
-so two runs are byte-equal. `tests/test_tax_ledger_goldens.py` checks that
-the file is the current corpus and what two fresh generator runs write,
-production against `expected`, and the live oracle against `oracle` (this
-catches a change in a product module the oracle shares), and runs 200 seeded
-generic and 200 Austrian books of the random generator against the oracle.
-One book in three uses the generator's `terms`: a generic holding
-period of 1, 30, or 730 days instead of 365, or an Austrian method beyond
-the three the stored seed books draw (`moving_average`, `lifo`, `lofo`). The
-named cases cover the same terms: sales just before, at, and just after
-such a holding period ends, and Austrian books under each of those methods.
-Without RP2 its oracle checks skip, except under `KASSIBER_CI`, which CI
-sets, where they fail.
+The generator certified every case before writing it, at the last commit
+with the Python reference (`archive/python-backend`). `ledger_fixtures.rs`
+checks that every stored request deserializes into the typed request and
+serializes back to the same document, that the ledger operation reproduces
+every stored response, and that unknown or missing fields and other schema
+versions are refused.
 
 ### Stage comparison
 
-`tests/test_tax_ledger_prepare.py` compares the engine's `prepare` stages with
-the frozen oracle's own intermediates, field by field, so a difference shows
-the stage it starts in before whole-ledger goldens can. Per asset that is the
-normalized stage (the events, moves, their order, their Austrian regimes,
-elections, and regime flows, normalize's quarantines, and the contamination
-time) and the prepared stage (the lot engine's entries as v1 entry documents
-with their notes and text, the walk's gate quarantines, and the transfer audit
-with the legs' description) of the final pass, against what the oracle's
-`_prepare_assets` builds on RP2, each entry its walk constructs recorded as
-the v1 entry document of its arguments (`tax-engine/scripts/v1_request.py`)
-with RP2's `str(transaction)` as its text; the generic Bitcoin rail carry
-before it (the rows it priced, with their value and rate, the ids its blocked
-pairs withhold, their quarantines, and its passes), against the oracle's
-`_apply_generic_bitcoin_rail_carry_values` run with the same configuration;
-and the Austrian swap-link selection over the first pass (the rows it links,
-the ids its blocked pairs leave out of the second pass, and their
-quarantines), against the oracle's `_select_at_cross_asset_swap_links`.
-Quarantines and audit rows go through the production reader. A failed pass is
-compared by the stages it reached and its error. It covers every golden book,
-the first 200 seeded generic and Austrian books without a carrying-value
-cross-asset pair, the first 200 seeded Austrian books with one, the first 100
-seeded generic books with the rail carry, and edge books neither reaches
-(non-finite stored rates and values, overflow, subnormal prices, missing
-labels, an empty or unparsed timestamp, blocked groups that share
-transactions, a group drained between its moves, one instant spelled two ways,
-a holder label with spaces; on Austrian books, times the regime tracker reads
-otherwise than RP2 or cannot read, the tracker's order at one instant, a held
-move leg, a move fee across both regimes, overrides of the tracker's regimes,
-wallet ids it merges, and swap pairs whose out leg is a move's, whose leg is
-not a row, without an id, whose reason only the pair's transaction id finds,
-whose leg's transaction has two reasons, with an unconfirmed leg, sharing a
-row, and linked on a regime the second pass changes; and rail pairs whose
-source has no basis and no reason, whose source has no amount, and whose
-coarse in leg the carry prices). Where an entry with an infinite value fails
-an earlier constructor check too, the engine fails at RP2's check. A last
-check runs the whole oracle and records its own normalize and walk calls in
-the carry's passes and both later ones, so the test's mirror of those calls
-cannot drift.
-
-### Comparing a real book
-
-Owners can compare production with the oracle on their own book, locally:
-
-```bash
-uv run --locked python -m tests.tax_oracle.compare_book --data-root <copy> \
-    [--db-passphrase-fd <fd>] [--profile <id or label>]
-```
-
-`<copy>` must be a disposable copy of a data directory, because opening it may
-migrate its schema. The tool refuses Kassiber's default and legacy data roots,
-anything inside the default state root or a registered project, a directory
-without a database, and a database or SQLite side file that is a symbolic or
-hard link, so it cannot reach a live book. Copy the files rather than linking
-them. It reads an encrypted copy's passphrase only
-from the file descriptor, never from the keyring, a remembered unlock, or the
-operator broker. Once the copy is open its connection is read-only; it builds
-each profile's custody projection, runs production and the oracle on it, and
-prints the differences to stdout. It makes no network connection.
+The field-by-field comparison of the engine's `prepare` stages with the
+oracle's intermediates was a pytest module and went with Python.
+`ledger_fixtures.rs` still requires the `prepare` operation to answer for
+every stored book, to agree with the ledger operation on the generic rail
+carry, and to list the stages it reached when it fails.
 
 ### Mutation checks
 
-`tax-engine/scripts/mutations.json` names, for each tax rule a test pins, one
-edit that breaks the rule and the tests that must then fail. Most of those
-tests run `build_ledger_state`; the transfer-identity entries pin the helpers
-in `kassiber.transfers` directly. Every book runs on the engine, so a
-rule's entry edits the engine (cargo filters, including the replay of the
-stored responses), the request builder, or the Python reader; the phase-3
-adapter and its normalizer are left only as the frozen oracle. Three entries
-edit the shadow summary's capability classifier in
-`tests/tax_engine_compare.py`:
+A mutation catalog names, for each rule a test pins, one edit that breaks the
+rule and the tests that must then fail. Catalogs are JSON lists beside the
+code they edit (`crates/*/scripts/*mutations*.json`,
+`tax-engine/scripts/mutations.json`); every entry has exactly `id`, `file`,
+`find` (which must occur once in `file`), `replace`, `expect_failing` (cargo
+test filters) and `rule`. Every catalog belongs to a suite in
+`crates/mutation-check/catalogs.json`, which says how its cargo tests run:
+packages, features, targets and environment. The runner validates or runs
+them:
 
 ```bash
-uv run --locked python tax-engine/scripts/mutation_check.py [--only ID ...] [--keep]
+cargo run -p kassiber-mutation-check -- check            # every entry applies, every catalog has a suite
+cargo run -p kassiber-mutation-check -- list             # suites and entry counts
+cargo run -p kassiber-mutation-check -- run SUITE [--only ID ...] [--keep]
 ```
 
-The check copies the working tree to a scratch directory under the system
-temporary directory, runs each named test there once unmutated, then applies
-one edit at a time and fails if a named test still passes. Python edits run
-pytest on production with the installed extension; Rust edits run their
-cargo test filters. It is too slow for CI; run it when `mutations.json` or
-the code it edits changes. CI only checks that every entry still applies once
-and names existing tests (`tests/test_tax_mutations.py`).
+`run` copies the working tree, plus the fetched test data the lock pins, to
+`target/mutation-scratch/<suite>`, runs each named test there once
+unmutated, then applies one edit at a time and fails if the mutated tree does
+not build, a named test still passes, or a filter selects no test. Every
+suite builds into the one shared `target/scratch-build`. The worktree is never
+written. Full runs are too slow for CI; run a suite when its catalog or the
+code it edits changes, and after regenerating a golden its tests read. CI and
+the quality gate run `check`.
+
+An entry that edits a Python file or names a pytest test as its killer is
+legacy: `check` counts it ("still need Python"), `check --strict` refuses it,
+and `run` refuses a suite that selects one. New entries need a Rust killer.
 
 ## Product subprocesses and recorded sessions
 
-[Plan 21](../plan/21-rust-backend.md) verifies a Rust backend against the
-Python reference at the process boundary. Two test-only variables serve it;
-product code reads neither.
+### Replaying the recorded sessions
 
-### The candidate switch
+The parity modules' Rust processes were recorded once, where Rust and Python
+agreed ([plan 22](../plan/22-python-removal.md#session-replay)): about
+24,000 sessions in nine archives under `tests/data/sessions/`, locked test
+data. `scripts/replay-sessions.sh` builds the binary, the examples, the
+replay tool and the session clock, extracts the archives and replays every
+session against this checkout; any difference fails it, and
+`target/session-replay-report.tsv` names each session's result. Pass
+`--only TEXT` to replay the sessions whose test id or name contains TEXT.
+Replays run in a user and mount namespace at the recorded paths, so the
+host must allow unprivileged user namespaces (CI's `Recorded sessions` job
+lifts Ubuntu's AppArmor restriction for its own runner).
 
-Every test, integration lane, and regtest seed that runs the CLI or
-`kassiber daemon` as a child builds the command with `tests/cli_runner.py`
-(`run`, `popen`, `argv`); `tests/test_cli_runner.py` fails on a new
-`python -m kassiber` construction anywhere under `tests/`, `dev/`, or
-`scripts/`, except the two scripts it lists with their reason. The working
-directory defaults to the repository root.
+A session holds the argv, the kept environment, stdin with its timing, the
+descriptors it was handed, stdout, stderr, the exit, the network tape, and the
+state roots before and after. Before comparing, both sides go through the
+rewrite rules in [plan 22](../plan/22-python-removal.md#comparison-rules):
+generated ids and clock readings are mapped, and nothing touches an amount,
+price, tax figure, or stored column other than random ids and clock
+readings (`crates/session-replay/tests/figures.rs` enforces this). Sessions
+that could not replay identically are listed with their reason in
+`tests/data/sessions/dropped.tsv`.
 
-| `KASSIBER_TEST_CLI` | The command |
-| --- | --- |
-| unset | `python -m kassiber` from this checkout |
-| `/path/to/kassiber` | that executable |
-| `["/path/to/kassiber", "--flag"]` | that argv prefix, without a shell |
-
-A value that names no runnable executable fails the call. An argument
-`cli_runner.InputFd(b"...")` becomes the number of a pipe holding those
-bytes, for `--db-passphrase-fd` and its siblings; it carries synthetic test
-values only. Call sites that pin the Python reference itself pass
-`reference=True`, which ignores the switch; only they may pass interpreter
-options (the tax shadow harness does both).
-`tests/_child_hooks/` and with it the no-egress guard reach Python children
-only. A Rust candidate carries the guard only when built with
-`--features test-harness`; a release build exits 78 when
-`KASSIBER_TEST_NO_EGRESS` is armed, so tests that start one must leave it
-unset (`tests/integration/runtime_parity.py` probes this).
-
-### Hybrid Rust candidate
-
-While the Rust port is incomplete, `tests/rust_port/hybrid_cli.py` serves
-each call from Rust when Rust implements the command, and from this
-checkout's Python otherwise, on the same book:
+The recorder needed the pytest suite, so no new sessions are recorded. New
+coverage goes into Rust tests. A reviewed, deliberate change re-records the
+sessions it changes, with the same argv, environment and starting state:
 
 ```bash
-cargo build -p kassiber --features test-harness --locked
-KASSIBER_TEST_CLI="[\"$PWD/.venv/bin/python\", \"$PWD/tests/rust_port/hybrid_cli.py\", \"--hybrid-rust-bin=$PWD/target/debug/kassiber\", \"--hybrid-log=/tmp/served.jsonl\"]" \
-  uv run --locked python -m pytest -q tests/test_<module>.py
+scripts/replay-sessions.sh --only TEXT --update
+target/debug/session-replay archive target/session-replay-data tests/data/sessions
+scripts/fetch-test-data.sh --publish tests/data/sessions/*
 ```
 
-Use absolute paths: some tests run the CLI from another directory. Each
-`KASSIBER_HYBRID_*` setting can also come from the environment, which wins,
-but tests that scrub `KASSIBER_*` variables from a child only keep settings
-given as `--hybrid-<name>=<value>` on the candidate command line.
+The script passes its options to `session-replay replay`; `--update`
+writes the new run's output, exit and state into each session that differs,
+in the extracted copy under `target/session-replay-data`; it is refused
+when `CI` is set. Review every
+changed session before archiving; see
+[changing a frozen golden](#changing-a-frozen-golden).
 
-Each call first runs the binary with `KASSIBER_RUST_TEST_PROBE=1` (test
-builds only). It parses the command line, prints the command path, and exits
-0 when Rust implements the command or 3 when it does not, touching nothing.
-A call carrying a global flag Rust still refuses, such as `--diagnostics-out`,
-probes as not implemented.
-Usage errors also run in Rust. `daemon` stays in Python unless
-`KASSIBER_HYBRID_RUST_DAEMON=1`, because one session mixes kinds.
+### Test builds
 
-The candidate `exec`s the chosen side, so stdin and inherited descriptors
-such as `--db-passphrase-fd` reach it unchanged. `KASSIBER_HYBRID_LOG` gets
-one `{"command", "served_by"}` line per call. A slice proves its commands
-ran in Rust from that log. `tests/test_rust_hybrid_candidate.py` pins the
-routing.
+Test-only behaviour is compiled in only behind features: `kassiber`'s
+`test-harness`, and the `test-hooks`, `test-harness`, `test-observer` and
+`test-kinds` features of the crates it enables. A release build reads none
+of the switches below except `KASSIBER_TEST_NO_EGRESS`, which it refuses. `scripts/check-no-test-tape.sh`
+checks that a product build of the binary carries none of the tape, SQLite
+seed and test clock hooks.
 
-Prebuilt test binaries must match the sources. `tests/rust_fixture_binary.py`
-reads the dep-info file cargo writes beside each binary (`<binary>.d`) and
-refuses a binary older than any workspace source it was built from or than
-`Cargo.lock`, or one without dep-info. `tests/conftest.py` stops the run when
-a binary named by an environment variable such as `KASSIBER_RUST_BIN` is
-stale; examples found beside `KASSIBER_RUST_BIN` or under `target/` are
-checked where a test runs them, and the refusal names the build to run.
+- `KASSIBER_TEST_NO_EGRESS` arms the egress observer, which refuses
+  non-loopback connections (`strict` also refuses loopback). A build without
+  the observer exits 78 when the variable is set instead of running
+  unguarded, so a test must leave it unset when it starts a release binary.
+- `KASSIBER_TEST_NET_TAPE=record:<file>`, `replay:<file>` or
+  `replay-strict:<file>` records a process's connections as a plaintext tape
+  or serves them from one without opening a socket (`crates/net/src/tape.rs`).
+  A strict replay notes every request the recording never answered in
+  `<file>.misses`.
+- `KASSIBER_TEST_SQLITE_SEED` seeds SQLite's id generator, so random row ids
+  replay identically.
+- `KASSIBER_RUST_TEST_OWNER_ROOT` gives book ownership an isolated namespace
+  in an existing disposable directory, for tests that migrate or encrypt
+  books. Production ownership uses the stable account-home namespace,
+  independently of `HOME` and XDG settings.
+- `KASSIBER_RUST_TEST_FAKE_STORE` selects the in-memory store, and
+  `KASSIBER_RUST_TEST_PROBE=1` prints the parsed command path and exits 0
+  when the binary implements the command or 3 when it does not.
 
-Fresh sources do not prove the right features. A workspace `cargo test
---features …` unifies test features across every crate and relinks shared
-binaries and examples in the same target directory, and dep-info stays fresh.
-After building the test binaries, record the build beside them:
-`python -m tests.rust_fixture_binary record --features "<cargo args>" BINARY…`
-writes `<binary>.build.json`. A recorded binary that a later cargo invocation
-relinked is refused, naming the recorded build. Binaries without a record keep
-the dep-info check only. Run workspace tests in their own `CARGO_TARGET_DIR`
-when test binaries share the default one.
+The guarded wallet fixtures (`cargo build -p kassiber-wallets --example
+sync_fixture --features test-harness --offline --locked`, and
+`freshness_fixture`, `freshness_sync_fixture`, `graph_fixture` and the
+others the quality gate builds) drive services directly. Recorded sessions
+start them, so the replay builds them too.
 
-The unregistered Bitcoin wallet-sync service has a separate guarded driver,
-`cargo build -p kassiber-wallets --example sync_fixture --features test-harness
---offline --locked`. `tests/test_rust_wallet_sync_service.py` compares its full
-`wallets.sync` envelope and every logical book row with Python's complete
-`handlers.sync_wallet`, including both wallet selection modes, the fixture and
-restart corpus, reviewed books and process consent/cancellation/no-egress fences.
-This is service-boundary evidence; it does not establish CLI/daemon registration
-or native hybrid served-by counts. The serial Rust-enabled lane builds the
-driver explicitly. Keep its books and temporary files under a disposable root
-and retain the socket guards.
+### Black-box goldens
 
-The guarded `freshness_sync_fixture` additionally executes admitted Bitcoin
-freshness jobs. `tests/test_rust_freshness_native.py` compares terminal
-envelopes and every logical table with Python's daemon freshness coordinator
-on disposable Electrum/Esplora servers. Identity and clock seams are fixed;
-elapsed time is frozen in the Python reference rather than removed from the
-comparison. This proves internal execution, not live daemon progress, graph
-handoff or product routing. The separate `freshness_fixture` drives scripted
-handlers for deterministic retry, cancellation, removal, checkpoint and
-redaction cases in `tests/test_rust_freshness_execution.py`. Both fixtures
-require `--features test-harness` and preserve account HOME.
+`crates/kassiber/tests/black_box.rs` (feature `test-harness`) drives the
+harness binary on Rust-seeded disposable books and compares each test's
+transcript (argv, exit, stdout/stderr, daemon replies, changed book rows,
+exported files) with its golden under `tests/black_box/golden/`. These tests
+hold the mutation kills the Python parity modules used to hold, and keep
+those modules' test names. Generated uuid4s, wall-clock readings and
+per-process handles are masked. Large outputs keep their head and a digest
+of every byte, and the whole transcript is written beside the test binary
+when a comparison fails. `KASSIBER_BLESS=1` rewrites the goldens; review the
+diff. Children get their XDG roots, offline/agent/update files, owner
+namespace and state root inside the sandbox, never `HOME`. Test builds accept
+`KASSIBER_RUST_TEST_ENTROPY_CLOCK=frozen`, which stops the Privacy Mirror's
+entropy time budget from depending on machine load.
 
-The guarded `graph_fixture` drives native post-sync graph completion.
-`tests/test_rust_freshness_graph.py` compares count-only completion payloads and
-every normalized table against Python on disposable Electrum/Esplora servers.
-The differential driver freezes the pass-admission clock in both implementations
-so shared-host load cannot change cursor/budget expectations. Production uses
-the real monotonic clock; lookup deadlines and backend timeouts remain real in
-the driver too.
-It also exercises the explicitly started daemon worker, unsolicited events,
-request/lifecycle cancellation and SQLCipher session cleanup. Graph grants still
-require a flushed successful-sync response; passive paths and recovered jobs
-cannot start lookup. The graph mutation catalogue is
-`crates/wallets/scripts/freshness_graph_mutations.json`, run through the same
-`freshness_mutation_check.py` driver with `--mutations`. The driver rejects skips,
-empty selections and build failures, and removes its scratch/build trees.
-The reference mismatch repro in that module deliberately records Python's
-acceptance of incorrect Electrum transaction bytes; native decoding refuses it.
-This suite runs in the Rust-enabled serial daemon shard and does not establish
-product routing or served-by counts.
+### Frozen routing replays
 
-For plaintext file-import scenarios, `KASSIBER_HYBRID_IMPORT_ORACLE=1` also
-replays each native CSV/Phoenix call through Python's core on an in-memory
-backup. Test-only identity/clock inputs keep generated rows comparable. Every
-schema object, table value and SQLite storage class, and the returned payload,
-must match. This requires an initialized disposable book with explicit
-`--data-root`; it is test tooling only. SQLCipher imports use the separate
-real-store wire/state scenarios.
+`cargo test -p kassiber --features test-harness --test routing_ports` holds
+the Rust replacements for the pytest parity modules whose tests were the only
+killers of `crates/wallets/scripts/routing_mutations.json` entries (plan 22,
+D1 option 3). Each test is named after the pytest test it replaces and
+replays the `kassiber` processes that test started, from a golden under
+`crates/kassiber/tests/routing_ports/goldens/` recorded once where Rust and
+the Python reference agreed. A session lists:
 
-For tests that migrate/encrypt books, set `KASSIBER_RUST_TEST_OWNER_ROOT` to
-an existing disposable directory. The hybrid launcher's Python fallback uses
-the same isolated ownership namespace as the native test build. This injection
-lives only in test tooling; production ownership still uses the stable UID
-account-home namespace, independently of `HOME` and XDG settings.
+- `setup`: what brings the state from the previous session's end to this
+  one's start (books as row patches against the current-schema manifest or
+  the last state, other files whole);
+- `args`, `env`, `cwd`, `stdin` and `tape`: the inputs; the tape is
+  `kassiber-net`'s test-observer tape of the fake servers' replies (stdin
+  chunks also wait for the reply to the previous request);
+- `expect`: exit status, stdout, stderr, and every row and file the process
+  changed under its roots.
 
-### Recording
+Paths are templated (`{tmp}`, `{repo}`). Generated uuids and 32-digit hex
+ids compare by order of first appearance and are restored to the recorded
+values after each session, so later sessions and orderings by id see the
+recorded state; ISO timestamps inside the run's window compare as `<now>`;
+wall-clock `elapsed_ms` is 0. Values over 16 KiB, and table changes of more
+than 2,000 rows, compare by length or count and an FNV-1a 64 digest. A test
+may mask further clock-derived numbers (`age_seconds`). Output keyed by the
+calendar day is pinned instead: `replay_pinned` sets a test-build clock seam
+to the recorded day (`KASSIBER_RUST_TEST_CLN_SNAPSHOT_TIME` for Core
+Lightning balance snapshots), which product builds never read, so the day
+and the hashes over it compare exactly. A client whose request order varies
+between runs is answered by a loopback JSON-RPC server built from the tape
+(`replay_served`, `kassiber-net`'s `FakeJsonRpc`) instead of the byte tape.
+That server binds a free port; the session's inputs name it in place of the
+recorded `127.0.0.1:<port>`, and its outputs are mapped back before they are
+compared.
 
-`KASSIBER_TEST_RECORD_SESSIONS=<dir>` records every invocation the runner
-starts, without changing what the test sees: the child gets pipes the
-recorder pumps, and the test gets pipes of its own. Use a directory outside
-the checkout or the ignored `.session-recordings/`:
+The replays run on strict tapes (`KASSIBER_TEST_NET_TAPE=replay-strict:`):
+a request no recording began with, a connect with no recording left, or a
+connection writing past its recording's bytes is noted in
+`<tape>.misses`, and any note fails the replay even when the product
+swallows the failed request. A daemon session sends each stdin chunk once
+the output reached what the recording had seen, or once every earlier
+request has its final reply.
 
-```bash
-KASSIBER_TEST_RECORD_SESSIONS=$PWD/.session-recordings \
-  uv run --locked python -m pytest tests/test_cli_smoke.py -n 4 --dist loadscope -q
-```
-
-A session is everything run against one state root in the system temporary
-directory: for a data root named `data`, its `data`, `config`, `exports`, and
-`attachments` directories (the data-root layout); otherwise the data root, or
-a temporary `HOME` and the other state directories the environment points
-at. Each session directory holds a manifest (format, recorder version,
-comparison policy, reference commit and dirty flag, schema fingerprint, tax
-engine and product version, the tests, the roots, and the states), the events
-in their global order, content-addressed blobs, and state trees. Events are
-each process's argv, working directory, environment subset, stdin and
-standard stream kinds, the fixture files it names in argv, stdin, or a
-`*_FILE` variable (with their content, or a note that an earlier step
-produced them), its process id, stdout and stderr, signals, and exit status
-with the files it wrote outside the roots. Every stdin write, signal, and
-spawn records how many lines each live process had printed by then, which is
-how a daemon's control-channel exchanges, streaming records, cancellation,
-shutdown, and restarts are ordered. The roots are captured unchanged when
-the session starts and whenever it falls idle. A change the test makes itself
-between processes, such as seeding through `open_db`, starts a new segment
-from what the test left.
-
-The environment subset is `KASSIBER_*`, `SATBOOKS_*`, the state-root
-variables (`HOME`, `XDG_*`, `LOCALAPPDATA`, `USERPROFILE`, `APPDATA`), the
-packaging variables, and locale, terminal, and time-zone variables
-(`tests/session_harness/policy.py`). A path outside the temporary directory
-and the checkout, such as the real home, is recorded as inherited, not by
-value; `KASSIBER_TEST_NO_EGRESS` is kept for the replay's guard.
-
-The recorder writes only under its directory and refuses, keeping only the
-reason in `refusals.jsonl`: a root outside the temporary directory or a
-command without one, a named path outside it and the checkout, a
-secret-named product variable that is set, stdin a call site marks with
-`secret_input=True`, inherited descriptors other than `InputFd`,
-interpreter options, a recording while `KASSIBER_TEST_CLI` is set, and any
-session in which a value of a secret-named variable from the test's
-environment appears. Recordings stay out of git; a committed recording must
-hold synthetic data only.
-
-### Replay and comparison
-
-```bash
-uv run --locked python -m tests.session_harness replay .session-recordings \
-  [--candidate /path/to/kassiber] [--jobs 6] [--diagnose] [--json report.json]
-```
-
-Each session starts from a fresh copy of its starting state, at the recorded
-paths when the replay can claim them and at fresh temporary paths otherwise,
-and receives the recorded inputs in the recorded order. The candidate is the
-Python reference unless `--candidate` or `KASSIBER_TEST_CLI` names another;
-the reference replays under the suite's no-egress guard. The comparison
-policy (`kassiber-session-compare/1`):
-
-- JSON is compared structurally: key order, array order, and value types
-  count, the spelling of a number (`1e-05`, `1e-5`) does not; the layout
-  (whitespace, separators, ASCII escaping, the trailing newline) is checked
-  separately.
-- Each database is dumped as its pragmas, every schema object, and every
-  table's rows in primary-key order, with no column masked. An encrypted
-  book is opened with the passphrases the session fed in (`InputFd`
-  descriptors and daemon `passphrase_secret` fields), under the contract's
-  SQLCipher parameters. Other files are compared by content
-  where they are text, zip archives member by member, and by size and
-  sha256 otherwise; permissions count.
-- Values a run generates compare through bindings: a uuid4 (or a whole
-  `uuid4().hex` value), or a wall-clock date, time, or epoch value inside the
-  run's own time window, binds on first sight to the candidate's value at the
-  same position, and every later occurrence must map the same way in both
-  directions, in the same order. Values that came in through argv, stdin, a
-  fixture, or a restored state are bound to themselves first. Ids the
-  candidate printed are translated into later inputs, as a test echoing them
-  would do. The `request_id` of a daemon `supervisor.*` record, the recorded
-  processes' ids, and relocated paths are mapped the same way.
-- Nothing else maps: hashes, uuid5 ids, and derived timestamps compare
-  exactly.
-
-Two Python runs differ legitimately in their clock readings and random ids
-until plan 21's clock and entropy injection exists, so a strict replay of
-most sessions still fails; the injection, not more masking, is the fix.
-`--diagnose` adds comparison lanes that never decide acceptance: `clock`
-keeps only the order of clock readings (including readings shifted by whole
-hours, such as expiries) and ignores the creation stamps of PDFs, `entropy`
-also maps any uuid and long hex run, and `order` compares
-arrays, JSON stored as text, and rows with generated keys in a canonical
-order. The report names the first lane in which each session is clean.
-`tests/test_cli_session_replay.py` proves both: a fresh Python run of a
-recorded CLI session, of a daemon session with a control-channel exchange,
-and of a session that encrypts its book through descriptors is clean once
-relaxed, and every lane fails on an altered output amount, exit
-status, referenced id, stored amount, link between rows, and timestamp, on an
-error a caught-error path reports, on a stored amount a grandchild process
-changes, and on a daemon response (`tests/session_harness/inject_candidate.py`).
-
-Limits that matter for the Rust stage: loopback services a test serves from
-its own process (AI provider and backend fakes) and mocks inside the test
-process do not exist on replay; a test's direct writes while a recorded
-daemon is live are not replayed (the recording notes when the test opens a
-session's database then); files the product reads outside the roots
-without naming them, such as the machine-wide project catalog, are neither
-recorded nor restored; and a wrapper candidate's own process id is what gets
-mapped, not its child's.
+After a reviewed behaviour change, `KASSIBER_GOLDEN_WRITE=1` rewrites the
+`expect` blocks from the current binary instead of comparing; it refuses to
+run under `CI`. Diff the goldens and explain every change; tax numbers,
+stored data and exports need the owner's sign-off.
 
 ## Tiers
 
 | Tier | Command | Docker | Purpose |
 | --- | --- | --- | --- |
-| FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). The same tapes are also served by a strict loopback Core RPC fake to the real CLI (`tests/integration/test_regtest_tape_cli.py`), so the replay runs on whichever runtime `KASSIBER_RUNTIME` selects. |
+| FAST | `./scripts/integration-harness.sh fast` | no | Serves recorded regtest tapes (a baseline watch-only tape and an edge-case tape: multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt) from a strict loopback Core RPC fake to the Rust binary's CLI (`tests/integration/test_regtest_tape_cli.py`), through sync, journals, reports and the CSV/XLSX/PDF exports, and compares them, the exchange lifecycle and the same-time lot order with [frozen goldens](#frozen-goldens). It also checks the signed, paginated Coinbase import against a loopback fixture, the harness's own helpers, and that every harness module imports with the standard library alone (`tests/integration/test_product_free.py`). |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), drives the Core RPC sync/pricing/journal/report/export smoke, and compares a real Fulcrum/Electrum address-wallet sync against Core RPC for receipt, spend, incremental, and no-op sync parity. |
-| CHAIN OBSERVERS | `./scripts/integration-harness.sh chain-observers [all\|bitcoin\|liquid]` | yes, unless reusing nodes | Extends the same disposable Compose stack with an independent Core/Elements truth oracle. It records bounded mode-0600 manifests for descriptor/address families, receive/change and gap ownership, mempool/confirmation/RBF/reorg/restart transitions, Bitcoin and Liquid UTXOs, policy/issued-asset values, and protocol endpoint heights. It also proves observer state commits and rollback/restart behavior inside a temporary SQLCipher book with no dependency sidecar store. |
+| CHAIN OBSERVERS | `./scripts/integration-harness.sh chain-observers [all\|bitcoin\|liquid]` | yes, unless reusing nodes | Extends the same disposable Compose stack with an independent Core/Elements truth oracle. It records bounded mode-0600 manifests for descriptor/address families, receive/change and gap ownership, mempool/confirmation/RBF/reorg/restart transitions, Bitcoin and Liquid UTXOs, policy/issued-asset values, and protocol endpoint heights, then holds the Rust binary's BDK and LWK observers to the nodes' own unspent outputs. |
 | DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including 8–12-address Bitcoin wallets, legacy/nested-SegWit/bech32/taproot rotation targets, a Silent Payments wallet, a mining wallet, and descriptor-backed Liquid wallets synced from real `elementsd` transactions through the local Liquid Electrum endpoint; monthly EUR-denominated receipts, payments, payroll, rent, cloud, and other expenses converted through the bundled Kraken BTC/EUR rate for each cycle; a deterministic jittered clock with quiet and doubled activity months; era-sensitive fees, rare heavy-tail receipts, 2–3 outbound payments in busy regimes, five external counterparty clusters, threshold-driven working-capital/merchant/cold-reserve transfers, near-full Bitcoin rotations with an explicit bounded legacy reserve where required, a real Liquid treasury migration with a delayed-receipt catch-up sweep, three policy-selected UTXO consolidation windows, and assertions that deprecated wallets retain at most one fee-reserve UTXO; 2021–22 pool payouts plus one solo coinbase, scheduled batched/dust/PayJoin/RBF edge cases, closed and still-open collateralized loans, ownership-derived fan-out self-transfer matching, a mempool-pending receipt, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, swap/peg bridge pairs, journals, reports, and transaction exports. The persistent `demo-up` variant also starts the Core Lightning and BTCPay overlays by default, seeding merchant Lightning, BTCPay connections, paid BTCPay invoice/payment-request examples, and reviewed commercial reconciliation unless explicitly disabled. |
-| SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
-| BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, persists the paid invoice through Kassiber's native LND adapter boundary, records the Liquid policy-asset id and Elements regtest scope, and explicitly reviews the resulting strong provider-hash candidate while the plain Liquid payment stays unpaired. An outbound submarine lockup has no owned claim witness, so provider metadata plus a native invoice is intentionally not called exact. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows. Exact `provider_swap_id` assertions require a unique 1:1 provider key, canonical send/receive route txids, explicit chain/network scope and Liquid consensus asset id, plus integer-msat principals covering both complete rows; incomplete evidence must stay strong/manual. |
+| SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs `tests/integration/test_live_silent_payments.py`: a Frigate backend with Silent Payments, a watch-only silent-payment wallet whose sync must import a real Core transaction exactly as Core reports it, and the CLI's refusals of spending material, a plain Electrum backend and a world-readable scan file. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
+| BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, imports the paid invoice through the Rust binary's own LND adapter (a real `lnd` backend and wallet sync against a loopback LND REST fake that serves exactly that invoice and requires the macaroon header), records the Liquid policy-asset id and Elements regtest scope, and explicitly reviews the resulting strong provider-hash candidate while the plain Liquid payment stays unpaired. An outbound submarine lockup has no owned claim witness, so provider metadata plus a native invoice is intentionally not called exact. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows. Exact `provider_swap_id` assertions require a unique 1:1 provider key, canonical send/receive route txids, explicit chain/network scope and Liquid consensus asset id, plus integer-msat principals covering both complete rows; incomplete evidence must stay strong/manual. |
 | BTCPAY | `./scripts/integration-harness.sh btcpay` | yes | Starts the standard Bitcoin regtest stack plus a BTCPay overlay (Postgres, NBXplorer, BTCPay Server) wired to the same disposable `bitcoind`, creates a first admin user, creates or reuses a test store, generates a BTC on-chain store wallet, creates and pays a realistic invoice mix from the regtest Core wallet, confirms it, syncs BTCPay wallet history into a temporary Kassiber book, syncs invoice provenance, and writes a local seed JSON containing the store id, disposable API key, invoice ids, scenarios, and payment txids. |
 | BTCPAY-BARK | `./scripts/integration-harness.sh btcpay-bark` | yes | Brings up a regtest Ark server and BTCPay with the Bark plugin in its own Compose project, drives every wallet-history row kind, records the Greenfield answers to a scratch directory, and tears the stack down. Needs the plugin package in `$KASSIBER_BARK_PLUGIN_CACHE`. |
 | LIGHTNING | `./scripts/integration-harness.sh lightning-business` | yes, Kassiber stack + CLN/LND overlay | Starts the existing regtest Compose stack plus `dev/regtest/compose.lightning.yml` with four pinned Core Lightning nodes and one LND backup merchant node. A seeded sim-ln-inspired business plan drives mainchain top-ups/withdrawals, merchant invoices, supplier payments, routed forwarding activity, LND backup receipts/outbound payments, an expired quote, and an intentionally failed oversized payment, opens private CLN merchant -> LND backup and LND backup -> CLN router channels, then verifies Kassiber through `wallets sync`, `ui.connections.node.snapshot` for both node implementations, `reports lightning-profitability`, and `export-lightning-profitability-csv`. |
@@ -511,17 +290,33 @@ export KASSIBER_REGTEST_RPC_PASSWORD=...
 
 ### Runtime selection
 
-Every lane starts the product through `tests/cli_runner.py`.
-`KASSIBER_RUNTIME=rust` points those children at the binary
-`KASSIBER_RUST_BIN` names (default `target/release/kassiber`) by exporting
-`KASSIBER_TEST_CLI`; unset or `python` keeps `python -m kassiber`, which CI
-uses. The harness's own scenario, seeding and probe helpers stay Python,
-including the few that open the book in-process (demo rate refresh,
-Lightning backdating, exchange fixture pricing).
+Every lane starts the product through `tests/integration/cli.py`, on the
+Rust binary `KASSIBER_RUST_BIN` names (default `target/release/kassiber`):
+the harness exports it as `KASSIBER_TEST_CLI` and refuses to start without
+it. There is no Python runtime or shadow mode any more. The harness, its
+scenario, seeding and probe helpers and every lane's `unittest` modules are
+standard-library Python run with `python3 -I` (3.11 or newer), with no uv,
+no virtual environment and no `import kassiber`
+([plan 22](../plan/22-python-removal.md), D2); a lane runs its modules as
+`py -m unittest tests.integration.<module>`, the harness's wrapper that puts
+the checkout on `sys.path`. By hand, the same is
+
+```bash
+python3 -I -c 'import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_module(sys.argv.pop(1), run_name="__main__", alter_sys=True)' \
+  "$PWD" unittest tests.integration.test_regtest_tape_cli -v
+```
+
+with `KASSIBER_RUST_BIN` set. The helpers read the plaintext demo books with
+`sqlite3` and edit them only where a fixture must (demo rate-cache cleanup,
+Lightning backdating) through `tests/integration/book.py`; exchange fixture
+pricing goes through the daemon's `ui.transactions.metadata.update`.
+`tests/integration/test_product_free.py` fails on any harness module that
+imports the product, a third-party package or a test module outside
+`tests/integration/` and `dev/regtest/`.
 
 ```bash
 cargo build -p kassiber --release
-KASSIBER_RUNTIME=rust ./scripts/integration-harness.sh fast
+./scripts/integration-harness.sh demo-full
 ```
 
 Every lane also points `KASSIBER_OFFLINE_PREFERENCE_FILE`, the agent-access
@@ -529,103 +324,86 @@ and update files at `target/integration-harness/preferences/` unless they are
 already set: the product otherwise reads the account's default state root
 even with `--data-root`.
 
-`KASSIBER_RUNTIME=shadow` compares the runtimes inside a live lane, where
-each run creates new chain activity and two runs never see the same chain.
-Python drives the lane; `tests/integration/runtime_shadow.py` copies the
-book before every CLI step, runs the step on Python and then on Rust from
-the copy against the same services, compares envelopes and every manifest
-table, and appends one line with both timings to
-`$KASSIBER_RUNTIME_SHADOW_DIR/steps.jsonl` (default under
-`target/runtime-shadow/`). The lane continues on Python's answers. A second
-run sees the first's side effects on live services, so a step such as the
-first Core RPC sync legitimately differs in counters like
-`core_wallet_created`. `sync-benchmark --runtimes python,rust` times both
-runtimes on one chain, using the CLI's `journals process` as the journal
-step, and compares their final books.
+### Frozen goldens
 
-With `KASSIBER_RUST_BIN` set, `tests/integration/test_regtest_tape_cli.py`
-and `tests/integration/test_regtest_exchange_cases.py` also compare the two
-runtimes step by step from one path: envelopes and every table of the
-store's schema manifest, with fresh identities and clocks masked, and
-export artifacts checked for validity only because they follow the
-[shared report design](report-design.md). The tape test runs everything
-after sync on copies of one Python-synced book, so it compares identities
-and their order strictly; the exchange lifecycle creates its rows in each
-run, so steps whose order or digests follow random row identities are
-compared identity-blind. Where Core RPC wallet sync is not native the
-parity test requires Rust's refusal (`native_fallback_required`) to leave
-the book unchanged; where it is, the two syncs and synced books must match.
+`tests/integration/test_regtest_tape_cli.py`,
+`tests/integration/test_regtest_exchange_cases.py` and
+`tests/integration/test_lot_order_determinism.py` once compared the Python
+and the Rust runtime step by step. The Python half is frozen in
+`tests/integration/goldens/` ([plan 22](../plan/22-python-removal.md), D5),
+recorded from the Python reference before its removal, and the Rust binary
+must match it: envelopes and every table of the store's schema manifest,
+with fresh identities, clocks, scratch paths and the per-run fixture URL
+masked, and export artifacts checked for validity only because they follow
+the [shared report design](report-design.md). The tape test runs everything
+after sync on a frozen Python-synced book, so it compares identities and
+their order strictly; balance history gets a fixed `--end`, since a record
+cannot follow a series that runs up to now. The exchange lifecycle creates
+its rows in each run, so steps whose order or digests follow random row
+identities are compared identity-blind. The lot-order test processes a
+frozen Python-imported book and must book Python's journals byte for byte.
+
+After a reviewed behaviour change, `KASSIBER_RECORD_GOLDENS=1` rewrites the
+goldens from the binary under test instead of comparing. Diff them and
+explain every change; tax numbers, stored data and exports need the owner's
+sign-off.
 
 ## Pull-request CI
 
-The required PR workflow is fail-fast without reducing the test inventory:
+The required PR workflow (`.github/workflows/ci.yml`) runs independent jobs
+that each fetch the locked test data first:
 
-1. `Preflight` compiles Python, validates the test-shard manifest, runs the
-   dependency/workflow/catalog/report drift contracts, and gates only the
-   Python shards. Frontend, CLI smoke, and observer jobs start independently.
-2. Pytest runs every `tests/**/test_*.py` module in exactly one lane. The
-   `core-accounting`, `wallets-sync`, `daemon-cli`,
-   `security-replication`, and `reports-contracts` lanes use two xdist workers
-   with class/module scope. Isolated `serial-network`, `serial-daemon`,
-   `serial-regressions`, and `serial-integration` jobs own
-   socket-, listener-, broad-regression-, OS-process-, and opt-in
-   integration-sensitive modules. The `Rust test binaries` job builds the
-   parity suite's binaries once (`scripts/build-rust-test-binaries.sh`: the
-   `kassiber` test-harness build, its example fixtures, and the release
-   journal probes); every Python and shadow lane downloads them and runs
-   with `KASSIBER_RUST_BIN` set, so no parity test refuses for a missing
-   binary. `serial-daemon`, which holds hours of subprocess parity tests, and
-   `core-accounting` run as several jobs, each with `--part K/N`: a test
-   belongs to the part its node id's CRC-32 picks (`tests/conftest.py`), so
-   the parts are disjoint and complete.
-3. The CLI smoke lane checks the broad argparse help surface in-process and
-   keeps only status/health/next-actions, command discovery, and daemon EOF as
-   real subprocess probes. TypeScript, ESLint, and Vitest run together in an
-   independent frontend job. The independent `Rust crates` job checks the
-   crates' formatting and clippy lints (warnings fail) and runs their tests,
-   then lints and tests the `kassiber` binary's `test-harness` build, which
-   the [Rust shell](rust-shell.md#tests) supervisor-protocol tests need.
-   Every job that compiles Rust, including every uv job (which builds the
-   engine's binding), first installs the toolchain `rust-toolchain.toml` pins.
-4. Specialized jobs can remain independent roots and join `ci/required`
-   without blocking unrelated setup. Platform credential jobs retain their
-   separate credential/packaging path filter, which includes `tax-engine/**`
-   so the binding builds on macOS and Windows, and ordinary pull requests do
-   not build release packages.
-5. Each pytest/Vitest lane uploads a JUnit artifact even after failure. Python
-   lanes print `--durations=50` output in their job summary. The stable
-   `ci/required` aggregate is successful only when every required lane passes.
-6. The Python lanes run under `KASSIBER_TEST_TAX_ENGINE=census`, so a lane
-   fails when one of its modules reaches the tax engine but is missing from
-   the [shadow overlay](#shadow-overlay). The `Tax shadow` job, after
-   `Preflight`, reruns the overlay part of each lane that has one with
-   `run-shadow <lane> --ci`, comparing production with the frozen oracle.
+1. `Rust crates` checks formatting (`cargo fmt --all --check`) and clippy
+   lints (warnings fail), runs the workspace tests with
+   `kassiber-journals/test-harness`, runs `scripts/check-ledger-features.sh`
+   and `scripts/check-cli-archive.sh` (both archive formats land in a relative
+   `--output-dir`, as release CI packages them),
+   validates the mutation catalogs with `kassiber-mutation-check -- check`,
+   checks that a product build of the binary carries no test tape
+   (`scripts/check-no-test-tape.sh`), runs the `kassiber-net` egress observer
+   tests, and lints and tests the `kassiber` binary's `test-harness` build,
+   which the [Rust shell](rust-shell.md#tests) supervisor-protocol tests need.
+   The repository contracts (workflow pins, the test-data lock, versions) are
+   the `kassiber-repo-checks` tests inside the workspace run.
+2. `Recorded sessions` replays the recordings (see
+   [above](#replaying-the-recorded-sessions)): one job builds the binaries
+   (`scripts/replay-sessions.sh build`, then `pack`) and 32 parts each unpack
+   them and replay every 32nd session (`--part K/N`), uploading their
+   `target/session-replay-report.tsv` even after failure. The Rust crates
+   job and the replay parts install
+   Poppler (`poppler-utils`), so the PDF import and chat paths run instead of
+   skipping.
+3. `Frontend checks` runs TypeScript, ESLint and Vitest and uploads a JUnit
+   report even after failure.
+4. `Tooling scripts` runs the standard-library tests of the packaging,
+   publishing and harness scripts (`tests/tooling/`, `python3 -I`) and the
+   product-free check that keeps every Python module in the tree off the
+   removed Python product. `linux-packaging.yml` runs the Debian, RPM and
+   channel-renderer suites (`tests/test_linux_*.py`, `tests/test_rpm_packaging.py`)
+   in their package-tool environments.
+5. `Chain observers (Linux Docker)` runs the
+   [chain-observer](#dependency-chain-observer-oracle) and
+   [chain-analysis](#local-chain-analysis-oracle) regtest lanes when
+   observer-sensitive paths change.
+6. The stable `required` aggregate succeeds only when every required job
+   passes. Platform credential jobs keep their separate credential/packaging
+   path filter, and ordinary pull requests do not build release packages.
 
-`scripts/python_test_shards.py` is the single file-to-lane mapping. Unknown new
-test modules default to `core-accounting`, while `tests/test_ci_shards.py`
-proves that every discovered module appears once and that sensitive modules do
-not enter xdist. A local `pytest -n N` without `--dist` also keeps each test
-class on one worker (`tests/conftest.py` defaults it to `loadscope`), since
-some classes, like the CLI smoke suite, are ordered steps over one book. PR
-pushes use a concurrency group and cancel superseded CI;
-test failures are never broadly retried. Locked uv and pnpm stores are cached;
-cache misses still install only from the checked-in lockfiles. Jobs that build
-Rust restore a Cargo cache of the registry and the dependency builds (the
-workspace's own crates rebuild after every checkout): the uv jobs share one
-key that `Preflight` saves, the `Rust crates` job keeps its own, and only
-pushes to `main` save, so pull requests restore `main`'s cache. Release
-builds take no cache.
+Every job that compiles Rust first installs the toolchain `rust-toolchain.toml`
+pins and restores a Cargo cache of the registry and the dependency builds (the
+workspace's own crates rebuild after every checkout). Each job keeps its own
+key, and only pushes to `main` save, so pull requests restore `main`'s cache.
+Release builds take no cache. PR pushes use a concurrency group and cancel
+superseded CI; test failures are never broadly retried. The pnpm store is
+cached; a cache miss still installs only from the checked-in lockfile.
 
-The local `./scripts/quality-gate.sh` favors deterministic serial execution,
-but runs the same complete Python inventory once, under `census`, and then the
-whole shadow overlay once with `run-shadow`, before the frontend checks.
-
-For faster local shard runs, `run <shard> --ci --workers 16 --dist worksteal`
-keeps a parallel lane on more workers without changing the CI policy.
-`worksteal` lets idle workers take queued tests, which `load` and
-`loadscope` never rebalance. `daemon-cli` keeps its classes together and
-refuses `--dist`; serial lanes refuse both options. Measurements and the
-slowest tests are in [test speed](test-speed.md).
+The local `./scripts/quality-gate.sh` runs the same checks serially: fmt,
+clippy, the workspace tests, the mutation catalog `check`, the ledger-features
+check, the net observer and `kassiber` harness tests, the no-test-tape check,
+`scripts/replay-sessions.sh`, then TypeScript, ESLint and Vitest. It replays
+the [custody recordings](#custody-recordings) too when
+`KASSIBER_CUSTODY_REPLAY_DIR` names them. Slow tests and timings are in
+[test speed](test-speed.md).
 
 ## Dependency chain-observer oracle
 
@@ -670,43 +448,45 @@ wrong-key failure expectation. Capability rows state whether the pinned local
 Elements build exposes Taproot or executable ranged multisig rather than
 pretending unsupported forms ran.
 
-Every transition is also referenced from versioned observer JSON in the main
-temporary SQLCipher database. The runner injects and rolls back a failed state
-write, reopens the encrypted project, and rejects BDK/LWK-looking sidecar files.
-For Bitcoin/all selections, the lane then creates a real Core descriptor wallet,
-funds both low and gap-edge receive indices, and refreshes its public descriptor
-through Fulcrum using BDK and through the local Esplora-compatible service using
-Kassiber's explicit HTTP transport. It asserts native Electrum state and
-per-branch coverage, the HTTP `http_route_policy` compatibility reason,
-transaction/UTXO parity, SQLCipher-only persistence, process restart, and
-byte-stable immediate no-op native state.
+The oracle is standard-library Python against the nodes' RPC; the lane's
+product checks run the Rust binary. For Bitcoin/all selections, the lane
+creates a real Core descriptor wallet, funds both low and gap-edge receive
+indices, and refreshes its public descriptor through Fulcrum using BDK and
+through the local Esplora-compatible service using Kassiber's explicit HTTP
+transport. It asserts native Electrum state and per-branch coverage, the HTTP
+`http_route_policy` compatibility reason, transaction/UTXO parity, that both
+books hold exactly the unspent outputs Core reports for the same descriptors
+(after the initial sync and again after the reorg, evictions and
+resurrection), no dependency sidecar files, process restart, and byte-stable
+immediate no-op native state.
 For Liquid/all selections, the lane creates a real Elements descriptor wallet
 with private SLIP77 view material and public spending keys, then refreshes it
 through local Electrum using LWK and the Esplora-compatible service using
 Kassiber's explicit HTTP transport. It asserts opaque native `ForeignStore`
 bytes only for Electrum, the HTTP compatibility reason, restart and immediate
 no-op stability, confidential LBTC receive/spend and fee normalization,
-issued-asset history, transport parity, confirmation, block invalidation and
-unconfirmed resurrection.
+issued-asset history, transport parity, unspent outputs equal to what Elements
+reports for the same keys, confirmation, block invalidation and unconfirmed
+resurrection.
 Only loopback RPC, Electrum and HTTP targets are accepted. Routing metadata
 pins pre-connect compatibility selection for this phase, forbids runtime
 fallback, and records that `.onion` endpoints may not connect directly.
-Separately, the transport oracle drives the pinned clients themselves: BDK crosses
-plain Electrum, Esplora, insecure test TLS and SOCKS5h; LWK crosses plain
-Electrum, Esplora, explicit insecure test TLS and an authentication-enforcing
-Esplora reverse proxy. Focused routing and SSL-context tests cover custom-CA and
-explicitly insecure Esplora rows through Kassiber's compatibility HTTP transport
-because neither pinned dependency accepts a per-client trust root; the selected
-TLS policy is exercised instead of being silently ignored. Direct SDK HTTP
-probes establish the binding's capabilities; they do not authorize its use by
-Kassiber. Production Esplora routing stays on the explicit compatibility
-transport until the SDK exposes enforceable redirect and proxy controls.
+The oracle once also drove the Python product's observer store in a
+temporary SQLCipher book and the bdkpython/lwk bindings through TLS, SOCKS5h
+and authenticating forwarders; those checked the Python side and went with
+it ([plan 22](../plan/22-python-removal.md)). The Rust transports' TLS, custom
+CA, insecure and SOCKS routing are covered by the `kassiber-net` and
+`kassiber-chain` crate tests. Production Esplora routing stays on the
+explicit compatibility transport until the SDK exposes enforceable redirect
+and proxy controls.
 
 Pull requests and main-branch pushes expose a required
 `Chain observers (Linux Docker)` job in `.github/workflows/ci.yml`. It runs the
-lane when observer, descriptor, sync, persistence, dependency-lock, or regtest
-backend paths change; unrelated changes retain the same successful check name
-without starting the Docker stack.
+lane when the observer, sync, store, network or CLI crates, the Cargo
+manifests and lock, or the regtest harness change; unrelated changes retain
+the same successful check name without starting the Docker stack. It builds
+the release `kassiber` binary and runs the harness on the runner's `python3`,
+with no uv or Python environment.
 
 The Compose lane generates disposable RPC credentials per run unless you set
 them explicitly, passes only the `rpcauth` hash to bitcoind, publishes RPC on
@@ -1217,8 +997,8 @@ BTCPayServer's `docker-compose up dev` + launch-profile workflow:
 cd ui-tauri && pnpm dev:demo               # dev preview on that real book
 ```
 
-Prerequisites on any machine: Docker (Desktop or engine), Python 3, `uv`, and
-`pnpm`.
+Prerequisites on any machine: Docker (Desktop or engine), the Rust toolchain,
+`python3` 3.11 or newer (standard library only, for the harness), and `pnpm`.
 From a fresh clone, install the project/runtime dependencies once:
 
 ```bash
@@ -1227,9 +1007,8 @@ pnpm --dir ui-tauri install --frozen-lockfile
 ```
 
 After that, the two commands above take you to a browser preview backed by the
-real Python daemon reading a multi-year regtest book. The harness checks for
-core Python dependencies and fails with a setup hint instead of silently using
-an unprepared system interpreter.
+`kassiber daemon` reading a multi-year regtest book. The harness checks for
+the Rust binary and `python3` and fails with a setup hint otherwise.
 
 What `demo-up` does:
 
@@ -1361,16 +1140,17 @@ waits for as its own child process:
 - `--noop-runs` unchanged resyncs;
 - an `--increment` sync;
 - a forced full replay;
-- after each of these, the desktop's post-sync journal step
-  (`refresh_journals_step` with automatic pairing).
+- after each of these, `journals process`, the journal step the desktop runs
+  after a user-triggered sync.
 
 The wallet uses the default route for an Electrum backend, BDK. Every backend
 in the disposable book is a loopback regtest backend, child processes run under
 the test socket guard, and the book is removed at the end. Each step emits a
 JSON line with its seconds, peak RSS and the sync counters. The book events
 also report how much of the stored `raw_json` is the per-row owned-script
-attestation. `--profile-dir` writes a cProfile file per step and adds the
-hottest functions to its line. `--smoke` checks the lane in about a minute.
+attestation. `--runtimes rust,rust` syncs two books from the same chain as a
+control and compares them table by table. `--smoke` checks the lane in about
+a minute.
 Keep the stack between runs with `KASSIBER_REGTEST_KEEP=1`, then
 `KASSIBER_REGTEST_REUSE_CORE=1` with the same `KASSIBER_REGTEST_RPC_PORT` and
 password.
@@ -1406,7 +1186,7 @@ Poke the node like BTCPayServer's `docker-bitcoin-cli.sh`:
 ```bash
 ./dev/regtest/bitcoin-cli.sh getblockchaininfo
 ./dev/regtest/bitcoin-cli.sh -generate 1
-uv run --locked python -m kassiber --data-root ~/.kassiber/regtest-demo/data reports summary
+target/release/kassiber --data-root ~/.kassiber/regtest-demo/data reports summary
 ```
 
 Tear-down is explicit: `demo-down` stops the node but keeps the chain volume
@@ -1425,68 +1205,30 @@ mode.
 
 Custody evidence commitments, decision, issue and relation ids, gap
 fingerprints and uuid5 component ids are stored and later compared with
-recomputed values, so their bytes may not drift. `tests/custody_hash_vectors.py`
-generates seeded golden vectors for each of them into
-`tests/fixtures/custody_hash_vectors/`, one JSON Lines file per family. Every
-vector names the product function, the serialization it hashes (including the
-`json.dumps` arguments) and the hashed text, so a port can reproduce it.
-`tests/test_custody_hash_vectors.py` recomputes every vector and also checks
-the recorded serialization against the hashed text.
+recomputed values, so their bytes may not drift. Seeded golden vectors for
+them live in `tests/fixtures/custody_hash_vectors/`, one JSON Lines file per
+family, partly in the tree and partly as locked test data. Every vector names
+the product function, the serialization it hashes and the hashed text.
+They were generated by the Python reference and are now frozen;
+`crates/custody/tests/hash_vectors.rs` recomputes the families it covers in
+Rust. Change a vector only together with a migration for books that stored
+the old values.
 
-```bash
-uv run --locked python -m tests.custody_hash_vectors          # check
-uv run --locked python -m tests.custody_hash_vectors --write  # regenerate
-```
-
-Regenerate only together with a migration for books that stored the old
-values.
-
-`KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR`, set to an existing absolute
-directory, records custody builds in-process and in Python children as one
-JSON envelope each: the product-loaded raw v1 request, owned-index lookups,
-stage results and decisions ([schema](custody-engine.md)). Add
-`KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1` to replay each raw request in a fresh
-process under another `PYTHONHASHSEED` and fail on any difference. This needs
-no database image and also works for SQLCipher-loaded requests. Product code
-reads neither variable. Use disposable data only.
-
-```bash
-mkdir -p /tmp/custody-snapshots
-KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR=/tmp/custody-snapshots \
-  KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1 \
-  uv run --locked python -m pytest tests/test_custody_*.py -q
-uv run --locked python -m tests.custody_snapshot check /tmp/custody-snapshots
-uv run --locked python -m tests.custody_snapshot compare DIR_A DIR_B
-uv run --locked python -m tests.custody_snapshot check-rust /tmp/custody-snapshots --permuted
-uv run --locked python -m tests.custody_snapshot refresh /tmp/custody-snapshots /tmp/custody-refreshed
-```
-
-`refresh` copies recordings with their stages recomputed by the current
-Python reference, for recordings an older reference wrote; it never writes
-the source directory.
+The Python-side recorder (`KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR` and
+`tests.custody_snapshot`) went with Python. Its recordings survive as the
+frozen [custody recordings](#custody-recordings).
 
 ## Guardrails
 
-- `KASSIBER_TEST_NO_EGRESS=1` arms the socket guard only; `tests/conftest.py`
-  sets it before collection for every non-integration run. It blocks Python
-  DNS, TCP connects, and UDP sends to non-loopback hosts. A `sitecustomize` on
-  `PYTHONPATH` carries it into spawned Python children and stops a child if the
-  guard cannot start. A child that would not load it fails instead of running
-  unguarded (`tests/egress_guard.py`): while the session is armed,
-  `cli_runner.run`/`popen` and `runtime_parity.child_env` refuse a Python
-  child whose environment drops the switch, whose `PYTHONPATH` does not
-  resolve `sitecustomize` to `tests/_child_hooks`, or whose interpreter
-  options skip site (`-I`, `-S`, `-E`), and every `python -m tests.<module>`
-  reference exits 78 at import when the guard is not live in it. Build child
-  environments by copying `os.environ` and use `guarded_pythonpath()` rather
-  than replacing `PYTHONPATH`; a child that brings a stricter guard of its own
-  names it with `own_egress_guard=` (`tests/rust_port/contracts.py`). The
-  separate product override `KASSIBER_NO_EGRESS=1`
-  blocks BDK/LWK observer construction, shared backend HTTP/SOCKS and Python
-  Electrum connections, and chain-analysis acquisition, including loopback.
-  It is not used suite-wide and is not an OS-wide network firewall.
-- `tests/conftest.py` also points `KASSIBER_OFFLINE_PREFERENCE_FILE` at a
-  disposable file for the whole run, so the user's real
+- `KASSIBER_TEST_NO_EGRESS` arms the test egress observer in test builds
+  (see [test builds](#test-builds)): non-loopback connections are refused,
+  and `strict` refuses loopback too. A build without the observer exits 78
+  instead of running unguarded. The separate product override
+  `KASSIBER_NO_EGRESS=1` blocks wallet observers, shared backend HTTP/SOCKS
+  and Electrum connections, and chain-analysis acquisition, including
+  loopback. It is not used suite-wide and is not an OS-wide network firewall.
+- The binary's test supports point `KASSIBER_OFFLINE_PREFERENCE_FILE` (and the
+  agent-access and update files) at disposable files, so the user's real
   [offline mode](privacy-and-security.md#offline-mode) choice cannot make
   transport tests fail and no test can change it. Exploratory
   `kassiber offline on|off` runs change the machine-wide switch unless that
@@ -1582,83 +1324,90 @@ Ark and Spark still need Kassiber observation adapters and real protocol evidenc
 before a cross-rail edge can claim more than a reviewed custody relation. A
 successful payment in an external demo alone does not establish that integration.
 
-## Rust custody comparisons
+## Custody checks
 
-R2 keeps Python as the production reference. `KASSIBER_TEST_CUSTODY_ENGINE=census`
-or `shadow` compares the implemented Rust stages on every journal build,
-including Python subprocesses. Shadow additionally audits the frozen SQL
-composition; census keeps structural read-budget probes on one Python build.
-Unported stages are reported as skipped; a recorded discrepancy fails the
-session even if a test catches it. Ordinary Python CI shards and the quality
-gate enable custody census. A required `custody-shadow` job and
-`scripts/python_test_shards.py run-custody-shadow` additionally compare the
-production pure flow against frozen SQL composition. The single-build
-`test_disjoint_reviewed_routes_limit_observation_reads` budget stays in census
-and is deselected only in shadow, which deliberately performs two builds.
-A book holding a SQLite BLOB, or a REAL or TEXT transaction quantity, is
-compared through the binding's loaded encoding, which runs the product's
-loaded path; see [the custody engine](custody-engine.md#complete-finalized-projection-runtime-r2f).
-Recorder lookup audits separately consult the full ownership index; recorded
-snapshots and mismatch artifacts are created with mode 0600.
-The CI matrix uses `run-custody-shadow <shard> --ci` and the same disjoint
-overlay and distribution policy as tax shadow; ordered modules run serially.
+Until Python was removed, `KASSIBER_TEST_CUSTODY_ENGINE=census|shadow`
+compared the Rust custody stages with the Python reference on every journal
+build of the pytest suite. That comparison is gone; the
+[custody engine reference](custody-engine.md) records it. The custody crate's
+own tests, the [custody recordings](#custody-recordings) and the recorded
+sessions cover the stages now.
 
-Both CI lanes and the local quality gate build the test-only native loader in
-release mode and set `KASSIBER_TEST_CUSTODY_LOADER_BIN` to `custody-load`. Every
-successfully loaded database snapshot also passes its exact v1 byte comparison,
-including pending caller writes. Pure stage tests with no connection have no
-database to compare. The terminal summary counts native matches; only an
-`equal` marker is appended to the disposable census records path plus `.loader`.
-The loader hook does not add another Python journal build, so the observation
-read-budget test remains enabled in census and retains its shadow exclusion.
-Tests that deliberately alter computed Python state after loading, such as the
-split-payout refusal regression, declare the exact stage and exception through
-`injected_stage_failure`. Their snapshot still passes the loader byte gate;
-the summary explicitly counts the injected build's skipped stage comparisons.
-Recorder audit tests inject omitted ownership matches at the recorded-artifact
-boundary, after comparing the canonical snapshot and production stages.
-To reproduce locally, build with `cargo build --release --offline --locked -p
-kassiber-journals --example custody-load --features test-harness`, set the hook
-to the absolute binary path, then run the existing shard command.
-
-Run a focused comparison with `KASSIBER_TEST_CUSTODY_ENGINE=shadow uv run --locked
-python -m pytest tests/test_custody_generated_books.py tests/test_custody_shadow_harness.py -q`.
-The seeded comparison covers at least 2,000 raw requests. The [custody engine
-reference](custody-engine.md) owns the schema, stage inventory and remaining work.
-
-For explicitly requested local recording, point
-`KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR` at an existing absolute disposable directory.
-Each envelope's `input` is the exact product-loaded v1 request; no independent
-recorder inventory is maintained. Add `KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1`
-to replay requests in fresh processes under another hash seed without a database
-image. Recordings contain private accounting evidence and stay local; commit
-only synthetic fixtures. Product code reads none of these test switches.
-
-Every newly ported custody stage must supply killed entries in the
+Every custody rule a test pins needs killed entries in the
 [custody mutation catalog](../../crates/custody/scripts/mutations.json). Run
-`uv run --locked python crates/custody/scripts/mutation_check.py` after changing
-ported behavior or entries; `--check` only validates applicability and named
-selections. Mutation runs build only `kassiber-custody` in a disposable scratch
-tree. `check_ledger_features.py` also proves byte equality of the ledger with and
-without custody's unified JSON features; the Rust CI lane and local gate run it.
+`cargo run -p kassiber-mutation-check -- run custody` after changing custody
+behaviour or entries; `check` only validates applicability. Mutation runs
+build only `kassiber-custody` in a disposable scratch tree.
+`scripts/check-ledger-features.sh` also proves byte equality of the ledger with
+and without custody's unified JSON features; the Rust CI job and the local
+gate run it.
+
+The test-only native loader, `cargo build --release --offline --locked -p
+kassiber-journals --example custody-load --features test-harness`, loads a
+book's raw custody request in Rust. No production command reaches it.
+Sessions that started it replay against the example
+`scripts/replay-sessions.sh` builds.
+
+### Custody recordings
+
+The local custody recordings (whole raw-fact requests recorded from test
+runs; they stay on the machine that recorded them) are replayed by Rust from
+frozen goldens. Each `*.replay.json` holds the exact requests one recording
+sends to the engine, the recorded request and its permutation, and the
+response Rust gave while the Python reference compared every stage with it
+and found no difference. They were frozen once, at the last commit with the
+Python reference, from a clean `check-rust --permuted` pass.
+
+```bash
+cargo run --release -p kassiber-custody --example custody-replay -- [--self-test] DIR
+KASSIBER_CUSTODY_REPLAY_DIR=DIR ./scripts/quality-gate.sh
+```
+
+The replay requires every response byte for byte; `--self-test` first proves
+a changed golden is reported. After a reviewed custody change,
+`KASSIBER_GOLDEN_WRITE=1` rewrites the responses instead of comparing (it is
+refused under `CI`); diff the goldens, explain every change, and keep them
+only with the owner's sign-off when tax or stored results move.
 
 ## Generated test data
 
-Fixtures a generator or recorder produces (Python-produced vectors, oracle
-outputs, recorded server replies) are not in this tree. They live on the
-orphan branch `t3code/test-data`, and `tests/test-data.lock` pins the commit
-and the git blob id of every file this tree's tests read. Small fixtures
-people write and read stay next to their tests.
+Generated and recorded fixtures (vectors the Python reference produced,
+oracle outputs, recorded server replies, recorded sessions) are not in this
+tree. They live on the orphan branch `t3code/test-data`, and
+`tests/test-data.lock` pins the commit and the git blob id of every file this
+tree's tests read. Small fixtures people write and read stay next to their
+tests.
 
 - `scripts/fetch-test-data.sh` fetches the pinned commit from the same
   repository with git, writes each locked file at its path (the `.gitignore`
-  block lists them all), and verifies every hash. CI runs it before any Python
-  or Rust test; `scripts/quality-gate.sh` refuses to start without it.
-- Without the data, pytest stops at once with "run scripts/fetch-test-data.sh",
-  and a Rust test build names the missing file; nothing is skipped silently.
-  `scripts/fetch-test-data.sh --check` verifies without fetching.
-- To change data: run the generator (it writes at the same paths), then
-  `scripts/fetch-test-data.sh --publish [new paths]` commits the files to the
-  data branch locally and rewrites the lock and the `.gitignore` block. Push
-  `t3code/test-data`, and commit the lock in the same PR as the generator or
-  code change. A new data file needs its path on the `--publish` line once.
+  block lists them all), and verifies every hash. CI runs it before any test;
+  `scripts/quality-gate.sh` refuses to start without it.
+- Without the data, a Rust test build names the missing file; nothing is
+  skipped silently. `scripts/fetch-test-data.sh --check` verifies without
+  fetching, and `kassiber-repo-checks` checks the lock itself.
+- A new data file needs its path on the `--publish` line once.
+
+### Changing a frozen golden
+
+The Python generators that made most goldens were removed under
+[plan 22](../plan/22-python-removal.md#generators-become-frozen-goldens);
+nothing regenerates them from a reference any more. The last commit that
+could is tagged `archive/python-backend`. For a deliberate change:
+
+1. Make the change and run the failing tests.
+2. Rewrite the affected goldens from the current code. Tests with a write
+   mode take `KASSIBER_GOLDEN_WRITE=1` (the custody recordings, the routing
+   replays, the `kassiber` crate's golden helper, the wallet analysis
+   recovery goldens); black-box transcripts take `KASSIBER_BLESS=1`; recorded
+   sessions take `scripts/replay-sessions.sh --update`. All three refuse
+   to run under `CI`. A golden without a write mode is edited by hand. A golden that
+   needs new network traffic is re-taped against a regtest stack with
+   `KASSIBER_TEST_NET_TAPE=record:<file>`.
+3. Review the diff. Every changed golden must be explained by the change;
+   tax and journal numbers, stored data and exports need the owner's
+   sign-off.
+4. Run `scripts/fetch-test-data.sh --publish [new paths]`. It commits the
+   files to the data branch locally and rewrites the lock and the
+   `.gitignore` block. Push `t3code/test-data`, and commit the lock in the
+   same PR as the code change.
+5. Rerun the mutation suites of the touched crates.

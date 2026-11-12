@@ -224,7 +224,12 @@ reads either book the same way.
   out; XLSX and CSV keep the zero.
 - **Dates:** per [language](#language).
 - **Page:** A4 portrait, 18 mm side margins. Tables wider than the page
-  switch the section to landscape pages. Running header from page 2:
+  switch the section to landscape pages. A table whose header words do not
+  fit side by side (a long unbroken wallet name) hyphenates its headers
+  instead, so its last columns stay on the page. The PDF tests check every
+  rendered page for text past its edge (`Rendered::off_page`); only text
+  wider than any page (a 400-character unbroken description) may still run
+  off, never a figure. Running header from page 2:
   *Kassiber · report title* left, *book · period* right. Footer on every page:
   *Generated … · journal input v…* left, *Page x of y* right.
 - **Charts:** few and quiet: a balance line (market value solid, cost basis
@@ -272,11 +277,16 @@ directory. Single-table exports (transactions, capital gains) stay one file.
 - UTF-8 without BOM, `\n` line endings, RFC 4180 quoting;
 - dates and times ISO 8601 in UTC (`2025-03-15T14:05:00Z`);
 - amounts as plain decimal strings without exponent or grouping: BTC from the
-  exact msat value (`0.12345678`; more places only when msat is sub-satoshi),
-  fiat at the stored precision;
+  exact msat value with eight places (`0.12345678`, `0.05000000`, zero as
+  `0.00000000`) and more places only for the sub-satoshi digits an msat
+  amount has (`0.000000015`, up to eleven: `0.00000000001` is one msat),
+  never rounded; fiat at the stored precision;
 - every BTC amount has an integer `_msat` column beside it;
 - unknown values are empty, with the reason in a `*_status` column where the
   model has one;
+- a single-table export that can be a draft list (transactions) ends with a
+  plain `status` column holding `draft` or `final` on every row, so the file
+  itself says what the envelope's warning says;
 - `summary.csv` holds the facts and headline figures as `section`, `key`,
   `value`, `unit`; labels stay in PDF and XLSX;
 - `manifest.json` lists `schema` (`kassiber.report/1`), report kind, book
@@ -294,7 +304,8 @@ manifest's `schema` lets a consumer detect the new layout.
 | --- | --- | --- |
 | full report: one file of 12 stacked sections with title rows | one ZIP: `summary.csv`, one file per table, `manifest.json` | stacked sections cannot be loaded by any CSV reader without hand-editing |
 | transactions: a title row and a section title row above the header | header row only | title rows break CSV readers; the title stays in the envelope |
-| `quantity`, `amount`, `fee` as Python float `repr` (`1e-08` possible) | `quantity_btc`, `amount_btc`, `fee_btc` as exact decimal strings | floats lose msat precision and exponents break spreadsheets; the suffix names the unit |
+| transactions: a draft list said so only in its section title (`Transactions (draft: … withheld)`) | a last column `status`, `draft` or `final` on every row | without title rows the file itself must still say it is a draft |
+| `quantity`, `amount`, `fee` as Python float `repr` (`1e-08` possible) | `quantity_btc`, `amount_btc`, `fee_btc` as exact decimal strings with eight places, more only for sub-satoshi msat | floats lose msat precision and exponents break spreadsheets; the suffix names the unit |
 | `*_sat` as float msat/1000 | removed | duplicates `*_msat` with less precision |
 | `*_msat` integer | unchanged | exact |
 | `cost_basis`, `proceeds`, `gain_loss`, `market_value` floats | same names, decimal strings, `fiat_currency` column | names are already clear; values become exact text |
@@ -302,7 +313,8 @@ manifest's `schema` lets a consumer detect the new layout.
 | Austrian bundle: German headers (`Börse`, `Anlage`, …) and merged total rows | snake_case headers, totals in `manifest.json` and the E 1kv table | German headers stay in PDF/XLSX where people read them |
 
 Unchanged: platform CSVs (another program's format), the transaction export's
-column names except the unit suffixes above, and every `_msat` column.
+column names except the unit suffixes and the added `status` above, and every
+`_msat` column.
 
 ## What must not change
 

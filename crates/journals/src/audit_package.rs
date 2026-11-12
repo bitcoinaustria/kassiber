@@ -201,9 +201,8 @@ pub fn export(
         }
     };
     staging.publish(directory)?;
-    let resolved = directory
-        .canonicalize()
-        .map_err(|e| write_failed(e, directory))?;
+    let resolved =
+        kassiber_paths::canonicalize(directory).map_err(|e| write_failed(e, directory))?;
     let totals = val(&summary, "summary");
     Ok(dict([
         ("dir", path_text(&resolved)),
