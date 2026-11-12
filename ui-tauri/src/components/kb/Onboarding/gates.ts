@@ -2,7 +2,7 @@ import {
   aiBaseUrlHint,
   backendEndpointHint,
   localAiBaseUrlHint,
-  databasePassphraseHint,
+  databasePassphraseIssue,
   electrumEndpointUrl,
   parseTaxLongTermDays,
 } from "./constants";
@@ -75,7 +75,7 @@ export const securityStepComplete = (form: OnboardingForm): boolean =>
   form.databaseMode === "plaintext"
     ? form.plaintextAcknowledged
     : form.recoveryAcknowledged &&
-      databasePassphraseHint(
+      databasePassphraseIssue(
         form.databasePassphrase,
         form.databasePassphraseConfirm,
       ) === null;

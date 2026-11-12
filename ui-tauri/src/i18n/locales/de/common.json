@@ -76,5 +76,9 @@
   "privacy": {
     "hiddenAmount": "Betrag verborgen",
     "hiddenShare": "Anteil verborgen"
+  },
+  "passphraseReveal": {
+    "show": "Passphrase anzeigen",
+    "hide": "Passphrase ausblenden"
   }
 }

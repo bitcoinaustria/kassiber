@@ -149,7 +149,8 @@ in-app toolbar there with no inset and no drag region. Screens outside the shell
 the same outline: the title bar row on the chrome and an inset page panel.
 Inside it the lock screen centres the wordmark over the welcome screen's type
 (title and lead, no eyebrow) and a passphrase field exactly the wordmark's width,
-with Back to setup set apart at the foot of the panel.
+with Open other books set apart at the foot of the panel. That action only
+clears the UI session and returns to the start screen; it deletes no books.
 While the native Touch ID prompt is open, the form gives way to a single
 waiting status and Touch ID guidance. Cancelling or failing that prompt restores
 the passphrase field and keyboard focus.
@@ -161,7 +162,9 @@ block is found (its stepped outline flashes orange), and the chain moves back
 in discrete steps; small pixel cubes above it are the mempool. The artwork is
 an SVG generated locally: it shows no chain data and stays out of the
 accessibility tree and tab order. Reduced motion holds it still, and hidden
-windows pause both the animation and its timer.
+windows pause both the animation and its timer. A language select beside the
+wordmark sets the UI language, the same setting as Settings → Appearance,
+before setup starts.
 
 The pixel wordmark appears throughout setup, the lock screen, and the sidebar.
 It arrives as falling cells on the welcome screen, decrypts when the lock
@@ -174,8 +177,9 @@ The app icon keeps the K and Bitcoin-orange wedge on a pixel grid. Standalone
 light- and dark-background wordmarks live in `docs/assets/` for reuse.
 
 The setup steps run in one wizard card laid out after T3 Code's welcome
-wizard: the identity and a segmented step track in its header, the step in an
-inset panel. Each step leads with its main decision as option cards; the Sync
+wizard: the identity, a "Step 4 of 5" position, and a segmented step track in
+its header, the step in an inset panel. The express path opens on Security, so
+it counts from there over the same five steps. Each step leads with its main decision as option cards; the Sync
 step starts with none chosen, so no server is picked for the user. Every card
 says what that option lets Kassiber reach and when (the internet when you
 sync, this device when you use the assistant, or no connections) and names the

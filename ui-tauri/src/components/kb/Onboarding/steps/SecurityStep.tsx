@@ -3,7 +3,12 @@ import { useTranslation } from "react-i18next";
 
 import { canUseTouchIdPassphraseUnlock } from "@/daemon/transport";
 
-import { databasePassphraseHint } from "../constants";
+import {
+  DATABASE_PASSPHRASE_HINT_KEYS,
+  databasePassphraseIssue,
+  databasePassphraseStrength,
+  MIN_DATABASE_PASSPHRASE_CHARS,
+} from "../constants";
 import { CheckRow, ChoiceCard, TextField } from "../fields";
 import { OnboardingStepActions, OnboardingStepPage } from "../frame";
 import type { StepComponentProps } from "../types";
@@ -18,19 +23,32 @@ export const SecurityStep = ({
   const { t } = useTranslation(["onboarding", "common"]);
   const encrypted = form.databaseMode === "sqlcipher";
   const touchIdAvailable = encrypted && canUseTouchIdPassphraseUnlock();
-  const passphraseHint = encrypted
-    ? databasePassphraseHint(
+  const passphraseIssue = encrypted
+    ? databasePassphraseIssue(
         form.databasePassphrase,
         form.databasePassphraseConfirm,
       )
     : null;
+  const passphraseHint = passphraseIssue
+    ? t(DATABASE_PASSPHRASE_HINT_KEYS[passphraseIssue], {
+        min: MIN_DATABASE_PASSPHRASE_CHARS,
+      })
+    : null;
+  // Only the not-yet-strong ratings speak; a strong passphrase needs no badge.
+  const strength = encrypted
+    ? databasePassphraseStrength(form.databasePassphrase)
+    : null;
+  const strengthNote =
+    strength === "weak"
+      ? t("security.strength.weak")
+      : strength === "fair"
+        ? t("security.strength.fair")
+        : null;
   const canCreateBooks = encrypted
-    ? passphraseHint === null && form.recoveryAcknowledged
+    ? passphraseIssue === null && form.recoveryAcknowledged
     : form.plaintextAcknowledged;
   return (
-    <OnboardingStepPage
-      title={t("security.title")}
-    >
+    <OnboardingStepPage title={t("security.title")} lead={t("security.lead")}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -50,16 +68,19 @@ export const SecurityStep = ({
               label={t("security.passphrase")}
               name="database-passphrase"
               type="password"
+              revealable
               autoComplete="new-password"
               autoFocus
               value={form.databasePassphrase}
               placeholder={t("security.passphrasePlaceholder")}
+              description={strengthNote}
               onChange={(value) => update("databasePassphrase", value)}
             />
             <TextField
               label={t("security.confirmPassphrase")}
               name="database-passphrase-confirm"
               type="password"
+              revealable
               autoComplete="new-password"
               value={form.databasePassphraseConfirm}
               placeholder={t("security.confirmPassphrasePlaceholder")}

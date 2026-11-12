@@ -76,5 +76,9 @@
   "privacy": {
     "hiddenAmount": "Hidden amount",
     "hiddenShare": "Hidden share"
+  },
+  "passphraseReveal": {
+    "show": "Show passphrase",
+    "hide": "Hide passphrase"
   }
 }

@@ -22,6 +22,7 @@ import {
 } from "@/lib/appLock";
 
 import { KassiberWordmark } from "./KassiberWordmark";
+import { PassphraseRevealButton } from "./PassphraseRevealButton";
 import { WORDMARK_COLUMNS } from "./kassiberWordmarkGrid";
 
 /** The wordmark's cell size here, and the form's width to match it. */
@@ -167,6 +168,7 @@ export function LockScreen({
 }) {
   const { t } = useTranslation("chrome");
   const [passphrase, setPassphrase] = React.useState("");
+  const [revealPassphrase, setRevealPassphrase] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [touchIdSubmitting, setTouchIdSubmitting] = React.useState(false);
@@ -317,7 +319,8 @@ export function LockScreen({
       lead={touchIdSubmitting ? t("lock.touchIdLead") : t(`lock.lead.${reason}`)}
       footer={
         <LockFooter
-          label={t("lock.backToSetup")}
+          // Only the UI session is cleared; no books are touched.
+          label={t("lock.openOtherBooks")}
           disabled={submitting}
           onClick={onReset}
         />
@@ -351,10 +354,10 @@ export function LockScreen({
               <Input
                 id="lock-passphrase"
                 ref={inputRef}
-                type="password"
+                type={revealPassphrase ? "text" : "password"}
                 autoComplete="current-password"
                 placeholder={t("lock.passphrase")}
-                className="h-11 pr-12 pl-10"
+                className="h-11 pr-20 pl-10"
                 value={passphrase}
                 aria-invalid={error ? true : undefined}
                 aria-describedby={error ? "lock-error" : undefined}
@@ -366,7 +369,13 @@ export function LockScreen({
               />
               {/* Placed by a wrapper: `kb-hit-floor` keeps every button
                   `position: relative`, outranking an `absolute` utility. */}
-              <div className="absolute inset-y-0 right-1.5 flex items-center">
+              <div className="absolute inset-y-0 right-1.5 flex items-center gap-0.5">
+                <PassphraseRevealButton
+                  revealed={revealPassphrase}
+                  onToggle={() => setRevealPassphrase((current) => !current)}
+                  controls="lock-passphrase"
+                  disabled={busy}
+                />
                 <Button
                   type="submit"
                   size="icon-sm"

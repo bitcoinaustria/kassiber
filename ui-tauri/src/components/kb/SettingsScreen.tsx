@@ -52,7 +52,11 @@ import {
 } from "@/lib/screen-layout";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
-import { databasePassphraseHint } from "@/components/kb/Onboarding/constants";
+import {
+  DATABASE_PASSPHRASE_HINT_KEYS,
+  databasePassphraseIssue,
+  MIN_DATABASE_PASSPHRASE_CHARS,
+} from "@/components/kb/Onboarding/constants";
 import {
   DEFAULT_SETTINGS_SECTION_ID,
   PENDING_SETTINGS_BACKEND_EDIT_KEY,
@@ -113,6 +117,7 @@ export function SettingsScreen({
   const setPrivacyMode = useUiStore((s) => s.setPrivacyMode);
   const hideAmountsOnUnlock = useUiStore((s) => s.hideAmountsOnUnlock);
   const setHideAmountsOnUnlock = useUiStore((s) => s.setHideAmountsOnUnlock);
+  const { t: tOnboarding } = useTranslation("onboarding");
   const clearClipboard = useUiStore((s) => s.clearClipboard);
   const setClearClipboard = useUiStore((s) => s.setClearClipboard);
   const currency = useUiStore((s) => s.currency);
@@ -931,9 +936,13 @@ export function SettingsScreen({
       setPassphraseError(t("changePassphrase.errorCurrent"));
       return;
     }
-    const hint = databasePassphraseHint(newPassphrase, newPassphraseConfirm);
-    if (hint) {
-      setPassphraseError(hint);
+    const issue = databasePassphraseIssue(newPassphrase, newPassphraseConfirm);
+    if (issue) {
+      setPassphraseError(
+        tOnboarding(DATABASE_PASSPHRASE_HINT_KEYS[issue], {
+          min: MIN_DATABASE_PASSPHRASE_CHARS,
+        }),
+      );
       return;
     }
 

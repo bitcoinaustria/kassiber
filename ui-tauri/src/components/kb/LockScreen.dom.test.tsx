@@ -359,10 +359,21 @@ describe("LockScreen", () => {
     expect(foreground.onTouchIdUnlock).toHaveBeenCalledTimes(1);
   });
 
-  it("goes back to setup from the footer", () => {
+  it("shows the typed passphrase on request", () => {
+    renderLock();
+    const input = screen.getByLabelText<HTMLInputElement>("Passphrase");
+    const toggle = screen.getByRole("button", { name: "Show passphrase" });
+
+    expect(input.type).toBe("password");
+    fireEvent.click(toggle);
+    expect(input.type).toBe("text");
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("leaves for other books from the footer", () => {
     const props = renderLock();
 
-    fireEvent.click(screen.getByRole("button", { name: "Back to setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open other books" }));
 
     expect(props.onReset).toHaveBeenCalledTimes(1);
   });

@@ -12,6 +12,7 @@ import type { Profile, ProfilesSnapshot, Workspace } from "@/mocks/profiles";
 import { useUiStore, type Identity } from "@/store/ui";
 
 import { KassiberWordmark } from "@/components/kb/KassiberWordmark";
+import { PassphraseRevealButton } from "@/components/kb/PassphraseRevealButton";
 
 import { OnboardingStepPage } from "./frame";
 import {
@@ -47,6 +48,7 @@ export function ImportProjectPanel({
   const setIdentity = useUiStore((state) => state.setIdentity);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const [passphrase, setPassphrase] = useState("");
+  const [revealPassphrase, setRevealPassphrase] = useState(false);
   const [openingProfileId, setOpeningProfileId] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const needsPassphrase = encrypted && !snapshot;
@@ -177,17 +179,30 @@ export function ImportProjectPanel({
                 <Label htmlFor="import-passphrase">
                   {t("import.passphraseLabel")}
                 </Label>
-                <Input
-                  id="import-passphrase"
-                  autoFocus
-                  type="password"
-                  value={passphrase}
-                  disabled={loadingProfiles}
-                  onChange={(event) => {
-                    setPassphrase(event.currentTarget.value);
-                    if (openError) setOpenError(null);
-                  }}
-                />
+                <div className="relative">
+                  <Input
+                    id="import-passphrase"
+                    autoFocus
+                    type={revealPassphrase ? "text" : "password"}
+                    className="pr-10"
+                    value={passphrase}
+                    disabled={loadingProfiles}
+                    onChange={(event) => {
+                      setPassphrase(event.currentTarget.value);
+                      if (openError) setOpenError(null);
+                    }}
+                  />
+                  {/* Placed by a wrapper: `kb-hit-floor` keeps every button
+                      `position: relative`, outranking an `absolute` utility. */}
+                  <div className="absolute inset-y-0 right-0.5 flex items-center">
+                    <PassphraseRevealButton
+                      revealed={revealPassphrase}
+                      onToggle={() => setRevealPassphrase((current) => !current)}
+                      controls="import-passphrase"
+                      disabled={loadingProfiles}
+                    />
+                  </div>
+                </div>
               </div>
               <Button
                 type="submit"

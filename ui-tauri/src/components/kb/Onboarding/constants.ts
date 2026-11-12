@@ -204,15 +204,53 @@ export const taxLongTermDaysHint = (raw: string): string | null => {
   return "Use a whole number of days.";
 };
 
-export const databasePassphraseHint = (
+/** Why a new database passphrase cannot be used yet. */
+export type DatabasePassphraseIssue =
+  | "required"
+  | "tooShort"
+  | "confirmRequired"
+  | "mismatch";
+
+/**
+ * Onboarding-bundle keys for each passphrase issue. Callers translate at render
+ * time with `{ min: MIN_DATABASE_PASSPHRASE_CHARS }`, so the message follows
+ * the UI language.
+ */
+export const DATABASE_PASSPHRASE_HINT_KEYS = {
+  required: "security.hint.required",
+  tooShort: "security.hint.tooShort",
+  confirmRequired: "security.hint.confirmRequired",
+  mismatch: "security.hint.mismatch",
+} as const satisfies Record<DatabasePassphraseIssue, string>;
+
+/** How easy an acceptable passphrase looks to guess; `null` when too short to rate. */
+export type DatabasePassphraseStrength = "weak" | "fair" | "strong";
+
+/**
+ * A local, rule-of-thumb rating for a passphrase that already meets the
+ * minimum length: longer and more varied is stronger. It only informs; the
+ * minimum length stays the one hard gate.
+ */
+export const databasePassphraseStrength = (
+  passphrase: string,
+): DatabasePassphraseStrength | null => {
+  const length = [...passphrase].length;
+  if (length < MIN_DATABASE_PASSPHRASE_CHARS) return null;
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter((pattern) =>
+    pattern.test(passphrase),
+  ).length;
+  if (length >= 20 || (length >= 16 && classes >= 3)) return "strong";
+  if (length >= 14 || classes >= 3) return "fair";
+  return "weak";
+};
+
+export const databasePassphraseIssue = (
   passphrase: string,
   confirmation: string,
-): string | null => {
-  if (!passphrase) return "Enter a database passphrase.";
-  if (passphrase.length < MIN_DATABASE_PASSPHRASE_CHARS) {
-    return `Use at least ${MIN_DATABASE_PASSPHRASE_CHARS} characters.`;
-  }
-  if (!confirmation) return "Confirm the database passphrase.";
-  if (passphrase !== confirmation) return "Passphrases do not match.";
+): DatabasePassphraseIssue | null => {
+  if (!passphrase) return "required";
+  if (passphrase.length < MIN_DATABASE_PASSPHRASE_CHARS) return "tooShort";
+  if (!confirmation) return "confirmRequired";
+  if (passphrase !== confirmation) return "mismatch";
   return null;
 };

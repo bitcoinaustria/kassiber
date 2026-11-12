@@ -263,7 +263,7 @@
     "unlocking": "Wird entsperrt…",
     "unlock": "Entsperren",
     "openBooks": "Bücher öffnen",
-    "backToSetup": "Zurück zum Setup",
+    "openOtherBooks": "Andere Bücher öffnen",
     "passphraseEmpty": "Gib zuerst die Passphrase ein.",
     "passphraseFailed": "Diese Passphrase hat die Bücher nicht entsperrt.",
     "unlockFailed": "Kassiber konnte die Bücher nicht entsperren. Versuch es noch einmal.",
