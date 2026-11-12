@@ -62,9 +62,8 @@ pub(super) fn publish(
     let bytes = kassiber_xlsx::render(&document(report, created, lang)?)
         .map_err(|e| AppError::new("internal_error", e.to_string()))?;
     export::write_synced(path, &bytes).map_err(|e| export::io_error(e, Some(path)))?;
-    let absolute = path
-        .canonicalize()
-        .map_err(|e| export::io_error(e, Some(path)))?;
+    let absolute =
+        kassiber_paths::canonicalize(path).map_err(|e| export::io_error(e, Some(path)))?;
     Ok(dict([
         ("file", s(absolute.to_string_lossy())),
         ("bytes", Value::Int(bytes.len().into())),

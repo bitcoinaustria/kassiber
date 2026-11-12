@@ -222,7 +222,7 @@ pub(crate) fn create(
     durable::sync_directory(root)?;
     observer("schema.after_directory_sync")?;
     let instance_id = read_instance_id(&conn)?;
-    let database = std::fs::canonicalize(database).map_err(Error::io)?;
+    let database = kassiber_paths::canonicalize(&database).map_err(Error::io)?;
     Ok(Book {
         connection: conn,
         database,

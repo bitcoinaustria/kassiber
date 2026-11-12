@@ -339,7 +339,7 @@ pub fn export(
     let failed = |e: std::io::Error| export::io_error(e, Some(&target));
     let published = artifact_publication::file(&prepared, &target)
         .map_err(|failure| failed(failure.into_io()))?;
-    let file = target.canonicalize().map_err(failed)?;
+    let file = kassiber_paths::canonicalize(&target).map_err(failed)?;
     Ok(dict([
         ("file", s(file.to_string_lossy().into_owned())),
         ("bytes", Value::Int(published.bytes.into())),

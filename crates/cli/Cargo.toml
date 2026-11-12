@@ -12,6 +12,7 @@ publish.workspace = true
 name = "kassiber_cli"
 
 [dependencies]
+kassiber-paths = { path = "../paths" }
 kassiber-tax-countries = { path = "../tax-countries" }
 kassiber-diagnostics = { path = "../diagnostics" }
 kassiber-transactions = { path = "../transactions" }

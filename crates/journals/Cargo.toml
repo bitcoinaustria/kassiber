@@ -9,6 +9,7 @@ authors.workspace = true
 publish.workspace = true
 
 [dependencies]
+kassiber-paths = { path = "../paths" }
 kassiber-tax-countries = { path = "../tax-countries" }
 kassiber-custody = { path = "../custody" }
 kassiber-envelope = { path = "../envelope" }

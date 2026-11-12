@@ -66,7 +66,7 @@ fn resolve(path: &Path) -> Result<PathBuf> {
             }
         }
         // Resolve existing prefixes so symlinks cannot escape ~/.bitcoin.
-        if let Ok(canonical) = result.canonicalize() {
+        if let Ok(canonical) = kassiber_paths::canonicalize(&result) {
             result = canonical;
         }
     }

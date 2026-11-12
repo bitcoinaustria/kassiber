@@ -660,6 +660,16 @@ fn movable_state(path: &Path) -> Result<bool> {
         Err(_) => Ok(path.exists() || path.is_symlink()),
     }
 }
+/// `os.path.realpath(path, strict=True)`: std's canonicalize, without the
+/// verbatim prefix (`\\?\`) Windows adds, so a path Kassiber shows or stores
+/// reads as the user wrote it.
+pub fn canonicalize(path: &Path) -> std::io::Result<PathBuf> {
+    let resolved = fs::canonicalize(path)?;
+    #[cfg(windows)]
+    let resolved = windows::python_resolved_path(&resolved);
+    Ok(resolved)
+}
+
 /// Path.resolve(strict=False), including symlink parents and missing leaves.
 pub fn canonicalize_allow_missing(path: &Path) -> Result<PathBuf> {
     canonicalize_with_depth(path, 0)

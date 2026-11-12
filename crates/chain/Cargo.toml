@@ -22,6 +22,7 @@ name = "lightning_fixture"
 required-features = ["test-harness"]
 
 [dependencies]
+kassiber-paths = { path = "../paths" }
 kassiber-net = { path = "../net" }
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }

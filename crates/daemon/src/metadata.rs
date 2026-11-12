@@ -167,8 +167,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
                 )
                 .with_hint("Choose an existing local JSONL label export."));
             }
-            let file = path
-                .canonicalize()
+            let file = kassiber_paths::canonicalize(&path)
                 .map_err(|e| AppError::new("internal_error", e.to_string()))?
                 .to_string_lossy()
                 .into_owned();
