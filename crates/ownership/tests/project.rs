@@ -61,8 +61,21 @@ fn now() -> f64 {
 
 fn age(path: &Path, seconds: f64) {
     let when = SystemTime::now() - Duration::from_secs_f64(seconds);
-    fs::File::options()
-        .write(true)
+    let mut options = fs::File::options();
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_WRITE_ATTRIBUTES alone: share modes govern data access, so a
+        // live owner's exclusive handle does not stop setting its times.
+        const FILE_WRITE_ATTRIBUTES: u32 = 0x0100;
+        const FILE_SHARE_ALL: u32 = 0x7;
+        options
+            .access_mode(FILE_WRITE_ATTRIBUTES)
+            .share_mode(FILE_SHARE_ALL);
+    }
+    #[cfg(not(windows))]
+    options.write(true);
+    options
         .open(path)
         .unwrap()
         .set_times(fs::FileTimes::new().set_accessed(when).set_modified(when))
