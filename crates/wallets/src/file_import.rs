@@ -1,5 +1,6 @@
 //! User-triggered ingestion. Document OCR requires an exact local-provider grant.
 pub mod analysis;
+pub mod assets;
 pub mod attachment;
 mod binance;
 mod btcpay;
@@ -20,6 +21,7 @@ mod pocket;
 mod river;
 pub mod samourai;
 mod strike;
+mod swaps;
 mod synthetic;
 pub use synthetic::synthetic_csv_identity;
 mod tax_platform;
@@ -697,10 +699,8 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
     fields.insert("occurred_at".into(), Sql::Text(occurred));
     fields.insert("confirmed_at".into(), sql(confirmed));
     fields.insert("direction".into(), Sql::Text(direction.into()));
-    fields.insert(
-        "asset".into(),
-        Sql::Text(asset(text(row, "asset").if_empty("BTC"))),
-    );
+    let code = asset(text(row, "asset").if_empty("BTC"));
+    fields.insert("asset".into(), Sql::Text(code.clone()));
     let integer_error = |v: &String| {
         AppError::new(
             "internal_error",
@@ -734,8 +734,13 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
     // Python keeps a non-finite fee Decimal until the row's fingerprint
     // converts it to msat, after the network guard.
     let deferred = fee_special.as_ref().map(integer_error);
-    fields.insert("amount".into(), Sql::Integer(msat(&amount)?));
-    fields.insert("fee".into(), Sql::Integer(msat(&fee)?));
+    // Bitcoin keeps its msat conversion; other assets must be exact.
+    let units = |field: &str, value: &Decimal| match assets::class(&code) {
+        assets::Class::Bitcoin => msat(value),
+        _ => assets::exact_units(&code, field, value),
+    };
+    fields.insert("amount".into(), Sql::Integer(units("amount", &amount)?));
+    fields.insert("fee".into(), Sql::Integer(units("fee", &fee)?));
     fields.insert(
         "amount_includes_fee".into(),
         Sql::Integer(i64::from(!text(row, "amount_includes_fee").is_empty())),
@@ -1495,6 +1500,16 @@ fn run(
             &mut ids,
             column_map,
         )
+        .and_then(|mut result| {
+            // Both legs of each provider-reported swap are stored; pair them.
+            let wallet = wallet.as_ref().expect("wallet import");
+            if let Some(pairs) =
+                swaps::pair(conn, &request.profile_id, &wallet.id, &rows, &records)?
+            {
+                kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs));
+            }
+            Ok(result)
+        })
         .and_then(|result| {
             if let Some(bundle) = &bundle {
                 let wallet = wallet.as_ref().expect("wallet import");

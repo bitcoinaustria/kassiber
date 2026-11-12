@@ -30,6 +30,28 @@ const MAX_ROWS: usize = 1_000_000;
 /// Python has no overall budget; each read still has the backend timeout.
 const BUDGET: Duration = Duration::from_secs(3600);
 
+/// What one exchange's mapper returns.
+struct Fetched {
+    records: Vec<Py>,
+    /// Provider-specific counts of operations left out, in the envelope.
+    skipped: Option<Py>,
+    /// Rows left out by asset (docs/plan/23-crypto-assets.md); `None` for a
+    /// mapper that is still Bitcoin-only and does not count them yet.
+    tally: Option<assets::Tally>,
+    /// The provider's own BTC balance, where it states one.
+    reported: Option<bitpanda::Reported>,
+}
+impl From<Vec<Py>> for Fetched {
+    fn from(records: Vec<Py>) -> Self {
+        Self {
+            records,
+            skipped: None,
+            tally: None,
+            reported: None,
+        }
+    }
+}
+
 /// Bitpanda is Rust only; Python knows the first three.
 pub const KINDS: [&str; 4] = ["kraken", "coinbase", "binance", "bitpanda"];
 
@@ -63,6 +85,8 @@ pub fn execute(
     let (name, kind) = backend_kind(&backend, expected)?;
     let mut ids = Ids { identity, at: 0 };
     let wallet = wallet(conn, profile, wallet_ref, &kind, &name, &mut ids)?;
+    // The wallet's `asset_scope` decides which non-Bitcoin rows are kept.
+    let scope = assets::Scope::of_wallet(conn, &wallet.id)?;
     let label = provider(&kind);
     let prepared = prepare(&backend, &kind, &name)?;
     let book = book_id(conn)?;
@@ -93,20 +117,20 @@ pub fn execute(
         key,
         secret,
         source: label,
+        scope,
     };
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
-    let (mut skipped, mut reported) = (None, None);
-    let records = match kind.as_str() {
-        "kraken" => kraken::fetch(&client)?,
-        "coinbase" => coinbase::fetch(&client)?,
-        "bitpanda" => {
-            let fetched = bitpanda::fetch(&client)?;
-            skipped = Some(fetched.skipped);
-            reported = Some(fetched.reported);
-            fetched.records
-        }
-        _ => binance::fetch(&client)?,
+    let Fetched {
+        records,
+        skipped,
+        tally,
+        reported,
+    } = match kind.as_str() {
+        "kraken" => kraken::fetch(&client)?.into(),
+        "coinbase" => coinbase::fetch(&client)?.into(),
+        "bitpanda" => bitpanda::fetch(&client)?,
+        _ => binance::fetch(&client)?.into(),
     };
     let fetched = records.len();
     let rows: Vec<csv::Row> = records
@@ -138,6 +162,15 @@ pub fn execute(
         Some(&format!("{kind}:api:{}", lossy(&name))),
     )
     // A revoked or offline route never publishes a book.
+    // Both legs of each swap are stored now; pair them in the same write.
+    .and_then(|mut result| {
+        let pairs = swaps::pair(conn, profile, &wallet.id, &rows, &normalized)?;
+        if tally.is_some() {
+            let pairs = pairs.unwrap_or(0);
+            kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs));
+        }
+        Ok(result)
+    })
     .and_then(|result| client.authorize().map(|()| result));
     match &result {
         Ok(_) => conn.execute_batch("RELEASE exchange_api_import"),
@@ -158,6 +191,10 @@ pub fn execute(
     }
     if let Some(skipped) = skipped {
         kassiber_envelope::set(&mut result, "skipped", skipped);
+    }
+    if let Some(tally) = &tally {
+        let assets = tally.envelope(scope, &wallet.label);
+        kassiber_envelope::set(&mut result, "assets", assets);
     }
     if let Some(reported) = reported {
         let check = provider_balance(conn, profile, &wallet.id, reported)?;
@@ -403,6 +440,8 @@ struct Client<'a> {
     key: &'a str,
     secret: &'a str,
     source: &'static str,
+    /// The wallet's asset scope: which non-Bitcoin rows a mapper may emit.
+    scope: assets::Scope,
 }
 impl Client<'_> {
     fn authorize(&self) -> Result<(), AppError> {
@@ -593,11 +632,7 @@ fn asset(value: &Py) -> String {
 fn is_bitcoin(code: &str) -> bool {
     matches!(code, "BTC" | "LBTC")
 }
-const FIAT: [&str; 29] = [
-    "AED", "ARS", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD",
-    "HUF", "ILS", "INR", "JPY", "KRW", "MXN", "NOK", "NZD", "PLN", "RON", "SEK", "SGD", "THB",
-    "TRY", "USD", "ZAR",
-];
+use super::assets::FIAT;
 fn is_fiat(code: &str) -> bool {
     FIAT.contains(&code)
 }
@@ -750,6 +785,13 @@ struct Pricing {
     fiat_rate: Option<PriceNumber>,
     method: &'static str,
     external_ref: PyStr,
+}
+/// One leg of a crypto-to-crypto swap: the record plus the `swap_ref` both
+/// legs share, so the import pairs them (docs/plan/23-crypto-assets.md).
+fn swap_leg(entry: Entry, reference: &PyStr) -> Result<Py, AppError> {
+    let mut record = record(entry)?;
+    kassiber_envelope::set(&mut record, "swap_ref", Py::Str(reference.clone()));
+    Ok(record)
 }
 fn record(entry: Entry) -> Result<Py, AppError> {
     let Entry {

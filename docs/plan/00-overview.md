@@ -38,8 +38,10 @@ Out of scope unless a future design says otherwise:
   working papers in core
 - remote multi-user service
 - mobile
-- broad altcoin product scope in core; third-party asset extensions are
-  proposed in [19-extensions.md](19-extensions.md)
+- broad altcoin product scope in core beyond
+  [23-crypto-assets.md](23-crypto-assets.md) (other crypto assets from
+  exchange syncs and provider exports, opt-in per wallet); third-party asset
+  extensions are proposed in [19-extensions.md](19-extensions.md)
 
 ## Current Architecture
 

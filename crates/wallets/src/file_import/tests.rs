@@ -4451,3 +4451,127 @@ fn record_imports_match_existing_only_and_label_their_source() {
     .unwrap_err();
     assert_eq!(error.code, "not_found");
 }
+
+/// docs/plan/23-crypto-assets.md: a provider-reported swap is paired once,
+/// with the country's policy, and other assets are stored exactly or refused.
+#[test]
+fn provider_swaps_pair_once_and_other_assets_store_exactly() {
+    let conn = fixture();
+    conn.execute_batch("UPDATE profiles SET tax_country='at', fiat_currency='EUR' WHERE id='p'")
+        .unwrap();
+    let leg = |txid: &str, direction: &str, asset: &str, amount: &str, swap: Option<&str>| {
+        let mut row = json!({"txid": txid, "occurred_at": "2025-04-01T10:00:00Z", "direction": direction,
+            "asset": asset, "amount": amount, "kind": "swap", "fiat_value": "4000", "fiat_currency": "EUR"});
+        if let Some(swap) = swap {
+            row["swap_ref"] = json!(swap);
+        }
+        row
+    };
+    let rows = json!([
+        {"txid": "b", "occurred_at": "2025-01-02T10:00:00Z", "direction": "inbound", "asset": "BTC",
+         "amount": "0.1", "kind": "buy", "fiat_value": "9000", "fiat_currency": "EUR"},
+        leg("s-out", "outbound", "BTC", "0.05", Some("trade-1")),
+        leg("s-in", "inbound", "ETH", "1.12345678901", Some("trade-1")),
+    ]);
+    let first = import_kind(&conn, &rows.to_string(), Format::Json).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&first, "swap_pairs"),
+        Some(&Py::from(1))
+    );
+    // 11 decimals are stored exactly, in the same unit as msat.
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT amount FROM transactions WHERE external_id='s-in'"
+        ),
+        112_345_678_901
+    );
+    let scope = kassiber_transfers::Scope {
+        workspace_id: "ws",
+        profile_id: "p",
+    };
+    let pairs = kassiber_transfers::execute(
+        &conn,
+        &scope,
+        "transfers.list",
+        &dict(Vec::<(&str, Py)>::new()),
+    )
+    .unwrap();
+    let listed = kassiber_pyjson::dumps(&pairs, &Default::default()).unwrap();
+    assert!(listed.contains(r#""policy": "carrying-value""#), "{listed}");
+    assert!(listed.contains(r#""pair_source": "provider""#), "{listed}");
+    // A re-run keeps the pair and authors no second one.
+    let again = import_kind(&conn, &rows.to_string(), Format::Json).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "swap_pairs"),
+        Some(&Py::from(0))
+    );
+    // An import without swaps reports none.
+    let plain = json!([{"txid": "c", "occurred_at": "2025-05-01T10:00:00Z", "direction": "inbound",
+        "asset": "BTC", "amount": "0.01", "kind": "deposit"}]);
+    let plain = import_kind(&conn, &plain.to_string(), Format::Json).unwrap();
+    assert_eq!(kassiber_envelope::get(&plain, "swap_pairs"), None);
+
+    // Finer than 11 decimals, or too large: refused, never rounded.
+    for amount in ["0.000000000001", "100000000"] {
+        let finer = json!([leg("x", "inbound", "ETH", amount, None)]);
+        let error = import_kind(&conn, &finer.to_string(), Format::Json).unwrap_err();
+        assert_eq!(error.code, "validation", "{amount}: {error:?}");
+    }
+    // A swap needs exactly one leg each way.
+    let lopsided = json!([
+        leg("y-1", "outbound", "BTC", "0.01", Some("trade-2")),
+        leg("y-2", "outbound", "BTC", "0.01", Some("trade-2")),
+    ]);
+    let error = import_kind(&conn, &lopsided.to_string(), Format::Json).unwrap_err();
+    assert_eq!(error.code, "protocol_error", "{error:?}");
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT COUNT(*) FROM transactions WHERE external_id LIKE 'y-%'"
+        ),
+        0
+    );
+}
+
+#[test]
+fn asset_scope_is_validated_and_defaults_to_bitcoin() {
+    let conn = fixture();
+    assert_eq!(
+        assets::Scope::of_wallet(&conn, "wallet").unwrap(),
+        assets::Scope::Bitcoin
+    );
+    assets::Scope::Crypto.store(&conn, "p", "wallet").unwrap();
+    assert_eq!(
+        assets::Scope::of_wallet(&conn, "wallet").unwrap(),
+        assets::Scope::Crypto
+    );
+    let error = lifecycle::execute(
+        &conn,
+        lifecycle::Operation::Update {
+            profile_id: "p".into(),
+            wallet: "wallet".into(),
+            label: None,
+            account: None,
+            config: json!({"asset_scope": "stocks"}),
+            clear: vec![],
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "validation");
+    let mut tally = assets::Tally::default();
+    assert!(tally.admit(assets::Scope::Bitcoin, "BTC", assets::Class::Bitcoin));
+    assert!(!tally.admit(assets::Scope::Bitcoin, "ETH", assets::Class::Crypto));
+    assert!(!tally.admit(assets::Scope::Bitcoin, "ETH", assets::Class::Crypto));
+    assert!(!tally.admit(assets::Scope::Crypto, "AAPL", assets::Class::Excluded));
+    assert!(!tally.admit(assets::Scope::Bitcoin, "EUR", assets::Class::Fiat));
+    assert!(tally.admit(assets::Scope::Crypto, "SOL", assets::Class::Crypto));
+    assert_eq!(
+        kassiber_pyjson::dumps(
+            &tally.envelope(assets::Scope::Bitcoin, "Tom's Ex"),
+            &Default::default()
+        )
+        .unwrap(),
+        r#"{"scope": "bitcoin", "skipped": {"ETH": 2}, "excluded": {"AAPL": 1}, "next_step": "kassiber wallets update --wallet 'Tom'\\''s Ex' --config '{\"asset_scope\": \"crypto\"}', then sync or import again to keep ETH"}"#
+    );
+}

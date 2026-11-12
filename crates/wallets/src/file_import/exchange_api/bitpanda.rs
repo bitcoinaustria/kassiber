@@ -22,14 +22,6 @@ const NAMED: [&str; 5] = ["deposit", "withdrawal", "reward", "buy", "sell"];
 /// Bitpanda's BTC quantities must be whole msat.
 const BTC_DECIMALS: usize = 11;
 
-pub(super) struct Fetched {
-    pub records: Vec<Py>,
-    /// Operations left out on purpose, by reason; reported in the envelope.
-    pub skipped: Py,
-    /// Bitpanda's own BTC balance, read from the history already fetched.
-    pub reported: Reported,
-}
-
 /// Bitpanda's BTC balance as its history states it, or why it is unknown.
 #[derive(Clone, PartialEq, Debug)]
 pub(super) enum Reported {
@@ -571,12 +563,13 @@ pub(super) fn normalize(
     }
     Ok(Fetched {
         records,
-        reported: reported(&relevant, btc),
-        skipped: dict([
+        tally: None,
+        reported: Some(reported(&relevant, btc)),
+        skipped: Some(dict([
             ("fiat_only_operations", Py::from(fiat_only)),
             ("non_btc_operations", Py::from(other)),
             ("internal_btc_moves", Py::from(internal)),
-        ]),
+        ])),
     })
 }
 

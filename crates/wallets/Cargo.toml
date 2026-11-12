@@ -110,6 +110,9 @@ kassiber-setup = { path = "../setup" }
 kassiber-rates = { path = "../rates" }
 # Reuse managed evidence storage and its validator; do not add a blob store.
 kassiber-transactions = { path = "../transactions" }
+# Imports pair the two legs of a provider-reported swap through reviewed
+# pair authoring (docs/plan/23-crypto-assets.md).
+kassiber-transfers = { path = "../transfers" }
 # The generic-ledger template workbook, through the shared renderer.
 kassiber-xlsx = { path = "../xlsx" }
 # Audited descriptor grammars, BIP32, script construction and confidential
