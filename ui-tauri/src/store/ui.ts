@@ -1064,7 +1064,11 @@ export const useUiStore = create<UiState>()(
             );
             if (existing) {
               existingId = existing.id;
-              const repeated = sameNotificationText(existing, notification);
+              // A running job re-announcing itself is the same run, not a
+              // repeat of it, so it never counts up.
+              const repeated =
+                !notification.progress &&
+                sameNotificationText(existing, notification);
               return [
                 {
                   ...existing,

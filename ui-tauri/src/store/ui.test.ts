@@ -193,6 +193,24 @@ describe("UI persistence", () => {
     expect(useUiStore.getState().notifications[0].repeatCount).toBeUndefined();
   });
 
+  it("never counts a keyed running job as a repeat", () => {
+    useUiStore.setState({ notifications: [] });
+    const { addNotification } = useUiStore.getState();
+    const running = {
+      title: "Refreshing book",
+      body: "Syncing wallets",
+      tone: "info" as const,
+      dedupeKey: "book-refresh",
+      progress: { indeterminate: true },
+    };
+    addNotification(running);
+    addNotification(running);
+    addNotification(running);
+    const { notifications } = useUiStore.getState();
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].repeatCount).toBeUndefined();
+  });
+
   it("does not fold a running job into an identical finished one", () => {
     useUiStore.setState({ notifications: [] });
     const { addNotification } = useUiStore.getState();
