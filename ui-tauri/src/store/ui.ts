@@ -306,11 +306,6 @@ export interface UiState {
   /** Launch and unlock raise the mode to at least "hideAmounts". */
   hideAmountsOnUnlock: boolean;
   clearClipboard: boolean;
-  /**
-   * Books (profile ids) that opted in to probing their own connections on a
-   * timer. Per book, because each book syncs from its own servers.
-   */
-  connectionAutoCheckBooks: string[];
   explorerSettings: ExplorerSettings;
   appLockPolicy: AppLockPolicy;
   identity: Identity | null;
@@ -432,7 +427,6 @@ export interface UiState {
   /** Applies "hide amounts when Kassiber unlocks" if the user enabled it. */
   enforceUnlockPrivacy: () => void;
   setClearClipboard: (clearClipboard: boolean) => void;
-  setConnectionAutoCheck: (profileId: string, enabled: boolean) => void;
   setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
@@ -594,17 +588,6 @@ export function normalizeBookChartPeriods(
   );
 }
 
-function normalizeConnectionAutoCheckBooks(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return [
-    ...new Set(
-      value.filter(
-        (entry): entry is string => typeof entry === "string" && entry !== "",
-      ),
-    ),
-  ];
-}
-
 export function normalizeAppScale(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return DEFAULT_APP_SCALE;
@@ -663,7 +646,6 @@ export function uiStatePartialForStorage(state: UiState) {
     privacyMode: state.privacyMode,
     hideAmountsOnUnlock: state.hideAmountsOnUnlock,
     clearClipboard: state.clearClipboard,
-    connectionAutoCheckBooks: state.connectionAutoCheckBooks,
     appScale: state.appScale,
     explorerSettings: state.explorerSettings,
     appLockPolicy: state.appLockPolicy,
@@ -691,7 +673,7 @@ export function uiStatePartialForStorage(state: UiState) {
   };
 }
 
-export const UI_STATE_VERSION = 3;
+export const UI_STATE_VERSION = 4;
 
 /**
  * v1: `developerToolsEnabled` stopped meaning "show the Logs page" and became
@@ -711,13 +693,15 @@ export function migrateUiState(
   version: number,
 ): ReturnType<typeof uiStatePartialForStorage> {
   const restored = persisted as Partial<UiState>;
+  const dock = version >= 2 ? {} : migrateAssistantDockToPanel(restored);
   return {
     ...restored,
     // `!(version >= 1)` rather than `version < 1`, so a blob with no numeric
     // version is treated as pre-v1 instead of slipping through.
     ...(version >= 1 ? {} : { developerToolsEnabled: false }),
-    ...(version >= 2 ? {} : migrateAssistantDockToPanel(restored)),
+    ...dock,
     ...(version >= 3 ? {} : migrateHideSensitiveToPrivacyMode(restored)),
+    ...(version >= 4 ? {} : migrateClosedBarDefault({ ...restored, ...dock })),
   } as ReturnType<typeof uiStatePartialForStorage>;
 }
 
@@ -744,6 +728,17 @@ function migrateAssistantDockToPanel(restored: Partial<UiState>) {
 }
 
 /**
+ * v4: the closed-panel bar is off by default; the title-bar panel button and
+ * ⌘I already open the assistant. The composer was the old default everyone
+ * carries, so it goes; the launcher was only ever picked, so it stays.
+ */
+function migrateClosedBarDefault(restored: Partial<UiState>) {
+  return restored.assistantClosedBar === "composer"
+    ? ({ assistantClosedBar: "hidden" } as Partial<UiState>)
+    : {};
+}
+
+/**
  * v3: the "hide sensitive values" boolean became a three-state privacy mode.
  * A user who hid values gets "hideAmounts", which hides everything the
  * boolean hid; "hideAll" only adds the shares the boolean left visible.
@@ -767,7 +762,6 @@ export const useUiStore = create<UiState>()(
       hideSensitive: false,
       hideAmountsOnUnlock: false,
       clearClipboard: true,
-      connectionAutoCheckBooks: [],
       explorerSettings: DEFAULT_EXPLORER_SETTINGS,
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
@@ -784,7 +778,8 @@ export const useUiStore = create<UiState>()(
       // Right-aligned, next to where the panel opens; Settings can move the
       // closed bar left/center/right.
       assistantDockPosition: "right",
-      assistantClosedBar: "composer",
+      // Off: the title-bar panel button and ⌘I open the assistant.
+      assistantClosedBar: "hidden",
       assistantPanelOpen: false,
       rightPanelOpen: false,
       rightPanelMaximized: false,
@@ -844,15 +839,6 @@ export const useUiStore = create<UiState>()(
             : state,
         ),
       setClearClipboard: (clearClipboard) => set({ clearClipboard }),
-      setConnectionAutoCheck: (profileId, enabled) =>
-        set((state) => {
-          const others = state.connectionAutoCheckBooks.filter(
-            (id) => id !== profileId,
-          );
-          return {
-            connectionAutoCheckBooks: enabled ? [...others, profileId] : others,
-          };
-        }),
       setExplorerSettings: (settings) =>
         set((state) => ({
           explorerSettings: { ...state.explorerSettings, ...settings },
@@ -1156,11 +1142,6 @@ export const useUiStore = create<UiState>()(
           appScale: normalizeAppScale(restored.appScale ?? current.appScale),
           clearClipboard: restored.clearClipboard ?? current.clearClipboard,
           ...restoredPrivacy(restored, current),
-          // Only an explicit per-book opt-in starts the timer; anything else
-          // is off.
-          connectionAutoCheckBooks: normalizeConnectionAutoCheckBooks(
-            restored.connectionAutoCheckBooks,
-          ),
           explorerSettings: {
             ...DEFAULT_EXPLORER_SETTINGS,
             ...(restored.explorerSettings ?? current.explorerSettings),

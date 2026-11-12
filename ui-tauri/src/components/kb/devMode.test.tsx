@@ -115,7 +115,7 @@ describe("pre-release dev mode", () => {
   // migration drops it once. zustand only runs `migrate` for older stored
   // versions, which is what lets a later opt-in survive.
   it("drops a pre-v1 stored opt-in exactly once", () => {
-    expect(UI_STATE_VERSION).toBe(3);
+    expect(UI_STATE_VERSION).toBe(4);
     expect(
       migrateUiState({ developerToolsEnabled: true, theme: "light" }, 0),
     ).toMatchObject({ developerToolsEnabled: false, theme: "light" });

@@ -236,14 +236,14 @@ describe("assistant panel preferences", () => {
     expect(migrateUiState({ assistantDockAutoHide: true } as never, 1)).toMatchObject({
       assistantClosedBar: "launcher",
     });
-    // Everyone else saw the composer and keeps it.
+    // Everyone else saw the composer, the old default, which v4 turns off.
     for (const legacy of [
       { assistantDockAutoHide: false, assistantDockDiscovered: true },
       { assistantDockAutoHide: true, assistantDockDiscovered: false },
       {},
     ]) {
       expect(migrateUiState(legacy as never, 1)).toMatchObject({
-        assistantClosedBar: "composer",
+        assistantClosedBar: "hidden",
       });
     }
     const migrated = migrateUiState({ assistantDockAutoHide: true } as never, 1);
@@ -251,6 +251,20 @@ describe("assistant panel preferences", () => {
     // Already-migrated state is left alone.
     expect(migrateUiState({ assistantClosedBar: "hidden" } as never, 2)).toMatchObject({
       assistantClosedBar: "hidden",
+    });
+  });
+
+  it("turns the old default closed bar off once", () => {
+    expect(migrateUiState({ assistantClosedBar: "composer" } as never, 3)).toMatchObject({
+      assistantClosedBar: "hidden",
+    });
+    // The launcher was only ever chosen, so it stays.
+    expect(migrateUiState({ assistantClosedBar: "launcher" } as never, 3)).toMatchObject({
+      assistantClosedBar: "launcher",
+    });
+    // A composer picked after v4 is a choice.
+    expect(migrateUiState({ assistantClosedBar: "composer" } as never, 4)).toMatchObject({
+      assistantClosedBar: "composer",
     });
   });
 
