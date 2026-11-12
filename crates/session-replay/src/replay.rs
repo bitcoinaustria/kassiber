@@ -113,6 +113,25 @@ impl Paths {
     }
 }
 
+/// The wall-clock spans the replayed process saw through the clock shim:
+/// its realtime base (the shared SQLite clock's, or the recorded start) plus
+/// the replay's own elapsed time. A slow machine stretches them past the
+/// recording's end, so they count as generated in their own right.
+fn virtual_spans(session: &Session, elapsed_us: i64) -> Vec<(i64, i64)> {
+    let mut bases = vec![session.started_us];
+    if let Some(base) = session
+        .env
+        .get("KASSIBER_TEST_CLOCK_BASE_US")
+        .and_then(|v| v.parse::<i64>().ok())
+    {
+        bases.push(base);
+    }
+    bases
+        .into_iter()
+        .map(|base| (base, base + elapsed_us.max(0)))
+        .collect()
+}
+
 /// The account this replay runs as, from the password database.
 fn current_user() -> Option<String> {
     // SAFETY: getuid cannot fail.
@@ -794,6 +813,7 @@ pub fn replay(
         end: ended,
         local_offset_us: local_offset_us(),
         also: std::iter::once((recorded_window.start, recorded_window.end))
+            .chain(virtual_spans(session, ended - started))
             .chain(session.rerecorded_us.iter().copied())
             .collect(),
     };
