@@ -6,6 +6,7 @@ import { canUseTouchIdPassphraseUnlock } from "@/daemon/transport";
 import {
   DATABASE_PASSPHRASE_HINT_KEYS,
   databasePassphraseIssue,
+  databasePassphraseStrength,
   MIN_DATABASE_PASSPHRASE_CHARS,
 } from "../constants";
 import { CheckRow, ChoiceCard, TextField } from "../fields";
@@ -33,13 +34,21 @@ export const SecurityStep = ({
         min: MIN_DATABASE_PASSPHRASE_CHARS,
       })
     : null;
+  // Only the not-yet-strong ratings speak; a strong passphrase needs no badge.
+  const strength = encrypted
+    ? databasePassphraseStrength(form.databasePassphrase)
+    : null;
+  const strengthNote =
+    strength === "weak"
+      ? t("security.strength.weak")
+      : strength === "fair"
+        ? t("security.strength.fair")
+        : null;
   const canCreateBooks = encrypted
     ? passphraseIssue === null && form.recoveryAcknowledged
     : form.plaintextAcknowledged;
   return (
-    <OnboardingStepPage
-      title={t("security.title")}
-    >
+    <OnboardingStepPage title={t("security.title")} lead={t("security.lead")}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -64,6 +73,7 @@ export const SecurityStep = ({
               autoFocus
               value={form.databasePassphrase}
               placeholder={t("security.passphrasePlaceholder")}
+              description={strengthNote}
               onChange={(value) => update("databasePassphrase", value)}
             />
             <TextField

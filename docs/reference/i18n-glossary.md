@@ -220,6 +220,7 @@ Buttons are infinitive; the du-imperative (in parentheses) is for prose.
 | Error / Warning / Success | Fehler / Warnung / Erfolg | success as action confirmation, not standing badge. |
 | Details | Details | „Details anzeigen". |
 | Show / Hide | Anzeigen / Ausblenden | state „Verborgen". |
+| Password manager | Passwort-Manager | Kassiber's own secret stays „Passphrase". |
 | Enabled / Disabled | Aktiviert / Deaktiviert | actions: Aktivieren/Deaktivieren. |
 | Connected / Disconnected | Verbunden / Getrennt | |
 | Pending / Confirmed / Failed | Ausstehend / Bestätigt / Fehlgeschlagen | on-chain pending → „Unbestätigt". |

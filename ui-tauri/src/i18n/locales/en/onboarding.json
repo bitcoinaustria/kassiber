@@ -287,6 +287,7 @@
   },
   "security": {
     "title": "Protect your books",
+    "lead": "Encryption protects your books on this device with a passphrase. Kassiber cannot recover a lost passphrase.",
     "encrypt": {
       "title": "Encrypted",
       "description": "Opens only with your passphrase."
@@ -305,9 +306,13 @@
       "confirmRequired": "Confirm the database passphrase.",
       "mismatch": "Passphrases do not match."
     },
+    "strength": {
+      "weak": "Easy to guess. Several unrelated words make a stronger passphrase.",
+      "fair": "Could be stronger. Add a few characters or another word."
+    },
     "passphraseNote": "Sent only to the local daemon to unlock the database — never stored in the UI.",
-    "recoveryAck": "I understand there is no passphrase recovery path.",
-    "recoveryAckDescription": "If the passphrase is lost, the SQLCipher database cannot be opened.",
+    "recoveryAck": "I have stored this passphrase somewhere safe, such as a password manager.",
+    "recoveryAckDescription": "Kassiber cannot reset it. Without it, these books cannot be opened.",
     "touchId": "Unlock with Touch ID",
     "touchIdDescription": "Unlock with Touch ID through a Keychain entry. The CLI is enrolled separately.",
     "existingCredentials": "Existing backend credentials",

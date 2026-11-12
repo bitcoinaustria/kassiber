@@ -9,6 +9,7 @@ import {
   localAiBaseUrlHint,
   DATABASE_PASSPHRASE_HINT_KEYS,
   databasePassphraseIssue,
+  databasePassphraseStrength,
   MIN_DATABASE_PASSPHRASE_CHARS,
   electrumEndpointUrl,
   GAINS_ALGORITHM_DEFAULTS,
@@ -192,5 +193,14 @@ describe("onboarding database passphrase validation", () => {
       "Bestätige die Datenbank-Passphrase.",
       "Die Passphrasen stimmen nicht überein.",
     ]);
+  });
+
+  it("rates acceptable passphrases by length and character variety", () => {
+    expect(databasePassphraseStrength("short")).toBeNull();
+    expect(databasePassphraseStrength("aaaaaaaaaaaa")).toBe("weak");
+    expect(databasePassphraseStrength("aaaaaaaaaaaaaa")).toBe("fair");
+    expect(databasePassphraseStrength("Abcdefgh123x")).toBe("fair");
+    expect(databasePassphraseStrength("Abcdefgh1234567x")).toBe("strong");
+    expect(databasePassphraseStrength("correct horse battery")).toBe("strong");
   });
 });

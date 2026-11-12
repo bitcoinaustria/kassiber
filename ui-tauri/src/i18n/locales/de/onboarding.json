@@ -287,6 +287,7 @@
   },
   "security": {
     "title": "Schütze deine Bücher",
+    "lead": "Verschlüsselung schützt deine Bücher auf diesem Gerät mit einer Passphrase. Eine verlorene Passphrase kann Kassiber nicht wiederherstellen.",
     "encrypt": {
       "title": "Verschlüsselt",
       "description": "Öffnet sich nur mit deiner Passphrase."
@@ -305,9 +306,13 @@
       "confirmRequired": "Bestätige die Datenbank-Passphrase.",
       "mismatch": "Die Passphrasen stimmen nicht überein."
     },
+    "strength": {
+      "weak": "Leicht zu erraten. Mehrere zufällige Wörter ergeben eine stärkere Passphrase.",
+      "fair": "Geht noch stärker. Füge ein paar Zeichen oder ein weiteres Wort hinzu."
+    },
     "passphraseNote": "Wird nur an den lokalen Daemon gesendet, um die Datenbank zu entsperren — nie in der Oberfläche gespeichert.",
-    "recoveryAck": "Mir ist klar, dass es keinen Wiederherstellungspfad für die Passphrase gibt.",
-    "recoveryAckDescription": "Geht die Passphrase verloren, kann die SQLCipher-Datenbank nicht geöffnet werden.",
+    "recoveryAck": "Ich habe diese Passphrase sicher aufbewahrt, zum Beispiel in einem Passwort-Manager.",
+    "recoveryAckDescription": "Kassiber kann sie nicht zurücksetzen. Ohne sie lassen sich diese Bücher nicht öffnen.",
     "touchId": "Mit Touch ID entsperren",
     "touchIdDescription": "Mit Touch ID über einen Keychain-Eintrag entsperren. Die CLI wird separat eingerichtet.",
     "existingCredentials": "Bestehende Backend-Zugangsdaten",

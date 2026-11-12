@@ -223,6 +223,27 @@ export const DATABASE_PASSPHRASE_HINT_KEYS = {
   mismatch: "security.hint.mismatch",
 } as const satisfies Record<DatabasePassphraseIssue, string>;
 
+/** How easy an acceptable passphrase looks to guess; `null` when too short to rate. */
+export type DatabasePassphraseStrength = "weak" | "fair" | "strong";
+
+/**
+ * A local, rule-of-thumb rating for a passphrase that already meets the
+ * minimum length: longer and more varied is stronger. It only informs; the
+ * minimum length stays the one hard gate.
+ */
+export const databasePassphraseStrength = (
+  passphrase: string,
+): DatabasePassphraseStrength | null => {
+  const length = [...passphrase].length;
+  if (length < MIN_DATABASE_PASSPHRASE_CHARS) return null;
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter((pattern) =>
+    pattern.test(passphrase),
+  ).length;
+  if (length >= 20 || (length >= 16 && classes >= 3)) return "strong";
+  if (length >= 14 || classes >= 3) return "fair";
+  return "weak";
+};
+
 export const databasePassphraseIssue = (
   passphrase: string,
   confirmation: string,
