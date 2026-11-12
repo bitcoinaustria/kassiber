@@ -837,6 +837,9 @@ pub fn unavailable_error() -> AppError {
     .with_hint("Use password authentication or the signed macOS desktop CLI launcher.")
 }
 
-#[cfg(test)]
+// The scripted helper launches act on inherited descriptors through
+// `/dev/fd`, and native auth is macOS-only: elsewhere `NativeAuthHelper`
+// only refuses, so the suite is Unix-only.
+#[cfg(all(test, unix))]
 #[path = "native_auth_tests.rs"]
 mod tests;
