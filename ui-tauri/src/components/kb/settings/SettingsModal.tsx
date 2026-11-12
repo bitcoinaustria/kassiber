@@ -27,6 +27,7 @@ import {
   type BackendSettingsData,
 } from "./SettingsModel";
 import { SettingsSidebarNav, sectionMeta } from "./SettingsNavigation";
+import { useSettingsAnchorHighlight } from "./settingsSearch";
 import {
   closeSettings,
   openSettingsSection,
@@ -123,6 +124,8 @@ function SettingsModalBody({
   React.useLayoutEffect(() => {
     scrollRef.current?.scrollTo?.({ top: 0 });
   }, [section]);
+  // A setting-level search result then scrolls to its row and marks it.
+  useSettingsAnchorHighlight(scrollRef, section);
 
   return (
     <div className="relative flex min-h-0 flex-1">

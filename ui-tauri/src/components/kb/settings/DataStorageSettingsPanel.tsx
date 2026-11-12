@@ -19,6 +19,7 @@ export function DataSettingsPanel({
     <div className="space-y-6">
       <SettingsGroup>
         <SettingsRow
+          anchorId="importData"
           label={t("data.importHeading")}
           description={t("data.importDescription")}
         >
@@ -32,12 +33,14 @@ export function DataSettingsPanel({
 
       <SettingsGroup title={t("data.localDatabaseHeading")}>
         <SettingsCopyRow
+          anchorId="dataRoot"
           label={t("data.dataRootLabel")}
           value={status?.data_root ?? null}
           copyLabel={t("page.copy", { label: t("data.dataRootLabel") })}
           placeholder={t("common:state.loading")}
         />
         <SettingsCopyRow
+          anchorId="databasePath"
           label={t("data.databaseLabel")}
           value={status?.database ?? null}
           copyLabel={t("page.copy", { label: t("data.databaseLabel") })}
@@ -79,6 +82,7 @@ export function DataStorageSettingsPanel({
       {/* Each action asks for confirmation before anything is cleared. */}
       <SettingsGroup title={t("data.dangerHeading")}>
         <SettingsRow
+          anchorId="resetWelcome"
           label={t("data.resetWelcomeTitle")}
           description={t("data.resetWelcomeDescription")}
         >
@@ -87,6 +91,7 @@ export function DataStorageSettingsPanel({
           </Button>
         </SettingsRow>
         <SettingsRow
+          anchorId="resetBook"
           label={t("data.resetBookTitle")}
           description={t("data.resetBookDescription")}
         >
@@ -101,6 +106,7 @@ export function DataStorageSettingsPanel({
           </Button>
         </SettingsRow>
         <SettingsRow
+          anchorId="deleteBooks"
           label={t("data.deleteBooksTitle")}
           description={t("data.deleteBooksDescription")}
         >

@@ -60,6 +60,7 @@ export function ChatHistorySettings() {
   return (
     <>
       <SettingsRow
+        anchorId="chatHistory"
         label={t("chatHistory.storeLabel")}
         description={effectiveLine}
         htmlFor="settings-chat-history-mode"

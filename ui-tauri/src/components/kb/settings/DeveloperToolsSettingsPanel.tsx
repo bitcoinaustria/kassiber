@@ -31,6 +31,7 @@ export function DeveloperToolsSettingsPanel({
   return (
     <SettingsGroup footer={t("developer.intro")}>
       <SettingsRow
+        anchorId="earlyFeatures"
         label={t("developer.enableLabel")}
         description={enabled ? t("developer.enableOn") : t("developer.enableOff")}
         htmlFor="settings-developer-tools"
@@ -42,6 +43,7 @@ export function DeveloperToolsSettingsPanel({
         />
       </SettingsRow>
       <SettingsRow
+        anchorId="alphaWarning"
         label={t("developer.alphaBannerLabel")}
         description={t("developer.alphaBannerDescription")}
         htmlFor="settings-alpha-banner"
@@ -53,6 +55,7 @@ export function DeveloperToolsSettingsPanel({
         />
       </SettingsRow>
       <SettingsRow
+        anchorId="logBuffer"
         label={t("developer.bufferHeading")}
         description={t("developer.bufferDescription", {
           retained: formatBytes(bytes),

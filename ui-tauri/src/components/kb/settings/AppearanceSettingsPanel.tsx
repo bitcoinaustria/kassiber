@@ -54,6 +54,7 @@ export function AppearanceSettingsPanel({
     <div className="space-y-6">
       <SettingsGroup>
         <SettingsRow
+          anchorId="theme"
           label={t("appearance.theme.title")}
           description={t("appearance.theme.description")}
           htmlFor="settings-theme"
@@ -70,6 +71,7 @@ export function AppearanceSettingsPanel({
           />
         </SettingsRow>
         <SettingsRow
+          anchorId="denomination"
           label={t("appearance.denomination.title")}
           description={t("appearance.denomination.description")}
           htmlFor="settings-denomination"
@@ -85,6 +87,7 @@ export function AppearanceSettingsPanel({
           />
         </SettingsRow>
         <SettingsRow
+          anchorId="interfaceScale"
           label={t("appearance.scale.title")}
           description={t("appearance.scale.description")}
           htmlFor="settings-scale"
@@ -103,6 +106,7 @@ export function AppearanceSettingsPanel({
           />
         </SettingsRow>
         <SettingsRow
+          anchorId="language"
           label={t("appearance.language.title")}
           description={t("appearance.language.description")}
           htmlFor="settings-language"
@@ -120,7 +124,7 @@ export function AppearanceSettingsPanel({
       </SettingsGroup>
 
       {aiFeaturesEnabled ? (
-        <SettingsGroup title={t("appearance.assistantDock.title")}>
+        <SettingsGroup anchorId="assistantDock" title={t("appearance.assistantDock.title")}>
           <SettingsRow
             label={t("appearance.assistantDock.closedBar")}
             description={t("appearance.assistantDock.closedBarDescription")}

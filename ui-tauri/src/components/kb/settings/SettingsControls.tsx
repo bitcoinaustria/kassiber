@@ -14,6 +14,16 @@ import {
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
+import type { SettingsAnchorId } from "./settingsSearch";
+
+/**
+ * A search result's target briefly takes the accent wash while the modal
+ * scrolls to it (see `useSettingsAnchorHighlight`). The fade is motion, so it
+ * only animates when the user allows motion.
+ */
+const settingsAnchorClassName =
+  "scroll-mt-4 motion-safe:transition-colors motion-safe:duration-500 data-[settings-highlight]:bg-accent";
+
 export function CopyButton({
   value,
   label,
@@ -59,6 +69,7 @@ export function SettingsGroup({
   actions,
   footer,
   className,
+  anchorId,
   children,
   ...rest
 }: {
@@ -66,10 +77,16 @@ export function SettingsGroup({
   actions?: React.ReactNode;
   footer?: React.ReactNode;
   className?: string;
+  /** Search target id (see `SETTINGS_SEARCH_ENTRIES`). */
+  anchorId?: SettingsAnchorId;
   children: React.ReactNode;
 } & Omit<React.HTMLAttributes<HTMLElement>, "title" | "children">) {
   return (
-    <section className={cn("space-y-2", className)} {...rest}>
+    <section
+      className={cn("space-y-2", settingsAnchorClassName, className)}
+      data-settings-anchor={anchorId}
+      {...rest}
+    >
       {title || actions ? (
         <div className="flex items-end justify-between gap-3">
           {title ? <h3 className="text-sm font-semibold">{title}</h3> : <span />}
@@ -86,16 +103,25 @@ export function SettingsRow({
   label,
   description,
   htmlFor,
+  anchorId,
   children,
 }: {
   label: React.ReactNode;
   description?: React.ReactNode;
   /** The control's id, so a click on the name focuses or toggles it. */
   htmlFor?: string;
+  /** Search target id (see `SETTINGS_SEARCH_ENTRIES`). */
+  anchorId?: SettingsAnchorId;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+    <div
+      className={cn(
+        "flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
+        settingsAnchorClassName,
+      )}
+      data-settings-anchor={anchorId}
+    >
       <div className="min-w-0 space-y-0.5">
         <Label htmlFor={htmlFor} className="text-sm font-medium">
           {label}
@@ -182,18 +208,26 @@ export function SettingsDisclosure({
   title,
   open,
   className,
+  anchorId,
   children,
 }: {
   title: React.ReactNode;
   /** Starts open; the user can still fold it. */
   open?: boolean;
   className?: string;
+  /** Search target id; a search jump unfolds it. */
+  anchorId?: SettingsAnchorId;
   children: React.ReactNode;
 }) {
   return (
     <details
       open={open || undefined}
-      className={cn("group overflow-hidden rounded-lg border bg-background", className)}
+      data-settings-anchor={anchorId}
+      className={cn(
+        "group overflow-hidden rounded-lg border bg-background",
+        settingsAnchorClassName,
+        className,
+      )}
     >
       <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium select-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset [&::-webkit-details-marker]:hidden">
         <ChevronRight
@@ -225,15 +259,18 @@ export function SettingsCopyRow({
   value,
   copyLabel,
   placeholder,
+  anchorId,
 }: {
   label: React.ReactNode;
   value: string | null;
   copyLabel: string;
   /** Shown while the value is still unknown. */
   placeholder?: string;
+  anchorId?: SettingsAnchorId;
 }) {
   return (
     <SettingsRow
+      anchorId={anchorId}
       label={label}
       description={
         <span className="font-mono text-xs break-all">{value ?? placeholder}</span>

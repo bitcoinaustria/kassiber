@@ -189,6 +189,7 @@ export function PrivacySettingsPanel({
         }
       >
         <SettingsRow
+          anchorId="offlineMode"
           label={t("privacy.offlineLabel")}
           description={
             offlineMode.offline ? t("privacy.offlineOn") : t("privacy.offlineOff")
@@ -211,6 +212,7 @@ export function PrivacySettingsPanel({
 
       <SettingsGroup title={t("privacy.onScreenHeading")}>
         <SettingsRow
+          anchorId="blurSensitive"
           label={t("privacy.blurLabel")}
           description={hideSensitive ? t("privacy.blurOn") : t("privacy.blurOff")}
           htmlFor="settings-blur"
@@ -222,6 +224,7 @@ export function PrivacySettingsPanel({
           />
         </SettingsRow>
         <SettingsRow
+          anchorId="clearClipboard"
           label={t("privacy.clipboardLabel")}
           description={
             clearClipboard ? t("privacy.clipboardOn") : t("privacy.clipboardOff")
@@ -241,6 +244,7 @@ export function PrivacySettingsPanel({
         footer={t("privacy.updatesTrust")}
       >
         <SettingsRow
+          anchorId="updateChecks"
           label={t("privacy.updatesLabel")}
           description={
             automaticUpdateChecks ? t("privacy.updatesOn") : t("privacy.updatesOff")
@@ -256,6 +260,7 @@ export function PrivacySettingsPanel({
       </SettingsGroup>
 
       <SettingsGroup
+        anchorId="outgoingConnections"
         title={t("privacy.leavesHeading")}
         footer={t("privacy.leavesDescription")}
       >

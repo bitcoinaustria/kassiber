@@ -394,6 +394,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         footer={t("marketData.intro")}
       >
         <SettingsRow
+          anchorId="liveRates"
           label={t("marketData.autoRefreshLabel")}
           description={t("marketData.autoRefreshHint", {
             provider: marketRateProviderLabelText,
@@ -410,6 +411,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           />
         </SettingsRow>
         <SettingsRow
+          anchorId="priceSource"
           label={t("marketData.priceSourceLabel")}
           description={t("marketData.priceSourceHint")}
           htmlFor="market-rate-provider"
@@ -428,6 +430,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           />
         </SettingsRow>
         <SettingsRow
+          anchorId="rebuildPricing"
           label={t("marketData.rebuildHeading")}
           description={
             liveMinuteRatesEnabled
@@ -509,6 +512,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
 
       <SettingsGroup title={t("marketData.policyHeading")}>
         <SettingsRow
+          anchorId="coarsePricingReview"
           label={t("marketData.coarse.reviewToggleLabel")}
           description={t("marketData.coarse.reviewToggleDescription")}
           htmlFor="require-coarse-review"
@@ -531,6 +535,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           </SettingsRow>
         ) : null}
         <SettingsRow
+          anchorId="bitcoinRails"
           label={t("marketData.bitcoinRails.toggleLabel")}
           description={t("marketData.bitcoinRails.toggleDescription")}
           htmlFor="bitcoin-rail-carrying-value"
@@ -567,6 +572,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       ) : null}
 
       <SettingsGroup
+        anchorId="krakenHistory"
         title={t("marketData.krakenHeading")}
         footer={
           <>
@@ -654,6 +660,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           </Button>
         </div>
         <SettingsRow
+          anchorId="bundledRates"
           label={t("marketData.bundledHeading")}
           description={t("marketData.bundledDescription")}
         >

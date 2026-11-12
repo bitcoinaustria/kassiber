@@ -23,6 +23,7 @@ export function AssistantPermissionSettings() {
 
   return (
     <SettingsRow
+      anchorId="permissionMode"
       label={t("ai.permissionMode.label")}
       description={
         <span data-permission-mode-description={mode}>

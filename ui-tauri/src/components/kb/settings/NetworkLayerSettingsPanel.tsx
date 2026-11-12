@@ -11,6 +11,7 @@ import {
   SettingsRow,
   SettingsSelect,
 } from "./SettingsControls";
+import type { SettingsAnchorId } from "./settingsSearch";
 import {
   backendExplorerBaseUrl,
   backendProtocolLabel,
@@ -26,6 +27,12 @@ const PUBLIC_EXPLORER: Record<"bitcoin" | "liquid", string> = {
   bitcoin: "mempool.bitcoin-austria.at",
   liquid: "Liquid Network",
 };
+
+const LAYER_SEARCH_ANCHOR = {
+  bitcoin: "bitcoinBackends",
+  lightning: "lightningNodes",
+  liquid: "liquidBackends",
+} as const satisfies Record<NetworkLayer, SettingsAnchorId>;
 
 export function NetworkLayerSettingsPanel({
   layer,
@@ -63,6 +70,7 @@ export function NetworkLayerSettingsPanel({
       {layer === "bitcoin" ? <BookNetworkSettings><AnalysisNetworkSettings /></BookNetworkSettings> : null}
 
       <SettingsGroup
+        anchorId={LAYER_SEARCH_ANCHOR[layer]}
         title={t(`networkLayer.${layer}.heading`)}
         actions={
           <Button type="button" size="sm" variant="outline" onClick={onAdd}>
@@ -178,7 +186,7 @@ function AnalysisNetworkSettings() {
   const network = useUiStore((state) => state.analysisNetwork);
   const setNetwork = useUiStore((state) => state.setAnalysisNetwork);
   return (
-    <SettingsDisclosure title={t("analysisNetwork.title")}>
+    <SettingsDisclosure anchorId="analysisNetwork" title={t("analysisNetwork.title")}>
       <SettingsRow
         label={t("analysisNetwork.label")}
         description={t("analysisNetwork.help")}

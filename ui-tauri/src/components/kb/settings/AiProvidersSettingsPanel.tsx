@@ -136,6 +136,7 @@ export function AiProvidersSettingsPanel({
     <div className="space-y-6">
       <SettingsGroup>
         <SettingsRow
+          anchorId="assistantFeatures"
           label={t("ai.featuresLabel")}
           description={t("ai.featuresDescription")}
           htmlFor="settings-ai-features"
@@ -152,6 +153,7 @@ export function AiProvidersSettingsPanel({
       </SettingsGroup>
 
       <SettingsGroup
+        anchorId="aiModels"
         title={<span id="settings-ai-models">{t("ai.modelsHeading")}</span>}
         aria-labelledby="settings-ai-models"
         footer={t("ai.checkPrivacy")}

@@ -50,7 +50,7 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
     </SettingsRow>
   );
   return <div className="space-y-3">
-    <SettingsGroup title={t("bookNetwork.title")} footer={bound ? t("bookNetwork.immutable") : inventory ? t("bookNetwork.help") : null}>
+    <SettingsGroup anchorId="bookNetwork" title={t("bookNetwork.title")} footer={bound ? t("bookNetwork.immutable") : inventory ? t("bookNetwork.help") : null}>
       {(bindingQuery.isLoading || needsInventory && query.isLoading) && <p className="px-4 py-3 text-sm text-muted-foreground">{t("common:state.loading")}</p>}
       {bindingQuery.isError && retryRow(() => void bindingQuery.refetch())}
       {needsInventory && query.isError && retryRow(() => void query.refetch())}
