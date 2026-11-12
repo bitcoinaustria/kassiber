@@ -51,7 +51,7 @@ export const OverviewDashboard = ({
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
   const { runJournalProcessing, isProcessingJournals } =
-    useJournalProcessingAction({ notifyStart: true });
+    useJournalProcessingAction();
   const refreshMarketRate = useDaemonMutation<RateLatestData>("ui.rates.latest");
   const marketRateNoticeRef = React.useRef<string | null>(null);
   const marketRateRefreshInFlightRef = React.useRef(false);

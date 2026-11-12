@@ -310,10 +310,6 @@
       "bookRefresh": "Buch wird aktualisiert",
       "bookRescan": "Buch wird neu gescannt",
       "journalProcessing": "Journale werden verarbeitet"
-    },
-    "bookRefreshRunning": {
-      "title": "Buch-Aktualisierung läuft bereits",
-      "body": "Kassiber aktualisiert bereits Quellen, Kurse oder Journale."
     }
   },
   "currencyToggle": {

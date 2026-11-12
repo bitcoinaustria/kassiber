@@ -100,13 +100,17 @@ import { bookIdentityKey, useUiStore } from "@/store/ui";
 import type { Identity, ThemePreference } from "@/store/ui";
 import {
   attentionGroupCount,
+  conditionKey,
   conditionsInScope,
+  resetNotificationStore,
   useNotificationStore,
   type NotificationOperation,
 } from "@/store/notifications";
 import { clearFeedback } from "@/lib/feedback";
 import {
+  applyFreshnessRun,
   reviewConditionsFromBadges,
+  safeMessage,
   sourceConditionsFromSnapshot,
 } from "@/lib/notificationConditions";
 import type { FreshnessSourceState } from "@/lib/syncResults";
@@ -174,8 +178,8 @@ import {
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
 import {
-  classifyDaemonFreshnessEvent,
   DAEMON_EVENT_CHANNEL,
+  parseDaemonFreshnessEvent,
 } from "@/lib/daemonFreshnessEvent";
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 import { useAgentAccessMasterSync } from "@/lib/agentAccess";
@@ -1217,6 +1221,9 @@ export function AppShell() {
   const resetLocalUiSession = React.useCallback(() => {
     clearSessionUnlockPassphrase();
     clearDaemonQueryCache();
+    // The session's notifications go with it; they are RAM only anyway.
+    resetNotificationStore();
+    useUiStore.setState({ notifications: [] });
     setDaemonAuthRequired(false);
     setHideSensitive(false);
     void clearImportedProjectRoot()
@@ -1294,8 +1301,6 @@ export function AppShell() {
   const { runJournalProcessing: runMenuJournalProcessing } =
     useJournalProcessingAction({
       beforeRun: ensureWorkspaceForMenuAction,
-      notifyAlreadyRunning: true,
-      notifyStart: true,
     });
 
   const runMenuWalletSync = React.useCallback(
@@ -1306,22 +1311,20 @@ export function AppShell() {
         isDaemonKindMutating("ui.freshness.run") ||
         isDaemonKindMutating("ui.wallets.sync")
       ) {
-        addNotification({
-          title: t("notifications.bookRefreshRunning.title"),
-          body: t("notifications.bookRefreshRunning.body"),
-          tone: "info",
-        });
+        // Already running: bring the running job back into view rather than
+        // announcing it again.
+        if (bookKey !== null) restoreSyncCardStore(bookKey);
         return;
       }
       syncAll({ forceFull: Boolean(options?.forceFull) });
     },
     [
-      addNotification,
+      bookKey,
       ensureWorkspaceForMenuAction,
       isDaemonKindMutating,
       isSyncing,
+      restoreSyncCardStore,
       syncAll,
-      t,
     ],
   );
 
@@ -1705,33 +1708,30 @@ export function AppShell() {
             addNotification({ title: t("chainAnalysis:watch.notificationTitle"), body: t("chainAnalysis:watch.notificationBody"), tone: "info", dedupeKey: "local-evidence-watches", target: "/chain-analysis" });
             return;
           }
-          const signal = classifyDaemonFreshnessEvent(event.payload);
-          if (!signal) return;
+          const freshness = parseDaemonFreshnessEvent(event.payload);
+          if (!freshness) return;
 
           void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-          if (signal === "refresh") {
-            const store = useUiStore.getState();
-            const previousFailure = store.notifications.find(
-              (item) => item.dedupeKey === "background-freshness",
-            );
-            if (previousFailure) store.clearNotification(previousFailure.id);
+          // The daemon serves one open book; its events belong to that book.
+          const book = bookIdentityKey(useUiStore.getState().identity);
+          const notifications = useNotificationStore.getState();
+          if (freshness.kind === "worker-error") {
+            notifications.raiseCondition({
+              code: "freshness.worker-error",
+              scope: { book },
+              severity: "error",
+              priority: "attention",
+              action: { type: "navigate", to: "/connections" },
+              details: [{ message: safeMessage(freshness.message ?? freshness.code) }],
+            });
             return;
           }
-
-          addNotification({
-            title:
-              signal === "worker-error"
-                ? t("overview:bookRefresh.failedTitle")
-                : t("overview:bookRefresh.needsAttentionTitle"),
-            body: t("overview:bookRefresh.failedBody"),
-            tone: signal === "worker-error" ? "error" : "warning",
-            dedupeKey: "background-freshness",
-            target: "/logs",
-            action: {
-              label: t("overview:bookRefresh.actions.retry"),
-              command: "refresh-book",
-            },
-          });
+          // A background run that reported back means the worker runs again;
+          // each source is then settled by what this run proves for it.
+          notifications.resolveCondition(
+            conditionKey("freshness.worker-error", { book }),
+          );
+          applyFreshnessRun(freshness.data, book);
         }),
       )
       .then((nextUnlisten) => {
@@ -3097,7 +3097,7 @@ function ShellTitlebarControls({
   const identity = useUiStore((s) => s.identity);
   const reopenFirstSyncCard = useUiStore((s) => s.reopenFirstSyncCard);
   const headerBookKey = bookIdentityKey(identity);
-  const { runJournalProcessing, isProcessingJournals } =
+  const { runJournalProcessing, runJournalProcessingWith, isProcessingJournals } =
     useJournalProcessingAction();
   useLiveNotificationConditions(daemonEnabled, headerBookKey);
   const conditions = useNotificationStore((s) => s.conditions);
@@ -3106,7 +3106,7 @@ function ShellTitlebarControls({
   const blocksReports = inScope.some((entry) => entry.priority === "blocking");
   const runNotificationOperation = (operation: NotificationOperation) => {
     if (operation.kind === "process-journals") {
-      runJournalProcessing();
+      runJournalProcessingWith({ autoPair: operation.autoPair });
     } else {
       onRefresh({ forceFull: operation.forceFull });
     }

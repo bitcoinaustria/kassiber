@@ -310,10 +310,6 @@
       "bookRefresh": "Refreshing book",
       "bookRescan": "Rescanning book",
       "journalProcessing": "Processing journals"
-    },
-    "bookRefreshRunning": {
-      "title": "Book refresh already running",
-      "body": "Kassiber is already refreshing sources, rates, or journals."
     }
   },
   "currencyToggle": {
