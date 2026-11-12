@@ -1,0 +1,422 @@
+[
+  {
+    "id": "legacy-privacy-change-position",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "spendable.len() >= 2 && owned.len() == 1",
+    "replace": "spendable.len() >= 2 && owned.len() == 2",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Owned edge outputs retain their advisory position tell."
+  },
+  {
+    "id": "legacy-privacy-op-return",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "\"op_return_metadata\",\n            \"high\",\n            -10,",
+    "replace": "\"op_return_metadata\",\n            \"high\",\n            -9,",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "OP_RETURN presence retains its local metadata penalty."
+  },
+  {
+    "id": "legacy-privacy-payjoin",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "\"payjoin_boundary\",\n            \"positive\",\n            8,",
+    "replace": "\"payjoin_boundary\",\n            \"positive\",\n            9,",
+    "expect_failing": [
+      "legacy_collaboration_and_inbound_attribution_match_python"
+    ],
+    "rule": "An explicit Payjoin boundary retains its positive context."
+  },
+  {
+    "id": "legacy-privacy-clamp",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": ".clamp(0, 100)",
+    "replace": ".clamp(1, 100)",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Scores never fall below zero."
+  },
+  {
+    "id": "legacy-privacy-invalid-amount",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "if integer(&row[\"amount\"]).is_none() {",
+    "replace": "if false && integer(&row[\"amount\"]).is_none() {",
+    "expect_failing": [
+      "legacy_inventory_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Malformed active amounts fail closed instead of becoming zero-valued dust."
+  },
+  {
+    "id": "legacy-privacy-clamp-upper",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": ".clamp(0, 100)",
+    "replace": ".clamp(0, 99)",
+    "expect_failing": [
+      "legacy_collaboration_and_inbound_attribution_match_python"
+    ],
+    "rule": "Scores never exceed one hundred."
+  },
+  {
+    "id": "legacy-privacy-base",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "(70 + findings.iter()",
+    "replace": "(71 + findings.iter()",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Preserve the reference base score used for ranking."
+  },
+  {
+    "id": "legacy-privacy-common-single",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "if count > 1 {",
+    "replace": "if count > 2 {",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Two unique inputs retain the common-input tell."
+  },
+  {
+    "id": "legacy-privacy-common-fifty",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "if count >= 50 {",
+    "replace": "if count > 50 {",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "The critical common-input tier starts at fifty."
+  },
+  {
+    "id": "legacy-privacy-common-twenty",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "} else if count >= 20 {",
+    "replace": "} else if count > 20 {",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "The second critical common-input tier starts at twenty."
+  },
+  {
+    "id": "legacy-privacy-common-ten",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "} else if count >= 10 {",
+    "replace": "} else if count > 10 {",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "The high common-input tier starts at ten."
+  },
+  {
+    "id": "legacy-privacy-common-five",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "} else if count >= 5 {",
+    "replace": "} else if count > 5 {",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "The high common-input tier starts at five."
+  },
+  {
+    "id": "legacy-privacy-round-cap",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "-(count as i64 * 8).min(20)",
+    "replace": "-(count as i64 * 8).min(21)",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Round-output penalties retain their cap."
+  },
+  {
+    "id": "legacy-privacy-unnecessary",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "inputs.len() >= 2 && known.len() == 2",
+    "replace": "inputs.len() > 2 && known.len() == 2",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "The unnecessary-input heuristic requires two locally valued inputs."
+  },
+  {
+    "id": "legacy-privacy-rate",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "(rate - rounded).abs() < 0.01",
+    "replace": "(rate - rounded).abs() < 0.02",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Rounded-rate evidence retains the strict tolerance."
+  },
+  {
+    "id": "legacy-privacy-rbf",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "*n < 0xfffffffe_u64.into()",
+    "replace": "*n <= 0xfffffffe_u64.into()",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A locktime-enabled final-minus-one sequence is not RBF."
+  },
+  {
+    "id": "legacy-privacy-mix",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "if all > 1 {",
+    "replace": "if all > 2 {",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Two meaningful script families retain the mixed-type tell."
+  },
+  {
+    "id": "legacy-privacy-change",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "&& input_types.len() == 1",
+    "replace": "&& input_types.len() == 2",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "The change-type heuristic retains the two-output prerequisite."
+  },
+  {
+    "id": "legacy-privacy-taproot-tx",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "count * 2 >= spendable.len()",
+    "replace": "count * 2 > spendable.len()",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A half-Taproot transaction retains the observed bonus."
+  },
+  {
+    "id": "legacy-privacy-coinjoin",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "if input_count < MIN_INPUTS || outputs.len() < MIN_OUTPUTS {",
+    "replace": "if input_count < MIN_INPUTS + 1 || outputs.len() < MIN_OUTPUTS {",
+    "expect_failing": [
+      "legacy_collaboration_and_inbound_attribution_match_python"
+    ],
+    "rule": "Shape-based collaboration begins at five inputs."
+  },
+  {
+    "id": "legacy-privacy-large-coinjoin",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "if input_count >= LARGE_MIN_LEGS && outputs.len() >= LARGE_MIN_LEGS {",
+    "replace": "if input_count > LARGE_MIN_LEGS && outputs.len() >= LARGE_MIN_LEGS {",
+    "expect_failing": [
+      "legacy_collaboration_and_inbound_attribution_match_python"
+    ],
+    "rule": "Large equal-output collaboration begins at twenty inputs."
+  },
+  {
+    "id": "legacy-privacy-attribution",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "item[\"impact\"] = json!(0);",
+    "replace": "item[\"impact\"] = json!(-1);",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Inbound counterparty tells do not lower the receiving wallet score."
+  },
+  {
+    "id": "legacy-privacy-invalid-boundary",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "Some(\"unknown\".into())",
+    "replace": "Some(\"sweep\".into())",
+    "expect_failing": [
+      "legacy_collaboration_and_inbound_attribution_match_python"
+    ],
+    "rule": "Invalid metadata preserves uncertainty and suppresses incompatible heuristics."
+  },
+  {
+    "id": "legacy-privacy-excluded",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "load_transactions(conn, &profile, None, None, true)?",
+    "replace": "load_transactions(conn, &profile, None, None, false)?",
+    "expect_failing": [
+      "legacy_collaboration_and_inbound_attribution_match_python"
+    ],
+    "rule": "Excluded observations still supply collaboration evidence."
+  },
+  {
+    "id": "legacy-privacy-reuse",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "-(12 + reused.len() as i64 * 6).min(30)",
+    "replace": "-(12 + reused.len() as i64 * 6).min(29)",
+    "expect_failing": [
+      "legacy_inventory_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Reused-address risk retains its cap."
+  },
+  {
+    "id": "legacy-privacy-dust",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "-(4 + dust as i64 * 2).min(12)",
+    "replace": "-(4 + dust as i64 * 2).min(11)",
+    "expect_failing": [
+      "legacy_inventory_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Dust-output risk retains its cap."
+  },
+  {
+    "id": "legacy-privacy-utxo-twenty",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "if active_count >= 20 {",
+    "replace": "if active_count > 20 {",
+    "expect_failing": [
+      "legacy_inventory_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Inventory risk begins at twenty active UTXOs."
+  },
+  {
+    "id": "legacy-privacy-utxo-fifty",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "if active_count >= 50 { \"high\" }",
+    "replace": "if active_count > 50 { \"high\" }",
+    "expect_failing": [
+      "legacy_inventory_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "High inventory severity begins at fifty active UTXOs."
+  },
+  {
+    "id": "legacy-privacy-legacy",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "-(legacy as i64 * 2).min(10)",
+    "replace": "-(legacy as i64 * 2).min(9)",
+    "expect_failing": [
+      "legacy_inventory_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Legacy-script risk retains its cap."
+  },
+  {
+    "id": "legacy-privacy-taproot-wallet",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "tr >= (types.values().sum::<usize>() / 2).max(1)",
+    "replace": "tr > (types.values().sum::<usize>() / 2).max(1)",
+    "expect_failing": [
+      "legacy_inventory_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Wallet Taproot evidence retains the reference floor-half threshold."
+  },
+  {
+    "id": "legacy-privacy-anonymity",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "n >= 20.into()",
+    "replace": "n > 20.into()",
+    "expect_failing": [
+      "legacy_inventory_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Imported anonymity evidence begins at twenty."
+  },
+  {
+    "id": "legacy-privacy-ambiguous",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "if o.ambiguous {",
+    "replace": "if false && o.ambiguous {",
+    "expect_failing": [
+      "legacy_inventory_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Ambiguous inventory never grants an owner or fallback value."
+  },
+  {
+    "id": "legacy-privacy-domain",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "matches!(chain.as_str(), \"bitcoin\" | \"liquid\")",
+    "replace": "matches!(chain.as_str(), \"bitcoin\" | \"liquid\" | \"lightning\")",
+    "expect_failing": [
+      "legacy_scope_and_refusals_match_python"
+    ],
+    "rule": "Lightning remains an unsupported on-chain scoring domain."
+  },
+  {
+    "id": "legacy-privacy-risk",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "f[\"attribution\"] == \"user_wallet\" && small(&f[\"impact\"]) < 0",
+    "replace": "f[\"attribution\"] != \"user_wallet\" && small(&f[\"impact\"]) < 0",
+    "expect_failing": [
+      "legacy_transaction_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Only negative user-wallet tells contribute risk."
+  },
+  {
+    "id": "legacy-privacy-feature",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "if item[\"authority\"] == \"hypothesis\"",
+    "replace": "if item[\"authority\"] != \"hypothesis\"",
+    "expect_failing": [
+      "legacy_structural_features_match_python_without_raw_payloads"
+    ],
+    "rule": "Structural hypotheses retain their evidence level."
+  },
+  {
+    "id": "legacy-privacy-limit",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "n.min(200.into())",
+    "replace": "n.min(1.into())",
+    "expect_failing": [
+      "legacy_ranking_and_limits_match_python_deterministically"
+    ],
+    "rule": "Returned transaction limits preserve ranked results."
+  },
+  {
+    "id": "legacy-privacy-rank",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "small(&r[\"score\"])\n            },",
+    "replace": "-small(&r[\"score\"])\n            },",
+    "expect_failing": [
+      "legacy_ranking_and_limits_match_python_deterministically"
+    ],
+    "rule": "Transactions rank lowest score first with deterministic ties."
+  },
+  {
+    "id": "legacy-privacy-value-btc",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "&Decimal::from(100_000_000),",
+    "replace": "&Decimal::from(100_000_001),",
+    "expect_failing": [
+      "legacy_numeric_coercion_and_exact_msat_match_python"
+    ],
+    "rule": "BTC-valued decimal legs preserve exact satoshi conversion."
+  },
+  {
+    "id": "legacy-privacy-msat",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "let q = &n / 1000;",
+    "replace": "let q = &n / 999;",
+    "expect_failing": [
+      "legacy_inventory_rules_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Inventory amounts remain integer msat before the satoshi comparison."
+  },
+  {
+    "id": "legacy-privacy-coinjoin-observed-values",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": ".map(|v| shape(&v.observed, &v.script))",
+    "replace": ".map(|v| shape(&v.value, &v.script))",
+    "expect_failing": [
+      "legacy_collaboration_and_inbound_attribution_match_python"
+    ],
+    "rule": "Inventory amounts never complete the public distinct-value ratio."
+  },
+  {
+    "id": "legacy-privacy-coinjoin-input-script",
+    "file": "crates/reports/src/legacy_privacy.rs",
+    "find": "            script: hex(script(&v[\"prevout\"])),\n        })",
+    "replace": "            script: hex(script(v)),\n        })",
+    "expect_failing": [
+      "legacy_collaboration_and_inbound_attribution_match_python"
+    ],
+    "rule": "The raw collaboration path reads input scripts from the prevout."
+  },
+  {
+    "id": "legacy-privacy-coinjoin-distinct-impact",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "\"distinct_value_coinjoin\" => Some(16),",
+    "replace": "\"distinct_value_coinjoin\" => Some(18),",
+    "expect_failing": [
+      "legacy_collaboration_and_inbound_attribution_match_python"
+    ],
+    "rule": "The distinct-value shape keeps its own hygiene impact."
+  }
+]

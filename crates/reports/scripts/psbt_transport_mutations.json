@@ -1,0 +1,212 @@
+[
+  {
+    "id": "psbt-transport-direct",
+    "file": "crates/cli/src/reports.rs",
+    "find": "Some(text) => text.to_owned(),",
+    "replace": "Some(_text) => String::new(),",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Direct proposal text reaches the decoder unchanged."
+  },
+  {
+    "id": "psbt-transport-formats",
+    "file": "crates/cli/src/reports.rs",
+    "find": "Some(\"table\" | \"plain\" | \"csv\")",
+    "replace": "Some(\"table\" | \"plain\")",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "CSV uses finding rows even through the machine-mode adapter."
+  },
+  {
+    "id": "psbt-transport-file-empty",
+    "file": "crates/cli/src/reports.rs",
+    "find": "(text.is_empty(), \"PSBT file is empty\"),",
+    "replace": "(false, \"PSBT file is empty\"),",
+    "expect_failing": [
+      "psbt_cli_file_refusals_preserve_reference_precedence_and_literal_paths"
+    ],
+    "rule": "Empty local files fail before scope resolution."
+  },
+  {
+    "id": "psbt-transport-file-nul",
+    "file": "crates/cli/src/reports.rs",
+    "find": "(text.contains('\\0'), \"PSBT file contains NUL bytes\"),",
+    "replace": "(false, \"PSBT file contains NUL bytes\"),",
+    "expect_failing": [
+      "psbt_cli_file_refusals_preserve_reference_precedence_and_literal_paths"
+    ],
+    "rule": "NUL-bearing files are refused at the literal text-file boundary."
+  },
+  {
+    "id": "psbt-transport-file-utf8",
+    "file": "crates/cli/src/reports.rs",
+    "find": "Some(1) if matches!(bytes[at], 0x80..=0xC1 | 0xF5..=0xFF) => (at, \"invalid start byte\"),",
+    "replace": "Some(1) if matches!(bytes[at], 0x80..=0xC1 | 0xF5..=0xFF) => (at, \"invalid continuation byte\"),",
+    "expect_failing": [
+      "psbt_cli_file_refusals_preserve_reference_precedence_and_literal_paths"
+    ],
+    "rule": "UTF-8 decoder errors retain exact reference messages."
+  },
+  {
+    "id": "psbt-transport-file-path",
+    "file": "crates/cli/src/reports.rs",
+    "find": ".with_hint(\"Choose a readable local file path.\")",
+    "replace": ".with_hint(\"Choose another path.\")",
+    "expect_failing": [
+      "psbt_cli_file_refusals_preserve_reference_precedence_and_literal_paths"
+    ],
+    "rule": "Unreadable literal paths preserve their typed refusal and hint."
+  },
+  {
+    "id": "psbt-transport-scope",
+    "file": "crates/cli/src/reports.rs",
+    "find": "args.get(\"profile\").cloned().unwrap_or(Value::Null),\n        ),\n        (\"psbt\",",
+    "replace": "Value::Null,\n        ),\n        (\"psbt\",",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Explicit CLI profile scope cannot be silently replaced with the active book."
+  },
+  {
+    "id": "psbt-transport-unknown",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "if !unknown.is_empty() {\n        return Err(AppError::new(\n            \"validation\",\n            \"ui.reports.psbt_privacy received unsupported arguments\",",
+    "replace": "if false && !unknown.is_empty() {\n        return Err(AppError::new(\n            \"validation\",\n            \"ui.reports.psbt_privacy received unsupported arguments\",",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Daemon arguments cannot inject scope, files, or baseline data."
+  },
+  {
+    "id": "psbt-transport-unknown-order",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    unknown.sort_by(|a, b| match (a, b) {\n        (Value::Str(a), Value::Str(b)) => a.cmp(b),\n        _ => unreachable!(),\n    });\n    if !unknown.is_empty() {\n        return Err(AppError::new(\n            \"validation\",\n            \"ui.reports.psbt_privacy received unsupported arguments\",\n        )\n",
+    "replace": "    unknown.sort_by(|a, b| match (a, b) {\n        (Value::Str(a), Value::Str(b)) => b.cmp(a),\n        _ => unreachable!(),\n    });\n    if !unknown.is_empty() {\n        return Err(AppError::new(\n            \"validation\",\n            \"ui.reports.psbt_privacy received unsupported arguments\",\n        )\n",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Unknown daemon fields are sorted by Python code-point order."
+  },
+  {
+    "id": "psbt-transport-blank",
+    "file": "crates/daemon/src/reports.rs",
+    "find": ".is_none_or(|text| !kassiber_pytext::strip(text).is_empty()),",
+    "replace": ".is_none_or(|text| !text.is_empty()),",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Whitespace-only daemon proposals fail required-text validation."
+  },
+  {
+    "id": "psbt-transport-daemon-text",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "Ok(dict([(\"psbt\", psbt.clone())]))",
+    "replace": "Ok(dict([(\"psbt\", s(\"invalid\"))]))",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Validated daemon text reaches the same report service as the CLI."
+  },
+  {
+    "id": "psbt-transport-surrogates",
+    "file": "crates/reports/src/lib.rs",
+    "find": "let psbt = match value(args, \"psbt\") {\n                Value::Str(text) => text.as_str().unwrap_or(\"\\u{fffd}\"),\n                _ => \"\",\n            };",
+    "replace": "let psbt_owned = kassiber_envelope::py_str(value(args, \"psbt\"));\n            let psbt = psbt_owned.as_str();",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Dropping lone JSON surrogates must never turn an invalid proposal into a valid one."
+  },
+  {
+    "id": "psbt-transport-history-route",
+    "file": "crates/reports/src/lib.rs",
+    "find": "let payload = psbt_privacy::report(conn, args, psbt)?;",
+    "replace": "let payload = psbt_privacy::report_inventory(conn, args, psbt)?;",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Product transports require the historical service, not the inventory-only checkpoint."
+  },
+  {
+    "id": "psbt-transport-reviewed-anchors",
+    "file": "crates/wallets/src/psbt_privacy/history.rs",
+    "find": "exposed(source_txids),",
+    "replace": "exposed(Vec::new()),",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Reviewed source-funds exposure contributes to the proposal adversary baseline."
+  },
+  {
+    "id": "psbt-transport-counterparty-anchors",
+    "file": "crates/wallets/src/psbt_privacy/history.rs",
+    "find": "exposed(counterparty_txids),",
+    "replace": "exposed(Vec::new()),",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Known-counterparty exposure cannot disappear from the proposal model."
+  },
+  {
+    "id": "psbt-transport-wire-order",
+    "file": "crates/reports/src/psbt_privacy.rs",
+    "find": "Ok(wire::project(&payload))",
+    "replace": "Ok(payload)",
+    "expect_failing": [
+      "psbt_product_registration_and_wire_order_match_python"
+    ],
+    "rule": "Product JSON bytes preserve Python object insertion order."
+  },
+  {
+    "id": "psbt-transport-cli-registration",
+    "file": "crates/cli/src/reports.rs",
+    "find": "    \"reports.psbt-privacy\",\n",
+    "replace": "",
+    "expect_failing": [
+      "psbt_product_registration_and_wire_order_match_python"
+    ],
+    "rule": "Registered PSBT CLI requests execute in Rust without Python fallback."
+  },
+  {
+    "id": "psbt-transport-probe-registration",
+    "file": "crates/cli/src/describe.rs",
+    "find": "    \"reports.psbt-privacy\",\n",
+    "replace": "",
+    "expect_failing": [
+      "psbt_product_registration_and_wire_order_match_python"
+    ],
+    "rule": "The hybrid implementation probe advertises the accepted PSBT leaf."
+  },
+  {
+    "id": "psbt-transport-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.reports.privacy_mirror\",\n    \"ui.reports.psbt_privacy\",\n    \"ui.reports.exit_tax_preview\",\n",
+    "replace": "    \"ui.reports.privacy_mirror\",\n    \"ui.reports.exit_tax_preview\",\n",
+    "expect_failing": [
+      "psbt_product_registration_and_wire_order_match_python"
+    ],
+    "rule": "Ready capabilities and execution include the accepted PSBT daemon kind."
+  },
+  {
+    "id": "psbt-transport-native-debug",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "        \"ui.reports.privacy_hygiene\" | \"ui.reports.psbt_privacy\"\n    ) && error.code == \"internal_error\"",
+    "replace": "        \"ui.reports.privacy_hygiene\"\n    ) && error.code == \"internal_error\"",
+    "expect_failing": [
+      "psbt_product_unhandled_decoder_diagnostic_matches_python"
+    ],
+    "rule": "Unhandled retained decoder errors use the native empty-string debug contract."
+  },
+  {
+    "id": "psbt-transport-file-newlines",
+    "file": "crates/cli/src/reports.rs",
+    "find": "    let text = text.replace(\"\\r\\n\", \"\\n\").replace('\\r', \"\\n\");\n",
+    "replace": "",
+    "expect_failing": [
+      "psbt_cli_file_and_daemon_adapters_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Universal-newline decoding precedes the text-size limit for literal UTF-8 PSBT files."
+  }
+]

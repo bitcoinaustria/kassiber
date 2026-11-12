@@ -1,0 +1,482 @@
+[
+  {
+    "id": "summary-top-five",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "Ok(ranked.into_iter().take(5).map(|(_, row)| row).collect())",
+    "replace": "Ok(ranked.into_iter().take(4).map(|(_, row)| row).collect())",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "The summary lists Python's five largest movements."
+  },
+  {
+    "id": "summary-default-start",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "kassiber_rates::time::parse(&format!(\"{}-01-01\", &stamp(end)?[..4]))",
+    "replace": "kassiber_rates::time::parse(&format!(\"{}-02-01\", &stamp(end)?[..4]))",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "Without --start the period begins on January 1 of the end year."
+  },
+  {
+    "id": "summary-wallet-dedupe",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "if !resolved.iter().any(|w| w.id == wallet.id) {",
+    "replace": "if true {",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "A wallet named twice in the scope is reported once."
+  },
+  {
+    "id": "summary-partial-month",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "(\"period_partial\", Value::Bool(end < period_end_at)),",
+    "replace": "(\"period_partial\", Value::Bool(end <= period_end_at)),",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "Only a month that ends after the period is marked partial."
+  },
+  {
+    "id": "summary-holding-age-days",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "&Decimal::from(86_400_i64))?;",
+    "replace": "&Decimal::from(86_000_i64))?;",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "The weighted holding age is in days of 86,400 seconds."
+  },
+  {
+    "id": "design-display-half-even",
+    "file": "crates/reports/src/report_design/locale.rs",
+    "find": "        .to_fixed_places(places, Rounding::HalfEven)",
+    "replace": "        .to_fixed_places(places, Rounding::HalfUp)",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value"],
+    "rule": "Display rounding is half-even, as Python's Decimal formatting."
+  },
+  {
+    "id": "design-minus-sign",
+    "file": "crates/reports/src/report_design/locale.rs",
+    "find": "        out.push('\\u{2212}');",
+    "replace": "        out.push('-');",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value"],
+    "rule": "Displayed negatives use a true minus sign."
+  },
+  {
+    "id": "design-csv-plain",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "    d.to_fixed_string().unwrap_or_else(|_| d.to_canonical())",
+    "replace": "    d.to_canonical()",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value", "summary_model_matches_python_and_renders_deterministically"],
+    "rule": "CSV amounts are plain decimals without exponent."
+  },
+  {
+    "id": "design-msat-exact",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "            if exact == text.parse::<Decimal>().unwrap_or_else(|_| Decimal::zero()) =>",
+    "replace": "            if true =>",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value"],
+    "rule": "An msat column is written only when the amount is whole msat."
+  },
+  {
+    "id": "design-manifest-hash",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "(\"sha256\", s(format!(\"{:x}\", Sha256::digest(bytes)))),",
+    "replace": "(\"sha256\", s(format!(\"{:x}\", Sha256::digest(b\"\")))),",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "The CSV manifest hashes each file's bytes."
+  },
+  {
+    "id": "design-language-by-country",
+    "file": "crates/reports/src/report_design/locale.rs",
+    "find": "            Some(kassiber_tax_countries::Locale::DeAt) => Lang::De,",
+    "replace": "            Some(kassiber_tax_countries::Locale::En) => Lang::De,",
+    "expect_failing": ["the_tax_country_picks_the_language_and_sparse_zeros_print_a_dash"],
+    "rule": "Austrian books read German; every other book English."
+  },
+  {
+    "id": "design-german-separators",
+    "file": "crates/reports/src/report_design/locale.rs",
+    "find": "            Lang::De | Lang::DeDe => ('.', ','),",
+    "replace": "            Lang::De | Lang::DeDe => (',', '.'),",
+    "expect_failing": ["display_rounding_and_csv_text_come_from_one_exact_value", "chart_axes_step_on_round_values", "the_tax_country_picks_the_language_and_sparse_zeros_print_a_dash"],
+    "rule": "German numbers group with a period and use a decimal comma."
+  },
+  {
+    "id": "design-sparse-dash",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "                if self.columns[i].sparse && cells[i].is_zero() {",
+    "replace": "                if false {",
+    "expect_failing": ["the_tax_country_picks_the_language_and_sparse_zeros_print_a_dash"],
+    "rule": "Zero amounts in sparse columns print an en dash."
+  },
+  {
+    "id": "design-round-axis",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "        let step = [1.0, 2.0, 2.5, 5.0, 10.0]",
+    "replace": "        let step = [1.0, 10.0]",
+    "expect_failing": ["chart_axes_step_on_round_values"],
+    "rule": "Chart axes step on 1, 2, 2.5 or 5 times a power of ten."
+  },
+  {
+    "id": "austrian-section-order",
+    "file": "crates/reports/src/report_design/austrian.rs",
+    "find": "    for id in &order {",
+    "replace": "    for id in order.iter().rev() {",
+    "expect_failing": ["austrian_model_matches_python_and_renders_deterministically"],
+    "rule": "Disposals and income list the Austrian sections' rows in section order."
+  },
+  {
+    "id": "austrian-income-split",
+    "file": "crates/reports/src/report_design/austrian.rs",
+    "find": "            if text(row, \"entry_type\") == \"income\" {",
+    "replace": "            if text(row, \"entry_type\") == \"disposal\" {",
+    "expect_failing": ["austrian_model_matches_python_and_renders_deterministically"],
+    "rule": "Income rows go to the Income table, every other row to Disposals."
+  },
+  {
+    "id": "austrian-profile-gate",
+    "file": "crates/reports/src/austrian_pdf.rs",
+    "find": "    austrian::validate(profile)?;\n",
+    "replace": "",
+    "expect_failing": ["austrian_model_matches_python_and_renders_deterministically"],
+    "rule": "The Austrian PDF refuses books that are not Austrian EUR books, as Python does."
+  },
+  {
+    "id": "austrian-vienna-year",
+    "file": "crates/reports/src/austrian_pdf.rs",
+    "find": "        if calendar::vienna(&text(&row, \"occurred_at\"))?.0 != year {",
+    "replace": "        if false {",
+    "expect_failing": ["austrian_model_matches_python_and_renders_deterministically"],
+    "rule": "The transaction appendix holds the Europe/Vienna tax year only."
+  },
+  {
+    "id": "source-funds-snapshot-hash",
+    "file": "crates/reports/src/source_funds_pdf.rs",
+    "find": "    if snapshot_hash(&snapshot)? != text(row, \"snapshot_hash\") {",
+    "replace": "    if false {",
+    "expect_failing": ["source_funds_model_matches_python_and_renders_deterministically"],
+    "rule": "A saved case whose snapshot no longer matches its stored hash refuses to export."
+  },
+  {
+    "id": "source-funds-review-gate",
+    "file": "crates/reports/src/source_funds_pdf.rs",
+    "find": "    if !truthy(value(gates, \"exportable\")) {",
+    "replace": "    if false {",
+    "expect_failing": ["source_funds_model_matches_python_and_renders_deterministically"],
+    "rule": "A case blocked by its review gates refuses to export."
+  },
+  {
+    "id": "source-funds-flow-links",
+    "file": "crates/reports/src/report_design/source_funds.rs",
+    "find": "        let links = list(flow, \"edges\")",
+    "replace": "        let links = list(flow, \"levels\")",
+    "expect_failing": ["source_funds_model_matches_python_and_renders_deterministically"],
+    "rule": "The diagram draws every edge of the simplified flow."
+  },
+  {
+    "id": "design-formula-row",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "formula.replace(&format!(\"{{{}}}\", column.key), &address(j, r + 1));",
+    "replace": "formula.replace(&format!(\"{{{}}}\", column.key), &address(j, r));",
+    "expect_failing": ["formula_cells_name_their_own_row_and_cache_the_value"],
+    "rule": "A formula cell names the columns of its own sheet row."
+  },
+  {
+    "id": "csv-zip-members",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "kassiber_xlsx::archive(&csv(doc)?)",
+    "replace": "kassiber_xlsx::archive(&csv(doc)?[1..])",
+    "expect_failing": ["summary_model_matches_python_and_renders_deterministically"],
+    "rule": "The full report's CSV ZIP holds every file of the CSV bundle, summary first."
+  },
+  {
+    "id": "capital-csv-country-columns",
+    "file": "crates/reports/src/capital_csv.rs",
+    "find": "let austria = crate::country::austrian(&country);",
+    "replace": "let austria = true;",
+    "expect_failing": ["capital_gains_csv_is_exact_with_austrian_columns_only_in_austria"],
+    "rule": "The capital-gains CSV has the Austrian columns only in Austrian books."
+  },
+  {
+    "id": "capital-csv-exact-amount",
+    "file": "crates/reports/src/capital_csv.rs",
+    "find": "let raw = if truthy(exact) {\n        exact\n    } else {\n        value(row, key)\n    };",
+    "replace": "let raw = value(row, key);",
+    "expect_failing": ["capital_gains_csv_is_exact_with_austrian_columns_only_in_austria"],
+    "rule": "Capital-gains amounts are the stored exact text, not the float."
+  },
+  {
+    "id": "transaction-csv-draft-withheld",
+    "file": "crates/reports/src/standalone_csv.rs",
+    "find": "let withheld = matches!(*name, \"cost_basis\" | \"gain_loss\")",
+    "replace": "let withheld = matches!(*name, \"cost_basis\")",
+    "expect_failing": ["standalone_transactions_csv_artifact_vectors"],
+    "rule": "A draft transaction CSV withholds gain as well as basis."
+  },
+  {
+    "id": "bundle-evidence-hash",
+    "file": "crates/reports/src/source_funds_bundle.rs",
+    "find": "if !well_formed || sha != expected {",
+    "replace": "if !well_formed {",
+    "expect_failing": ["the_bundle_ships_disclosed_evidence_only_when_its_hash_matches"],
+    "rule": "The bundle refuses evidence whose bytes no longer match the hash the saved case disclosed."
+  },
+  {
+    "id": "bundle-reveal-withholds",
+    "file": "crates/reports/src/source_funds_bundle.rs",
+    "find": "let include_files = matches!(mode.as_str(), \"standard\" | \"full\");",
+    "replace": "let include_files = true;",
+    "expect_failing": ["the_bundle_ships_disclosed_evidence_only_when_its_hash_matches"],
+    "rule": "Evidence files ship only in the standard and full reveal modes."
+  },
+  {
+    "id": "bundle-safe-name-unique",
+    "file": "crates/reports/src/source_funds_bundle.rs",
+    "find": "while used.contains(&name) {",
+    "replace": "while used.contains(&name) && false {",
+    "expect_failing": ["safe_names_match_python"],
+    "rule": "Bundled evidence names are unique, numbered like Python's."
+  },
+  {
+    "id": "us-digital-asset-boxes-from-2025",
+    "file": "crates/reports/src/us_tax.rs",
+    "find": "2025..=LAST_FORM_YEAR => Some((\"I\", \"L\")),",
+    "replace": "2025..=LAST_FORM_YEAR => Some((\"C\", \"F\")),",
+    "expect_failing": ["boxes_follow_the_form_years", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "Form 8949 digital assets without a Form 1099-DA use boxes I and L from 2025."
+  },
+  {
+    "id": "us-forms-end-with-2026",
+    "file": "crates/reports/src/us_tax.rs",
+    "find": "pub const LAST_FORM_YEAR: i64 = 2026;",
+    "replace": "pub const LAST_FORM_YEAR: i64 = 2027;",
+    "expect_failing": ["boxes_follow_the_form_years", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "A tax year after the last known forms reads unknown instead of borrowing a placement."
+  },
+  {
+    "id": "us-terms-total-apart",
+    "file": "crates/reports/src/us_tax.rs",
+    "find": "Term::Short => &mut y.short,",
+    "replace": "Term::Short => &mut y.long,",
+    "expect_failing": ["years_total_by_term_and_kind", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "Short-term and long-term rows total apart (Form 8949 Parts I and II)."
+  },
+  {
+    "id": "us-line-10-is-long-term",
+    "file": "crates/reports/src/us_tax.rs",
+    "find": "\"schedule_d_line_10\": if boxes.is_some() { money(&year.long[2])? }",
+    "replace": "\"schedule_d_line_10\": if boxes.is_some() { money(&year.short[2])? }",
+    "expect_failing": ["years_total_by_term_and_kind", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "Schedule D line 10 is the long-term total."
+  },
+  {
+    "id": "us-layer-registered",
+    "file": "crates/reports/src/report_design/countries.rs",
+    "find": "    generator: \"us.form_8949\",",
+    "replace": "    generator: \"us.form_1040\",",
+    "expect_failing": ["every_country_generator_has_its_layer"],
+    "rule": "A country layer provides the generator its registry entry lists."
+  },
+  {
+    "id": "us-layer-after-income",
+    "file": "crates/reports/src/report_design/full.rs",
+    "find": "        sections.extend((layer.sections)(&data, lang));",
+    "replace": "        let _ = (layer.sections, &data);",
+    "expect_failing": ["the_full_report_places_the_layer_and_the_notice"],
+    "rule": "A country layer's sections follow Income in the full report."
+  },
+  {
+    "id": "preview-notice-pdf",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "        kassiber_envelope::set(&mut meta, \"notice\", s(notice));",
+    "replace": "        let _ = notice;",
+    "expect_failing": ["the_full_report_places_the_layer_and_the_notice"],
+    "rule": "A preview country's PDF carries the preview notice."
+  },
+  {
+    "id": "preview-notice-csv",
+    "file": "crates/reports/src/report_design/mod.rs",
+    "find": "        facts.push((\"preview\", \"notice\", Cell::Text(notice.into())));",
+    "replace": "        let _ = notice;",
+    "expect_failing": ["the_full_report_places_the_layer_and_the_notice"],
+    "rule": "A preview country's CSV summary carries the preview notice."
+  },
+  {
+    "id": "design-swiss-apostrophe",
+    "file": "crates/reports/src/report_design/locale.rs",
+    "find": "            Lang::DeCh => ('\\'', '.'),",
+    "replace": "            Lang::DeCh => ('.', ','),",
+    "expect_failing": ["germany_and_switzerland_have_their_own_german"],
+    "rule": "Swiss numbers group with an apostrophe and use a decimal point (1'234.56)."
+  },
+  {
+    "id": "design-german-januar",
+    "file": "crates/reports/src/report_design/locale.rs",
+    "find": "            Lang::DeDe | Lang::DeCh => Some((&MONTHS_DE_DE, &MONTHS_DE_DE_SHORT)),",
+    "replace": "            Lang::DeDe | Lang::DeCh => Some((&MONTHS_DE, &MONTHS_DE_SHORT)),",
+    "expect_failing": ["germany_and_switzerland_have_their_own_german"],
+    "rule": "Germany and Switzerland write Januar, not the Austrian J\u00e4nner."
+  },
+  {
+    "id": "design-locale-overlay",
+    "file": "crates/reports/src/report_design/locale.rs",
+    "find": "        self.overlay()\n            .iter()\n            .chain(self.table())",
+    "replace": "        self.table()\n            .iter()\n            .chain(self.overlay())",
+    "expect_failing": ["germany_and_switzerland_have_their_own_german", "swiss_german_has_no_sharp_s"],
+    "rule": "A locale's own strings come before the shared German table."
+  },
+  {
+    "id": "calendar-registry-zone",
+    "file": "crates/reports/src/calendar.rs",
+    "find": "    if zone == kassiber_tax_countries::VIENNA {\n        return vienna(raw);",
+    "replace": "    if zone != kassiber_tax_countries::VIENNA {\n        return vienna(raw);",
+    "expect_failing": ["every_supported_zone_has_local_dates_and_new_years"],
+    "rule": "Vienna reads its pinned table; every other zone its registry calendar."
+  },
+  {
+    "id": "calendar-year-start-offset",
+    "file": "crates/reports/src/calendar.rs",
+    "find": "    let start = midnight_us - i64::from(offset) * 1_000_000;",
+    "replace": "    let start = midnight_us + i64::from(offset) * 1_000_000;",
+    "expect_failing": ["every_supported_zone_has_local_dates_and_new_years"],
+    "rule": "A zone's year starts at its local midnight, before UTC midnight east of Greenwich."
+  },
+  {
+    "id": "book-zone-rule-fallback",
+    "file": "crates/reports/src/export_range.rs",
+    "find": "            Some(rule) if rule.eu_summer_time() => {",
+    "replace": "            Some(rule) if !rule.eu_summer_time() => {",
+    "expect_failing": ["rule_zones_match_tzdata_from_1996"],
+    "rule": "Without tzdata, Berlin and Zurich follow the EU summer rule."
+  },
+  {
+    "id": "de-p23-freigrenze-table",
+    "file": "crates/reports/src/de_tax.rs",
+    "find": "        y.p23 = verdict(&tables::DE_P23_FREIGRENZE, y.year, &y.taxable[3])?;",
+    "replace": "        y.p23 = verdict(&tables::DE_P22_3_FREIGRENZE, y.year, &y.taxable[3])?;",
+    "expect_failing": ["freigrenzen_follow_the_year_and_unknown_years_stay_unknown", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "The \u00a7 23 net gain is measured against the \u00a7 23 Freigrenze (DE-FG-23)."
+  },
+  {
+    "id": "de-taxable-fragments",
+    "file": "crates/reports/src/de_tax.rs",
+    "find": "            if fragment.taxable {\n                y.taxable[0]",
+    "replace": "            if !fragment.taxable {\n                y.taxable[0]",
+    "expect_failing": ["freigrenzen_follow_the_year_and_unknown_years_stay_unknown", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "Only fragments inside the one-year period count towards \u00a7 23 (DE-HOLD-1Y)."
+  },
+  {
+    "id": "de-mining-apart",
+    "file": "crates/reports/src/de_tax.rs",
+    "find": "        \"mining\" | \"mining_reward\" => MINING,",
+    "replace": "        \"mining_reward\" => MINING,",
+    "expect_failing": ["freigrenzen_follow_the_year_and_unknown_years_stay_unknown", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "Block rewards are kept out of \u00a7 22 Nr. 3 until classified (DE-INC-MINING)."
+  },
+  {
+    "id": "de-anlage-so-2025-lines",
+    "file": "crates/reports/src/de_tax.rs",
+    "find": "            loss: \"66\",",
+    "replace": "            loss: \"62\",",
+    "expect_failing": ["line_numbers_only_for_years_on_file"],
+    "rule": "The 2025 Anlage SO's loss line is 66."
+  },
+  {
+    "id": "de-layer-registered",
+    "file": "crates/reports/src/report_design/countries.rs",
+    "find": "        generator: \"de.anlage_so\",",
+    "replace": "        generator: \"de.form\",",
+    "expect_failing": ["every_country_generator_has_its_layer"],
+    "rule": "Germany's layer provides the generator its registry entry lists."
+  },
+  {
+    "id": "de-holding-labels",
+    "file": "crates/reports/src/report_design/de.rs",
+    "find": "                        \"de.holding.within\"\n",
+    "replace": "                        \"de.holding.beyond\"\n",
+    "expect_failing": ["anlage_so_rows_carry_the_lines_and_verdicts_in_german"],
+    "rule": "A lot inside the year reads \u2264 1 Jahr."
+  },
+  {
+    "id": "ch-six-months",
+    "file": "crates/reports/src/ch_tax.rs",
+    "find": "sold >= acquired.add_months(6)",
+    "replace": "sold > acquired.add_months(6)",
+    "expect_failing": ["six_months_clamp_to_the_month_end", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "KS 36 criterion 1 is met on the day six calendar months after acquisition (CH-KS36-C1)."
+  },
+  {
+    "id": "ch-volume-at-limit",
+    "file": "crates/reports/src/ch_tax.rs",
+    "find": "Some(limit) if &volume <= limit",
+    "replace": "Some(limit) if &volume < limit",
+    "expect_failing": ["every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "A volume equal to five times the start value meets criterion 2 (CH-KS36-C2)."
+  },
+  {
+    "id": "ch-gains-under-half",
+    "file": "crates/reports/src/ch_tax.rs",
+    "find": "Some(half) if &gains < half",
+    "replace": "Some(half) if &gains <= half",
+    "expect_failing": ["ks36_needs_its_inputs_and_fails_on_any_unmet_criterion", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "Gains equal to half the net income do not meet criterion 3 (CH-KS36-C3)."
+  },
+  {
+    "id": "ch-lending-movable",
+    "file": "crates/reports/src/ch_tax.rs",
+    "find": "\"staking\" | \"lending_interest\" | \"interest\" | \"airdrop\" => MOVABLE,",
+    "replace": "\"staking\" | \"interest\" | \"airdrop\" => MOVABLE,",
+    "expect_failing": ["six_months_clamp_to_the_month_end", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "Lending interest is income from movable assets (CH-INC-MOVABLE)."
+  },
+  {
+    "id": "ch-lbtc-as-btc",
+    "file": "crates/reports/src/ch_tax.rs",
+    "find": "if valuation.is_none() && asset == \"LBTC\" {",
+    "replace": "if false {",
+    "expect_failing": ["wealth_is_unknown_without_a_value_and_lbtc_borrows_bitcoins", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "L-BTC without its own value is valued at Bitcoin's, flagged."
+  },
+  {
+    "id": "ch-market-flag",
+    "file": "crates/reports/src/ch_tax.rs",
+    "find": "if valuation.source != ESTV {",
+    "replace": "if false {",
+    "expect_failing": ["wealth_is_unknown_without_a_value_and_lbtc_borrows_bitcoins", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "A market close is flagged as not the ESTV tax value (CH-WEALTH-FALLBACK)."
+  },
+  {
+    "id": "ch-year-end-day",
+    "file": "crates/reports/src/ch_tax.rs",
+    "find": "if !date.ends_with(\"-12-31\") {",
+    "replace": "if !date.ends_with(\"-12-30\") {",
+    "expect_failing": ["year_end_values_and_inputs_come_from_the_book"],
+    "rule": "A year-end value is a rate of 31 December in Zurich."
+  },
+  {
+    "id": "ch-estv-wins",
+    "file": "crates/reports/src/ch_tax.rs",
+    "find": "let estv = source == ESTV;",
+    "replace": "let estv = false;",
+    "expect_failing": ["year_end_values_and_inputs_come_from_the_book"],
+    "rule": "The ESTV Kursliste value wins over the day's market rates (CH-WEALTH-ESTV)."
+  },
+  {
+    "id": "ch-professional-refused",
+    "file": "crates/reports/src/ch_tax.rs",
+    "find": "if inputs.professional_trader {",
+    "replace": "if false {",
+    "expect_failing": ["year_end_values_and_inputs_come_from_the_book"],
+    "rule": "A professional trader's book is refused (CH-PROFESSIONAL)."
+  },
+  {
+    "id": "ch-any-unmet-fails",
+    "file": "crates/reports/src/ch_tax.rs",
+    "find": "let overall = if results.contains(&Criterion::NotMet) {",
+    "replace": "let overall = if false {",
+    "expect_failing": ["ks36_needs_its_inputs_and_fails_on_any_unmet_criterion", "every_country_file_has_the_shared_shape_and_listed_countries_compute"],
+    "rule": "Any unmet criterion fails the KS 36 safe harbour."
+  },
+  {
+    "id": "ch-layer-registered",
+    "file": "crates/reports/src/report_design/countries.rs",
+    "find": "        generator: \"ch.wealth_income\",",
+    "replace": "        generator: \"ch.form\",",
+    "expect_failing": ["every_country_generator_has_its_layer"],
+    "rule": "Switzerland's layer provides the generator its registry entry lists."
+  }
+]

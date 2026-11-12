@@ -1,0 +1,82 @@
+[
+  {
+    "id": "legacy-transport-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.privacy_hygiene.snapshot\",\n",
+    "replace": "",
+    "expect_failing": [
+      "legacy_daemon_acceptance_bytes_all_tables_zero_fallback"
+    ],
+    "rule": "Advertise and serve the existing legacy snapshot kind natively."
+  },
+  {
+    "id": "legacy-transport-arguments",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "return book.reports(kind, raw.unwrap_or(&Value::Null));",
+    "replace": "return book.reports(kind, &Value::Null);",
+    "expect_failing": [
+      "legacy_daemon_acceptance_bytes_all_tables_zero_fallback"
+    ],
+    "rule": "Preserve snapshot arguments and service-owned validation through the daemon."
+  },
+  {
+    "id": "legacy-transport-dispatch",
+    "file": "crates/reports/src/lib.rs",
+    "find": "return legacy_privacy_wire::snapshot(conn, args);",
+    "replace": "return legacy_privacy_wire::snapshot(conn, &dict::<&str>([]));",
+    "expect_failing": [
+      "legacy_daemon_acceptance_bytes_all_tables_zero_fallback"
+    ],
+    "rule": "Native report dispatch forwards the exact legacy snapshot options."
+  },
+  {
+    "id": "legacy-transport-cli-surface",
+    "file": "crates/reports/src/lib.rs",
+    "find": "if command == \"ui.privacy_hygiene.snapshot\" {",
+    "replace": "if matches!(command, \"ui.privacy_hygiene.snapshot\" | \"reports.privacy-hygiene\") {",
+    "expect_failing": [
+      "legacy_cli_configuration_report_remains_unchanged"
+    ],
+    "rule": "The existing configuration report CLI remains distinct from the legacy scorer."
+  },
+  {
+    "id": "legacy-transport-diagnostic-class",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if kind == \"ui.privacy_hygiene.snapshot\" && error.code == \"internal_error\" {",
+    "replace": "if kind == \"ui.privacy_hygiene.snapshot\" && error.code != \"internal_error\" {",
+    "expect_failing": [
+      "legacy_corrupt_amount_has_honest_native_diagnostics"
+    ],
+    "rule": "Only unhandled legacy scorer failures use native empty-string diagnostics."
+  },
+  {
+    "id": "legacy-transport-diagnostic-value",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "*debug = s(\"\");\n            }",
+    "replace": "*debug = Value::Null;\n            }",
+    "expect_failing": [
+      "legacy_corrupt_amount_has_honest_native_diagnostics"
+    ],
+    "rule": "Native unhandled legacy diagnostics retain a string with every other response byte unchanged."
+  },
+  {
+    "id": "legacy-transport-wire-order",
+    "file": "crates/reports/src/legacy_privacy_wire.rs",
+    "find": "        .map(ordered)\n        .map_err",
+    "replace": "        .map(|value| value)\n        .map_err",
+    "expect_failing": [
+      "legacy_daemon_acceptance_bytes_all_tables_zero_fallback"
+    ],
+    "rule": "Preserve Python insertion order in every legacy daemon response object."
+  },
+  {
+    "id": "legacy-transport-limit-detail-order",
+    "file": "crates/reports/src/legacy_privacy_wire.rs",
+    "find": "error.details = Some(dict([(\"limit\", limit.clone())]));",
+    "replace": "error.details = error.details.take();",
+    "expect_failing": [
+      "legacy_daemon_acceptance_bytes_all_tables_zero_fallback"
+    ],
+    "rule": "Invalid limit details retain the caller object order without changing their value."
+  }
+]

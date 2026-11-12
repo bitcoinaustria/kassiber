@@ -1,0 +1,79 @@
+[package]
+name = "kassiber"
+description = "Kassiber's backend binary: the CLI, the desktop daemon, the MCP server, and the operator broker"
+# The product version (kassiber.__version__ and pyproject.toml), which
+# --version, daemon.ready, and status report; bumped with them.
+version = "0.22.78"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "kassiber"
+path = "src/main.rs"
+
+[features]
+# Test builds only: the egress attempt observer (so an armed
+# KASSIBER_TEST_NO_EGRESS runs instead of exiting 78), the in-memory store
+# selected by KASSIBER_RUST_TEST_FAKE_STORE, the daemon's protocol test
+# kinds, and the KASSIBER_RUST_TEST_PROBE implementation probe the hybrid
+# test candidate routes on. Never in a release build.
+test-harness = [
+  "kassiber-wallets/test-harness",
+  "kassiber-ai/test-harness",
+  "kassiber-diagnostics/test-hooks",
+  "kassiber-cli/test-probe",
+  "kassiber-net/test-observer",
+  "kassiber-net/test-support",
+  "kassiber-runtime/fake",
+  "kassiber-daemon/test-kinds",
+  "kassiber-store/test-hooks",
+  "kassiber-secrets/test-hooks",
+  "kassiber-backup/test-hooks",
+  "kassiber-operator/test-harness",
+]
+
+[dependencies]
+kassiber-diagnostics = { path = "../diagnostics" }
+kassiber-chain = { path = "../chain" }
+kassiber-backup = { path = "../backup" }
+kassiber-reports = { path = "../reports" }
+kassiber-journals = { path = "../journals" }
+
+kassiber-transfers = { path = "../transfers" }
+kassiber-rates = { path = "../rates" }
+kassiber-setup = { path = "../setup" }
+
+kassiber-transactions = { path = "../transactions" }
+kassiber-workspace = { path = "../workspace" }
+kassiber-release = { path = "../release" }
+kassiber-cli = { path = "../cli" }
+kassiber-imports = { path = "../imports" }
+kassiber-wallets = { path = "../wallets" }
+kassiber-ai = { path = "../ai" }
+kassiber-daemon = { path = "../daemon" }
+kassiber-net = { path = "../net" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-runtime = { path = "../runtime" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-paths = { path = "../paths" }
+kassiber-ownership = { path = "../ownership" }
+kassiber-operator = { path = "../operator" }
+kassiber-ipc = { path = "../ipc" }
+kassiber-store = { path = "../store" }
+kassiber-secrets = { path = "../secrets", features = ["native-keyring"] }
+serde_json = "1"
+zeroize = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[[example]]
+name = "psbt_transport_fixture"
+required-features = ["test-harness"]

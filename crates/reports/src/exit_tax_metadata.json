@@ -1,0 +1,14 @@
+{
+  "EXIT_TAX_REVIEW_GATE": "Estimate only \u2014 not tax advice. The exit-tax (Wegzugsbesteuerung) liability across all of your assets is determined by your Steuerberater. Hand this draft to your tax adviser for review before relying on it or filing.",
+  "_ASSUMPTION_ALT_EXCLUDED": "EXIT: Altbestand (acquired before 2021-03-01 Europe/Vienna) is treated as tax-free and excluded from the deemed-disposal base; only Neubestand unrealized gains are taxed.",
+  "_ASSUMPTION_RATE": "EXIT-002: Neubestand gains estimated at the 27.5% Sondersteuersatz (\u00a7 27a EStG). Losses net within the deemed disposal; if the total Neubestand gain is negative the estimated tax is zero (no carryforward, and loss offset beyond the same income type is out of scope).",
+  "_ASSUMPTION_DERIVED_TOKENS": "EXIT-004: Income-type receipts (staking/mining/airdrop) are present in this book. Inventory uses the matching acquisition lots (income recognition lines are not counted again); confirm the product mechanics with your adviser.",
+  "_ASSUMPTION_UNTAGGED_DISPOSAL": "EXIT-010: A disposal marked non-reportable carries no Alt/Neu tag; its regime was inferred from the disposal date and may misattribute Altbestand sold after 2021-03-01. Review those rows.",
+  "_ASSUMPTION_DEFERRAL_EU": "EXIT-002: EU/EEA destination \u2014 tax is assessed but, on application, not collected until you actually sell (Nichtfestsetzung, \u00a7 27 Abs 6 Z 1 lit a). Not the 7-year business-asset Ratenzahlung.",
+  "_ASSUMPTION_DEFERRAL_THIRD": "EXIT-002: Third-country (non-EU/EEA) destination \u2014 tax is due immediately on departure.",
+  "_ASSUMPTION_FMV": "EXIT-005: Fair market value uses the closest cached or transaction quote strictly before the exclusive departure cutoff, at most 24 hours old. Older, future or undated quotes leave the asset unpriced. It does not imply intraday coverage.",
+  "_ASSUMPTION_FUTURE_TIGHTENING": "EXIT-003: A planned 1 July 2026 tightening (annual proof when deferred gains exceed EUR 100,000) is not modelled \u2014 verify against enacted law.",
+  "_ASSUMPTION_GENERIC": "EXIT: Non-Austrian profile \u2014 no Altbestand grandfathering or special rate is applied; this shows the total unrealized gain only. Have a local adviser set the applicable exit-tax treatment.",
+  "_ASSUMPTION_OLD_RULES": "EXIT-011: The 27.5% rate and KZ 174 cover realisations from 1 March 2022. A departure before it followed the old rules, so no tax is estimated; a Steuerberater states it.",
+  "missing": "EXIT-005: No usable cached or transaction quote found for one or more assets \u2014 run `kassiber rates sync`; market value, gain, and estimated tax stay incomplete (null) until those holdings are priced."
+}

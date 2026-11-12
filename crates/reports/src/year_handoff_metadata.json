@@ -1,0 +1,961 @@
+{
+  "sheets": [
+    {
+      "name": "Overview",
+      "columns": [
+        {
+          "key": "group",
+          "label": "Group",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "field",
+          "label": "Field",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "value",
+          "label": "Value",
+          "format": "text",
+          "formula": null
+        }
+      ]
+    },
+    {
+      "name": "Wallets",
+      "columns": [
+        {
+          "key": "wallet",
+          "label": "Wallet",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "wallet_kind",
+          "label": "Wallet Kind",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "chain",
+          "label": "Chain",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "network",
+          "label": "Network",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "status",
+          "label": "Status",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "assets",
+          "label": "Assets",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "transactions_in_year",
+          "label": "Transactions In Year",
+          "format": "int",
+          "formula": null
+        },
+        {
+          "key": "excluded_in_year",
+          "label": "Excluded In Year",
+          "format": "int",
+          "formula": null
+        },
+        {
+          "key": "first_transaction_at",
+          "label": "First Transaction (UTC)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "last_transaction_at",
+          "label": "Last Transaction (UTC)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "last_synced_at",
+          "label": "Last Sync (UTC)",
+          "format": "text",
+          "formula": null
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "columns": [
+        {
+          "key": "occurred_at",
+          "label": "Occurred At (UTC)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "local_date",
+          "label": "Local Date",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "wallet",
+          "label": "Wallet",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "wallet_kind",
+          "label": "Wallet Kind",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "chain",
+          "label": "Chain",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "network",
+          "label": "Network",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "transaction_ref",
+          "label": "Transaction Ref",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "transaction_id",
+          "label": "Transaction ID",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "direction",
+          "label": "Direction",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "classification",
+          "label": "Kassiber Classification",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "source_kind",
+          "label": "Source Kind",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "pair_ref",
+          "label": "Pair Ref",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "other_wallet",
+          "label": "Other Wallet",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "other_leg_transaction_id",
+          "label": "Other Leg Transaction ID",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset",
+          "label": "Asset",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset_id",
+          "label": "Asset ID",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "amount",
+          "label": "Amount",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "fee",
+          "label": "Fee",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "net_change",
+          "label": "Net Change",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "amount_sats",
+          "label": "Amount (sats)",
+          "format": "sats",
+          "formula": null
+        },
+        {
+          "key": "fee_sats",
+          "label": "Fee (sats)",
+          "format": "sats",
+          "formula": null
+        },
+        {
+          "key": "net_change_sats",
+          "label": "Net Change (sats)",
+          "format": "sats",
+          "formula": null
+        },
+        {
+          "key": "amount_exact",
+          "label": "Amount (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "fee_exact",
+          "label": "Fee (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "net_change_exact",
+          "label": "Net Change (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "fiat_price",
+          "label": "Price ({fiat} per unit)",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "fiat_value",
+          "label": "Recorded Value ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "fmv",
+          "label": "Market Value ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "fiat_fee",
+          "label": "Network Fee ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "income_value",
+          "label": "Income ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "disposal_proceeds",
+          "label": "Proceeds ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "disposal_cost_basis",
+          "label": "Cost Basis Disposed ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "disposal_gain_loss",
+          "label": "Gain/Loss ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "fee_cost_basis",
+          "label": "Fee Cost Basis ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "journal_entry_types",
+          "label": "Journal Entry Types",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "tax_category",
+          "label": "Tax Category",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "description",
+          "label": "Description",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "note",
+          "label": "Note",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "counterparty",
+          "label": "Counterparty",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "tags",
+          "label": "Tags",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "references",
+          "label": "References",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "attachments",
+          "label": "Attachments",
+          "format": "text",
+          "formula": null
+        }
+      ]
+    },
+    {
+      "name": "Journal",
+      "columns": [
+        {
+          "key": "occurred_at",
+          "label": "Occurred At (UTC)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "local_date",
+          "label": "Local Date",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "wallet",
+          "label": "Wallet",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "transaction_ref",
+          "label": "Transaction Ref",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "transaction_id",
+          "label": "Transaction ID",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "entry_type",
+          "label": "Entry Type",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset",
+          "label": "Asset",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset_id",
+          "label": "Asset ID",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "quantity",
+          "label": "Quantity",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "quantity_exact",
+          "label": "Quantity (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "fiat_value",
+          "label": "Value ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "cost_basis",
+          "label": "Cost Basis ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "proceeds",
+          "label": "Proceeds ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "gain_loss",
+          "label": "Gain/Loss ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "in_capital_gains_report",
+          "label": "In Capital Gains Report",
+          "format": "int",
+          "formula": null
+        },
+        {
+          "key": "tax_category",
+          "label": "Tax Category",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "tax_form_field",
+          "label": "Tax Form Field",
+          "format": "int",
+          "formula": null
+        },
+        {
+          "key": "capital_gains_type",
+          "label": "Holding Period",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "pricing_source",
+          "label": "Pricing Source",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "pricing_quality",
+          "label": "Pricing Quality",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "description",
+          "label": "Description",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "journal_entry_id",
+          "label": "Journal Entry ID",
+          "format": "text",
+          "formula": null
+        }
+      ]
+    },
+    {
+      "name": "Balances",
+      "columns": [
+        {
+          "key": "wallet",
+          "label": "Wallet",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "chain",
+          "label": "Chain",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "network",
+          "label": "Network",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset",
+          "label": "Asset",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset_id",
+          "label": "Asset ID",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "opening_quantity",
+          "label": "Opening Quantity",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "opening_quantity_exact",
+          "label": "Opening Quantity (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "opening_cost_basis",
+          "label": "Opening Cost Basis ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "closing_quantity",
+          "label": "Closing Quantity",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "closing_quantity_exact",
+          "label": "Closing Quantity (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "closing_cost_basis",
+          "label": "Closing Cost Basis ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "year_end_rate",
+          "label": "Year-End Rate ({fiat} per unit)",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "year_end_market_value",
+          "label": "Year-End Market Value ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "rate_source",
+          "label": "Rate Source",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "rate_timestamp",
+          "label": "Rate Timestamp (UTC)",
+          "format": "text",
+          "formula": null
+        }
+      ]
+    },
+    {
+      "name": "Roll-forward",
+      "columns": [
+        {
+          "key": "asset",
+          "label": "Asset",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset_id",
+          "label": "Asset ID",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "opening_quantity",
+          "label": "Opening Quantity",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "acquired_quantity",
+          "label": "Acquired",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "disposed_quantity",
+          "label": "Disposed",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "fee_quantity",
+          "label": "Fees",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "transfer_net",
+          "label": "Own-Wallet Transfers Net",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "closing_quantity",
+          "label": "Closing Quantity",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "quantity_check",
+          "label": "Quantity Check",
+          "format": "quantity",
+          "formula": "=ROUND({opening_quantity}+{acquired_quantity}-{disposed_quantity}-{fee_quantity}+{transfer_net}-{closing_quantity},{decimals})"
+        },
+        {
+          "key": "opening_quantity_exact",
+          "label": "Opening Quantity (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "closing_quantity_exact",
+          "label": "Closing Quantity (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "opening_cost_basis",
+          "label": "Opening Cost Basis ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "acquired_value",
+          "label": "Acquired Value ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "income_value",
+          "label": "Of Which Income ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "disposed_cost_basis",
+          "label": "Cost Basis Disposed ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "disposal_proceeds",
+          "label": "Proceeds ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "realized_gain_loss",
+          "label": "Realized Gain/Loss ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "fee_cost_basis",
+          "label": "Fee Cost Basis ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "transfer_basis_net",
+          "label": "Own-Wallet Transfers Basis Net ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "closing_cost_basis",
+          "label": "Closing Cost Basis ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "basis_check",
+          "label": "Basis Check ({fiat})",
+          "format": "money",
+          "formula": "=ROUND({opening_cost_basis}+{acquired_value}-{disposed_cost_basis}-{fee_cost_basis}+{transfer_basis_net}-{closing_cost_basis},2)"
+        },
+        {
+          "key": "year_end_rate",
+          "label": "Year-End Rate ({fiat} per unit)",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "year_end_market_value",
+          "label": "Year-End Market Value ({fiat})",
+          "format": "money",
+          "formula": null
+        },
+        {
+          "key": "unrealized_gain_loss",
+          "label": "Unrealized Gain/Loss ({fiat})",
+          "format": "money",
+          "formula": null
+        }
+      ]
+    },
+    {
+      "name": "Reconciliation",
+      "columns": [
+        {
+          "key": "wallet",
+          "label": "Wallet",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset",
+          "label": "Asset",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset_id",
+          "label": "Asset ID",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "opening_journal",
+          "label": "Opening (journal)",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "opening_observed",
+          "label": "Opening (observed)",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "inflow",
+          "label": "Received",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "outflow",
+          "label": "Sent",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "fee",
+          "label": "Fees",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "closing_observed",
+          "label": "Closing (observed)",
+          "format": "quantity",
+          "formula": "=ROUND({opening_observed}+{inflow}-{outflow}-{fee},{decimals})"
+        },
+        {
+          "key": "closing_journal",
+          "label": "Closing (journal)",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "opening_difference",
+          "label": "Opening Difference",
+          "format": "quantity",
+          "formula": "=ROUND({opening_journal}-{opening_observed},{decimals})"
+        },
+        {
+          "key": "closing_difference",
+          "label": "Closing Difference",
+          "format": "quantity",
+          "formula": "=ROUND({closing_journal}-{closing_observed},{decimals})"
+        },
+        {
+          "key": "status",
+          "label": "Status",
+          "format": "text",
+          "formula": "=IF(AND({opening_difference}=0,{closing_difference}=0),\"OK\",\"DIFF\")"
+        },
+        {
+          "key": "opening_difference_exact",
+          "label": "Opening Difference (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "closing_difference_exact",
+          "label": "Closing Difference (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "timing_notes",
+          "label": "Timing Notes",
+          "format": "text",
+          "formula": null
+        }
+      ]
+    },
+    {
+      "name": "Excluded",
+      "columns": [
+        {
+          "key": "occurred_at",
+          "label": "Occurred At (UTC)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "local_date",
+          "label": "Local Date",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "wallet",
+          "label": "Wallet",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "transaction_ref",
+          "label": "Transaction Ref",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "transaction_id",
+          "label": "Transaction ID",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "direction",
+          "label": "Direction",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "source_kind",
+          "label": "Source Kind",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset",
+          "label": "Asset",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "asset_id",
+          "label": "Asset ID",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "amount",
+          "label": "Amount",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "fee",
+          "label": "Fee",
+          "format": "quantity",
+          "formula": null
+        },
+        {
+          "key": "amount_exact",
+          "label": "Amount (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "fee_exact",
+          "label": "Fee (exact)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "excluded_at",
+          "label": "Excluded At (UTC)",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "exclusion_reason",
+          "label": "Exclusion Reason",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "description",
+          "label": "Description",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "note",
+          "label": "Note",
+          "format": "text",
+          "formula": null
+        },
+        {
+          "key": "tags",
+          "label": "Tags",
+          "format": "text",
+          "formula": null
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Wallets lists every wallet in this book. Wallets in other books are not included; a transfer to one of them appears as an external payment.",
+    "Transactions lists every non-excluded transaction observed in the year. Excluded transactions are listed on the Excluded sheet and count nowhere else.",
+    "Transaction Ref is Kassiber's id; Journal rows carry the same ref. Both legs of an own-wallet transfer or swap carry the same Pair Ref.",
+    "Kassiber Classification is how the journal booked the row: internal_transfer moves between own wallets, swap is a reviewed conversion, income/acquisition/disposal cross the book's boundary, fee is a fee-only row. Source Kind is what the import or sync said.",
+    "Amounts are in each asset's own unit. The (exact) columns are lossless text; sats columns are filled for BTC and L-BTC only. Net Change is signed: negative leaves the wallet.",
+    "Money columns are in the book currency. Recorded Value is the cash amount recorded with the transaction (including exchange fees); Market Value is amount x price.",
+    "Per-wallet cost basis is the asset's pooled residual basis allocated by quantity, as in portfolio-summary; the per-asset Roll-forward total is exact.",
+    "Reconciliation compares journal balances with observed wallet movements at both ends of the year. A DIFF row needs an explanation before closing the books.",
+    "Kassiber does not assign spheres, accounts, or the UGB/EA valuation rule. Tag rows in Kassiber to carry that assignment into this workbook."
+  ]
+}

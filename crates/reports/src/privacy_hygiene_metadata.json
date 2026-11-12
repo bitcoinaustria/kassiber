@@ -1,0 +1,191 @@
+{
+  "limitations": [
+    {
+      "code": "local_only_no_probe",
+      "message": "No network request was made; endpoint posture is inferred from local configuration only.",
+      "evidence_level": "derived"
+    },
+    {
+      "code": "redacted_payload",
+      "message": "Addresses, scripts, descriptors, xpubs, backend URLs/tokens, wallet config, raw_json, branch/index values, and derivation paths are omitted from this payload.",
+      "evidence_level": "exact"
+    }
+  ],
+  "findings": {
+    "database_plaintext": {
+      "category": "storage",
+      "severity": "warning",
+      "title": "Database file is plaintext SQLite",
+      "detail": "The active database header is plaintext SQLite; SQLCipher encryption is not active for this data root.",
+      "evidence_level": "exact",
+      "recommendation": "Use `kassiber secrets init` if this book should be encrypted at rest.",
+      "id": "database_plaintext"
+    },
+    "remote_backend_endpoints": {
+      "category": "network",
+      "severity": "warning",
+      "title": "Third-party backend endpoints are configured",
+      "detail": "{count} configured backend endpoint(s) are inferred as third-party and can observe wallet/indexer queries.",
+      "evidence_level": "derived",
+      "recommendation": "Use your own node/backend or a per-backend proxy when that exposure is not acceptable.",
+      "id": "remote_backend_endpoints"
+    },
+    "unacknowledged_off_device_ai_provider": {
+      "category": "ai",
+      "severity": "alert",
+      "title": "Off-device AI provider needs acknowledgement",
+      "detail": "{count} off-device AI provider(s) lack an acknowledgement timestamp.",
+      "evidence_level": "exact",
+      "recommendation": "Review the provider posture before sending assistant prompts.",
+      "id": "unacknowledged_off_device_ai_provider"
+    },
+    "watch_only_wallet_material_present": {
+      "category": "wallets",
+      "severity": "info",
+      "title": "Watch-only wallet material is stored locally",
+      "detail": "{count} wallet(s) have watch-only material in the local database.",
+      "evidence_level": "exact",
+      "id": "watch_only_wallet_material_present"
+    },
+    "privacy_boundary_transactions_present": {
+      "category": "transactions",
+      "severity": "info",
+      "title": "Privacy-boundary transaction markers are present",
+      "detail": "{count} transaction(s) carry a privacy-boundary marker; provenance across those hops remains opaque unless reviewed with stronger evidence.",
+      "evidence_level": "exact",
+      "id": "privacy_boundary_transactions_present"
+    },
+    "import_raw_json_present": {
+      "category": "transactions",
+      "severity": "info",
+      "title": "Imported raw metadata is present",
+      "detail": "{count} transaction(s) retain importer raw_json inside the local database; this payload reports only the count.",
+      "evidence_level": "exact",
+      "id": "import_raw_json_present"
+    },
+    "local_utxo_location_metadata_present": {
+      "category": "inventory",
+      "severity": "info",
+      "title": "Local UTXO location metadata is present",
+      "detail": "The local output inventory contains address, script, or derivation metadata; this payload reports counts only.",
+      "evidence_level": "exact",
+      "id": "local_utxo_location_metadata_present"
+    },
+    "privacy_quarantines_present": {
+      "category": "journals",
+      "severity": "warning",
+      "title": "Privacy-related journal quarantines are present",
+      "detail": "{count} journal quarantine(s) are privacy-related and need review before derived reports are complete.",
+      "evidence_level": "exact",
+      "id": "privacy_quarantines_present"
+    },
+    "database_encryption_unknown": {
+      "category": "storage",
+      "severity": "info",
+      "title": "Database encryption status is unknown",
+      "detail": "Kassiber could not classify the active database header from the local file.",
+      "evidence_level": "unknown",
+      "id": "database_encryption_unknown"
+    },
+    "off_device_ai_provider_configured": {
+      "category": "ai",
+      "severity": "warning",
+      "title": "Off-device AI providers are configured",
+      "detail": "{count} configured AI provider(s) may send prompt content outside this machine when selected.",
+      "evidence_level": "exact",
+      "recommendation": "Keep the assistant on a local provider for local-only inference.",
+      "id": "off_device_ai_provider_configured"
+    }
+  },
+  "queries": [
+    {
+      "name": "active_transactions",
+      "sql": "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+      "code": "transactions_count_unavailable"
+    },
+    {
+      "name": "excluded_transactions",
+      "sql": "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded != 0",
+      "code": "excluded_transactions_count_unavailable"
+    },
+    {
+      "name": "raw_json_transactions",
+      "sql": "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND raw_json IS NOT NULL AND trim(raw_json) NOT IN ('', '{}', 'null')",
+      "code": "transaction_raw_json_count_unavailable"
+    },
+    {
+      "name": "privacy_boundary_transactions",
+      "sql": "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND privacy_boundary IS NOT NULL AND trim(privacy_boundary) != ''",
+      "code": "privacy_boundary_count_unavailable"
+    },
+    {
+      "name": "utxo_count",
+      "sql": "SELECT COUNT(*) AS count FROM wallet_utxos WHERE profile_id = ?",
+      "code": "utxo_count_unavailable"
+    },
+    {
+      "name": "active_utxo_count",
+      "sql": "SELECT COUNT(*) AS count FROM wallet_utxos WHERE profile_id = ? AND spent_at IS NULL",
+      "code": "active_utxo_count_unavailable"
+    },
+    {
+      "name": "utxos_with_address",
+      "sql": "SELECT COUNT(*) AS count FROM wallet_utxos WHERE profile_id = ? AND address IS NOT NULL AND trim(address) != ''",
+      "code": "utxo_address_count_unavailable"
+    },
+    {
+      "name": "utxos_with_script",
+      "sql": "SELECT COUNT(*) AS count FROM wallet_utxos WHERE profile_id = ? AND script_pubkey IS NOT NULL AND trim(script_pubkey) != ''",
+      "code": "utxo_script_count_unavailable"
+    },
+    {
+      "name": "utxos_with_derivation",
+      "sql": "SELECT COUNT(*) AS count FROM wallet_utxos WHERE profile_id = ? AND (branch_index IS NOT NULL OR address_index IS NOT NULL)",
+      "code": "utxo_derivation_count_unavailable"
+    },
+    {
+      "name": "journal_entry_count",
+      "sql": "SELECT COUNT(*) AS count FROM journal_entries WHERE profile_id = ?",
+      "code": "journal_entry_count_unavailable"
+    },
+    {
+      "name": "quarantine_count",
+      "sql": "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
+      "code": "quarantine_count_unavailable"
+    },
+    {
+      "name": "privacy_quarantine_count",
+      "sql": "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ? AND reason LIKE 'privacy%'",
+      "code": "privacy_quarantine_count_unavailable"
+    }
+  ],
+  "ipv4_private": [
+    "0.0.0.0/8",
+    "10.0.0.0/8",
+    "127.0.0.0/8",
+    "169.254.0.0/16",
+    "172.16.0.0/12",
+    "192.0.0.0/24",
+    "192.0.0.170/31",
+    "192.0.2.0/24",
+    "192.168.0.0/16",
+    "198.18.0.0/15",
+    "198.51.100.0/24",
+    "203.0.113.0/24",
+    "240.0.0.0/4",
+    "255.255.255.255/32"
+  ],
+  "ipv6_private": [
+    "::1/128",
+    "::/128",
+    "::ffff:0.0.0.0/96",
+    "64:ff9b:1::/48",
+    "100::/64",
+    "2001::/23",
+    "2001:db8::/32",
+    "2002::/16",
+    "3fff::/20",
+    "fc00::/7",
+    "fe80::/10"
+  ]
+}
