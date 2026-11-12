@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "@/i18n";
 import { DaemonScopeContext } from "@/daemon/client";
-import { bookEvidenceNetwork, PsbtPanel } from "./PsbtPanel";
+import { bookEvidenceNetwork } from "@/lib/bookNetworkEvidence";
+import { PsbtPanel } from "./PsbtPanel";
 
 const mock = vi.hoisted(() => ({ invoke: vi.fn(), pick: vi.fn(), binding: { environment_id: null as string | null, domains: [] as {chain:string;network:string}[] }, wallets: [] as { environments: string[] }[], effects: [] as Array<() => void | (() => void)> }));
 vi.mock("react", async original => ({

@@ -10,20 +10,10 @@ import { DEFAULT_ANALYSIS_QUERY, formatAnalysisAmount } from "@/lib/chainAnalysi
 import { maskSensitive, useSensitive } from "@/lib/sensitive";
 import { payjoinOptions, psbtAssistantContext, type PsbtAnalysis, type PsbtComparison } from "@/lib/chainAnalysisWorkbench";
 import { ANALYSIS_NETWORKS, type AnalysisNetwork } from "@/store/ui";
+import { bookEvidenceNetwork } from "@/lib/bookNetworkEvidence";
 import { EntropyPanel } from "./EntropyPanel";
 import { CodeList, FeatureDetails, StructuredValue } from "./FeatureDetails";
 import { Fact } from "./EvidenceDetails";
-
-/**
- * The network a PSBT inspection runs on. A bound book decides it. An unbound
- * book uses the one environment its wallets already show, and mainnet when
- * they show none or disagree; there is no separate device-wide default.
- */
-export function bookEvidenceNetwork(wallets: { environments: string[] }[] | undefined): AnalysisNetwork {
-  const seen = new Set((wallets ?? []).flatMap(wallet => wallet.environments));
-  const [only] = seen;
-  return seen.size === 1 && ANALYSIS_NETWORKS.includes(only as AnalysisNetwork) ? only as AnalysisNetwork : "main";
-}
 
 export function PsbtPanel(props: { onError: (value: unknown) => void; initialNetwork?: string }) {
   const { t } = useTranslation(["settings", "common"]);

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { SettingsGroup, SettingsRow, SettingsSelect } from "./SettingsControls";
+import { bookEvidenceNetwork } from "@/lib/bookNetworkEvidence";
 
 type WalletScope = { wallet_id: string; label: string; environments: string[]; transaction_count: number; unknown_count: number; conflict_count: number; requires_declaration: boolean };
 type Binding = { profile_id: string; state: "unbound" | "bound"; environment?: string; chain_instance_id?: string | null; domains: { chain: string; network: string }[] };
@@ -22,7 +23,8 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
   const query = useDaemon<Inventory>("ui.networks.inventory", {}, { enabled: needsInventory });
   const preview = useDaemonMutation<Plan>("ui.networks.plan");
   const bind = useDaemonMutation("ui.networks.bind");
-  const [environment, setEnvironment] = useState("main");
+  // Unset until the user picks one; until then show what the connections show.
+  const [chosenEnvironment, setEnvironment] = useState<string | null>(null);
   const [instance, setInstance] = useState("");
   // One choice for every connection without network evidence, not a switch
   // per row: the declaration means the same thing for each of them.
@@ -31,6 +33,7 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
   const [error, setError] = useState<string | null>(null);
   const inventory = needsInventory && query.data?.data?.binding.state === "unbound" && query.data.data.profile_id === binding?.profile_id
     ? query.data.data : undefined;
+  const environment = chosenEnvironment ?? bookEvidenceNetwork(inventory?.wallets);
   const undeclared = inventory?.wallets.filter(wallet => wallet.requires_declaration) ?? [];
   const declared = declareAll ? undeclared.map(wallet => wallet.wallet_id) : [];
   const recipe = { environment, chain_instance_id: environment === "regtest" ? instance : null, declared_wallet_ids: declared };

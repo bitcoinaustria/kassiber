@@ -967,7 +967,7 @@
     "loadError": "The book's network could not be read.",
     "environment": "Environment",
     "environments": {
-      "main": "Production",
+      "main": "Mainnet",
       "test": "Testnet",
       "signet": "Signet",
       "regtest": "Local regtest"
