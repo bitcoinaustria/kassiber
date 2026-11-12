@@ -6,6 +6,7 @@ import type {
 import type { BookStamp } from "@/components/ai/bookStamp";
 import type { DaemonScopeBoundary } from "@/daemon/client";
 import i18n from "@/i18n";
+import { showFeedback } from "@/lib/feedback";
 import { useUiStore } from "@/store/ui";
 
 interface HandoffOrigin {
@@ -36,11 +37,12 @@ export function beginAssistantHandoff(
     ? { daemonSession: origin.boundary.daemonSession, scope: origin.boundary.expectedScope }
     : (assistant.captureBook?.() ?? null);
   if (!book) {
-    useUiStore.getState().addNotification({
+    showFeedback({
       title: i18n.t("queue.bookLoading.title", { ns: "assistant" }),
-      body: i18n.t("queue.bookLoading.body", { ns: "assistant" }),
+      description: i18n.t("queue.bookLoading.body", { ns: "assistant" }),
+      descriptionPrivacy: "safe",
       tone: "warning",
-      dedupeKey: "assistant-book-loading",
+      key: "assistant-book-loading",
     });
     return null;
   }

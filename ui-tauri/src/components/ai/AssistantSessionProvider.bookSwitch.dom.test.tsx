@@ -120,6 +120,7 @@ import {
 } from "@/components/ai/assistantSession";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
+import { useFeedbackStore } from "@/lib/feedback";
 import Ai02 from "@/components/ai-02";
 import { useAssistantComposer } from "@/components/kb/assistant-panel/useAssistantComposer";
 import { AssistantSessionProvider } from "./AssistantSessionProvider";
@@ -183,8 +184,8 @@ describe("a conversation and its book", () => {
     mocks.picker.mockResolvedValue(PICKED);
     useUiStore.setState({
       assistantModelSelection: { provider: "copilot", model: "default" },
-      notifications: [],
     });
+    useFeedbackStore.setState({ items: [] });
     useAssistantDraftStore.setState({ draft: "", handoff: null });
   });
   afterEach(cleanup);
@@ -266,7 +267,7 @@ describe("a conversation and its book", () => {
 
     expect(mocks.chats).toHaveLength(sentBefore);
     expect(useAssistantDraftStore.getState().draft).toBe("And the fee?");
-    expect(useUiStore.getState().notifications.at(0)?.title).toBe(
+    expect(useFeedbackStore.getState().items.at(-1)?.title).toBe(
       "Not sent: you switched books",
     );
     // Sent again from the fresh conversation, it goes alone.
@@ -327,7 +328,7 @@ describe("a conversation and its book", () => {
     mocks.scope = BOOK_B;
     view.rerender(provider());
     expect(session.attachments).toEqual([]);
-    expect(useUiStore.getState().notifications.at(0)?.body).toBe(
+    expect(useFeedbackStore.getState().items.at(-1)?.description).toBe(
       "The file you attached in the other book was removed from this chat.",
     );
 
@@ -383,7 +384,7 @@ describe("a conversation and its book", () => {
     expect(mocks.chats).toHaveLength(0);
     // As the notice says, the question is back in (still in) the composer.
     expect(useAssistantDraftStore.getState().draft).toBe("How many are pending?");
-    expect(useUiStore.getState().notifications.at(0)?.body).toBe(
+    expect(useFeedbackStore.getState().items.at(-1)?.description).toBe(
       "This book is still loading. Your text is back in the composer.",
     );
   });

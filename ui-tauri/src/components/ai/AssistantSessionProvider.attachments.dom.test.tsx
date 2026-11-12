@@ -152,6 +152,8 @@ import {
 } from "@/components/ai/assistantSession";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
+import { useFeedbackStore } from "@/lib/feedback";
+import { useNotificationStore } from "@/store/notifications";
 import { AssistantSessionProvider } from "./AssistantSessionProvider";
 import { evidenceRequest } from "./evidenceRequest";
 
@@ -191,8 +193,8 @@ describe("a pasted chat file", () => {
     mocks.picker.mockReset();
     useUiStore.setState({
       assistantModelSelection: { provider: "copilot", model: "default" },
-      notifications: [],
     });
+    useFeedbackStore.setState({ items: [] });
     useAssistantDraftStore.setState({ draft: "", handoff: null });
   });
   afterEach(cleanup);
@@ -270,9 +272,13 @@ describe("a pasted chat file", () => {
     await act(async () => session.sendPrompt("Still there?"));
     view.rerender(provider());
     expect(session.attachments.map((file) => file.filename)).toEqual(["a.csv"]);
-    const notice = useUiStore.getState().notifications[0];
+    const notice = useFeedbackStore.getState().items.at(-1);
     expect(notice?.title).toBe("An attached file expired");
-    expect(notice?.body).toContain("receipt.png");
+    expect(notice?.description).toContain("receipt.png");
+    // A file name is user data: privacy modes treat it as free text.
+    expect(notice?.descriptionPrivacy).toBe("free-text");
+    // Feedback on the chat on screen, not a standing entry in the center.
+    expect(useNotificationStore.getState().conditions).toEqual({});
     // The next turn no longer offers it.
     await act(async () => session.sendPrompt("And now?"));
     expect(lastChat().attachments).toEqual([{ token: "grant-a.csv" }]);
@@ -283,15 +289,15 @@ describe("a pasted chat file", () => {
     await act(async () => session.attachFiles!([new File(["x"], "notes.zip"), csv("b.csv")]));
     view.rerender(provider());
     expect(session.attachments.map((file) => file.filename)).toEqual(["b.csv"]);
-    expect(useUiStore.getState().notifications.at(-1)?.title).toBe("This file can't be attached");
+    expect(useFeedbackStore.getState().items[0]?.title).toBe("This file can't be attached");
 
     const many = Array.from({ length: 9 }, (_, index) => csv(`f${index}.csv`));
     await act(async () => session.attachFiles!(many));
     view.rerender(provider());
     expect(session.attachments).toHaveLength(8);
     expect(uploads()).toHaveLength(8);
-    // Newest first.
-    expect(useUiStore.getState().notifications[0]?.title).toBe("A chat holds up to 8 files");
+    // The newest toast is the last one.
+    expect(useFeedbackStore.getState().items.at(-1)?.title).toBe("A chat holds up to 8 files");
   });
 
   it("refuses a file the chat cannot take without sending anything", async () => {
@@ -300,7 +306,7 @@ describe("a pasted chat file", () => {
     view.rerender(provider());
     expect(session.attachments).toEqual([]);
     expect(uploads()).toHaveLength(0);
-    expect(useUiStore.getState().notifications.at(-1)?.title).toBe("This file can't be attached");
+    expect(useFeedbackStore.getState().items[0]?.title).toBe("This file can't be attached");
   });
 
   it("still continues a source-of-funds review when the evidence file finds the chat full", async () => {
@@ -343,7 +349,7 @@ describe("a pasted chat file", () => {
     expect(continued).toContain("Continue the source-of-funds review");
     expect(continued).toContain("not available for analysis here");
     expect(lastChat().attachments).not.toContainEqual(expect.objectContaining({ token: "grant-receipt.pdf" }));
-    expect(useUiStore.getState().notifications[0]?.body).toContain("not added to this chat");
+    expect(useFeedbackStore.getState().items.at(-1)?.description).toContain("not added to this chat");
   });
 
   it("drops a paste that finishes after another book opened", async () => {

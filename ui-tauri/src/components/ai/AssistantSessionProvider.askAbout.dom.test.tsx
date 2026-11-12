@@ -74,6 +74,7 @@ import { mutationAdvancesDaemonSession } from "@/daemon/client";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useAssistantScreenMetricsStore } from "@/store/assistantScreenMetrics";
 import { useUiStore } from "@/store/ui";
+import { useFeedbackStore } from "@/lib/feedback";
 import { AssistantSessionProvider } from "./AssistantSessionProvider";
 import { beginAssistantHandoff, handOffToAssistant } from "./assistantHandoff";
 import { useAskAssistantAbout, type AskAboutTarget } from "./useAskAssistantAbout";
@@ -386,7 +387,7 @@ describe("Ask about this", () => {
     act(() => session.sendPrompt("Why are 11 pending?"));
 
     window.history.replaceState(null, "", "/reports");
-    useUiStore.setState({ notifications: [] });
+    useFeedbackStore.setState({ items: [] });
     act(() => {
       useUiStore.getState().bumpDaemonSession();
       mocks.streaming = false;
@@ -397,7 +398,7 @@ describe("Ask about this", () => {
     // user's own text, not a page's, goes back to the composer.
     expect(mocks.send).not.toHaveBeenCalled();
     expect(useAssistantDraftStore.getState().draft).toBe("Why are 11 pending?");
-    expect(useUiStore.getState().notifications.at(0)?.body).toBe(
+    expect(useFeedbackStore.getState().items.at(-1)?.description).toBe(
       "You switched books before it was sent. Your text is back in the composer.",
     );
   });
@@ -489,7 +490,7 @@ describe("Ask about this", () => {
     window.history.replaceState(null, "", "/source-of-funds?tx=tx-old-book");
     act(() => handOffToAssistant(session, "Investigate this source of funds case."));
     act(() => session.sendPrompt("And the fee?"));
-    useUiStore.setState({ notifications: [] });
+    useFeedbackStore.setState({ items: [] });
 
     // The book switches before the answer ends.
     act(() => {
@@ -505,10 +506,10 @@ describe("Ask about this", () => {
     // and the notice says both.
     expect(useAssistantDraftStore.getState().draft).toBe("And the fee?");
     expect(useAssistantDraftStore.getState().handoff).toBeNull();
-    const notice = useUiStore.getState().notifications.at(0);
+    const notice = useFeedbackStore.getState().items.at(-1);
     expect(notice?.title).toBe("Not sent: you switched books");
-    expect(notice?.body).toContain("Your own text is back in the composer");
-    expect(JSON.stringify(useUiStore.getState().notifications)).not.toContain(
+    expect(notice?.description).toContain("Your own text is back in the composer");
+    expect(JSON.stringify(useFeedbackStore.getState().items)).not.toContain(
       "source of funds case",
     );
   });
@@ -519,7 +520,7 @@ describe("Ask about this", () => {
     window.history.replaceState(null, "", "/source-of-funds?tx=tx-old-book");
     act(() => handOffToAssistant(session, "Investigate this source of funds case."));
     expect(useAssistantDraftStore.getState().handoff).not.toBeNull();
-    useUiStore.setState({ notifications: [] });
+    useFeedbackStore.setState({ items: [] });
 
     // A model is chosen and the parked request sent in the same moment the
     // book switches, before anything could clear the composer.
@@ -537,7 +538,7 @@ describe("Ask about this", () => {
     // Its text carries the old book's data: not kept for a manual resend.
     expect(useAssistantDraftStore.getState().draft).toBe("");
     expect(useAssistantDraftStore.getState().handoff).toBeNull();
-    expect(useUiStore.getState().notifications.at(0)?.body).toContain(
+    expect(useFeedbackStore.getState().items.at(-1)?.description).toContain(
       "referred to its data",
     );
   });
@@ -547,13 +548,13 @@ describe("Ask about this", () => {
     mount();
     window.history.replaceState(null, "", "/chain-analysis");
     act(() => handOffToAssistant(session, "Analyze this PSBT."));
-    useUiStore.setState({ notifications: [] });
+    useFeedbackStore.setState({ items: [] });
 
     act(() => useUiStore.getState().bumpDaemonSession());
 
     expect(useAssistantDraftStore.getState().draft).toBe("");
     expect(useAssistantDraftStore.getState().handoff).toBeNull();
-    expect(useUiStore.getState().notifications).toHaveLength(1);
+    expect(useFeedbackStore.getState().items).toHaveLength(1);
   });
 
   it("does not send a question held for effort seeding into another book", () => {
@@ -615,7 +616,7 @@ describe("Ask about this", () => {
     window.history.replaceState(null, "", "/source-of-funds?tx=tx-old-book");
     act(() => handOffToAssistant(session, "Investigate this source of funds case."));
     expect(useAssistantDraftStore.getState().handoff).not.toBeNull();
-    useUiStore.setState({ notifications: [] });
+    useFeedbackStore.setState({ items: [] });
 
     // On Books, the user creates book B, which opens it.
     window.history.replaceState(null, "", "/books");
@@ -625,7 +626,7 @@ describe("Ask about this", () => {
     // Its text carries book A's case: gone, and the notice says so.
     expect(useAssistantDraftStore.getState().draft).toBe("");
     expect(useAssistantDraftStore.getState().handoff).toBeNull();
-    expect(useUiStore.getState().notifications.at(0)?.body).toContain("referred to its data");
+    expect(useFeedbackStore.getState().items.at(-1)?.description).toContain("referred to its data");
     act(() =>
       useUiStore.setState({ assistantModelSelection: { provider: "copilot", model: "default" } }),
     );
@@ -651,7 +652,7 @@ describe("Ask about this", () => {
     mocks.streaming = true;
     view.rerender(provider());
     act(() => session.sendPrompt("Investigate case tx-old-book."));
-    useUiStore.setState({ notifications: [] });
+    useFeedbackStore.setState({ items: [] });
 
     // Book B opens while the answer streams; the session counter stays.
     mocks.scope = BOOK_B;
@@ -660,7 +661,7 @@ describe("Ask about this", () => {
 
     expect(mocks.send).not.toHaveBeenCalled();
     expect(useAssistantDraftStore.getState().draft).toBe("Investigate case tx-old-book.");
-    expect(useUiStore.getState().notifications.at(0)?.title).toBe("Not sent: you switched books");
+    expect(useFeedbackStore.getState().items.at(-1)?.title).toBe("Not sent: you switched books");
   });
 
   it("never sends a handoff built across a book change under the new book", async () => {
@@ -678,7 +679,7 @@ describe("Ask about this", () => {
     window.history.replaceState(null, "", "/books");
     mocks.scope = BOOK_B;
     act(() => view.rerender(provider()));
-    useUiStore.setState({ notifications: [] });
+    useFeedbackStore.setState({ items: [] });
     await act(async () => {
       finish("Investigate the graph around tx-old-book.");
       await handedOver;
@@ -686,7 +687,7 @@ describe("Ask about this", () => {
 
     // Written from book A's data: not sent at all, and never as book B's.
     expect(mocks.send).not.toHaveBeenCalled();
-    expect(useUiStore.getState().notifications.at(0)?.body).toContain("referred to its data");
+    expect(useFeedbackStore.getState().items.at(-1)?.description).toContain("referred to its data");
   });
 
   it("returns a queued prompt the draft only mentions", () => {
@@ -714,12 +715,12 @@ describe("Ask about this", () => {
     mocks.scope = null;
     const view = mount();
     expect(session.sendBlockedReason).toBe("Loading this book…");
-    useUiStore.setState({ notifications: [] });
+    useFeedbackStore.setState({ items: [] });
     act(() => session.sendPrompt("How many pending?"));
     expect(mocks.send).not.toHaveBeenCalled();
     expect(session.queuedPrompts).toEqual([]);
     expect(useAssistantDraftStore.getState().draft).toBe("How many pending?");
-    expect(useUiStore.getState().notifications.at(0)?.title).toBe("Not sent yet");
+    expect(useFeedbackStore.getState().items.at(-1)?.title).toBe("Not sent yet");
     // Nor a pin or a page's request.
     act(() => ask!({ kind: "transaction", transactionId: "tx-a" }));
     expect(session.focus).toBeNull();
@@ -737,26 +738,26 @@ describe("Ask about this", () => {
   it("handles the daemon refusing a turn asked in another book", async () => {
     mocks.send.mockResolvedValue({ refused: true });
     mount();
-    useUiStore.setState({ notifications: [] });
+    useFeedbackStore.setState({ items: [] });
 
     // The user's own question comes back to the composer.
     await act(async () => {
       session.sendPrompt("Why is this pending?");
     });
     expect(useAssistantDraftStore.getState().draft).toBe("Why is this pending?");
-    expect(useUiStore.getState().notifications.at(0)?.title).toBe(
+    expect(useFeedbackStore.getState().items.at(-1)?.title).toBe(
       "Not sent: you switched books",
     );
 
     // A page's handoff carries that book's data: it is not kept.
     useAssistantDraftStore.setState({ draft: "" });
-    useUiStore.setState({ notifications: [] });
+    useFeedbackStore.setState({ items: [] });
     window.history.replaceState(null, "", "/source-of-funds?tx=tx-old-book");
     await act(async () => {
       handOffToAssistant(session, "Investigate this source of funds case.");
     });
     expect(useAssistantDraftStore.getState().draft).toBe("");
-    expect(useUiStore.getState().notifications.at(0)?.body).toContain(
+    expect(useFeedbackStore.getState().items.at(-1)?.description).toContain(
       "referred to its data",
     );
   });

@@ -65,8 +65,9 @@
       "body": "Attach a CSV, TSV, XLSX, PDF or image file."
     },
     "attachmentTooLarge": {
-      "title": "{{filename}} is too large to paste",
-      "body": "Pasted files can be up to 25 MB. Attach larger ones with the + button."
+      "title": "This file is too large to paste",
+      "body": "Pasted files can be up to 25 MB. Attach larger ones with the + button.",
+      "bodyNamed": "{{filename}} is over 25 MB. Attach larger files with the + button."
     },
     "attachmentFailed": "The file couldn't be attached",
     "modelContext": "Model context",
