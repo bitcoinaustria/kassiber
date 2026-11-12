@@ -118,6 +118,90 @@ describe("UI persistence", () => {
     expect(encoded).toContain('"clearClipboard":false');
   });
 
+  it("keeps notification details in memory but never in kb.ui", () => {
+    useUiStore.setState({ notifications: [] });
+    useUiStore.getState().addNotification({
+      title: "Book refresh needs attention",
+      body: "1 needs attention",
+      tone: "warning",
+      details: ["Cold wallet: HTTP 502 from https://node.example:3002/api"],
+      action: { label: "Retry", command: "refresh-book" },
+    });
+
+    expect(useUiStore.getState().notifications[0].details).toEqual([
+      "Cold wallet: HTTP 502 from https://node.example:3002/api",
+    ]);
+    const encoded = JSON.stringify(
+      uiStatePartialForStorage(useUiStore.getState()),
+    );
+    expect(encoded).not.toContain("node.example");
+    expect(encoded).not.toContain('"details"');
+    // The action is plain data and survives a restart.
+    expect(encoded).toContain('"command":"refresh-book"');
+  });
+
+  it("clears the replaced entry's details and action on a dedupe update", () => {
+    useUiStore.setState({ notifications: [] });
+    const { addNotification } = useUiStore.getState();
+    addNotification({
+      title: "Book refresh failed",
+      body: "Electrum timeout",
+      tone: "error",
+      dedupeKey: "book-refresh",
+      details: ["Cold wallet: timeout"],
+      action: { label: "Retry", command: "refresh-book" },
+    });
+    addNotification({
+      title: "Book refresh started",
+      body: "Refreshing",
+      tone: "warning",
+      dedupeKey: "book-refresh",
+    });
+
+    const [entry] = useUiStore.getState().notifications;
+    expect(entry.title).toBe("Book refresh started");
+    expect(entry.details).toBeUndefined();
+    expect(entry.action).toBeUndefined();
+    expect(entry.repeatCount).toBeUndefined();
+  });
+
+  it("counts word-for-word repeats instead of adding rows", () => {
+    useUiStore.setState({ notifications: [] });
+    const { addNotification } = useUiStore.getState();
+    const failure = {
+      title: "Export failed",
+      body: "Disk full",
+      tone: "error" as const,
+    };
+    const first = addNotification(failure);
+    expect(addNotification(failure)).toBe(first);
+    addNotification(failure);
+    addNotification({ ...failure, body: "Permission denied" });
+
+    const notifications = useUiStore.getState().notifications;
+    expect(notifications).toHaveLength(2);
+    expect(notifications[1]).toMatchObject({ id: first, repeatCount: 3 });
+    expect(notifications[0].repeatCount).toBeUndefined();
+
+    // A keyed notification counts only when its text is unchanged.
+    useUiStore.setState({ notifications: [] });
+    const keyed = { ...failure, dedupeKey: "background-freshness" };
+    addNotification(keyed);
+    addNotification(keyed);
+    expect(useUiStore.getState().notifications[0].repeatCount).toBe(2);
+    addNotification({ ...keyed, title: "Book refresh needs attention" });
+    expect(useUiStore.getState().notifications[0].repeatCount).toBeUndefined();
+  });
+
+  it("does not fold a running job into an identical finished one", () => {
+    useUiStore.setState({ notifications: [] });
+    const { addNotification } = useUiStore.getState();
+    const notice = { title: "Import", body: "Working", tone: "info" as const };
+    addNotification(notice);
+    addNotification({ ...notice, progress: { indeterminate: true } });
+    expect(useUiStore.getState().notifications).toHaveLength(2);
+  });
+
   it("persists overview chart periods per book", () => {
     useUiStore.setState({ bookChartPeriods: {} });
     useUiStore.getState().setBookChartPeriod("db:/books/a.sqlite3", "4years");

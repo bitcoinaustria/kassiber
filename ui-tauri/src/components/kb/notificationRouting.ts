@@ -1,8 +1,29 @@
-import { APP_ROUTE_PATHS, type AppRoutePath } from "./menuIntent";
+import {
+  NOTIFICATION_COMMANDS,
+  type NotificationAction,
+  type NotificationCommand,
+} from "@/store/ui";
 
-function asRoutePath(value: string | undefined): AppRoutePath | undefined {
-  return value && (APP_ROUTE_PATHS as readonly string[]).includes(value)
-    ? (value as AppRoutePath)
+import { APP_ROUTE_PATHS, type AppRoutePath } from "./menuIntent";
+import {
+  SETTINGS_SECTION_ROUTE,
+  type SettingsSectionRoutePath,
+} from "./settingsSections";
+
+const SETTINGS_ROUTE_PATHS: readonly string[] = Object.values(
+  SETTINGS_SECTION_ROUTE,
+);
+
+// Stored targets come back from `kb.ui`, so only known routes pass.
+function asRoutePath(
+  value: string | undefined,
+): AppRoutePath | SettingsSectionRoutePath | undefined {
+  if (!value) return undefined;
+  if ((APP_ROUTE_PATHS as readonly string[]).includes(value)) {
+    return value as AppRoutePath;
+  }
+  return SETTINGS_ROUTE_PATHS.includes(value)
+    ? (value as SettingsSectionRoutePath)
     : undefined;
 }
 
@@ -47,7 +68,7 @@ export function notificationRouteFor(title: string): AppRoutePath | undefined {
  * developer-tools fallback needs a settings *section*: plain `/settings`
  * resolves to Appearance, which explains nothing about a failed sync.
  */
-export type NotificationTarget = AppRoutePath | "/settings/developer";
+export type NotificationTarget = AppRoutePath | SettingsSectionRoutePath;
 
 // Resolve the click target for a header notification, accounting for the fact
 // that /logs is developer-tools-gated: its route guard bounces to /overview
@@ -71,4 +92,39 @@ export function notificationTarget(
   if (target === "/logs") return logsOrSettings;
   if (target) return target;
   return tone === "error" ? logsOrSettings : undefined;
+}
+
+/** A notification button, checked against the routes and commands it may use. */
+export type ResolvedNotificationAction =
+  | { label: string; kind: "navigate"; to: NotificationTarget }
+  | { label: string; kind: "command"; command: NotificationCommand };
+
+/**
+ * Resolve a stored action into something the bell can run, or null. Persisted
+ * state is not trusted to name a route or command: anything outside the known
+ * lists is dropped, and a `/logs` target takes the same developer-tools
+ * detour as a notification's own click target.
+ */
+export function resolveNotificationAction(
+  action: NotificationAction | undefined,
+  developerToolsEnabled: boolean,
+): ResolvedNotificationAction | null {
+  const label = action?.label?.trim();
+  if (!action || !label) return null;
+  if (
+    action.command &&
+    (NOTIFICATION_COMMANDS as readonly string[]).includes(action.command)
+  ) {
+    return { label, kind: "command", command: action.command };
+  }
+  const target = asRoutePath(action.target);
+  if (!target) return null;
+  if (target === "/logs") {
+    return {
+      label,
+      kind: "navigate",
+      to: developerToolsEnabled ? "/logs" : "/settings/developer",
+    };
+  }
+  return { label, kind: "navigate", to: target };
 }

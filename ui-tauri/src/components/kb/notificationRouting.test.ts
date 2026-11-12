@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 
-import { notificationRouteFor, notificationTarget } from "./notificationRouting";
+import {
+  notificationRouteFor,
+  notificationTarget,
+  resolveNotificationAction,
+} from "./notificationRouting";
 
 describe("notificationRouteFor", () => {
   it("routes failures / needs-attention to /logs", () => {
@@ -90,5 +94,55 @@ describe("notificationTarget", () => {
     expect(
       notificationTarget("All caught up", "info", false, "/not-a-route"),
     ).toBeUndefined();
+  });
+});
+
+describe("resolveNotificationAction", () => {
+  it("runs known shell commands", () => {
+    expect(
+      resolveNotificationAction({ label: "Retry", command: "refresh-book" }, false),
+    ).toEqual({ label: "Retry", kind: "command", command: "refresh-book" });
+  });
+
+  it("navigates to app routes and settings sections", () => {
+    expect(
+      resolveNotificationAction({ label: "Open", target: "/settings/bitcoin" }, false),
+    ).toEqual({ label: "Open", kind: "navigate", to: "/settings/bitcoin" });
+    expect(
+      resolveNotificationAction({ label: "Review", target: "/review" }, false),
+    ).toEqual({ label: "Review", kind: "navigate", to: "/review" });
+  });
+
+  it("sends /logs to the developer-tools section when that is off", () => {
+    expect(
+      resolveNotificationAction({ label: "Logs", target: "/logs" }, false),
+    ).toMatchObject({ to: "/settings/developer" });
+    expect(
+      resolveNotificationAction({ label: "Logs", target: "/logs" }, true),
+    ).toMatchObject({ to: "/logs" });
+  });
+
+  it("drops unknown routes, unknown commands, and blank labels from stored state", () => {
+    expect(
+      resolveNotificationAction({ label: "Go", target: "https://example.com" }, true),
+    ).toBeNull();
+    expect(
+      resolveNotificationAction(
+        { label: "Run", command: "rm -rf" as never },
+        true,
+      ),
+    ).toBeNull();
+    expect(
+      resolveNotificationAction({ label: " ", target: "/review" }, true),
+    ).toBeNull();
+    expect(resolveNotificationAction(undefined, true)).toBeNull();
+  });
+});
+
+describe("notificationTarget settings sections", () => {
+  it("accepts an explicit settings-section target", () => {
+    expect(
+      notificationTarget("Backend required", "warning", false, "/settings/bitcoin"),
+    ).toBe("/settings/bitcoin");
   });
 });
