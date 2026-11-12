@@ -623,6 +623,22 @@ Developer tools with an explanatory notification instead of a silent bounce. The
 choice is stored in the desktop's local UI state, so it survives updates;
 `ui-tauri/src/components/kb/devMode.ts` holds the route lists.
 
+The title bar's bell opens the notification list
+(`ui-tauri/src/components/kb/NotificationCenter.tsx`): the last 12 notices,
+plus entries derived from the book (journals waiting to be processed, the
+Review count), filtered to All or Needs action. Each entry shows how long
+ago it arrived, with the full date on hover, and clips its text to two lines
+until Show more, which also reveals detail lines such as the sources a book
+refresh could not finish. Its title opens the screen that explains it; a
+button can open a specific place (Settings -> Bitcoin when a backend is
+missing, Review) or retry the book refresh or journal processing. A notice
+that arrives again word for word replaces the earlier one and shows a repeat
+count. The × dismisses one stored notice and Clear all removes them all;
+derived entries go away when their cause does. Notices are kept in the
+desktop's local UI state without their progress bars and detail lines,
+which quote backend error text, so after a restart an entry keeps its title
+and body only. Notification text carries no amounts.
+
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
 launcher without administrator privileges. It writes a small managed launcher
 under the user's bin directory (for example `~/.local/bin/kassiber`) that
