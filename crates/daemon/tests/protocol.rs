@@ -359,3 +359,34 @@ fn plaintext_sensitive_actions_require_the_exact_typed_acknowledgement() {
     assert!(lines[2].contains("requires plaintext acknowledgement"));
     assert!(lines[3].contains("not_implemented"));
 }
+
+#[test]
+fn status_reports_storage_only_when_asked() {
+    let store = FakeStore::new(FakeConfig::default());
+    let bootstrap = store.bootstrap(&Selection::default()).unwrap();
+    let out = Captured::default();
+    serve(
+        Arc::new(store),
+        DaemonConfig {
+            build: BUILD,
+            bootstrap,
+        },
+        Box::new(std::io::Cursor::new(
+            b"{\"request_id\":\"a\",\"kind\":\"status\"}\n{\"request_id\":\"b\",\"kind\":\"status\",\"args\":{\"storage\":true}}\n{\"request_id\":\"c\",\"kind\":\"status\",\"args\":{\"storage\":\"yes\"}}\n".to_vec(),
+        )),
+        Box::new(out.clone()),
+    );
+    let text = String::from_utf8(out.0.lock().unwrap().clone()).unwrap();
+    let data = |line: usize| {
+        let envelope = parse(text.lines().nth(line).unwrap());
+        get(&envelope, "data").unwrap().clone()
+    };
+    // The default payload is unchanged; only an explicit `true` adds storage.
+    assert_eq!(get(&data(1), "storage"), None);
+    assert_eq!(get(&data(3), "storage"), None);
+    let storage = data(2);
+    let storage = get(&storage, "storage").expect("storage block");
+    // The fake book has no file on disk: sizes are null, never guessed.
+    assert_eq!(get(storage, "database_bytes"), Some(&Value::Null));
+    assert_eq!(get(storage, "wal_bytes"), Some(&Value::Null));
+}

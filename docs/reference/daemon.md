@@ -817,6 +817,15 @@ it was asked in (see [AI](ai.md)).
 views should prefer it over persisted UI identity when deciding whether a
 local-auth action needs a passphrase or a plaintext acknowledgement.
 
+`status` with `args.storage: true` adds `storage: {database_bytes, wal_bytes}`,
+the on-disk size of the open book's database file and its write-ahead log
+(`null` when a file is absent). It stats local files only and is opt-in, so
+the default `status` payload, which the recorded sessions pin, is unchanged;
+the AI `status` read never includes it. Settings → Data & storage asks for it.
+The CLI `status` does not offer it yet: a flag would change the recorded
+`status` and `commands describe` output, which needs a reviewed golden
+regeneration first.
+
 `ui.network.offline` returns `{offline, environment_blocked}`, and
 `ui.network.offline.set` takes `{enabled: bool}` and returns the same shape.
 Both answer without opening or unlocking a book: the switch is the

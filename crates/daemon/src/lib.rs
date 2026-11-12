@@ -1265,7 +1265,16 @@ impl Daemon {
                 if let Some(locked) = self.open_lazily(&request_id)? {
                     return Ok((Some(locked), false));
                 }
-                let payload = self.status_payload()?;
+                let mut payload = self.status_payload()?;
+                // Opt-in, so the default payload stays byte-identical.
+                if args.as_ref().and_then(|args| get(args, "storage")) == Some(&Value::Bool(true)) {
+                    let database = self.book_mut()?.status_facts()?.paths.database;
+                    kassiber_envelope::set(
+                        &mut payload,
+                        "storage",
+                        kassiber_runtime::status::storage_payload(database.as_str()),
+                    );
+                }
                 Ok((
                     Some(with_request_id(success("status", payload), &request_id)),
                     false,
