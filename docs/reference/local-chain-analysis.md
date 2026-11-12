@@ -291,6 +291,14 @@ binds even changes in private maps or same-template output scripts. Raw PSBTs,
 derivations, xpubs, keys and witness stacks never enter analysis results or the
 database. Only safe categorical features survive acquisition's discard boundary.
 
+The separate reduced `reports psbt-privacy` CLI read (direct text or a literal
+UTF-8 `--psbt-file`) and `ui.reports.psbt_privacy` now run natively in Rust.
+They compare the proposal with the shared local historical index and reviewed
+anchor exposure, return only reduced findings, and preserve every book table.
+This report registration does not port the workspace's separate comparison,
+Payjoin or conditional-entropy transports. See the
+[native checkpoint](rust-shell.md#registered-psbt-privacy-reads-r5-privacy-psbt).
+
 ## Expanding local observations
 
 The acquisition panel first computes a plan using an explicitly selected
@@ -449,6 +457,15 @@ handoff obtains the same projection before constructing the prompt. Read errors
 and stale case failures obey the same identity boundary.
 
 ## Implementation and verification
+
+The native Rust backend now serves local overview/trace/path queries, synchronous
+transaction entropy, saved-case list/get/compare, label listing, and dataset
+list/get/exact-query reads through both CLI and daemon adapters. The
+[R5 read checkpoint](rust-shell.md#chain-analysis-local-read-checkpoint-r5-partial)
+records exact envelope and all-table comparisons. The
+[completion checkpoint](rust-shell.md#chain-analysis-psbt-preview-and-receipt-completion-r5)
+adds PSBT analysis/comparison/entropy, dataset preview, staged source grants and
+the bounded receipt runtime. AI projections remain in Python.
 
 `core/chain_analysis/` owns immutable evidence indexing, bounded traversal and
 pure analytical algorithms. `chain_analysis_api.py` dispatches explicit

@@ -1,0 +1,158 @@
+[package]
+name = "kassiber-wallets"
+description = "Local wallet identity and lifecycle services"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[features]
+# Guarded differential driver only; never enabled by a production binary.
+# The AI clock lets a driver pin provider timestamps (KASSIBER_RUST_TEST_AI_TIME).
+test-harness = ["kassiber-net/test-observer", "kassiber-ai/test-harness"]
+
+[[example]]
+name = "freshness_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "freshness_sync_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "graph_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "discovery_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "acquisition_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "observer_state_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "bdk_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "lwk_vectors"
+required-features = ["test-harness"]
+
+[[example]]
+name = "lwk_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "records_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "publication_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "sync_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "document_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_features_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "psbt_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_durable_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_ops_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "exchange_fixture"
+required-features = ["test-harness"]
+
+[dependencies]
+kassiber-chain = { path = "../chain" }
+kassiber-net = { path = "../net" }
+# The AI provider store and its error mapping, shared with chat (R6-6a).
+kassiber-ai = { path = "../ai" }
+# Withholds the provider key from what a provider sends back.
+kassiber-credentials = { path = "../credentials" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-pydecimal = { path = "../pydecimal" }
+kassiber-custody = { path = "../custody" }
+kassiber-paths = { path = "../paths" }
+kassiber-store = { path = "../store" }
+kassiber-setup = { path = "../setup" }
+# Market-rate provider settings for the desktop freshness settings kinds.
+kassiber-rates = { path = "../rates" }
+# Reuse managed evidence storage and its validator; do not add a blob store.
+kassiber-transactions = { path = "../transactions" }
+# The generic-ledger template workbook, through the shared renderer.
+kassiber-xlsx = { path = "../xlsx" }
+# Audited descriptor grammars, BIP32, script construction and confidential
+# address cryptography cannot be safely replaced with standard-library code.
+bitcoin = "0.32"
+miniscript = "12"
+elements-miniscript = "0.4"
+# Match bdkpython 3.0.0's wallet/index/update semantics. The protocol adapters
+# are deliberately absent: their connectors would bypass kassiber-net.
+bdk_wallet = { version = "=3.0.0", default-features = false, features = ["std"] }
+bdk_chain = { version = "=0.23.3", default-features = false, features = ["std"] }
+bdk_core = { version = "=0.6.3", default-features = false, features = ["std"] }
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+sha2 = "0.11"
+regex = "1"
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
+# Match the lwk 0.18.0 Python binding's wollet, update and store semantics.
+# Default features are off: no Electrum, Esplora, Waterfalls, registry or
+# price clients. Chain data reaches it only through kassiber-net (lwk.rs).
+lwk_wollet = { version = "=0.18.0", default-features = false }
+# Its network parameters; the version lwk_wollet 0.18.0 resolves offline.
+lwk_common = { version = "=0.18.1", default-features = false }
+
+[dev-dependencies]
+kassiber-net = { path = "../net", features = ["test-support"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[[example]]
+name = "analysis_index_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_traversal_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_analytics_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_datasets_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "analysis_entropy_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "chain_analysis_reads_fixture"
+required-features = ["test-harness"]

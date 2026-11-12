@@ -1,0 +1,522 @@
+[
+  {
+    "id": "confirmation-active",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "a.active=1",
+    "replace": "a.active>=1",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Only active reference assertions supply confirmation depth."
+  },
+  {
+    "id": "confirmation-profile",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "a.profile_id=?",
+    "replace": "a.profile_id!=?",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Confirmation assertions stay within the selected profile."
+  },
+  {
+    "id": "confirmation-domain",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "a.domain_id=?",
+    "replace": "a.domain_id!=?",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Confirmation sources retain exact domain identity."
+  },
+  {
+    "id": "confirmation-confirmed",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "|| field(&status, \"confirmed\") != &Value::Bool(true)",
+    "replace": "|| false && field(&status, \"confirmed\") != &Value::Bool(true)",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Reject unsupported confirmation evidence: confirmed."
+  },
+  {
+    "id": "confirmation-removed",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "|| field(&status, \"removed\") == &Value::Bool(true)",
+    "replace": "|| false && field(&status, \"removed\") == &Value::Bool(true)",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Reject unsupported confirmation evidence: removed."
+  },
+  {
+    "id": "confirmation-conflicted",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "|| field(&status, \"conflicted\") == &Value::Bool(true)",
+    "replace": "|| false && field(&status, \"conflicted\") == &Value::Bool(true)",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Reject unsupported confirmation evidence: conflicted."
+  },
+  {
+    "id": "confirmation-anchor",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "|| field(&status, \"block_hash\") != &s(block)",
+    "replace": "|| false && field(&status, \"block_hash\") != &s(block)",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Reject unsupported confirmation evidence: anchor."
+  },
+  {
+    "id": "confirmation-tip-height",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "|| tip < height",
+    "replace": "|| false && tip < height",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Reject unsupported confirmation evidence: tip-height."
+  },
+  {
+    "id": "confirmation-tip-one",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "|| tip == height && tip_hash != block",
+    "replace": "|| false && tip == height && tip_hash != block",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Reject unsupported confirmation evidence: tip-one."
+  },
+  {
+    "id": "confirmation-tip-hash",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": ".all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))",
+    "replace": ".all(|b| b.is_ascii_hexdigit())",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Verified tip hashes retain the lowercase canonical grammar."
+  },
+  {
+    "id": "confirmation-depth",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "tip - height + BigInt::from(1)",
+    "replace": "tip - height",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Confirmation depth includes the anchored block."
+  },
+  {
+    "id": "confirmation-newest",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "observations.iter().map(|v| v.0).max()",
+    "replace": "observations.iter().map(|v| v.0).min()",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Use the newest valid verified observation."
+  },
+  {
+    "id": "confirmation-tie",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "(v.1.clone(), v.2.clone()) != (selected.1.clone(), selected.2.clone())",
+    "replace": "false && (v.1.clone(), v.2.clone()) != (selected.1.clone(), selected.2.clone())",
+    "expect_failing": [
+      "confirmation_overlay_matches_python_and_all_112_tables"
+    ],
+    "rule": "Equally recent contradictory observations withhold depth."
+  },
+  {
+    "id": "confirmation-cache",
+    "file": "crates/wallets/src/analysis_index/confirmations.rs",
+    "find": "if !self.cache.contains_key(&key) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "confirmation_cache_stays_with_its_caller_snapshot_and_rolls_back"
+    ],
+    "rule": "Overlay caches belong to one caller snapshot."
+  },
+  {
+    "id": "ingestion-confirmation-conflict",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "if *field == \"confirmations\"",
+    "replace": "if *field == \"confirmation_unused\"",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Equal-ranked contradictory confirmation counts remain unknown."
+  },
+  {
+    "id": "ingestion-rank",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "previous_rank.is_none_or(|v| rank > v)",
+    "replace": "previous_rank.is_none_or(|v| rank < v)",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Inventory outranks stored transaction and reference values."
+  },
+  {
+    "id": "ingestion-conflict-lock",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "previous_rank.is_none_or(|v| v < 100)",
+    "replace": "previous_rank.is_none_or(|v| v <= 100)",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Later observations cannot restore an equal-rank conflicting value."
+  },
+  {
+    "id": "ingestion-output-scale",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "n * BigInt::from(1000)",
+    "replace": "n * BigInt::from(1)",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Satoshi observations become exact integer msat strings."
+  },
+  {
+    "id": "ingestion-public-owned",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "&& entry[\"role\"] != \"owned\"",
+    "replace": "&& true",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Locally unblinded owned Liquid values are not public facts."
+  },
+  {
+    "id": "ingestion-public-commitment",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "&& !truth(&entry[\"valuecommitment\"])",
+    "replace": "&& true",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Value commitments do not supply public explicit Liquid amounts."
+  },
+  {
+    "id": "ingestion-id-conflict",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "external != raw_id",
+    "replace": "external == raw_id",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "External and raw transaction identities must agree."
+  },
+  {
+    "id": "ingestion-pegin",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "if item[\"is_pegin\"] == true || item[\"is_peg_in\"] == true {",
+    "replace": "if false && (item[\"is_pegin\"] == true || item[\"is_peg_in\"] == true) {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Liquid peg-ins never become same-chain parent links."
+  },
+  {
+    "id": "ingestion-trusted-parent",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "item[\"reference_occurrence_id\"].clone()",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Trusted historical references retain explicit parent occurrence qualifiers."
+  },
+  {
+    "id": "ingestion-input-uniqueness",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "input_set.len() == inputs.len()",
+    "replace": "true",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Duplicate input identities do not establish a complete transaction."
+  },
+  {
+    "id": "ingestion-output-uniqueness",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "output_set.len() == outputs.len()",
+    "replace": "true",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Duplicate output identities do not establish a complete transaction."
+  },
+  {
+    "id": "ingestion-partial-shape",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "if self\n            .complete_members",
+    "replace": "if false && self\n            .complete_members",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Partial observations cannot extend incompatible complete shapes."
+  },
+  {
+    "id": "ingestion-inventory-ownership",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "json!(count == 1)",
+    "replace": "json!(count >= 1)",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Multiple inventory observations withhold singular ownership."
+  },
+  {
+    "id": "ingestion-inventory-ambiguity",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "json!(count > 1)",
+    "replace": "json!(false)",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Inventory ambiguity remains explicit in output facts."
+  },
+  {
+    "id": "ingestion-reference-schema",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "&kassiber_pyjson::Value::Int(1.into())",
+    "replace": "&kassiber_pyjson::Value::Int(2.into())",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Only schema one reference caches pass the closed seam."
+  },
+  {
+    "id": "ingestion-custody-freshness",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "json!(if fresh { \"observed\" } else { \"stale\" })",
+    "replace": "json!(\"observed\")",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Custody relations require current journal evidence to be traversable."
+  },
+  {
+    "id": "ingestion-stale-spender",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "if self.nodes[&target][\"status\"] == \"stale\" {",
+    "replace": "if false && self.nodes[&target][\"status\"] == \"stale\" {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Retracted spenders do not compete with live replacements."
+  },
+  {
+    "id": "ingestion-competing-spends",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "if targets.len() > 1 {",
+    "replace": "if targets.len() > 2 {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Two live spenders stop physical value inference."
+  },
+  {
+    "id": "ingestion-complete-conflict",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "if conflict {",
+    "replace": "if false && conflict {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Conflicting or retracted facts cannot establish complete current value inference."
+  },
+  {
+    "id": "ingestion-fee-direction",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "let fee = &sums[0] - &sums[1];",
+    "replace": "let fee = &sums[1] - &sums[0];",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Miner fees use exact total inputs less outputs."
+  },
+  {
+    "id": "ingestion-branch-range",
+    "file": "crates/wallets/src/analysis_index/ingestion/normalize.rs",
+    "find": ".filter(|n| *n < 8)",
+    "replace": ".filter(|n| *n < 9)",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Only the existing four script branch pairs support derived roles."
+  },
+  {
+    "id": "ingestion-custody-first-observation",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "if created {\n                    edge[\"amount_msat\"]",
+    "replace": "if true || created {\n                    edge[\"amount_msat\"]",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Repeated custody references retain the first edge amount, asset and freshness."
+  },
+  {
+    "id": "ingestion-custody-missing-endpoint",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "if missing_target {",
+    "replace": "if missing_target && !self.nodes.contains_key(&target) {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "A repeated missing custody endpoint retains the latest relation label and evidence."
+  },
+  {
+    "id": "ingestion-edge-order",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "self.orders.insert(\"edges\", self.edge_order);",
+    "replace": "self.orders.insert(\"edges\", self.edge_order.into_iter().rev().collect());",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Public adjacency retains the source edge insertion order while lookup stays deterministic."
+  },
+  {
+    "id": "coinjoin-equal-balance",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "if outputs.len() < MAX_LEG_RATIO * input_count {",
+    "replace": "if outputs.len() <= MAX_LEG_RATIO * input_count {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Five times as many outputs as inputs is a batch payout, not an equal-output join."
+  },
+  {
+    "id": "coinjoin-equal-minimum",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "if top >= MIN_EQUAL_OUTPUTS {",
+    "replace": "if top >= MIN_EQUAL_OUTPUTS - 1 {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "An equal-output join needs five outputs of one value."
+  },
+  {
+    "id": "coinjoin-large-both-sides",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "if input_count >= LARGE_MIN_LEGS && outputs.len() >= LARGE_MIN_LEGS {",
+    "replace": "if input_count >= LARGE_MIN_LEGS {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "The large rule needs twenty legs on both sides."
+  },
+  {
+    "id": "coinjoin-positive-classes",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "if *value > BigInt::from(0) {",
+    "replace": "if *value >= BigInt::from(0) {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Zero-valued outputs never form an equal-output class."
+  },
+  {
+    "id": "coinjoin-distinct-batch-guard",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "    if outputs.len() >= MAX_LEG_RATIO * input_count\n",
+    "replace": "    if outputs.len() > MAX_LEG_RATIO * input_count\n",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "The distinct-value shape refuses batch-payout proportions."
+  },
+  {
+    "id": "coinjoin-distinct-consolidation-guard",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "|| input_count >= MAX_LEG_RATIO * outputs.len()",
+    "replace": "|| input_count > MAX_LEG_RATIO * outputs.len()",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "The distinct-value shape refuses consolidation proportions."
+  },
+  {
+    "id": "coinjoin-distinct-readable-inputs",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "|| inputs.len() != input_count",
+    "replace": "|| false",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "An unreadable input entry leaves the ratio unavailable."
+  },
+  {
+    "id": "coinjoin-distinct-output-repetition",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "|| top < 2",
+    "replace": "|| top < 1",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Repetition only on the input side is not a distinct-value join."
+  },
+  {
+    "id": "coinjoin-distinct-script-available",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "leg.script.is_none() || ",
+    "replace": "",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "An unavailable script cannot be checked for reuse."
+  },
+  {
+    "id": "coinjoin-distinct-negative-value",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "is_none_or(|v| *v < BigInt::from(0))",
+    "replace": "is_none_or(|v| *v < BigInt::from(-1000))",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "A negative amount is not an observed value."
+  },
+  {
+    "id": "coinjoin-distinct-script-reuse",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "if scripts.len() != inputs.len() + outputs.len() {",
+    "replace": "if scripts.len() + 1 < inputs.len() + outputs.len() {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "A script used twice rules out the distinct-value shape."
+  },
+  {
+    "id": "coinjoin-distinct-ratio",
+    "file": "crates/wallets/src/coinjoin_shape.rs",
+    "find": "if 2 * (distinct(inputs) + distinct(outputs)) > input_count + outputs.len() {",
+    "replace": "if 2 * (distinct(inputs) + distinct(outputs)) >= input_count + outputs.len() {",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "Distinct values may make up exactly half of the legs."
+  },
+  {
+    "id": "coinjoin-input-entry-value",
+    "file": "crates/wallets/src/analysis_index/ingestion/normalize.rs",
+    "find": "                .or_else(|| crate::analysis_features::value_sats(&v.serde()));",
+    "replace": "                ;",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "An input value beside a valueless prevout still counts, as in Python."
+  },
+  {
+    "id": "coinjoin-public-distinct-source",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "            && !crate::coinjoin_shape::SOURCES",
+    "replace": "            && !crate::coinjoin_shape::SOURCES[..2]",
+    "expect_failing": [
+      "observation_ingestion_matches_python_variants_and_all_112_tables"
+    ],
+    "rule": "A public observer keeps the distinct-value shape, decided by chain facts alone."
+  }
+]

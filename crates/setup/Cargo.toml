@@ -1,0 +1,30 @@
+[package]
+name = "kassiber-setup"
+description = "Local book setup, scope resolution, profile policy, and saved views"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-tax-countries = { path = "../tax-countries" }
+kassiber-diagnostics = { path = "../diagnostics" }
+kassiber-store = { path = "../store" }
+kassiber-paths = { path = "../paths" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+# Reuse the existing bootstrap JSON codec; no new package.
+serde_json = "1"
+# Existing workspace packages: Python-compatible SHA-256 commitments and UUID parsing.
+sha2 = "0.11"
+uuid = "1"
+age = "0.12"
+tar = "0.4"
+tempfile = "3"
+fancy-regex = "0.20"
+
+[lints.rust]
+unsafe_code = "forbid"

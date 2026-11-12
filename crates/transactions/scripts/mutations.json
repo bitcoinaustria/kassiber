@@ -1,0 +1,2673 @@
+[
+  {
+    "id": "loan-role-direction",
+    "file": "crates/transactions/src/loans.rs",
+    "find": "if direction != expected {",
+    "replace": "if direction == expected {",
+    "expect_failing": [
+      "all_roles_require_the_exact_direction_and_refuse_channel_roles"
+    ],
+    "rule": "Loan roles require their exact inbound or outbound transaction direction."
+  },
+  {
+    "id": "loan-link-first-requested",
+    "file": "crates/transactions/src/loans.rs",
+    "find": "unique.iter().find_map(|id| {",
+    "replace": "unique.iter().rev().find_map(|id| {",
+    "expect_failing": [
+      "linking_preserves_request_order_and_requires_two_distinct_active_marks"
+    ],
+    "rule": "Linking reuses the first existing loan ID in request order."
+  },
+  {
+    "id": "loan-lock-oldest-first",
+    "file": "crates/transactions/src/loans.rs",
+    "find": "ordered.sort_by_key(|m| (text(m, \"occurred_at\"), text(m, \"created_at\")));",
+    "replace": "ordered.sort_by_key(|m| (text(m, \"occurred_at\"), text(m, \"created_at\"))); ordered.reverse();",
+    "expect_failing": [
+      "open_locks_match_oldest_first_per_asset_and_ignore_principal"
+    ],
+    "rule": "A collateral release offsets the oldest lock of the same asset."
+  },
+  {
+    "id": "loan-principal-is-not-collateral",
+    "file": "crates/transactions/src/loans.rs",
+    "find": "if text(mark, \"role\") == \"collateral_release\" {",
+    "replace": "if [\"collateral_release\", \"loan_principal_received\"].contains(&text(mark, \"role\")) {",
+    "expect_failing": [
+      "open_locks_match_oldest_first_per_asset_and_ignore_principal"
+    ],
+    "rule": "Principal received does not release collateral."
+  },
+  {
+    "id": "attachment-root-containment",
+    "file": "crates/transactions/src/attachments.rs",
+    "find": "if !path.starts_with(&root) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "traversal_verify_remove_and_open_never_touch_external_file"
+    ],
+    "rule": "Managed file operations refuse references escaping the attachment root."
+  },
+  {
+    "id": "attachment-copy-identity",
+    "file": "crates/transactions/src/attachments.rs",
+    "find": "paths.push(path.clone());",
+    "replace": "paths.push(path.clone()); let path = source_path.clone();",
+    "expect_failing": [
+      "copy_creates_independent_file_identity_and_preserves_provenance"
+    ],
+    "rule": "Evidence reuse copies file bytes to an independent attachment identity."
+  },
+  {
+    "id": "attachment-copy-hash",
+    "file": "crates/transactions/src/attachments.rs",
+    "find": "if !text(row, \"sha256\").is_empty() && text(row, \"sha256\") != sha {",
+    "replace": "if false {",
+    "expect_failing": [
+      "corrupt_copy_rolls_back_prior_rows_and_files"
+    ],
+    "rule": "A copied source must still match its recorded evidence hash."
+  },
+  {
+    "id": "metadata-id-precedence",
+    "file": "crates/transactions/src/lookup.rs",
+    "find": "    if let Some(row) = exact.into_iter().next() {\n        return Ok(Some(row));",
+    "replace": "    if let Some(row) = exact.into_iter().next().filter(|_| false) {\n        return Ok(Some(row));",
+    "expect_failing": [
+      "resolver_prefers_id_and_refuses_duplicate_external_ids_and_cross_profile"
+    ],
+    "rule": "Exact transaction IDs win over external-ID aliases."
+  },
+  {
+    "id": "metadata-ambiguous-reference",
+    "file": "crates/transactions/src/lookup.rs",
+    "find": "    if found.len() > 1 {\n        let direction_hint",
+    "replace": "    if found.len() > 2 {\n        let direction_hint",
+    "expect_failing": [
+      "resolver_prefers_id_and_refuses_duplicate_external_ids_and_cross_profile"
+    ],
+    "rule": "Ambiguous external IDs never select a guessed transaction."
+  },
+  {
+    "id": "metadata-tag-identity",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "if let Some(row) = found.first() {\n        return Ok(text(row, \"id\").into());",
+    "replace": "if let Some(row) = found.first().filter(|_| false) {\n        return Ok(text(row, \"id\").into());",
+    "expect_failing": [
+      "tag_label_reuses_an_existing_profile_code"
+    ],
+    "rule": "An existing normalized label reuses its tag identity."
+  },
+  {
+    "id": "metadata-tag-noop",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "if !label.is_empty() && seen.insert(lower(label)) {",
+    "replace": "if !label.is_empty() && { let _ = seen.insert(lower(label)); true } {",
+    "expect_failing": [
+      "duplicate_case_labels_already_attached_are_a_canonical_noop"
+    ],
+    "rule": "Repeated tag labels are deduplicated before comparing audited state."
+  },
+  {
+    "id": "metadata-note-noop",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "let event = if before == after {",
+    "replace": "let event = if false {",
+    "expect_failing": [
+      "notes_append_exact_json_and_noops_do_not_invalidate"
+    ],
+    "rule": "No-op edits append no event and do not invalidate journals."
+  },
+  {
+    "id": "metadata-custody-exclusion",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "component.state='active'",
+    "replace": "component.state='draft'",
+    "expect_failing": [
+      "exclusion_refuses_an_active_anchored_custody_leg"
+    ],
+    "rule": "An active anchored custody review prevents excluding its transaction."
+  },
+  {
+    "id": "metadata-kind-direction",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "if text(&tx, \"direction\") != expected {",
+    "replace": "if text(&tx, \"direction\") == expected {",
+    "expect_failing": [
+      "kind_requires_direction_and_preserves_observed_kind"
+    ],
+    "rule": "A kind override must agree with the observed transaction direction."
+  },
+  {
+    "id": "metadata-stale-version",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "WHERE profile_id=? AND journal_input_version_after>?\",params![profile,version])?.remove(0);",
+    "replace": "WHERE profile_id=? AND journal_input_version_after>=?\",params![profile,version])?.remove(0);",
+    "expect_failing": [
+      "stale_counts_use_version_after_and_preserve_processed_events"
+    ],
+    "rule": "Events at the processed input version are no longer stale."
+  },
+  {
+    "id": "metadata-profile-scope",
+    "file": "crates/transactions/src/lookup.rs",
+    "find": "\"SELECT * FROM transactions WHERE profile_id = ? AND id = ?\",\n            params![profile_id, text],",
+    "replace": "\"SELECT * FROM transactions WHERE (? IS NOT NULL) AND id = ?\",\n            params![profile_id, text],",
+    "expect_failing": [
+      "resolver_prefers_id_and_refuses_duplicate_external_ids_and_cross_profile"
+    ],
+    "rule": "A transaction ID must remain inside the resolved profile."
+  },
+  {
+    "id": "metadata-record-page-order",
+    "file": "crates/transactions/src/metadata/records.rs",
+    "find": "ORDER BY t.occurred_at DESC,t.created_at DESC,t.id DESC LIMIT ?",
+    "replace": "ORDER BY t.occurred_at DESC,t.created_at ASC,t.id ASC LIMIT ?",
+    "expect_failing": [
+      "record_pages_bind_filters_and_keep_all_three_descending_tiebreakers"
+    ],
+    "rule": "Record pagination sorts by occurred_at, created_at and id descending."
+  },
+  {
+    "id": "metadata-record-page-boundary",
+    "file": "crates/transactions/src/metadata/records.rs",
+    "find": "(t.occurred_at,t.created_at,t.id)<(?,?,?)",
+    "replace": "(t.occurred_at,t.created_at,t.id)<=(?,?,?)",
+    "expect_failing": [
+      "record_pages_bind_filters_and_keep_all_three_descending_tiebreakers"
+    ],
+    "rule": "Record pages exclude the previous page tail even when timestamps tie."
+  },
+  {
+    "id": "metadata-cursor-filter-binding",
+    "file": "crates/transactions/src/metadata/cursor.rs",
+    "find": "get(row, \"filters\").is_some_and(|v| equivalent(v, filters))",
+    "replace": "get(row, \"filters\").is_some_and(|v| { let _ = equivalent(v, filters); true })",
+    "expect_failing": [
+      "record_pages_bind_filters_and_keep_all_three_descending_tiebreakers"
+    ],
+    "rule": "Cursors are bound to every resolved scope and filter."
+  },
+  {
+    "id": "metadata-history-page-order",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "ORDER BY e.changed_at DESC,e.id DESC LIMIT ?",
+    "replace": "ORDER BY e.changed_at DESC,e.id ASC LIMIT ?",
+    "expect_failing": [
+      "history_pages_filter_events_preserve_all_fields_and_redact_values"
+    ],
+    "rule": "History IDs break equal changed_at timestamps in descending order."
+  },
+  {
+    "id": "metadata-history-page-boundary",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "(e.changed_at,e.id)<(?,?)",
+    "replace": "(e.changed_at,e.id)<=(?,?)",
+    "expect_failing": [
+      "history_pages_filter_events_preserve_all_fields_and_redact_values"
+    ],
+    "rule": "History pages exclude the last event of the preceding page."
+  },
+  {
+    "id": "metadata-history-field-selection",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "f.event_id=e.id AND f.field IN",
+    "replace": "f.event_id!=e.id AND f.field IN",
+    "expect_failing": [
+      "history_pages_filter_events_preserve_all_fields_and_redact_values"
+    ],
+    "rule": "Field filters select events from their own complete field rows."
+  },
+  {
+    "id": "metadata-wallet-reference-ambiguity",
+    "file": "crates/transactions/src/metadata/records.rs",
+    "find": "if found.len() > 1 {",
+    "replace": "if found.len() > 2 {",
+    "expect_failing": [
+      "wallet_filters_prefer_ids_and_refuse_ambiguous_labels"
+    ],
+    "rule": "A duplicate case-insensitive wallet label must not guess a wallet."
+  },
+  {
+    "id": "metadata-revert-before-state",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "let old = load(&value(row, \"before_value\"));",
+    "replace": "let old = load(&value(row, \"after_value\"));",
+    "expect_failing": [
+      "reverts_append_one_forward_event_and_repeating_is_a_noop"
+    ],
+    "rule": "Reverting restores the selected event before-state through a new forward edit."
+  },
+  {
+    "id": "metadata-revert-field-selection",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "fields.retain(|row| text(row, \"field\") == field);",
+    "replace": "fields.retain(|row| text(row, \"field\") != field);",
+    "expect_failing": [
+      "reverts_append_one_forward_event_and_repeating_is_a_noop"
+    ],
+    "rule": "A requested revert field must have been changed by the selected event."
+  },
+  {
+    "id": "metadata-revert-forward-append",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "append_fields(conn, scope, &tx, &changes, &source, reason)",
+    "replace": "Ok(event.to_owned())",
+    "expect_failing": [
+      "reverts_append_one_forward_event_and_repeating_is_a_noop"
+    ],
+    "rule": "A revert appends a new audit event; old history remains intact."
+  },
+  {
+    "id": "metadata-revert-grouped-source",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "append_fields(conn, scope, &tx, &changes, &source, reason)",
+    "replace": "append_fields(conn, scope, &tx, &changes, \"cli\", reason)",
+    "expect_failing": [
+      "grouped_revert_restores_tax_pricing_tags_and_rolls_back_invalidation_failure"
+    ],
+    "rule": "Grouped reverts retain the authored source and one version transition."
+  },
+  {
+    "id": "metadata-revert-custody-exclusion",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "guard_exclusion(conn, scope.profile_id, text(&tx, \"id\"))?;",
+    "replace": "let _ = scope.profile_id;",
+    "expect_failing": [
+      "revert_cannot_exclude_a_newly_reviewed_custody_leg"
+    ],
+    "rule": "Reverting an inclusion cannot exclude a transaction claimed by active custody review."
+  },
+  {
+    "id": "metadata-record-tag-scope",
+    "file": "crates/transactions/src/metadata/records.rs",
+    "find": "tt.transaction_id=t.id AND tt.tag_id=?",
+    "replace": "tt.transaction_id!=t.id AND tt.tag_id=?",
+    "expect_failing": [
+      "record_pages_bind_filters_and_keep_all_three_descending_tiebreakers"
+    ],
+    "rule": "Tag selection matches the current transaction rather than another tagged row."
+  },
+  {
+    "id": "metadata-history-stale-selection",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "clauses.push(\"e.journal_input_version_after>?\".into());",
+    "replace": "clauses.push(\"e.journal_input_version_after>=?\".into());",
+    "expect_failing": [
+      "history_pages_filter_events_preserve_all_fields_and_redact_values"
+    ],
+    "rule": "History stale-only filtering excludes events already covered by the processed input version."
+  },
+  {
+    "id": "bip329-last-duplicate-tag",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "i == last,",
+    "replace": "i != last,",
+    "expect_failing": [
+      "duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag"
+    ],
+    "rule": "Only the final duplicate transaction label projects a tag."
+  },
+  {
+    "id": "bip329-null-keeps-stored",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "if v == Value::Null {",
+    "replace": "if false {",
+    "expect_failing": [
+      "duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag"
+    ],
+    "rule": "A null incoming standard field retains the stored authored value."
+  },
+  {
+    "id": "bip329-unknown-merge",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "update(&mut merged, &data);",
+    "replace": "merged = data.clone();",
+    "expect_failing": [
+      "duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag"
+    ],
+    "rule": "Repeated imports merge unknown fields instead of replacing the entire object."
+  },
+  {
+    "id": "bip329-kassiber-merge",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "if matches!(kassiber, Value::Dict(_)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag"
+    ],
+    "rule": "Nested Kassiber metadata preserves earlier imported fields."
+  },
+  {
+    "id": "bip329-conflict-equality",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "!cursor::equivalent(old, &incoming)",
+    "replace": "cursor::equivalent(old, &incoming)",
+    "expect_failing": [
+      "conflicts_preserve_unknown_surrogate_keys_and_python_numeric_equality"
+    ],
+    "rule": "Conflict detection follows Python numeric and nested object equality, including unknown surrogate keys."
+  },
+  {
+    "id": "bip329-case-insensitive-tx",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "lower(t.external_id)=lower(?)",
+    "replace": "t.external_id=?",
+    "expect_failing": [
+      "matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity"
+    ],
+    "rule": "Transaction label matching uses SQLite case-insensitive external IDs."
+  },
+  {
+    "id": "bip329-profile-match",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "t.profile_id=? AND lower(t.external_id)",
+    "replace": "(? IS NOT NULL) AND lower(t.external_id)",
+    "expect_failing": [
+      "matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity"
+    ],
+    "rule": "BIP329 matching never crosses the resolved profile."
+  },
+  {
+    "id": "bip329-exact-needs-one-row",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "tx_count.is_none_or(|n| n == 1)",
+    "replace": "tx_count.is_none_or(|n| n <= 2)",
+    "expect_failing": [
+      "matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity"
+    ],
+    "rule": "Two transaction rows in one wallet are still ambiguous."
+  },
+  {
+    "id": "bip329-wallet-order",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "(&a.1, &a.0).cmp(&(&b.1, &b.0))",
+    "replace": "(&b.1, &b.0).cmp(&(&a.1, &a.0))",
+    "expect_failing": [
+      "matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity"
+    ],
+    "rule": "Matched wallets are ordered by wallet label then identity."
+  },
+  {
+    "id": "bip329-wallet-export-exact",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "text(&matched, \"status\") != \"exact\"",
+    "replace": "![\"exact\", \"ambiguous\"].contains(&text(&matched, \"status\"))",
+    "expect_failing": [
+      "matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity"
+    ],
+    "rule": "Wallet-scoped stored exports include only exclusive exact matches."
+  },
+  {
+    "id": "bip329-stored-order",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "created_at ASC,record_type ASC,ref ASC,id ASC",
+    "replace": "created_at ASC,record_type DESC,ref ASC,id ASC",
+    "expect_failing": [
+      "export_keeps_stored_order_then_synthesized_and_first_object_wins"
+    ],
+    "rule": "Stored exports retain Python chronological and type/ref/ID ordering."
+  },
+  {
+    "id": "bip329-synthesized-order",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "ORDER BY t.occurred_at ASC,t.created_at ASC,t.id ASC",
+    "replace": "ORDER BY t.occurred_at ASC,t.created_at DESC,t.id DESC",
+    "expect_failing": [
+      "export_keeps_stored_order_then_synthesized_and_first_object_wins"
+    ],
+    "rule": "The earliest ordered transaction supplies a duplicate synthesized object."
+  },
+  {
+    "id": "bip329-stored-precedence",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "output.push(record.clone());",
+    "replace": "output.push(record.clone()); seen.clear();",
+    "expect_failing": [
+      "export_keeps_stored_order_then_synthesized_and_first_object_wins"
+    ],
+    "rule": "Combined exports preserve stored objects before synthesized duplicates."
+  },
+  {
+    "id": "bip329-page-order",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "ORDER BY created_at DESC,id DESC LIMIT ?",
+    "replace": "ORDER BY created_at DESC,id ASC LIMIT ?",
+    "expect_failing": [
+      "label_pages_keep_descending_id_ties_and_bind_scope"
+    ],
+    "rule": "Label pages sort equal timestamps by descending ID."
+  },
+  {
+    "id": "bip329-page-boundary",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "AND (created_at,id)<(?,?)",
+    "replace": "AND (created_at,id)<=(?,?)",
+    "expect_failing": [
+      "label_pages_keep_descending_id_ties_and_bind_scope"
+    ],
+    "rule": "The previous page tail is excluded from the next page."
+  },
+  {
+    "id": "bip329-receive-exclusive",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "ids==BTreeSet::from([text(&tx,\"wallet_id\")])",
+    "replace": "!ids.is_empty()",
+    "expect_failing": [
+      "local_address_inventory_and_receive_outpoint_matches_preserve_sources"
+    ],
+    "rule": "Stored Core receive outpoints require exclusive address agreement with the row wallet."
+  },
+  {
+    "id": "bip329-outpoint-match",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": ".and_then(|p| self.outpoints.get(&p).cloned())",
+    "replace": ".and_then(|p| self.outpoints.get(&p).cloned()).filter(|_|false)",
+    "expect_failing": [
+      "local_address_inventory_and_receive_outpoint_matches_preserve_sources"
+    ],
+    "rule": "Output labels match exact locally owned outpoints."
+  },
+  {
+    "id": "bip329-base58-case",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "        text.into()",
+    "replace": "        lowered",
+    "expect_failing": [
+      "local_address_inventory_and_receive_outpoint_matches_preserve_sources"
+    ],
+    "rule": "Base58 address identity remains case sensitive."
+  },
+  {
+    "id": "bip329-derivation-refusal",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "if has_derivation(&config) {",
+    "replace": "if false && has_derivation(&config) {",
+    "expect_failing": [
+      "unported_descriptor_and_complex_graph_matching_refuse_before_writes"
+    ],
+    "rule": "Unported descriptor evidence refuses rather than silently using an incomplete index."
+  },
+  {
+    "id": "bip329-graph-refusal",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": ".any(|k| get(&parsed, k).is_some())",
+    "replace": ".all(|k| get(&parsed, k).is_some())",
+    "expect_failing": [
+      "unported_descriptor_and_complex_graph_matching_refuse_before_writes"
+    ],
+    "rule": "Unported complex input graphs fail closed before label writes."
+  },
+  {
+    "id": "grouped-null-note",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "if let Some(note) = &input.note {",
+    "replace": "if let Some(note) = input.note.as_ref().filter(|v| !matches!(v, Value::Null)) {",
+    "expect_failing": [
+      "grouped_save_merges_only_present_fields_and_appends_one_ordered_event"
+    ],
+    "rule": "Explicit null clears the stored note; an omitted note is preserved."
+  },
+  {
+    "id": "grouped-null-tags",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "None | Some(Value::Null) => return Ok(None),",
+    "replace": "None | Some(Value::Null) => return Ok(Some(Vec::new())),",
+    "expect_failing": [
+      "grouped_save_merges_only_present_fields_and_appends_one_ordered_event"
+    ],
+    "rule": "Null or absent tags preserve the existing labels; an empty array clears them."
+  },
+  {
+    "id": "grouped-first-tag-label",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "labels.push(label.to_owned());",
+    "replace": "labels.push(label.to_owned()); } else if let Some(old) = labels.iter_mut().find(|old| lower(old) == lower(label)) { *old = label.to_owned();",
+    "expect_failing": [
+      "grouped_save_merges_only_present_fields_and_appends_one_ordered_event"
+    ],
+    "rule": "The first case-equivalent requested label supplies the authored audit spelling."
+  },
+  {
+    "id": "grouped-audit-order",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "for &(field, _, _) in history::FIELDS {",
+    "replace": "for &(field, _, _) in history::FIELDS.iter().rev() {",
+    "expect_failing": [
+      "grouped_save_merges_only_present_fields_and_appends_one_ordered_event"
+    ],
+    "rule": "One grouped event uses the reference audit field order independent of request order."
+  },
+  {
+    "id": "grouped-present-fields",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "updates.get(column).cloned()",
+    "replace": "updates.get(column).cloned().or(Some(Value::Null))",
+    "expect_failing": [
+      "grouped_canonical_tags_and_capture_time_only_changes_are_noops"
+    ],
+    "rule": "Absent fields do not become null changes in the audit state."
+  },
+  {
+    "id": "grouped-rate-from-value",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": ".map(|v| v.div(&amount, &CONTEXT))",
+    "replace": ".map(|v| v.mul(&amount, &CONTEXT))",
+    "expect_failing": [
+      "grouped_prices_derive_exact_amounts_and_clear_all_provenance_when_missing"
+    ],
+    "rule": "A missing rate divides the authored fiat value by the exact BTC amount."
+  },
+  {
+    "id": "grouped-value-from-rate",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": ".map(|v| v.mul(&amount, &CONTEXT))",
+    "replace": ".map(|v| v.div(&amount, &CONTEXT))",
+    "expect_failing": [
+      "grouped_save_merges_only_present_fields_and_appends_one_ordered_event"
+    ],
+    "rule": "A missing value multiplies the authored rate by the exact BTC amount."
+  },
+  {
+    "id": "grouped-decimal-context",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "Context::new(32, Rounding::HalfEven)",
+    "replace": "Context::new(28, Rounding::HalfEven)",
+    "expect_failing": [
+      "grouped_prices_derive_exact_amounts_and_clear_all_provenance_when_missing"
+    ],
+    "rule": "Price arithmetic uses the application 32-digit decimal context."
+  },
+  {
+    "id": "grouped-missing-pricing",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "if matches!(source, Value::Null) || quality == s(\"missing\") {",
+    "replace": "if matches!(source, Value::Null) && quality == s(\"missing\") {",
+    "expect_failing": [
+      "grouped_prices_derive_exact_amounts_and_clear_all_provenance_when_missing"
+    ],
+    "rule": "Missing source or explicitly missing quality clears all authored pricing provenance."
+  },
+  {
+    "id": "grouped-capture-only-noop",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": ".any(|(field, _, _)| *field != \"pricing_fetched_at\");",
+    "replace": ".any(|_| true);",
+    "expect_failing": [
+      "grouped_canonical_tags_and_capture_time_only_changes_are_noops"
+    ],
+    "rule": "Capture time alone neither appends history nor invalidates the journal."
+  },
+  {
+    "id": "grouped-kind-direction",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "if text(&tx, \"direction\") != direction {",
+    "replace": "if text(&tx, \"direction\") == direction {",
+    "expect_failing": [
+      "grouped_validation_and_failed_invalidation_preserve_all_rows"
+    ],
+    "rule": "Grouped classification requires the same observed direction as single-field edits."
+  },
+  {
+    "id": "grouped-custody-exclusion",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "if excluded == Value::Bool(true) {",
+    "replace": "if excluded == Value::Bool(false) {",
+    "expect_failing": [
+      "grouped_nonfinite_prices_fail_before_writes_and_exclusion_preserves_custody"
+    ],
+    "rule": "Grouped exclusion must preserve active anchored custody evidence."
+  },
+  {
+    "id": "transaction-profile-scope",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "vec![\"t.profile_id=?\".to_owned()]",
+    "replace": "vec![\"t.profile_id<>?\".to_owned()]",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Observed pages are confined to the resolved profile."
+  },
+  {
+    "id": "transaction-wallet-filter",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "\"t.wallet_id=?\", wallet.as_str()",
+    "replace": "\"t.wallet_id<>?\", wallet.as_str()",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Wallet IDs constrain pages after scoped reference resolution."
+  },
+  {
+    "id": "transaction-asset-filter",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "\"upper(t.asset)=?\", asset.as_str()",
+    "replace": "\"upper(t.asset)<>?\", asset.as_str()",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Asset filters preserve normalized equality."
+  },
+  {
+    "id": "transaction-start-inclusive",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "(\">=\", start.as_str())",
+    "replace": "(\">\", start.as_str())",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Date lower bounds include rows exactly on the boundary."
+  },
+  {
+    "id": "transaction-end-inclusive",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "(\"<=\", end.as_str())",
+    "replace": "(\"<\", end.as_str())",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Date upper bounds include rows exactly on the boundary."
+  },
+  {
+    "id": "transaction-id-normalization",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "let term = lower(strip(part));",
+    "replace": "let term = strip(part).to_owned();",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Repeated and comma-separated IDs match case-insensitively."
+  },
+  {
+    "id": "transaction-time-order",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "t.created_at {order},t.id {order}",
+    "replace": "t.created_at {order},t.id ASC",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Chronological pages keep the requested ID tie order."
+  },
+  {
+    "id": "transaction-primary-ties",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "t.occurred_at DESC,t.created_at DESC,t.id DESC",
+    "replace": "t.occurred_at DESC,t.created_at DESC,t.id ASC",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Numeric sorts keep descending chronological ties even in ascending order."
+  },
+  {
+    "id": "transaction-page-boundary",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "page.len() > limit as usize",
+    "replace": "page.len() >= limit as usize",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Only an extra row establishes another page."
+  },
+  {
+    "id": "transaction-cursor-direction",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "let op = if order == \"asc\" { \">\" } else { \"<\" };",
+    "replace": "let op = if order == \"asc\" { \"<\" } else { \">\" };",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Cursor bounds advance in the selected primary order."
+  },
+  {
+    "id": "transaction-cursor-ties",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "(t.occurred_at,t.created_at,t.id)<(?,?,?)",
+    "replace": "(t.occurred_at,t.created_at,t.id)>(?,?,?)",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Numeric cursor ties continue in descending chronological order."
+  },
+  {
+    "id": "transaction-cursor-sort",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "value(row, \"sort\") != s(sort)",
+    "replace": "value(row, \"sort\") == s(sort)",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Cursors bind the exact primary sort."
+  },
+  {
+    "id": "transaction-cursor-order",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "value(row, \"order\") != s(order)",
+    "replace": "value(row, \"order\") == s(order)",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Cursors bind the requested ordering."
+  },
+  {
+    "id": "transaction-review-precedence",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "OR jq.reason IS NOT NULL THEN 'review'",
+    "replace": "OR 0 THEN 'review'",
+    "expect_failing": [
+      "transaction_quick_status_and_price_filters_keep_quarantine_precedence"
+    ],
+    "rule": "Quarantine takes precedence over an authored completed status."
+  },
+  {
+    "id": "transaction-exact-price",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "CAST(t.fiat_rate_exact AS REAL)<=0",
+    "replace": "CAST(t.fiat_rate_exact AS REAL)>=0",
+    "expect_failing": [
+      "transaction_quick_status_and_price_filters_keep_quarantine_precedence"
+    ],
+    "rule": "A positive exact rate prevents a missing-price match."
+  },
+  {
+    "id": "transaction-fee-filter",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "COALESCE(t.fee,0)<>0",
+    "replace": "COALESCE(t.fee,0)=0",
+    "expect_failing": [
+      "transaction_quick_status_and_price_filters_keep_quarantine_precedence"
+    ],
+    "rule": "Fee filtering selects nonzero observed fees."
+  },
+  {
+    "id": "transaction-explorer-id",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "length(trim(t.external_id))<>64",
+    "replace": "length(trim(t.external_id))=64",
+    "expect_failing": [
+      "transaction_quick_status_and_price_filters_keep_quarantine_precedence"
+    ],
+    "rule": "Explorer-ID filtering requires exactly 64 hexadecimal characters."
+  },
+  {
+    "id": "transaction-liquid-precedence",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "lower(t.asset)='lbtc'",
+    "replace": "lower(t.asset)='never'",
+    "expect_failing": [
+      "transaction_payment_and_network_filters_keep_family_precedence_and_json_guards"
+    ],
+    "rule": "Liquid asset evidence takes precedence over Lightning wallet labels."
+  },
+  {
+    "id": "transaction-projection-version",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "custody_profile.journal_input_version=custody_profile.last_processed_input_version",
+    "replace": "custody_profile.journal_input_version<>custody_profile.last_processed_input_version",
+    "expect_failing": [
+      "transaction_flows_use_only_fresh_profile_scoped_custody_projections"
+    ],
+    "rule": "Flow filters use only the current journal input version."
+  },
+  {
+    "id": "transaction-projection-processed",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "custody_profile.last_processed_at IS NOT NULL",
+    "replace": "custody_profile.last_processed_at IS NULL",
+    "expect_failing": [
+      "transaction_flows_use_only_fresh_profile_scoped_custody_projections"
+    ],
+    "rule": "Unprocessed projections cannot establish transfer or swap filters."
+  },
+  {
+    "id": "transaction-projection-scope",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "relation.profile_id=t.profile_id",
+    "replace": "relation.profile_id<>t.profile_id",
+    "expect_failing": [
+      "transaction_flows_use_only_fresh_profile_scoped_custody_projections"
+    ],
+    "rule": "Economic projections match only their own profile."
+  },
+  {
+    "id": "transaction-incoming-direction",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "if flow == \"incoming\"",
+    "replace": "if flow == \"outgoing\"",
+    "expect_failing": [
+      "transaction_flows_use_only_fresh_profile_scoped_custody_projections"
+    ],
+    "rule": "Incoming and outgoing flows retain their observed direction."
+  },
+  {
+    "id": "transaction-tag-order",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "ORDER BY tags.code ASC",
+    "replace": "ORDER BY tags.code DESC",
+    "expect_failing": [
+      "transaction_rows_preserve_msat_decimal_rounding_tags_and_observed_fields"
+    ],
+    "rule": "Transaction tags retain ascending code order."
+  },
+  {
+    "id": "transaction-observed-kind",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "COALESCE(t.kind,'') AS kind",
+    "replace": "COALESCE(t.kind_override,t.kind,'') AS kind",
+    "expect_failing": [
+      "transaction_rows_preserve_msat_decimal_rounding_tags_and_observed_fields"
+    ],
+    "rule": "List rows preserve the importer kind rather than overwriting observed provenance."
+  },
+  {
+    "id": "transaction-cursor-filter-binding",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "(\"with_fees\", s(if options.with_fees { \"1\" } else { \"\" }))",
+    "replace": "(\"with_fees\", s(\"\"))",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Page cursors bind the fee filter even if it currently matches every row."
+  },
+  {
+    "id": "transaction-msat-rounding",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "let decimal = format!(\"{}e-11\", py_str(msat));",
+    "replace": "let decimal = (kassiber_pytext::parse_float(&py_str(msat)).unwrap() / 1e11).to_string();",
+    "expect_failing": [
+      "transaction_rows_preserve_msat_decimal_rounding_tags_and_observed_fields"
+    ],
+    "rule": "BTC display converts the exact decimal only once rather than rounding msat first."
+  },
+  {
+    "id": "transaction-move-projection-scope",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "decision.profile_id=t.profile_id",
+    "replace": "decision.profile_id<>t.profile_id",
+    "expect_failing": [
+      "transaction_flows_use_only_fresh_profile_scoped_custody_projections"
+    ],
+    "rule": "Move projections remain bound to the current profile."
+  },
+  {
+    "id": "transaction-network-config",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "lower(json_extract(w.config_json,'$.network'))",
+    "replace": "lower(json_extract(w.config_json,'$.unused'))",
+    "expect_failing": [
+      "transaction_payment_and_network_filters_keep_family_precedence_and_json_guards"
+    ],
+    "rule": "Network selection reads the explicit network only from valid local wallet configuration."
+  },
+  {
+    "id": "transaction-bound-lexical",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "conditions.push(time::predicate(conn, \"t.occurred_at\", op)?);",
+    "replace": "conditions.push(format!(\"t.occurred_at{op}?\"));",
+    "expect_failing": [
+      "transaction_fractional_bounds_compare_instants_before_counting_and_pagination"
+    ],
+    "rule": "Observed pages compare fractional bounds before counting and paging."
+  },
+  {
+    "id": "record-bound-lexical",
+    "file": "crates/transactions/src/metadata/records.rs",
+    "find": "conditions.push(time::predicate(conn, \"t.occurred_at\", op)?);",
+    "replace": "conditions.push(format!(\"t.occurred_at{op}?\"));",
+    "expect_failing": [
+      "metadata_record_and_history_bounds_keep_exact_microseconds"
+    ],
+    "rule": "Metadata record date bounds compare exact instants."
+  },
+  {
+    "id": "history-bound-lexical",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "clauses.push(time::predicate(conn, \"e.changed_at\", op)?);",
+    "replace": "clauses.push(format!(\"e.changed_at{op}?\"));",
+    "expect_failing": [
+      "metadata_record_and_history_bounds_keep_exact_microseconds"
+    ],
+    "rule": "Edit history date bounds compare exact instants."
+  },
+  {
+    "id": "timestamp-fractional-precision",
+    "file": "crates/transactions/src/metadata/time.rs",
+    "find": "normalized(raw).filter(|us| (0..315_537_897_600_000_000).contains(us))",
+    "replace": "normalized(raw).map(|us| us / 1_000_000 * 1_000_000).filter(|us| (0..315_537_897_600_000_000).contains(us))",
+    "expect_failing": [
+      "transaction_fractional_bounds_compare_instants_before_counting_and_pagination"
+    ],
+    "rule": "SQL instants preserve all six microsecond digits."
+  },
+  {
+    "id": "timestamp-offset-normalization",
+    "file": "crates/transactions/src/metadata/time.rs",
+    "find": "Some(day * 86_400_000_000 + local - offset)",
+    "replace": "Some(day * 86_400_000_000 + local + offset)",
+    "expect_failing": [
+      "persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants"
+    ],
+    "rule": "Persisted offset spellings compare at their UTC instant."
+  },
+  {
+    "id": "timestamp-unknown-is-null",
+    "file": "crates/transactions/src/metadata/time.rs",
+    "find": "normalized(raw).filter(|us| (0..315_537_897_600_000_000).contains(us))",
+    "replace": "normalized(raw).or(Some(0)).filter(|us| (0..315_537_897_600_000_000).contains(us))",
+    "expect_failing": [
+      "persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants"
+    ],
+    "rule": "Unknown timestamps are excluded from bounded reads rather than dated at genesis."
+  },
+  {
+    "id": "timestamp-calendar-range",
+    "file": "crates/transactions/src/metadata/time.rs",
+    "find": "normalized(raw).filter(|us| (0..315_537_897_600_000_000).contains(us))",
+    "replace": "normalized(raw)",
+    "expect_failing": [
+      "persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants"
+    ],
+    "rule": "UTC normalization outside the supported calendar remains unknown."
+  },
+  {
+    "id": "timestamp-terminal-z-normalization",
+    "file": "crates/transactions/src/metadata/time.rs",
+    "find": ".strip_suffix('Z')",
+    "replace": ".strip_suffix('Q')",
+    "expect_failing": [
+      "persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants"
+    ],
+    "rule": "Persisted timestamps use the same terminal-Z normalization as the product parser."
+  },
+  {
+    "id": "desktop-profile",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "vec![\"t.profile_id=?\".to_owned(), wallet_sql(&wallet)]",
+    "replace": "vec![\"t.profile_id<>?\".to_owned(), wallet_sql(&wallet)]",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Desktop pages remain profile scoped."
+  },
+  {
+    "id": "desktop-wallet-population",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(id=? OR lower(label)=lower(?))",
+    "replace": "(id=? AND lower(label)=lower(?))",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Desktop wallet filters include every matching ID or case-insensitive label."
+  },
+  {
+    "id": "desktop-direction",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(\"t.direction=?\", direction.as_str())",
+    "replace": "(\"t.direction<>?\", direction.as_str())",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Direction filters preserve inbound versus outbound."
+  },
+  {
+    "id": "desktop-asset",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(\"upper(t.asset)=?\", asset.as_str())",
+    "replace": "(\"lower(t.asset)=?\", asset.as_str())",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Asset filters uppercase before SQL matching."
+  },
+  {
+    "id": "desktop-start-inclusive",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "[(\">=\", since.as_str()), (\"<=\", until.as_str())]",
+    "replace": "[(\">\", since.as_str()), (\"<=\", until.as_str())]",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Start bounds include the exact instant."
+  },
+  {
+    "id": "desktop-end-inclusive",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "[(\">=\", since.as_str()), (\"<=\", until.as_str())]",
+    "replace": "[(\">=\", since.as_str()), (\"<\", until.as_str())]",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "End bounds include the exact instant."
+  },
+  {
+    "id": "desktop-timestamp-instants",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "for (op, t) in [(\">=\", since.as_str()), (\"<=\", until.as_str())] {\n        if !t.is_empty() {\n            conditions.push(time::predicate(conn, \"t.occurred_at\", op)?);",
+    "replace": "for (op, t) in [(\">=\", since.as_str()), (\"<=\", until.as_str())] {\n        if !t.is_empty() {\n            conditions.push(format!(\"t.occurred_at {op} ?\"));",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Desktop bounds compare microseconds rather than lexical suffixes."
+  },
+  {
+    "id": "desktop-txids",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(lower(t.id) IN ({terms}) OR lower(COALESCE(t.external_id,'')) IN ({terms}))",
+    "replace": "(lower(t.id) NOT IN ({terms}) OR lower(COALESCE(t.external_id,'')) NOT IN ({terms}))",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "ID filters match IDs and external IDs case-insensitively."
+  },
+  {
+    "id": "desktop-query-tags",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(tags.label) LIKE ?",
+    "replace": "lower(tags.code) LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes tag labels."
+  },
+  {
+    "id": "desktop-query-id",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(t.id) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes id using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-external-id",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.external_id,'')) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes external-id using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-kind",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.kind,'')) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes kind using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-description",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.description,'')) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes description using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-counterparty",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.counterparty,'')) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes counterparty using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-note",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.note,'')) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes note using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-wallet",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(w.label) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes wallet using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-candidate-flow",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": " OR lower(t.id) IN ({})",
+    "replace": " OR lower('') IN ({})",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Candidate IDs broaden only transfer/swap/layer-transition filters."
+  },
+  {
+    "id": "desktop-incoming-direction",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "if flow==\"incoming\" {\"inbound\"} else {\"outbound\"}",
+    "replace": "if flow==\"incoming\" {\"outbound\"} else {\"inbound\"}",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Incoming and outgoing flow keep the observed direction."
+  },
+  {
+    "id": "desktop-fee-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "COALESCE(t.fee,0)<>0",
+    "replace": "COALESCE(t.fee,0)=0",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "with_fees retains only nonzero observed fees."
+  },
+  {
+    "id": "desktop-external-flow",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.kind,''))<>'transfer'",
+    "replace": "lower(COALESCE(t.kind,''))='transfer'",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "External flow excludes observed transfers."
+  },
+  {
+    "id": "desktop-review-queue",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "{\"<>0\"} else {\"=2\"}",
+    "replace": "{\"=0\"} else {\"=2\"}",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Review queue excludes completed queue items."
+  },
+  {
+    "id": "desktop-failed-import",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "{\"<>0\"} else {\"=2\"}",
+    "replace": "{\"<>0\"} else {\"=1\"}",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Failed import selects failed queue items."
+  },
+  {
+    "id": "desktop-explorer-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "length(trim(t.external_id))<>64",
+    "replace": "length(trim(t.external_id))=64",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Missing explorer ID checks the complete 64-hex form."
+  },
+  {
+    "id": "desktop-missing-price",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "t.fiat_rate<=0 OR lower(COALESCE(t.pricing_quality,''))",
+    "replace": "t.fiat_rate>0 OR lower(COALESCE(t.pricing_quality,''))",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Desktop missing-price follows its legacy rate and quality rule."
+  },
+  {
+    "id": "desktop-network-config",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(json_extract(w.config_json,'$.network')) END=?",
+    "replace": "lower(json_extract(w.config_json,'$.chain')) END=?",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Network filters include configured network without exposing configuration."
+  },
+  {
+    "id": "desktop-network-asset",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "OR upper(t.asset)=?)",
+    "replace": "OR lower(t.asset)=?)",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Network filters match uppercase asset aliases."
+  },
+  {
+    "id": "desktop-payment-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "conditions.push(format!(\"({})=?\", sql::PAYMENT));\n        bind.push(SqlValue::Text(method.clone()));",
+    "replace": "conditions.push(format!(\"({})<>?\", sql::PAYMENT));\n        bind.push(SqlValue::Text(method.clone()));",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Payment method filters use the shared presentation family."
+  },
+  {
+    "id": "desktop-network-payment",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "conditions.push(format!(\"({})=?\", sql::PAYMENT));\n            bind.push(SqlValue::Text(payment));",
+    "replace": "conditions.push(format!(\"({})<>?\", sql::PAYMENT));\n            bind.push(SqlValue::Text(payment));",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Network payment aliases preserve their payment-family matching."
+  },
+  {
+    "id": "desktop-sort-amount",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "Some(\"amount\") => sql::AMOUNT",
+    "replace": "Some(\"amount\") => \"t.amount\"",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Amount sort uses signed display magnitude including fee-only rows."
+  },
+  {
+    "id": "desktop-sort-fiat",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "Some(\"fiat-value\") => sql::FIAT_VALUE",
+    "replace": "Some(\"fiat-value\") => \"t.fiat_value\"",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Fiat sort uses signed stored value or legacy rate fallback."
+  },
+  {
+    "id": "desktop-sort-fee",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "Some(\"fee\") => sql::FEE",
+    "replace": "Some(\"fee\") => \"t.amount\"",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Fee sort orders observed fees."
+  },
+  {
+    "id": "desktop-time-order",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "t.occurred_at {order},t.created_at {order},t.id {order}",
+    "replace": "t.occurred_at DESC,t.created_at DESC,t.id DESC",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Time order applies to all chronological ties."
+  },
+  {
+    "id": "desktop-primary-ties",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "t.occurred_at DESC,t.created_at DESC,t.id DESC\")",
+    "replace": "t.occurred_at ASC,t.created_at ASC,t.id ASC\")",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Numeric primary ties always use descending chronology."
+  },
+  {
+    "id": "desktop-null-order",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "({column}) IS NULL ASC",
+    "replace": "({column}) IS NULL DESC",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Null numeric sort values follow nonnull values."
+  },
+  {
+    "id": "desktop-cursor-order",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "val(&row, \"order\") != s(order)",
+    "replace": "false",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Cursor order is bound to the request."
+  },
+  {
+    "id": "desktop-cursor-sort",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "val(&row, \"sort\") != s(sort)",
+    "replace": "false",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Cursor primary sort is bound to the request."
+  },
+  {
+    "id": "desktop-cursor-ties",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(t.occurred_at,t.created_at,t.id){tie_op}(?,?,?)",
+    "replace": "(t.occurred_at,t.id,t.created_at){tie_op}(?,?,?)",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Keyset boundaries preserve all three chronological ties."
+  },
+  {
+    "id": "desktop-total-groups",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "COUNT(DISTINCT {}) AS count",
+    "replace": "COUNT({}) AS count",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "Counts cover distinct custody groups before pagination."
+  },
+  {
+    "id": "desktop-page-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "output.len() >= limit as usize && would_render",
+    "replace": "output.len() > limit as usize && would_render",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "The rendered page limit never admits an extra row."
+  },
+  {
+    "id": "desktop-pending-pairs",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "if pending.remove(id) {",
+    "replace": "if false && pending.remove(id) {",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "A later page suppresses the other leg of a previously rendered pair."
+  },
+  {
+    "id": "desktop-pair-dedup",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "if seen.contains_key(id) {",
+    "replace": "if false && seen.contains_key(id) {",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "A page renders each reviewed pair once."
+  },
+  {
+    "id": "desktop-queue-rank",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "MAX(leg.rank) OVER",
+    "replace": "MIN(leg.rank) OVER",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "Grouped queue status uses the most urgent scoped leg."
+  },
+  {
+    "id": "desktop-queue-end",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "for (op, bound) in [(\">=\", since), (\"<=\", until)]",
+    "replace": "for (op, bound) in [(\"<=\", since), (\">=\", until)]",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "Queue status bounds use the same exact scoped instants as the page."
+  },
+  {
+    "id": "desktop-fresh-count",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "p.last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0)",
+    "replace": "p.last_processed_tx_count>=0",
+    "expect_failing": [
+      "desktop_freshness_requires_processed_count_version_and_timestamp"
+    ],
+    "rule": "Pair rendering requires the current active transaction count."
+  },
+  {
+    "id": "desktop-fresh-version",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "p.journal_input_version=p.last_processed_input_version",
+    "replace": "p.journal_input_version>=p.last_processed_input_version",
+    "expect_failing": [
+      "desktop_freshness_requires_processed_count_version_and_timestamp"
+    ],
+    "rule": "Pair rendering requires current journal inputs."
+  },
+  {
+    "id": "desktop-fresh-processed",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "COALESCE(p.last_processed_at,'')<>''",
+    "replace": "1",
+    "expect_failing": [
+      "desktop_freshness_requires_processed_count_version_and_timestamp"
+    ],
+    "rule": "Pair rendering requires stored processing for nonempty books."
+  },
+  {
+    "id": "desktop-search-required",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "if query.is_empty() && kind == \"ui.transactions.search\"",
+    "replace": "if false && query.is_empty() && kind == \"ui.transactions.search\"",
+    "expect_failing": [
+      "desktop_search_requires_query_and_clamps_its_own_limit"
+    ],
+    "rule": "Search requires a nonempty query."
+  },
+  {
+    "id": "desktop-extremes-order",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "set(&mut base, \"order\", s(\"asc\"));",
+    "replace": "set(&mut base, \"order\", s(\"desc\"));",
+    "expect_failing": [
+      "desktop_extremes_apply_filters_before_both_amount_limits"
+    ],
+    "rule": "Extremes produce both ascending and descending amount selections."
+  },
+  {
+    "id": "desktop-extremes-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "let limit = limit(args, 3, 20)?;",
+    "replace": "let limit = limit(args, 1, 20)?;",
+    "expect_failing": [
+      "desktop_extremes_apply_filters_before_both_amount_limits"
+    ],
+    "rule": "Extremes default to three rows per side."
+  },
+  {
+    "id": "desktop-no-context",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "kind != \"ui.transactions.extremes\"",
+    "replace": "kind == \"ui.transactions.extremes\"",
+    "expect_failing": [
+      "desktop_missing_context_short_circuits_list_search_but_extremes_validates"
+    ],
+    "rule": "List and search return the empty-context shape before validating args."
+  },
+  {
+    "id": "desktop-tags-order",
+    "file": "crates/transactions/src/desktop/render.rs",
+    "find": "ORDER BY tags.code ASC",
+    "replace": "ORDER BY tags.code DESC",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Metadata tags preserve code order."
+  },
+  {
+    "id": "desktop-kind-override",
+    "file": "crates/transactions/src/desktop/render.rs",
+    "find": "if truthy(&val(row, \"kind_override\"))",
+    "replace": "if false && truthy(&val(row, \"kind_override\"))",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Authored kind overrides win without rewriting observed kinds."
+  },
+  {
+    "id": "desktop-period-30days",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "\"30days\" | \"30day\" | \"30d\" => 29,",
+    "replace": "\"30days\" | \"30day\" | \"30d\" => 30,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative period 30days uses Python calendar-day subtraction at midnight."
+  },
+  {
+    "id": "desktop-period-3months",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "\"3months\" | \"3month\" | \"3m\" => 92,",
+    "replace": "\"3months\" | \"3month\" | \"3m\" => 93,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative period 3months uses Python calendar-day subtraction at midnight."
+  },
+  {
+    "id": "desktop-period-6months",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "\"6months\" | \"6month\" | \"6m\" => 183,",
+    "replace": "\"6months\" | \"6month\" | \"6m\" => 184,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative period 6months uses Python calendar-day subtraction at midnight."
+  },
+  {
+    "id": "desktop-period-1year",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "\"1year\" | \"1years\" | \"1y\" => 365,",
+    "replace": "\"1year\" | \"1years\" | \"1y\" => 366,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative period 1year uses Python calendar-day subtraction at midnight."
+  },
+  {
+    "id": "desktop-period-4years",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "\"4years\" | \"4year\" | \"4y\" => 365 * 4,",
+    "replace": "\"4years\" | \"4year\" | \"4y\" => 365 * 5,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Four years is 1460 days before local midnight, as Python added in 62419c8a6."
+  },
+  {
+    "id": "desktop-period-5years",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "=> 365 * 5,",
+    "replace": "=> 365 * 4,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative multi-year period preserves Python day count."
+  },
+  {
+    "id": "desktop-period-10years",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "=> 365 * 10,",
+    "replace": "=> 365 * 9,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative multi-year period preserves Python day count."
+  },
+  {
+    "id": "desktop-period-15years",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "_ => 365 * 15,",
+    "replace": "_ => 365 * 14,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative multi-year period preserves Python day count."
+  },
+  {
+    "id": "desktop-ids-deduplicate",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "seen.insert(lower(t))",
+    "replace": "seen.insert(t.to_owned())",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Repeated ID filters deduplicate case-insensitively while retaining first spelling."
+  },
+  {
+    "id": "desktop-ids-count",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "strings(args, \"txids\", 128)",
+    "replace": "strings(args, \"txids\", 129)",
+    "expect_failing": [
+      "desktop_refusals_keep_typed_validation_and_cursor_errors"
+    ],
+    "rule": "Desktop ID requests refuse more than 128 distinct values."
+  },
+  {
+    "id": "desktop-candidate-count",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "strings(args, \"candidate_txids\", 512)",
+    "replace": "strings(args, \"candidate_txids\", 513)",
+    "expect_failing": [
+      "desktop_refusals_keep_typed_validation_and_cursor_errors"
+    ],
+    "rule": "Candidate ID lists refuse more than 512 distinct values."
+  },
+  {
+    "id": "desktop-list-default-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "            25\n        } else {\n            100",
+    "replace": "            25\n        } else {\n            99",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "List defaults to 100 displayed rows."
+  },
+  {
+    "id": "desktop-search-default-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "            25\n        } else {\n            100",
+    "replace": "            24\n        } else {\n            100",
+    "expect_failing": [
+      "desktop_search_requires_query_and_clamps_its_own_limit"
+    ],
+    "rule": "Search defaults to 25 displayed rows."
+  },
+  {
+    "id": "desktop-list-maximum-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "            100\n        } else {\n            500",
+    "replace": "            100\n        } else {\n            499",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "List clamps limits to 500."
+  },
+  {
+    "id": "desktop-search-maximum-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "            100\n        } else {\n            500",
+    "replace": "            99\n        } else {\n            500",
+    "expect_failing": [
+      "desktop_search_requires_query_and_clamps_its_own_limit"
+    ],
+    "rule": "Search clamps limits to 100."
+  },
+  {
+    "id": "desktop-extremes-maximum-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "let limit = limit(args, 3, 20)?;",
+    "replace": "let limit = limit(args, 3, 19)?;",
+    "expect_failing": [
+      "desktop_extremes_apply_filters_before_both_amount_limits"
+    ],
+    "rule": "Extremes clamp their per-side limit to 20."
+  },
+  {
+    "id": "desktop-count-before-cursor",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(\"count\", val(&count[0], \"count\"))",
+    "replace": "(\"count\", Value::Int(raw.len().into()))",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Count covers the complete filtered population before the cursor."
+  },
+  {
+    "id": "desktop-total-before-cursor",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(\"total\", val(&count[0], \"count\"))",
+    "replace": "(\"total\", Value::Int(raw.len().into()))",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Total covers the complete filtered population before the cursor."
+  },
+  {
+    "id": "desktop-boolean-alias-priority",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "&[\"with_fees\", \"withFees\"]",
+    "replace": "&[\"withFees\", \"with_fees\"]",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Snake-case fee flags take precedence over camel-case aliases."
+  },
+  {
+    "id": "desktop-timestamp-alias-priority",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "if get(args, primary).is_none_or(|v| *v == Value::Null)",
+    "replace": "if true || get(args, primary).is_none_or(|v| *v == Value::Null)",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Timestamp aliases do not validate ignored values when a primary bound is supplied."
+  },
+  {
+    "id": "desktop-limit-truncation",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "n.trunc()",
+    "replace": "n.round()",
+    "expect_failing": [
+      "desktop_refusals_keep_typed_validation_and_cursor_errors"
+    ],
+    "rule": "Float limits use Python int truncation."
+  },
+  {
+    "id": "desktop-sat-rounding",
+    "file": "crates/transactions/src/desktop/render.rs",
+    "find": "kassiber_pytext::parse_float(&format!(\"{msat}e-3\")).unwrap()",
+    "replace": "msat as f64 / 1000.0",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Sub-satoshi presentation divides the exact integer rational once."
+  },
+  {
+    "id": "desktop-status-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "WHERE item_rank=?)",
+    "replace": "WHERE item_rank<>?)",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Status filters select the displayed queue-item status."
+  },
+  {
+    "id": "desktop-stored-transfer-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "let transfer = if current { sql::TRANSFER } else { \"0\" };",
+    "replace": "let transfer = if false && current { sql::TRANSFER } else { \"0\" };",
+    "expect_failing": [
+      "desktop_moves_use_stored_decisions_and_journal_fallback_without_inventing_fees"
+    ],
+    "rule": "Transfer filters include current stored same-asset MOVE decisions."
+  },
+  {
+    "id": "desktop-stored-swap-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "let swap = if current { sql::SWAP } else { \"0\" };",
+    "replace": "let swap = if false && current { sql::SWAP } else { \"0\" };",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "Swap filters include current stored conversion relations."
+  },
+  {
+    "id": "desktop-layer-transition-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "IN ({LAYERS})",
+    "replace": "IN ({SWAPS})",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Layer-transition filtering omits generic swap kinds."
+  },
+  {
+    "id": "desktop-cursor-filter-binding",
+    "file": "crates/transactions/src/metadata/cursor.rs",
+    "find": "get(row, \"filters\").is_some_and(|v| equivalent(v, filters))",
+    "replace": "get(row, \"filters\").is_some_and(|v| true || equivalent(v, filters))",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Desktop cursors remain bound to scope and the complete normalized filter set."
+  },
+  {
+    "id": "document-id-precedence",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "if let Some(row) = exact.first() {",
+    "replace": "if let Some(row) = exact.first().filter(|_| false) {",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Exact document IDs win over labels and external references."
+  },
+  {
+    "id": "document-reference-scope",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "SELECT * FROM external_documents WHERE profile_id=? AND id=?",
+    "replace": "SELECT * FROM external_documents WHERE (profile_id=? OR 1) AND id=?",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Document references remain bound to the admitted profile."
+  },
+  {
+    "id": "document-reference-ambiguity",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "if found.len() > 1 {",
+    "replace": "if found.len() > 1000 {",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Non-unique labels and references refuse rather than selecting a document."
+  },
+  {
+    "id": "document-external-conflict",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "if truthy(&external)\n",
+    "replace": "if false && truthy(&external)\n",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Duplicate external references retain the explicit conflict refusal."
+  },
+  {
+    "id": "document-page-tie",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "ORDER BY created_at DESC, id DESC LIMIT ?",
+    "replace": "ORDER BY created_at DESC, id ASC LIMIT ?",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Document pages retain descending ID ties."
+  },
+  {
+    "id": "document-second-precision",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "format_timestamp(us / 1_000_000 * 1_000_000)?",
+    "replace": "format_timestamp(us)?",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Authored document timestamps truncate to UTC seconds as Python does."
+  },
+  {
+    "id": "document-unknown-date",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "normalized != \"1970-01-01T00:00:00Z\"",
+    "replace": "normalized != \"impossible\"",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "The unknown timestamp sentinel remains null document evidence."
+  },
+  {
+    "id": "document-exact-fiat",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "kassiber_pydecimal::finite_price(&py_str(v))",
+    "replace": "kassiber_pydecimal::finite_price(\"0\")",
+    "expect_failing": [
+      "document_registration_preserves_exact_values_refusals_scope_and_order"
+    ],
+    "rule": "Registration preserves the exact source decimal without float rounding."
+  },
+  {
+    "id": "document-cleanup-files",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "if result.is_err() {",
+    "replace": "if false && result.is_err() {",
+    "expect_failing": [
+      "document_evidence_is_literal_transactionless_hashed_and_atomic"
+    ],
+    "rule": "Failed evidence insertion removes every file created by the request."
+  },
+  {
+    "id": "document-transactionless",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "VALUES(?,?,?,NULL,?,?,?,?,?,?,?,?,?)",
+    "replace": "VALUES(?,?,?,'tx',?,?,?,?,?,?,?,?,?)",
+    "expect_failing": [
+      "document_evidence_is_literal_transactionless_hashed_and_atomic"
+    ],
+    "rule": "Document evidence does not attach itself to an observed transaction."
+  },
+  {
+    "id": "document-url-literal",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "let source = py_str(&url);",
+    "replace": "let source = strip(&py_str(&url)).to_owned();",
+    "expect_failing": [
+      "document_evidence_is_literal_transactionless_hashed_and_atomic"
+    ],
+    "rule": "Document URL targets remain literal and are never normalized or fetched."
+  },
+  {
+    "id": "document-prior-evidence-type",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "(\"document_type\",s(\"tax_report\"))",
+    "replace": "(\"document_type\",s(\"invoice\"))",
+    "expect_failing": [
+      "prior_reports_are_atomic_evidence_without_ledger_or_lot_authority"
+    ],
+    "rule": "A prior tax report is archived as report evidence rather than commercial authority."
+  },
+  {
+    "id": "commercial-profile",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "WHERE profile_id=? AND excluded=0 AND",
+    "replace": "WHERE (profile_id=? OR 1) AND excluded=0 AND",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Transaction matches cannot cross profile scope."
+  },
+  {
+    "id": "commercial-excluded",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "AND excluded=0 AND",
+    "replace": "AND excluded>=0 AND",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Excluded transactions cannot absorb commercial suggestions."
+  },
+  {
+    "id": "commercial-txid-signal",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "let txid = value(record, \"txid\");",
+    "replace": "let txid = Value::Null;",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "A stored transaction ID is an independent deterministic match signal."
+  },
+  {
+    "id": "commercial-payment-hash-signal",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "let hash = value(record, \"payment_hash\");",
+    "replace": "let hash = Value::Null;",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "A stored payment hash is an independent deterministic match signal."
+  },
+  {
+    "id": "commercial-stable-key-signal",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "value(record, \"stable_key\")",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Payment-ledger stable keys match their observed transaction identities."
+  },
+  {
+    "id": "commercial-unique-transaction",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "if matches.len() != 1 {",
+    "replace": "if matches.is_empty() {",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Ambiguous transaction observations cannot become suggestions."
+  },
+  {
+    "id": "commercial-principal-fee",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "principal -= integer(&value(tx, \"fee\"))?;",
+    "replace": "principal += integer(&value(tx, \"fee\"))?;",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Exact confidence uses principal after an included outbound fee."
+  },
+  {
+    "id": "commercial-principal-absolute",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "== principal.abs()",
+    "replace": "== principal",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Confidence compares payment amounts with absolute transaction principal."
+  },
+  {
+    "id": "commercial-confidence",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "confidence: if exact { \"exact\" } else { \"strong\" }",
+    "replace": "confidence: if exact { \"strong\" } else { \"exact\" }",
+    "expect_failing": [
+      "commercial_matching_requires_unique_in_scope_active_identifiers_and_scores_principal"
+    ],
+    "rule": "Amount equality and mere identifier agreement have different confidence."
+  },
+  {
+    "id": "commercial-payout-direction",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "(? != 'payout' OR direction='outbound')",
+    "replace": "(? != 'payout' OR direction IN ('inbound','outbound'))",
+    "expect_failing": [
+      "commercial_payout_matching_requires_outgoing_proof_and_matchable_status"
+    ],
+    "rule": "Payout proofs only match the outgoing merchant side."
+  },
+  {
+    "id": "commercial-payout-status",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "IN ('inprogress','completed')",
+    "replace": "IN ('inprogress','completed','awaiting')",
+    "expect_failing": [
+      "commercial_payout_matching_requires_outgoing_proof_and_matchable_status"
+    ],
+    "rule": "Only in-progress and completed stored payout proofs can be proposed."
+  },
+  {
+    "id": "document-match-request-reference",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "OR d.external_ref=p.payment_request_id",
+    "replace": "OR 0=p.payment_request_id",
+    "expect_failing": [
+      "document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment"
+    ],
+    "rule": "Payment-request references connect both invoice and payment evidence."
+  },
+  {
+    "id": "document-match-order-reference",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "OR d.external_ref=p.order_id",
+    "replace": "OR 0=p.order_id",
+    "expect_failing": [
+      "document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment"
+    ],
+    "rule": "External order references connect both invoice and payment evidence."
+  },
+  {
+    "id": "document-match-exact-fiat",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "p.fiat_value_exact=d.fiat_value_exact",
+    "replace": "CAST(p.fiat_value_exact AS REAL)=CAST(d.fiat_value_exact AS REAL)",
+    "expect_failing": [
+      "document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment"
+    ],
+    "rule": "The reference matcher compares exact stored fiat spellings."
+  },
+  {
+    "id": "document-match-currency",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "p.fiat_currency=d.fiat_currency",
+    "replace": "p.fiat_currency IS NOT NULL",
+    "expect_failing": [
+      "document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment"
+    ],
+    "rule": "Amount-only document matching requires equal currencies."
+  },
+  {
+    "id": "document-match-profile",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "p.profile_id=d.profile_id",
+    "replace": "p.profile_id IS NOT NULL",
+    "expect_failing": [
+      "document_matching_uses_reference_or_exact_currency_value_and_requires_unique_payment"
+    ],
+    "rule": "Document matches cannot cross profile scope."
+  },
+  {
+    "id": "document-match-unique-payment",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "if tx.len() != 1 {",
+    "replace": "if tx.is_empty() {",
+    "expect_failing": [
+      "document_transaction_matching_refuses_ambiguity_and_rolls_back_the_whole_suggestion_batch"
+    ],
+    "rule": "A document cannot break a tie between duplicate payment observations."
+  },
+  {
+    "id": "commercial-rejected-identity",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "AND state!='rejected'",
+    "replace": "AND state IN ('suggested','reviewed','rejected')",
+    "expect_failing": [
+      "document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates"
+    ],
+    "rule": "Rejected links are retained and cannot absorb a fresh suggestion."
+  },
+  {
+    "id": "commercial-document-enrichment",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "&& !truthy(&value(row, \"document_id\"))",
+    "replace": "&& truthy(&value(row, \"document_id\"))",
+    "expect_failing": [
+      "document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates"
+    ],
+    "rule": "A payment link can acquire its first matching document without duplication."
+  },
+  {
+    "id": "commercial-first-document",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "(?='btcpay_payment_transaction' OR COALESCE(document_id,'')=COALESCE(?,''))",
+    "replace": "(?='unused' OR COALESCE(document_id,'')=COALESCE(?,''))",
+    "expect_failing": [
+      "document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates"
+    ],
+    "rule": "One existing payment/transaction identity survives later matching documents."
+  },
+  {
+    "id": "commercial-document-fiat-provenance",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "let fiat = if truthy(&value(row, \"doc_value\"))",
+    "replace": "let fiat = if !truthy(&value(row, \"doc_value\"))",
+    "expect_failing": [
+      "document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates"
+    ],
+    "rule": "Document fiat evidence takes precedence when enriching a payment link."
+  },
+  {
+    "id": "commercial-suggestion-dedup",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": ".find(|old| text(old, \"id\") == text(&link, \"id\"))",
+    "replace": ".find(|_| false)",
+    "expect_failing": [
+      "document_matching_enriches_identity_preserves_review_and_rejection_and_deduplicates"
+    ],
+    "rule": "Repeated generation paths replace a link value without duplicating its position."
+  },
+  {
+    "id": "commercial-suggestion-atomic",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "atomic(conn, || suggest(conn, scope, limit(*n, 500, 500)))",
+    "replace": "suggest(conn, scope, limit(*n, 500, 500))",
+    "expect_failing": [
+      "document_transaction_matching_refuses_ambiguity_and_rolls_back_the_whole_suggestion_batch"
+    ],
+    "rule": "A failed later suggestion rolls back earlier inserts in the same request."
+  },
+  {
+    "id": "commercial-context-rejected",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "cl.state IN ('suggested', 'reviewed')",
+    "replace": "cl.state IN ('suggested', 'reviewed', 'rejected')",
+    "expect_failing": [
+      "commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness"
+    ],
+    "rule": "Rejected evidence is omitted from transaction commercial context."
+  },
+  {
+    "id": "commercial-context-reviewed-order",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "ORDER BY cl.reviewed_at DESC, cl.created_at DESC, cl.id DESC",
+    "replace": "ORDER BY cl.reviewed_at ASC, cl.created_at DESC, cl.id DESC",
+    "expect_failing": [
+      "commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties"
+    ],
+    "rule": "Reviewed context sorts reviewed time before creation time and ID."
+  },
+  {
+    "id": "commercial-context-id-tie",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "ORDER BY cl.reviewed_at DESC, cl.created_at DESC, cl.id DESC",
+    "replace": "ORDER BY cl.reviewed_at DESC, cl.created_at DESC, cl.id ASC",
+    "expect_failing": [
+      "commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties"
+    ],
+    "rule": "Commercial context preserves descending ID ties."
+  },
+  {
+    "id": "commercial-links-id-tie",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "ORDER BY cl.created_at DESC, cl.id DESC LIMIT ?",
+    "replace": "ORDER BY cl.created_at DESC, cl.id ASC LIMIT ?",
+    "expect_failing": [
+      "commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties"
+    ],
+    "rule": "Stored link pages preserve descending ID ties."
+  },
+  {
+    "id": "commercial-records-id-tie",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "ORDER BY COALESCE(occurred_at,created_at) DESC,id DESC LIMIT ?",
+    "replace": "ORDER BY COALESCE(occurred_at,created_at) DESC,id ASC LIMIT ?",
+    "expect_failing": [
+      "commercial_stored_pages_and_context_keep_scope_filters_limits_and_ties"
+    ],
+    "rule": "Stored provenance pages preserve descending ID ties."
+  },
+  {
+    "id": "commercial-invoice-origin-priority",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "let source = if truthy(&invoice) { &invoice } else { &payment };",
+    "replace": "let source = if truthy(&payment) { &payment } else { &invoice };",
+    "expect_failing": [
+      "commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness"
+    ],
+    "rule": "Invoice origin and payment-request evidence take precedence over payment fields."
+  },
+  {
+    "id": "commercial-bitcoin-is-not-fiat",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "[\"BTC\", \"SATS\", \"SAT\", \"MSAT\", \"LBTC\"]",
+    "replace": "[\"SATS\", \"SATS\", \"SAT\", \"MSAT\", \"LBTC\"]",
+    "expect_failing": [
+      "commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness"
+    ],
+    "rule": "Bitcoin-denominated invoice values cannot become displayed fiat prices."
+  },
+  {
+    "id": "commercial-payout-absolute-sum",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "sum + n.abs()",
+    "replace": "sum + n",
+    "expect_failing": [
+      "commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers"
+    ],
+    "rule": "Payout batch amounts sum absolute integer msat."
+  },
+  {
+    "id": "commercial-payout-decimal-precision",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "Context::new(32, Rounding::HalfEven)",
+    "replace": "Context::new(28, Rounding::HalfEven)",
+    "expect_failing": [
+      "commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers"
+    ],
+    "rule": "Payout fiat totals retain the Python 32-digit decimal context."
+  },
+  {
+    "id": "commercial-payout-currency-barrier",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "let priced = currencies.len() == 1",
+    "replace": "let priced = !currencies.is_empty()",
+    "expect_failing": [
+      "commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers"
+    ],
+    "rule": "Mixed-currency payout evidence has no inferred aggregate fiat value."
+  },
+  {
+    "id": "commercial-payout-missing-currency",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "&& truthy(&value(r, \"payment_fiat_currency\"))",
+    "replace": "&& true",
+    "expect_failing": [
+      "commercial_context_payout_batches_preserve_exact_sums_and_currency_barriers"
+    ],
+    "rule": "A payout member with no currency prevents aggregate fiat pricing."
+  },
+  {
+    "id": "commercial-freshness-never-synced",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "(\"never_synced\", Value::Bool(!truthy(&success)))",
+    "replace": "(\"never_synced\", Value::Bool(truthy(&success)))",
+    "expect_failing": [
+      "commercial_context_keeps_order_invoice_preference_redaction_boundary_and_stored_freshness"
+    ],
+    "rule": "Missing stored sync evidence remains explicitly never synced."
+  },
+  {
+    "id": "commercial-corrupt-amount",
+    "file": "crates/transactions/src/commercial.rs",
+    "find": "number.ok_or_else",
+    "replace": "number.or(Some(0)).ok_or_else",
+    "expect_failing": [
+      "document_transaction_matching_refuses_ambiguity_and_rolls_back_the_whole_suggestion_batch"
+    ],
+    "rule": "Malformed stored amounts must refuse rather than become guessed zero-valued evidence."
+  },
+  {
+    "id": "document-prior-source-provenance",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "&dict([(\"provider\",s(provider)),(\"tax_year\",year.as_deref().map_or(Value::Null,s))])",
+    "replace": "&dict::<&str>([])",
+    "expect_failing": [
+      "prior_reports_are_atomic_evidence_without_ledger_or_lot_authority"
+    ],
+    "rule": "A prior report preserves the provider and tax year in raw source provenance without importing accounting authority."
+  },
+  {
+    "id": "document-url-surrogate",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "storable(&url)?;",
+    "replace": "",
+    "expect_failing": [
+      "document_evidence_is_literal_transactionless_hashed_and_atomic"
+    ],
+    "rule": "Unencodable URL evidence is refused rather than silently dropping Unicode code points from its literal provenance."
+  },
+  {
+    "id": "R7-commercial-price-boundary",
+    "file": "crates/transactions/src/documents.rs",
+    "find": "kassiber_pydecimal::finite_price(&py_str(v))",
+    "replace": "kassiber_pydecimal::finite_price(\"1\")",
+    "expect_failing": [
+      "document_prices_are_bounded_finite_and_canonicalize_zero"
+    ],
+    "rule": "Commercial document prices use the same finite bounded decimal boundary as Python."
+  },
+  {
+    "id": "resolve-id-precedence",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "for (column, candidates) in [(\"t.id\", ids), (\"t.external_id\", external_ids)] {",
+    "replace": "for (column, candidates) in [(\"t.external_id\", external_ids), (\"t.id\", ids)] {",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Desktop IDs are selected before external aliases."
+  },
+  {
+    "id": "resolve-id-lowercase",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "ids.push(lower(query));",
+    "replace": "ids.push(query.to_owned());",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Desktop ID lookup includes the lowercased query."
+  },
+  {
+    "id": "resolve-external-uppercase",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "external_ids.push(upper(query));",
+    "replace": "external_ids.push(query.to_owned());",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "External aliases also try the uppercase query."
+  },
+  {
+    "id": "resolve-order",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "ORDER BY t.occurred_at DESC,t.created_at DESC,t.id DESC LIMIT 1",
+    "replace": "ORDER BY t.occurred_at ASC,t.created_at ASC,t.id ASC LIMIT 1",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Duplicate aliases retain descending SQL text order."
+  },
+  {
+    "id": "resolve-id-order",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "let order_limit = if column == \"t.id\" {",
+    "replace": "let order_limit = if false {",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Direct ID candidates retain the reference's unsorted lookup."
+  },
+  {
+    "id": "resolve-profile",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "WHERE t.profile_id=? AND {column}",
+    "replace": "WHERE (t.profile_id=? OR 1) AND {column}",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Resolution remains bound to the active profile."
+  },
+  {
+    "id": "resolve-focused-principal",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "let focused = lower(text(&row, \"id\")) == lower(query);",
+    "replace": "let focused = false;",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "An ID resolution displays the focused observed principal."
+  },
+  {
+    "id": "resolve-focused-pair-fee",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "set(&mut displayed, \"feeSat\", render::sat(num(&row, \"fee\")));",
+    "replace": "set(&mut displayed, \"feeSat\", Value::Null);",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "A focused pair displays its observed leg fee."
+  },
+  {
+    "id": "resolve-queue-status",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "if text(pair, \"kind\") != \"journal-derived\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Detail pair status follows the whole-book review queue."
+  },
+  {
+    "id": "resolve-current",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "let current = current(conn, scope)?;",
+    "replace": "let current = true;",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Stale stored journals cannot annotate resolution with current custody."
+  },
+  {
+    "id": "resolve-no-context",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": "if scope.workspace_id.is_empty() || scope.profile_id.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "desktop_missing_context_short_circuits_list_search_but_extremes_validates"
+    ],
+    "rule": "Absent book context precedes argument validation."
+  },
+  {
+    "id": "resolve-query-trim",
+    "file": "crates/transactions/src/desktop/resolve.rs",
+    "find": ".map(strip)",
+    "replace": ".map(|query| query)",
+    "expect_failing": [
+      "desktop_resolve_preserves_alias_precedence_focused_principal_and_queue_status"
+    ],
+    "rule": "Resolver queries strip Python whitespace."
+  },
+  {
+    "id": "dashboard-alias-canonical",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "        \"30day\" | \"30d\" => \"30days\",",
+    "replace": "        \"30day\" => \"30days\",",
+    "expect_failing": [
+      "every_period_spelling_buckets_like_its_canonical_name"
+    ],
+    "rule": "Every accepted spelling of a dashboard period buckets like its canonical name."
+  },
+  {
+    "id": "S3-acceptance-not-recorded",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "        updates.insert(\"pricing_review_accepted_price\".into(), s(accepted));\n",
+    "replace": "        let _ = accepted;\n",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "An accepted coarse price is recorded on the transaction."
+  },
+  {
+    "id": "S3-acceptance-any-quality",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "    if text(tx, \"pricing_quality\") != \"coarse_fallback\" {",
+    "replace": "    if text(tx, \"pricing_quality\") == \"never\" {",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "Only a coarse price can be accepted."
+  },
+  {
+    "id": "S3-acceptance-value-first",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "        (\"rate\", \"fiat_rate_exact\", \"fiat_rate\"),\n        (\"value\", \"fiat_value_exact\", \"fiat_value\"),\n",
+    "replace": "        (\"value\", \"fiat_value_exact\", \"fiat_value\"),\n        (\"rate\", \"fiat_rate_exact\", \"fiat_rate\"),\n",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "The acceptance names the positive rate first, as journals read the price."
+  },
+  {
+    "id": "S3-history-label-kind",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "                if kind == \"rate\" {\n                    \"price per unit\"\n",
+    "replace": "                if kind != \"rate\" {\n                    \"price per unit\"\n",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "The history labels an accepted rate as a price per unit and a value as a value."
+  },
+  {
+    "id": "S3-revert-acceptance-column",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "                \"pricing_review_accepted\" => \"pricing_review_accepted_price\",\n",
+    "replace": "",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "Reverting the acceptance writes the acceptance column."
+  },
+  {
+    "id": "S3-stale-family-default",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "            .map_or(\"metadata\", |(_, _, family)| *family);",
+    "replace": "            .map_or(\"metadata\", |_| \"metadata\");",
+    "expect_failing": [
+      "coarse_price_acceptance_binds_the_price_labels_history_and_reverts"
+    ],
+    "rule": "Stale edits count under each field's history family."
+  },
+  {
+    "id": "commercial-review-income-direction",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "if *commercial == s(\"income\") && direction != s(\"inbound\") {",
+    "replace": "if *commercial == s(\"income\") && direction == s(\"inbound\") {",
+    "expect_failing": [
+      "commercial_review_applies_exact_pricing_once_and_restores_the_snapshot"
+    ],
+    "rule": "Income only prices inbound transactions."
+  },
+  {
+    "id": "commercial-review-payout-income",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "if !matches!(commercial, Value::Null) && !PAYOUT_KINDS",
+    "replace": "if false && !PAYOUT_KINDS",
+    "expect_failing": [
+      "commercial_review_batches_payouts_and_refuses_income_and_custody_overwrites"
+    ],
+    "rule": "A payout is never income."
+  },
+  {
+    "id": "commercial-review-batch-absolute",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "amount += integer(&value(member, \"amount\"))?.abs();",
+    "replace": "amount += integer(&value(member, \"amount\"))?;",
+    "expect_failing": [
+      "commercial_review_batches_payouts_and_refuses_income_and_custody_overwrites"
+    ],
+    "rule": "Batch amounts sum absolute payouts."
+  },
+  {
+    "id": "commercial-review-msat-rate",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "\"100000000000\".parse::<Decimal>()",
+    "replace": "\"100000000\".parse::<Decimal>()",
+    "expect_failing": [
+      "commercial_review_applies_exact_pricing_once_and_restores_the_snapshot"
+    ],
+    "rule": "Rates divide by BTC, from msat."
+  },
+  {
+    "id": "commercial-review-restore",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "restored = restore(conn, profile, &before)?;",
+    "replace": "restored = false;",
+    "expect_failing": [
+      "commercial_review_applies_exact_pricing_once_and_restores_the_snapshot"
+    ],
+    "rule": "Reopening restores the reviewed transaction."
+  },
+  {
+    "id": "commercial-review-snapshot-reuse",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "let snapshot = if owner == value(link, \"id\")",
+    "replace": "let snapshot = if false && owner == value(link, \"id\")",
+    "expect_failing": [
+      "commercial_review_applies_exact_pricing_once_and_restores_the_snapshot"
+    ],
+    "rule": "A repeated review keeps the pre-review snapshot."
+  },
+  {
+    "id": "commercial-review-origin-scheme",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "if !matches!(scheme.as_str(), \"http\" | \"https\") {",
+    "replace": "if matches!(scheme.as_str(), \"http\" | \"https\") {",
+    "expect_failing": [
+      "commercial_review_applies_exact_pricing_once_and_restores_the_snapshot"
+    ],
+    "rule": "Only web origins become URL references."
+  },
+  {
+    "id": "commercial-review-origin-dedup",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "    if existing.is_some() {\n        return Ok(());",
+    "replace": "    if false {\n        return Ok(());",
+    "expect_failing": [
+      "commercial_review_applies_exact_pricing_once_and_restores_the_snapshot"
+    ],
+    "rule": "An origin URL is referenced once per transaction."
+  },
+  {
+    "id": "commercial-review-custody",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "if let Some(review) = custody_review(conn, profile, &value(&tx, \"id\"))? {",
+    "replace": "if let Some(review) = None::<Value> {",
+    "expect_failing": [
+      "commercial_review_batches_payouts_and_refuses_income_and_custody_overwrites"
+    ],
+    "rule": "Commercial review never overwrites an active custody review."
+  },
+  {
+    "id": "commercial-review-batch-owner",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "            link_ref = owner;\n",
+    "replace": "",
+    "expect_failing": [
+      "commercial_review_batches_payouts_and_refuses_income_and_custody_overwrites"
+    ],
+    "rule": "A reviewed batch is reopened through its owner."
+  },
+  {
+    "id": "commercial-review-batch-reject",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "    if state == \"rejected\"\n        && was_reviewed",
+    "replace": "    if false\n        && was_reviewed",
+    "expect_failing": [
+      "commercial_review_batches_payouts_and_refuses_income_and_custody_overwrites"
+    ],
+    "rule": "A reviewed batch member cannot be rejected alone."
+  },
+  {
+    "id": "commercial-review-invalidate",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "    if applied || restored {\n",
+    "replace": "    if false {\n",
+    "expect_failing": [
+      "commercial_review_applies_exact_pricing_once_and_restores_the_snapshot"
+    ],
+    "rule": "Applying or restoring pricing invalidates journals."
+  },
+  {
+    "id": "commercial-review-batch-currency",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "if truthy(&currency) && truthy(&record_currency) && currency != record_currency {",
+    "replace": "if false {",
+    "expect_failing": [
+      "commercial_review_batches_payouts_and_refuses_income_and_custody_overwrites"
+    ],
+    "rule": "A batch prices in one currency."
+  },
+  {
+    "id": "commercial-review-reconciliation",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "        Some(if state == \"reviewed\" {\n            \"matched\"",
+    "replace": "        Some(if state == \"reviewed\" {\n            \"unreviewed\"",
+    "expect_failing": [
+      "commercial_review_applies_exact_pricing_once_and_restores_the_snapshot"
+    ],
+    "rule": "Reviewing defaults to matched, other states to ignored."
+  },
+  {
+    "id": "T-r58a-implied-valuations",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "        rate.as_deref(),\n        value.as_deref(),",
+    "replace": "        None,\n        None,",
+    "expect_failing": [
+      "grouped_prices_bound_the_valuations_they_imply",
+      "price_reverts_bound_restored_values_and_implied_valuations"
+    ],
+    "rule": "Metadata price saves and reverts check the valuations the prices imply (f823b4729)."
+  },
+  {
+    "id": "T-r58a-grouped-derived-bound",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "        .map(|n| decimal(&s(n.to_string()), \"fiat_rate\"))",
+    "replace": "        .map(|n| Ok::<_, AppError>(Some(n)))",
+    "expect_failing": [
+      "grouped_prices_bound_the_valuations_they_imply"
+    ],
+    "rule": "A derived grouped rate is bounded as fiat_rate before the valuation check (f823b4729)."
+  },
+  {
+    "id": "T-r58a-revert-finite",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "                        .map_err(|error| AppError::new(\"validation\", error.message(field)))?;",
+    "replace": "                        .unwrap_or_else(|_| \"0\".parse().unwrap());",
+    "expect_failing": [
+      "price_reverts_bound_restored_values_and_implied_valuations"
+    ],
+    "rule": "A restored price passes finite_decimal before its float mirror is written (d444f4db5)."
+  },
+  {
+    "id": "T-r58a-revert-merged-row",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "    if changed\n        && updates.iter().any(|(column, _)| {",
+    "replace": "    if false\n        && updates.iter().any(|(column, _)| {",
+    "expect_failing": [
+      "price_reverts_bound_restored_values_and_implied_valuations"
+    ],
+    "rule": "A price revert validates the merged row before writing (f823b4729)."
+  },
+  {
+    "id": "commercial-review-derived-bound",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "validate_derived(&value(&tx, \"amount\"), &rate_exact, &value_exact)?;",
+    "replace": "validate_derived(&value(&tx, \"amount\"), &Value::Null, &Value::Null)?;",
+    "expect_failing": [
+      "commercial_review_bounds_prices_for_the_transaction_amount"
+    ],
+    "rule": "Applied BTCPay prices must imply bounded valuations for the transaction's own amount (f823b4729)."
+  },
+  {
+    "id": "commercial-review-canonical-zero",
+    "file": "crates/transactions/src/commercial/review.rs",
+    "find": "Ok(s(price.to_fixed_string().map_err(arithmetic)?))",
+    "replace": "Ok(s(decimal(v)?.to_fixed_string().map_err(arithmetic)?))",
+    "expect_failing": [
+      "commercial_review_bounds_prices_for_the_transaction_amount"
+    ],
+    "rule": "pricing_payload stores finite_decimal's canonical zero."
+  }
+]

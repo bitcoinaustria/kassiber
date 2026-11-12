@@ -1,0 +1,72 @@
+[
+  {
+    "id": "handles-hmac-separator",
+    "file": "crates/wallets/src/analysis_index/handles.rs",
+    "find": "engine.input(&[0]);",
+    "replace": "engine.input(&[1]);",
+    "expect_failing": [
+      "handles_match_python_tokens_and_replay_all_112_tables"
+    ],
+    "rule": "HMAC commitment uses the exact scope and identifier separator."
+  },
+  {
+    "id": "handles-hmac-scope",
+    "file": "crates/wallets/src/analysis_index/handles.rs",
+    "find": "engine.input(&scope.0);",
+    "replace": "engine.input(&[]);",
+    "expect_failing": [
+      "handles_match_python_tokens_and_replay_all_112_tables"
+    ],
+    "rule": "References bind their complete book scope."
+  },
+  {
+    "id": "handles-revalidate",
+    "file": "crates/wallets/src/analysis_index/handles.rs",
+    "find": "if !view.has_subject(&subject)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "handles_revalidate_current_subject_and_reject_unissued_tokens"
+    ],
+    "rule": "Issued subjects must still exist in the current view."
+  },
+  {
+    "id": "handles-eviction",
+    "file": "crates/wallets/src/analysis_index/handles.rs",
+    "find": "while self.entries.len() > self.capacity {",
+    "replace": "while self.entries.len() > self.capacity + 1 {",
+    "expect_failing": [
+      "handles_match_python_tokens_and_replay_all_112_tables"
+    ],
+    "rule": "The reference registry remains bounded and evicts the least recently used entry."
+  },
+  {
+    "id": "handles-lru",
+    "file": "crates/wallets/src/analysis_index/handles.rs",
+    "find": "self.entries.get_mut(reference).unwrap().used = used;",
+    "replace": "let _ = used;",
+    "expect_failing": [
+      "handles_match_python_tokens_and_replay_all_112_tables"
+    ],
+    "rule": "A successful replay refreshes reference recency."
+  },
+  {
+    "id": "handles-process-resolve",
+    "file": "crates/wallets/src/analysis_index/handles.rs",
+    "find": "    pub fn resolve(&mut self, scope: &BookScope, reference: &str) -> Result<String, AppError> {\n        if self.process != std::process::id() {",
+    "replace": "    pub fn resolve(&mut self, scope: &BookScope, reference: &str) -> Result<String, AppError> {\n        if false {",
+    "expect_failing": [
+      "handles_bind_process_profile_connection_and_book_identity"
+    ],
+    "rule": "A registry inherited by a different process refuses replay."
+  },
+  {
+    "id": "handles-book-identity",
+    "file": "crates/wallets/src/analysis_index/handles.rs",
+    "find": "identity.map(s).unwrap_or(Value::Null)",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "handles_bind_process_profile_connection_and_book_identity"
+    ],
+    "rule": "Replacing a book identity at the same path invalidates old references."
+  }
+]

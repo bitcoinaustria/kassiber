@@ -1,0 +1,72 @@
+[
+  {
+    "id": "mirror-datasets-network",
+    "file": "crates/wallets/src/analysis_index/datasets.rs",
+    "find": ".require_network(bitcoin_network)",
+    "replace": ".require_network(bitcoin::Network::Bitcoin)",
+    "expect_failing": [
+      "datasets_match_python_captured_rows_byte_exact"
+    ],
+    "rule": "Validate Bitcoin addresses in their exact selected network."
+  },
+  {
+    "id": "mirror-datasets-outpoint-bound",
+    "file": "crates/wallets/src/analysis_index/datasets.rs",
+    "find": "index.parse::<u32>().is_ok()",
+    "replace": "index.parse::<u64>().is_ok()",
+    "expect_failing": [
+      "datasets_match_python_captured_rows_byte_exact"
+    ],
+    "rule": "Outpoint positions must fit the protocol uint32 bound."
+  },
+  {
+    "id": "mirror-datasets-visibility",
+    "file": "crates/wallets/src/analysis_index/datasets.rs",
+    "find": "observer != \"public\" || text(p, \"visibility\") == \"public\"",
+    "replace": "true",
+    "expect_failing": [
+      "datasets_match_python_captured_rows_byte_exact"
+    ],
+    "rule": "Private attribution manifests and claims stay outside public views."
+  },
+  {
+    "id": "mirror-datasets-date",
+    "file": "crates/wallets/src/analysis_index/datasets.rs",
+    "find": "text(v, \"valid_until\") > instant",
+    "replace": "text(v, \"valid_until\") >= instant",
+    "expect_failing": [
+      "datasets_match_python_captured_rows_byte_exact"
+    ],
+    "rule": "Validity windows exclude their exact end instant."
+  },
+  {
+    "id": "mirror-datasets-lookahead",
+    "file": "crates/wallets/src/analysis_index/datasets.rs",
+    "find": "if part.found.len() > n {",
+    "replace": "if part.found.len() >= n {",
+    "expect_failing": [
+      "datasets_match_python_captured_rows_byte_exact"
+    ],
+    "rule": "Only lookahead establishes a truncated visibility population."
+  },
+  {
+    "id": "mirror-datasets-unicode-state",
+    "file": "crates/wallets/src/analysis_index/datasets.rs",
+    "find": ".ensure_ascii(false)",
+    "replace": ".ensure_ascii(true)",
+    "expect_failing": [
+      "datasets_match_python_captured_rows_byte_exact"
+    ],
+    "rule": "Dataset state digests use Python canonical UTF-8 metadata bytes."
+  },
+  {
+    "id": "mirror-datasets-source-shape",
+    "file": "crates/wallets/src/analysis_index/datasets.rs",
+    "find": "if !matches!(source, Value::Dict(_)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "datasets_reject_nonmapping_captured_source_records"
+    ],
+    "rule": "Malformed captured provenance cannot become an accepted sourced claim."
+  }
+]

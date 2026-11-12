@@ -1,0 +1,82 @@
+[
+  {
+    "id": "mirror-actionable-relevance",
+    "file": "crates/wallets/src/analysis_index/mirror.rs",
+    "find": "let actionable = [\"own_spend\", \"owned_output\"].contains(&relevance)",
+    "replace": "let actionable = [\"own_spend\", \"owned_output\", \"nearby_context\", \"received_context\"].contains(&relevance)",
+    "expect_failing": [
+      "mirror_relevance_attribution_budgets_and_redaction_match_python"
+    ],
+    "rule": "Private relevance selects attention without granting ownership."
+  },
+  {
+    "id": "mirror-unsafe-findings",
+    "file": "crates/wallets/src/analysis_index/mirror.rs",
+    "find": "if UNSAFE.contains(&text(&node, \"status\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "mirror_unsafe_findings_remain_coverage_only"
+    ],
+    "rule": "Unsafe observations belong in coverage rather than current findings."
+  },
+  {
+    "id": "mirror-owned-input-relevance",
+    "file": "crates/wallets/src/analysis_index/mirror.rs",
+    "find": "if owned.contains(output) && (edges.is_none() || related.contains(output)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "mirror_relevance_attribution_budgets_and_redaction_match_python"
+    ],
+    "rule": "Owned input branches affect actionable relevance."
+  },
+  {
+    "id": "mirror-entropy-budget",
+    "file": "crates/wallets/src/analysis_index/mirror.rs",
+    "find": "const MAX_ENTROPY: usize = 12;",
+    "replace": "const MAX_ENTROPY: usize = 1;",
+    "expect_failing": [
+      "mirror_relevance_attribution_budgets_and_redaction_match_python"
+    ],
+    "rule": "The bounded report evaluates up to twelve entropy candidates."
+  },
+  {
+    "id": "mirror-entropy-deadline",
+    "file": "crates/wallets/src/analysis_index/mirror.rs",
+    "find": "if remaining == 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "mirror_relevance_attribution_budgets_and_redaction_match_python"
+    ],
+    "rule": "The total entropy deadline stops additional work."
+  },
+  {
+    "id": "mirror-findings-limit",
+    "file": "crates/wallets/src/analysis_index/mirror.rs",
+    "find": "const MAX_FINDINGS: usize = 100;",
+    "replace": "const MAX_FINDINGS: usize = 1;",
+    "expect_failing": [
+      "mirror_relevance_attribution_budgets_and_redaction_match_python"
+    ],
+    "rule": "The display cap retains the full finding count and coverage reason."
+  },
+  {
+    "id": "mirror-attribution-assumption",
+    "file": "crates/wallets/src/analysis_index/mirror.rs",
+    "find": "&[\"source_claim_requires_independent_review\"],",
+    "replace": "&[],",
+    "expect_failing": [
+      "mirror_relevance_attribution_budgets_and_redaction_match_python"
+    ],
+    "rule": "Attribution claims preserve their independent-review assumption."
+  },
+  {
+    "id": "mirror-redacted-subject",
+    "file": "crates/wallets/src/analysis_index/mirror.rs",
+    "find": "let subject = opaque(refs, scope, field(row, \"subject\"))?;",
+    "replace": "let subject = field(row, \"subject\").clone();",
+    "expect_failing": [
+      "mirror_relevance_attribution_budgets_and_redaction_match_python"
+    ],
+    "rule": "Exported entropy subjects use opaque process/book references."
+  }
+]

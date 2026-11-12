@@ -1,0 +1,50 @@
+[
+  {
+    "id": "xlsx-number-precision",
+    "file": "crates/xlsx/src/package.rs",
+    "find": "format!(\"{value:.15e}\")",
+    "replace": "format!(\"{value:.14e}\")",
+    "expect_failing": ["typed_values_precision_and_formula_caches_are_preserved"],
+    "rule": "Ordinary numbers preserve Python's 16 significant digits."
+  },
+  {
+    "id": "xlsx-fixed-properties",
+    "file": "crates/xlsx/src/lib.rs",
+    "find": ".set_creation_datetime(&created)",
+    "replace": ".set_creation_datetime(&ExcelDateTime::parse_from_str(\"2000-01-01T00:00:00Z\")?)",
+    "expect_failing": ["meaningful_layout_and_fixed_properties_are_preserved"],
+    "rule": "Both document timestamps bind to the explicit export clock."
+  },
+  {
+    "id": "xlsx-formula-cache",
+    "file": "crates/xlsx/src/lib.rs",
+    "find": "Formula::new(expression).set_result(result)",
+    "replace": "Formula::new(expression).set_result(\"0\")",
+    "expect_failing": ["typed_values_precision_and_formula_caches_are_preserved"],
+    "rule": "A formula retains its full-precision cached result."
+  },
+  {
+    "id": "xlsx-bold-header",
+    "file": "crates/xlsx/src/lib.rs",
+    "find": "out = out.set_bold();",
+    "replace": "out = out;",
+    "expect_failing": ["meaningful_layout_and_fixed_properties_are_preserved"],
+    "rule": "Meaningful bold styling survives the renderer."
+  },
+  {
+    "id": "xlsx-defined-name",
+    "file": "crates/xlsx/src/lib.rs",
+    "find": "workbook.define_name(name, formula)?;",
+    "replace": "let _ = (name, formula);",
+    "expect_failing": ["meaningful_layout_and_fixed_properties_are_preserved"],
+    "rule": "Defined names preserve both scope and formula."
+  },
+  {
+    "id": "xlsx-overwritten-number",
+    "file": "crates/xlsx/src/package.rs",
+    "find": "numbers.remove(&key);",
+    "replace": "let _ = &key;",
+    "expect_failing": ["overwritten_numbers_do_not_rewrite_later_cell_types"],
+    "rule": "Numeric compatibility cannot rewrite a later string at the same coordinate."
+  }
+]

@@ -178,6 +178,75 @@ Prefer these rows over summing `capital-gains` output manually.
 kassiber --format csv --output capital-gains.csv reports capital-gains
 ```
 
+## United States (preview)
+
+Books with `tax_country=us` exist only on the Rust backend and are a
+**preview**: not yet reviewed by a US tax professional, so say so whenever
+you report their figures and tell the user to check them before filing.
+They use USD, FIFO by default (LIFO, HIFO, LOFO as standing orders), and
+per-wallet identification (`cost_basis_pool_scope=wallet`) as required from
+2025; a book on the global scope cannot dispose of anything from 2025.
+Long-term means held more than one year by UTC calendar date. The full
+report (`reports export-pdf`, `export-xlsx`, `export-csv`) adds Form 8949
+rows (Part I/II, boxes C/F before 2025 and I/L from 2025), the Schedule D
+lines 3 and 10, ordinary income by kind and network fees.
+`ui.profiles.snapshot` marks such a book with `taxCountryPreview: true`.
+
+## Germany and Switzerland (preview)
+
+Books with `tax_country=de` or `ch` also exist only on the Rust backend and
+are **previews**: say so whenever you report their figures. German books use
+EUR, FIFO per wallet (or `MOVING_AVERAGE_FIFO_PERIOD`), the § 23 EStG
+one-year period by Berlin date, network fee units as disposals whose value
+is Werbungskosten of their sale, and the yearly Freigrenzen; airdrops, hard
+forks and received gifts are held in quarantine, and a BTC/LBTC rail change
+needs `transfers pair --policy`. Their full report adds the Anlage SO
+figures per year, the list of disposals per lot, income by section and the
+year-end holdings, in German. Swiss books use CHF and Zurich dates; their
+capital gains are tax-free and listed for information, and the report
+adds the securities list with each holding's tax value at 31 December (the
+ESTV value is entered with `rates set BTC-CHF <31 December> <value> --source
+estv_kursliste`; without a value the wealth stays unknown), income by
+category, and the KS 36 indicators, which never conclude that the user is a
+professional trader.
+
+## Ireland and the United Kingdom (preview)
+
+Books with `tax_country=ie` or `tax_country=gb` exist only on the Rust
+backend and are a **preview** too: say so whenever you report their figures.
+Irish books use EUR, FIFO across all wallets and the calendar year in
+Dublin; the full report adds the Form CG1 lines per year (whole euros), the
+tax at 33 % (31 % from 7 October 2026) after losses and the €1,270
+exemption, the 15 December and 31 January payments, Case IV income and a
+review list of flags and held receipts. UK books use GBP and statutory share
+matching (same day, 30 days, section 104 pool) with tax years from 6 April
+(`2024-25`); the full report adds the SA108 boxes (whole pounds), the
+annual exempt amount and reporting tests, each day's computation with its
+matches, the pools and SA100 box 17 income. A UK book with an airdrop or an
+outgoing gift shows only the refused transactions: Kassiber does not guess
+their treatment. As in German books, a BTC/LBTC rail change needs
+`transfers pair --policy`.
+## Spain and Japan (preview)
+
+Books with `tax_country=es` or `jp` exist only on the Rust backend and are
+a **preview** as well: say so and tell the user to check the figures with
+a Spanish asesor fiscal or a Japanese 税理士 before filing.
+
+- Spain: EUR, FIFO across every wallet (global scope only), no holding
+  period, Madrid calendar years. A move's network fee is a transmission of
+  its own; a crypto swap is valued at the higher of the two values; a gift's
+  loss is not computable. Lost coins, hard forks, donations and unlabelled
+  income are quarantined with `es_*_requires_review` codes. The full report
+  is in Spanish and adds the casilla 1804 annex and totals, the income
+  casillas (0027, 0304, art. 25.2), an indicative crypto-only integration of
+  the savings base, and review flags.
+- Japan: JPY, the total average (`JP_TOTAL_AVERAGE`, default) or the moving
+  average (`JP_MOVING_AVERAGE`) over every wallet, Tokyo calendar years;
+  2027 onwards is refused (`jp_separate_taxation_regime_unconfirmed`).
+  Hard forks cost zero; airdrops and lost coins are quarantined. The full
+  report is in Japanese and adds the NTA calculation sheet per coin and
+  year, the return figures (第一表 雑・その他) and review flags.
+
 ## Austrian E 1kv
 
 Use this only for Austrian books (`tax_country=at`, `fiat_currency=EUR`)
@@ -255,10 +324,12 @@ kassiber --format plain reports balance-history --wallet satoshi-liquid --asset 
 
 ## Complete report exports
 
-Kassiber includes built-in full-report export commands. The CSV export is a
-sectioned spreadsheet-friendly file; the XLSX export uses separate sheets for
-overview, wallets, flows, reviewed transfers/swaps, balances, capital gains,
-history, data quality, and transactions.
+Kassiber includes built-in full-report export commands. All three render one
+report document. The XLSX export opens on a `summary` sheet and has one sheet
+per table (holdings, flows, disposals, income, transactions, …) plus the
+verification appendix. The CSV export is a ZIP of machine-format tables
+(`summary.csv`, one file per table, `manifest.json`; exact decimals, ISO dates,
+`snake_case` headers): `--file report.csv` writes `report.zip`.
 
 ```bash
 kassiber reports export-pdf --file report.pdf
@@ -291,7 +362,10 @@ counted in the book's calendar (Europe/Vienna for Austrian books, else UTC)
 unless `--timezone` names another, and the result reports the resolved
 `range`. Transactions without a known date are left out of a period and
 counted in `warnings`; an undated quarantine still blocks a platform export.
-Without them every transaction is exported. `cointracking-csv` and `blockpit-csv` write another tool's import format
+Without them every transaction is exported. The `csv` format is one header
+row and the rows, with exact decimal text: `amount_btc` and `fee_btc` beside
+integer `amount_msat` and `fee_msat`, fiat values at their stored precision.
+`cointracking-csv` and `blockpit-csv` write another tool's import format
 instead of Kassiber's columns; see
 [moving to CoinTracking or Blockpit](../../../docs/reference/imports.md#moving-to-cointracking-or-blockpit).
 They fail closed on quarantined transactions in scope

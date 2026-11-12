@@ -1,0 +1,2250 @@
+[
+  {
+    "id": "A-validate-required-before-unknown",
+    "file": "crates/ai/src/validate.rs",
+    "find": "        if !missing.is_empty() {",
+    "replace": "        if !missing.is_empty() && pairs.iter().all(|(key, _)| property(properties, key).is_some()) {",
+    "expect_failing": [
+      "synthetic_validation_matches_python",
+      "catalog_validation_matches_python"
+    ],
+    "rule": "Missing required fields are reported before unsupported ones."
+  },
+  {
+    "id": "A-validate-enum",
+    "file": "crates/ai/src/validate.rs",
+    "find": "if let Some(Value::List(allowed)) = get(schema, \"enum\") {",
+    "replace": "if let Some(Value::List(allowed)) = get(schema, \"enum\").filter(|_| expected.is_empty()) {",
+    "expect_failing": [
+      "synthetic_validation_matches_python",
+      "catalog_validation_matches_python"
+    ],
+    "rule": "An enum is enforced alongside a declared type."
+  },
+  {
+    "id": "A-validate-depth",
+    "file": "crates/ai/src/validate.rs",
+    "find": "    if depth > MAX_SCHEMA_DEPTH {",
+    "replace": "    if depth > MAX_SCHEMA_DEPTH + 1 {",
+    "expect_failing": [
+      "synthetic_validation_matches_python"
+    ],
+    "rule": "Nesting past sixteen schema levels is refused."
+  },
+  {
+    "id": "A-validate-code-points",
+    "file": "crates/ai/src/validate.rs",
+    "find": "        let length = len_big(pyre::char_len(text));",
+    "replace": "        let length = len_big(text.as_surrogatepass_bytes().len());",
+    "expect_failing": [
+      "catalog_validation_matches_python",
+      "synthetic_validation_matches_python"
+    ],
+    "rule": "String lengths count code points, not UTF-8 bytes."
+  },
+  {
+    "id": "A-validate-size-limit",
+    "file": "crates/ai/src/validate.rs",
+    "find": "    if argument_chars(arguments)? > MAX_ARGUMENT_CHARS {",
+    "replace": "    if argument_chars(arguments)? > MAX_ARGUMENT_CHARS + 1 {",
+    "expect_failing": [
+      "catalog_validation_matches_python"
+    ],
+    "rule": "Arguments over 65,536 characters of escaped compact JSON are refused."
+  },
+  {
+    "id": "A-pattern-trailing-newline",
+    "file": "crates/envelope/src/redaction.rs",
+    "find": "            out.push_str(r\"(?=\\n?\\z)\");",
+    "replace": "            out.push_str(r\"\\z\");",
+    "expect_failing": [
+      "synthetic_validation_matches_python",
+      "catalog_validation_matches_python"
+    ],
+    "rule": "A Python $ also matches before a final newline."
+  },
+  {
+    "id": "A-redact-wif",
+    "file": "crates/ai/src/redact.rs",
+    "find": "    \"wif\",\n",
+    "replace": "    \"wif-never-matches\",\n",
+    "expect_failing": [
+      "redaction_matches_python"
+    ],
+    "rule": "Keys naming WIF material are blanked in previews and results."
+  },
+  {
+    "id": "A-redact-header",
+    "file": "crates/ai/src/redact.rs",
+    "find": "    \"header\",\n",
+    "replace": "    \"header-never-matches\",\n",
+    "expect_failing": [
+      "redaction_matches_python"
+    ],
+    "rule": "Header-named keys are blanked."
+  },
+  {
+    "id": "A-redact-path-cutoff",
+    "file": "crates/ai/src/redact.rs",
+    "find": "Ok(Some(found)) => format!(\"{}{REDACTED_PATH}\", &without_urls[..found.start()]),",
+    "replace": "Ok(Some(found)) => format!(\"{}{REDACTED_PATH}{}\", &without_urls[..found.start()], &without_urls[found.end()..]),",
+    "expect_failing": [
+      "redaction_matches_python"
+    ],
+    "rule": "Everything after the first local path is withheld."
+  },
+  {
+    "id": "A-consent-once-only",
+    "file": "crates/ai/src/consent.rs",
+    "find": "    \"ui.review.apply\",\n",
+    "replace": "    \"ui.review.apply-never-matches\",\n",
+    "expect_failing": [
+      "once_only_grants_are_never_remembered",
+      "constants_match_python"
+    ],
+    "rule": "A session grant for a review apply is never remembered."
+  },
+  {
+    "id": "A-consent-timeout",
+    "file": "crates/ai/src/consent.rs",
+    "find": "Duration::from_secs(300)",
+    "replace": "Duration::from_secs(299)",
+    "expect_failing": [
+      "constants_match_python",
+      "consent_waits_end_on_decision_cancel_or_timeout"
+    ],
+    "rule": "Consent waits 300 seconds."
+  },
+  {
+    "id": "A-gate-local-provider",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        && !full_access(runtime.state)\n    {\n        return tool_result_denied_with(",
+    "replace": "        && false\n    {\n        return tool_result_denied_with(",
+    "expect_failing": [
+      "custody_reads_need_full_agent_access"
+    ],
+    "rule": "Custody lineage reads need full agent access (#678)."
+  },
+  {
+    "id": "A-gate-advertised",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    if !planned_auto_read && !is_advertised(entry, runtime.state) {",
+    "replace": "    if false && !is_advertised(entry, runtime.state) {",
+    "expect_failing": [
+      "only_tools_advertised_this_turn_run"
+    ],
+    "rule": "Only tools advertised this turn run."
+  },
+  {
+    "id": "A-gate-egress-consent",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    if entry.egresses && !consented(runtime.state, &call.call_id) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "egressing_reads_need_a_consent_bound_to_the_call"
+    ],
+    "rule": "Egressing reads need a consent bound to the call."
+  },
+  {
+    "id": "A-gate-stale-profile",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    if &workspace != expected_workspace || &profile != expected_profile {",
+    "replace": "    if &workspace != expected_workspace {",
+    "expect_failing": [
+      "scoped_reads_check_the_frozen_project_and_book"
+    ],
+    "rule": "A changed book is a stale context even within one workspace."
+  },
+  {
+    "id": "A-auto-read-egress",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        if entry.egresses || !advertised.iter().any(|name| name.is(entry.provider_name())) {",
+    "replace": "        if !advertised.iter().any(|name| name.is(entry.provider_name())) {",
+    "expect_failing": [
+      "auto_reads_never_run_egressing_tools"
+    ],
+    "rule": "Auto-reads never run an egressing tool."
+  },
+  {
+    "id": "A-on-device-strip",
+    "file": "crates/ai/src/select.rs",
+    "find": "    wire_name.starts_with(ON_DEVICE_WIRE_PREFIX) || ON_DEVICE_WIRE_NAMES.contains(&wire_name)",
+    "replace": "    ON_DEVICE_WIRE_NAMES.contains(&wire_name)",
+    "expect_failing": [
+      "on_device_only_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "Recurring-source tools are offered only to on-device providers."
+  },
+  {
+    "id": "A-on-device-executor",
+    "file": "crates/ai/src/projections.rs",
+    "find": "    if crate::analysis::on_device_kind(kind) && !on_device {",
+    "replace": "    if crate::analysis::on_device_kind(kind) && false {",
+    "expect_failing": [
+      "on_device_only_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "On-device-only analysis kinds refuse other providers."
+  },
+  {
+    "id": "A-trim-string",
+    "file": "crates/ai/src/planner.rs",
+    "find": "        Value::Str(text) if pyre::char_len(text) > AUTO_CONTEXT_STRING_LIMIT => {",
+    "replace": "        Value::Str(text) if pyre::char_len(text) > AUTO_CONTEXT_STRING_LIMIT + 1 => {",
+    "expect_failing": [
+      "context_messages_match_python"
+    ],
+    "rule": "Auto-context strings keep 2,000 characters."
+  },
+  {
+    "id": "A-trim-entry",
+    "file": "crates/ai/src/planner.rs",
+    "find": "    if model_json(&trimmed).len() <= AUTO_CONTEXT_ENTRY_MAX_CHARS {",
+    "replace": "    if model_json(&trimmed).len() < AUTO_CONTEXT_ENTRY_MAX_CHARS + 2 {",
+    "expect_failing": [
+      "context_messages_match_python"
+    ],
+    "rule": "An auto-context entry over 6,000 characters becomes a summary."
+  },
+  {
+    "id": "A-trim-total",
+    "file": "crates/ai/src/planner.rs",
+    "find": "        if model_json(&payload).len() > AUTO_CONTEXT_MAX_CHARS {",
+    "replace": "        if model_json(&payload).len() > AUTO_CONTEXT_MAX_CHARS + 1 {",
+    "expect_failing": [
+      "context_messages_match_python"
+    ],
+    "rule": "The auto-context message stays within 24,000 characters."
+  },
+  {
+    "id": "A-planner-cap",
+    "file": "crates/ai/src/planner.rs",
+    "find": "    plan.planned.truncate(MAX_PLANNED_READS);",
+    "replace": "    plan.planned.truncate(MAX_PLANNED_READS + 1);",
+    "expect_failing": [
+      "planner_matches_python"
+    ],
+    "rule": "At most twelve auto-reads run per turn."
+  },
+  {
+    "id": "B-mutate-consent",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "    if !consented(runtime.state, &call.call_id) {",
+    "replace": "    if false && !consented(runtime.state, &call.call_id) {",
+    "expect_failing": [
+      "mutating_tools_run_only_with_a_consent_bound_to_the_call"
+    ],
+    "rule": "A write runs only with a consent bound to its own call id."
+  },
+  {
+    "id": "B-mutate-advertised",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "    if !is_advertised(entry, runtime.state) {",
+    "replace": "    if false && !is_advertised(entry, runtime.state) {",
+    "expect_failing": [
+      "mutating_tools_run_only_when_advertised_this_turn"
+    ],
+    "rule": "A write runs only if the tool was advertised this turn."
+  },
+  {
+    "id": "B-mutate-local-custody",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        && !crate::executor::full_access(runtime.state)",
+    "replace": "        && false",
+    "expect_failing": [
+      "custody_writes_need_full_agent_access_and_are_audited"
+    ],
+    "rule": "Custody-gap writes need full agent access (#678)."
+  },
+  {
+    "id": "B-mutate-stale-context",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        assert_scope(book, &data_root, state)?;\n        write(book, state)",
+    "replace": "        write(book, state)",
+    "expect_failing": [
+      "mutating_tools_check_the_frozen_project_and_book"
+    ],
+    "rule": "Every write checks the project and book frozen for the turn first."
+  },
+  {
+    "id": "B-mutate-redaction",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "    Ok(redact_ai_tool_result(&host.on_request_loop(&mut work)?))",
+    "replace": "    host.on_request_loop(&mut work)",
+    "expect_failing": [
+      "mutating_results_are_redacted_before_they_leave_the_executor"
+    ],
+    "rule": "Write results are redacted before they leave the executor."
+  },
+  {
+    "id": "B-mutate-authorship",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "            let args = with(arguments, \"source\", s(\"ai_tool\"));",
+    "replace": "            let args = arguments.clone();",
+    "expect_failing": [
+      "mutating_tools_run_only_when_advertised_this_turn"
+    ],
+    "rule": "Metadata edits and reverts are authored ai_tool whatever the model sends."
+  },
+  {
+    "id": "B-mutate-audit-package-target",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "            \"package\",\n            \"ui.reports.export_audit_package\",",
+    "replace": "            \"package\",\n            \"ui.reports.export_csv\",",
+    "expect_failing": [
+      "pdf_and_audit_package_exports_run_under_their_own_kinds"
+    ],
+    "rule": "The audit-package target exports the package, nothing else."
+  },
+  {
+    "id": "B-mutate-source-funds-case-strip",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "            Some(Value::Str(text)) => kassiber_pytext::strip_py(text),",
+    "replace": "            Some(Value::Str(text)) => text.clone(),",
+    "expect_failing": [
+      "pdf_and_audit_package_exports_run_under_their_own_kinds"
+    ],
+    "rule": "A source-of-funds export names its saved case stripped, as Python does."
+  },
+  {
+    "id": "B-audit-executed",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "workspace, profile, audit, \"executed\", None,",
+    "replace": "workspace, profile, audit, \"failed\", None,",
+    "expect_failing": [
+      "custody_writes_need_full_agent_access_and_are_audited"
+    ],
+    "rule": "A consented custody write is audited as executed."
+  },
+  {
+    "id": "B-audit-nonexecuted-filter",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        .filter(|kind| CUSTODY_GAP_MUTATING_KINDS.contains(kind))",
+    "replace": "        .filter(|_| true)",
+    "expect_failing": [
+      "denied_custody_proposals_are_audited_without_running"
+    ],
+    "rule": "Only custody proposals are audited when they did not run."
+  },
+  {
+    "id": "B-dataset-preview-binding",
+    "file": "crates/ai/src/projections.rs",
+    "find": "            book.dataset_preview(&decoded)?;",
+    "replace": "            let _ = book.dataset_preview(&decoded);",
+    "expect_failing": [
+      "dataset_imports_are_bound_to_the_completed_preview"
+    ],
+    "rule": "A dataset import runs only for the exact completed local preview."
+  },
+  {
+    "id": "B-preview-on-device",
+    "file": "crates/ai/src/previews.rs",
+    "find": "        if !on_device(state) {\n            return Ok(blocked(\"agent_access_restricted\"));\n        }\n        book.active_profile()?;",
+    "replace": "        book.active_profile()?;",
+    "expect_failing": [
+      "consent_previews_never_write"
+    ],
+    "rule": "Acquisition previews are computed for on-device providers only."
+  },
+  {
+    "id": "B-review-kind-override",
+    "file": "crates/ai/src/review.rs",
+    "find": "    [\"custody_component\", \"exclude\", \"price_override\", \"unpair\"];",
+    "replace": "    [\"custody_component\", \"exclude\", \"price_override\", \"pair\"];",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "A restricted provider plans only the four restricted review operation types (#678)."
+  },
+  {
+    "id": "B-review-conversion-activate",
+    "file": "crates/ai/src/review.rs",
+    "find": "    if activate {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "An AI-authored conversion component cannot activate itself."
+  },
+  {
+    "id": "B-review-artifact-size",
+    "file": "crates/ai/src/review.rs",
+    "find": "    if size > 65_536 {",
+    "replace": "    if size > 65_537 {",
+    "expect_failing": [
+      "planned_review_artifact_checks_match_python"
+    ],
+    "rule": "A planned artifact must fit a later ui.review.apply call."
+  },
+  {
+    "id": "B-composite-safety",
+    "file": "crates/ai/src/executor.rs",
+    "find": "                let contacted = auto_sync_data.is_some();",
+    "replace": "                let contacted = false;",
+    "expect_failing": [
+      "composite_reads_report_the_refresh_they_ran"
+    ],
+    "rule": "Composite reads say when the read prelude contacted the network."
+  },
+  {
+    "id": "B-auto-report-blockers",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        if kind != \"ui.report.blockers\" && sync_payload_has_errors(auto_sync_data.as_ref()) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "composite_reads_report_the_refresh_they_ran"
+    ],
+    "rule": "A failed automatic refresh adds the readiness it blocks."
+  },
+  {
+    "id": "B-audit-proposal-bound",
+    "file": "crates/transfers/src/custody_ai_audit.rs",
+    "find": "const MAX_REASON_CHARS: usize = 500;",
+    "replace": "const MAX_REASON_CHARS: usize = 5000;",
+    "expect_failing": [
+      "proposals_keep_only_the_custody_vocabulary_in_sorted_order"
+    ],
+    "rule": "Audited proposals keep at most 500 characters per text field."
+  },
+  {
+    "id": "B-audit-review-fallback",
+    "file": "crates/transfers/src/custody_ai_audit.rs",
+    "find": "    if !packet.iter().any(|(key, _)| *key == Key::from(\"review_id\")) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "results_keep_identifiers_and_fall_back_to_id_for_the_review"
+    ],
+    "rule": "An audited result names its review by id when it has no review_id."
+  },
+  {
+    "id": "wire-custody-failed-row",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "                kassiber_transfers::custody_ai_audit::append(conn, &failed, None, &sources)?;",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_custody_writes_are_audited_or_rolled_back"
+    ],
+    "rule": "A refused custody write still commits its failed audit row."
+  },
+  {
+    "id": "wire-custody-audit-record",
+    "file": "crates/transfers/src/custody_ai_audit.rs",
+    "find": "            bound(bounded_text(&field(\"call_id\"), 256))?,",
+    "replace": "            bound(field(\"call_id\"))?,",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_custody_audit_records_match_python"
+    ],
+    "rule": "The audit row bounds the call id as Python does."
+  },
+  {
+    "id": "wire-quarantine-ai-source",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "                args,\n                source,\n            );",
+    "replace": "                args,\n                \"gui\",\n            );",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_ai_authored_writes_match_python"
+    ],
+    "rule": "An AI quarantine resolution is authored ai_tool."
+  },
+  {
+    "id": "wire-review-request-redaction",
+    "file": "crates/daemon/src/review.rs",
+    "find": "            &kassiber_ai::redact::redact_ai_tool_result(args),",
+    "replace": "            args,",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_review_apply_flow_matches_python"
+    ],
+    "rule": "An AI input request stores a redacted explanation."
+  },
+  {
+    "id": "wire-worklist-default-sections",
+    "file": "crates/daemon/src/worklist.rs",
+    "find": "    \"transfers\",\n    \"loans\",\n];",
+    "replace": "    \"loans\",\n    \"transfers\",\n];",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_read_tools_match_python_on_every_fixture"
+    ],
+    "rule": "The worklist's default sections are Python's, in Python's order."
+  },
+  {
+    "id": "wire-mirror-index-sources",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "                &mut AnalysisSources::default(),\n            );\n        }\n        if lightning::COMMANDS.contains(&command) {",
+    "replace": "                &mut kassiber_wallets::publication::wallet::SystemSources::default(),\n            );\n        }\n        if lightning::COMMANDS.contains(&command) {",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_read_tools_match_python_on_every_fixture"
+    ],
+    "rule": "The privacy mirror synchronizes the analysis index with the index's own identity source."
+  },
+  {
+    "id": "R67-record-order",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "status(\"preparing\", \"Preparing chat\")",
+    "replace": "status(\"connecting\", \"Preparing chat\")",
+    "expect_failing": [
+      "records_follow_python_order"
+    ],
+    "rule": "A chat opens with the preparing status, then connecting, then waiting_for_model."
+  },
+  {
+    "id": "R67-consent-before-record",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "chat.consent.expect(&lossy(&call.call_id));",
+    "replace": "let _ = &call.call_id;",
+    "expect_failing": [
+      "consent_is_registered_before_the_tool_call_record"
+    ],
+    "rule": "A call is registered for consent before the record that announces it is written."
+  },
+  {
+    "id": "R67-cancel-terminal",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "        if self.turn.chat.is_cancelled() {\n            finish_reason = Some(\"cancelled\".into());\n        }\n        if finish_reason.as_deref() != Some(\"cancelled\")\n            && self.client.is_some()",
+    "replace": "        if finish_reason.as_deref() != Some(\"cancelled\")\n            && self.client.is_some()",
+    "expect_failing": [
+      "an_early_cancel_contacts_nothing"
+    ],
+    "rule": "A cancelled chat still ends with a terminal ai.chat whose finish_reason is cancelled."
+  },
+  {
+    "id": "R67-auto-encrypted-only",
+    "file": "crates/ai/src/chat/history.rs",
+    "find": "_ => database_encrypted,",
+    "replace": "_ => true,",
+    "expect_failing": [
+      "history_is_stored_only_under_the_policy",
+      "auto_policy_persists_only_into_encrypted_books"
+    ],
+    "rule": "The auto history policy persists only into an encrypted database."
+  },
+  {
+    "id": "R67-persist-intent",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "let opted_in = validated.persist == Value::Bool(true)",
+    "replace": "let opted_in = true || validated.persist == Value::Bool(true)",
+    "expect_failing": [
+      "history_is_stored_only_under_the_policy"
+    ],
+    "rule": "Only a request that asked to persist (persist true or auto, or a session id) is stored."
+  },
+  {
+    "id": "R67-sixteen-iterations",
+    "file": "crates/ai/src/chat/args.rs",
+    "find": "tool_loop_max_iterations = 16;",
+    "replace": "tool_loop_max_iterations = 8;",
+    "expect_failing": [
+      "review_and_source_funds_questions_get_16_iterations"
+    ],
+    "rule": "A tool chat about review or source of funds without an explicit budget gets 16 iterations."
+  },
+  {
+    "id": "R67-cross-book-phrase",
+    "file": "crates/ai/src/planner.rs",
+    "find": "    \"all books\",\n",
+    "replace": "    \"all bookz\",\n",
+    "expect_failing": [
+      "cross_book_reads_need_an_explicit_book_set_phrase"
+    ],
+    "rule": "An explicit book-set phrase such as 'all books' allows cross-book reads."
+  },
+  {
+    "id": "R67-receipt",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "if let Some(receipt) = &self.receipt {",
+    "replace": "if let Some(receipt) = None::<&Receipt> {",
+    "expect_failing": [
+      "the_privacy_receipt_counts_what_was_sent"
+    ],
+    "rule": "Every provider request is counted into the turn's privacy receipt with Python's byte estimate."
+  },
+  {
+    "id": "R67-cancel-revokes",
+    "file": "crates/ai/src/chat/client.rs",
+    "find": "                    revocation.revoke();\n",
+    "replace": "",
+    "expect_failing": [
+      "cancelling_revokes_the_turns_network_consent"
+    ],
+    "rule": "Cancelling a chat revokes its client's network consents."
+  },
+  {
+    "id": "R67-consent-granted-to-turn",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "self.revocation.grant(consent.clone());",
+    "replace": "let _ = &consent;",
+    "expect_failing": [
+      "cancelling_revokes_the_turns_network_consent"
+    ],
+    "rule": "Each request's consent is held by the turn so a revocation refuses it."
+  },
+  {
+    "id": "R67-duplicate-call",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "let duplicate = seen.contains(&call.call_id);",
+    "replace": "let duplicate = false;",
+    "expect_failing": [
+      "a_repeated_call_id_is_denied_without_consent"
+    ],
+    "rule": "A call id repeated within one answer is denied without running."
+  },
+  {
+    "id": "R67-cut-off",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "    tool_calls.clear();\n    if let Some(output) = response_output.as_mut() {",
+    "replace": "    if let Some(output) = response_output.as_mut() {",
+    "expect_failing": [
+      "cut_off_answers_drop_their_calls"
+    ],
+    "rule": "An answer cut off by its token limit or a content filter runs none of its tool calls."
+  },
+  {
+    "id": "R67-advertised",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "let advertised = entry.is_some_and(|entry| is_advertised(entry, &self.turn.state));",
+    "replace": "let advertised = entry.is_some();",
+    "expect_failing": [
+      "a_tool_not_offered_this_turn_never_runs"
+    ],
+    "rule": "Only a tool offered this turn runs."
+  },
+  {
+    "id": "R67-on-device-strip",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "            strip_on_device_only(entries, crate::executor::full_access(&self.turn.state));",
+    "replace": "            strip_on_device_only(entries, true);",
+    "expect_failing": [
+      "on_device_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "On-device-only tools are never offered to other providers."
+  },
+  {
+    "id": "R67-early-cancel-held",
+    "file": "crates/ai/src/chat/registry.rs",
+    "find": "if deadline >= now {",
+    "replace": "if deadline < now {",
+    "expect_failing": [
+      "an_early_cancel_contacts_nothing",
+      "an_early_cancel_is_held_and_starts_the_chat_cancelled"
+    ],
+    "rule": "A cancel that arrives before its chat is held and starts the chat cancelled."
+  },
+  {
+    "id": "R67-pending-cap",
+    "file": "crates/ai/src/chat/registry.rs",
+    "find": "while state.pending.len() > MAX_PENDING_CANCELS {",
+    "replace": "while state.pending.len() > MAX_PENDING_CANCELS * 2 {",
+    "expect_failing": [
+      "held_cancels_are_capped_at_128"
+    ],
+    "rule": "At most 128 early cancels are held, the earliest dropped first."
+  },
+  {
+    "id": "R67-cursor-branch",
+    "file": "crates/ai/src/chat/registry.rs",
+    "find": "(recorded.as_str() == fingerprint).then(|| cursor.clone())",
+    "replace": "Some(cursor.clone())",
+    "expect_failing": [
+      "provider_resume_cursor_is_bound_to_the_visible_chat_branch"
+    ],
+    "rule": "A provider session cursor resumes only the exact visible chat branch it saw."
+  },
+  {
+    "id": "R66-route-phrase",
+    "file": "crates/ai/src/transport/errors.rs",
+    "find": "const UNKNOWN_ENDPOINT_PHRASES: &[&str] = &[\n    \"unexpected endpoint\",\n",
+    "replace": "const UNKNOWN_ENDPOINT_PHRASES: &[&str] = &[\n",
+    "expect_failing": [
+      "missing_routes_and_unserved_formats",
+      "missing_responses_path_falls_back_once_and_reports_detection"
+    ],
+    "rule": "A 400 naming the endpoint unknown counts as a missing route for the auto fallback."
+  },
+  {
+    "id": "R66-relax-once",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "            self.compat.include = false;\n",
+    "replace": "",
+    "expect_failing": [
+      "a_refused_include_is_retried_once_and_then_left_out"
+    ],
+    "rule": "A refused optional part is dropped at most once and stays out for the rest of the turn."
+  },
+  {
+    "id": "R66-status-429",
+    "file": "crates/ai/src/transport/errors.rs",
+    "find": "        429 => (",
+    "replace": "        428 => (",
+    "expect_failing": [
+      "status_codes_map_like_python",
+      "http_errors_map_status_and_redact_the_body"
+    ],
+    "rule": "HTTP 429 maps to the retryable ai_rate_limited."
+  },
+  {
+    "id": "R66-same-origin",
+    "file": "crates/net/src/http.rs",
+    "find": "            if target.origin() != self.url.origin() {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "redirects_never_connect_to_an_unconsented_origin"
+    ],
+    "rule": "Provider redirects are followed only to the exact origin."
+  },
+  {
+    "id": "R66-ack-gate",
+    "file": "crates/ai/src/providers/gates.rs",
+    "find": "    if *field(provider, \"kind\") == s(\"local\") || truthy(field(provider, \"acknowledged_at\")) {",
+    "replace": "    if *field(provider, \"kind\") == s(\"local\") {",
+    "expect_failing": [
+      "create_and_get_with_remote_kind"
+    ],
+    "rule": "An acknowledged off-device provider passes the acknowledgement gate."
+  },
+  {
+    "id": "R66-test-target-loopback",
+    "file": "crates/ai/src/providers/gates.rs",
+    "find": "    if kind == Some(\"local\") && is_loopback_http_url(base_url) {",
+    "replace": "    if kind == Some(\"local\") {",
+    "expect_failing": [
+      "gates_refuse_in_python_order"
+    ],
+    "rule": "A local claim for a non-loopback test target still needs acknowledgement."
+  },
+  {
+    "id": "R66-infer-kind",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "pub fn infer_kind(base_url: &str) -> &'static str {\n    if is_loopback_http_url(base_url) {",
+    "replace": "pub fn infer_kind(base_url: &str) -> &'static str {\n    if true {",
+    "expect_failing": [
+      "create_infers_local_or_remote_never_tee"
+    ],
+    "rule": "Only a loopback HTTP URL infers the local kind."
+  },
+  {
+    "id": "R66-ttl",
+    "file": "crates/ai/src/discovery/mod.rs",
+    "find": "if !refresh && entry.expires > Instant::now() {",
+    "replace": "if !refresh {",
+    "expect_failing": [
+      "stale_failure_is_not_replayed_to_a_later_call_and_the_ttl_expires"
+    ],
+    "rule": "A discovery entry expires after its TTL."
+  },
+  {
+    "id": "R66-sse-leading-spaces",
+    "file": "crates/ai/src/transport/sse.rs",
+    "find": "data.trim_start_matches(' ')",
+    "replace": "data.strip_prefix(' ').unwrap_or(data)",
+    "expect_failing": [
+      "done_stops_and_quirks_hold"
+    ],
+    "rule": "SSE data loses all leading spaces, as Python's lstrip does."
+  },
+  {
+    "id": "R66-sse-trailing-cr",
+    "file": "crates/ai/src/transport/sse.rs",
+    "find": ".trim_end_matches('\\r');",
+    "replace": ";",
+    "expect_failing": [
+      "splits_events_like_python"
+    ],
+    "rule": "Trailing carriage returns are stripped, so CRLF blank lines end events."
+  },
+  {
+    "id": "R66-sse-done",
+    "file": "crates/ai/src/transport/sse.rs",
+    "find": "if payload == DONE_SENTINEL {",
+    "replace": "if payload.trim() == DONE_SENTINEL {",
+    "expect_failing": [
+      "done_stops_and_quirks_hold"
+    ],
+    "rule": "Only the exact [DONE] payload ends the stream."
+  },
+  {
+    "id": "R66-store-regex",
+    "file": "crates/ai/src/transport/errors.rs",
+    "find": "        !text[..index].chars().next_back().is_some_and(word)\n",
+    "replace": "        true\n",
+    "expect_failing": [
+      "store_refusals_read_paths_or_messages_never_echoed_input"
+    ],
+    "rule": "Only store as a whole word names the store field."
+  },
+  {
+    "id": "R66-store-never-dropped",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "if prepared.store_sent && names_store(&error) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "store_false_is_never_dropped_by_an_error"
+    ],
+    "rule": "A refusal naming store fails the turn instead of relaxing anything."
+  },
+  {
+    "id": "R66-fallback-detected",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "            && self.config.detected_api_format.is_none()\n",
+    "replace": "",
+    "expect_failing": [
+      "no_fallback_without_a_missing_path_or_for_a_known_format"
+    ],
+    "rule": "A provider with a detected format never falls back."
+  },
+  {
+    "id": "R66-offline-loopback",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "if self.config.on_device && is_loopback_http_url(&self.config.base_url) {",
+    "replace": "if self.config.on_device {",
+    "expect_failing": [
+      "redirects_stay_on_origin_and_offline_keeps_only_local_loopback"
+    ],
+    "rule": "Only a local provider on a loopback URL passes offline mode."
+  },
+  {
+    "id": "R66-key-origin",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    if origin_changed && !present(&updates.api_key) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "update_clears_and_sets_fields_and_retargeting_drops_the_key"
+    ],
+    "rule": "Retargeting a provider to another origin drops its API key."
+  },
+  {
+    "id": "R66-secret-namespace",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    if store != SECRET_STORE_INLINE && (service != expected_service || account != expected_account)",
+    "replace": "    if false",
+    "expect_failing": [
+      "narrow_set_api_key_and_native_refs"
+    ],
+    "rule": "A native secret ref outside this root's namespace is never used."
+  },
+  {
+    "id": "R66-duplicate-call-id",
+    "file": "crates/ai/src/transport/accumulate.rs",
+    "find": "} else if known.is_some() && known != slot {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "chat_calls_split_by_index_and_fail_closed_on_duplicates",
+      "chat_duplicate_ids_fail_closed_and_finish_reasons_map"
+    ],
+    "rule": "One call id under two indices fails closed instead of merging."
+  },
+  {
+    "id": "R66-cut-off-calls",
+    "file": "crates/ai/src/transport/stream.rs",
+    "find": "    if finish_reason == \"length\" || finish_reason == \"content_filter\" {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "chat_duplicate_ids_fail_closed_and_finish_reasons_map"
+    ],
+    "rule": "Calls of a cut-off Chat Completions answer never run."
+  },
+  {
+    "id": "R66b-observer-sees-launch",
+    "file": "crates/net/src/broker.rs",
+    "find": "        if self.gate.observer != Observer::Disabled {\n",
+    "replace": "        if false {\n",
+    "expect_failing": [
+      "every_launch_is_seen_by_the_observer_and_a_strict_one_blocks_it"
+    ],
+    "rule": "An armed observer records every broker launch before it starts."
+  },
+  {
+    "id": "R66b-fixture-only",
+    "file": "crates/net/src/broker.rs",
+    "find": "                || self.gate.broker_fixture.as_ref() != Some(&program.script)\n",
+    "replace": "",
+    "expect_failing": [
+      "every_launch_is_seen_by_the_observer_and_a_strict_one_blocks_it"
+    ],
+    "rule": "A loopback observer admits only the fake broker script a harness named."
+  },
+  {
+    "id": "R66b-missing-script",
+    "file": "crates/net/src/broker.rs",
+    "find": "(program.node.clone(), program.script.is_file())",
+    "replace": "(program.node.clone(), true)",
+    "expect_failing": [
+      "a_missing_node_or_script_starts_nothing_and_counts_no_attempt"
+    ],
+    "rule": "No Node or no script file starts nothing and counts no attempt."
+  },
+  {
+    "id": "R66b-runtime-dir-mode",
+    "file": "crates/net/src/broker.rs",
+    "find": "    if info.mode() & 0o022 != 0 {",
+    "replace": "    if info.mode() & 0o002 != 0 {",
+    "expect_failing": [
+      "refuses_a_runtime_dir_others_can_write"
+    ],
+    "rule": "A runtime directory its group or others can write is never used for the broker root."
+  },
+  {
+    "id": "R66b-runtime-dir-ram",
+    "file": "crates/net/src/broker.rs",
+    "find": "        \"tmpfs\" | \"ramfs\" => Some(path),\n        _ => None,",
+    "replace": "        _ => Some(path),",
+    "expect_failing": [
+      "keeps_the_disk_temp_dir_when_the_runtime_dir_is_not_ram"
+    ],
+    "rule": "The runtime directory holds the root only when it is tmpfs or ramfs."
+  },
+  {
+    "id": "R66b-group-straggler-kill",
+    "file": "crates/net/src/broker.rs",
+    "find": "    fn discard_root(&mut self) {\n        self.signal.kill();\n",
+    "replace": "    fn discard_root(&mut self) {\n",
+    "expect_failing": [
+      "probe_timeout_stops_a_provider_that_ignores_sigterm"
+    ],
+    "rule": "A finished broker's group is killed before its root goes, ending CLIs that ignored SIGTERM."
+  },
+  {
+    "id": "R66b-empty-scope",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "    if names.as_ref().is_some_and(Vec::is_empty) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "runtime_status_scopes_and_an_empty_list_starts_nothing"
+    ],
+    "rule": "An empty runtime list starts no broker."
+  },
+  {
+    "id": "R66b-scope-filter",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "                    && names.iter().any(|name| field(row, \"provider\").is(name))\n",
+    "replace": "",
+    "expect_failing": [
+      "runtime_status_scopes_and_an_empty_list_starts_nothing"
+    ],
+    "rule": "Status rows outside the requested scope are dropped, whatever the broker echoes."
+  },
+  {
+    "id": "R66b-cancel-latch",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "    fn check_cancelled(&self) -> Result<(), AppError> {\n        if self.shared.cancelled.load(Ordering::SeqCst) {",
+    "replace": "    fn check_cancelled(&self) -> Result<(), AppError> {\n        if false {",
+    "expect_failing": [
+      "cancel_is_latched_before_resolution_spawn_registration_and_send"
+    ],
+    "rule": "A cancel is latched for the client: at any stage it stops the turn before a request is sent."
+  },
+  {
+    "id": "R66b-cancel-signals",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "            if signal.running() {\n                signal.terminate();\n            }",
+    "replace": "            if signal.running() {}",
+    "expect_failing": [
+      "cancel_terminates_active_broker_process_group",
+      "cancellation_does_not_wait_for_a_blocked_prompt_writer"
+    ],
+    "rule": "A cancel sends SIGTERM to a running broker's group."
+  },
+  {
+    "id": "R66b-keep-alive",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "                *keep_alive = true;\n",
+    "replace": "",
+    "expect_failing": [
+      "kassiber_typed_tools_cross_the_chat_only_broker",
+      "missing_tool_results_keep_the_broker_waiting"
+    ],
+    "rule": "After a tool call the broker stays alive for the results."
+  },
+  {
+    "id": "R66b-every-result",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "            if answered != self.pending_call_ids {",
+    "replace": "            if answered.is_empty() && false {",
+    "expect_failing": [
+      "missing_tool_results_keep_the_broker_waiting"
+    ],
+    "rule": "A continuing leg must answer every pending tool call."
+  },
+  {
+    "id": "R66b-private-cursor",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "!(sensitive || stateless) && text",
+    "replace": "!stateless && text",
+    "expect_failing": [
+      "sensitive_context_crosses_broker_and_cannot_retain_session"
+    ],
+    "rule": "A private turn keeps no provider session cursor."
+  },
+  {
+    "id": "R66b-fast-mode-explicit",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "        if fast_mode {\n",
+    "replace": "        if true {\n",
+    "expect_failing": [
+      "forwards_only_an_explicit_true"
+    ],
+    "rule": "Fast mode reaches the broker only when it is exactly true."
+  },
+  {
+    "id": "R66b-known-notices",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": ".find(|(name, _)| phase.is(name))",
+    "replace": ".find(|_| true)",
+    "expect_failing": [
+      "broker_client_forwards_only_known_notices"
+    ],
+    "rule": "Only the known provider notices are forwarded."
+  },
+  {
+    "id": "R66b-leg-watchdog",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "                flag.store(true, Ordering::SeqCst);\n                signal.kill();\n",
+    "replace": "                flag.store(true, Ordering::SeqCst);\n",
+    "expect_failing": [
+      "a_silent_broker_is_killed_by_the_leg_watchdog"
+    ],
+    "rule": "A leg that outlives its timeout has its broker group killed."
+  },
+  {
+    "id": "R66b-binary-presence",
+    "file": "crates/ai/src/service.rs",
+    "find": "            s(if binary_presence {",
+    "replace": "            s(if !binary_presence {",
+    "expect_failing": [
+      "display_reads_never_probe_and_cli_runtimes_go_through_the_broker"
+    ],
+    "rule": "A CLI connection test reports binary_presence when the broker's rows say so."
+  },
+  {
+    "id": "S12-review-full-access",
+    "file": "crates/ai/src/review.rs",
+    "find": "        if !full_access {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "Only full agent access lifts the restricted review operation types."
+  },
+  {
+    "id": "S12-conversion-revision",
+    "file": "crates/ai/src/review.rs",
+    "find": "    if mode != \"conversion\" {",
+    "replace": "    if mode == \"conversion\" {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "An AI revision or activation never makes a conversion component effective."
+  },
+  {
+    "id": "S12-chat-document-pack",
+    "file": "crates/ai/src/select.rs",
+    "find": "        return BTreeSet::from([CHAT_DOCUMENT_CAPABILITY]);",
+    "replace": "        return BTreeSet::from([\"core\"]);",
+    "expect_failing": [
+      "tool_capabilities_match_python"
+    ],
+    "rule": "Chat-document tools belong to no capability pack the question selects."
+  },
+  {
+    "id": "S12-review-route",
+    "file": "crates/ai/src/select.rs",
+    "find": "    if route == \"/review\"",
+    "replace": "    if route == \"/reviewx\"",
+    "expect_failing": [
+      "selection_matches_python"
+    ],
+    "rule": "The Review screen selects the bounded review pack."
+  },
+  {
+    "id": "S12-load-tools-restricted",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        crate::select::build_area_tools(&names, profile),\n        full_access(state),",
+    "replace": "        crate::select::build_area_tools(&names, profile),\n        true,",
+    "expect_failing": [
+      "load_tools_adds_requested_areas_only_when_offered"
+    ],
+    "rule": "load_tools never offers on-device-only tools to a restricted provider."
+  },
+  {
+    "id": "S12-load-tools-enabled",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    if !enabled || !matches!(get(state, \"advertised_tools\"), Some(Value::List(_))) {",
+    "replace": "    if !matches!(get(state, \"advertised_tools\"), Some(Value::List(_))) {",
+    "expect_failing": [
+      "load_tools_adds_requested_areas_only_when_offered"
+    ],
+    "rule": "load_tools works only on turns that offered it."
+  },
+  {
+    "id": "S12-once-only-rollback",
+    "file": "crates/ai/src/consent.rs",
+    "find": "    \"ui.imports.rollback\",\n",
+    "replace": "    \"ui.imports.rollback.plan\",\n",
+    "expect_failing": [
+      "constants_match_python"
+    ],
+    "rule": "Each import rollback is its own plan-bound decision."
+  },
+  {
+    "id": "S12-planner-visuals",
+    "file": "crates/ai/src/planner.rs",
+    "find": "        plan.add(\"ui.visuals.render\", arguments);",
+    "replace": "        let _ = arguments;",
+    "expect_failing": [
+      "planner_matches_python"
+    ],
+    "rule": "A chart request plans the chart's local read."
+  },
+  {
+    "id": "S12-summary-group",
+    "file": "crates/ai/src/summary.rs",
+    "find": ".map(|group| Text::default().push(\"the root of \").py(&group).done())",
+    "replace": ".map(|group| Text::default().push(\"the group \").py(&group).done())",
+    "expect_failing": [
+      "summaries_match_python"
+    ],
+    "rule": "A group resolution names the group's root in its consent text."
+  },
+  {
+    "id": "S12-summary-nonstring-action",
+    "file": "crates/ai/src/summary.rs",
+    "find": "                    \"validation\",\n                    \"Custody component review action is unsupported\",",
+    "replace": "                    \"internal_error\",\n                    \"Custody component review action is unsupported\",",
+    "expect_failing": [
+      "summaries_match_python"
+    ],
+    "rule": "A non-string component action is a validation result, not a failed turn (b2c0d9447)."
+  },
+  {
+    "id": "S12-prompt-area-index",
+    "file": "crates/ai/src/prompt.rs",
+    "find": "        Some(PromptKind::Kassiber) if tools_enabled => s(kassiber_system_prompt()),",
+    "replace": "        Some(PromptKind::Kassiber) if tools_enabled => s(default_system_prompt()),",
+    "expect_failing": [
+      "messages_gain_one_system_message"
+    ],
+    "rule": "A tool-enabled turn's prompt carries the tool-area index."
+  },
+  {
+    "id": "S12-provider-access-output",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    \"omit_store_field\",\n    \"agent_access\",\n    \"created_at\",",
+    "replace": "    \"omit_store_field\",\n    \"created_at\",",
+    "expect_failing": [
+      "list_with_default_payload_shape"
+    ],
+    "rule": "Provider rows report their agent access (#678)."
+  },
+  {
+    "id": "S12-provider-access-unknown",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    s(normalize_agent_access(value).unwrap_or(AGENT_ACCESS_RESTRICTED))",
+    "replace": "    s(normalize_agent_access(value).unwrap_or(AGENT_ACCESS_FULL))",
+    "expect_failing": [
+      "agent_access_is_full_or_restricted_and_unknown_values_restrict"
+    ],
+    "rule": "An unknown stored agent access restricts rather than widening access."
+  },
+  {
+    "id": "S12-check-models-cap",
+    "file": "crates/ai/src/providers/checks.rs",
+    "find": "            Value::List(models.iter().take(MAX_SAVED_MODELS).cloned().collect())\n",
+    "replace": "            Value::List(models.to_vec())\n",
+    "expect_failing": [
+      "checks_are_bound_to_the_endpoint_and_capped"
+    ],
+    "rule": "A saved model list is capped at 1000 entries."
+  },
+  {
+    "id": "S12-check-endpoint",
+    "file": "crates/ai/src/providers/checks.rs",
+    "find": "    if stored_url != kassiber_envelope::s(base_url) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "checks_are_bound_to_the_endpoint_and_capped"
+    ],
+    "rule": "A saved check is read back only at the base URL it was made at."
+  },
+  {
+    "id": "S12-check-clear-on-address",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "        if base_changed || clear.contains(\"api_key\") || present(&updates.api_key) {",
+    "replace": "        if clear.contains(\"api_key\") || present(&updates.api_key) {",
+    "expect_failing": [
+      "a_check_marks_a_built_in_provider_set_up_until_its_address_changes"
+    ],
+    "rule": "A new address forgets what the old one's check found."
+  },
+  {
+    "id": "S12-set-up-checked",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    if !is_untouched_seed(provider) || is_default || truthy(last_checked_at) {",
+    "replace": "    if !is_untouched_seed(provider) || is_default {",
+    "expect_failing": [
+      "a_check_marks_a_built_in_provider_set_up_until_its_address_changes"
+    ],
+    "rule": "A built-in provider counts as set up once it was checked at its address."
+  },
+  {
+    "id": "S12-discovery-seed-expired",
+    "file": "crates/ai/src/discovery/mod.rs",
+    "find": "                    snapshot,\n                    expires: Instant::now(),",
+    "replace": "                    snapshot,\n                    expires: Instant::now() + self.ttl,",
+    "expect_failing": [
+      "a_seeded_snapshot_is_reported_but_never_spares_a_probe"
+    ],
+    "rule": "A saved check never spares the next explicit probe."
+  },
+  {
+    "id": "S12-review-nonstring-type",
+    "file": "crates/ai/src/review.rs",
+    "find": "        if !matches!(kind, Some(Value::Str(_))) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "A non-string review operation type is refused as validation (5d8b2658a)."
+  },
+  {
+    "id": "S12-chat-whole-answer",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "            content.push_str(&leg.content);",
+    "replace": "            content = leg.content;",
+    "expect_failing": [
+      "a_tool_turn_saves_every_leg_of_its_answer"
+    ],
+    "rule": "A tool turn's saved answer is every leg the user saw (a26567dfa)."
+  },
+  {
+    "id": "S12-chat-summary-refusal",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                        && summary_refusal.is_none()\n",
+    "replace": "\n",
+    "expect_failing": [
+      "a_call_the_consent_card_cannot_describe_is_refused_before_any_card"
+    ],
+    "rule": "A call the consent card cannot describe gets no card (b2c0d9447)."
+  },
+  {
+    "id": "S12-chat-resume-fingerprint",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "        .then(|| history_fingerprint(before))",
+    "replace": "        .then(|| history_fingerprint(messages))",
+    "expect_failing": [
+      "resume_looks_up_the_transcript_before_the_new_prompt"
+    ],
+    "rule": "A cursor is looked up against the transcript before the new prompt (7e3e9e286)."
+  },
+  {
+    "id": "S12-chat-full-profile",
+    "file": "crates/ai/src/chat/args.rs",
+    "find": "        None => \"full\",",
+    "replace": "        None => \"scoped\",",
+    "expect_failing": [
+      "every_tool_is_offered_unless_the_caller_narrows_it"
+    ],
+    "rule": "Every tool is offered unless the caller narrows it (#684)."
+  },
+  {
+    "id": "S12-full-access-flag",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    get(state, \"provider_full_access\") == Some(&Value::Bool(true))\n",
+    "replace": "    false\n",
+    "expect_failing": [
+      "custody_reads_need_full_agent_access"
+    ],
+    "rule": "A provider the user did not restrict has full agent access off the device (#678)."
+  },
+  {
+    "id": "S12-error-remediation",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        \"agent_access_restricted\" => Some(agent_access_remediation()),",
+    "replace": "        \"agent_access_restricted\" => None,",
+    "expect_failing": [
+      "on_device_only_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "An agent-access refusal tells the model only the user can lift it."
+  },
+  {
+    "id": "S12-error-hint",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        kassiber_envelope::set(&mut result, \"hint\", redact_ai_tool_result(&s(hint)));",
+    "replace": "        let _ = hint;",
+    "expect_failing": [
+      "on_device_only_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "A failed tool's hint reaches the model."
+  },
+  {
+    "id": "S12-undo-attached",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        Ok(result) => with_undo(entry, call, result),",
+    "replace": "        Ok(result) => result,",
+    "expect_failing": [
+      "reversible_writes_name_the_call_that_takes_them_back"
+    ],
+    "rule": "A reversible write's result names the call that takes it back (#684)."
+  },
+  {
+    "id": "S12-undo-btc-precision",
+    "file": "crates/ai/src/undo.rs",
+    "find": "    const PRECISION: usize = 32;",
+    "replace": "    const PRECISION: usize = 28;",
+    "expect_failing": [
+      "undo_hints_match_python"
+    ],
+    "rule": "Undo amounts keep Kassiber's 32-digit decimal precision."
+  },
+  {
+    "id": "S12-mode-auto-local-only",
+    "file": "crates/ai/src/consent.rs",
+    "find": "        \"auto\" if reversible && !egresses => Some(\"mode_auto\"),",
+    "replace": "        \"auto\" if reversible => Some(\"mode_auto\"),",
+    "expect_failing": [
+      "permission_modes_approve_without_asking_or_release_waiting_calls"
+    ],
+    "rule": "Auto never approves a tool that leaves the machine (#684)."
+  },
+  {
+    "id": "S12-mode-release-filter",
+    "file": "crates/ai/src/consent.rs",
+    "find": "                    && mode_decision(mode, *reversible, *egresses).is_some()\n",
+    "replace": "\n",
+    "expect_failing": [
+      "permission_modes_approve_without_asking_or_release_waiting_calls"
+    ],
+    "rule": "A mode switch releases only the calls the new mode approves."
+  },
+  {
+    "id": "S12-mode-wait-recheck",
+    "file": "crates/ai/src/consent.rs",
+    "find": "            if let Some(decision) = mode_decision(&state.permission_mode, reversible, egresses) {\n                break decision.to_owned();\n            }\n",
+    "replace": "",
+    "expect_failing": [
+      "switching_modes_releases_a_waiting_call"
+    ],
+    "rule": "A waiting call sees a mode switch that approves it."
+  },
+  {
+    "id": "S12-approval-label",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "        Some(\"mode_auto\") => \"auto\",",
+    "replace": "        Some(\"mode_auto\") => \"required\",",
+    "expect_failing": [
+      "a_permission_mode_approves_without_asking"
+    ],
+    "rule": "A call approved by the mode says so in its approval label."
+  },
+  {
+    "id": "S12-session-allows-shared",
+    "file": "crates/ai/src/chat/registry.rs",
+    "find": "            Some(session_id) => session_allows(&mut self.lock(), session_id),",
+    "replace": "            Some(_) => SessionAllows::default(),",
+    "expect_failing": [
+      "an_allow_for_this_chat_carries_to_the_next_turn"
+    ],
+    "rule": "Allow for this chat lasts the whole chat session (#685)."
+  },
+  {
+    "id": "S12-permission-mode-default",
+    "file": "crates/ai/src/chat/args.rs",
+    "find": "        None => \"approval\",",
+    "replace": "        None => \"auto\",",
+    "expect_failing": [
+      "every_tool_is_offered_unless_the_caller_narrows_it"
+    ],
+    "rule": "An absent permission mode asks for every change."
+  },
+  {
+    "id": "S12-stale-overview-cost-basis",
+    "file": "crates/ai/src/projections.rs",
+    "find": "let mut fiat = nulled(fiat, &[\"eurCostBasis\", \"eurUnrealized\", \"eurRealizedYTD\"]);",
+    "replace": "let mut fiat = nulled(fiat, &[\"eurUnrealized\", \"eurRealizedYTD\"]);",
+    "expect_failing": [
+      "stale_journal_figures_are_withheld_as_python_withholds_them"
+    ],
+    "rule": "A stale overview withholds the cost basis as well as the unrealized and realized figures (#681)."
+  },
+  {
+    "id": "S12-stale-capital-gains-always-stale",
+    "file": "crates/ai/src/projections.rs",
+    "find": "|| kind == \"ui.reports.capital_gains\"",
+    "replace": "|| kind == \"ui.journals.snapshot\"",
+    "expect_failing": [
+      "stale_journal_figures_are_withheld_as_python_withholds_them"
+    ],
+    "rule": "Withheld capital gains are always `journals_stale`; the journal reads say `journals_never_processed` before any processing."
+  },
+  {
+    "id": "S12-stale-transfers-only-when-stale",
+    "file": "crates/ai/src/projections.rs",
+    "find": "if get(&summary, \"projection_status\") != Some(&s(\"stale\")) {",
+    "replace": "if get(&summary, \"projection_status\") == Some(&s(\"current\")) {",
+    "expect_failing": [
+      "stale_journal_figures_are_withheld_as_python_withholds_them"
+    ],
+    "rule": "Journal transfer pairs are withheld only when their projection is stale."
+  },
+  {
+    "id": "S12-stale-projection-applied",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        let mut payload = projections::stale_journal_figures_for_ai(\n            kind,\n",
+    "replace": "        let mut payload = (|_: &str, payload: Value| payload)(\n            kind,\n",
+    "expect_failing": [
+      "stale_journal_figures_never_reach_the_model"
+    ],
+    "rule": "Every AI read passes the stale-journal projection before it leaves the executor."
+  },
+  {
+    "id": "S12-refresh-by-catalog-entry",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    let wants = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())",
+    "replace": "    let wants = AUTO_JOURNAL_REFRESH_TOOLS.iter().any(|name| call.name.is(name))",
+    "expect_failing": [
+      "refresh_reads_report_journal_processing_unless_disabled"
+    ],
+    "rule": "A model's wire-name read refreshes stale journals like the planner's dotted one (09912e4c0)."
+  },
+  {
+    "id": "S12-files-name-only-with-full-access",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "        let described = if full_access && !filename.is_empty() {",
+    "replace": "        let described = if !filename.is_empty() {",
+    "expect_failing": [
+      "a_restricted_provider_is_told_extensions_only"
+    ],
+    "rule": "A restricted provider is told a file's extension, never its name (#693)."
+  },
+  {
+    "id": "S12-files-shown-only-with-full-access",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "    if crate::executor::full_access(state) {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "only_a_full_access_provider_sees_an_image"
+    ],
+    "rule": "Only a full-access provider is shown an attached image or PDF."
+  },
+  {
+    "id": "S12-files-earlier-in-own-message",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "                let target = if resumed && !is_new(entry) {",
+    "replace": "                let target = if false && resumed && !is_new(entry) {",
+    "expect_failing": [
+      "only_a_full_access_provider_sees_an_image"
+    ],
+    "rule": "A resumed session gets earlier files in a message of their own, which it skips."
+  },
+  {
+    "id": "S12-files-tool-reads-its-kinds",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "        if !reads(found) {",
+    "replace": "        if false && !reads(found) {",
+    "expect_failing": [
+      "files_are_chosen_by_id_and_kind"
+    ],
+    "rule": "A tool reads only the kinds of file it takes, by id."
+  },
+  {
+    "id": "S12-history-keeps-file-cards",
+    "file": "crates/ai/src/chat/history.rs",
+    "find": "    let user_provenance = if exchange.user_attachments.is_empty() {",
+    "replace": "    let user_provenance = if true {",
+    "expect_failing": [
+      "persist_follows_the_stored_policy_and_the_frozen_book"
+    ],
+    "rule": "The user row keeps the cards of the files its message first sent (#697)."
+  },
+  {
+    "id": "S12-broker-images-inline-only",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "        if encoding == \"base64\" && media_type.starts_with(\"image/\") && !data.is_empty() {",
+    "replace": "        if !data.is_empty() {",
+    "expect_failing": [
+      "only_inline_image_data_reaches_the_broker"
+    ],
+    "rule": "The broker gets only base64 image data URLs, never a remote URL or other content."
+  },
+  {
+    "id": "S12-evidence-from-chat-withholds-name",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "    if !crate::executor::full_access(state) {\n        // The note gave a restricted provider the extension only.",
+    "replace": "    if false {\n        // The note gave a restricted provider the extension only.",
+    "expect_failing": [
+      "a_chat_file_kept_as_evidence_never_names_the_file_to_a_restricted_provider"
+    ],
+    "rule": "Keeping a chat file as evidence never returns its name to a restricted provider."
+  },
+  {
+    "id": "S12-rollback-bound-to-plan",
+    "file": "crates/ai/src/import_runs.rs",
+    "find": "    if !py_eq(&field(\"input_version\"), expected_input_version)",
+    "replace": "    if false && !py_eq(&field(\"input_version\"), expected_input_version)",
+    "expect_failing": [
+      "a_rollback_runs_only_on_the_plan_the_user_saw"
+    ],
+    "rule": "A rollback runs only on the plan and book version the user consented to (#682)."
+  },
+  {
+    "id": "S12-rollback-blocked-by-reviewed-work",
+    "file": "crates/ai/src/import_runs.rs",
+    "find": "    if matches!(get(&current, \"blockers\"), Some(Value::List(blockers)) if !blockers.is_empty()) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "reviewed_work_blocks_a_rollback_from_chat"
+    ],
+    "rule": "A rollback that would delete reviewed work is the desktop's decision."
+  },
+  {
+    "id": "S12-rollback-withholds-filename",
+    "file": "crates/ai/src/import_runs.rs",
+    "find": "    if !full_access {\n        payload = without_filename(&payload);",
+    "replace": "    if false {\n        payload = without_filename(&payload);",
+    "expect_failing": [
+      "a_rollback_runs_only_on_the_plan_the_user_saw"
+    ],
+    "rule": "A restricted provider never gets an import run's recorded filename."
+  },
+  {
+    "id": "S12-visual-refresh-report-sources",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        && (entry.name != \"ui.visuals.render\"",
+    "replace": "        && (true",
+    "expect_failing": [
+      "visuals_refresh_journals_only_for_report_sources"
+    ],
+    "rule": "A visual refreshes journals only for the report sources whose read tools do (#676)."
+  },
+  {
+    "id": "S12-visual-rows-only-while-few",
+    "file": "crates/ai/src/visuals.rs",
+    "find": "    if rows.len() <= MODEL_ROW_LIMIT {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "chat_visuals_match_python"
+    ],
+    "rule": "The model reads a visual's rows only while they are few; the digest otherwise."
+  },
+  {
+    "id": "S12-visual-zero-value-is-missing-price",
+    "file": "crates/ai/src/visuals.rs",
+    "find": "            if quantity.is_some_and(|q| q != 0.0) && market_value.is_none_or(|v| v == 0.0) {\n                market_value = None;\n                missing_prices += 1;\n            }\n            rows.push(dict([\n                (\"period\"",
+    "replace": "            if false {\n                market_value = None;\n                missing_prices += 1;\n            }\n            rows.push(dict([\n                (\"period\"",
+    "expect_failing": [
+      "chat_visuals_match_python"
+    ],
+    "rule": "A held balance valued at zero is a missing price, never plotted as zero."
+  },
+  {
+    "id": "S12-visual-names-own-wallets-only",
+    "file": "crates/ai/src/visuals.rs",
+    "find": "                if [\"owned\", \"ambiguous\"].contains(&ownership.as_str())",
+    "replace": "                if true",
+    "expect_failing": [
+      "chat_visuals_match_python"
+    ],
+    "rule": "A flow visual names only the user's own wallets; other parties stay generic."
+  },
+  {
+    "id": "A-chat-resume-before-prompt",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "        .then(|| history_fingerprint(before))",
+    "replace": "        .then(|| history_fingerprint(messages))",
+    "expect_failing": [
+      "the_next_prompt_resumes_the_branch_before_it"
+    ],
+    "rule": "The next request resumes the cursor recorded for the transcript before its new prompt."
+  },
+  {
+    "id": "A-chat-resume-needs-a-prompt",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "    (matches!(last, Value::Dict(_)) && get(last, \"role\") == Some(&s(\"user\")))",
+    "replace": "    (matches!(last, Value::Dict(_)))",
+    "expect_failing": [
+      "the_next_prompt_resumes_the_branch_before_it"
+    ],
+    "rule": "A request that does not end with a new user prompt resumes nothing."
+  },
+  {
+    "id": "wire-chat-cursor-binds-every-leg",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "            content.push_str(&leg.content);",
+    "replace": "            content = leg.content;",
+    "expect_failing": [
+      "tests/test_rust_ai_chat.py::RustAiChatParityTest::test_broker_chat_tool_round_and_resumed_cursor"
+    ],
+    "rule": "A tool turn binds its provider cursor to every leg's text the user saw."
+  },
+  {
+    "id": "wire-chat-stream-resume-lookup",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                    resume_fingerprint(&self.turn.validated.messages).as_deref(),",
+    "replace": "                    Some(history_fingerprint(&self.turn.validated.messages).as_str()),",
+    "expect_failing": [
+      "tests/test_rust_ai_chat.py::RustAiChatParityTest::test_broker_chat_tool_round_and_resumed_cursor"
+    ],
+    "rule": "A tool-free turn looks its cursor up by the transcript before the new prompt."
+  },
+  {
+    "id": "A-refresh-wire-name",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    let wants = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())",
+    "replace": "    let wants = AUTO_JOURNAL_REFRESH_TOOLS.iter().any(|name| call.name.is(name))",
+    "expect_failing": [
+      "wire_name_reads_refresh_like_catalog_names"
+    ],
+    "rule": "A read called by its wire name refreshes stale journals like its catalog name."
+  },
+  {
+    "id": "wire-ai-wallet-sync-invalid-config",
+    "file": "crates/daemon/src/ai_tools.rs",
+    "find": "        Err(error) if error.code == \"invalid_wallet_config\" => return Err(error),\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_unreadable_wallet_config_refuses_wallet_sync_typed"
+    ],
+    "rule": "The AI wallet sync answers the planner's invalid_wallet_config, not the direct-sync refusal."
+  },
+  {
+    "id": "wire-ai-write-refusal-hint",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        kassiber_envelope::set(&mut result, \"hint\", redact_ai_tool_result(&s(hint)));",
+    "replace": "        let _ = hint;",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_unreadable_wallet_config_refuses_wallet_sync_typed"
+    ],
+    "rule": "A refused AI write carries the error's hint to the model, redacted."
+  },
+  {
+    "id": "echo-ai-preview-after-cut",
+    "file": "crates/ai/src/transport/errors.rs",
+    "find": "    let body = withhold(body, withheld);",
+    "replace": "    let body = body.to_owned();",
+    "expect_failing": [
+      "provider_errors_withhold_the_api_key_before_the_cut_and_lowercasing",
+      "provider_errors_never_repeat_the_api_key"
+    ],
+    "rule": "A provider body is withheld before the 512-character preview cut."
+  },
+  {
+    "id": "echo-ai-code-lowercased-first",
+    "file": "crates/ai/src/transport/errors.rs",
+    "find": "        other => kassiber_pytext::lower(&withhold(&kassiber_envelope::py_str(other), withheld)),",
+    "replace": "        other => withhold(&kassiber_pytext::lower(&kassiber_envelope::py_str(other)), withheld),",
+    "expect_failing": [
+      "provider_errors_withhold_the_api_key_before_the_cut_and_lowercasing",
+      "provider_errors_never_repeat_the_api_key"
+    ],
+    "rule": "A provider error code is withheld before it is lowercased."
+  },
+  {
+    "id": "echo-ai-reason-raw",
+    "file": "crates/ai/src/transport/errors.rs",
+    "find": "        .with_details(dict([(\"reason\", s(withhold(reason, withheld)))]))",
+    "replace": "        .with_details(dict([(\"reason\", s(reason))]))",
+    "expect_failing": [
+      "provider_errors_withhold_the_api_key_before_the_cut_and_lowercasing"
+    ],
+    "rule": "A network error reason withholds the API key."
+  },
+  {
+    "id": "echo-ai-client-forgets-key",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "        let mut credentials = vec![self.config.api_key.clone().unwrap_or_default()];",
+    "replace": "        let mut credentials: Vec<String> = Vec::new();",
+    "expect_failing": [
+      "provider_errors_never_repeat_the_api_key"
+    ],
+    "rule": "The client withholds its own API key from every provider error."
+  },
+  {
+    "id": "wire-wallets-sync-payload-order",
+    "file": "crates/wallets/src/freshness/planning.rs",
+    "find": "                if !self.request.wallets_sync {\n                    if let Some(journals) = journals.take() {",
+    "replace": "                if self.request.wallets_sync || !self.request.wallets_sync {\n                    if let Some(journals) = journals.take() {",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_mutating_tools_match_python_on_every_fixture"
+    ],
+    "rule": "A wallet sync's journal step follows the snapshot in the payload, as _wallets_sync_payload adds it."
+  },
+  {
+    "id": "wire-attachment-plan-rolls-back",
+    "file": "crates/wallets/src/file_import/attachment.rs",
+    "find": "\"ROLLBACK TO SAVEPOINT {SAVEPOINT}; RELEASE SAVEPOINT {SAVEPOINT}\"",
+    "replace": "\"RELEASE SAVEPOINT {SAVEPOINT}\"",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_flow_matches_python"
+    ],
+    "rule": "Planning an attachment import leaves the book unchanged."
+  },
+  {
+    "id": "wire-attachment-apply-binds-digest",
+    "file": "crates/wallets/src/file_import/attachment.rs",
+    "find": "    if get(expected, \"plan_digest\") != Some(&s(plan_digest)) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_flow_matches_python"
+    ],
+    "rule": "An apply runs only the plan whose digest the user approved."
+  },
+  {
+    "id": "wire-attachment-apply-binds-bytes",
+    "file": "crates/wallets/src/file_import/attachment.rs",
+    "find": "        if get(expected, \"expected_content_sha256\") != Some(&s(file.sha256.as_str())) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_flow_matches_python"
+    ],
+    "rule": "An apply refuses a file that changed since its plan."
+  },
+  {
+    "id": "wire-attachment-apply-binds-book",
+    "file": "crates/wallets/src/file_import/attachment.rs",
+    "find": "        if !crate::file_import::attachment::same_int(",
+    "replace": "        if false && !crate::file_import::attachment::same_int(",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_flow_matches_python"
+    ],
+    "rule": "An apply refuses a book whose inputs moved since its plan."
+  },
+  {
+    "id": "wire-attachment-target-file-wallets",
+    "file": "crates/wallets/src/file_import/attachment.rs",
+    "find": "            if !completeness::FILE_IMPORT_TARGET_CLASSES.contains(&klass.as_str()) {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_plans_match_python"
+    ],
+    "rule": "Only file-backed wallets receive an attached file's rows."
+  },
+  {
+    "id": "wire-attachment-sign-kinds-block",
+    "file": "crates/wallets/src/file_import/attachment.rs",
+    "find": "        if transfers_only_confirmed {",
+    "replace": "        if true {",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_plans_match_python"
+    ],
+    "rule": "Row kinds taken from the amount sign block until the user confirms a transfers-only export."
+  },
+  {
+    "id": "wire-attachment-restricted-withheld",
+    "file": "crates/ai/src/chat_imports.rs",
+    "find": "        Ok(withhold_cell_values(&payload))",
+    "replace": "        Ok(payload)",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_flow_matches_python",
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_attachment_import_plans_match_python"
+    ],
+    "rule": "A restricted provider gets an import plan without the file's values."
+  },
+  {
+    "id": "A-chat-import-withhold-totals",
+    "file": "crates/ai/src/chat_imports.rs",
+    "find": "                            (\"rows\", field(row, \"rows\")),",
+    "replace": "                            (\"rows\", field(row, \"rows\")),\n                            (\"amount_msat\", field(row, \"amount_msat\")),",
+    "expect_failing": [
+      "a_restricted_provider_gets_no_value_from_the_file"
+    ],
+    "rule": "Withheld totals keep counts, never amounts."
+  },
+  {
+    "id": "wire-document-reader-off-loop",
+    "file": "crates/daemon/src/ai_chat.rs",
+    "find": "        crate::ai_tools::read_document(provider, source_file, pages, expected_fiat_currency)",
+    "replace": "        let (provider, source_file, pages, fiat) = (provider.clone(), source_file.to_owned(), pages.clone(), expected_fiat_currency.map(str::to_owned));\n        on_request_loop(&self.tasks, move |_| crate::ai_tools::read_document(&provider, &source_file, &pages, fiat.as_deref())).unwrap_or(Err(ToolError::Unexpected))",
+    "expect_failing": [
+      "tests/test_rust_ai_document_import.py::RustAiDocumentReaderOffLoopTest::test_other_requests_are_answered_while_the_model_reads"
+    ],
+    "rule": "The document reader's model call never holds the daemon's request loop."
+  },
+  {
+    "id": "wire-document-plan-rolls-back",
+    "file": "crates/wallets/src/file_import/document_chat.rs",
+    "find": "\"ROLLBACK TO SAVEPOINT {SAVEPOINT}; RELEASE SAVEPOINT {SAVEPOINT}\"",
+    "replace": "\"RELEASE SAVEPOINT {SAVEPOINT}\"",
+    "expect_failing": [
+      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+    ],
+    "rule": "Planning a document import leaves the book unchanged."
+  },
+  {
+    "id": "wire-document-apply-binds-digest",
+    "file": "crates/wallets/src/file_import/document_chat.rs",
+    "find": "super::attachment::apply_refusal(&plan, &plan_digest, expected, PLAN_TOOL)",
+    "replace": "super::attachment::apply_refusal(&plan, &plan_digest, &dict([(\"plan_digest\", s(plan_digest.as_str()))]), PLAN_TOOL)",
+    "expect_failing": [
+      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+    ],
+    "rule": "A document apply runs only the plan whose digest the user approved."
+  },
+  {
+    "id": "wire-document-apply-binds-source",
+    "file": "crates/wallets/src/file_import/document_chat.rs",
+    "find": "        if get(expected, \"expected_source_sha256\") != Some(&s(source_sha256.as_str())) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+    ],
+    "rule": "A document apply refuses a draft of another document."
+  },
+  {
+    "id": "wire-document-apply-consumes-draft",
+    "file": "crates/daemon/src/ai_tools.rs",
+    "find": "            self.daemon.document_sessions.consume(draft);",
+    "replace": "            let _ = draft;",
+    "expect_failing": [
+      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+    ],
+    "rule": "An applied draft cannot be imported twice."
+  },
+  {
+    "id": "wire-document-restricted-withheld",
+    "file": "crates/ai/src/chat_imports.rs",
+    "find": "        Ok(withhold_values(&payload))",
+    "replace": "        Ok(payload)",
+    "expect_failing": [
+      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+    ],
+    "rule": "A restricted provider gets a document plan without values or row ids."
+  },
+  {
+    "id": "wire-document-draft-filename",
+    "file": "crates/ai/src/chat_imports.rs",
+    "find": "    if full_access {\n        keys.push(\"filename\");\n    }",
+    "replace": "    keys.push(\"filename\");",
+    "expect_failing": [
+      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+    ],
+    "rule": "A restricted provider never gets the document's file name."
+  },
+  {
+    "id": "wire-document-sessions-required",
+    "file": "crates/ai/src/chat_imports.rs",
+    "find": "    if get(state, \"document_import_sessions\") == Some(&Value::Bool(true)) {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "tests/test_rust_ai_document_import.py::RustAiDocumentImportTest::test_reading_and_importing_a_chat_photo_matches_python"
+    ],
+    "rule": "Documents are read only where the daemon keeps document grants: a chat."
+  },
+  {
+    "id": "C-chat-write-binds-consent",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                            self.bind_consent(&call.call_id);\n                            if entry.kind_class == KindClass::Mutating {",
+    "replace": "                            if entry.kind_class == KindClass::Mutating {",
+    "expect_failing": [
+      "an_allowed_write_runs_through_the_mutating_executor"
+    ],
+    "rule": "A consented chat write runs with its consent bound to the call id."
+  },
+  {
+    "id": "C-chat-write-runs-executor",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                                execute_mutating(&call, &mut runtime, host.reads(), Some(&audit))",
+    "replace": "                                tool_result_denied(\"not_implemented\", None)",
+    "expect_failing": [
+      "an_allowed_write_runs_through_the_mutating_executor",
+      "a_full_access_chat_writes_without_asking",
+      "an_allowed_custody_write_carries_its_consent_audit"
+    ],
+    "rule": "A chat turn runs an approved write through the native mutating executor."
+  },
+  {
+    "id": "C-chat-audit-decision",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "            consent_decision: decision.into(),",
+    "replace": "            consent_decision: \"allow_once\".into(),",
+    "expect_failing": [
+      "denied_and_timed_out_custody_proposals_are_audited",
+      "cancelled_custody_proposals_are_audited"
+    ],
+    "rule": "A custody audit records the user's actual decision."
+  },
+  {
+    "id": "C-chat-deny-audited",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                            self.record_unexecuted(\n                                &call,\n                                host,\n                                &decision,\n                                &proposal_seen_at,\n                                &decided_at,\n                                (\"denied\", \"user_denied\"),\n                            );\n",
+    "replace": "",
+    "expect_failing": [
+      "denied_and_timed_out_custody_proposals_are_audited"
+    ],
+    "rule": "A denied custody proposal is audited in the book."
+  },
+  {
+    "id": "C-chat-timeout-audited",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                            self.record_unexecuted(\n                                &call,\n                                host,\n                                &decision,\n                                &proposal_seen_at,\n                                &decided_at,\n                                (\"denied\", \"consent_timeout\"),\n                            );\n",
+    "replace": "",
+    "expect_failing": [
+      "denied_and_timed_out_custody_proposals_are_audited"
+    ],
+    "rule": "A timed-out custody proposal is audited in the book."
+  },
+  {
+    "id": "C-chat-cancel-audited",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                            (\"cancelled\", \"cancelled\"),",
+    "replace": "                            (\"cancelled\", \"cancelled_while_waiting\"),",
+    "expect_failing": [
+      "cancelled_custody_proposals_are_audited"
+    ],
+    "rule": "A custody proposal cancelled while its card waits is audited as cancelled."
+  },
+  {
+    "id": "C-chat-cancel-before-card-audited",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                            (\"cancelled\", \"cancelled_before_consent\"),",
+    "replace": "                            (\"cancelled\", \"cancelled\"),",
+    "expect_failing": [
+      "cancelled_custody_proposals_are_audited"
+    ],
+    "rule": "A custody proposal cancelled before its card is audited as cancelled_before_consent."
+  },
+  {
+    "id": "C-chat-review-card",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                            set(&mut card, \"review_preview\", review);",
+    "replace": "                            let _ = review;",
+    "expect_failing": [
+      "consent_cards_show_what_the_book_recomputes"
+    ],
+    "rule": "The review card carries the book's recomputed effects."
+  },
+  {
+    "id": "C-chat-plan-card",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                    preview = plan;",
+    "replace": "                    let _ = plan;",
+    "expect_failing": [
+      "consent_cards_show_what_the_book_recomputes"
+    ],
+    "rule": "A plan-bound apply's card shows the daemon's plan, not the model's figures."
+  },
+  {
+    "id": "C-chat-acquisition-card",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                        preview_arguments(entry, &call.arguments, &mut runtime, host.reads())",
+    "replace": "                        { let _ = (entry, &mut runtime); redact_tool_arguments(&call.arguments) }",
+    "expect_failing": [
+      "consent_cards_show_what_the_book_recomputes"
+    ],
+    "rule": "An acquisition card shows the plan the book recomputes."
+  },
+  {
+    "id": "B-node-snapshot-pubkey",
+    "file": "crates/ai/src/projections.rs",
+    "find": "            \"pubkey\" => Value::Null,",
+    "replace": "            \"pubkey\" => field(key),",
+    "expect_failing": [
+      "egressing_reads_need_a_consent_bound_to_the_call"
+    ],
+    "rule": "The model never sees the operator's node pubkey."
+  },
+  {
+    "id": "B-node-snapshot-connection-id",
+    "file": "crates/ai/src/projections.rs",
+    "find": "            &[\"label\", \"kind\", \"lightningCapabilities\"],",
+    "replace": "            &[\"label\", \"kind\", \"lightningCapabilities\", \"id\"],",
+    "expect_failing": [
+      "egressing_reads_need_a_consent_bound_to_the_call"
+    ],
+    "rule": "The node snapshot's connection block reaches the model without its id."
+  },
+  {
+    "id": "B-node-snapshot-channel-fields",
+    "file": "crates/ai/src/projections.rs",
+    "find": "    const CHANNEL: [&str; 15] = [\n        \"capacitySat\",",
+    "replace": "    const CHANNEL: [&str; 16] = [\n        \"peerAlias\",\n        \"capacitySat\",",
+    "expect_failing": [
+      "egressing_reads_need_a_consent_bound_to_the_call"
+    ],
+    "rule": "Channel rows reach the model without peer or channel identifiers."
+  },
+  {
+    "id": "wire-chat-proxy-forwards-writes",
+    "file": "crates/daemon/src/ai_chat.rs",
+    "find": "        answer!(self, Value, |book: &mut HostBook<'_>| book.mutate(\n            &kind,\n            &arguments,\n            authored_source\n        ))",
+    "replace": "        let _ = (kind, arguments, authored_source);\n        Err(ToolError::Unexpected)",
+    "expect_failing": [
+      "tests/test_rust_ai_chat.py::RustAiChatParityTest::test_writes_ask_apply_and_undo_through_the_executor"
+    ],
+    "rule": "The chat worker's book forwards writes to the request loop."
+  },
+  {
+    "id": "wire-quarantine-groups-read",
+    "file": "crates/journals/src/views.rs",
+    "find": "        \"ui.journals.quarantine.groups\" => crate::quarantine::groups::snapshot(conn, args),\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_formerly_refused_tools_match_python"
+    ],
+    "rule": "The assistant reads quarantine root-cause groups natively."
+  },
+  {
+    "id": "wire-transaction-verify-read",
+    "file": "crates/daemon/src/ai_tools.rs",
+    "find": "        return transaction_verify_for_ai(daemon, raw);",
+    "replace": "        let _ = transaction_verify_for_ai;\n        return Err(AppError::new(\"not_implemented\", \"verify\"));",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_formerly_refused_tools_match_python"
+    ],
+    "rule": "The assistant verifies a row against its import evidence natively."
+  },
+  {
+    "id": "wire-dismissal-expiry-wall-clock",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "            let wall = super::sql::wall_clock(conn, sources)?;",
+    "replace": "            let wall = now.clone();",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_formerly_refused_tools_match_python"
+    ],
+    "rule": "A dismissal's expiry counts from the wall clock, as Python's datetime.now does."
+  },
+  {
+    "id": "wire-transfers-test-sources",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "        // reference binds `transfer_matching.datetime` and `uuid4`.\n        #[cfg(feature = \"test-harness\")]\n        let sources = journals::Sources;",
+    "replace": "        // reference binds `transfer_matching.datetime` and `uuid4`.\n        let sources = kassiber_transfers::SystemSources;",
+    "expect_failing": [
+      "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_formerly_refused_tools_match_python"
+    ],
+    "rule": "Harness builds bind the transfers route's clock as the Python reference does."
+  },
+  {
+    "id": "wire-mcp-analysis-reads-skip-reservation",
+    "file": "crates/store/src/write_lock.rs",
+    "find": "        || conn.is_readonly(\"main\")?\n        || conn.query_row(\"PRAGMA query_only\", [], |row| row.get::<_, bool>(0))?\n    {\n        return Ok(None);",
+    "replace": "        || conn.is_readonly(\"main\")?\n    {\n        return Ok(None);",
+    "expect_failing": [
+      "tests/test_rust_mcp.py::McpTranscriptParityTest::test_every_grant_lists_and_runs_what_it_covers"
+    ],
+    "rule": "An MCP analysis-index read (Privacy Mirror, chain-analysis query and entropy) under the read pin's query_only takes no writer reservation, so it answers as Python round 13 does instead of tool_error."
+  },
+  {
+    "id": "cli-proxy-codex-speaks-responses",
+    "file": "crates/ai/src/providers/cli_proxy.rs",
+    "find": "    (\"openai\", API_FORMAT_RESPONSES),",
+    "replace": "    (\"openai\", API_FORMAT_CHAT_COMPLETIONS),",
+    "expect_failing": [
+      "families_map_to_their_format_and_unknown_ones_fail_closed",
+      "test_and_discover_lists_every_family_and_saves_the_inventory"
+    ],
+    "rule": "Codex models (owned_by openai) are spoken natively over the Responses API."
+  },
+  {
+    "id": "cli-proxy-unknown-family-fails-closed",
+    "file": "crates/ai/src/providers/cli_proxy.rs",
+    "find": "        .ok_or(UNKNOWN_FAMILY)",
+    "replace": "        .or(Some(API_FORMAT_CHAT_COMPLETIONS))\n        .ok_or(UNKNOWN_FAMILY)",
+    "expect_failing": [
+      "families_map_to_their_format_and_unknown_ones_fail_closed",
+      "test_and_discover_lists_every_family_and_saves_the_inventory"
+    ],
+    "rule": "A model whose owned_by family is unknown has no format and is refused."
+  },
+  {
+    "id": "cli-proxy-media-models-are-not-chat",
+    "file": "crates/ai/src/providers/cli_proxy.rs",
+    "find": "    if is_media_model(id) {",
+    "replace": "    if false && is_media_model(id) {",
+    "expect_failing": [
+      "families_map_to_their_format_and_unknown_ones_fail_closed",
+      "test_and_discover_lists_every_family_and_saves_the_inventory"
+    ],
+    "rule": "Image, video and speech models the proxy lists are never chatted with."
+  },
+  {
+    "id": "cli-proxy-annotation-carries-format",
+    "file": "crates/ai/src/providers/cli_proxy.rs",
+    "find": "                    set(&mut row, \"api_format\", s(format));",
+    "replace": "                    set(&mut row, \"api_format\", Value::Null);",
+    "expect_failing": [
+      "annotation_marks_chat_models_and_explains_the_rest",
+      "test_and_discover_lists_every_family_and_saves_the_inventory"
+    ],
+    "rule": "The saved model list carries each model's format."
+  },
+  {
+    "id": "cli-proxy-ultra-is-max",
+    "file": "crates/ai/src/providers/cli_proxy.rs",
+    "find": "        \"ultra\" => Some(\"max\"),",
+    "replace": "        \"ultra\" => Some(\"high\"),",
+    "expect_failing": [
+      "efforts_reach_the_proxys_levels",
+      "streamed_tool_calls_and_efforts_go_out_in_each_models_format"
+    ],
+    "rule": "Kassiber's ultra effort reaches the proxy as max."
+  },
+  {
+    "id": "cli-proxy-chat-model-must-be-listed",
+    "file": "crates/ai/src/providers/cli_proxy.rs",
+    "find": "        .find(|row| string(field(row, \"id\")).as_deref() == Some(model))",
+    "replace": "        .next()",
+    "expect_failing": [
+      "test_and_discover_lists_every_family_and_saves_the_inventory"
+    ],
+    "rule": "A chat model the saved list does not have is refused, never given another model's format."
+  },
+  {
+    "id": "cli-proxy-transport-uses-proxy-levels",
+    "file": "crates/ai/src/transport/mod.rs",
+    "find": "        if self.cli_proxy {",
+    "replace": "        if false && self.cli_proxy {",
+    "expect_failing": [
+      "streamed_tool_calls_and_efforts_go_out_in_each_models_format",
+      "a_cli_proxy_chat_asks_consent_and_writes_through_chat_completions",
+      "a_cli_proxy_codex_chat_in_full_access_writes_over_responses_without_asking"
+    ],
+    "rule": "A CLI proxy's requests send the proxy's effort levels, not the HTTP clamp."
+  },
+  {
+    "id": "cli-proxy-chat-pins-model-format",
+    "file": "crates/ai/src/service.rs",
+    "find": "            proxy_format.map_or_else(|| field(&provider, \"api_format\").clone(), s),",
+    "replace": "            field(&provider, \"api_format\").clone(),",
+    "expect_failing": [
+      "test_and_discover_lists_every_family_and_saves_the_inventory"
+    ],
+    "rule": "A CLI proxy chat speaks the model's own format, pinned from the saved list."
+  },
+  {
+    "id": "cli-proxy-saved-test-keeps-models",
+    "file": "crates/ai/src/service.rs",
+    "find": "            save_proxy_models(conn, host, row, field(&result, \"models\"))?;",
+    "replace": "",
+    "expect_failing": [
+      "testing_the_saved_provider_saves_its_models_and_probes_in_the_models_format"
+    ],
+    "rule": "Testing a saved CLI proxy at its own address keeps the list its chats read."
+  },
+  {
+    "id": "cli-proxy-saved-ack-passes-test",
+    "file": "crates/ai/src/providers/gates.rs",
+    "find": "            || *saved_kind == s(super::cli_proxy::KIND))",
+    "replace": "            || false)",
+    "expect_failing": [
+      "a_local_provider_becoming_a_cli_proxy_must_be_acknowledged_again"
+    ],
+    "rule": "An acknowledged saved CLI proxy can be tested without ticking the box again."
+  },
+  {
+    "id": "cli-proxy-local-to-proxy-drops-ack",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "Some(\"remote\" | \"tee\" | cli_proxy::KIND))",
+    "replace": "Some(\"remote\" | \"tee\"))",
+    "expect_failing": [
+      "a_local_provider_becoming_a_cli_proxy_must_be_acknowledged_again"
+    ],
+    "rule": "A local provider's implicit acknowledgement never covers becoming a CLI proxy."
+  },
+  {
+    "id": "cli-proxy-no-api-format",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    if kind == cli_proxy::KIND && (format != API_FORMAT_AUTO || detected.is_some()) {",
+    "replace": "    if false && kind == cli_proxy::KIND && (format != API_FORMAT_AUTO || detected.is_some()) {",
+    "expect_failing": [
+      "a_cli_proxy_is_off_device_and_takes_no_format_store_choice_or_locator"
+    ],
+    "rule": "A CLI proxy takes no API format or detection of its own."
+  },
+  {
+    "id": "cli-proxy-no-store-exemption",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    if omit && kind == cli_proxy::KIND {",
+    "replace": "    if false && omit && kind == cli_proxy::KIND {",
+    "expect_failing": [
+      "a_cli_proxy_is_off_device_and_takes_no_format_store_choice_or_locator"
+    ],
+    "rule": "A CLI proxy never sends requests without the no-retention flag."
+  },
+  {
+    "id": "cli-proxy-never-records-detection",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": " AND (kind IS NULL OR kind != 'cli_proxy')\",",
+    "replace": "\",",
+    "expect_failing": [
+      "a_cli_proxy_is_off_device_and_takes_no_format_store_choice_or_locator"
+    ],
+    "rule": "No single detected format is ever recorded onto a CLI proxy."
+  },
+  {
+    "id": "cli-proxy-reports-reasoning-support",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "            is_cli_locator(field(provider, \"base_url\")) || cli_proxy::is_cli_proxy(provider),",
+    "replace": "            is_cli_locator(field(provider, \"base_url\")),",
+    "expect_failing": [
+      "a_cli_proxy_is_off_device_and_takes_no_format_store_choice_or_locator"
+    ],
+    "rule": "Provider output says a CLI proxy takes reasoning efforts."
+  },
+  {
+    "id": "cli-proxy-has-no-single-format",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    if is_cli_locator(field(provider, \"base_url\")) || cli_proxy::is_cli_proxy(provider) {",
+    "replace": "    if is_cli_locator(field(provider, \"base_url\")) {",
+    "expect_failing": [
+      "a_cli_proxy_is_off_device_and_takes_no_format_store_choice_or_locator"
+    ],
+    "rule": "A CLI proxy has no effective_api_format: each model has its own."
+  },
+  {
+    "id": "wire-cli-proxy-chat-passes-model",
+    "file": "crates/daemon/src/ai_chat.rs",
+    "find": "        (\"model\", Value::Str(validated.model.clone())),",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_cli_proxy_daemon.py::RustCliProxyDaemonTest::test_a_cli_proxy_is_set_up_and_chats_in_each_models_format"
+    ],
+    "rule": "ai.chat hands its model to the provider resolution, so a CLI proxy chat speaks that model's format."
+  },
+  {
+    "id": "wire-cli-proxy-cli-needs-acknowledge",
+    "file": "crates/ai/src/service.rs",
+    "find": "            if kind.as_deref() == Some(cli_proxy::KIND) && !truthy(field(args, \"acknowledge\")) {",
+    "replace": "            if false && kind.as_deref() == Some(cli_proxy::KIND) && !truthy(field(args, \"acknowledge\")) {",
+    "expect_failing": [
+      "tests/test_rust_cli_proxy_daemon.py::RustCliProxyDaemonTest::test_the_cli_creates_a_cli_proxy_and_contacts_it_only_to_list_or_test"
+    ],
+    "rule": "`ai providers create --kind cli_proxy` is saved only with --acknowledge, as in the desktop wizard."
+  },
+  {
+    "id": "wire-cli-proxy-cli-grammar-takes-kind",
+    "file": "crates/cli/src/spec_data.rs",
+    "find": "help: Help::AiProviderKind, metavar: None, choices: Some(&[\"local\", \"remote\", \"tee\", \"cli_proxy\"])",
+    "replace": "help: Help::AiProviderKind, metavar: None, choices: Some(&[\"local\", \"remote\", \"tee\"])",
+    "expect_failing": [
+      "tests/test_rust_cli_proxy_daemon.py::RustCliProxyDaemonTest::test_the_cli_creates_a_cli_proxy_and_contacts_it_only_to_list_or_test"
+    ],
+    "rule": "The Rust CLI grammar takes `ai providers create --kind cli_proxy`, a Rust-only choice."
+  },
+  {
+    "id": "cli-proxy-prefix-own-family-wins",
+    "file": "crates/ai/src/providers/cli_proxy.rs",
+    "find": "    if let Some(owned) = given(string(field(row, \"owned_by\"))) {\n        return Some(owned);\n    }",
+    "replace": "    if let Some(owned) = given(string(field(row, \"owned_by\")))\n        .filter(|_| route_prefix(&string(field(row, \"id\")).unwrap_or_default()).is_none())\n    {\n        return Some(owned);\n    }",
+    "expect_failing": [
+      "a_prefixed_id_takes_its_own_family_and_only_falls_back_to_the_listed_base"
+    ],
+    "rule": "A prefixed id's own owned_by decides its family, even when the listed base has another."
+  },
+  {
+    "id": "cli-proxy-prefix-falls-back-to-listed-base",
+    "file": "crates/ai/src/providers/cli_proxy.rs",
+    "find": "    let (_, base) = route_prefix(&id)?;",
+    "replace": "    let (_, base) = route_prefix(&id).filter(|_| false)?;",
+    "expect_failing": [
+      "a_prefixed_id_takes_its_own_family_and_only_falls_back_to_the_listed_base",
+      "without_owned_by_a_prefixed_id_takes_only_its_listed_base_family"
+    ],
+    "rule": "A prefixed id without owned_by takes the family the same listing gives its base model."
+  },
+  {
+    "id": "cli-proxy-prefix-never-guesses",
+    "file": "crates/ai/src/providers/cli_proxy.rs",
+    "find": "        .and_then(|other| given(string(field(other, \"owned_by\"))))\n}",
+    "replace": "        .and_then(|other| given(string(field(other, \"owned_by\"))))\n        .or_else(|| Some(\"anthropic\".to_owned()))\n}",
+    "expect_failing": [
+      "a_prefixed_id_takes_its_own_family_and_only_falls_back_to_the_listed_base",
+      "without_owned_by_a_prefixed_id_takes_only_its_listed_base_family"
+    ],
+    "rule": "Without owned_by and without a listed base, a prefixed id has no family: nothing is guessed."
+  }
+]

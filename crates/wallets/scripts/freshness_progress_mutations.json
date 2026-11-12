@@ -1,0 +1,182 @@
+[
+  {
+    "id": "freshness-progress-prefetch",
+    "file": "crates/wallets/src/freshness/planning.rs",
+    "find": "if workspace.is_none() && !automatic {\n                    handler.prefetch",
+    "replace": "if false && workspace.is_none() && !automatic {\n                    handler.prefetch",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-electrum]"
+    ],
+    "rule": "Active-book prefetch emits before running-job progress and must not be folded into handler execution."
+  },
+  {
+    "id": "freshness-progress-workspace",
+    "file": "crates/wallets/src/freshness/planning.rs",
+    "find": "if workspace.is_none() && !automatic {\n                    handler.prefetch",
+    "replace": "if !automatic {\n                    handler.prefetch",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-True-electrum]"
+    ],
+    "rule": "Workspace jobs fetch inside their own progress context rather than active-book prefetch."
+  },
+  {
+    "id": "freshness-progress-bdk-scan",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "json!({\"phase\":\"backend_fetch\",\"observer\":\"bdk\",\"status\":\"scanning\"})",
+    "replace": "json!({\"phase\":\"backend_fetch\",\"observer\":\"bdk\",\"status\":\"complete\"})",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-electrum]"
+    ],
+    "rule": "Live BDK scanning progress preserves the Python payload."
+  },
+  {
+    "id": "freshness-progress-bdk-decode",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "\"transactions_seen\":update[\"facts\"][\"transaction_records\"].as_array().map_or(0,Vec::len)",
+    "replace": "\"transactions_seen\":0",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[receive-change-False-electrum]"
+    ],
+    "rule": "Decode progress reports the actual normalized transaction count."
+  },
+  {
+    "id": "freshness-progress-discovery",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "cancel.progress(event)?;",
+    "replace": "let _ = event;",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-esplora]"
+    ],
+    "rule": "Compatibility discovery batches reach the request stream with their counts."
+  },
+  {
+    "id": "freshness-progress-esplora-stats",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "fetched(index + 1, total)?;",
+    "replace": "let _ = (index, total);",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-esplora]"
+    ],
+    "rule": "Esplora stats fetch progress is separate from the later stats-summary pass."
+  },
+  {
+    "id": "freshness-progress-esplora-history",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "fetched(histories.len(), changed)?;",
+    "replace": "let _ = changed;",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-esplora]"
+    ],
+    "rule": "Esplora history fetch progress is emitted before history-summary progress."
+  },
+  {
+    "id": "freshness-progress-esplora-utxos",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "utxos_seen += script[\"utxos\"].as_array().map_or(0, Vec::len);",
+    "replace": "utxos_seen += 0;",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[receive-change-False-esplora]"
+    ],
+    "rule": "UTXO batch progress counts every output received so far."
+  },
+  {
+    "id": "freshness-progress-wallet-label",
+    "file": "crates/wallets/src/freshness/native.rs",
+    "find": "put(&mut event, \"wallet\", label.clone());",
+    "replace": "put(&mut event, \"wallet\", s(\"wallet\"));",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-electrum]"
+    ],
+    "rule": "Fetch progress retains the selected wallet label without adding private inputs."
+  },
+  {
+    "id": "freshness-progress-stream-failure",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "(self.progress.borrow_mut())(event)",
+    "replace": "(self.progress.borrow_mut())(event).or(Ok(()))",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_progress_authority_fences[decode_enrich-closed-esplora]"
+    ],
+    "rule": "A failed stream stops further acquisition and publication."
+  },
+  {
+    "id": "freshness-control-bdk-batches",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": ".run(gate, scope, Some(&grant), deadline, cancel, start_time)?;",
+    "replace": ".run(gate, scope, Some(&grant), deadline, cancel.cancellation(), start_time)?;",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_controls_between_fetch_batches[False-cancel-electrum]"
+    ],
+    "rule": "BDK RPC batches retain database/request authority checks, not only the atomic stop flag."
+  },
+  {
+    "id": "freshness-control-esplora-batches",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "discovery.run(gate, scope, Some(&grant), deadline, cancel, |_| {})?;",
+    "replace": "discovery.run(gate, scope, Some(&grant), deadline, cancel.cancellation(), |_| {})?;",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_controls_between_fetch_batches[False-cancel-esplora]"
+    ],
+    "rule": "Compatibility discovery rechecks job cancellation, book scope and wallet inputs between batches."
+  },
+  {
+    "id": "freshness-progress-daemon-stream",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": "success(&format!(\"{kind}.progress\"), event.clone()),",
+    "replace": "success(&format!(\"{kind}.wrong\"), event.clone()),",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_live_stream_matches_python[electrum]"
+    ],
+    "rule": "The guarded admitted-book stream emits ordered, request-bound envelopes before its terminal response."
+  },
+  {
+    "id": "freshness-control-request-check",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "(self.check)()",
+    "replace": "Ok(())",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_controls_between_fetch_batches[False-book-electrum]"
+    ],
+    "rule": "Synchronous request checks run at protocol boundaries in addition to the atomic cancellation flag."
+  },
+  {
+    "id": "freshness-control-backend-revision",
+    "file": "crates/wallets/src/freshness/native.rs",
+    "find": "if resolver.borrow_mut()(conn, &selected.backend_name) != selected.backend {",
+    "replace": "if false && resolver.borrow_mut()(conn, &selected.backend_name) != selected.backend {",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_controls_between_fetch_batches[False-backend-electrum]"
+    ],
+    "rule": "A backend revision ends the admitted fetch before another batch starts."
+  },
+  {
+    "id": "freshness-control-wallet-inputs",
+    "file": "crates/wallets/src/freshness/native.rs",
+    "find": "[\"kind\", \"config_json\"]\n                    .iter()",
+    "replace": "[\"kind\"]\n                    .iter()",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_controls_between_fetch_batches[False-config-electrum]"
+    ],
+    "rule": "Invalid wallet edits are stale request inputs, never a capability handoff after transport has started."
+  },
+  {
+    "id": "freshness-progress-electrum-statuses",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "cancel.progress(json!({\"phase\":\"backend_fetch\",\"target_count\":total,",
+    "replace": "cancel.progress(json!({\"phase\":\"backend_fetch_statuses\",\"target_count\":total,",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_electrum_address_list_matches_python"
+    ],
+    "rule": "The compatibility Electrum route reports its status round as Python does."
+  },
+  {
+    "id": "freshness-progress-electrum-histories",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "\"targets_checked\":position+1,\"known_txids\":txids.len(),",
+    "replace": "\"targets_checked\":position+1,\"known_txids\":0,",
+    "expect_failing": [
+      "tests/test_rust_freshness_native.py::test_native_freshness_electrum_address_list_matches_python"
+    ],
+    "rule": "The compatibility Electrum route reports its known txids as Python does."
+  }
+]

@@ -1,0 +1,102 @@
+[
+  {
+    "id": "latest-manual-priority",
+    "file": "crates/rates/src/lib.rs",
+    "find": "const LATEST_ORDER: &str = \"timestamp DESC, CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC, fetched_at DESC, source ASC\";",
+    "replace": "const LATEST_ORDER: &str = \"timestamp DESC, CASE WHEN source = 'manual' THEN 1 ELSE 0 END ASC, fetched_at DESC, source ASC\";",
+    "expect_failing": [
+      "latest_manual_then_fetched_then_source_ties_match_base"
+    ],
+    "rule": "Manual rates win timestamp ties before fetched_at and source."
+  },
+  {
+    "id": "lookup-no-future",
+    "file": "crates/rates/src/lib.rs",
+    "find": "WHERE pair=? AND timestamp <= ? ORDER BY {LOOKUP_ORDER}",
+    "replace": "WHERE pair=? AND timestamp >= ? ORDER BY {LOOKUP_ORDER}",
+    "expect_failing": [
+      "lookup_excludes_future_and_preserves_insertion_tie"
+    ],
+    "rule": "Pricing must never select a future rate."
+  },
+  {
+    "id": "manual-positive",
+    "file": "crates/rates/src/lib.rs",
+    "find": "if d <= Decimal::zero() {",
+    "replace": "if d < Decimal::zero() {",
+    "expect_failing": [
+      "csv_missing_path_errors_and_manual_validation"
+    ],
+    "rule": "Manual rates must be strictly positive."
+  },
+  {
+    "id": "csv-finest-interval",
+    "file": "crates/rates/src/csv.rs",
+    "find": "if interval >= *current {",
+    "replace": "if interval <= *current {",
+    "expect_failing": [
+      "csv_selection_chooses_finest_and_first_duplicate"
+    ],
+    "rule": "The finest available Kraken interval wins."
+  },
+  {
+    "id": "coinbase-midnight-window",
+    "file": "crates/rates/src/providers.rs",
+    "find": "(close - day - 60_000_000).div_euclid(18_000_000_000)",
+    "replace": "(close - day).div_euclid(18_000_000_000)",
+    "expect_failing": [
+      "windows_respect_midnight_max_candles_and_future"
+    ],
+    "rule": "Close at midnight belongs to the preceding 300-candle block."
+  },
+  {
+    "id": "cached-minute-selection",
+    "file": "crates/rates/src/providers.rs",
+    "find": "if exists {\n                    cached += 1;",
+    "replace": "if false {\n                    cached += 1;",
+    "expect_failing": [
+      "coinbase_transaction_need_no_traffic_before_consent_and_incremental_cache"
+    ],
+    "rule": "Existing precise cache rows prevent a repeated provider fetch."
+  },
+  {
+    "id": "checked-minute-selection",
+    "file": "crates/rates/src/providers.rs",
+    "find": "if exists {\n                    checked += 1;",
+    "replace": "if false {\n                    checked += 1;",
+    "expect_failing": [
+      "coinbase_empty_window_is_checked_without_refetch"
+    ],
+    "rule": "Checked sparse minutes prevent repeated empty requests."
+  },
+  {
+    "id": "background-no-idle-warming",
+    "file": "crates/rates/src/providers.rs",
+    "find": "let warm = action != FetchAction::EnabledRefresh\n            &&",
+    "replace": "let warm = action == FetchAction::EnabledRefresh\n            &&",
+    "expect_failing": [
+      "action_grants_cannot_relabel_fetches_or_warm_background_cache"
+    ],
+    "rule": "Enabled background refresh cannot inherit explicit sync's idle cache warming."
+  },
+  {
+    "id": "lbtc-fallback",
+    "file": "crates/rates/src/lib.rs",
+    "find": "    let asset = if asset == \"LBTC\" || asset == \"L-BTC\" {\n        \"BTC\"",
+    "replace": "    let asset = if asset == \"LBTC\" || asset == \"L-BTC\" {\n        \"LBTC\"",
+    "expect_failing": [
+      "normalized_provider_fallback_and_asset_aliases"
+    ],
+    "rule": "LBTC uses the BTC fiat rate pair."
+  },
+  {
+    "id": "RA-r58a-l-btc-alias",
+    "file": "crates/rates/src/lib.rs",
+    "find": "    let asset = if asset == \"LBTC\" || asset == \"L-BTC\" {",
+    "replace": "    let asset = if asset == \"LBTC\" {",
+    "expect_failing": [
+      "normalized_provider_fallback_and_asset_aliases"
+    ],
+    "rule": "Both Liquid ticker spellings price from the BTC pair (6cb9ff8d8)."
+  }
+]

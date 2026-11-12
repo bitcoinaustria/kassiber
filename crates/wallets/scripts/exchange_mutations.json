@@ -1,0 +1,729 @@
+[
+  {
+    "id": "exchange-consent-from-caller",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "let consent = consent(&route);",
+    "replace": "let consent = Some(Consent::explicit_trigger(&route.request));",
+    "expect_failing": [
+      "exchange_reads_need_the_callers_consent_and_an_open_gate"
+    ],
+    "rule": "Only the trusted command boundary mints consent for the exact route."
+  },
+  {
+    "id": "exchange-publication-recheck",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": ".and_then(|result| client.authorize().map(|()| result));",
+    "replace": ".and_then(Ok);",
+    "expect_failing": [
+      "going_offline_after_the_reads_publishes_nothing"
+    ],
+    "rule": "Going offline or losing consent after the reads rolls the import back."
+  },
+  {
+    "id": "exchange-non-finite-abs",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "PriceNumber::Special(v) if v.contains(\"NaN\") => Ok(PriceNumber::Special(v)),",
+    "replace": "PriceNumber::Special(v) if v.contains(\"NaN\") => Ok(PriceNumber::Special(v.trim_start_matches('-').into())),",
+    "expect_failing": [
+      "normalizers_match_python_reference_vectors"
+    ],
+    "rule": "abs() of a quiet NaN keeps its sign, as Decimal does."
+  },
+  {
+    "id": "exchange-default-decimal",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "Py::Null => return PriceNumber::parse(default),",
+    "replace": "Py::Null => return PriceNumber::parse(\"1\"),",
+    "expect_failing": [
+      "normalizers_match_python_reference_vectors"
+    ],
+    "rule": "A missing number is the call's default, as msat.dec."
+  },
+  {
+    "id": "exchange-implied-rate",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "}) if positive(fiat_value)? && truth(&amount) => {",
+    "replace": "}) if false => {",
+    "expect_failing": [
+      "normalizers_match_python_reference_vectors"
+    ],
+    "rule": "Without a price, a positive value prices the row over the absolute amount."
+  },
+  {
+    "id": "exchange-z-fiat-alias",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "code.starts_with('Z') && code.chars().count() == 4",
+    "replace": "code.starts_with('Z') && code.chars().count() == 3",
+    "expect_failing": [
+      "assets_follow_normalize_asset_code_and_exchange_aliases",
+      "normalizers_match_python_reference_vectors"
+    ],
+    "rule": "Four-character Z codes name fiat currencies."
+  },
+  {
+    "id": "exchange-ms-epoch",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "PriceNumber::parse(\"1000\")?",
+    "replace": "PriceNumber::parse(\"100\")?",
+    "expect_failing": [
+      "normalizers_match_python_reference_vectors"
+    ],
+    "rule": "Binance times are milliseconds."
+  },
+  {
+    "id": "exchange-utc-carry",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "if micros >= 1e6 {",
+    "replace": "if micros > 1e6 {",
+    "expect_failing": [
+      "utc_timestamps_round_half_even_and_report_cpython_range_errors"
+    ],
+    "rule": "Microseconds that round up to a whole second carry into it."
+  },
+  {
+    "id": "exchange-utc-gmtime-range",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "if i32::try_from(year - 1900).is_err() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "utc_timestamps_round_half_even_and_report_cpython_range_errors"
+    ],
+    "rule": "gmtime refuses years beyond int, before the datetime range check."
+  },
+  {
+    "id": "exchange-utc-nan",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "if seconds.is_nan() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "utc_timestamps_round_half_even_and_report_cpython_range_errors"
+    ],
+    "rule": "A NaN timestamp is CPython's ValueError."
+  },
+  {
+    "id": "kraken-sign-path",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "&[path.as_bytes(), digest.as_byte_array()],",
+    "replace": "&[digest.as_byte_array()],",
+    "expect_failing": [
+      "kraken_signs_every_page_and_imports_through_the_coordinator"
+    ],
+    "rule": "The Kraken signature binds the private API path."
+  },
+  {
+    "id": "kraken-sign-nonce",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "format!(\"{nonce}{body}\")",
+    "replace": "format!(\"{body}\")",
+    "expect_failing": [
+      "kraken_signs_every_page_and_imports_through_the_coordinator"
+    ],
+    "rule": "The nonce prefixes the form body before hashing."
+  },
+  {
+    "id": "kraken-offset",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "offset += BigInt::from(page.len());",
+    "replace": "offset += BigInt::from(1);",
+    "expect_failing": [
+      "kraken_signs_every_page_and_imports_through_the_coordinator"
+    ],
+    "rule": "The next page starts after every entry of this page."
+  },
+  {
+    "id": "kraken-count-fallback",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "integer(value)?.unwrap_or_else(|| count.clone())",
+    "replace": "integer(value)?.unwrap_or_else(|| count.clone() + BigInt::from(1))",
+    "expect_failing": [
+      "kraken_unparsable_counts_stop_after_the_merged_rows"
+    ],
+    "rule": "An unparsable count falls back to the merged row count."
+  },
+  {
+    "id": "kraken-permission-code",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "contains(\"permission\")",
+    "replace": "contains(\"permissions\")",
+    "expect_failing": [
+      "kraken_errors_keep_permission_codes_and_withhold_credentials"
+    ],
+    "rule": "An error mentioning permission is an auth_error."
+  },
+  {
+    "id": "kraken-withhold-credentials",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "Py::Str(scrub(item, &[client.key, client.secret]))",
+    "replace": "Py::Str(item.clone())",
+    "expect_failing": [
+      "kraken_errors_keep_permission_codes_and_withhold_credentials"
+    ],
+    "rule": "Echoed credentials never reach the error details."
+  },
+  {
+    "id": "kraken-base64-lenient",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "let Some(v) = value(c) else { continue };",
+    "replace": "let Some(v) = value(c) else { return None };",
+    "expect_failing": [
+      "kraken_secret_decoding_follows_non_validating_binascii"
+    ],
+    "rule": "Non-alphabet characters are skipped, as binascii does without validation."
+  },
+  {
+    "id": "kraken-base64-pad-stop",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "if quad >= 2 && quad + pads >= 4 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "kraken_secret_decoding_follows_non_validating_binascii"
+    ],
+    "rule": "A complete pad sequence ends the decoded data."
+  },
+  {
+    "id": "coinbase-commission-buy-only",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "if inbound && truth(&commission) {",
+    "replace": "if truth(&commission) {",
+    "expect_failing": [
+      "normalizers_match_python_reference_vectors",
+      "coinbase_signs_pages_follows_its_collection_and_keeps_coinbase_network_metadata"
+    ],
+    "rule": "Commission raises only a buy's fiat value."
+  },
+  {
+    "id": "coinbase-cent-threshold",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "\"0.01\".parse::<Decimal>()",
+    "replace": "\"0.001\".parse::<Decimal>()",
+    "expect_failing": [
+      "normalizers_match_python_reference_vectors"
+    ],
+    "rule": "Trades need at least a cent of fiat value."
+  },
+  {
+    "id": "coinbase-collection-guard",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "!(rest.is_empty() || rest.starts_with('?'))",
+    "replace": "false",
+    "expect_failing": [
+      "coinbase_ids_quote_like_urllib_and_pages_stay_in_their_collection"
+    ],
+    "rule": "Pagination cannot leave the requested collection."
+  },
+  {
+    "id": "binance-signature",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "hmac_sha256_hex(client.secret.as_bytes(), query.as_bytes())",
+    "replace": "hmac_sha256_hex(client.secret.as_bytes(), format!(\"{query}&\").as_bytes())",
+    "expect_failing": [
+      "binance_signs_each_history_query_in_reference_order"
+    ],
+    "rule": "The signature covers exactly the sent query."
+  },
+  {
+    "id": "binance-status-confirming",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "\"credited\", \"confirming\"]",
+    "replace": "\"credited\"]",
+    "expect_failing": [
+      "normalizers_match_python_reference_vectors",
+      "binance_signs_each_history_query_in_reference_order"
+    ],
+    "rule": "Confirming transfers import."
+  },
+  {
+    "id": "binance-fiat-denominated",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "if !is_fiat(&fiat_currency) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "normalizers_match_python_reference_vectors"
+    ],
+    "rule": "Fiat payments must be fiat-denominated."
+  },
+  {
+    "id": "coinbase-network-guard",
+    "file": "crates/wallets/src/network.rs",
+    "find": "if kind == \"coinbase\" && raw.get(\"network\").is_some_and(Value::is_object) {",
+    "replace": "if false && raw.get(\"network\").is_some_and(Value::is_object) {",
+    "expect_failing": [
+      "coinbase_signs_pages_follows_its_collection_and_keeps_coinbase_network_metadata"
+    ],
+    "rule": "Coinbase network objects are payment metadata on a coinbase wallet."
+  },
+  {
+    "id": "import-non-finite-at-fingerprint",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "        if let Some(error) = &r.deferred {\n            return Err(error.clone());\n        }\n        let fp = fingerprint(&wallet.id, r);",
+    "replace": "        let fp = fingerprint(&wallet.id, r);\n        price_currency(r, &currency)?;\n        if let Some(error) = &r.deferred {\n            return Err(error.clone());\n        }",
+    "expect_failing": [
+      "non_finite_amounts_report_before_the_rows_price_currency_check"
+    ],
+    "rule": "A non-finite amount fails at its row's fingerprint, before the price-currency check."
+  },
+  {
+    "id": "sync-sourceless-sp",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "        || crate::silent_payments::has_material(c)\n",
+    "replace": "",
+    "expect_failing": [
+      "sync_service_sourceless_selections_answer_python_skipped_rows"
+    ],
+    "rule": "A silent-payment descriptor is a source Python syncs."
+  },
+  {
+    "id": "sync-sourceless-kinds",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "\"coreln\" | \"lnd\" | \"nwc\" | \"phoenix\" | \"silent-payment\"\n                    );",
+    "replace": "\"coreln\" | \"lnd\"\n                    );",
+    "expect_failing": [
+      "sync_service_sourceless_selections_answer_python_skipped_rows"
+    ],
+    "rule": "Node and wallet-route kinds never take the sourceless answer."
+  },
+  {
+    "id": "exchange-rate-absolute-amount",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "Some(divide(fiat_value, &abs(amount.clone())?)?)",
+    "replace": "Some(divide(fiat_value, &amount)?)",
+    "expect_failing": [
+      "normalizers_match_python_reference_vectors"
+    ],
+    "rule": "A sell's implied rate divides by the absolute amount."
+  },
+  {
+    "id": "exchange-rate-positive-value",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "}) if positive(fiat_value)? && truth(&amount) => {",
+    "replace": "}) if truth(&amount) => {",
+    "expect_failing": [
+      "normalizers_match_python_reference_vectors"
+    ],
+    "rule": "A value that is not positive prices nothing."
+  },
+  {
+    "id": "kraken-cost-volume",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "Some(divide(&cost, &abs(amount.clone())?)?)",
+    "replace": "None",
+    "expect_failing": [
+      "kraken_signs_every_page_and_imports_through_the_coordinator",
+      "normalizers_match_python_reference_vectors"
+    ],
+    "rule": "A Kraken trade without price is priced at cost / volume."
+  },
+  {
+    "id": "kraken-error-string-whole",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "Py::Str(text) => vec![text.clone()],",
+    "replace": "Py::Str(text) => text\n            .code_points()\n            .map(|p| PyStr::from_code_points([p]).expect(\"code point\"))\n            .collect(),",
+    "expect_failing": [
+      "a_kraken_error_string_is_one_item_with_its_echoed_key_withheld"
+    ],
+    "rule": "A Kraken error string is one item."
+  },
+  {
+    "id": "http-withhold-before-truncation",
+    "file": "crates/chain/src/http.rs",
+    "find": "                credentials.extend(self.withheld.iter().cloned());\n",
+    "replace": "",
+    "expect_failing": [
+      "http_error_bodies_withhold_credentials_before_truncation"
+    ],
+    "rule": "Echoed credentials are withheld before the body is cut to 200 characters."
+  },
+  {
+    "id": "credential-forms-escaped-slash",
+    "file": "crates/chain/src/http.rs",
+    "find": "escaped.replace('/', \"\\\\/\"),",
+    "replace": "escaped.clone(),",
+    "expect_failing": [
+      "echoed_credentials_are_withheld_in_every_spelling_python_withholds"
+    ],
+    "rule": "The JSON form with escaped slashes is withheld."
+  },
+  {
+    "id": "credential-forms-plus",
+    "file": "crates/chain/src/http.rs",
+    "find": "quote(credential, true),",
+    "replace": "quote(credential, false),",
+    "expect_failing": [
+      "echoed_credentials_are_withheld_in_every_spelling_python_withholds"
+    ],
+    "rule": "The quote_plus form is withheld."
+  },
+  {
+    "id": "bitpanda-write-scope-check",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {\n    refuse_trading_keys(client)?;\n",
+    "replace": "pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {\n    let _ = refuse_trading_keys;\n",
+    "expect_failing": [
+      "bitpanda_refuses_keys_that_can_trade"
+    ],
+    "rule": "A key that can trade is refused before any history is read."
+  },
+  {
+    "id": "bitpanda-limits-404-can-trade",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "const LIMITS: &[u16] = &[401, 403, 404];",
+    "replace": "const LIMITS: &[u16] = &[401, 403];",
+    "expect_failing": [
+      "bitpanda_refuses_keys_that_can_trade"
+    ],
+    "rule": "Bitpanda's documented 404 on /v1/trading-limits means the key holds Trade (Write)."
+  },
+  {
+    "id": "bitpanda-limits-only-refusals-pass",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    if REFUSED.contains(&response.status) {\n        return Ok(());",
+    "replace": "    if response.status != 200 {\n        return Ok(());",
+    "expect_failing": [
+      "bitpanda_refuses_keys_that_can_trade"
+    ],
+    "rule": "Only 401 and 403 prove the key lacks the write scope."
+  },
+  {
+    "id": "bitpanda-shared-accept-policy",
+    "file": "crates/chain/src/http.rs",
+    "find": "                    || matches!(policy, StatusPolicy::Accept(statuses) if statuses.contains(&response.status))\n",
+    "replace": "",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event",
+      "bitpanda_auth_errors_withhold_the_echoed_key"
+    ],
+    "rule": "Accepted statuses reach the caller; every other non-2xx keeps the shared error."
+  },
+  {
+    "id": "bitpanda-auth-code-withheld",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "let code = kassiber_chain::withhold_credentials(&code, &[client.key, client.secret]);",
+    "replace": "let code = code.clone();",
+    "expect_failing": [
+      "bitpanda_auth_errors_withhold_the_echoed_key",
+      "bitpanda_reads_need_consent_an_open_gate_and_a_key"
+    ],
+    "rule": "A 401/403 error code never carries an echoed key or secret."
+  },
+  {
+    "id": "bitpanda-refusal-text-withheld",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        let text = kassiber_chain::withhold_credentials(&text, self.secrets);\n",
+    "replace": "",
+    "expect_failing": [
+      "bitpanda_refusals_withhold_echoed_credentials"
+    ],
+    "rule": "Server text quoted in a refusal withholds the credentials."
+  },
+  {
+    "id": "bitpanda-paging-needs-has-next",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "            Py::Bool(false) => return Ok(rows),",
+    "replace": "            Py::Bool(false) | Py::Null => return Ok(rows),",
+    "expect_failing": [
+      "bitpanda_malformed_pages_fail_closed"
+    ],
+    "rule": "A page must say whether another follows."
+  },
+  {
+    "id": "bitpanda-paging-repeated-cursor",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        if !cursors.insert(next.clone()) {",
+    "replace": "        if !cursors.insert(next.clone()) && false {",
+    "expect_failing": [
+      "bitpanda_malformed_pages_fail_closed"
+    ],
+    "rule": "A repeated cursor stops paging instead of looping."
+  },
+  {
+    "id": "bitpanda-duplicate-operation",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "            Some((_, seen)) if *seen == operation => {}",
+    "replace": "            Some(_) => {}",
+    "expect_failing": [
+      "bitpanda_malformed_pages_fail_closed"
+    ],
+    "rule": "An operation repeated with different contents fails closed."
+  },
+  {
+    "id": "bitpanda-btc-asset-narrowing",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "folded(at(row, \"type\")) == \"crypto\" || folded(at(row, \"group\")) == \"cryptocoin\"",
+    "replace": "true",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event",
+      "bitpanda_needs_one_btc_crypto_asset"
+    ],
+    "rule": "A ticker shared with a stock or ETF narrows to the crypto asset."
+  },
+  {
+    "id": "bitpanda-trade-cash-value",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "            fiat_value: PriceNumber::Finite(cash.amount.clone()),",
+    "replace": "            fiat_value: PriceNumber::Finite(leg.amount.clone()),",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A trade's exact value is its cash leg."
+  },
+  {
+    "id": "bitpanda-trade-separate-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    if leg.fee.is_some() || cash.fee.is_some() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events"
+    ],
+    "rule": "A separate trade fee is ambiguous and refused."
+  },
+  {
+    "id": "bitpanda-trade-against-movement-type",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    if MOVEMENTS.contains(&kind) {\n        return Err(refuse.because(\n            format!(\"has type '{shown_kind}' but carries trade details\"),",
+    "replace": "    if false {\n        return Err(refuse.because(\n            format!(\"has type '{shown_kind}' but carries trade details\"),",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events"
+    ],
+    "rule": "Trade details contradict a deposit, withdrawal or reward type."
+  },
+  {
+    "id": "bitpanda-reversal-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        return Err(refuse.because(\"reverses an earlier transaction\", REVIEW));",
+    "replace": "        return Ok(None);",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events"
+    ],
+    "rule": "A reversal (compensates) is refused, never skipped."
+  },
+  {
+    "id": "bitpanda-other-asset-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    if btc.is_empty() || btc.len() + fiat.len() != operation.legs.len() {",
+    "replace": "    if btc.is_empty() {",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events"
+    ],
+    "rule": "BTC against another asset (swap, index) is refused."
+  },
+  {
+    "id": "bitpanda-contradicting-transaction-type",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "&& MOVEMENTS.contains(&kind.as_str()) && named != kind {",
+    "replace": "&& MOVEMENTS.contains(&kind.as_str()) && false {",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events"
+    ],
+    "rule": "A transaction type naming another event contradicts the operation."
+  },
+  {
+    "id": "bitpanda-internal-move-balance",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        if btc.iter().all(|l| l.fee.is_none()) && total(true)? == total(false)? {",
+    "replace": "        if btc.iter().all(|l| l.fee.is_none()) {",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events"
+    ],
+    "rule": "Only a balanced move between own wallets is skipped."
+  },
+  {
+    "id": "bitpanda-flow-matches-type",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    if leg.inbound != inbound {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events"
+    ],
+    "rule": "A movement must flow the way its type says."
+  },
+  {
+    "id": "bitpanda-reward-is-income",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        \"reward\" => (true, \"income\"),",
+    "replace": "        \"reward\" => (true, \"deposit\"),",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A BTC reward is income, not a transfer."
+  },
+  {
+    "id": "bitpanda-withdrawal-net-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        return Ok((leg.amount.clone(), fee.clone()));",
+    "replace": "        return Ok((sub(&leg.amount, fee)?, fee.clone()));",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "Balances showing the fee charged besides the amount keep the amount."
+  },
+  {
+    "id": "bitpanda-withdrawal-gross-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "            return Ok((sent, fee.clone()));",
+    "replace": "            return Ok((leg.amount.clone(), fee.clone()));",
+    "expect_failing": [
+      "bitpanda_withdrawal_amount_may_include_its_fee"
+    ],
+    "rule": "Balances showing the fee inside the amount subtract it."
+  },
+  {
+    "id": "bitpanda-withdrawal-tie",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        .any(|(at, _, id)| *at == leg.occurred && *id != leg.id)",
+    "replace": "        .any(|(at, _, id)| false && *at == leg.occurred && *id != leg.id)",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events"
+    ],
+    "rule": "A withdrawal at the same time as another leg has no unambiguous previous balance."
+  },
+  {
+    "id": "bitpanda-time-zone-required",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    parsed.offset_us?;\n",
+    "replace": "",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events"
+    ],
+    "rule": "A credit time without an offset is refused."
+  },
+  {
+    "id": "bitpanda-msat-precision",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "fraction_digits(at(amount_object, \"value\")) > BTC_DECIMALS",
+    "replace": "fraction_digits(at(amount_object, \"value\")) > 12",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events"
+    ],
+    "rule": "BTC amounts must be whole msat."
+  },
+  {
+    "id": "bitpanda-skip-counts",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "                fiat_only += 1;",
+    "replace": "                other += 1;",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "Fiat-only and non-BTC operations are counted apart."
+  },
+  {
+    "id": "bitpanda-key-alone",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "        (Some(key), secret) if kind == \"bitpanda\" => (key, secret.unwrap_or_else(|| \"\".into())),",
+    "replace": "",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "Bitpanda needs the key alone, no secret."
+  },
+  {
+    "id": "desktop-binance-unknown-flags",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "(name.starts_with(\"enable\") || name.starts_with(\"permits\"))",
+    "replace": "(name == \"enableWithdrawals\" || name == \"enableSpotAndMarginTrading\")",
+    "rule": "Every Binance enable*/permits* flag but reading refuses the key, including flags Binance adds later.",
+    "expect_failing": [
+      "binance_check_accepts_only_read_only_keys"
+    ]
+  },
+  {
+    "id": "desktop-binance-must-read",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "    if at(&restrictions, \"enableReading\") != &Py::Bool(true) {",
+    "replace": "    if false {",
+    "rule": "A Binance key that cannot read is refused.",
+    "expect_failing": [
+      "binance_check_accepts_only_read_only_keys"
+    ]
+  },
+  {
+    "id": "desktop-bitpanda-trading-check",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    refuse_trading_keys(client)?;\n    currencies(&read(client, \"/v1/currencies\")?)?;",
+    "replace": "    currencies(&read(client, \"/v1/currencies\")?)?;",
+    "rule": "The Bitpanda key check refuses a key that can trade.",
+    "expect_failing": [
+      "bitpanda_check_refuses_trading_keys_then_reads_with_both_scopes"
+    ]
+  },
+  {
+    "id": "desktop-kraken-both-histories",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "    for path in [\"/0/private/TradesHistory\", \"/0/private/Ledgers\"] {",
+    "replace": "    for path in [\"/0/private/TradesHistory\"] {",
+    "rule": "The Kraken key check reads both histories the sync needs.",
+    "expect_failing": [
+      "kraken_check_signs_the_first_page_of_both_histories"
+    ]
+  },
+  {
+    "id": "desktop-probe-consent",
+    "file": "crates/wallets/src/file_import/exchange_api/desktop.rs",
+    "find": "    let consent = consent(&route);",
+    "replace": "    let consent = Some(Consent::explicit_trigger(route.request()));",
+    "rule": "The key check reads only under the caller's consent.",
+    "expect_failing": [
+      "checks_need_consent_an_open_gate_and_credentials"
+    ]
+  },
+  {
+    "id": "desktop-probe-withholds",
+    "file": "crates/wallets/src/file_import/exchange_api/desktop.rs",
+    "find": ".withholding(&[key, secret])",
+    "replace": ".withholding(&[])",
+    "rule": "The key check withholds an echoed key and secret.",
+    "expect_failing": [
+      "checks_withhold_an_echoed_key_and_secret"
+    ]
+  },
+  {
+    "id": "desktop-read-only-verdict",
+    "file": "crates/wallets/src/file_import/exchange_api/desktop.rs",
+    "find": "(\"read_only\", read_only.map_or(Py::Null, Py::Bool)),",
+    "replace": "(\"read_only\", Py::Bool(true)),",
+    "rule": "Only an exchange that reports a key's permissions confirms it is read-only.",
+    "expect_failing": [
+      "kraken_check_signs_the_first_page_of_both_histories"
+    ]
+  },
+  {
+    "id": "desktop-wallet-config",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "            config: json!({\"backend\": backend}),",
+    "replace": "            config: json!({\"backend\": backend, \"source\": \"desktop\"}),",
+    "rule": "A new connection's wallet stores the CLI sync's config.",
+    "expect_failing": [
+      "a_new_connection_wallet_is_the_one_the_cli_sync_creates"
+    ]
+  },
+  {
+    "id": "desktop-targets-exchange-only",
+    "file": "crates/wallets/src/file_import/exchange_api/desktop.rs",
+    "find": "        .filter(|(_, _, kind, _)| KINDS.contains(&kind.as_str()))\n",
+    "replace": "",
+    "rule": "Only exchange wallets are exchange sync targets.",
+    "expect_failing": [
+      "sync_targets_are_the_profiles_exchange_wallets"
+    ]
+  },
+  {
+    "id": "desktop-sync-target-refusal",
+    "file": "crates/wallets/src/file_import/exchange_api/desktop.rs",
+    "find": "    if !KINDS.contains(&kind.as_str()) {",
+    "replace": "    if false {",
+    "rule": "A wallet that is not an exchange connection cannot be synced as one.",
+    "expect_failing": [
+      "sync_targets_are_the_profiles_exchange_wallets"
+    ]
+  },
+  {
+    "id": "binance-btc-rail-admission",
+    "file": "crates/wallets/src/network.rs",
+    "find": "    if kind == \"binance\" && asset == \"BTC\" && raw.get(\"network\") == Some(&json!(\"BTC\")) {",
+    "replace": "    if false {",
+    "rule": "Binance's BTC rail on a BTC row is mainnet evidence, so its withdrawals import.",
+    "expect_failing": [
+      "binance_btc_rail_imports_and_other_rails_refuse"
+    ]
+  }
+]

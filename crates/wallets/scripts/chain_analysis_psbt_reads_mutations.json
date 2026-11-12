@@ -1,0 +1,142 @@
+[
+  {
+    "id": "psbt-order-adapter",
+    "file": "crates/wallets/src/psbt/order.rs",
+    "find": "let tail = if i + adapter >= total {",
+    "replace": "let tail = if i + adapter > total {",
+    "expect_failing": [
+      "chain_analysis_psbt_analysis_keeps_reference_order_and_validation"
+    ],
+    "rule": "Adapter partial-signature rows keep the reference's re-keyed field order."
+  },
+  {
+    "id": "psbt-surrogate-text",
+    "file": "crates/wallets/src/psbt/compare.rs",
+    "find": "            None => Err(invalid(\"invalid_base64_or_hex\")),",
+    "replace": "            None => Err(invalid(\"payload_limit\")),",
+    "expect_failing": [
+      "chain_analysis_psbt_analysis_keeps_reference_order_and_validation"
+    ],
+    "rule": "Non-ASCII request text is a decoding refusal, not a size refusal."
+  },
+  {
+    "id": "psbt-source-exclusive",
+    "file": "crates/wallets/src/analysis_index/reads/psbt.rs",
+    "find": "if get(args, key).is_some() && get(args, &token).is_some() {",
+    "replace": "if false && get(args, key).is_some() && get(args, &token).is_some() {",
+    "expect_failing": [
+      "chain_analysis_psbt_analysis_keeps_reference_order_and_validation"
+    ],
+    "rule": "A request cannot mix inline PSBT text with a staged source."
+  },
+  {
+    "id": "psbt-entropy-snapshot",
+    "file": "crates/wallets/src/analysis_index/reads/psbt.rs",
+    "find": "(\"snapshot_id\", s(engine::digest(&result)?)),",
+    "replace": "(\"snapshot_id\", s(engine::digest(&facts)?)),",
+    "expect_failing": [
+      "chain_analysis_psbt_entropy_binds_snapshot_and_limits"
+    ],
+    "rule": "PSBT entropy binds the whole redacted analysis commitment."
+  },
+  {
+    "id": "psbt-maximum-whole-sat",
+    "file": "crates/wallets/src/psbt/compare.rs",
+    "find": ".filter(|v| *v <= u128::from(MAX_MONEY) * 1000 && v % 1000 == 0)",
+    "replace": ".filter(|v| *v <= u128::from(MAX_MONEY) * 1000)",
+    "expect_failing": [
+      "chain_analysis_psbt_compare_reports_delta_and_constraints"
+    ],
+    "rule": "Fee contribution budgets are exact whole-satoshi msat strings."
+  },
+  {
+    "id": "payjoin-sequence-hash",
+    "file": "crates/wallets/src/psbt/compare.rs",
+    "find": "data.extend_from_slice(&if anyone || base == 2 || base == 3 {",
+    "replace": "data.extend_from_slice(&if anyone || base == 2 {",
+    "expect_failing": [
+      "chain_analysis_payjoin_checks_verify_commitments_and_outputs"
+    ],
+    "rule": "BIP143 omits the sequence commitment for SINGLE signatures."
+  },
+  {
+    "id": "payjoin-single-output",
+    "file": "crates/wallets/src/psbt/compare.rs",
+    "find": "output(&tx.outputs[index], &mut single);",
+    "replace": "output(&tx.outputs[0], &mut single);",
+    "expect_failing": [
+      "chain_analysis_payjoin_checks_verify_commitments_and_outputs"
+    ],
+    "rule": "SINGLE commits to the output at the signed input's index."
+  },
+  {
+    "id": "payjoin-hybrid-key",
+    "file": "crates/wallets/src/psbt/compare.rs",
+    "find": "|| key.len() == 65 && key[0] == 4)",
+    "replace": "|| key.len() == 65)",
+    "expect_failing": [
+      "chain_analysis_payjoin_checks_verify_commitments_and_outputs"
+    ],
+    "rule": "Hybrid public keys are refused as the reference signer library does."
+  },
+  {
+    "id": "payjoin-output-order",
+    "file": "crates/wallets/src/psbt/compare.rs",
+    "find": "Some(counts_preserved && positions.windows(2).all(|w| w[0] <= w[1])),",
+    "replace": "Some(counts_preserved),",
+    "expect_failing": [
+      "chain_analysis_payjoin_checks_verify_commitments_and_outputs"
+    ],
+    "rule": "Receiver insertions cannot reorder protected sender outputs."
+  },
+  {
+    "id": "payjoin-cap-factor",
+    "file": "crates/wallets/src/psbt/compare.rs",
+    "find": "for factor in [*first, receivers.len(), 1000] {",
+    "replace": "for factor in [*first, receivers.len(), 100] {",
+    "expect_failing": [
+      "chain_analysis_payjoin_checks_verify_commitments_and_outputs"
+    ],
+    "rule": "The added-input fee cap uses exact msat units."
+  },
+  {
+    "id": "runtime-job-scope",
+    "file": "crates/wallets/src/analysis_index/runtime.rs",
+    "find": ".filter(|(_, job)| job.scope == scope)",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "chain_analysis_jobs_fence_scope_capacity_and_cancellation"
+    ],
+    "rule": "Receipts never cross books or profiles."
+  },
+  {
+    "id": "runtime-quiesce-admission",
+    "file": "crates/wallets/src/analysis_index/runtime.rs",
+    "find": "if state.quiescing > 0 || state.running >= JOB_CONCURRENCY {",
+    "replace": "if state.running >= JOB_CONCURRENCY {",
+    "expect_failing": [
+      "chain_analysis_jobs_fence_scope_capacity_and_cancellation"
+    ],
+    "rule": "A restore keeps worker admission closed."
+  },
+  {
+    "id": "runtime-clear-grants",
+    "file": "crates/wallets/src/analysis_index/runtime.rs",
+    "find": "        sources.grants.clear();\n",
+    "replace": "",
+    "expect_failing": [
+      "chain_analysis_sources_pin_purpose_book_and_identity"
+    ],
+    "rule": "Book boundaries forget staged source grants."
+  },
+  {
+    "id": "runtime-source-identity",
+    "file": "crates/wallets/src/analysis_index/runtime.rs",
+    "find": "if !info.is_file() || identity(&info) != self.identity {",
+    "replace": "if !info.is_file() {",
+    "expect_failing": [
+      "chain_analysis_sources_pin_purpose_book_and_identity"
+    ],
+    "rule": "A staged file changed after selection must be selected again."
+  }
+]

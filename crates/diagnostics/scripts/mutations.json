@@ -1,0 +1,982 @@
+[
+  {
+    "id": "bearer",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?i)\\bBearer\\s+[A-Za-z0-9._~+/=-]{6,}\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the bearer redaction rule."
+  },
+  {
+    "id": "sk-secret",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"\\bsk-[A-Za-z0-9._-]{6,}\\b\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the sk-secret redaction rule."
+  },
+  {
+    "id": "recovery-assignment",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?i)\\b(?P<key>[A-Za-z0-9_.-]*(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?)[A-Za-z0-9_.-]*)(?P<sep>\\s*[:=]\\s*)(?P<value>[^,;}{]*?)(?=(?:\\s+[A-Za-z0-9_.-]+\\s*[:=])|[,;}'\\\"]|$)\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the recovery-assignment redaction rule."
+  },
+  {
+    "id": "assigned-secret",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?i)\\b(?P<key>[A-Za-z0-9_.-]*(?:api[_-]?key|auth[_-]?header|cookie|mnemonic|passphrase|password|recovery[_-]?phrase|secret|seed(?:[_-]?(?:phrase|words))?|token)[A-Za-z0-9_.-]*)(?P<sep>\\s*[:=]\\s*)(?P<value>[^\\s,;]+)\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the assigned-secret redaction rule."
+  },
+  {
+    "id": "url",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?i)\\b[a-z][a-z0-9+.-]*://[^\\s'\\\"<>]+\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the url redaction rule."
+  },
+  {
+    "id": "timestamp",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?i)\\b\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:\\d{2})?\\b\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the timestamp redaction rule."
+  },
+  {
+    "id": "hex64",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"\\b[0-9a-fA-F]{64}\\b\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the hex64 redaction rule."
+  },
+  {
+    "id": "extended-key",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?i)\\b(?:xpub|ypub|zpub|tpub|upub|vpub|xprv|yprv|zprv|tprv|uprv|vprv)[A-Za-z0-9]{20,}\\b\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the extended-key redaction rule."
+  },
+  {
+    "id": "silent-payment-descriptor",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?i)\\bsp\\([^)\\n]{8,}\\)\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the silent-payment-descriptor redaction rule."
+  },
+  {
+    "id": "silent-payment-text",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?i)\\b(?:t?spscan|t?spspend|t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{8,}\\b\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the silent-payment-text redaction rule."
+  },
+  {
+    "id": "bech32",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?i)\\b(?:bc1|tb1|bcrt1|lq1|ex1)[0-9a-z]{8,90}\\b\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the bech32 redaction rule."
+  },
+  {
+    "id": "path",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?P<path>(?:/[A-Za-z0-9_.@+-][^\\s'\\\":)]*)|(?:[A-Za-z]:\\\\[^\\s'\\\":)]+))\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the path redaction rule."
+  },
+  {
+    "id": "amount-unit",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?i)(?<![A-Za-z0-9_])[-+]?\\d+(?:\\.\\d+)?\\s*(?:msat|sats?|btc|lbtc|usd|eur)\\b\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the amount-unit redaction rule."
+  },
+  {
+    "id": "number",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "r###\"(?<![A-Za-z_])[-+]?\\d+(?:\\.\\d+)?(?![A-Za-z_])\"###",
+    "replace": "r###\"(?!)\"###",
+    "expect_failing": [
+      "all_text_rules_match_python_bytes"
+    ],
+    "rule": "Public text must apply the number redaction rule."
+  },
+  {
+    "id": "sensitive-key-account",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"account\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The account key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-address",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"address\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The address key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-amount",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"amount\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The amount key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-asset",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"asset\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The asset key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-auth",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"auth\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The auth key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-backend",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"backend\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The backend key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-balance",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"balance\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The balance key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-basis",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"basis\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The basis key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-blinding",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"blinding\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The blinding key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-code",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"code\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The code key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-config",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"config\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The config key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-cookie",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"cookie\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The cookie key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-counterparty",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"counterparty\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The counterparty key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-credential",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"credential\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The credential key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-cursor",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"cursor\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The cursor key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-date",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"date\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The date key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-description",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"description\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The description key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-descriptor",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"descriptor\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The descriptor key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-end",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"end\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The end key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-env",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"env\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The env key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-external",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"external\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The external key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-fee",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"fee\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The fee key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-file",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"file\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The file key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-fingerprint",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"fingerprint\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The fingerprint key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-gain",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"gain\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The gain key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-id",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"id\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The id key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-key",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"key\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The key key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-label",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"label\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The label key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-loss",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"loss\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The loss key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-mnemonic",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"mnemonic\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The mnemonic key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-name",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"name\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The name key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-note",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"note\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The note key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-output",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"output\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The output key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-pair_id",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"pair_id\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The pair_id key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-passphrase",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"passphrase\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The passphrase key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-password",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"password\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The password key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-path",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"path\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The path key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-payload",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"payload\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The payload key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-price",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"price\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The price key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-proceeds",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"proceeds\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The proceeds key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-profile",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"profile\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The profile key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-rate",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"rate\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The rate key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-raw",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"raw\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The raw key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-recovery",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"recovery\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The recovery key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-ref",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"ref\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The ref key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-secret",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"secret\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The secret key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-seed",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"seed\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The seed key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-source",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"source\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The source key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-start",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"start\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The start key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-store",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"store\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The store key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-tag",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"tag\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The tag key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-time",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"time\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The time key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-timestamp",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"timestamp\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The timestamp key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-token",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"token\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The token key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-transaction",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"transaction\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The transaction key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-tx",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"tx\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The tx key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-type",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"type\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The type key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-url",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"url\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The url key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-user",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"user\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The user key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-value",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"value\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The value key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-wallet",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"wallet\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The wallet key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "sensitive-key-workspace",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");",
+    "replace": "let lowered = kassiber_pytext::lower(key).replace('-', \"_\");\n if lowered == \"workspace\" { return false; }",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "The workspace key is redacted, including when its value does not look secret."
+  },
+  {
+    "id": "key-casefold",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "kassiber_pytext::lower(key)",
+    "replace": "key.to_owned()",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "Sensitive-key matching is case insensitive."
+  },
+  {
+    "id": "key-hyphen",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": ".replace('-', \"_\")",
+    "replace": ".to_owned()",
+    "expect_failing": [
+      "every_sensitive_key_matches_python"
+    ],
+    "rule": "Hyphenated tokens match underscore tokens."
+  },
+  {
+    "id": "detail-sensitive-shape",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "redacted_shape(value)",
+    "replace": "sanitize_details(value)",
+    "expect_failing": [
+      "recursive_details_shapes_match_python"
+    ],
+    "rule": "Sensitive detail values retain only their redacted shape."
+  },
+  {
+    "id": "detail-number",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "Value::Int(_) | Value::Float(_) => s(\"<number>\")",
+    "replace": "Value::Int(_) | Value::Float(_) => value.clone()",
+    "expect_failing": [
+      "recursive_details_shapes_match_python"
+    ],
+    "rule": "Structured exact numeric detail values are omitted."
+  },
+  {
+    "id": "detail-list",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "Value::List(items) => dict([(\"items\", Value::Int(items.len().into()))]),\n        Value::Int",
+    "replace": "Value::List(items) => Value::List(items.clone()),\n        Value::Int",
+    "expect_failing": [
+      "recursive_details_shapes_match_python"
+    ],
+    "rule": "Structured detail lists disclose only their length."
+  },
+  {
+    "id": "native-frame-refusal",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "pub fn public_stack() -> Value {\n    Value::List(Vec::new())",
+    "replace": "pub fn public_stack() -> Value {\n    Value::List(vec![s(\"/home/planted-user/private-build/main.rs\")])",
+    "expect_failing": [
+      "native_error_and_panic_contexts_never_export_home_usernames_or_frames"
+    ],
+    "rule": "No raw native frame, username, home path or build path reaches the report."
+  },
+  {
+    "id": "native-debug-refusal",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "pub const EMPTY_NATIVE_DEBUG: &str = \"\";",
+    "replace": "pub const EMPTY_NATIVE_DEBUG: &str = \"/home/planted-user/private-build/main.rs\";",
+    "expect_failing": [
+      "native_debug_preserves_presence_type_and_position_without_exporting_frames"
+    ],
+    "rule": "No raw native stack reaches error.debug."
+  },
+  {
+    "id": "unhandled-debug-presence",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "requested.then_some(EMPTY_NATIVE_DEBUG)",
+    "replace": "Some(EMPTY_NATIVE_DEBUG)",
+    "expect_failing": [
+      "native_debug_preserves_presence_type_and_position_without_exporting_frames"
+    ],
+    "rule": "The CLI leaves error.debug null without --debug, even for unhandled failures."
+  },
+  {
+    "id": "handled-debug-presence",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "requested.then_some(EMPTY_NATIVE_DEBUG)",
+    "replace": "None",
+    "expect_failing": [
+      "native_debug_preserves_presence_type_and_position_without_exporting_frames"
+    ],
+    "rule": "Handled --debug failures populate error.debug."
+  },
+  {
+    "id": "effective-manual-review",
+    "file": "crates/diagnostics/src/state.rs",
+    "find": "m.component_id=term.component_id",
+    "replace": "m.component_id!=term.component_id",
+    "expect_failing": [
+      "all_state_aggregates_match_planted_python_fixture"
+    ],
+    "rule": "Only effective component terms contribute to reviewed manual pair counts."
+  },
+  {
+    "id": "backend-credential-presence",
+    "file": "crates/diagnostics/src/state.rs",
+    "find": "credentials.push((key, count(&rows, key)));",
+    "replace": "credentials.push((key, s(\"planted-credential\")));",
+    "expect_failing": [
+      "all_state_aggregates_match_planted_python_fixture"
+    ],
+    "rule": "Credentials disclose presence counts only."
+  },
+  {
+    "id": "wallet-descriptor-presence",
+    "file": "crates/diagnostics/src/state.rs",
+    "find": "fields.push((key, count(&configs, field)));\n    }\n    fields.push((\n        \"btcpay_sync_configured\"",
+    "replace": "fields.push((key, Value::List(configs.clone())));\n    }\n    fields.push((\n        \"btcpay_sync_configured\"",
+    "expect_failing": [
+      "all_state_aggregates_match_planted_python_fixture"
+    ],
+    "rule": "Wallet config fields disclose presence counts only."
+  },
+  {
+    "id": "private-ip-registry",
+    "file": "crates/diagnostics/src/state.rs",
+    "find": "std::net::IpAddr::V4(ip) => private_v4(u32::from(ip))",
+    "replace": "std::net::IpAddr::V4(_ip) => false",
+    "expect_failing": [
+      "backend_locality_is_syntactic_and_matches_python_address_registry"
+    ],
+    "rule": "Backend IPv4 locality follows the frozen Python registry without resolving DNS."
+  },
+  {
+    "id": "detail-surrogate-sensitive-key",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "if is_sensitive_key(&scalar_key)",
+    "replace": "if !key.has_surrogates() && is_sensitive_key(&scalar_key)",
+    "expect_failing": [
+      "recursive_details_shapes_match_python"
+    ],
+    "rule": "Sensitive tokens remain redacted when a JSON details key contains lone surrogates."
+  },
+  {
+    "id": "argument-skip-command",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "_SKIP_ARG_KEYS.contains(&key)",
+    "replace": "(key != \"command\" && _SKIP_ARG_KEYS.contains(&key))",
+    "expect_failing": [
+      "every_argument_class_matches_python"
+    ],
+    "rule": "The command invocation field is omitted from the report argument projection."
+  },
+  {
+    "id": "argument-skip-data_root",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "_SKIP_ARG_KEYS.contains(&key)",
+    "replace": "(key != \"data_root\" && _SKIP_ARG_KEYS.contains(&key))",
+    "expect_failing": [
+      "every_argument_class_matches_python"
+    ],
+    "rule": "The data_root invocation field is omitted from the report argument projection."
+  },
+  {
+    "id": "argument-skip-diagnostics_out",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "_SKIP_ARG_KEYS.contains(&key)",
+    "replace": "(key != \"diagnostics_out\" && _SKIP_ARG_KEYS.contains(&key))",
+    "expect_failing": [
+      "every_argument_class_matches_python"
+    ],
+    "rule": "The diagnostics_out invocation field is omitted from the report argument projection."
+  },
+  {
+    "id": "argument-skip-env_file",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "_SKIP_ARG_KEYS.contains(&key)",
+    "replace": "(key != \"env_file\" && _SKIP_ARG_KEYS.contains(&key))",
+    "expect_failing": [
+      "every_argument_class_matches_python"
+    ],
+    "rule": "The env_file invocation field is omitted from the report argument projection."
+  },
+  {
+    "id": "argument-skip-output",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "_SKIP_ARG_KEYS.contains(&key)",
+    "replace": "(key != \"output\" && _SKIP_ARG_KEYS.contains(&key))",
+    "expect_failing": [
+      "every_argument_class_matches_python"
+    ],
+    "rule": "The output invocation field is omitted from the report argument projection."
+  },
+  {
+    "id": "argument-skip-runtime_config",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "_SKIP_ARG_KEYS.contains(&key)",
+    "replace": "(key != \"runtime_config\" && _SKIP_ARG_KEYS.contains(&key))",
+    "expect_failing": [
+      "every_argument_class_matches_python"
+    ],
+    "rule": "The runtime_config invocation field is omitted from the report argument projection."
+  },
+  {
+    "id": "argument-subcommand-omission",
+    "file": "crates/diagnostics/src/report.rs",
+    "find": "key.ends_with(\"_command\")",
+    "replace": "key.ends_with(\"_disabled_command\")",
+    "expect_failing": [
+      "every_argument_class_matches_python"
+    ],
+    "rule": "Internal subcommand destinations are omitted from provided_arguments."
+  },
+  {
+    "id": "sensitive-shape-key-redaction",
+    "file": "crates/diagnostics/src/lib.rs",
+    "find": "sanitize_py(&key_text(k))",
+    "replace": "key_text(k)",
+    "expect_failing": [
+      "recursive_details_shapes_match_python"
+    ],
+    "rule": "Even dictionary key names in a redacted shape must pass public-text redaction."
+  }
+]

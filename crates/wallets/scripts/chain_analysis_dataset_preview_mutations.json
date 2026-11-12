@@ -1,0 +1,142 @@
+[
+  {
+    "id": "preview-csv-doubled-quote",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "self.field.push('\"');",
+    "replace": "self.field.push('\\'');",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_parses_strict_csv"
+    ],
+    "rule": "A doubled quote inside a quoted field is one literal quote."
+  },
+  {
+    "id": "preview-csv-strict-quote",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "                } else {\n                    return Err(Malformed);\n                }\n            }\n            State::EatNewline",
+    "replace": "                } else {\n                    self.field.push(c.unwrap());\n                    self.state = State::InField;\n                }\n            }\n            State::EatNewline",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_parses_strict_csv"
+    ],
+    "rule": "Strict CSV rejects characters after a closing quote."
+  },
+  {
+    "id": "preview-csv-carriage-return",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "                } else if !newline {\n                    return Err(Malformed);",
+    "replace": "                } else if false && !newline {\n                    return Err(Malformed);",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_parses_strict_csv"
+    ],
+    "rule": "A carriage return inside an unquoted field is malformed."
+  },
+  {
+    "id": "preview-bom",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "raw.strip_prefix(b\"\\xef\\xbb\\xbf\").unwrap_or(&raw)",
+    "replace": "&raw[..]",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_parses_strict_csv"
+    ],
+    "rule": "The first line is decoded as utf-8-sig."
+  },
+  {
+    "id": "preview-record-limit",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "|| self.record_bytes > MAX_RECORD_BYTES {",
+    "replace": "|| self.record_bytes > MAX_RECORD_BYTES * 2 {",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_parses_strict_csv"
+    ],
+    "rule": "Each record is bounded to 64 KiB before decoding."
+  },
+  {
+    "id": "preview-header-reset",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "        lines.record_bytes = 0;\n        loop {",
+    "replace": "        loop {",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_parses_strict_csv"
+    ],
+    "rule": "The header does not count toward the first record's byte limit."
+  },
+  {
+    "id": "preview-manifest-order",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "    \"attribution_method\",\n    \"chain\",",
+    "replace": "    \"chain\",\n    \"attribution_method\",",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_normalizes_manifests_and_urls"
+    ],
+    "rule": "Native manifests use the pinned sorted field order."
+  },
+  {
+    "id": "preview-url-query",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "query = i + 1 < url.len();",
+    "replace": "query = false;",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_normalizes_manifests_and_urls"
+    ],
+    "rule": "Source references cannot carry a query."
+  },
+  {
+    "id": "preview-url-nfkc",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "&& netloc.iter().any(|p| NFKC_DELIMITERS.contains(p))",
+    "replace": "&& false",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_normalizes_manifests_and_urls"
+    ],
+    "rule": "Hosts whose NFKC form introduces delimiters are refused."
+  },
+  {
+    "id": "preview-category-fallback",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "        .filter(truthy)\n",
+    "replace": "",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_bounds_jsonl_claims"
+    ],
+    "rule": "A falsy row category falls back to the manifest category."
+  },
+  {
+    "id": "preview-claim-window",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "    window(&start, &end)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_bounds_jsonl_claims"
+    ],
+    "rule": "A claim validity window must be ordered."
+  },
+  {
+    "id": "preview-maru92-single",
+    "file": "crates/wallets/src/analysis_index/reads/preview.rs",
+    "find": "if fields.len() != 1 {",
+    "replace": "if fields.is_empty() {",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_bounds_jsonl_claims"
+    ],
+    "rule": "Maru92 rows name exactly one entity category."
+  },
+  {
+    "id": "preview-surrogate-subject",
+    "file": "crates/wallets/src/analysis_index/datasets.rs",
+    "find": "Value::Str(v) if v.has_surrogates() => Some(",
+    "replace": "Value::Str(v) if false && v.has_surrogates() => Some(",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_bounds_jsonl_claims"
+    ],
+    "rule": "Lone surrogates are text but never a valid subject form."
+  },
+  {
+    "id": "preview-remember",
+    "file": "crates/wallets/src/analysis_index/reads.rs",
+    "find": "                if !stopped() {",
+    "replace": "                if false {",
+    "expect_failing": [
+      "chain_analysis_dataset_preview_jobs_remember_completed_validation"
+    ],
+    "rule": "Completed preview receipts are remembered for import consent."
+  }
+]

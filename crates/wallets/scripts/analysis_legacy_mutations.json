@@ -1,0 +1,74 @@
+[
+  {
+    "id": "legacy-nonfinite-decode",
+    "file": "crates/wallets/src/analysis_index/value.rs",
+    "find": "Py::Float(v) => Self::Float(*v),",
+    "replace": "Py::Float(v) => if v.is_finite() { Self::Float(*v) } else { Self::Null },",
+    "expect_failing": ["legacy_json_preserves_opaque_values_and_commitments"],
+    "rule": "Non-finite JSON values remain distinct from absent facts and retain their source commitment."
+  },
+  {
+    "id": "legacy-surrogate-decode",
+    "file": "crates/wallets/src/analysis_index/value.rs",
+    "find": "Py::Str(v) => Self::String(v.clone()),",
+    "replace": "Py::Str(v) => Self::String(v.code_points().filter_map(char::from_u32).collect::<String>().into()),",
+    "expect_failing": ["legacy_json_preserves_opaque_values_and_commitments"],
+    "rule": "Decoding must preserve lone surrogate code points in retained values."
+  },
+  {
+    "id": "legacy-surrogate-key",
+    "file": "crates/wallets/src/analysis_index/value.rs",
+    "find": "(key.clone(), Self::from_py(value))",
+    "replace": "(key.code_points().filter_map(char::from_u32).collect::<String>().into(), Self::from_py(value))",
+    "expect_failing": ["legacy_json_preserves_opaque_values_and_commitments"],
+    "rule": "Surrogate-bearing mapping keys participate in exact status and source commitments."
+  },
+  {
+    "id": "legacy-surrogate-encode",
+    "file": "crates/wallets/src/analysis_index/value.rs",
+    "find": "Self::String(v) => Py::Str(v.clone()),",
+    "replace": "Self::String(v) => Py::Str(v.code_points().filter_map(char::from_u32).collect::<String>().into()),",
+    "expect_failing": ["legacy_json_preserves_opaque_values_and_commitments"],
+    "rule": "Returning a canonical snapshot must preserve legacy string code points."
+  },
+  {
+    "id": "legacy-owner-alias",
+    "file": "crates/wallets/src/analysis_index/ingestion.rs",
+    "find": "let alias = string(alias);",
+    "replace": "let alias: PyStr = text(alias).into();",
+    "expect_failing": ["legacy_json_preserves_observer_aliases"],
+    "rule": "Owner aliases retain the exact address rather than a Unicode replacement."
+  },
+  {
+    "id": "legacy-public-alias",
+    "file": "crates/wallets/src/analysis_index/observer.rs",
+    "find": "Value::Str(v) => v.clone(),",
+    "replace": "Value::Str(v) => v.code_points().filter_map(char::from_u32).collect::<String>().into(),",
+    "expect_failing": ["legacy_json_preserves_observer_aliases"],
+    "rule": "Observer projection cannot silently change a retained public address alias."
+  },
+  {
+    "id": "legacy-subject-validation",
+    "file": "crates/wallets/src/analysis_index.rs",
+    "find": "if name != \"subjects\" && key.as_str().is_none() {",
+    "replace": "if key.as_str().is_none() {",
+    "expect_failing": ["legacy_json_preserves_observer_aliases"],
+    "rule": "A legacy address alias is accepted without relaxing typed node identity validation."
+  },
+  {
+    "id": "legacy-scope-mapping",
+    "file": "crates/wallets/src/analysis_index/ingestion/normalize.rs",
+    "find": "let raw = mapping(&row[\"raw_json\"], false);",
+    "replace": "let raw = json!({});",
+    "expect_failing": ["legacy_json_preserves_invalid_identifiers_and_scope"],
+    "rule": "Ignored unusual fields cannot discard the raw protocol and network scope."
+  },
+  {
+    "id": "legacy-record-order",
+    "file": "crates/wallets/src/analysis_index/value.rs",
+    "find": "Py::Dict(v) => Self::Object(Object(\n                v.iter()",
+    "replace": "Py::Dict(v) => Self::Object(Object(\n                v.iter().rev()",
+    "expect_failing": ["legacy_json_preserves_observer_aliases"],
+    "rule": "Python str of a legacy composite address retains mapping insertion order."
+  }
+]

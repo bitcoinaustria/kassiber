@@ -1,0 +1,142 @@
+[
+  {
+    "id": "I-batch-membership",
+    "file": "crates/imports/src/lib.rs",
+    "find": "SELECT transaction_id FROM import_batch_transactions WHERE batch_id=?",
+    "replace": "SELECT transaction_id FROM import_batch_transactions WHERE ? IS NOT NULL",
+    "expect_failing": [
+      "rollback_large_run_uses_staged_ids_and_preserves_enriched_rows"
+    ],
+    "rule": "Rollback selects only the transactions created by the selected run."
+  },
+  {
+    "id": "I-profile-scope",
+    "file": "crates/imports/src/lib.rs",
+    "find": "SELECT * FROM import_batches WHERE profile_id=? AND id=?",
+    "replace": "SELECT * FROM import_batches WHERE ? IS NOT NULL AND id=?",
+    "expect_failing": [
+      "rollback_is_profile_bound_and_failures_are_atomic"
+    ],
+    "rule": "A run in another profile cannot be read or rolled back."
+  },
+  {
+    "id": "I-cascade-only",
+    "file": "crates/imports/src/lib.rs",
+    "find": "if on_delete.to_uppercase() != \"CASCADE\" {",
+    "replace": "if !matches!(on_delete.to_uppercase().as_str(), \"CASCADE\" | \"SET NULL\") {",
+    "expect_failing": [
+      "collateral_counts_once_and_follows_transitive_cascades"
+    ],
+    "rule": "SET NULL references survive rollback and are not collateral losses."
+  },
+  {
+    "id": "I-cascade-union",
+    "file": "crates/imports/src/lib.rs",
+    "find": ".join(\" OR \")",
+    "replace": ".join(\" AND \")",
+    "expect_failing": [
+      "collateral_counts_once_and_follows_transitive_cascades"
+    ],
+    "rule": "A row reached through any cascade leg dies once, including mixed-run pairs."
+  },
+  {
+    "id": "I-cascade-transitive",
+    "file": "crates/imports/src/lib.rs",
+    "find": "for _ in 0..6 {",
+    "replace": "for _ in 0..0 {",
+    "expect_failing": [
+      "collateral_counts_once_and_follows_transitive_cascades"
+    ],
+    "rule": "Collateral discovery follows transitive cascades past direct transaction children."
+  },
+  {
+    "id": "I-bookkeeping",
+    "file": "crates/imports/src/lib.rs",
+    "find": "\"transactions\" | \"import_batch_transactions\"",
+    "replace": "\"transactions\"",
+    "expect_failing": [
+      "collateral_counts_once_and_follows_transitive_cascades"
+    ],
+    "rule": "The run link rows are bookkeeping rather than collateral authored work."
+  },
+  {
+    "id": "I-empty-invalidation",
+    "file": "crates/imports/src/lib.rs",
+    "find": "if staged != 0 {\n            invalidate_journals(conn, profile)?;",
+    "replace": "if true {\n            invalidate_journals(conn, profile)?;",
+    "expect_failing": [
+      "empty_run_does_not_invalidate_and_lists_actual_remaining_rows"
+    ],
+    "rule": "Removing an empty run does not invalidate unchanged journal inputs."
+  },
+  {
+    "id": "I-journal-version",
+    "file": "crates/wallets/src/lib.rs",
+    "find": "journal_input_version=journal_input_version+1",
+    "replace": "journal_input_version=journal_input_version+0",
+    "expect_failing": [
+      "rollback_large_run_uses_staged_ids_and_preserves_enriched_rows"
+    ],
+    "rule": "Removing imported observations advances the owning profile journal input version."
+  },
+  {
+    "id": "I-remaining-count",
+    "file": "crates/imports/src/lib.rs",
+    "find": "(\"rows_present\", Value::from(remaining))",
+    "replace": "(\"rows_present\", Value::from(self.inserted))",
+    "expect_failing": [
+      "list_is_ordered_scoped_and_filters_wallet_without_exposing_config"
+    ],
+    "rule": "Rows present is the surviving link count, never the historical insertion count."
+  },
+  {
+    "id": "I-limit-type",
+    "file": "crates/imports/src/lib.rs",
+    "find": "return Ok(50);",
+    "replace": "return Ok(1);",
+    "expect_failing": [
+      "python_list_limits_preserve_zero_types_and_integer_bounds"
+    ],
+    "rule": "A false Python limit falls back to fifty before integer conversion."
+  },
+  {
+    "id": "I-atomic-failure",
+    "file": "crates/imports/src/lib.rs",
+    "find": "ROLLBACK TO import_run_rollback;RELEASE import_run_rollback",
+    "replace": "RELEASE import_run_rollback",
+    "expect_failing": [
+      "rollback_is_profile_bound_and_failures_are_atomic"
+    ],
+    "rule": "A failed invalidation restores deleted rows, links and collateral before the daemon can serve another request."
+  },
+  {
+    "id": "W-resolver-scope",
+    "file": "crates/wallets/src/lib.rs",
+    "find": "{select} WHERE w.profile_id=? AND w.id=? LIMIT 1",
+    "replace": "{select} WHERE ? IS NOT NULL AND w.id=? LIMIT 1",
+    "expect_failing": [
+      "resolver_prefers_id_refuses_ambiguity_and_scopes_profiles"
+    ],
+    "rule": "Exact wallet identities are scoped to the selected profile."
+  },
+  {
+    "id": "W-resolver-id-first",
+    "file": "crates/wallets/src/lib.rs",
+    "find": "{select} WHERE w.profile_id=? AND w.id=? LIMIT 1",
+    "replace": "{select} WHERE w.profile_id=? AND lower(w.label)=lower(?) LIMIT 1",
+    "expect_failing": [
+      "resolver_prefers_id_refuses_ambiguity_and_scopes_profiles"
+    ],
+    "rule": "A wallet id takes precedence over an overlapping label."
+  },
+  {
+    "id": "I-json-recursion",
+    "file": "crates/imports/src/lib.rs",
+    "find": "if matches!(error.kind, kassiber_pytext::JsonErrorKind::TooDeep { .. }) =>",
+    "replace": "if false =>",
+    "expect_failing": [
+      "column_map_decode_errors_are_null_but_recursion_errors_fail_closed"
+    ],
+    "rule": "A recursion failure cannot be silently presented as an absent column map."
+  }
+]

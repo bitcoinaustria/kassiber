@@ -1,0 +1,202 @@
+[
+  {
+    "id": "mirror-traversal-unknown-argument",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "if !unknown.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Reject unsupported analysis arguments."
+  },
+  {
+    "id": "mirror-traversal-strict-integer",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "if !matches!(field(&q, key), Value::Int(_)) ||",
+    "replace": "if !matches!(field(&q, key), Value::Int(_)) &&",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Enforce strict bounded integer query limits."
+  },
+  {
+    "id": "mirror-traversal-physical-domain",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "if physical && domains.len() > 1 {",
+    "replace": "if false && domains.len() > 1 {",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Bare physical subjects must not bridge chain domains."
+  },
+  {
+    "id": "mirror-traversal-physical-instance",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "if physical && (instances.len() > 1 || transaction_key && candidates.len() > 1) {",
+    "replace": "if false && (instances.len() > 1 || transaction_key && candidates.len() > 1) {",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Preserve physical instance and occurrence ambiguity."
+  },
+  {
+    "id": "mirror-traversal-node-budget",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "self.nodes.len() >= size(field(self.query, \"node_limit\"))",
+    "replace": "self.nodes.len() > size(field(self.query, \"node_limit\"))",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Respect the exact node admission budget."
+  },
+  {
+    "id": "mirror-traversal-edge-budget",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "self.inspections >= size(field(self.query, \"edge_limit\"))",
+    "replace": "self.inspections > size(field(self.query, \"edge_limit\"))",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Share the exact inspection budget across alternative paths."
+  },
+  {
+    "id": "mirror-traversal-depth-budget",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "if depth >= size(field(self.query, \"depth\")) {",
+    "replace": "if depth > size(field(self.query, \"depth\")) {",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Depth is measured in graph edges."
+  },
+  {
+    "id": "mirror-traversal-unknown-successors",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "self.stop(id, \"unobserved_successor\", None);",
+    "replace": "self.stop(id, \"missing_observation\", None);",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "An unobserved successor is not proven unspent."
+  },
+  {
+    "id": "mirror-traversal-incomplete",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "self.stop(id, \"incomplete_transaction\", None);",
+    "replace": "self.stop(id, \"missing_observation\", None);",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Retain incomplete transaction coverage."
+  },
+  {
+    "id": "mirror-traversal-relation-filter",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": ".entry(\"relations_disabled\".into())",
+    "replace": ".entry(\"domain\".into())",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Count disabled custody relations separately."
+  },
+  {
+    "id": "mirror-traversal-amount-filter",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "amount < min",
+    "replace": "amount > min",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Prune only known amounts below the minimum."
+  },
+  {
+    "id": "mirror-traversal-time-filter",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "when < start",
+    "replace": "when > start",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Compare known times as timezone-aware instants."
+  },
+  {
+    "id": "mirror-traversal-frontier-overflow",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "self.omitted += 1;",
+    "replace": "self.omitted += 2;",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Report omitted frontier entries exactly."
+  },
+  {
+    "id": "mirror-traversal-blocked-alternative",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "if blocked.contains(eid) {",
+    "replace": "if false && blocked.contains(eid) {",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Alternative routes exclude the selected primary edge."
+  },
+  {
+    "id": "mirror-traversal-alternative-cap",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "paths.len() >= 3",
+    "replace": "paths.len() >= 2",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Retain up to three distinct bounded paths."
+  },
+  {
+    "id": "mirror-traversal-stale-coverage",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "truthy(field(&coverage, \"reference_reconciling_count\"))",
+    "replace": "false",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Reconciling sources keep stale coverage visible."
+  },
+  {
+    "id": "mirror-traversal-known-missing-tables",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "!truthy(field(&coverage, \"missing_tables\"))",
+    "replace": "true",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Missing source tables cannot claim complete coverage."
+  },
+  {
+    "id": "mirror-traversal-invalid-observations",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "!truthy(field(&coverage, \"invalid_observations\"))",
+    "replace": "true",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Invalid observations cannot claim complete coverage."
+  },
+  {
+    "id": "mirror-traversal-observer-first",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "index.observer(text(&query, \"observer\"))?",
+    "replace": "index.observer(\"owner\")?",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Apply the observer boundary before traversal."
+  },
+  {
+    "id": "mirror-traversal-integer-digit-limit",
+    "file": "crates/wallets/src/analysis_index/traversal.rs",
+    "find": "if text.len() > kassiber_pyjson::INT_MAX_STR_DIGITS {",
+    "replace": "if false {",
+    "expect_failing": [
+      "traversal_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Preserve the Python integer-conversion digit bound."
+  }
+]

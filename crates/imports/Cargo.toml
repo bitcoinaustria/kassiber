@@ -1,0 +1,19 @@
+[package]
+name = "kassiber-imports"
+description = "Local import-run provenance and confirmed rollback"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-store = { path = "../store" }
+kassiber-wallets = { path = "../wallets" }
+
+[lints.rust]
+unsafe_code = "forbid"

@@ -1,0 +1,694 @@
+[
+  {
+    "id": "resolve-id-before-label",
+    "file": "crates/setup/src/references.rs",
+    "find": "query(\"id=?1\")?",
+    "replace": "query(\"id=?1 AND 0\")?",
+    "expect_failing": [
+      "id_lookup_precedes_labels_and_folded_labels_are_ambiguous"
+    ],
+    "rule": "An exact ID must win over a label equal to that ID."
+  },
+  {
+    "id": "scope-profile-label",
+    "file": "crates/setup/src/references.rs",
+    "find": "workspace.unwrap_or_default()",
+    "replace": "\"\"",
+    "expect_failing": [
+      "profile_labels_are_scoped_and_ids_win"
+    ],
+    "rule": "Profile lookup remains inside the selected workspace."
+  },
+  {
+    "id": "invalidate-policy-edit",
+    "file": "crates/setup/src/profiles.rs",
+    "find": "if changed {",
+    "replace": "if !changed {",
+    "expect_failing": [
+      "method_change_invalidates_journals"
+    ],
+    "rule": "A tax policy edit invalidates prior journal inputs."
+  },
+  {
+    "id": "neutral-label-edit",
+    "file": "crates/setup/src/profiles.rs",
+    "find": ".filter(|k| **k != \"label\")",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "label_change_preserves_method_and_version"
+    ],
+    "rule": "Renaming a profile does not invalidate its journal."
+  },
+  {
+    "id": "reject-country-method",
+    "file": "crates/setup/src/profiles.rs",
+    "find": "    if check_algorithm && !country.allows_method(&algo) {",
+    "replace": "    if check_algorithm && !country.allows_method(&algo) && algo == \"NOT_A_METHOD\" {",
+    "expect_failing": [
+      "generic_refuses_austrian_method_atomically"
+    ],
+    "rule": "A generic profile refuses the Austrian-only method without changing the book."
+  },
+  {
+    "id": "scope-view-delete",
+    "file": "crates/setup/src/views.rs",
+    "find": "SELECT * FROM saved_views WHERE id=? AND profile_id=?",
+    "replace": "SELECT * FROM saved_views WHERE id=? OR profile_id=?",
+    "expect_failing": [
+      "delete_other_profile_view_blocked"
+    ],
+    "rule": "A view cannot be deleted through another profile."
+  },
+  {
+    "id": "project-no-select",
+    "file": "crates/setup/src/projects.rs",
+    "find": "!flag(args, \"no_select\") || catalog.selected_project_id.is_none()",
+    "replace": "true",
+    "expect_failing": [
+      "create_preserves_catalog_order_and_no_select_keeps_selection"
+    ],
+    "rule": "Creating an unselected project must preserve the current project."
+  },
+  {
+    "id": "project-first-selection",
+    "file": "crates/setup/src/projects.rs",
+    "find": "    if !flag(args, \"no_select\") || catalog.selected_project_id.is_none() {",
+    "replace": "    if !flag(args, \"no_select\") {",
+    "expect_failing": [
+      "first_no_select_project_still_establishes_a_selection"
+    ],
+    "rule": "The first registered project establishes a selection even with no-select."
+  },
+  {
+    "id": "project-lookup-id",
+    "file": "crates/setup/src/projects.rs",
+    "find": "find(|p| p.id == wanted)",
+    "replace": "find(|_| true)",
+    "expect_failing": [
+      "explicit_list_selection_does_not_change_saved_selection",
+      "missing_and_invalid_project_references_leave_catalog_untouched"
+    ],
+    "rule": "Project inspection and selection resolve the requested canonical ID."
+  },
+  {
+    "id": "project-encrypted-no-select",
+    "file": "crates/setup/src/projects.rs",
+    "find": "if select {",
+    "replace": "if !select {",
+    "expect_failing": [
+      "encrypted_creation_preserves_no_select_and_only_selected_creation_marks_opened"
+    ],
+    "rule": "Encrypted creation marks opened and selects only when requested."
+  },
+  {
+    "id": "describe-prefix-selection",
+    "file": "crates/cli/src/describe.rs",
+    "find": "leaf.path.iter().zip(query).all(|(a, b)| *a == b)",
+    "replace": "leaf.path.iter().zip(query).all(|(a, b)| *a != b)",
+    "expect_failing": [
+      "every_prefix_selects_the_python_entries_in_order"
+    ],
+    "rule": "A catalog prefix selects precisely the Python command paths in parser order."
+  },
+  {
+    "id": "network-unknown-declaration",
+    "file": "crates/setup/src/networks.rs",
+    "find": "!declared.contains(&text(wallet, \"wallet_id\"))",
+    "replace": "false",
+    "expect_failing": [
+      "network_unknown_declaration_cannot_override_conflicts_or_other_book_ids"
+    ],
+    "rule": "Unknown wallet scope needs an explicit declaration; declarations cannot override conflicts."
+  },
+  {
+    "id": "network-history-preview",
+    "file": "crates/setup/src/networks.rs",
+    "find": "if value(args, \"plan_id\") != value(&plan, \"plan_id\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "network_bind_recomputes_history_and_invalidates_journals_atomically"
+    ],
+    "rule": "Binding recomputes the preview against all current evidence."
+  },
+  {
+    "id": "network-instance-cache",
+    "file": "crates/setup/src/networks.rs",
+    "find": "!(unscoped && truthy(expected) && instance.map(s).as_ref() != Some(expected))",
+    "replace": "true",
+    "expect_failing": [
+      "network_regtest_cache_requires_exact_instance_and_never_relabels_wallet"
+    ],
+    "rule": "Shared regtest cache reads require the exact authored instance."
+  },
+  {
+    "id": "partition-closure",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "if !wallets.is_disjoint(&selected) && !wallets.is_subset(&selected) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "partition_closure_and_legacy_rows_block_before_files"
+    ],
+    "rule": "Authored relationships cannot cross a selected partition."
+  },
+  {
+    "id": "partition-legacy",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "if legacy_rows {",
+    "replace": "if false {",
+    "expect_failing": [
+      "partition_closure_and_legacy_rows_block_before_files"
+    ],
+    "rule": "Archived ledger rows block partitioning only in their owning book."
+  },
+  {
+    "id": "partition-raw-authority",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "[\"raw_json\", \"profile_id\", \"workspace_id\", \"account_id\"]",
+    "replace": "[\"not_raw_json\", \"profile_id\", \"workspace_id\", \"account_id\"]",
+    "expect_failing": [
+      "partition_closure_and_legacy_rows_block_before_files"
+    ],
+    "rule": "Raw provider payload IDs are evidence and do not establish authored relationships."
+  },
+  {
+    "id": "partition-attachment-hash",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "if value(attachment, \"sha256\") != &s(hash) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "partition_export_preserves_ids_encryption_attachments_and_source"
+    ],
+    "rule": "Partition attachments must match their stored content hash."
+  },
+  {
+    "id": "partition-private-watch-material",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "if private {",
+    "replace": "if false {",
+    "expect_failing": [
+      "partition_public_wallet_material_drops_credentials_and_private_keys"
+    ],
+    "rule": "Private watch-policy material cannot enter an exported partition."
+  },
+  {
+    "id": "network-journal-invalidation",
+    "file": "crates/setup/src/networks.rs",
+    "find": "journal_input_version=journal_input_version+1",
+    "replace": "journal_input_version=journal_input_version+0",
+    "expect_failing": [
+      "network_bind_recomputes_history_and_invalidates_journals_atomically"
+    ],
+    "rule": "Binding a book invalidates its previous journal inputs."
+  },
+  {
+    "id": "partition-identity-types",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "values.iter().any(|v| !matches!(v, Value::Str(_)))",
+    "replace": "false",
+    "expect_failing": [
+      "partition_identity_types_match_python_without_coercing_numbers"
+    ],
+    "rule": "Partition IDs retain Python types; a number cannot select a string wallet ID."
+  },
+  {
+    "id": "offline-malformed-policy",
+    "file": "crates/setup/src/offline.rs",
+    "find": "        _ => true,",
+    "replace": "        _ => false,",
+    "expect_failing": [
+      "offline_malformed_or_oversized_preferences_fail_closed"
+    ],
+    "rule": "An invalid preference blocks egress rather than granting permission."
+  },
+  {
+    "id": "offline-independent-switch",
+    "file": "crates/setup/src/offline.rs",
+    "find": "Value::Bool(enabled(&path))",
+    "replace": "Value::Bool(blocked || enabled(&path))",
+    "expect_failing": [
+      "offline_environment_override_does_not_replace_the_users_switch"
+    ],
+    "rule": "The user's persisted offline switch stays distinct from the process egress override."
+  },
+  {
+    "id": "offline-strict-boolean",
+    "file": "crates/setup/src/offline.rs",
+    "find": "Some(Value::Bool(v)) => *v,\n                _ => {",
+    "replace": "Some(Value::Bool(v)) => *v,\n                Some(Value::Int(_)) => true,\n                _ => {",
+    "expect_failing": [
+      "offline_desktop_validation_is_strict_and_never_writes_on_error"
+    ],
+    "rule": "The desktop offline switch refuses a numeric value in place of a boolean."
+  },
+  {
+    "id": "backend-default-chain",
+    "file": "crates/setup/src/backends.rs",
+    "find": "c == chain && SYNC_KINDS.contains(&k.to_lowercase().as_str())",
+    "replace": "SYNC_KINDS.contains(&k.to_lowercase().as_str())",
+    "expect_failing": [
+      "backend_default_replacement_stays_on_chain_and_prefers_user_sync_backends"
+    ],
+    "rule": "Replacement defaults stay on the removed backend chain."
+  },
+  {
+    "id": "backend-default-sync-kind",
+    "file": "crates/setup/src/backends.rs",
+    "find": "c == chain && SYNC_KINDS.contains(&k.to_lowercase().as_str())",
+    "replace": "c == chain",
+    "expect_failing": [
+      "backend_default_replacement_stays_on_chain_and_prefers_user_sync_backends"
+    ],
+    "rule": "A replacement default must support wallet sync."
+  },
+  {
+    "id": "backend-default-canonical",
+    "file": "crates/setup/src/backends.rs",
+    "find": "if !names(conn)?.contains(&name) {\n        return Err(AppError::new(\"conflict\",format!(\"Backend '{name}' only exists as an environment override",
+    "replace": "if false {\n        return Err(AppError::new(\"conflict\",format!(\"Backend '{name}' only exists as an environment override",
+    "expect_failing": [
+      "backend_environment_overrides_are_ephemeral_and_cannot_be_deleted_or_defaulted"
+    ],
+    "rule": "An ephemeral environment backend cannot become the canonical default."
+  },
+  {
+    "id": "backend-wallet-references",
+    "file": "crates/setup/src/backends.rs",
+    "find": "if direct||routes {",
+    "replace": "if false {",
+    "expect_failing": [
+      "backend_wallet_and_btcpay_provenance_references_block_deletion"
+    ],
+    "rule": "BTCPay provenance wallet references block deletion."
+  },
+  {
+    "id": "backend-output-allowlist",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "for k in SAFE {",
+    "replace": "for k in SAFE.iter().chain([\"token\", \"password\", \"macaroon\", \"unknown\"].iter()) {",
+    "expect_failing": [
+      "backend_secrets_are_stored_exactly_and_allowlisted_output_never_discloses_them"
+    ],
+    "rule": "Normal projections never disclose secret or unknown config values."
+  },
+  {
+    "id": "backend-url-redaction",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "if proxy { \"redacted\" } else { \"<redacted>\" }",
+    "replace": "userinfo",
+    "expect_failing": [
+      "backend_secrets_are_stored_exactly_and_allowlisted_output_never_discloses_them"
+    ],
+    "rule": "URL userinfo never survives a normal projection."
+  },
+  {
+    "id": "backend-malformed-url-redaction",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "\"<redacted>\".to_owned()",
+    "replace": "raw.to_owned()",
+    "expect_failing": [
+      "malformed_backend_locations_never_echo_embedded_credentials"
+    ],
+    "rule": "Malformed backend URLs and proxies never echo their raw credential-bearing input."
+  },
+  {
+    "id": "backend-deletion-tombstone",
+    "file": "crates/setup/src/backends.rs",
+    "find": "removed.insert(name.clone());",
+    "replace": "removed.remove(&name);",
+    "expect_failing": [
+      "backend_deleted_presets_stay_deleted_after_restart_and_seed"
+    ],
+    "rule": "Deleted bootstrap backends stay deleted after restart."
+  },
+  {
+    "id": "backend-bare-host-visible",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "if host_ok && port_ok {",
+    "replace": "if false && host_ok && port_ok {",
+    "expect_failing": [
+      "bare_backend_location_fullmatch_preserves_only_the_python_allowlist"
+    ],
+    "rule": "Unparsed bare hosts remain visible, including bracketed hosts and numeric ports."
+  },
+  {
+    "id": "backend-bare-host-fullmatch",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "host_ok && port_ok",
+    "replace": "host_ok || port_ok",
+    "expect_failing": [
+      "bare_backend_location_fullmatch_preserves_only_the_python_allowlist"
+    ],
+    "rule": "Unparsed locations must fully match both host and optional port before disclosure."
+  },
+  {
+    "id": "backend-bare-host-port-length",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "(1..=5).contains(&port.len())",
+    "replace": "!port.is_empty()",
+    "expect_failing": [
+      "bare_backend_location_fullmatch_preserves_only_the_python_allowlist"
+    ],
+    "rule": "An unparsed numeric port has at most five ASCII digits."
+  },
+  {
+    "id": "workspace-desktop-exact-id",
+    "file": "crates/setup/src/workspace_desktop.rs",
+    "find": "SELECT id FROM workspaces WHERE id=?",
+    "replace": "SELECT id FROM workspaces WHERE label=?",
+    "expect_failing": [
+      "frozen_python_desktop_responses_and_database_states"
+    ],
+    "rule": "Desktop rename selects an exact workspace ID."
+  },
+  {
+    "id": "workspace-delete-current",
+    "file": "crates/setup/src/workspace_desktop.rs",
+    "find": "let id = text(&context, \"workspace_id\");",
+    "replace": "let id = text(args, \"workspace_id\");",
+    "expect_failing": [
+      "frozen_python_desktop_responses_and_database_states"
+    ],
+    "rule": "Workspace deletion always targets the current workspace."
+  },
+  {
+    "id": "sensitive-confirmation",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "get(args, \"confirm\") != Some(&s(confirmation))",
+    "replace": "get(args, \"confirm\") == Some(&s(confirmation))",
+    "expect_failing": [
+      "sensitive_selection_requires_exact_current_names_and_boolean_rate_scope"
+    ],
+    "rule": "Destructive actions require their exact confirmation word."
+  },
+  {
+    "id": "sensitive-current-name",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "get(args, &format!(\"confirm_{key}\")) != Some(&s(name.as_str()))",
+    "replace": "false",
+    "expect_failing": [
+      "sensitive_selection_requires_exact_current_names_and_boolean_rate_scope"
+    ],
+    "rule": "A destructive confirmation must equal the exact current book or workspace name."
+  },
+  {
+    "id": "sensitive-rate-boolean",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "optional(args, \"clear_shared_rates\").is_some_and(|v| !matches!(v, Value::Bool(_)))",
+    "replace": "false",
+    "expect_failing": [
+      "sensitive_selection_requires_exact_current_names_and_boolean_rate_scope"
+    ],
+    "rule": "Shared rate reset accepts only a boolean."
+  },
+  {
+    "id": "reveal-target-precedence",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "[\"name\", \"wallet\", \"backend\"]",
+    "replace": "[\"backend\", \"wallet\", \"name\"]",
+    "expect_failing": [
+      "sensitive_selection_requires_exact_current_names_and_boolean_rate_scope"
+    ],
+    "rule": "The first truthy name/wallet/backend target follows Python precedence."
+  },
+  {
+    "id": "destructive-legacy-barrier",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "if populated {",
+    "replace": "if false {",
+    "expect_failing": [
+      "archived_ledger_blocks_only_its_profile_and_unscoped_rows_block_all"
+    ],
+    "rule": "Retained scoped or global legacy ledger rows block destructive operations."
+  },
+  {
+    "id": "reset-profile-boundary",
+    "file": "crates/setup/src/profile_reset.rs",
+    "find": "DELETE FROM attachments WHERE profile_id = ?",
+    "replace": "DELETE FROM attachments WHERE profile_id <> ?",
+    "expect_failing": [
+      "profile_reset_keeps_other_books_and_confines_attachment_cleanup"
+    ],
+    "rule": "Reset preserves all data belonging to other profiles."
+  },
+  {
+    "id": "reset-attachment-confinement",
+    "file": "crates/setup/src/profile_reset.rs",
+    "find": "if path.starts_with(&root) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "profile_reset_keeps_other_books_and_confines_attachment_cleanup"
+    ],
+    "rule": "Reset only removes managed attachment files resolved under the attachment root."
+  },
+  {
+    "id": "reset-shared-rates-opt-in",
+    "file": "crates/setup/src/profile_reset.rs",
+    "find": "let clear = flag(args, \"clear_shared_rates\");",
+    "replace": "let clear = true;",
+    "expect_failing": [
+      "frozen_python_desktop_responses_and_database_states"
+    ],
+    "rule": "Reset preserves shared rates unless explicitly requested."
+  },
+  {
+    "id": "profile-display-stored-method",
+    "file": "crates/setup/src/profile_snapshot.rs",
+    "find": "human_tax_method(&method)",
+    "replace": "human_tax_method(\"MOVING_AVERAGE_AT\")",
+    "expect_failing": [
+      "profile_display_uses_the_stored_method_for_each_country"
+    ],
+    "rule": "Austrian display must report the stored accounting method."
+  },
+  {
+    "id": "profile-snapshot-active-selection",
+    "file": "crates/setup/src/profile_snapshot.rs",
+    "find": "let active = get(p, \"id\") == get(&context, \"profile_id\");",
+    "replace": "let active = false;",
+    "expect_failing": [
+      "frozen_python_desktop_responses_and_database_states"
+    ],
+    "rule": "The snapshot marks only the actual current profile active."
+  },
+  {
+    "id": "core-reference-exact",
+    "file": "crates/setup/src/core_credentials.rs",
+    "find": ".find(|c| reference(c) == requested)",
+    "replace": ".find(|_| true)",
+    "expect_failing": [
+      "core_references_reselect_current_local_credentials_without_password_in_identity"
+    ],
+    "rule": "Opaque references reselect a matching current candidate, never the first available credential."
+  },
+  {
+    "id": "core-reference-identity",
+    "file": "crates/setup/src/core_credentials.rs",
+    "find": "\"cookiefile\",\n        \"username\",",
+    "replace": "\"cookiefile\",\n        \"password\",",
+    "expect_failing": [
+      "core_references_reselect_current_local_credentials_without_password_in_identity"
+    ],
+    "rule": "Reference identity includes username and excludes password."
+  },
+  {
+    "id": "core-local-candidates",
+    "file": "crates/setup/src/core_credentials.rs",
+    "find": "if !loopback(&url) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "core_references_reselect_current_local_credentials_without_password_in_identity"
+    ],
+    "rule": "Core reference resolution ignores non-loopback configured RPC endpoints."
+  },
+  {
+    "id": "core-network-alias-precedence",
+    "file": "crates/setup/src/core_credentials.rs",
+    "find": "merged.extend(s.clone());",
+    "replace": "merged = s.clone();",
+    "expect_failing": [
+      "core_candidate_alias_precedence_cookie_dedup_and_ipv6_match_python"
+    ],
+    "rule": "Network aliases override earlier fields while preserving inherited credentials."
+  },
+  {
+    "id": "core-reference-auth-replacement",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "fields.retain(|(k, _)| !remove.iter().any(|r| *k == (*r).into()));",
+    "replace": "fields.retain(|_| true);",
+    "expect_failing": [
+      "core_reference_merge_replaces_endpoint_and_conflicting_auth"
+    ],
+    "rule": "A detected credential source removes conflicting cookie or basic authentication."
+  },
+  {
+    "id": "core-reference-endpoint",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "replace(common, \"url\", get(detected, \"url\").unwrap().clone());",
+    "replace": "replace(common, \"url\", s(\"https://example.test\"));",
+    "expect_failing": [
+      "core_reference_merge_replaces_endpoint_and_conflicting_auth"
+    ],
+    "rule": "Resolved credentials stay bound to their detected RPC endpoint."
+  },
+  {
+    "id": "sensitive-auth-before-service",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if kassiber_setup::sensitive::KINDS.contains(&kind_text.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "plaintext_sensitive_actions_require_the_exact_typed_acknowledgement"
+    ],
+    "rule": "Sensitive kinds authorize before reaching any domain service."
+  },
+  {
+    "id": "sensitive-passphrase-verification",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if !verified {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sensitive_actions_require_reauthorization_after_unlock_and_hold_the_owner"
+    ],
+    "rule": "Unlock does not authorize a later reveal; its fresh passphrase must verify."
+  },
+  {
+    "id": "sensitive-plaintext-ack",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "auth.and_then(|v| get(v, requirement.ack_key)) != Some(&s(requirement.ack_value))",
+    "replace": "auth.and_then(|v| get(v, requirement.ack_key)) == Some(&s(requirement.ack_value))",
+    "expect_failing": [
+      "plaintext_sensitive_actions_require_the_exact_typed_acknowledgement"
+    ],
+    "rule": "Plaintext secrets require the exact typed acknowledgement."
+  },
+  {
+    "id": "sensitive-desktop-owner",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "let acquired_here = self.owner.is_none();\n        self.ensure_owner()?;",
+    "replace": "let acquired_here = self.owner.is_none();",
+    "expect_failing": [
+      "sensitive_actions_require_reauthorization_after_unlock_and_hold_the_owner"
+    ],
+    "rule": "Sensitive desktop operations hold desktop project ownership."
+  },
+  {
+    "id": "accounting-neutral-wallet-scope",
+    "file": "crates/setup/src/networks.rs",
+    "find": "let cache = &mut neutral[index];",
+    "replace": "let cache = &mut neutral[0];",
+    "expect_failing": [
+      "accounting_neutral_cache_is_wallet_and_asset_scoped"
+    ],
+    "rule": "Neutral observations may reuse evidence only within the same wallet."
+  },
+  {
+    "id": "accounting-neutral-asset-scope",
+    "file": "crates/setup/src/networks.rs",
+    "find": "if cache.contains(asset) { return; }",
+    "replace": "if !cache.is_empty() { return; }",
+    "expect_failing": [
+      "accounting_neutral_cache_is_wallet_and_asset_scoped"
+    ],
+    "rule": "Different assets in one wallet must independently pass the network-family evidence checks."
+  },
+  {
+    "id": "setup-writes-begin-deferred",
+    "file": "crates/setup/src/lib.rs",
+    "find": "    } else {\n        kassiber_store::write_transaction(conn)\n    }",
+    "replace": "    } else {\n        conn.unchecked_transaction()\n    }",
+    "expect_failing": [
+      "setup_writes_wait_for_a_held_writer"
+    ],
+    "rule": "Setup writes reserve the writer before their first read."
+  },
+  {
+    "id": "setup-reads-reserve",
+    "file": "crates/setup/src/lib.rs",
+    "find": "        \"list\"\n            | \"get\"\n            | \"show\"\n",
+    "replace": "        \"get\"\n",
+    "expect_failing": [
+      "setup_reads_do_not_wait_behind_a_writer"
+    ],
+    "rule": "Setup reads stay deferred so they never wait behind another connection's writer."
+  },
+  {
+    "id": "profile-registry-methods",
+    "file": "crates/setup/src/profiles.rs",
+    "find": "    METHODS.contains(&method.as_str())\n        || kassiber_tax_countries::COUNTRIES",
+    "replace": "    METHODS.contains(&method.as_str())\n        && kassiber_tax_countries::COUNTRIES",
+    "expect_failing": [
+      "spanish_and_japanese_profiles_follow_the_registry"
+    ],
+    "rule": "A method only a registry country offers (Japan's averages) is a known method."
+  },
+  {
+    "id": "price-currency-holds-reported",
+    "file": "crates/setup/src/profiles.rs",
+    "find": "    if currency_code(&book) != currency_code(&text(&p, \"fiat_currency\")) {",
+    "replace": "    if currency_code(&book) == currency_code(&text(&p, \"fiat_currency\")) {",
+    "expect_failing": [
+      "a_currency_change_reports_the_rows_it_holds"
+    ],
+    "rule": "Only a profile update that changes the book's currency reports the rows it will hold."
+  },
+  {
+    "id": "price-currency-holds-unpriced",
+    "file": "crates/setup/src/profiles.rs",
+    "find": "        if priced {\n            *by_currency.entry(currency).or_default() += 1;",
+    "replace": "        if true || priced {\n            *by_currency.entry(currency).or_default() += 1;",
+    "expect_failing": [
+      "a_currency_change_reports_the_rows_it_holds"
+    ],
+    "rule": "An unpriced row is not counted among the rows a currency change holds."
+  },
+  {
+    "id": "reset-clears-wallet-checkpoints",
+    "file": "crates/setup/src/profile_reset.rs",
+    "find": "checkpoint_json='{{}}',rate_limited_until=NULL",
+    "replace": "checkpoint_json=checkpoint_json,rate_limited_until=NULL",
+    "expect_failing": [
+      "profile_reset_clears_wallet_sync_checkpoints_and_times"
+    ],
+    "rule": "Reset book data empties every wallet source's sync checkpoint."
+  },
+  {
+    "id": "reset-keeps-market-rate-state",
+    "file": "crates/setup/src/profile_reset.rs",
+    "find": "const WALLET_SOURCES: &str = \"('onchain_wallet', 'btcpay_wallet', 'btcpay_provenance')\";",
+    "replace": "const WALLET_SOURCES: &str = \"('onchain_wallet', 'btcpay_wallet', 'btcpay_provenance', 'market_rates')\";",
+    "expect_failing": [
+      "profile_reset_clears_wallet_sync_checkpoints_and_times"
+    ],
+    "rule": "Reset book data leaves shared market-rate freshness state alone."
+  },
+  {
+    "id": "reset-clears-last-sync-time",
+    "file": "crates/setup/src/profile_reset.rs",
+    "find": "        config.remove(position);",
+    "replace": "        let _ = position;",
+    "expect_failing": [
+      "profile_reset_clears_wallet_sync_checkpoints_and_times"
+    ],
+    "rule": "Reset book data clears each wallet's last sync time so retired wallets re-import."
+  },
+  {
+    "id": "binance-btc-rail-mainnet",
+    "file": "crates/setup/src/networks.rs",
+    "find": "                    *field = s(\"main\");",
+    "replace": "                    *field = s(\"regtest\");",
+    "expect_failing": [
+      "network_evidence_matches_python_including_absence_and_contradictions",
+      "network_reference_vectors_match_python"
+    ],
+    "rule": "Binance's BTC rail is mainnet evidence in the network inventory."
+  },
+  {
+    "id": "binance-btc-rail-btc-rows-only",
+    "file": "crates/setup/src/networks.rs",
+    "find": "        && value(row, \"asset\") == &s(\"BTC\")\n",
+    "replace": "",
+    "expect_failing": [
+      "network_evidence_matches_python_including_absence_and_contradictions"
+    ],
+    "rule": "Only a BTC row reads Binance's BTC rail; a Liquid row naming it contradicts itself."
+  }
+]
