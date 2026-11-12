@@ -508,5 +508,25 @@
       "populated_legacy_ledger_archives_pass_the_structural_check"
     ],
     "rule": "A structural refusal names a current object that is absent."
+  },
+  {
+    "id": "encryption-leak-guard-off",
+    "file": "crates/store/src/encryption.rs",
+    "find": "    if needles.is_empty() {\n        return Ok(());\n    }",
+    "replace": "    if true {\n        return Ok(());\n    }",
+    "expect_failing": [
+      "a_leaked_plaintext_page_with_a_credential_is_refused"
+    ],
+    "rule": "An encrypted candidate that carries the plaintext's credential bytes is refused."
+  },
+  {
+    "id": "encryption-leak-bare-marker",
+    "file": "crates/store/src/encryption.rs",
+    "find": "let needle = &source[start..(start + LEAK_CONTEXT).min(source.len())];",
+    "replace": "let needle = { let _ = start; *marker };",
+    "expect_failing": [
+      "a_marker_that_ciphertext_happens_to_contain_is_not_a_leak"
+    ],
+    "rule": "A marker counts as leaked only with the source's own bytes around it, so ciphertext that happens to contain one is not refused."
   }
 ]

@@ -552,7 +552,10 @@ keys and retention triggers; Rust tests cover rollback of audit/drop groups.
 `encryption::encrypt_plaintext` acquires both compatible maintenance role
 leases, secures DELETE journaling, exports through `sqlcipher_export`, copies
 `user_version`/`auto_vacuum`, and verifies a fresh keyed connection against the
-entire source schema and every row. It checks integrity and credential markers,
+entire source schema and every row. It checks integrity and that no credential
+marker the source holds appears in the candidate with the 32 source bytes
+around it (a bare five-byte marker also turns up by chance in megabytes of
+fresh ciphertext, which refused sound migrations now and then),
 flushes the private sibling, retains the plaintext rollback copy at Python's
 filename, and syncs the directory after each rename. Existing artifacts are
 refused. `find_resumable_state` describes Python-compatible artifacts;
