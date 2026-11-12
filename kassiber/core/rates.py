@@ -15,7 +15,7 @@ from urllib import request as urlrequest
 from .. import __version__
 from .. import http_client
 from ..backends import preferred_mempool_api_backend
-from ..db import APP_NAME, get_setting, set_setting
+from ..db import APP_NAME, begin_write_savepoint, get_setting, set_setting
 from ..errors import AppError
 from ..proxy import urlopen_with_proxy
 from ..redaction import request_credentials
@@ -1250,7 +1250,7 @@ def rebuild_rates_cache(
         raise AppError("--days must be positive", code="validation") from exc
     if days_int <= 0:
         raise AppError("--days must be positive", code="validation")
-    conn.execute("SAVEPOINT rates_rebuild")
+    begin_write_savepoint(conn, "rates_rebuild")
     try:
         supported_pairs = [normalized_pair] if normalized_pair else list(SUPPORTED_RATE_PAIRS)
         transaction_prices = {"transactions": 0, "profiles": 0}

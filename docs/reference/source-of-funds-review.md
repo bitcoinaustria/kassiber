@@ -118,6 +118,9 @@ cases bind the target, amount, planned-sale destination/note and disclosure
 recipe.
 The desktop also supplies the inspected fingerprint when saving; the daemon
 rechecks it under the write lock before creating the snapshot.
+The case and immutable snapshot are inserted atomically. A failed insert or
+standalone commit leaves neither row; nested saves preserve the caller's
+transaction and leave its final commit to that caller.
 ZIP exports compare copied evidence with the saved file hashes and
 retain frozen URLs. Missing or changed disclosed files block export, while
 withheld modes never read those files. Publication replaces a prior ZIP only

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 from urllib.parse import unquote, urlparse
 
-from ..db import ensure_data_root, resolve_attachments_root
+from ..db import begin_write_savepoint, ensure_data_root, resolve_attachments_root
 from ..errors import AppError
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
@@ -448,7 +448,7 @@ def copy_attachments(
     created_paths: list[Path] = []
     new_ids: list[str] = []
     created_at = hooks.now_iso()
-    conn.execute("SAVEPOINT attachment_copy")
+    begin_write_savepoint(conn, "attachment_copy")
     try:
         for source in (rows_by_id[attachment_id] for attachment_id in cleaned_ids):
             new_id = str(uuid.uuid4())
@@ -635,7 +635,7 @@ def remove_attachment(
     attachment = _attachment_row_to_dict(row, attachments_root)
     stored_path, _ = _resolve_stored_path(attachments_root, attachment["stored_relpath"])
     deleted_file = False
-    conn.execute("SAVEPOINT attachment_remove")
+    begin_write_savepoint(conn, "attachment_remove")
     try:
         conn.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
         if stored_path and stored_path.exists():

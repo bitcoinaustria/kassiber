@@ -89,6 +89,7 @@ from ..db import (
     APP_NAME,
     DEFAULT_DATA_ROOT,
     SCHEMA,
+    begin_write_savepoint,
     ensure_column,
     ensure_schema_compat,
     get_setting,
@@ -2037,7 +2038,7 @@ def _run_wallet_refresh_savepoint(conn, apply, *, suppress_progress=False):
     """Run one wallet's local apply under the coordinator-owned savepoint."""
 
     savepoint = f"wallet_refresh_{uuid.uuid4().hex}"
-    conn.execute(f"SAVEPOINT {savepoint}")
+    begin_write_savepoint(conn, savepoint)
     # Freshness progress callbacks persist and commit job progress on this same
     # connection. Chain network progress has already been emitted by the
     # preparation phase; suppress only the chain apply chatter so an observer

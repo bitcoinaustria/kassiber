@@ -20,6 +20,9 @@ from pathlib import Path
 from typing import Any
 
 from .db import (
+    _fsync_directory,
+    _read_migration_json,
+    _write_migration_json,
     DEFAULT_ATTACHMENTS_DIRNAME,
     DEFAULT_CONFIG_DIRNAME,
     DEFAULT_DATA_DIRNAME,
@@ -34,6 +37,7 @@ from .db import (
     resolve_database_path,
     resolve_effective_state_root,
 )
+from .durable_sync import full_fsync, sync_directory, sync_tree
 from .errors import AppError
 from .secrets.sqlcipher import looks_like_plaintext_sqlite
 
@@ -327,9 +331,12 @@ def write_catalog(catalog: dict[str, Any], path: str | Path | None = None) -> Pa
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(json.dumps(normalized, indent=2, sort_keys=True) + "\n")
+            handle.flush()
+            full_fsync(handle.fileno())
         _chmod_best_effort(tmp_path, 0o600)
         tmp_path.replace(cpath)
         _chmod_best_effort(cpath, 0o600)
+        sync_directory(cpath.parent)
     except Exception:
         try:
             tmp_path.unlink()
@@ -528,6 +535,8 @@ def create_project(
 
 
 def ensure_default_project(*, state_root: str | Path | None = None) -> ProjectEntry:
+    if state_root is None:
+        _resume_default_project_migration()
     cpath = catalog_path(state_root)
     catalog = load_catalog(cpath)
     entries = catalog.get("projects") or []
@@ -722,29 +731,102 @@ def _move_if_exists(source: Path, backup_root: Path, source_state: Path) -> str 
     return str(target)
 
 
-def _move_legacy_artifacts_aside(layout: LegacyLayout) -> dict[str, Any]:
-    backup_root = _backup_dir_for_legacy_migration(layout.state_root)
-    moved: dict[str, str] = {}
-    for key, source in (
-        ("database", layout.database),
+def _legacy_artifact_sources(layout: LegacyLayout) -> dict[str, Path]:
+    # Keep discovery possible until the other artifacts have moved. The marker
+    # also covers the final database move, when discovery alone cannot recover.
+    return dict((
         ("attachments", layout.state_root / DEFAULT_ATTACHMENTS_DIRNAME),
         ("exports", layout.state_root / DEFAULT_EXPORTS_DIRNAME),
         ("backends_env", layout.state_root / DEFAULT_CONFIG_DIRNAME / "backends.env"),
         ("settings_json", layout.state_root / DEFAULT_CONFIG_DIRNAME / "settings.json"),
-    ):
-        moved_to = _move_if_exists(source, backup_root, layout.state_root)
-        if moved_to is not None:
-            moved[key] = moved_to
-    if not moved:
-        return {"moved": {}, "backup_root": None}
-    return {"moved": moved, "backup_root": str(backup_root)}
+        ("database", layout.database),
+    ))
+
+
+def _resume_legacy_artifacts(marker_path: Path, marker: dict[str, Any]) -> None:
+    pending = marker["pending_legacy_artifacts"]
+    if (not isinstance(pending, dict)
+            or not isinstance(pending.get("backup_root"), str)
+            or not isinstance(pending.get("sources"), dict)
+            or any(not isinstance(marker.get(key), str) for key in
+                   ("source_state_root", "source_data_root", "source_database"))):
+        raise AppError("invalid legacy project migration intent", code="validation", retryable=False)
+    layout = LegacyLayout(
+        state_root=Path(marker["source_state_root"]),
+        data_root=Path(marker["source_data_root"]),
+        database=Path(marker["source_database"]),
+    )
+    backup_root = Path(pending["backup_root"])
+    sources = _legacy_artifact_sources(layout)
+    candidates = (default_state_root() / DEFAULT_DATA_DIRNAME,
+                  Path(LEGACY_XDG_DATA_ROOT).expanduser(), Path(LEGACY_DATA_ROOT).expanduser())
+    if (layout.data_root not in candidates
+            or layout.state_root != Path(resolve_effective_state_root(layout.data_root)).expanduser()
+            or layout.database.parent != layout.data_root
+            or layout.database.name not in (DEFAULT_DB_FILENAME, LEGACY_DB_FILENAME)
+            or backup_root.parent != layout.state_root
+            or not backup_root.name.startswith(LEGACY_MIGRATION_BACKUP_PREFIX)
+            or not isinstance(pending["sources"], dict)
+            or any(key not in sources or value != str(sources[key])
+                   for key, value in pending["sources"].items())):
+        raise AppError("invalid legacy project migration intent", code="validation", retryable=False)
+    moved = {}
+    for key, source in sources.items():
+        if key not in pending["sources"]:
+            continue
+        target = backup_root / source.relative_to(layout.state_root)
+        if source.exists():
+            if target.exists():
+                raise FileExistsError(target)
+            _move_if_exists(source, backup_root, layout.state_root)
+        elif not target.exists():
+            raise FileNotFoundError(source)
+        _fsync_directory(source.parent)
+        _fsync_directory(target.parent)
+        moved[key] = str(target)
+    marker["legacy_artifacts"] = {"moved": moved, "backup_root": str(backup_root)}
+    marker["legacy_artifacts_moved_at"] = now_iso()
+    del marker["pending_legacy_artifacts"]
+    _write_migration_json(marker_path, marker)
+
+
+def _resume_default_project_migration() -> None:
+    marker_path = project_root_for_id(DEFAULT_PROJECT_ID) / DEFAULT_CONFIG_DIRNAME / PROJECT_MIGRATION_MARKER
+    if marker_path.exists():
+        marker = _read_migration_json(marker_path)
+        if "pending_legacy_artifacts" in marker:
+            _resume_legacy_artifacts(marker_path, marker)
+
+
+def _move_legacy_artifacts_aside(layout: LegacyLayout, target_root: Path) -> None:
+    marker_path = target_root / DEFAULT_CONFIG_DIRNAME / PROJECT_MIGRATION_MARKER
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    marker = _read_migration_json(marker_path) if marker_path.exists() else {
+        "schema_version": 1,
+        "source_state_root": str(layout.state_root),
+        "source_data_root": str(layout.data_root),
+        "source_database": str(layout.database),
+        "created_at": now_iso(),
+        "requires_single_workspace_validation": not looks_like_plaintext_sqlite(layout.database),
+        "legacy_workspace_count": _workspace_count_for_plaintext(layout.database),
+    }
+    if "pending_legacy_artifacts" not in marker:
+        marker["pending_legacy_artifacts"] = {
+            "backup_root": str(_backup_dir_for_legacy_migration(layout.state_root)),
+            "sources": {key: str(source) for key, source in _legacy_artifact_sources(layout).items()
+                        if source.exists()},
+        }
+        # Publish the entire intent before the first move. A rename can finish
+        # even when the process dies before recording that individual move.
+        _write_migration_json(marker_path, marker)
+    _resume_legacy_artifacts(marker_path, marker)
 
 
 def _register_existing_default_project_after_legacy_recovery(
     layout: LegacyLayout,
     target_root: Path,
 ) -> ProjectEntry:
-    _move_legacy_artifacts_aside(layout)
+    _move_legacy_artifacts_aside(layout, target_root)
     return create_project(
         DEFAULT_PROJECT_NAME,
         project_id=DEFAULT_PROJECT_ID,
@@ -760,6 +842,7 @@ def migrate_legacy_default_layout_if_needed(
 ) -> ProjectEntry | None:
     if state_root is not None:
         return None
+    _resume_default_project_migration()
     layout = _legacy_layout()
     if layout is None:
         return None
@@ -829,10 +912,7 @@ def migrate_legacy_default_layout_if_needed(
             "legacy_workspace_count": workspace_count,
         }
         marker_path = staging_root / DEFAULT_CONFIG_DIRNAME / PROJECT_MIGRATION_MARKER
-        marker_path.write_text(
-            json.dumps(marker, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        _write_migration_json(marker_path, marker)
         report = _write_migration_report(
             state_root=source_state,
             status=status,
@@ -851,19 +931,12 @@ def migrate_legacy_default_layout_if_needed(
             },
         )
         marker["report"] = str(report)
-        marker_path.write_text(
-            json.dumps(marker, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        _write_migration_json(marker_path, marker)
+        # Every staged copy must be on disk before the rename publishes it.
+        sync_tree(staging_root)
         staging_root.replace(target_root)
-        moved = _move_legacy_artifacts_aside(layout)
-        marker_path = target_root / DEFAULT_CONFIG_DIRNAME / PROJECT_MIGRATION_MARKER
-        marker["legacy_artifacts"] = moved
-        marker["legacy_artifacts_moved_at"] = now_iso()
-        marker_path.write_text(
-            json.dumps(marker, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        sync_directory(target_root.parent)
+        _move_legacy_artifacts_aside(layout, target_root)
     except Exception:
         shutil.rmtree(staging_root, ignore_errors=True)
         raise
@@ -913,7 +986,4 @@ def validate_project_migration_after_unlock(data_root: str | Path, conn: sqlite3
     marker["requires_single_workspace_validation"] = False
     marker["legacy_workspace_count"] = workspace_count
     marker["validated_at"] = now_iso()
-    marker_path.write_text(
-        json.dumps(marker, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    _write_migration_json(marker_path, marker)

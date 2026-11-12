@@ -34,6 +34,7 @@ import uuid
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
+from .durable_sync import apply_sqlite_durability, full_fsync, sync_directory
 from .errors import AppError
 from .fingerprints import make_transaction_fingerprint
 from .msat import btc_to_msat, dec, msat_to_btc
@@ -117,14 +118,7 @@ def _state_root_migration_lock_path(preferred: Path) -> Path:
 
 
 def _fsync_directory(path: Path) -> None:
-    if os.name == "nt":
-        return
-    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-    fd = os.open(path, flags)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    sync_directory(path)
 
 
 def _write_migration_json(
@@ -138,7 +132,7 @@ def _write_migration_json(
             json.dump(payload, handle, indent=2, sort_keys=True)
             handle.write("\n")
             handle.flush()
-            os.fsync(handle.fileno())
+            full_fsync(handle.fileno())
         os.replace(temporary_name, path)
         _fsync_directory(path.parent)
     finally:
@@ -515,6 +509,40 @@ def sqlite_error_is_busy(details: dict[str, object]) -> bool:
         sqlite3.SQLITE_BUSY,
         sqlite3.SQLITE_LOCKED,
     }
+
+
+def begin_write_savepoint(conn, name: str) -> None:
+    """Open SAVEPOINT `name` for a write, holding SQLite's writer lock from the start.
+
+    Outside a transaction a SAVEPOINT begins a deferred one: its reads take a
+    shared lock that the first write must then upgrade. When another
+    connection holds the writer lock (a daemon worker, another Kassiber
+    process), SQLite refuses that upgrade with SQLITE_BUSY at once instead of
+    running the busy handler, since waiting could deadlock, so busy_timeout
+    never applies and the request fails as database_busy. Asking for the
+    writer lock with the transaction's first statement waits like any write.
+    RELEASE of an outermost savepoint still commits. Read-only snapshots keep
+    a plain SAVEPOINT; they never upgrade.
+    """
+    # Every Kassiber book has `settings`; partial test schemas may not. Look
+    # before the savepoint opens, so this read holds no lock afterwards.
+    reservable = bool(
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings'"
+        ).fetchall()
+    )
+    conn.execute(f"SAVEPOINT {name}")
+    if not reservable:
+        return
+    try:
+        # Changes nothing; requesting the writer lock is its only effect.
+        conn.execute("UPDATE settings SET value = value WHERE 0")
+    except BaseException:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {name}")
+        conn.execute(f"RELEASE SAVEPOINT {name}")
+        raise
+
+
 LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
 DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
@@ -3558,8 +3586,9 @@ def _atomic_write_managed_settings(settings_path, payload):
             json.dump(payload, handle, indent=2, sort_keys=True)
             handle.write("\n")
             handle.flush()
-            os.fsync(handle.fileno())
+            full_fsync(handle.fileno())
         os.replace(temporary_path, settings_path)
+        sync_directory(settings_path.parent)
     finally:
         with suppress(FileNotFoundError):
             temporary_path.unlink()
@@ -3763,6 +3792,7 @@ def _configure_connection_pragmas(conn, *, encrypted=False):
     if not encrypted:
         conn.execute(f"PRAGMA mmap_size = {DB_MMAP_SIZE_BYTES}")
     conn.execute("PRAGMA foreign_keys = ON")
+    apply_sqlite_durability(conn)
 
 
 def _preflight_schema_index_columns(conn):
@@ -3820,6 +3850,9 @@ def open_db(
     the schema script runs. When `passphrase` is `None` the legacy
     plaintext code path is preserved for backwards compatibility.
     """
+    from .backup.install import recover_pending_restore
+
+    recover_pending_restore(Path(resolve_effective_data_root(data_root)))
     root = ensure_data_root(resolve_effective_data_root(data_root))
     db_path = resolve_database_path(root)
 

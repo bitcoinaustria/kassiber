@@ -35,6 +35,22 @@ Primary automated coverage:
 - `tests/test_samourai_import.py`
 - `tests/test_legacy_ledger.py`
 
+## macOS full-sync durability
+
+On macOS `fsync(2)` leaves data in the drive's cache. Both runtimes set
+`PRAGMA fullfsync = ON` and `PRAGMA checkpoint_fullfsync = ON` there on every
+book connection (plaintext and SQLCipher opens, every keyed SQLCipher open,
+and the plaintext source of `secrets init`), so commits and WAL checkpoints
+use `fcntl(F_FULLFSYNC)`. Other platforms keep SQLite's defaults. The pragmas
+are per connection and change no stored byte, schema object or journal mode.
+Python's file and directory syncs go through `kassiber/durable_sync.py`
+(`F_FULLFSYNC` on macOS, falling back to `fsync` where a file system refuses
+it, as SQLite does); Rust's `File::sync_all` already uses `F_FULLFSYNC`.
+`tests/test_durable_sync.py` and the store's
+`macos_connections_set_both_fullfsync_pragmas` check the macOS branch on any
+host through a platform seam; `crates/store/scripts/durability_mutations.json`
+lists the mutations they kill.
+
 ## Austrian consumed-regime journal migration
 
 The `at-outflow-consumed-regime-v2` semantic migration supersedes the earlier
@@ -222,6 +238,25 @@ journal invalidation is needed. Existing stored explanations remain until
 `journals process` rebuilds them; review evidence and the displayed root may
 then name a previously omitted blocker. Saved exports and filed snapshots
 are not rewritten.
+
+## Custody authoring transaction compatibility
+
+The savepoint atomicity fix changes transaction ownership, not the schema or
+existing authored revisions. Low-level component and legacy consolidation
+helpers leave persistence to their caller; database initialization explicitly
+commits consolidation changes, journal processing owns its writer transaction,
+and review/component/gap authoring boundaries commit their completed operation.
+No caller in these paths requires an outermost savepoint release to persist it.
+
+`tests/test_custody_authoring_atomicity.py` injects component/gap failures after
+the outermost authoring savepoint has actually been released, before the caller
+commits. A failure inside that savepoint cannot expose an accidental release
+commit. The suite compares
+all persisted tables after rollback, including input versions, memberships and
+audit records. It also pins rollback of successful `commit=False` applies.
+There is no reliable historical failed-request marker from which to reconstruct
+an owner's intended review. Opening an existing book does not silently repair
+or replay authoring; see [recovery](custody-components.md#authoring-transactions-and-recovery).
 
 ## Intentionally not inferred during upgrade
 

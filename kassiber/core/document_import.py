@@ -28,6 +28,7 @@ from ..ai.providers import (
     require_ai_provider_contactable,
     resolve_ai_provider,
 )
+from ..db import begin_write_savepoint
 from ..errors import AppError
 from ..msat import MSAT_PER_BTC
 from ..time_utils import now_iso, parse_timestamp
@@ -1719,7 +1720,7 @@ def import_document_draft(
     attachments_root = core_attachments._attachments_root(resolved_data_root)
     savepoint = f"document_import_{uuid.uuid4().hex}"
     try:
-        conn.execute(f"SAVEPOINT {savepoint}")
+        begin_write_savepoint(conn, savepoint)
     except Exception:
         stable_dir.cleanup()
         raise

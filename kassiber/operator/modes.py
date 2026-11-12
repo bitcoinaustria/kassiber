@@ -25,6 +25,9 @@ OPERATOR_UNLOCK_MODE_SETTING = "operator_unlock_mode"
 def configured_unlock_mode(data_root) -> UnlockMode | None:
     """Return the explicit mode, or None for installations not yet migrated."""
 
+    from ..backup.install import recover_pending_restore
+
+    recover_pending_restore(data_root)
     data_root = resolve_canonical_project_data_root(data_root)
     value = load_managed_settings(data_root).get(OPERATOR_UNLOCK_MODE_SETTING)
     if value is None:

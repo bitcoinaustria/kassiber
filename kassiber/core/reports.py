@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import csv
+import errno
 import ipaddress
 import json
+import os
 import re
 import sqlite3
+import stat
+import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -15,6 +19,7 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
 from ..ai.contracts import is_cli_provider_locator
+from ..durable_sync import full_fsync
 from . import custody_filed_reports as core_custody_filed_reports
 from . import custody_journal as core_custody_journal
 from . import pricing
@@ -310,6 +315,12 @@ def _register_saved_export(
     period_end_year: int | None = None,
     report_scope: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if any(not stat.S_ISREG(Path(path).expanduser().stat().st_mode) for path in artifact_paths):
+        return {
+            "status": "skipped",
+            "reason": "non_regular_target",
+            "message": "Saved-artifact registration skipped for non-regular output target.",
+        }
     return core_custody_filed_reports.register_saved_report_export(
         conn,
         workspace_id=str(workspace["id"]),
@@ -5560,10 +5571,90 @@ def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path
     return result
 
 
+def _export_csv_rows(path, rows):
+    """Translate storage failures at every CSV export boundary."""
+    try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        _write_csv_rows(path, rows)
+    except OSError as exc:
+        reason = os.strerror(exc.errno) if exc.errno is not None else "I/O error"
+        raise AppError(
+            f"Could not write CSV export '{path}': {reason}",
+            code="export_write_failed",
+            details={"destination": os.fspath(path), "errno": exc.errno},
+        ) from None
+
+
 def _write_csv_rows(path, rows):
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerows(rows)
+    """Stage ordinary files; preserve open("w") behavior for special targets.
+
+    Like ``open("w")``, this writes through a final symlink, gives a new file
+    the umask's default mode and keeps an existing file's mode. Hard links and
+    existing files whose directory cannot hold a sibling are written in place;
+    those fallbacks, and device/pipe output, are deliberately non-atomic.
+    """
+    try:
+        target_stat = os.stat(path)
+    except FileNotFoundError:
+        target_stat = None
+    # Do this before realpath: /dev/stdout can resolve to a pipe:[inode]
+    # pseudo-path that cannot itself be opened.
+    if target_stat is not None and (not stat.S_ISREG(target_stat.st_mode) or target_stat.st_nlink > 1):
+        with open(path, "w", encoding="utf-8", newline="") as handle:
+            csv.writer(handle).writerows(rows)
+        return
+    target = Path(os.path.realpath(path))
+    mode = stat.S_IMODE(target_stat.st_mode) if target_stat is not None else None
+    staged = target.with_name(f".kassiber-{uuid.uuid4().hex}.tmp")
+    try:
+        descriptor = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    except OSError as exc:
+        if target_stat is None or exc.errno not in {
+            errno.EACCES, errno.EPERM, errno.EROFS,
+        }:
+            raise OSError(exc.errno, exc.strerror, os.fspath(path)) from None
+        with open(target, "w", encoding="utf-8", newline="") as handle:
+            csv.writer(handle).writerows(rows)
+        return
+    try:
+        handle = os.fdopen(descriptor, "w", encoding="utf-8", newline="")
+        descriptor = None  # fdopen now owns it, including exceptional exits.
+        with handle:
+            csv.writer(handle).writerows(rows)
+            if mode is not None:
+                os.chmod(staged, mode)
+            handle.flush()
+            full_fsync(handle.fileno())
+        try:
+            os.replace(staged, target)
+        except OSError as exc:
+            # Report the requested output, including when it became a directory
+            # during writing. A random staging path is not useful to callers.
+            raise OSError(exc.errno, exc.strerror, os.fspath(path)) from None
+        _fsync_csv_directory(target.parent)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        staged.unlink(missing_ok=True)
+
+
+def _fsync_csv_directory(directory):
+    """Persist the replacement where directory fsync is supported."""
+    unsupported = {errno.EINVAL, errno.EBADF, errno.EACCES, errno.EPERM, errno.ENOTSUP}
+    try:
+        descriptor = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    except OSError as exc:
+        if exc.errno not in unsupported:
+            raise
+        return
+    try:
+        try:
+            full_fsync(descriptor)
+        except OSError as exc:
+            if exc.errno not in unsupported:
+                raise
+    finally:
+        os.close(descriptor)
 
 
 def _austrian_e1kv_overview_csv_rows(report):
@@ -5660,13 +5751,11 @@ def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, 
         report_context=report_context,
     )
     directory = Path(dir_path).expanduser()
-    directory.mkdir(parents=True, exist_ok=True)
-
     files = []
 
     def write_file(sheet_name, filename, rows):
         path = directory / filename
-        _write_csv_rows(path, rows)
+        _export_csv_rows(path, rows)
         files.append(
             {
                 "sheet": sheet_name,
@@ -6381,8 +6470,7 @@ def export_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
     sections = _generic_report_section_specs(context)
     rows = _generic_report_csv_rows(context, sections)
     path = Path(file_path).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _write_csv_rows(path, rows)
+    _export_csv_rows(path, rows)
     result = {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
@@ -6931,8 +7019,7 @@ def export_transactions_csv_report(
     )
     spec = context["spec"]
     path = Path(file_path).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _write_csv_rows(path, _generic_report_csv_rows({"title": context["title"]}, [spec]))
+    _export_csv_rows(path, _generic_report_csv_rows({"title": context["title"]}, [spec]))
     result = {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,

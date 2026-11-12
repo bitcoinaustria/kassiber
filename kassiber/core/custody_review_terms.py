@@ -460,25 +460,26 @@ def create_pair_review(
         )
     else:
         swap_fee_msat, swap_fee_kind = None, None
-    pair_row = custody_authored_migration.create_pair_review_component(
-        conn,
-        review_id=str(uuid.uuid4()),
-        workspace_id=workspace_id,
-        profile_id=profile["id"],
-        out_transaction_id=out_row["id"],
-        in_transaction_id=in_row["id"],
-        kind=kind,
-        policy=policy,
-        notes=notes,
-        swap_fee_msat=swap_fee_msat,
-        swap_fee_kind=swap_fee_kind,
-        confidence_at_pair=confidence_at_pair,
-        pair_source=pair_source,
-        out_amount_msat=out_amount_msat,
-        created_at=now_iso(),
-        authored_source=authored_source,
-    )
-    invalidate_journals(conn, profile["id"])
+    with custody_authored_migration._savepoint(conn, "custody_pair_review"):
+        pair_row = custody_authored_migration.create_pair_review_component(
+            conn,
+            review_id=str(uuid.uuid4()),
+            workspace_id=workspace_id,
+            profile_id=profile["id"],
+            out_transaction_id=out_row["id"],
+            in_transaction_id=in_row["id"],
+            kind=kind,
+            policy=policy,
+            notes=notes,
+            swap_fee_msat=swap_fee_msat,
+            swap_fee_kind=swap_fee_kind,
+            confidence_at_pair=confidence_at_pair,
+            pair_source=pair_source,
+            out_amount_msat=out_amount_msat,
+            created_at=now_iso(),
+            authored_source=authored_source,
+        )
+        invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
     return pair_to_dict(pair_row)
@@ -806,15 +807,16 @@ def delete_pair_review(
         raise AppError(f"Pair '{pair_id}' not found", code="not_found")
     if row["deleted_at"]:
         return {"deleted": pair_id}
-    custody_authored_migration.delete_authored_review(
-        conn,
-        profile_id=profile_id,
-        review_id=pair_id,
-        term_kind="transaction_pair",
-        deleted_at=now_iso(),
-        authored_source=authored_source,
-    )
-    invalidate_journals(conn, profile_id)
+    with custody_authored_migration._savepoint(conn, "custody_pair_review"):
+        custody_authored_migration.delete_authored_review(
+            conn,
+            profile_id=profile_id,
+            review_id=pair_id,
+            term_kind="transaction_pair",
+            deleted_at=now_iso(),
+            authored_source=authored_source,
+        )
+        invalidate_journals(conn, profile_id)
     if commit:
         conn.commit()
     # The removed pair's legs and terms, so it can be paired again.
@@ -1009,17 +1011,18 @@ def update_pair_review(
             )
         else:
             new_fee_msat, new_fee_kind = None, None
-    updated = custody_authored_migration.revise_pair_review_component(
-        conn,
-        row,
-        kind=new_kind,
-        policy=new_policy,
-        notes=new_notes,
-        swap_fee_msat=new_fee_msat,
-        swap_fee_kind=new_fee_kind,
-        authored_source=authored_source,
-    )
-    invalidate_journals(conn, profile["id"])
+    with custody_authored_migration._savepoint(conn, "custody_pair_review"):
+        updated = custody_authored_migration.revise_pair_review_component(
+            conn,
+            row,
+            kind=new_kind,
+            policy=new_policy,
+            notes=new_notes,
+            swap_fee_msat=new_fee_msat,
+            swap_fee_kind=new_fee_kind,
+            authored_source=authored_source,
+        )
+        invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
     return pair_to_dict(updated)

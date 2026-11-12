@@ -60,6 +60,9 @@ and the full gate live in [CONTRIBUTING.md](../CONTRIBUTING.md).
 - Background events use `build_event_envelope`, not ordinary responses without
   a request ID. Workers that open a database own their connection and obey
   book-switch, cancellation, and source-revision checks.
+- Open write transactions with `db.begin_write_savepoint` or `BEGIN IMMEDIATE`.
+  A deferred one that reads first fails at once against another writer
+  instead of waiting (`tests/test_write_transaction_locks.py`).
 
 For adapters, read the root task index before editing: observation transport,
 Lightning sanitization, and graph visibility have different trust

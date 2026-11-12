@@ -11,6 +11,7 @@ from heapq import heappop, heappush
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
+from ..db import begin_write_savepoint
 from ..envelope import json_ready
 from .custody_pricing import finite_decimal
 from ..errors import AppError
@@ -2023,7 +2024,7 @@ def suggest_links(
     # ceiling regardless of how the request reaches us.
     if max_suggestions > SUGGESTION_WRITE_CAP:
         max_suggestions = SUGGESTION_WRITE_CAP
-    conn.execute("SAVEPOINT source_funds_suggest")
+    begin_write_savepoint(conn, "source_funds_suggest")
     rows = _inputs.rows if _inputs is not None else _active_transaction_rows(conn, profile["id"])
     rows_by_id = {row["id"]: row for row in rows}
     scoped_tx_ids = (
@@ -3800,44 +3801,50 @@ def save_case_snapshot(
     created_at = _now()
     snapshot_json = json.dumps(json_ready(snapshot), sort_keys=True)
     digest = _snapshot_hash(snapshot)
-    conn.execute(
-        """
-        INSERT INTO source_funds_cases(
-            id, workspace_id, profile_id, target_transaction_id, target_external_id,
-            target_amount, asset, label, reveal_mode, status, snapshot_hash, snapshot_json,
-            created_at, updated_at, recipient_id,
-            recipient_label_snapshot, recipient_kind_snapshot, recipient_reveal_mode_snapshot
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            case_id,
-            workspace_id,
-            profile_id,
-            target_transaction_id,
-            target_external_id,
-            target_amount_msat,
-            asset,
-            label,
-            reveal_mode,
-            status,
-            digest,
-            snapshot_json,
-            created_at,
-            created_at,
-            recipient_id,
-            recipient_label_snapshot,
-            recipient_kind_snapshot,
-            recipient_reveal_mode_snapshot,
-        ),
-    )
-    conn.execute(
-        """
-        INSERT INTO source_funds_snapshots(id, case_id, snapshot_hash, snapshot_json, created_at)
-        VALUES(?, ?, ?, ?, ?)
-        """,
-        (snapshot_id, case_id, digest, snapshot_json, created_at),
-    )
-    conn.commit()
+    begin_write_savepoint(conn, "source_funds_case_snapshot")
+    try:
+        conn.execute(
+            """
+            INSERT INTO source_funds_cases(
+                id, workspace_id, profile_id, target_transaction_id, target_external_id,
+                target_amount, asset, label, reveal_mode, status, snapshot_hash, snapshot_json,
+                created_at, updated_at, recipient_id,
+                recipient_label_snapshot, recipient_kind_snapshot, recipient_reveal_mode_snapshot
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                case_id,
+                workspace_id,
+                profile_id,
+                target_transaction_id,
+                target_external_id,
+                target_amount_msat,
+                asset,
+                label,
+                reveal_mode,
+                status,
+                digest,
+                snapshot_json,
+                created_at,
+                created_at,
+                recipient_id,
+                recipient_label_snapshot,
+                recipient_kind_snapshot,
+                recipient_reveal_mode_snapshot,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO source_funds_snapshots(id, case_id, snapshot_hash, snapshot_json, created_at)
+            VALUES(?, ?, ?, ?, ?)
+            """,
+            (snapshot_id, case_id, digest, snapshot_json, created_at),
+        )
+        conn.execute("RELEASE SAVEPOINT source_funds_case_snapshot")
+    except BaseException:
+        conn.execute("ROLLBACK TO SAVEPOINT source_funds_case_snapshot")
+        conn.execute("RELEASE SAVEPOINT source_funds_case_snapshot")
+        raise
     return {
         "id": case_id,
         "snapshot_id": snapshot_id,

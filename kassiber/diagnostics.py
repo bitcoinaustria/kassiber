@@ -7,6 +7,7 @@ import sqlite3
 import sys
 import traceback
 import ipaddress
+import itertools
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -205,20 +206,30 @@ def save_public_diagnostics_report(
 ) -> DiagnosticsSaveResult | None:
     if not target:
         return None
+    text = json.dumps(json_ready(report), indent=2, sort_keys=False) + "\n"
     if target == "auto":
         paths = resolve_runtime_paths(data_root=data_root)
         directory = Path(paths.exports_root) / "diagnostics"
-        filename = _diagnostics_filename(report.get("generated_at"))
-        path = directory / filename
-        relative_path = str(DIAGNOSTICS_SUBDIR / filename)
-        target_label = "auto"
-    else:
-        path = Path(target).expanduser()
-        relative_path = None
-        target_label = "custom"
+        directory.mkdir(parents=True, exist_ok=True)
+        path = _write_new_report(directory, _diagnostics_filename(report.get("generated_at")), text)
+        return DiagnosticsSaveResult(path=path, relative_path=str(DIAGNOSTICS_SUBDIR / path.name), target="auto")
+    path = Path(target).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(json_ready(report), indent=2, sort_keys=False) + "\n", encoding="utf-8")
-    return DiagnosticsSaveResult(path=path, relative_path=relative_path, target=target_label)
+    path.write_text(text, encoding="utf-8")
+    return DiagnosticsSaveResult(path=path, relative_path=None, target="custom")
+
+
+def _write_new_report(directory: Path, filename: str, text: str) -> Path:
+    """Create the report under a name no earlier automatic report holds."""
+    stem, suffix = filename.rsplit(".", 1)
+    for attempt in itertools.count(1):
+        name = filename if attempt == 1 else f"{stem}-{attempt}.{suffix}"
+        try:
+            with open(directory / name, "x", encoding="utf-8") as handle:
+                handle.write(text)
+        except FileExistsError:
+            continue
+        return directory / name
 
 
 def write_error_diagnostics(
@@ -817,7 +828,8 @@ def _is_sensitive_key(key: str) -> bool:
 
 
 def _diagnostics_filename(generated_at: Any) -> str:
-    stamp = sanitize_text(str(generated_at or now_iso())) or now_iso()
-    stamp = stamp.replace(":", "-").replace("/", "-")
+    # The stamp is the report's own generated_at, which the report carries
+    # anyway. The free-text redactor would turn every stamp into "timestamp".
+    stamp = str(generated_at or now_iso()).replace(":", "-")
     stamp = re.sub(r"[^A-Za-z0-9_.-]", "-", stamp)
     return f"kassiber-diagnostics-{stamp}.json"

@@ -451,7 +451,7 @@ def _apply_audited_transaction_update(
     savepoint = f"metadata_update_{uuid.uuid4().hex}" if not commit else None
     if savepoint:
         if not conn.in_transaction:
-            conn.execute("BEGIN")
+            conn.execute("BEGIN IMMEDIATE")
         conn.execute(f"SAVEPOINT {savepoint}")
     try:
         if tags_set and "tags" in changed_fields:
@@ -1179,6 +1179,8 @@ def revert_transaction_edit(
         tx_updates.update(next_tx_updates)
         state_updates.update(next_state_updates)
         reverted_fields.append(edit_field)
+    if state_updates.get("excluded") is True:
+        _guard_excluding_paired_leg(conn, profile["id"], tx["id"])
     event_reason = reason or f"Reverted transaction edit {event_id}"
     new_event_id, changed = _apply_audited_transaction_update(
         conn,

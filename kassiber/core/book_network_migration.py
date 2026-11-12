@@ -17,6 +17,7 @@ from pathlib import Path
 
 from ..backup.age_cli import encrypt_age_stream
 from ..db import RETIRED_DEVICE_SYNC_COLUMNS, open_db, resolve_attachments_root
+from ..durable_sync import full_fsync
 from . import legacy_ledger
 from .attachments import _resolve_stored_path, _hash_file
 from .book_network import ENVIRONMENTS, _digest, _error, inventory_book_network, plan_book_network, apply_book_network
@@ -346,7 +347,7 @@ def export_network_partition(conn, profile_id, args, *, data_root, output_path, 
                 temporary = Path(output.name)
                 encrypt_age_stream(source, output, **({"recipients": [recipient]} if recipient else {"passphrase": backup_passphrase}))
                 output.flush()
-                os.fsync(output.fileno())
+                full_fsync(output.fileno())
             # Hard link is atomic and refuses an existing destination, including
             # one created after the preview. Never replace another user's file.
             os.link(temporary, destination)

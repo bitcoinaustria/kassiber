@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from ..durable_sync import apply_sqlite_durability, sync_directory, sync_file
 from ..errors import AppError
 from .sqlcipher import (
     CIPHER_COMPATIBILITY,
@@ -193,6 +194,7 @@ def migrate_plaintext_to_encrypted(
     # SQLCipher-built connections.
     src_conn = sqlcipher.connect(str(src))
     try:
+        apply_sqlite_durability(src_conn)
         try:
             checkpoint = src_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
             if checkpoint and int(checkpoint[0]) != 0:
@@ -306,8 +308,12 @@ def migrate_plaintext_to_encrypted(
             retryable=False,
         )
 
+    # The verified copy must be on disk before either rename can publish it.
+    sync_file(encrypted_path)
+    sync_directory(src.parent)
     src.rename(backup_path)
     encrypted_path.rename(src)
+    sync_directory(src.parent)
 
     return MigrationResult(
         encrypted_path=src,
@@ -356,4 +362,6 @@ def create_empty_encrypted_database(
         conn.commit()
     finally:
         conn.close()
+    sync_file(target)
+    sync_directory(target.parent)
     return target

@@ -28,6 +28,7 @@ import uuid
 from urllib.parse import urlsplit
 from typing import NoReturn
 
+from ..db import begin_write_savepoint
 from ..errors import AppError
 from ..time_utils import now_iso, parse_timestamp
 from ..wallet_descriptors import normalize_network
@@ -314,7 +315,7 @@ def preview_dataset(manifest, stream, *, format="csv", adapter="generic", cancel
 @contextmanager
 def _atomic(conn):
     name = "dataset_" + uuid.uuid4().hex
-    conn.execute(f"SAVEPOINT {name}")
+    begin_write_savepoint(conn, name)
     try:
         yield
     except BaseException:

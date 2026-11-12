@@ -1308,3 +1308,56 @@ def test_review_notes_schema_migration_backfills_and_refreezes_terms():
             "SET review_notes = 'changed' WHERE id = 'pair-term'"
         )
     conn.close()
+
+
+@pytest.mark.parametrize("failure", ["excluded", "canonical"])
+def test_native_review_activation_failure_leaves_no_committed_draft(tmp_path, failure):
+    conn = open_db(tmp_path)
+    _scope(conn)
+    _tx(conn, "out", "btc", "outbound", "BTC", 1000, NOW)
+    _tx(conn, "in", "btc2", "inbound", "BTC", 1000, NOW)
+    if failure == "excluded":
+        conn.execute("UPDATE transactions SET excluded=1 WHERE id='in'")
+    else:
+        conn.execute("UPDATE transactions SET amount_includes_fee=1,fee=1 WHERE id='in'")
+    conn.commit()
+    # No outer transaction: creation previously committed before activation.
+    assert not conn.in_transaction
+    before = list(conn.iterdump())
+    with pytest.raises((AppError, ValueError)):
+        create_transaction_pair(conn, "ws", "profile", "out", "in")
+    assert list(conn.iterdump()) == before
+    conn.rollback()
+    assert list(conn.iterdump()) == before
+    conn.close()
+
+
+@pytest.mark.parametrize("operation", ["create", "update", "unpair"])
+def test_pair_invalidation_failure_keeps_complete_database_unchanged(tmp_path, operation):
+    from kassiber.cli.handlers import delete_transaction_pair, update_transaction_pair
+
+    conn = open_db(tmp_path)
+    _scope(conn)
+    _tx(conn, "out", "btc", "outbound", "BTC", 1000, NOW)
+    _tx(conn, "in", "btc2", "inbound", "BTC", 1000, NOW)
+    conn.commit()
+    if operation != "create":
+        pair = create_transaction_pair(conn, "ws", "profile", "out", "in")
+    before = list(conn.iterdump())
+    with patch(
+        "kassiber.core.custody_review_terms.invalidate_journals",
+        side_effect=RuntimeError("injected invalidation failure"),
+    ):
+        with pytest.raises(RuntimeError, match="injected invalidation failure"):
+            if operation == "create":
+                create_transaction_pair(conn, "ws", "profile", "out", "in")
+            elif operation == "update":
+                update_transaction_pair(conn, "ws", "profile", pair["id"], notes="revised")
+            else:
+                delete_transaction_pair(conn, "ws", "profile", pair["id"])
+    # Operation-level rollback must finish before the caller cleans up its
+    # transaction; otherwise a later caller commit could retain partial work.
+    assert list(conn.iterdump()) == before
+    conn.rollback()
+    assert list(conn.iterdump()) == before
+    conn.close()

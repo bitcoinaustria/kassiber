@@ -28,6 +28,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - exercised in fallback tests
     _sqlcipher_module = None
 
+from ..durable_sync import apply_sqlite_durability
 from ..errors import AppError
 
 
@@ -125,6 +126,7 @@ def apply_keying(
     conn.execute(f"PRAGMA cipher_compatibility = {int(compatibility)}")
     conn.execute(f"PRAGMA kdf_iter = {int(kdf_iter)}")
     conn.execute(f"PRAGMA cipher_page_size = {int(cipher_page_size)}")
+    apply_sqlite_durability(conn)
 
 
 def _database_error_classes() -> tuple[type, ...]:

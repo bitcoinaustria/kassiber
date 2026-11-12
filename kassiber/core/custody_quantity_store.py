@@ -11,6 +11,7 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
+from ..db import begin_write_savepoint
 from ..errors import AppError
 from .custody_evidence import (
     EvidenceSnapshot,
@@ -673,7 +674,7 @@ def replace_canonical_quantity_state(
     """Atomically replace all derived canonical quantity state for a book."""
 
     savepoint = "replace_canonical_quantity_state"
-    conn.execute(f"SAVEPOINT {savepoint}")
+    begin_write_savepoint(conn, savepoint)
     try:
         result = _replace_canonical_quantity_state(
             conn,

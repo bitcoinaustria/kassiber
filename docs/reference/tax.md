@@ -445,6 +445,20 @@ it does not expand to cover a 25-hour autumn departure day.
 
 ## Rates and tax input quality
 
+CSV exports stage ordinary files in the destination directory, preserve file
+modes, flush and fsync before replacement, and fsync the directory where
+supported. Symlinks are written through. Devices and pipes are written directly;
+report exports to these non-regular targets succeed and explicitly report that
+saved-artifact registration was skipped. No saved report snapshot is created.
+Hard-linked files and existing writable files whose directory cannot hold a
+staged sibling are written in place. These compatibility paths are not atomic:
+an interrupted write can leave partial output, as with `open("w")`.
+Storage exhaustion (`ENOSPC` or `EDQUOT`) during staging raises without opening
+the existing destination for writing, so the previous complete report survives.
+CSV storage failures return `export_write_failed` with only the requested
+destination and OS error number, including staging failures and when the target
+becomes a directory during writing; random staging filenames are not exposed.
+
 If transactions do not already include usable fiat pricing, Kassiber first tries to fill them from the local rates cache during journal processing. When a transaction has a known `confirmed_at` timestamp, Kassiber prices from that confirmation time; otherwise it falls back to `occurred_at`. `LBTC` / `L-BTC` transactions use the BTC fiat rate because Liquid Bitcoin is pegged one-to-one with BTC.
 
 All price write paths use shared finite decimal validation, including overrides,

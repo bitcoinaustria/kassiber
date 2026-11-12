@@ -437,6 +437,16 @@ until that process stops. `kassiber status` reports the effective root.
 
 ### At-rest encryption — passphrase-gated SQLCipher (V4.1)
 
+Restore installation keeps a private same-filesystem prepared tree and a
+retained `pre-restore-*` copy. A bounded, owner-only `.restore-pending.json`
+intent records only the container path and fixed entry names, never passwords.
+Startup acquires exclusive project maintenance before recovering it, before
+layout writes or database creation. An uncommitted transaction rolls back;
+a committed transaction retains the restored tree and recovery copy. Invalid
+or symlinked intents block opening instead of guessing. These local recovery
+artifacts can include plaintext sidecars and need the same protection as the
+container itself.
+
 Each project database is optionally encrypted via SQLCipher 4, and each
 encrypted project has its own passphrase. After `kassiber secrets init`, select
 an explicit unlock mode for that project: `manual` prompts or uses

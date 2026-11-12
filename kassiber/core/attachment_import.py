@@ -39,6 +39,7 @@ import tempfile
 from typing import Any, Iterator, Mapping
 
 from .. import importers as importers_module
+from ..db import begin_write_savepoint
 from ..errors import AppError
 from ..time_utils import UNKNOWN_OCCURRED_AT
 from . import file_analysis as core_file_analysis
@@ -410,7 +411,7 @@ def plan_or_apply(
             for blocker in blockers
         )
         apply_now = False
-        conn.execute(f"SAVEPOINT {_SAVEPOINT}")
+        begin_write_savepoint(conn, _SAVEPOINT)
         try:
             outcome: dict[str, Any] = {}
             if simulate:

@@ -274,6 +274,7 @@ from .backends import (
     wallet_backend_references,
 )
 from .db import (
+    begin_write_savepoint,
     ensure_data_root,
     open_db,
     resolve_config_root,
@@ -1515,7 +1516,17 @@ def _drain_daemon_main_thread_tasks(ctx: DaemonContext) -> None:
                 )
             payload = task.callback(ctx.conn)
         except BaseException as exc:
-            task.response.put((False, exc))
+            # Every queued callback shares the daemon's writer: tool calls,
+            # chat persistence and provider-format detection alike. A failed
+            # callback must not leave work for the next request to commit.
+            try:
+                if ctx.conn is not None:
+                    ctx.conn.rollback()
+            finally:
+                # The caller is waiting on this queue even if the connection
+                # closed or failed during rollback. Preserve its original error.
+                followups.clear()
+                task.response.put((False, exc))
         else:
             task.response.put((True, payload))
         finally:
@@ -5046,7 +5057,7 @@ def _rates_rebuild_payload(
     reprice = None
     if reprice_transactions:
         _, profile = resolve_scope(conn, None, None)
-        conn.execute("SAVEPOINT rates_rebuild_reprice")
+        begin_write_savepoint(conn, "rates_rebuild_reprice")
         try:
             auto_priced = auto_price_transactions_from_rates_cache(conn, profile)
             journal_input_version_after = int(profile["journal_input_version"] or 0)
@@ -8887,7 +8898,7 @@ def _execute_mutating_ai_tool_unhinted(
                         code="stale_context",
                         retryable=True,
                     )
-                conn.execute("SAVEPOINT custody_ai_assisted_write")
+                begin_write_savepoint(conn, "custody_ai_assisted_write")
                 try:
                     payload = _ui_custody_gap_payload_from_conn(
                         conn,
