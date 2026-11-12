@@ -464,13 +464,19 @@ pub(crate) fn root(dir: &tempfile::TempDir) -> String {
     dir.path().to_string_lossy().into_owned()
 }
 
-/// The data root as the service canonicalizes it: on macOS the temporary
-/// directory under /var is a symlink into /private/var.
-pub(crate) fn canonical_root(dir: &tempfile::TempDir) -> String {
-    std::fs::canonicalize(dir.path())
+/// A path as the service canonicalizes it (`canonicalize_allow_missing`,
+/// Python's `Path.resolve`): on macOS the temporary directory under /var is a
+/// symlink into /private/var, and on Windows the result has no `\\?\` prefix.
+pub(crate) fn canonical(path: &Path) -> String {
+    kassiber_paths::canonicalize_allow_missing(path)
         .unwrap()
         .to_string_lossy()
         .into_owned()
+}
+
+/// The data root as the service canonicalizes it.
+pub(crate) fn canonical_root(dir: &tempfile::TempDir) -> String {
+    canonical(dir.path())
 }
 
 pub(crate) fn unlock(service: &OperatorService, data_root: &str) -> Result<Value> {
@@ -860,10 +866,7 @@ fn test_mode_authentication_and_continuation_use_canonical_root() {
     let result = service
         .set_mode_authenticated(&alias.to_string_lossy(), b"passphrase", "manual")
         .unwrap();
-    let canonical = std::fs::canonicalize(tmp.path())
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
+    let canonical = canonical(tmp.path());
     assert_eq!(text(&result, "mode"), "manual");
     assert_eq!(locked(&roots)[0], canonical);
     let identity = identity(&fake, &canonical);
@@ -1542,10 +1545,7 @@ fn test_explicit_book_scope_survives_queue_admission() {
     )
     .unwrap();
     assert_eq!(text(&wait(&service, &id(&accepted)), "state"), "completed");
-    let canonical = std::fs::canonicalize(tmp.path())
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
+    let canonical = canonical(tmp.path());
     assert_eq!(
         locked(&seen)[0].1[..8],
         argv(&[
@@ -2603,10 +2603,7 @@ fn test_queued_child_is_pinned_to_canonical_root_not_caller_alias() {
     let first = submit(&service, &alias_text, argv(&["status"])).unwrap();
     assert!(started.wait(Duration::from_secs(1)));
     let second = submit(&service, &alias_text, argv(&["status"])).unwrap();
-    let canonical = std::fs::canonicalize(source.path())
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
+    let canonical = canonical(source.path());
     {
         let state = service.state();
         let queued = &state.operations[&id(&second)];
@@ -2686,10 +2683,7 @@ fn test_explicit_scope_is_pinned_at_admission() {
     release.set();
     wait_terminal(&service, &id(&first));
     wait_terminal(&service, &id(&queued));
-    let canonical = std::fs::canonicalize(tmp.path())
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
+    let canonical = canonical(tmp.path());
     assert_eq!(
         locked(&seen)[1][..8],
         argv(&[
