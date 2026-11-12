@@ -187,15 +187,18 @@ compatibility observer.
 For a local Apple Silicon build without Rosetta, use the arm64-only helper:
 
 ```bash
-./scripts/build-macos-arm64-rust-app.sh
+./scripts/build-macos-arm64-app.sh
+# also install it to ~/Applications with its terminal command:
+./scripts/build-macos-arm64-app.sh --install
 # skip the DMG if you only want the .app:
-BUNDLES=app ./scripts/build-macos-arm64-rust-app.sh
+BUNDLES=app ./scripts/build-macos-arm64-app.sh
 ```
 
 It builds the production `kassiber` binary as the sidecar and runs Tauri with
 `--target aarch64-apple-darwin`; the details are under
-[Local Apple Silicon build with the Rust backend](#local-apple-silicon-build-with-the-rust-backend).
-The result is an unsigned desktop app and DMG, copied to `dist/macos-arm64/`.
+[Local Apple Silicon build details](#local-apple-silicon-build-details).
+The result is an ad-hoc-signed desktop app and DMG, copied to `dist/macos-arm64/`.
+Intel Macs are not a build target; see above.
 The package version comes from `crates/kassiber/Cargo.toml`, not the
 placeholder in `tauri.conf.json`.
 
@@ -207,7 +210,7 @@ The good news for a local build: nothing downloaded it, so there is no
 `com.apple.quarantine` xattr — Gatekeeper is on its softer path.
 
 ```bash
-open "dist/macos-arm64/Kassiber Rust Dev.app"
+open "dist/macos-arm64/Kassiber Dev.app"
 ```
 
 Expected dialogs and how to clear them:
@@ -222,7 +225,7 @@ Expected dialogs and how to clear them:
   xattr was attached (e.g. you zipped/unzipped the bundle through a tool
   that adds the flag). Strip it:
   ```bash
-  xattr -dr com.apple.quarantine "dist/macos-arm64/Kassiber Rust Dev.app"
+  xattr -dr com.apple.quarantine "dist/macos-arm64/Kassiber Dev.app"
   ```
 
 Subsequent launches from the same path go through silently. If you rebuild
@@ -277,13 +280,12 @@ update checker treats these packages as manual installs and shows the GitHub
 release link; see [Linux packaging](linux-packaging.md) for why no `apt`/`dnf`
 command is offered.
 
-### Local Apple Silicon build with the Rust backend
+### Local Apple Silicon build details
 
-`scripts/build-macos-arm64-rust-app.sh` builds a local app with the Rust
-binary as its sidecar:
+`scripts/build-macos-arm64-app.sh` builds the local app:
 
 ```bash
-./scripts/build-macos-arm64-rust-app.sh [--no-backup]
+./scripts/build-macos-arm64-app.sh [--install] [--no-backup]
 ```
 
 The helper builds the production `kassiber` binary (no `test-harness`
@@ -296,10 +298,17 @@ smoke CI runs. It places the binary at the sidecar location,
 `binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, with the provider
 broker beside it, so the supervisor, the bundled CLI launcher and the Touch ID
 helper's identity check find it unchanged, and re-signs it under that
-identifier if Tauri's bundle signing changed it. It probes the freshly built
-bundles and only reads installed apps' build records, never executes them. The app is named **Kassiber Rust Dev**
-(`at.bitcoinaustria.kassiber.rust-dev`) and shows the build label `dev-rust`.
-Finished apps and DMGs are copied to `dist/macos-arm64/`.
+identifier if Tauri's bundle signing changed it. Tauri seals the bundle with an
+ad-hoc signature (`signingIdentity` `-`) before it makes the DMG. It probes the
+freshly built bundles and only reads installed apps' build records, never
+executes them. The app is named **Kassiber Dev** (`at.bitcoinaustria.kassiber.dev`)
+and shows the build label `dev`. Finished apps and DMGs are copied to
+`dist/macos-arm64/`. `--install` then replaces the installed Kassiber Dev,
+in `/Applications` or `~/Applications` (two bundles with one identifier let
+macOS open either), or copies the app to `~/Applications` when there is none;
+it refuses while that app runs. It installs the terminal command with
+`scripts/install-macos-desktop-cli.sh`; a `kassiber` that Homebrew or another
+installer manages is left in place.
 
 This app and an installed Kassiber app use the same books. The data location
 does not depend on the bundle identifier, and ownership locks let only one

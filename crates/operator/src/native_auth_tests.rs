@@ -721,7 +721,7 @@ fn inspect_code_pins_identifier_team_and_cdhash() {
         );
     }
     let refused = [
-        describe("at.bitcoinaustria.kassiber.rust-dev", TEAM, CDHASH),
+        describe("at.bitcoinaustria.kassiber.dev", TEAM, CDHASH),
         describe("kassiber_ui-0992cffe1a53d924", "not set", CDHASH),
         describe(NATIVE_AUTH_IDENTIFIER, "not set", CDHASH),
         describe(NATIVE_AUTH_IDENTIFIER, "6q4r2c3gjk", CDHASH),

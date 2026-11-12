@@ -296,7 +296,7 @@ downloaded bytes are authenticated. See
 [release signing](release-signing.md).
 
 For a real installable `.app` built locally on Apple Silicon (without
-Rosetta), use `./scripts/build-macos-arm64-rust-app.sh`. The build is unsigned
+Rosetta), use `./scripts/build-macos-arm64-app.sh`. The build is unsigned
 and ad-hoc signed; first-launch Gatekeeper handling is documented in
 [prerelease-binaries.md → Local Apple Silicon build](prerelease-binaries.md#local-apple-silicon-build).
 

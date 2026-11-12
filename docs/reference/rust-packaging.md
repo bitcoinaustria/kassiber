@@ -213,8 +213,8 @@ Native run, on an Apple Silicon Mac with Xcode command line tools, rustup and
 pnpm 10.33.0:
 
 ```bash
-./scripts/build-macos-arm64-rust-app.sh --no-backup     # local "Kassiber Rust Dev" app
-codesign -d --verbose=2 "dist/macos-arm64/Kassiber Rust Dev.app/Contents/Resources/binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin"
+./scripts/build-macos-arm64-app.sh --no-backup          # local "Kassiber Dev" app
+codesign -d --verbose=2 "dist/macos-arm64/Kassiber Dev.app/Contents/Resources/binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin"
 # Identifier=kassiber-cli-aarch64-apple-darwin
 ```
 

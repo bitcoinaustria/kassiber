@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Snapshot and restore every local Kassiber book on this Mac.
 #
-# Used before a differently built backend (such as the Rust desktop build from
-# scripts/build-macos-arm64-rust-app.sh) first opens the same books, so an
+# Used before a differently built app (such as the local build from
+# scripts/build-macos-arm64-app.sh) first opens the same books, so an
 # upgrade or a backend bug can be rolled back. Snapshots copy files only while
 # no Kassiber process runs, which keeps SQLite/SQLCipher databases and their
 # WAL files consistent; encrypted books stay encrypted in the copy.

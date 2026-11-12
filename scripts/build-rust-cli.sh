@@ -5,7 +5,7 @@
 #
 # Release CI and the local Linux/Windows packaging runs share this script, so a
 # locally verified binary and the published one come from the same command.
-# macOS keeps scripts/build-macos-arm64-rust-app.sh for the local app, which
+# macOS keeps scripts/build-macos-arm64-app.sh for the local app, which
 # runs the same cargo invocation.
 set -euo pipefail
 

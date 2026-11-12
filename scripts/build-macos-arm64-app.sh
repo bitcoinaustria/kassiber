@@ -8,25 +8,31 @@ TARGET_TRIPLE="aarch64-apple-darwin"
 SIDECAR_NAME="kassiber-cli-${TARGET_TRIPLE}"
 # A separate name and bundle identifier, so this local build installs beside
 # a released Kassiber.
-APP_PRODUCT_NAME="Kassiber Rust Dev"
-APP_IDENTIFIER="at.bitcoinaustria.kassiber.rust-dev"
+APP_PRODUCT_NAME="Kassiber Dev"
+APP_IDENTIFIER="at.bitcoinaustria.kassiber.dev"
 BINARIES_DIR="$ROOT/ui-tauri/src-tauri/binaries"
 BUNDLE_DIR="$ROOT/ui-tauri/src-tauri/target/$TARGET_TRIPLE/release/bundle"
 OUTPUT_DIR="$ROOT/dist/macos-arm64"
 BUNDLES="${BUNDLES:-app,dmg}"
 BACKUP=1
+INSTALL=0
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/build-macos-arm64-rust-app.sh [--no-backup]
+Usage: ./scripts/build-macos-arm64-app.sh [--install] [--no-backup]
 
-Build the local ad-hoc-signed macOS arm64 app with the Rust backend as its
-sidecar: "Kassiber Rust Dev" (at.bitcoinaustria.kassiber.rust-dev). It installs
-beside a released Kassiber and opens the same books.
+Build the local ad-hoc-signed macOS arm64 app: "Kassiber Dev"
+(at.bitcoinaustria.kassiber.dev). It installs beside a released Kassiber and
+opens the same books.
 
+  --install          Replace an installed Kassiber Dev (in /Applications or
+                     ~/Applications), or copy the app to ~/Applications, and
+                     install its terminal command.
+                     The command never takes over a \`kassiber\` that
+                     Homebrew or another installer manages.
   --no-backup        Skip the snapshot of your Kassiber data. By default the
                      script snapshots every local book (only when it changed
-                     since the last snapshot) before the Rust app can open it;
+                     since the last snapshot) before this build can open it;
                      see scripts/macos-kassiber-data.sh.
 
 Finished apps and DMGs are copied to dist/macos-arm64/.
@@ -35,6 +41,7 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --install) INSTALL=1 ;;
     --no-backup) BACKUP=0 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -78,13 +85,13 @@ require_command cargo
 
 DATA_HELPER="$ROOT/scripts/macos-kassiber-data.sh"
 # Fail before the long build rather than after it: the snapshot needs every
-# Kassiber process stopped. The snapshot itself runs last, closest to the Rust
+# Kassiber process stopped. The snapshot itself runs last, closest to the
 # app's first launch.
 if [ "$BACKUP" -eq 1 ]; then
   running="$(pgrep -fl 'Contents/MacOS/kassiber-ui|kassiber-cli-[a-z0-9_]+-apple-darwin|--operator-broker-server|-m kassiber( |$)' || true)"
   if [ -n "$running" ]; then
     echo "Kassiber is running. Quit every Kassiber app and CLI so your books can be" >&2
-    echo "backed up before the Rust app opens them (or pass --no-backup):" >&2
+    echo "backed up before this build opens them (or pass --no-backup):" >&2
     printf '%s\n' "$running" >&2
     exit 3
   fi
@@ -99,7 +106,7 @@ fi
 APP_COMMIT_FULL="$(git rev-parse HEAD 2>/dev/null || printf unknown)"
 # `--version` prints the first 12 characters of the embedded commit.
 APP_COMMIT="$(printf '%s' "$APP_COMMIT_FULL" | cut -c1-12)"
-APP_DISPLAY_VERSION="dev-rust"
+APP_DISPLAY_VERSION="dev"
 if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
   SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD 2>/dev/null || date +%s)"
   export SOURCE_DATE_EPOCH
@@ -122,7 +129,7 @@ echo "Building $APP_PRODUCT_NAME desktop for macOS arm64 only."
 echo "Package version: $APP_VERSION"
 echo "Displayed build: $APP_DISPLAY_VERSION ($APP_COMMIT)"
 echo "Bundle identifier: $APP_IDENTIFIER"
-echo "Bundled sidecar: $SIDECAR_NAME (Rust)"
+echo "Bundled sidecar: $SIDECAR_NAME"
 echo "Bundles: $BUNDLES"
 
 # The production binary through the release build script: no test-harness
@@ -154,9 +161,9 @@ run pnpm --dir ui-tauri install --frozen-lockfile
 run pnpm --dir ui-tauri run broker:build
 test -s "$ROOT/ui-tauri/provider-broker/dist/index.mjs"
 
-# Same one-dir location and file name the Python sidecar uses: the supervisor,
-# the CLI launcher, and the Touch ID helper's identity check all look there.
-# Sweep both layouts so a previous Python build never shadows this binary.
+# The one-dir location and file name the supervisor, the CLI launcher and the
+# Touch ID helper's identity check look in. Sweep the flat layout too, so a
+# binary from an older build never shadows this one.
 mkdir -p "$BINARIES_DIR"
 find "$BINARIES_DIR" -maxdepth 1 -type f -name 'kassiber-cli-*' -delete
 rm -rf "${BINARIES_DIR:?}/kassiber-cli" "${BINARIES_DIR:?}/provider_broker"
@@ -184,24 +191,25 @@ if [ -d "$APP_BUNDLE" ]; then
   case "$(file "$bundled_sidecar")" in
     *"Mach-O 64-bit executable arm64"*) ;;
     *)
-      echo "The app bundle does not contain the Rust backend at $bundled_sidecar." >&2
+      echo "The app bundle does not contain the kassiber binary at $bundled_sidecar." >&2
       exit 1
       ;;
   esac
   if [ "$("$bundled_sidecar" --version)" != "$version_text" ]; then
-    echo "The bundled sidecar is not the Rust backend built above." >&2
+    echo "The bundled sidecar is not the kassiber binary built above." >&2
     exit 1
   fi
   if [ -e "$APP_BUNDLE/Contents/Resources/binaries/kassiber-cli/_internal" ]; then
-    echo "The app bundle still carries a Python sidecar payload; refusing it." >&2
+    echo "The app bundle still carries an old Python sidecar payload; refusing it." >&2
     exit 1
   fi
   test -s "$APP_BUNDLE/Contents/Resources/binaries/kassiber-cli/provider_broker/index.mjs"
-  # The sidecar keeps the Python sidecar's signing identifier. Tauri's ad-hoc
-  # bundle signing may re-sign nested code under a derived identifier; if so,
-  # restore it and re-seal the bundle. A Developer ID signature (and with it
-  # the Touch ID helper and Keychain continuity) comes only from
-  # scripts/macos_release.py sign, which signs every Mach-O under its file name.
+  # The sidecar keeps its file name as its signing identifier, which the Touch
+  # ID helper's identity check expects. Tauri's ad-hoc bundle signing may
+  # re-sign nested code under a derived identifier; if so, restore it and
+  # re-seal the bundle. A Developer ID signature (and with it the Touch ID
+  # helper and Keychain continuity) comes only from the release signing
+  # workflow, which signs every Mach-O under its file name.
   sidecar_identifier="$(codesign -d --verbose=2 "$bundled_sidecar" 2>&1 | sed -n 's/^Identifier=//p')"
   if [ "$sidecar_identifier" != "$SIDECAR_NAME" ]; then
     echo "Re-signing the bundled sidecar as $SIDECAR_NAME (Tauri signed it as '$sidecar_identifier')."
@@ -255,9 +263,9 @@ done
 snapshot_note="Backup: skipped (--no-backup)."
 if [ "$BACKUP" -eq 1 ]; then
   echo
-  if run "$DATA_HELPER" snapshot --if-changed --label "before-rust-$APP_COMMIT"; then
+  if run "$DATA_HELPER" snapshot --if-changed --label "before-dev-$APP_COMMIT"; then
     snapshot_note="Backup: your books were snapshotted (or were unchanged since the last
-snapshot) before this Rust build can open them. List or restore with:
+snapshot) before this build can open them. List or restore with:
   $DATA_HELPER list
   $DATA_HELPER restore <snapshot>"
   else
@@ -267,22 +275,66 @@ before opening $APP_PRODUCT_NAME."
   fi
 fi
 
+install_note="Install it with --install, or run it from $OUTPUT_DIR."
+if [ "$INSTALL" -eq 1 ]; then
+  if [ ! -d "$OUTPUT_DIR/$APP_PRODUCT_NAME.app" ]; then
+    echo "--install needs the app bundle; include app in BUNDLES." >&2
+    exit 1
+  fi
+  # Update the copy macOS already knows: two bundles with one identifier make
+  # Finder, Spotlight and `open -a` start whichever LaunchServices prefers.
+  # Without one, install to ~/Applications, which needs no administrator.
+  installed=""
+  for dir in /Applications "$HOME/Applications"; do
+    if [ -d "$dir/$APP_PRODUCT_NAME.app" ]; then
+      if [ -n "$installed" ]; then
+        echo "WARNING: $dir/$APP_PRODUCT_NAME.app is a second copy; macOS may open it instead." >&2
+      else
+        installed="$dir/$APP_PRODUCT_NAME.app"
+      fi
+    fi
+  done
+  installed="${installed:-$HOME/Applications/$APP_PRODUCT_NAME.app}"
+  if pgrep -f "$installed/Contents/MacOS/" >/dev/null 2>&1; then
+    echo "Quit $APP_PRODUCT_NAME ($installed) before installing over it, then run this script again." >&2
+    exit 1
+  fi
+  if [ ! -e "$installed" ]; then
+    mkdir -p "$(dirname "$installed")"
+    run ditto "$OUTPUT_DIR/$APP_PRODUCT_NAME.app" "$installed"
+  elif [ -w "$(dirname "$installed")" ]; then
+    rm -rf "${installed:?}"
+    run ditto "$OUTPUT_DIR/$APP_PRODUCT_NAME.app" "$installed"
+  elif [ -w "$installed" ]; then
+    # /Applications itself needs an administrator, but a bundle this user
+    # installed there is theirs: replace its contents in place.
+    rm -rf "${installed:?}/Contents"
+    run ditto "$OUTPUT_DIR/$APP_PRODUCT_NAME.app/Contents" "$installed/Contents"
+  else
+    echo "Cannot replace $installed: it belongs to another user. Remove it, then run this script again." >&2
+    exit 1
+  fi
+  run codesign --verify --deep --strict "$installed"
+  run "$ROOT/scripts/install-macos-desktop-cli.sh" "$installed"
+  install_note="Installed: $installed
+Open it with: open \"$installed\""
+fi
+
 cat <<EOF
 
-macOS arm64 Rust desktop build complete.
+macOS arm64 desktop build complete.
 
 Look under:
   $OUTPUT_DIR
 
-$APP_PRODUCT_NAME uses the Rust backend ($version_text) and the same books
-as an installed Kassiber:
+$APP_PRODUCT_NAME ($version_text) uses the same books as an installed
+Kassiber:
   ~/Library/Application Support/at.bitcoinaustria.kassiber
 Both apps can be open at once, but one book opens in one desktop app at a
 time: the other app reports that another desktop app owns the project. Quit
 one app to open that book in the other.
 
-$snapshot_note
+$install_note
 
-Run the Rust CLI directly, without replacing your installed \`kassiber\`:
-  alias kassiber-rust='$OUTPUT_DIR/$APP_PRODUCT_NAME.app/Contents/Resources/bin/kassiber'
+$snapshot_note
 EOF

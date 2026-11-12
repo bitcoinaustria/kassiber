@@ -18339,7 +18339,7 @@ The contract now lives in
 [storage roots and symlinks](rust-store.md#storage-roots-and-symlinks):
 `durable::under(root, path)` resolves the root the user or OS chose, keeps the
 Kassiber-managed tail lexical, and the no-link walk still covers the tail.
-`scripts/build-macos-arm64-rust-app.sh` also resolves its smoke directory with
+`scripts/build-macos-arm64-app.sh` also resolves its smoke directory with
 `pwd -P`.
 
 | Call site | Python counterpart | Behaviour now |
