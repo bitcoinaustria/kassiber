@@ -23,6 +23,13 @@ import type { SettingsAnchorId } from "./settingsSearch";
  */
 const settingsAnchorClassName =
   "scroll-mt-4 motion-safe:transition-colors motion-safe:duration-500 data-[settings-highlight]:bg-accent";
+/**
+ * A group's box paints its own background over a wash, so a group target is
+ * ringed instead. (Rows sit inside the box's `overflow-hidden`, which would
+ * clip a ring, so they keep the wash.)
+ */
+const settingsGroupAnchorClassName =
+  "scroll-mt-4 rounded-lg outline-offset-4 outline-transparent motion-safe:transition-[outline-color] motion-safe:duration-500 data-[settings-highlight]:outline-2 data-[settings-highlight]:outline-ring";
 
 export function CopyButton({
   value,
@@ -83,7 +90,7 @@ export function SettingsGroup({
 } & Omit<React.HTMLAttributes<HTMLElement>, "title" | "children">) {
   return (
     <section
-      className={cn("space-y-2", settingsAnchorClassName, className)}
+      className={cn("space-y-2", settingsGroupAnchorClassName, className)}
       data-settings-anchor={anchorId}
       {...rest}
     >
