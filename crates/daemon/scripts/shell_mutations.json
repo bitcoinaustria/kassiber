@@ -561,5 +561,15 @@
       "sshsig_verdicts_match_python_and_ssh_keygen"
     ],
     "rule": "Only whitespace may follow the padding."
+  },
+  {
+    "id": "freshness-replied-worker-is-reaped",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": ".is_some_and(|v| stop || v.worker.is_finished() || v.replied.load(Ordering::SeqCst))",
+    "replace": ".is_some_and(|v| stop || v.worker.is_finished())",
+    "expect_failing": [
+      "a_request_after_the_reply_waits_for_the_worker_instead_of_refusing"
+    ],
+    "rule": "A request that follows a journal refresh's reply waits for the worker's checkpoint tail instead of being refused as busy."
   }
 ]
