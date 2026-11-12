@@ -2131,8 +2131,7 @@ See [tax countries](docs/reference/tax-countries.md) and
   on native ARM CI across CLI, Debian, AppImage, and channel metadata.
 - [ ] Complete production signing/distribution activation: live macOS credential
   validation and clean-Mac signed/notarized installation, Windows signing,
-  and Linux repository/artifact signatures. Resolve the desktop plan's AGPL
-  packaging opinion or explicit residual-risk acceptance gate before shipping.
+  and Linux repository/artifact signatures.
 - [ ] Publish the SSH release-key fingerprint
   `SHA256:UzYeHzOEIbanmYDAylIaGhI6dGFvhNOkszPXwUgzo9M` on the Kassiber website
   and through one independent Bitcoin Austria channel, compare them with this

@@ -81,5 +81,5 @@ using real wallet data, and [SECURITY.md](SECURITY.md) to report a vulnerability
 - [Product and architecture](docs/plan/00-overview.md) and [backlog](TODO.md)
 - [Contributor guide](CONTRIBUTING.md) and [agent instructions](AGENTS.md)
 
-Licensed under [AGPL-3.0-only](LICENSE). See
+Licensed under the [MIT License](LICENSE). See
 [third-party licenses](THIRD_PARTY_LICENSES.md) for dependency notices.

@@ -4,7 +4,7 @@ Name:           kassiber
 Version:        %{kassiber_version}
 Release:        %{kassiber_release}
 Summary:        Local-first Bitcoin accounting desktop application
-License:        AGPL-3.0-only
+License:        MIT
 URL:            https://github.com/bitcoinaustria/kassiber
 Source0:        kassiber-desktop-rootfs.tar.gz
 Source1:        LICENSE

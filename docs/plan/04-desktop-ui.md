@@ -20,9 +20,7 @@ contract stay unchanged. No business logic moves languages.
 
 Preconditions before each shipping milestone:
 
-1. AGPL legal opinion on subprocess linkage to Tauri/JS bundle on file (or
-   "residual risk accepted" sign-off) — required before Phase 5 ships.
-2. `rp2` published as an installable wheel artifact (see Phase 0 below) —
+1. `rp2` published as an installable wheel artifact (see Phase 0 below) —
    required before Phase 5 ships. The current `git+https://...` pin in
    `pyproject.toml` is fragile for a sidecar bundle.
 
@@ -680,10 +678,9 @@ green before merging the phase's PRs.
       preference-controlled fixed-origin notifier.
 - [ ] User-Agent for any outbound HTTPS still matches
       `kassiber/<version>`.
-- [ ] AGPL: every JS/Rust/Python dep tracked in
-      [THIRD_PARTY_LICENSES.md](../../THIRD_PARTY_LICENSES.md);
-      CI fails on any new dep with a license incompatible with
-      AGPL-3.0-only.
+- [ ] Every JS/Rust/Python dep tracked in
+      [THIRD_PARTY_LICENSES.md](../../THIRD_PARTY_LICENSES.md); notable
+      redistribution constraints (copyleft, unclear terms) called out there.
 - [ ] Platform code-signing identities use protected CI/HSM integrations and
       never live in the repo; the SSH release private key never enters CI.
 - [ ] Bundled Python tree is read-only at runtime; user-writable state

@@ -155,7 +155,7 @@ pkgrel=1
 pkgdesc='Local-first Bitcoin accounting desktop application'
 arch=('x86_64')
 url='https://github.com/bitcoinaustria/kassiber'
-license=('AGPL-3.0-only')
+license=('MIT')
 depends=('glibc' 'gcc-libs' 'gtk3' 'webkit2gtk-4.1')
 provides=('kassiber' 'kassiber-command')
 conflicts=('kassiber' 'kassiber-cli' 'kassiber-cli-bin')
@@ -197,7 +197,7 @@ package() {{
 \tpkgrel = 1
 \turl = https://github.com/bitcoinaustria/kassiber
 \tarch = x86_64
-\tlicense = AGPL-3.0-only
+\tlicense = MIT
 \tdepends = glibc
 \tdepends = gcc-libs
 \tdepends = gtk3
@@ -235,7 +235,7 @@ pkgrel=1
 pkgdesc='Local-first Bitcoin accounting CLI'
 arch=('x86_64')
 url='https://github.com/bitcoinaustria/kassiber'
-license=('AGPL-3.0-only')
+license=('MIT')
 depends=('glibc' 'gcc-libs')
 provides=('kassiber-cli' 'kassiber-command')
 conflicts=('kassiber' 'kassiber-bin' 'kassiber-cli')
@@ -263,7 +263,7 @@ package() {{
 \tpkgrel = 1
 \turl = https://github.com/bitcoinaustria/kassiber
 \tarch = x86_64
-\tlicense = AGPL-3.0-only
+\tlicense = MIT
 \tdepends = glibc
 \tdepends = gcc-libs
 \tprovides = kassiber-cli
@@ -379,7 +379,7 @@ pub fn cli_formula(
   desc "Local-first Bitcoin accounting CLI"
   homepage "https://github.com/bitcoinaustria/kassiber"
   version "{formula_version}"
-  license "AGPL-3.0-only"
+  license "MIT"
 
   on_macos do
     # Homebrew must not rewrite the Developer ID-sealed runtime or metadata.
