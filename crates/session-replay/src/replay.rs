@@ -105,6 +105,21 @@ impl Paths {
     }
 }
 
+/// The account this replay runs as, from the password database.
+fn current_user() -> Option<String> {
+    // SAFETY: getuid cannot fail.
+    let uid = unsafe { libc::getuid() };
+    let passwd = fs::read_to_string("/etc/passwd").ok()?;
+    passwd
+        .lines()
+        .find_map(|line| {
+            let fields: Vec<&str> = line.split(':').collect();
+            (fields.len() > 2 && fields[2].parse::<u32>().ok() == Some(uid))
+                .then(|| fields[0].to_owned())
+        })
+        .or_else(|| std::env::var("USER").ok())
+}
+
 fn now_us() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -422,10 +437,25 @@ pub fn replay(
         )?;
     }
     paths.add(&session.repo, &repo.to_string_lossy());
-    if !namespaced {
-        for (index, root) in session.roots.iter().enumerate() {
-            relocate(&disk_path(scratch, index, &root.path, false), &paths)?;
+    // `~user` names the recording account (a test that passes a path
+    // through the user's home): the replay's account stands in.
+    if let (Some(recorded), Some(current)) = (
+        session
+            .env
+            .get("HOME")
+            .and_then(|home| Path::new(home).file_name())
+            .map(|name| name.to_string_lossy().into_owned()),
+        current_user(),
+    ) {
+        if recorded != current {
+            paths.add(&format!("~{recorded}/"), &format!("~{current}/"));
         }
+    }
+    // Restored state still names the recording checkout (a book's custom CA
+    // bundle in the repository's fixtures); point it at this one. Namespaced
+    // roots keep their own /mnt paths, so only the repository moves there.
+    for (index, root) in session.roots.iter().enumerate() {
+        relocate(&disk_path(scratch, index, &root.path, namespaced), &paths)?;
     }
     let tmp = scratch.join("tmp");
     fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
