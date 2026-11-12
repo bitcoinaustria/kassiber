@@ -180,8 +180,8 @@
     "notifyBody": "A desktop-only passphrase was saved in macOS Keychain for Touch ID unlock."
   },
   "touchId": {
-    "removedTitle": "Touch ID passphrase was not removed",
-    "removedBody": "macOS Keychain did not remove the saved passphrase.",
+    "removeFailedTitle": "Touch ID passphrase was not removed",
+    "removeFailedBody": "macOS Keychain did not remove the saved passphrase.",
     "disabledTitle": "Touch ID unlock was disabled",
     "disabledBody": "The database passphrase changed, but macOS Keychain did not accept the updated desktop Touch ID passphrase.",
     "forgetAllTitle": "Saved unlock methods removed",
