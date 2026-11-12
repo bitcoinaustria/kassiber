@@ -150,6 +150,28 @@ fn fetch_changed_scope_offline_and_cancelled_actions_make_no_traffic() {
 }
 
 #[test]
+fn fetch_network_check_refuses_a_book_bound_after_preparation() {
+    // The freshness runner checks this before every request instead of the
+    // full revalidation, so a binding made mid-fetch must refuse on its own.
+    let conn = book();
+    let action = Fetch::new(&conn, "p", "a", &backend("electrum"), false, "fixture").unwrap();
+    let kind: String = conn
+        .query_row("SELECT kind FROM wallets WHERE id='a'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    action.check_network(&conn, &kind).unwrap();
+    conn.execute("INSERT INTO book_network_bindings(profile_id,environment_id,environment,domains_json,acknowledgements_json,inventory_digest,created_at) VALUES('p','bound','main','[]','[]','fixed','fixed')",[]).unwrap();
+    let before = snapshot(&conn);
+    assert_eq!(
+        action.check_network(&conn, &kind).unwrap_err().code,
+        "stale_context"
+    );
+    assert_eq!(action.revalidate(&conn).unwrap_err().code, "stale_context");
+    assert_eq!(snapshot(&conn), before);
+}
+
+#[test]
 fn fetch_grant_revocation_reaches_every_protocol_stage() {
     let conn = book();
     let ledger = Ledger::default();

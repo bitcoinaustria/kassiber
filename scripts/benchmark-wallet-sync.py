@@ -15,6 +15,10 @@ starts both in a disposable per-worktree Compose project:
     ./scripts/integration-harness.sh sync-benchmark --txs 5000 --addresses 1000
     ./scripts/integration-harness.sh sync-benchmark --smoke
     ./scripts/integration-harness.sh sync-benchmark --runtimes rust,rust
+    ./scripts/integration-harness.sh sync-benchmark --sync-path daemon
+
+`--sync-path daemon` times the desktop's `ui.wallets.sync` freshness job
+through `kassiber daemon` instead of the CLI's `wallets sync`.
 
 `--runtimes rust,rust` syncs two books from the same chain, each stage on
 every book in turn, and compares the final books table by table
@@ -270,6 +274,7 @@ class Book:
     def __init__(self, data_root: Path, label: str) -> None:
         self.data_root = data_root
         self.label = label
+        self.last_cpu_seconds = 0.0
         self.prefix = list(cli.prefix())
         data_root.parent.mkdir(parents=True, exist_ok=True)
         self.env = self._child_env(data_root.parent)
@@ -307,8 +312,62 @@ class Book:
         if process.returncode != 0:
             raise RuntimeError(f"kassiber {' '.join(args[:4])} failed ({process.returncode})\n{stdout[-2000:]}\n{stderr[-4000:]}")
         # ru_maxrss is KiB on Linux and bytes on macOS.
+        self.last_cpu_seconds = usage.ru_utime + usage.ru_stime
         rss_mb = usage.ru_maxrss / (1024 * 1024 if platform.system() == "Darwin" else 1024)
         return json.loads(stdout) if stdout.strip() else {}, seconds, rss_mb
+
+    def daemon_sync(self, *, force_full: bool = False) -> tuple[dict[str, Any], float, float]:
+        """`ui.wallets.sync` through `kassiber daemon`: the desktop freshness
+        queue, whose per-request source checks differ from the CLI's.
+
+        Closing stdin shuts the daemon down and cancels a running job, so
+        stdin stays open until the request's terminal record arrives. The
+        timing covers start-up, the whole job and shutdown, as `cli` does.
+        """
+        request_id = "bench-sync"
+        request = {
+            "request_id": request_id,
+            "kind": "ui.wallets.sync",
+            "args": {"wallet": WALLET_LABEL, "force_full": force_full, "process_journals": False},
+        }
+        command = [*self.prefix, "--data-root", str(self.data_root), "daemon"]
+        terminal: dict[str, Any] | None = None
+        tail: list[str] = []
+        with tempfile.TemporaryFile() as err:
+            started = time.perf_counter()
+            process = subprocess.Popen(
+                command, cwd=REPO_ROOT, env=self.env, stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=err, text=True, encoding="utf-8",
+            )
+            assert process.stdin is not None and process.stdout is not None
+            process.stdin.write(json.dumps(request) + "\n")
+            process.stdin.flush()
+            for line in process.stdout:
+                tail = (tail + [line])[-20:]
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if record.get("request_id") != request_id:
+                    continue
+                if record.get("kind") == "error" or "error" in record or record.get("kind") == "ui.wallets.sync":
+                    terminal = record
+                    break
+            process.stdin.close()
+            process.stdout.read()
+            _pid, status, usage = os.wait4(process.pid, 0)
+            seconds = time.perf_counter() - started
+            err.seek(0)
+            stderr = err.read().decode("utf-8", "replace")
+        if terminal is None:
+            raise RuntimeError(f"daemon ui.wallets.sync gave no terminal record\n{''.join(tail)}\n{stderr[-4000:]}")
+        if terminal.get("kind") != "ui.wallets.sync":
+            raise RuntimeError(f"daemon ui.wallets.sync failed: {json.dumps(terminal.get('error'))[:2000]}")
+        if os.waitstatus_to_exitcode(status) != 0:
+            raise RuntimeError(f"kassiber daemon exited {os.waitstatus_to_exitcode(status)}\n{stderr[-4000:]}")
+        self.last_cpu_seconds = usage.ru_utime + usage.ru_stime
+        rss_mb = usage.ru_maxrss / (1024 * 1024 if platform.system() == "Darwin" else 1024)
+        return {"data": terminal.get("data") or {}}, seconds, rss_mb
 
     def journal(self, _stage: str) -> tuple[dict[str, Any], float, float]:
         return self.cli("journals", "process")
@@ -391,17 +450,37 @@ def _sync_fields(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in (data or {}).items() if isinstance(value, (int, float, str, bool))}
 
 
+def _error_codes(value: Any) -> list[str]:
+    """Every `error.code` in a result, depth first: a daemon job reports its
+    failure inside a successful envelope."""
+    codes: list[str] = []
+    if isinstance(value, dict):
+        error = value.get("error")
+        if isinstance(error, dict) and isinstance(error.get("code"), str):
+            codes.append(error["code"])
+        for item in value.values():
+            codes.extend(_error_codes(item))
+    elif isinstance(value, list):
+        for item in value:
+            codes.extend(_error_codes(item))
+    return codes
+
+
 def _run_stage(book: Book, stage: str, action) -> dict[str, Any]:
     payload, seconds, rss_mb = action(stage)
+    output = _sync_fields(payload)
+    errors = sorted(set(_error_codes(payload.get("data"))))
     result: dict[str, Any] = {
         "event": "benchmark_result",
         "schema_version": SCHEMA_VERSION,
         "stage": stage,
         "book": book.label,
-        "ok": True,
+        "ok": output.get("ok") is not False and not errors,
+        "errors": errors,
         "seconds": round(seconds, 3),
         "peak_rss_mb": round(rss_mb, 1),
-        "output": _sync_fields(payload),
+        "cpu_seconds": round(book.last_cpu_seconds, 3),
+        "output": output,
     }
     _emit(result)
     return result
@@ -455,6 +534,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--runtimes", default="rust",
                         help="comma-separated runtimes, one book each, synced from the same chain: only rust "
                              "(`rust,rust` compares two books, the control)")
+    parser.add_argument("--sync-path", choices=("cli", "daemon"), default="cli",
+                        help="`wallets sync` (cli) or the desktop's `ui.wallets.sync` freshness job (daemon)")
     args = parser.parse_args(argv)
     if args.smoke:
         args.txs, args.addresses, args.increment, args.noop_runs = 60, 20, 5, 1
@@ -484,11 +565,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         "txs": args.txs,
         "addresses": args.addresses,
         "spends": spends,
+        "sync_path": args.sync_path,
         "kassiber": version,
         "platform": platform.platform(),
     })
 
     chain = Chain(rpc, electrum_url, args.addresses)
+    # A daemon job reports failure inside a successful envelope, so a
+    # failed stage still times; the run as a whole must not pass.
+    failed: list[str] = []
     scratch = Path(tempfile.mkdtemp(prefix="kassiber-sync-bench-"))
     try:
         started = time.perf_counter()
@@ -515,10 +600,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         def stage(name: str, *extra: str, journal: bool = False) -> None:
             for book in books:
                 if journal:
-                    _run_stage(book, name, book.journal)
+                    result = _run_stage(book, name, book.journal)
+                elif args.sync_path == "daemon":
+                    result = _run_stage(book, name, lambda _s, book=book: book.daemon_sync(
+                        force_full="--force-full" in extra))
                 else:
-                    _run_stage(book, name, lambda _s, book=book: book.cli(
+                    result = _run_stage(book, name, lambda _s, book=book: book.cli(
                         "wallets", "sync", "--wallet", WALLET_LABEL, *extra))
+                if not result["ok"]:
+                    failed.append(f"{book.label}:{name}")
 
         def stats() -> None:
             for book in books:
@@ -544,8 +634,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     finally:
         chain.close()
         shutil.rmtree(scratch, ignore_errors=True)
-    _emit({"event": "benchmark_complete", "schema_version": SCHEMA_VERSION, "ok": True})
-    return 0
+    _emit({"event": "benchmark_complete", "schema_version": SCHEMA_VERSION, "ok": not failed,
+           "failed_stages": failed})
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

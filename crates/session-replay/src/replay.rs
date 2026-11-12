@@ -19,6 +19,34 @@ use crate::{dbdump, entry_path, restore, Blobs, Entry, Session};
 /// input followed.
 pub const PROCESS_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// The recording test that held a wallet's first history request in its
+/// loopback server while it sent a freshness control (cancel, revoke,
+/// pause, offline). The tape answers at once, so without the same hold
+/// whether the control lands before the job's next check is a race with
+/// how fast the fetch runs.
+const HELD_FETCH_TEST: &str = "tests/test_rust_freshness_lifecycle.py::\
+     test_live_freshness_controls_remain_available_during_fetch[";
+
+/// Its inputs: the sync, a status read, a competing sync, then the control.
+const HELD_CONTROL_INPUT: usize = 3;
+
+/// The request a session's recording held, as tape-hold bytes.
+fn held_request(session: &Session) -> Option<&'static str> {
+    if !session.test.as_deref()?.starts_with(HELD_FETCH_TEST) {
+        return None;
+    }
+    Some(
+        match session
+            .env
+            .get("KASSIBER_BACKEND_FIXTURE_KIND")
+            .map(String::as_str)
+        {
+            Some("electrum") => "blockchain.scripthash.get_history",
+            _ => "/scripthash/",
+        },
+    )
+}
+
 /// Where recordings keep their state roots: `record.sh` runs the suite in a
 /// mount namespace with a build directory bound here.
 pub const NAMESPACE_ROOT: &str = "/mnt/";
@@ -626,6 +654,18 @@ pub fn replay(
         "KASSIBER_TEST_NET_TAPE",
         format!("replay:{}", tape.display()),
     );
+    // A recording whose loopback server held one request in flight gets the
+    // tape's hold on that request, released below once its control answered.
+    let hold = match held_request(session) {
+        Some(pattern) => {
+            let dir = scratch.join("hold");
+            fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            fs::write(dir.join("arm"), pattern).map_err(|e| e.to_string())?;
+            command.env("KASSIBER_TEST_NET_TAPE_HOLD", &dir);
+            Some(dir)
+        }
+        None => None,
+    };
     // Ownership locks rendezvous outside the state roots; a test-harness
     // binary keeps them in this replay's own directory instead.
     if !session.env.contains_key("KASSIBER_RUST_TEST_OWNER_ROOT") {
@@ -733,6 +773,17 @@ pub fn replay(
                 .status();
             continue;
         }
+        let control = hold.as_ref().filter(|_| index == HELD_CONTROL_INPUT);
+        if let Some(dir) = control {
+            // The test sent its control while the request was held.
+            while !dir.join("held").exists() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            if !dir.join("held").exists() {
+                differences.push("the held request never came".into());
+                break;
+            }
+        }
         match &session.stdin[index].data {
             Some(data) => {
                 let bytes = base64::engine::general_purpose::STANDARD
@@ -761,6 +812,14 @@ pub fn replay(
                 }
             }
             None => drop(stdin.take()),
+        }
+        if let Some(dir) = control {
+            // ...and let the request finish once the control's answer printed.
+            if !wait_for(after + 1) {
+                differences.push("timed out waiting for the held control's answer".into());
+                break;
+            }
+            fs::write(dir.join("release"), b"").map_err(|e| e.to_string())?;
         }
     }
     drop(stdin.take());

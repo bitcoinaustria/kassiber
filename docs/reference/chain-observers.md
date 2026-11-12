@@ -688,7 +688,16 @@ already committed wallets.
 Freshness progress callbacks use the same SQLite connection and historically
 committed their progress rows. Network workers synchronously route progress and
 cancellation checks to the thread owning that connection, including isolated
-single-wallet jobs and widened repair fetches. Network progress is emitted during preparation;
+single-wallet jobs and widened repair fetches. The BDK and LWK Electrum
+transports run those checks around each request and batch chunk, and the
+compatibility observers at their protocol stages and per fetched record, so
+they stay cheap: cancellation, consent, the job, the book context, the wallet
+row, its backend and the book's network scope. The full observer revalidation
+(descriptor plan, checkpoint and observer state) runs once per job before
+publication, which refuses stale inputs without writing. A negative-balance
+rescan inside the publication savepoint checks consent, cancellation and the
+book before it starts, and only cancellation between its requests.
+Network progress is emitted during preparation;
 commit-capable progress callbacks are suppressed during local apply so they
 cannot invalidate the wallet savepoint. Deterministic fault injection covers
 all six state boundaries and compares the exact before/after database state.
