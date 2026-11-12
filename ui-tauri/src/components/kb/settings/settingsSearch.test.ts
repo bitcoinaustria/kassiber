@@ -94,6 +94,9 @@ describe("setting-level app search", () => {
     expect(search("clipboard", "de")[0]?.id).toBe(
       "setting:security-privacy:clearClipboard",
     );
+    expect(search("Datenbankgröße", "de").map((result) => result.id)).toContain(
+      "setting:data-storage:databaseSize",
+    );
   });
 
   it("keeps developer-only settings hidden while developer tools are off", () => {

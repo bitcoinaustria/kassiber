@@ -92,9 +92,17 @@ export interface BackendSettingsData {
   };
 }
 
+/** `status` with `args.storage: true`: on-disk sizes, null when absent. */
+export interface StatusStorage {
+  database_bytes: number | null;
+  wal_bytes: number | null;
+}
+
 export interface StatusData {
   data_root: string;
   database: string;
+  /** Only when the request asked for it (`{storage: true}`). */
+  storage?: StatusStorage;
   current_workspace: string | null;
   current_profile: string | null;
   workspaces: number;

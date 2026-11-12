@@ -39,3 +39,24 @@ describe("DataStorageSettingsPanel regtest reset", () => {
     expect(html).toContain("Rebuilding…");
   });
 });
+
+describe("DataStorageSettingsPanel database size", () => {
+  it("shows the database size and notes a non-empty write-ahead log", () => {
+    const html = renderPanel({
+      storage: { database_bytes: 5 * 1024 * 1024, wal_bytes: 2048 },
+    });
+    expect(html).toContain("Database size");
+    expect(html).toContain("5.0 MiB");
+    expect(html).toContain("Plus 2.0 KiB in the write-ahead log");
+  });
+
+  it("stays quiet about an empty log, and says when the size is unknown", () => {
+    const empty = renderPanel({ storage: { database_bytes: 1000, wal_bytes: 0 } });
+    expect(empty).toContain("1000 B");
+    expect(empty).not.toContain("write-ahead log");
+    expect(renderPanel({ storage: { database_bytes: null, wal_bytes: null } })).toContain(
+      "Unknown",
+    );
+    expect(renderPanel({ storage: null })).toContain("Loading");
+  });
+});

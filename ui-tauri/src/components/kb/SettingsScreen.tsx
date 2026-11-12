@@ -164,6 +164,17 @@ export function SettingsScreen({
   const status =
     statusQuery.data?.kind === "status" ? statusQuery.data.data : null;
   const statusLoaded = statusQuery.data?.kind === "status";
+  // File sizes are a separate, opt-in read so the shared `status` query key
+  // (and its payload) stays as every other caller knows it.
+  const storageStatusQuery = useDaemon<StatusData>(
+    "status",
+    { storage: true },
+    { enabled: sectionId === "data-storage" },
+  );
+  const statusStorage =
+    storageStatusQuery.data?.kind === "status"
+      ? storageStatusQuery.data.data?.storage ?? null
+      : null;
   const touchIdDataRoot = identity?.importedProject?.dataRoot ?? null;
   const touchIdPlatformSupported = canUseTouchIdPassphraseUnlock();
   const encryptedWorkspace =
@@ -1152,6 +1163,7 @@ export function SettingsScreen({
         return (
           <DataStorageSettingsPanel
             status={status ?? null}
+            storage={statusStorage}
             onOpenImports={() => void navigate({ to: "/imports" })}
             onResetWelcome={onResetWorkspace}
             onResetBook={openResetBookData}

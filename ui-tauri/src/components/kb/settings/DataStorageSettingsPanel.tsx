@@ -4,13 +4,16 @@ import { Button } from "@/components/ui/button";
 import { SettingsCopyRow, SettingsGroup, SettingsRow } from "./SettingsControls";
 import { useUiStore } from "@/store/ui";
 import { BackupSettings } from "./BackupSettings";
-import type { StatusData } from "./SettingsModel";
+import { formatBytes, type StatusData, type StatusStorage } from "./SettingsModel";
 
 export function DataSettingsPanel({
   status,
+  storage = null,
   onOpenImports,
 }: {
   status: StatusData | null;
+  /** Database file sizes; null while loading or when unavailable. */
+  storage?: StatusStorage | null;
   onOpenImports: () => void;
 }) {
   const { t } = useTranslation(["settings", "common"]);
@@ -46,6 +49,24 @@ export function DataSettingsPanel({
           copyLabel={t("page.copy", { label: t("data.databaseLabel") })}
           placeholder={t("common:state.loading")}
         />
+        <SettingsRow
+          anchorId="databaseSize"
+          label={t("data.databaseSizeLabel")}
+          description={
+            // A write-ahead log is noted only when it holds anything.
+            storage?.wal_bytes
+              ? t("data.databaseSizeWal", { size: formatBytes(storage.wal_bytes) })
+              : undefined
+          }
+        >
+          <span className="text-sm tabular-nums text-muted-foreground">
+            {storage?.database_bytes != null
+              ? formatBytes(storage.database_bytes)
+              : storage
+                ? t("data.databaseSizeUnknown")
+                : t("common:state.loading")}
+          </span>
+        </SettingsRow>
       </SettingsGroup>
     </div>
   );
@@ -53,6 +74,7 @@ export function DataSettingsPanel({
 
 export function DataStorageSettingsPanel({
   status,
+  storage = null,
   onOpenImports,
   onResetWelcome,
   onResetBook,
@@ -64,6 +86,7 @@ export function DataStorageSettingsPanel({
   resetRegtestPending = false,
 }: {
   status: StatusData | null;
+  storage?: StatusStorage | null;
   onOpenImports: () => void;
   onResetWelcome: () => void;
   onResetBook: () => void;
@@ -77,7 +100,11 @@ export function DataStorageSettingsPanel({
   const { t } = useTranslation("settings");
   return (
     <div className="space-y-6">
-      <DataSettingsPanel status={status} onOpenImports={onOpenImports} />
+      <DataSettingsPanel
+        status={status}
+        storage={storage}
+        onOpenImports={onOpenImports}
+      />
 
       {/* Each action asks for confirmation before anything is cleared. */}
       <SettingsGroup title={t("data.dangerHeading")}>

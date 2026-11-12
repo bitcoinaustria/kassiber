@@ -73,6 +73,7 @@ export const SETTINGS_SEARCH_ENTRIES = [
   entry("data-storage", "backup", "data.backupHeading"),
   entry("data-storage", "dataRoot", "data.dataRootLabel"),
   entry("data-storage", "databasePath", "data.databaseLabel"),
+  entry("data-storage", "databaseSize", "data.databaseSizeLabel"),
   entry("data-storage", "resetWelcome", "data.resetWelcomeTitle"),
   entry("data-storage", "resetBook", "data.resetBookTitle"),
   entry("data-storage", "deleteBooks", "data.deleteBooksTitle"),
