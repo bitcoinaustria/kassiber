@@ -2330,6 +2330,18 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             state=fallback,
             created_at="replaced",
         )
+        fallback_postings = [
+            tuple(row) for row in self.conn.execute(
+                "SELECT rowid, * FROM journal_quantity_postings ORDER BY posting_id"
+            ).fetchall()
+        ]
+        # Unchanged postings retain the earlier write's creation time.
+        self.assertEqual(
+            {row["created_at"] for row in self.conn.execute(
+                "SELECT created_at FROM journal_quantity_postings"
+            ).fetchall()},
+            {"rebuilt", "replaced"},
+        )
         self.assertEqual(replacement_counts["decisions"], 0)
         self.assertEqual(
             self.conn.execute(
@@ -2355,13 +2367,10 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                 created_at="must-roll-back",
             )
         self.assertEqual(
-            {
-                row["created_at"]
-                for row in self.conn.execute(
-                    "SELECT created_at FROM journal_quantity_postings"
-                ).fetchall()
-            },
-            {"replaced"},
+            [tuple(row) for row in self.conn.execute(
+                "SELECT rowid, * FROM journal_quantity_postings ORDER BY posting_id"
+            ).fetchall()],
+            fallback_postings,
         )
         self.assertEqual(
             self.conn.execute(

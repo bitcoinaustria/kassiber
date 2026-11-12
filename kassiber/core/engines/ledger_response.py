@@ -20,7 +20,7 @@ raised there.
 Journal entries come in the adapter's order and with its keys
 (``_append_rp2_journal_entries``): the engine gives each entry's type, row,
 wallet label, exact values, and description, and a realized entry's
-fragments with their event's and lot's values; this reader adds the uuid,
+fragments with their event's and lot's values; this reader adds the stable UUIDv8,
 the profile's ids, the wallet's and account's ids, the transaction id and
 time of the entry's row, the Austrian Kennzahl of its category, and the
 ``calculation`` metadata, whose fragments carry the row facts of
@@ -31,7 +31,6 @@ row, with the adapter's float quantities.
 from __future__ import annotations
 
 import json
-import uuid
 from collections import defaultdict
 from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional, Sequence
@@ -39,6 +38,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from ...errors import AppError
 from ...msat import btc_to_msat, dec
 from .. import pricing
+from ..journal_storage import journal_entry_id
 from ..austrian import kennzahl_for_disposal_category
 from ..privacy_hops import privacy_hop_evidence_from_row
 from ..tax_events import build_tax_quarantine
@@ -416,6 +416,7 @@ class _EntryReader:
         self.rendered_audit = rendered_audit
         self.method = _profile_str(profile, "gains_algorithm")
         self._iso: dict[Any, str] = {}
+        self._entry_ordinals: dict[tuple[str, str, str, str], int] = defaultdict(int)
 
     def wallet(self, label: str) -> Mapping[str, Any]:
         ref = self.refs_by_label.get(label)
@@ -423,9 +424,15 @@ class _EntryReader:
             raise AppError(f"RP2 emitted transaction for unknown wallet '{label}'", code="internal")
         return ref
 
-    def _head(self, wallet: Mapping[str, Any], transaction_id: str, occurred_at: Any) -> dict[str, Any]:
+    def _head(
+        self, wallet: Mapping[str, Any], transaction_id: str, occurred_at: Any,
+        entry_type: str, asset: str,
+    ) -> dict[str, Any]:
+        key = (transaction_id, wallet["id"], entry_type, asset)
+        ordinal = self._entry_ordinals[key]
+        self._entry_ordinals[key] += 1
         return {
-            "id": str(uuid.uuid4()),
+            "id": journal_entry_id(self.profile["id"], *key, ordinal),
             "workspace_id": self.profile["workspace_id"],
             "profile_id": self.profile["id"],
             "transaction_id": transaction_id,
@@ -487,7 +494,7 @@ class _EntryReader:
         wallet = self.wallet(item["wallet"])
         fiat_in_with_fee = decode_decimal(item["fiat_value"])
         return {
-            **self._head(wallet, _journal_transaction_id(row, row_id), row["occurred_at"]),
+            **self._head(wallet, _journal_transaction_id(row, row_id), row["occurred_at"], "acquisition", item["asset"]),
             "entry_type": "acquisition",
             "asset": item["asset"],
             "quantity": decode_decimal(item["quantity"]),
@@ -505,7 +512,7 @@ class _EntryReader:
         wallet = self.wallet(item["wallet"])
         proceeds = decode_decimal(item["proceeds"])
         entry = {
-            **self._head(wallet, _journal_transaction_id(row, row_id), row["occurred_at"]),
+            **self._head(wallet, _journal_transaction_id(row, row_id), row["occurred_at"], item["entry_type"], item["asset"]),
             "entry_type": item["entry_type"],
             "asset": item["asset"],
             "quantity": decode_decimal(item["quantity"]),
@@ -540,7 +547,7 @@ class _EntryReader:
         row_id = audit["out_id"] if outbound else audit["in_id"]
         quantity = dec(audit["crypto_sent"] if outbound else audit["crypto_received"])
         return {
-            **self._head(wallet, _journal_transaction_id(self.rows_by_id.get(row_id), row_id), audit["occurred_at"]),
+            **self._head(wallet, _journal_transaction_id(self.rows_by_id.get(row_id), row_id), audit["occurred_at"], item["entry_type"], audit["asset"]),
             "entry_type": item["entry_type"],
             "asset": audit["asset"],
             "quantity": -quantity if outbound else quantity,

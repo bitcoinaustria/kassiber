@@ -1100,6 +1100,44 @@ Fixture transport remains useful for component tests, but it should not be
 treated as an accounting or sync proof and is not exposed as an interactive data
 mode.
 
+## Custody oracle
+
+Custody evidence commitments, decision, issue and relation ids, gap
+fingerprints and uuid5 component ids are stored and later compared with
+recomputed values, so their bytes may not drift. `tests/custody_hash_vectors.py`
+generates seeded golden vectors for each of them into
+`tests/fixtures/custody_hash_vectors/`, one JSON Lines file per family. Every
+vector names the product function, the serialization it hashes (including the
+`json.dumps` arguments) and the hashed text, so a port can reproduce it.
+`tests/test_custody_hash_vectors.py` recomputes every vector and also checks
+the recorded serialization against the hashed text.
+
+```bash
+uv run --locked python -m tests.custody_hash_vectors          # check
+uv run --locked python -m tests.custody_hash_vectors --write  # regenerate
+```
+
+Regenerate only together with a migration for books that stored the old
+values.
+
+`KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR`, set to an existing directory, makes
+`tests/conftest.py` record every in-process custody build there as one JSON
+document: its inputs with wallet configuration reduced to the facts custody
+reads, its owned-index lookups, stage results, and decisions
+([schema](../plan/21-rust-backend.md#draft-snapshot-v0)). Add
+`KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1` to rebuild each one in a fresh
+process under another `PYTHONHASHSEED` and fail on any difference. Product
+code reads neither variable. Use disposable data only.
+
+```bash
+mkdir -p /tmp/custody-snapshots
+KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR=/tmp/custody-snapshots \
+  KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1 \
+  uv run --locked python -m pytest tests/test_custody_*.py -q
+uv run --locked python -m tests.custody_snapshot check /tmp/custody-snapshots
+uv run --locked python -m tests.custody_snapshot compare DIR_A DIR_B
+```
+
 ## Guardrails
 
 - `KASSIBER_TEST_NO_EGRESS=1` arms the socket guard only; `tests/conftest.py`

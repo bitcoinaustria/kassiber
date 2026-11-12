@@ -184,6 +184,15 @@ def _ambiguous_hash_quarantines(
     } for transaction_id in sorted(held)]
 
 
+def native_transition_pair_id(method: str, out_id: str, in_id: str) -> str:
+    """Return the transient pair id of one native HTLC transition."""
+
+    digest = hashlib.sha256(json.dumps(
+        [method, out_id, in_id], separators=(",", ":")
+    ).encode()).hexdigest()
+    return f"native-htlc-{digest}"
+
+
 def compile_native_transitions(
     rows: Sequence[Mapping[str, Any]],
     observations: Mapping[str, QuantityObservation],
@@ -191,18 +200,27 @@ def compile_native_transitions(
     profile: Mapping[str, Any],
     occupied_ids: set[str],
     dismissals: Sequence[Mapping[str, Any]] = (),
+    as_of: str | None = None,
 ) -> tuple[
     list[dict[str, Any]],
     dict[tuple[str, str], NativeTransitionProof],
     tuple[Mapping[str, Any], ...],
 ]:
-    """Interpret only solo native exact edges from the original population."""
+    """Interpret only solo native exact edges from the original population.
+
+    ``as_of`` is the instant against which dismissal expiry is judged. The
+    journal builder passes the time it captured once for the whole build, so
+    a rebuild of unchanged inputs at the same ``as_of`` gives the same result;
+    ``None`` keeps the old behavior of reading the wall clock here.
+    """
 
     # Neither dismissed nor occupied legs may disappear before conflict and
     # payment-hash cardinality checks. Otherwise a reviewed sibling would make
     # the remaining ambiguous edge look exact on the next journal rebuild.
-    candidates = suggest_swap_candidates(rows, include_heuristics=False)
-    dismissed = active_dismissed_pairs(dismissals)
+    candidates = suggest_swap_candidates(
+        rows, include_heuristics=False, now_iso=as_of,
+    )
+    dismissed = active_dismissed_pairs(dismissals, now_iso=as_of)
     rows_by_id = {str(row["id"]): row for row in rows}
     pairs: list[dict[str, Any]] = []
     proofs: dict[tuple[str, str], NativeTransitionProof] = {}
@@ -270,13 +288,10 @@ def compile_native_transitions(
                 })
             continue
         policy = recommended_pair_policy(profile, candidate.out_asset, candidate.in_asset)
-        pair_digest = hashlib.sha256(json.dumps(
-            [candidate.method, *key], separators=(",", ":")
-        ).encode()).hexdigest()
         pairs.append({
             "out": out_row, "in": in_row,
             "source": NATIVE_TRANSITION_SOURCE,
-            "pair_id": f"native-htlc-{pair_digest}",
+            "pair_id": native_transition_pair_id(candidate.method, *key),
             "kind": candidate.default_kind,
             "policy": policy,
             "out_amount_msat": source.principal_msat,

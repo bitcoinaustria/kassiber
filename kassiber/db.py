@@ -1372,6 +1372,8 @@ CREATE INDEX IF NOT EXISTS idx_import_batches_profile_time
 CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
     ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS idx_transactions_profile_page ON transactions(profile_id, occurred_at, created_at, id, wallet_id);
+
 CREATE INDEX IF NOT EXISTS idx_transactions_profile_active_time
     ON transactions(profile_id, excluded, occurred_at, created_at, id);
 
@@ -1511,6 +1513,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     proceeds_exact TEXT,
     gain_loss_exact TEXT,
     calculation_json TEXT,
+    calculation_compact TEXT,
     pricing_source_kind TEXT,
     pricing_quality TEXT,
     description TEXT,
@@ -3543,7 +3546,10 @@ def _install_base_schema(conn):
     # connection: encrypted onboarding already creates a nonempty, empty-schema
     # file. Existing schemas keep their current migration transaction boundaries.
     empty_schema = conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone() is None
-    schema = "BEGIN;\n" + SCHEMA + "\nCOMMIT;" if empty_schema else SCHEMA
+    schema = "BEGIN;\n" + SCHEMA + "\nCOMMIT;" if empty_schema else SCHEMA.replace(
+        "CREATE INDEX IF NOT EXISTS idx_transactions_profile_page ON "
+        "transactions(profile_id, occurred_at, created_at, id, wallet_id);", ""
+    )
     conn.executescript(schema)
 
 
@@ -5518,6 +5524,9 @@ def ensure_schema_compat(conn):
     # it on a legacy REAL-typed database.
     ensure_column(conn, "transactions", "amount_includes_fee", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "transactions", "kind_override", "TEXT")
+    # Compact retained calculations (see core/journal_calculation.py). Existing
+    # rows keep calculation_json until the next journal build rewrites them.
+    ensure_column(conn, "journal_entries", "calculation_compact", "TEXT")
     from .core.acquisition_review import migrate_valuation_support
     if migrate_valuation_support(conn):
         conn.commit()
@@ -5553,7 +5562,6 @@ def ensure_schema_compat(conn):
     )
     if _ensure_custody_projection_table_shapes(conn):
         conn.commit()
-    _ensure_custody_projection_relation_view(conn)
     _migrate_attachment_table_shape(conn)
     ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")
     ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT")
@@ -5678,6 +5686,11 @@ def ensure_schema_compat(conn):
         conn.commit()
     _ensure_custody_leg_role_schema(conn)
     _ensure_custody_ai_audit_consent_schema(conn)
+    # The leg-role rebuild renames the custody leg and term tables before
+    # dropping them, and SQLite rewrites view references on rename. Creating
+    # the view any earlier leaves it pointing at the dropped tables until the
+    # next open.
+    _ensure_custody_projection_relation_view(conn)
     if _ensure_custody_gap_review_transaction_schema(conn):
         conn.commit()
     if _backfill_custody_gap_review_transactions(conn):
@@ -5708,6 +5721,33 @@ def ensure_schema_compat(conn):
 
     if legacy_ledger.retire_if_empty(conn):
         conn.commit()
+
+    _ensure_transaction_page_index(conn)
+
+
+def _ensure_transaction_page_index(conn):
+    """Add the covering page index atomically, without touching unchanged DDL."""
+    conn.execute("SAVEPOINT transaction_page_index")
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_transactions_profile_page "
+            "ON transactions(profile_id, occurred_at, created_at, id, wallet_id)"
+        )
+        definition = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='index' "
+            "AND name='idx_transactions_profile_page'"
+        ).fetchone()[0]
+        if " ".join(definition.lower().split()).replace(" if not exists", "") != (
+            "create index idx_transactions_profile_page on "
+            "transactions(profile_id, occurred_at, created_at, id, wallet_id)"
+        ):
+            raise sqlite3.DatabaseError("unexpected transaction page index definition")
+        conn.execute("RELEASE transaction_page_index")
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK TO transaction_page_index")
+            conn.execute("RELEASE transaction_page_index")
+        raise
 
 
 def _ensure_custody_economic_term_review_notes(conn):
@@ -7321,6 +7361,10 @@ def _recreate_msat_migration_indexes(conn):
     """Restore indexes dropped by SQLite table rebuild migrations."""
     conn.executescript(
         """
+        SAVEPOINT transaction_page_index;
+        CREATE INDEX IF NOT EXISTS idx_transactions_profile_page ON transactions(profile_id, occurred_at, created_at, id, wallet_id);
+        RELEASE transaction_page_index;
+
         CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
             ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
 

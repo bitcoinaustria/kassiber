@@ -6,7 +6,7 @@ and asserts the resulting behavior, not merely that schema creation succeeds.
 
 | Compatibility concern | Before PR #432 (`5d232097`) | Before PR #435 (`16b7bdc1`) | Current schema | Deliberate compatibility rule |
 | --- | --- | --- | --- | --- |
-| Database integrity and current schema open | Tested: exact historical database, `PRAGMA integrity_check` | Tested: independent exact historical database | Tested by fresh/current migration acceptance | Opening must be idempotent and must not reinterpret authored economics. |
+| Database integrity and current schema open | Tested: exact historical database, `PRAGMA integrity_check`; the upgrading connection reads `journal_custody_projection_relations` and a reopen changes no schema object | Tested: independent exact historical database, same single-open checks | Tested by fresh/current migration acceptance | Opening must be idempotent and must not reinterpret authored economics. The first open leaves a complete schema; it must not rely on a second open to repair it. |
 | Manual transfer pairs | Tested: row, source, policy and amount survive | Tested: same | Tested end-to-end in `test_custody_migration_acceptance.py` | Explicit reviewed pairs survive. Graphless same-txid rows do not acquire equivalent authority automatically. |
 | Conflicting custody components | Tested: both authored-active revisions survive and both remain ineffective | Tested: same | Tested with concurrent active revisions in `test_custody_migration_acceptance.py` | Conflicts fail closed; migration never picks a winner or silently supersedes a revision. |
 | Samourai/Whirlpool missing-wallet gap | Tested: 10 BTC outbound and 9.9 BTC return remain a review candidate | Tested: same | Tested by the flagship full/missing Whirlpool variants | A likely bridge may block provisional tax output, but only explicit review carries basis. |
@@ -31,6 +31,32 @@ Primary automated coverage:
 - `tests/test_observer_custody_boundaries.py`
 - `tests/test_samourai_import.py`
 - `tests/test_legacy_ledger.py`
+
+## Compact retained calculations
+
+Opening a book adds the nullable `journal_entries.calculation_compact` column
+after the msat rebuild. Existing rows keep their `calculation_json` text and
+are read as before. The next `journals process` stores each realized entry's
+calculation in the compact column and leaves `calculation_json` NULL. A
+calculation the compact form cannot restore exactly keeps the legacy column.
+Explanations and `journals events get` return the same values and bytes from
+either column. An older Python build ignores the column: it reports
+compact rows' engine detail as unavailable until it rebuilds the journal
+itself. An older Rust build refuses the newer schema. See
+[storage-format speedups](r4-journal-pipeline.md#storage-format-speedups).
+
+Journal entry identities now use the deterministic UUIDv8 construction in that
+contract. Opening a book never rekeys it; its next rebuild replaces old uuid4
+entries. Later rebuilds retain unchanged entries and quantity postings, including
+their creation times, and rewrite a changed entry's whole timestamp group.
+No new schema or migration audit is needed. The Rust store manifest and ordered
+pass remain identical; both runtimes accept these opaque text ids. Older Python
+can rebuild with uuid4 ids and legacy calculations, causing one full entry
+rewrite the next time current Python rebuilds. Backups preserve both formats.
+
+The scoped 128 MiB rebuild cache is a connection setting. It adds no schema,
+migration or stored-format change, so the same Python/Rust schema manifest and
+older-binary coexistence rules apply. SQLCipher retains DELETE/FULL durability.
 
 ## Intentionally not inferred during upgrade
 
@@ -58,3 +84,38 @@ Primary automated coverage:
 - They do not prove that an unknown wallet was the user’s wallet. That fact is
   unknowable from a database alone and remains a user-reviewed boundary.
 
+
+## Transaction page index
+
+`idx_transactions_profile_page` is a nonunique covering index on
+`transactions(profile_id, occurred_at, created_at, id, wallet_id)`. It changes
+no row values, accounting authority, migration audit, or input version. Existing
+indexes remain. Python fresh creation and the Rust creation transcript include
+it; existing books defer creation from the base installer to the final ordered
+compatibility step, after table rebuilds. The msat rebuild restores it too.
+Python uses a savepoint and Rust a transaction. Both check the same stored
+index definition and reject a conflicting definition without replacing it.
+Unchanged creation is a no-op: no index rebuild, root-page change, or schema
+cookie increment from this step. No `ANALYZE` or planner hints are used.
+
+**Upgrade Rust before opening a book with the new Python build.** Rust at
+`f261b9b2` rejects an additional index through its structural admission gate.
+The gate remains strict. Older Python can ignore the additive index. Do not
+remove the index to bypass admission; deploy the matching Rust build instead.
+
+The page-index migration tests cover current books missing the index with
+Python-first and Rust-first upgrades, plaintext and SQLCipher, complete typed
+logical row dumps, subsequent opens, injected rollback and process termination.
+The existing ordered matrix covers both historical fixtures and SQLCipher
+copies: pair-free variants migrate in Rust; original authored-pair fixtures
+retain their explicit R2 refusal and must first migrate in Python. This index
+does not extend Rust's authored-consolidation support.
+
+Python's existing compatibility pass recreates unrelated indexes, views and
+triggers on every open (a fresh control book advances `schema_version` by 36).
+This change does not address that existing behavior. Whole-open schema-object
+and row equality and isolated page-index cookie/root-page stability are checked
+separately; whole-open Python cookie stability is not claimed.
+
+See the [page-index implementation evidence](transaction-page-index.md) for
+measurements and verification results.

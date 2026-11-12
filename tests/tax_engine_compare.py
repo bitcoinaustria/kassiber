@@ -6,7 +6,7 @@ RP2. Production is the engine class ``custody_journal.py`` instantiates.
 Production must equal the oracle exactly: every value, its type, its decimal
 representation (sign, coefficient and exponent), every key and every order.
 Only two fields are masked, because they are generated or name the engine:
-journal entry ids (``uuid4``) and the ``engine`` identity in each entry's
+journal entry ids (the oracle's uuid4 and production's UUIDv8) and the ``engine`` identity in each entry's
 calculation metadata.
 
 Failures compare too: the same class, message, ``AppError`` fields and

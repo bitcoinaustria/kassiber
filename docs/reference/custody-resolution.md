@@ -33,7 +33,10 @@ population before occupancy and pair dismissals. A native HTLC route that still
 has several possible payment records receives `native_transition_ambiguous`;
 it cannot fall through to an arbitrary disposal and fresh acquisition.
 This also applies to time/amount suggestions
-used by report-readiness checks.
+used by report-readiness checks. A pair dismissal with an expiry stops
+vetoing a native route from that instant on. Each journal build reads the
+clock once, at its start, and judges every dismissal against that one
+instant, so unchanged inputs at the same instant give the same projection.
 
 Missing-wallet discovery uses the same explicit inbound classification and
 user override precedence as the accounting adapter. A classified purchase or

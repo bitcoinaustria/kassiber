@@ -1,7 +1,9 @@
 """Timestamp helpers used across kassiber.
 
 Kassiber stores and emits timestamps as RFC3339 UTC strings with a trailing
-`Z` (no fractional seconds). These helpers are the single place that
+`Z` (normally no fractional seconds). Journal processed markers may use a
+microsecond successor to distinguish builds whose clock has not advanced.
+These helpers are the single place that
 converts between:
 
   - arbitrary ISO 8601 strings users paste in (with or without Z, with or

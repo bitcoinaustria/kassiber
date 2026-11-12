@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .custody_component_facts import component_fact
+
 import base64
 import binascii
 import hashlib
@@ -96,6 +98,70 @@ def evidence_commitment_id(component_id: str, ordinal: int) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def custody_decision_id(
+    source_observation_hash: str,
+    source_start_msat: int,
+    source_end_msat: int,
+    target_observation_hash: str,
+    target_start_msat: int,
+    target_end_msat: int,
+    state: str,
+    reason: str,
+    atomic_bundle_id: Any,
+    component_id: Any,
+) -> str:
+    """Return the stored id of one internal custody decision slice."""
+
+    encoded = json.dumps(
+        [
+            "canonical-custody-decision-v1",
+            source_observation_hash,
+            source_start_msat,
+            source_end_msat,
+            target_observation_hash,
+            target_start_msat,
+            target_end_msat,
+            state,
+            reason,
+            atomic_bundle_id,
+            component_id,
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def economic_relation_id(
+    relation_kind: str,
+    source_transaction_id: str,
+    target_transaction_id: str | None,
+    component_id: Any,
+    source_asset: Any,
+    target_asset: Any,
+    source_amount_msat: int,
+    target_amount_msat: int,
+) -> str:
+    """Return the stored id of one conversion or direct-payout relation."""
+
+    encoded = json.dumps(
+        [
+            "canonical-custody-economic-relation-v3",
+            relation_kind,
+            source_transaction_id,
+            target_transaction_id,
+            component_id,
+            source_asset,
+            target_asset,
+            source_amount_msat,
+            target_amount_msat,
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def _commitment_detail_hash(snapshot: EvidenceSnapshot) -> str:
     """Hash decision-material evidence without raw payloads.
 
@@ -155,7 +221,7 @@ def _canonical_component_snapshots(
     if not transaction_ids:
         return ()
     placeholders = ", ".join("?" for _ in transaction_ids)
-    rows = conn.execute(
+    rows = component_fact(conn, "canonical_anchors", (component["profile_id"], *transaction_ids), lambda: conn.execute(
         f"""
         SELECT t.*, w.kind AS wallet_kind, w.config_json AS config_json
         FROM transactions t
@@ -164,7 +230,7 @@ def _canonical_component_snapshots(
         ORDER BY t.occurred_at, t.created_at, t.id
         """,
         (component["profile_id"], *transaction_ids),
-    ).fetchall()
+    ).fetchall())
     canonical = build_canonical_quantity_input(enriched_quantity_rows(rows))
     rejected_ids = {
         transaction_id
@@ -309,12 +375,12 @@ def component_evidence_status(
     profile_id = str(component.get("profile_id") or "")
     expected = component.get("expected_evidence_count")
     if expected is None and component_id:
-        header = conn.execute(
+        header = component_fact(conn, "header", (component_id,), lambda: conn.execute(
             "SELECT expected_evidence_count FROM custody_components WHERE id = ?",
             (component_id,),
-        ).fetchone()
+        ).fetchone())
         expected = header["expected_evidence_count"] if header is not None else None
-    commitments = conn.execute(
+    commitments = component_fact(conn, "commitments", (component_id, profile_id), lambda: conn.execute(
         """
         SELECT id, ordinal, quantity_hash, detail_hash
         FROM custody_component_evidence_commitments
@@ -322,7 +388,7 @@ def component_evidence_status(
         ORDER BY ordinal, id
         """,
         (component_id, profile_id),
-    ).fetchall()
+    ).fetchall())
     base = {
         "expected_count": None if expected is None else int(expected),
         "commitment_count": len(commitments),
@@ -347,7 +413,7 @@ def component_evidence_status(
     if legs is None:
         legs = [
             dict(row)
-            for row in conn.execute(
+            for row in component_fact(conn, "legs", (component_id,), lambda: conn.execute(
                 """
                 SELECT transaction_id, anchor_transaction_id
                 FROM custody_component_legs
@@ -355,7 +421,7 @@ def component_evidence_status(
                 ORDER BY ordinal, id
                 """,
                 (component_id,),
-            ).fetchall()
+            ).fetchall())
         ]
     comparison_component = dict(component)
     comparison_component["legs"] = legs
@@ -398,7 +464,7 @@ def profile_native_support_context(
 
     rows = [
         dict(row)
-        for row in conn.execute(
+        for row in component_fact(conn, "native_rows", (profile_id,), lambda: conn.execute(
             """
             SELECT t.*, w.kind AS wallet_kind, w.config_json AS config_json
             FROM transactions t
@@ -407,7 +473,7 @@ def profile_native_support_context(
             ORDER BY t.occurred_at, t.created_at, t.id
             """,
             (profile_id,),
-        ).fetchall()
+        ).fetchall())
     ]
     observations: dict[str, QuantityObservation] = {}
     keys: dict[str, Any] = {}
@@ -635,7 +701,6 @@ def _replace_canonical_quantity_state(
     """Replace derived rows inside the caller's active savepoint."""
 
     for table in (
-        "journal_quantity_postings",
         "journal_quantity_issues",
         "journal_quantity_balances",
         "journal_custody_decisions",
@@ -672,16 +737,9 @@ def _replace_canonical_quantity_state(
         )
         key = (posting.location_kind, posting.location_id, posting.asset)
         balances[key] = balances.get(key, 0) + posting.amount_msat
-    conn.executemany(
-        """
-        INSERT INTO journal_quantity_postings(
-            posting_id, workspace_id, profile_id, transaction_id,
-            observation_hash, occurred_at, asset, location_kind, location_id,
-            amount_msat, state, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        posting_rows,
-    )
+    from .journal_storage import replace_quantity_postings
+
+    replace_quantity_postings(conn, profile_id, posting_rows)
     conn.executemany(
         """
         INSERT INTO journal_quantity_issues(
@@ -744,8 +802,7 @@ def _replace_canonical_quantity_state(
         target = observations[decision.target.observation_hash]
         source_domain = QuantityDomain.from_observation(source)
         target_domain = QuantityDomain.from_observation(target)
-        decision_payload = [
-            "canonical-custody-decision-v1",
+        decision_id = custody_decision_id(
             decision.source.observation_hash,
             decision.source.start_msat,
             decision.source.end_msat,
@@ -756,14 +813,7 @@ def _replace_canonical_quantity_state(
             decision.reason,
             decision.atomic_bundle_id,
             decision.component_id,
-        ]
-        decision_id = hashlib.sha256(
-            json.dumps(
-                decision_payload,
-                ensure_ascii=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
+        )
         basis_barrier = state.tax_eligibility.barrier_for(source)
         decision_rows.append(
             (
@@ -881,8 +931,7 @@ def _replace_canonical_quantity_state(
         )
         if source_amount <= 0 or target_amount <= 0:
             continue
-        payload = [
-            "canonical-custody-economic-relation-v3",
+        relation_id = economic_relation_id(
             relation_kind,
             source_transaction_id,
             target_transaction_id,
@@ -891,14 +940,7 @@ def _replace_canonical_quantity_state(
             (target.asset if target is not None else relation.get("payout_asset")),
             source_amount,
             target_amount,
-        ]
-        relation_id = hashlib.sha256(
-            json.dumps(
-                payload,
-                ensure_ascii=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
+        )
         relation_rows.append(
             (
                 relation_id,
@@ -1366,7 +1408,9 @@ __all__ = [
     "component_evidence_status",
     "component_native_support_status",
     "custody_quantity_readiness_summary",
+    "custody_decision_id",
     "custody_decision_rows",
+    "economic_relation_id",
     "evidence_commitment_id",
     "load_component_evidence_snapshots",
     "persist_authored_evidence_snapshots",

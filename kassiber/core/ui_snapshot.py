@@ -3470,10 +3470,14 @@ def _fiat_snapshot(
     realized_row = conn.execute(
         """
         SELECT SUM(COALESCE(gain_loss, 0)) AS gain_loss
-        FROM journal_entries
-        WHERE profile_id = ?
-          AND gain_loss IS NOT NULL
-          AND occurred_at >= date('now', 'start of year')
+        FROM (
+            SELECT gain_loss
+            FROM journal_entries
+            WHERE profile_id = ?
+              AND gain_loss IS NOT NULL
+              AND occurred_at >= date('now', 'start of year')
+            ORDER BY occurred_at, created_at, id
+        )
         """,
         (profile_id,),
     ).fetchone()

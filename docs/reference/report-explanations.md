@@ -9,8 +9,10 @@ source event; they must not be summed once per fragment. The contribution
 proceeds are the engine's fee-inclusive fragment result.
 
 The engine selects lots and computes any pool unit-basis override. The explanation
-retains that output in `journal_entries.calculation_json` while the canonical
-journal is built. It does not replay the engine on read. In pooled methods the
+retains that output in `journal_entries.calculation_compact` while the canonical
+journal is built. Rows written before that column existed keep it in
+`calculation_json`, and both decode to the same value. The explanation does
+not replay the engine on read. In pooled methods the
 selected acquisition is a matching anchor, not a claim that its original price
 is the pool's consumed basis. Acquisition basis and the unit override remain
 separate. Custody decisions are the existing semantic lineage projection;
@@ -27,6 +29,11 @@ transaction evidence for that calculation version. Custody links are bounded to
 canonical eligible custody moves back through the result wallet history to the
 earliest retained engine source. Later moves and unrelated wallet branches are
 excluded. These links describe custody context, not physical ownership of tax lots.
+
+Stable entry ids do not keep an explanation reference current after a rebuild.
+The profile's processed marker advances even when the build clock repeats or
+moves backward; a repeated marker becomes its previous instant plus one
+microsecond. Unchanged journal rows retain their creation times independently.
 
 CLI: use `kassiber --machine reports capital-gains`, then pass a row's exact
 `explanation_reference` JSON to

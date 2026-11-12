@@ -945,88 +945,91 @@ def _receipt_transaction_ids(results):
 
 def apply_review(conn, profile, *, artifact, idempotency_key, hooks, authored_source="user", commit=True):
     """Revalidate, apply and verify once, atomically with the durable receipt."""
-    if not isinstance(artifact, Mapping) or set(artifact) != {
-        "schema_version", "workspace_id", "profile_id", "base_input_version", "operations", "before", "after",
-        "delta", "digest",
-    }:
-        raise _error("Review artifact is malformed", "review_artifact_invalid")
-    if len(_json(artifact).encode()) > MAX_ARTIFACT_BYTES:
-        raise _error("Review artifact exceeds the size limit")
-    payload = {key: value for key, value in artifact.items() if key != "digest"}
-    if artifact["schema_version"] != 1 or _digest(payload) != artifact["digest"]:
-        raise _error("Review artifact digest is invalid", "review_artifact_invalid")
-    if artifact["profile_id"] != profile["id"] or artifact["workspace_id"] != profile["workspace_id"]:
-        raise _error("Review artifact belongs to another profile", "review_scope_mismatch")
-    operations = _operations(artifact["operations"])
-    if operations != artifact["operations"]:
-        raise _error("Review operations are not canonical", "review_artifact_invalid")
-    try:
-        delta = _tax_delta(artifact["before"], artifact["after"])
-    except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
-        raise _error("Review artifact is malformed", "review_artifact_invalid") from exc
-    if delta != artifact["delta"]:
-        raise _error("Review tax delta does not match its effects", "review_artifact_invalid")
-    if not isinstance(idempotency_key, str) or not 1 <= len(idempotency_key.strip()) <= 200:
-        raise _error("Review requires an idempotency key of 1 to 200 characters")
-    own_transaction = not conn.in_transaction
-    if own_transaction:
-        conn.execute("BEGIN IMMEDIATE")
-    conn.execute("SAVEPOINT review_workflow_apply")
-    released = False
-    try:
-        # This write reserves the writer even when a caller owns the transaction.
-        conn.execute("UPDATE profiles SET journal_input_version = journal_input_version WHERE id = ?", (profile["id"],))
-        existing = conn.execute(
-            "SELECT artifact_digest, receipt_json FROM review_workflow_receipts WHERE profile_id = ? AND idempotency_key = ?",
-            (profile["id"], idempotency_key),
-        ).fetchone()
-        if existing:
-            if existing["artifact_digest"] != artifact["digest"]:
-                raise _error("Idempotency key already belongs to another proposal", "review_idempotency_conflict")
-            receipt = json.loads(existing["receipt_json"])
-        else:
-            custody_components.require_review_input_version(
-                conn, workspace_id=profile["workspace_id"], profile_id=profile["id"],
-                expected_input_version=artifact["base_input_version"],
-            )
-            before_state = _build(conn, profile)
-            if _effects(before_state, conn, profile, operations) != artifact["before"]:
-                raise _error("Review evidence changed; create a fresh preview", "review_plan_stale")
-            results = _apply_operations(conn, profile, operations, hooks, authored_source,
-                                        before_state)
-            state = _build(conn, profile)
-            after = _effects(state, conn, profile, operations)
-            if after != artifact["after"]:
-                raise _error("Review effects changed; create a fresh preview", "review_plan_stale")
-            current = _profile(conn, profile)
-            stored = custody_journal.store_ledger_state(conn, current, state)
-            receipt = {
-                "id": str(uuid.uuid4()), "schema_version": 1,
-                "workspace_id": current["workspace_id"], "profile_id": current["id"],
-                "idempotency_key": idempotency_key, "artifact_digest": artifact["digest"],
-                "base_input_version": artifact["base_input_version"],
-                "result_input_version": int(current["journal_input_version"] or 0),
-                "status": "verified", "operations": results,
-                "transaction_ids": _receipt_transaction_ids(results),
-                "before": artifact["before"], "delta": artifact["delta"],
-                "proposed_operations": [_operation_summary(op) for op in operations],
-                "verification": {**after, "processed_at": stored["processed_at"]},
-                "authored_source": authored_source, "created_at": now_iso(),
-            }
-            conn.execute(
-                "INSERT INTO review_workflow_receipts(id,workspace_id,profile_id,idempotency_key,artifact_digest,receipt_json,created_at) VALUES(?,?,?,?,?,?,?)",
-                (receipt["id"], current["workspace_id"], current["id"], idempotency_key,
-                 artifact["digest"], _json(receipt), receipt["created_at"]),
-            )
-        conn.execute("RELEASE SAVEPOINT review_workflow_apply")
-        released = True
-        if commit:
-            conn.commit()
-        return receipt
-    except Exception:
-        if not released:
-            conn.execute("ROLLBACK TO SAVEPOINT review_workflow_apply")
+    from .journal_storage import journal_write_cache
+
+    with journal_write_cache(conn):
+        if not isinstance(artifact, Mapping) or set(artifact) != {
+            "schema_version", "workspace_id", "profile_id", "base_input_version", "operations", "before", "after",
+            "delta", "digest",
+        }:
+            raise _error("Review artifact is malformed", "review_artifact_invalid")
+        if len(_json(artifact).encode()) > MAX_ARTIFACT_BYTES:
+            raise _error("Review artifact exceeds the size limit")
+        payload = {key: value for key, value in artifact.items() if key != "digest"}
+        if artifact["schema_version"] != 1 or _digest(payload) != artifact["digest"]:
+            raise _error("Review artifact digest is invalid", "review_artifact_invalid")
+        if artifact["profile_id"] != profile["id"] or artifact["workspace_id"] != profile["workspace_id"]:
+            raise _error("Review artifact belongs to another profile", "review_scope_mismatch")
+        operations = _operations(artifact["operations"])
+        if operations != artifact["operations"]:
+            raise _error("Review operations are not canonical", "review_artifact_invalid")
+        try:
+            delta = _tax_delta(artifact["before"], artifact["after"])
+        except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+            raise _error("Review artifact is malformed", "review_artifact_invalid") from exc
+        if delta != artifact["delta"]:
+            raise _error("Review tax delta does not match its effects", "review_artifact_invalid")
+        if not isinstance(idempotency_key, str) or not 1 <= len(idempotency_key.strip()) <= 200:
+            raise _error("Review requires an idempotency key of 1 to 200 characters")
+        own_transaction = not conn.in_transaction
+        if own_transaction:
+            conn.execute("BEGIN IMMEDIATE")
+        conn.execute("SAVEPOINT review_workflow_apply")
+        released = False
+        try:
+            # This write reserves the writer even when a caller owns the transaction.
+            conn.execute("UPDATE profiles SET journal_input_version = journal_input_version WHERE id = ?", (profile["id"],))
+            existing = conn.execute(
+                "SELECT artifact_digest, receipt_json FROM review_workflow_receipts WHERE profile_id = ? AND idempotency_key = ?",
+                (profile["id"], idempotency_key),
+            ).fetchone()
+            if existing:
+                if existing["artifact_digest"] != artifact["digest"]:
+                    raise _error("Idempotency key already belongs to another proposal", "review_idempotency_conflict")
+                receipt = json.loads(existing["receipt_json"])
+            else:
+                custody_components.require_review_input_version(
+                    conn, workspace_id=profile["workspace_id"], profile_id=profile["id"],
+                    expected_input_version=artifact["base_input_version"],
+                )
+                before_state = _build(conn, profile)
+                if _effects(before_state, conn, profile, operations) != artifact["before"]:
+                    raise _error("Review evidence changed; create a fresh preview", "review_plan_stale")
+                results = _apply_operations(conn, profile, operations, hooks, authored_source,
+                                            before_state)
+                state = _build(conn, profile)
+                after = _effects(state, conn, profile, operations)
+                if after != artifact["after"]:
+                    raise _error("Review effects changed; create a fresh preview", "review_plan_stale")
+                current = _profile(conn, profile)
+                stored = custody_journal.store_ledger_state(conn, current, state)
+                receipt = {
+                    "id": str(uuid.uuid4()), "schema_version": 1,
+                    "workspace_id": current["workspace_id"], "profile_id": current["id"],
+                    "idempotency_key": idempotency_key, "artifact_digest": artifact["digest"],
+                    "base_input_version": artifact["base_input_version"],
+                    "result_input_version": int(current["journal_input_version"] or 0),
+                    "status": "verified", "operations": results,
+                    "transaction_ids": _receipt_transaction_ids(results),
+                    "before": artifact["before"], "delta": artifact["delta"],
+                    "proposed_operations": [_operation_summary(op) for op in operations],
+                    "verification": {**after, "processed_at": stored["processed_at"]},
+                    "authored_source": authored_source, "created_at": now_iso(),
+                }
+                conn.execute(
+                    "INSERT INTO review_workflow_receipts(id,workspace_id,profile_id,idempotency_key,artifact_digest,receipt_json,created_at) VALUES(?,?,?,?,?,?,?)",
+                    (receipt["id"], current["workspace_id"], current["id"], idempotency_key,
+                     artifact["digest"], _json(receipt), receipt["created_at"]),
+                )
             conn.execute("RELEASE SAVEPOINT review_workflow_apply")
-        if own_transaction or (released and commit):
-            conn.rollback()
-        raise
+            released = True
+            if commit:
+                conn.commit()
+            return receipt
+        except Exception:
+            if not released:
+                conn.execute("ROLLBACK TO SAVEPOINT review_workflow_apply")
+                conn.execute("RELEASE SAVEPOINT review_workflow_apply")
+            if own_transaction or (released and commit):
+                conn.rollback()
+            raise

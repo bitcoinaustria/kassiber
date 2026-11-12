@@ -148,7 +148,34 @@ def authored_claim_fingerprint(candidate: CustodyGapCandidate) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def latest_reviews(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[str, Any]]:
+def _gap_bridge_component_id(profile_id: str, gap_id: str, fingerprint: str) -> str:
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"kassiber:custody-gap-bridge:{profile_id}:{gap_id}:{fingerprint}",
+        )
+    )
+
+
+def _gap_revision_component_id(base_fingerprint: str) -> str:
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"kassiber:custody-gap-revision:{base_fingerprint}",
+        )
+    )
+
+
+def _gap_residual_component_id(base_fingerprint: str) -> str:
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"kassiber:custody-gap-residual:{base_fingerprint}",
+        )
+    )
+
+
+def latest_review_rows(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
     try:
         rows = conn.execute(
             """
@@ -166,7 +193,15 @@ def latest_reviews(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[
             (profile_id, profile_id),
         ).fetchall()
     except sqlite3.OperationalError:
-        return {}
+        return []
+    return [dict(row) for row in rows]
+
+
+def latest_reviews(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[str, Any]]:
+    return reviews_from_rows(latest_review_rows(conn, profile_id))
+
+
+def reviews_from_rows(rows):
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         grouped.setdefault(str(row["gap_id"]), []).append(dict(row))
@@ -273,9 +308,13 @@ def latest_dismissed_fingerprints(
 ) -> dict[str, str]:
     """Return unambiguous latest dismissal fingerprints for runtime input."""
 
+    return dismissed_fingerprints_from_rows(latest_review_rows(conn, profile_id))
+
+
+def dismissed_fingerprints_from_rows(rows):
     return {
         gap_id: str(review["candidate_fingerprint"])
-        for gap_id, review in latest_reviews(conn, profile_id).items()
+        for gap_id, review in reviews_from_rows(rows).items()
         if review.get("action") == "dismissed"
         and _event_kind(review) != "bridge_reopened"
     }
@@ -422,12 +461,7 @@ def plan_review(
             spec = _guided_component_spec(
                 conn, candidate, authored_fingerprint, authored_source
             )
-            component_id = str(
-                uuid.uuid5(
-                    uuid.NAMESPACE_URL,
-                    f"kassiber:custody-gap-revision:{base_fingerprint}",
-                )
-            )
+            component_id = _gap_revision_component_id(base_fingerprint)
             replacing_lineage_id = str(context["component"]["lineage_id"])
             new_component_revision = _next_component_revision(conn, context)
         if action != "dismiss" and spec is not None:
@@ -478,12 +512,7 @@ def plan_review(
             classification=normalized,
             authored_source=authored_source,
         )
-        component_id = str(
-            uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                f"kassiber:custody-gap-residual:{base_fingerprint}",
-            )
-        )
+        component_id = _gap_residual_component_id(base_fingerprint)
         component_plan = _component_plan(
             conn,
             workspace_id=workspace_id,
@@ -1878,11 +1907,8 @@ def _guided_component_spec(
             fee_id = f"fee-{index}"
             legs.append(_anchored_leg(fee_id, "fee", fee, row, scope))
             allocations.append(_allocation(source_id, fee_id, fee))
-    component_id = str(
-        uuid.uuid5(
-            uuid.NAMESPACE_URL,
-            f"kassiber:custody-gap-bridge:{candidate.profile_id}:{candidate.gap_id}:{fingerprint}",
-        )
+    component_id = _gap_bridge_component_id(
+        candidate.profile_id, candidate.gap_id, fingerprint
     )
     return {
         "component_id": component_id,

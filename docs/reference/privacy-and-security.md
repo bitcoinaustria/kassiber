@@ -445,6 +445,12 @@ operator lease, and `unattended` opts into the separate CLI remembered-unlock
 credential. Brokered mode never falls through to remembered unlock. Unlocking
 one project does not unlock another.
 
+Journal processing and review apply temporarily raise the connection's page
+cache to 128 MiB. This can retain more decrypted pages in RAM during the build;
+the prior cache setting is restored on return, including failure. Encryption,
+journal mode and durability settings do not change. See the
+[journal storage contract](r4-journal-pipeline.md#3-sqlcipher-write-mode).
+
 - `<state-root>/projects/<project>/data/kassiber.sqlite3` — when encrypted, contents are
   protected by SQLCipher 4 with stock PBKDF2-HMAC-SHA512
   (`kdf_iter = 256000`). Recoverable with the upstream `sqlcipher`

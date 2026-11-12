@@ -111,6 +111,48 @@ def _deterministic_id(component_id: str, kind: str, ordinal: int) -> str:
     )
 
 
+def _canonical_spec_json(spec: Mapping[str, Any]) -> str:
+    """The canonical text of an authored spec that its planned ids commit to."""
+
+    return json.dumps(spec, sort_keys=True, separators=(",", ":"))
+
+
+def _bulk_component_id(
+    profile_id: str,
+    authored_source: str,
+    activate: bool,
+    index: int,
+    canonical: str,
+) -> str:
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            "kassiber:custody-bulk:"
+            f"{profile_id}:{authored_source}:{int(activate)}:{index}:{canonical}",
+        )
+    )
+
+
+def _revision_component_id(
+    profile_id: str,
+    component_id: str,
+    action: str,
+    next_revision: int,
+    authored_source: str,
+    activate: bool,
+    reason: str | None,
+    canonical: str,
+) -> str:
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            "kassiber:custody-revision:"
+            f"{profile_id}:{component_id}:{action}:{next_revision}:"
+            f"{authored_source}:{int(activate)}:{reason or ''}:{canonical}",
+        )
+    )
+
+
 def _prepare_legs(
     conn: sqlite3.Connection,
     *,
@@ -264,16 +306,12 @@ def plan_component_batch(
             raise _error("Custody component spec must be a JSON object")
         spec = dict(raw_spec)
         try:
-            canonical = json.dumps(spec, sort_keys=True, separators=(",", ":"))
+            canonical = _canonical_spec_json(spec)
         except (TypeError, ValueError) as error:
             raise _error("Custody component spec is not JSON-safe") from error
         requested_component_id = str(spec.get("component_id") or "").strip()
-        component_id = requested_component_id or str(
-            uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                "kassiber:custody-bulk:"
-                f"{profile_id}:{authored_source}:{int(activate)}:{index}:{canonical}",
-            )
+        component_id = requested_component_id or _bulk_component_id(
+            profile_id, authored_source, activate, index, canonical
         )
         existing = conn.execute(
             "SELECT 1 FROM custody_components WHERE id = ? AND profile_id = ?",
@@ -626,7 +664,7 @@ def plan_component_revision(
         )
     spec_dict = dict(raw_spec)
     try:
-        canonical = json.dumps(spec_dict, sort_keys=True, separators=(",", ":"))
+        canonical = _canonical_spec_json(spec_dict)
     except (TypeError, ValueError) as error:
         raise _error("Custody component revision is not JSON-safe") from error
     existing_draft = conn.execute(
@@ -670,13 +708,15 @@ def plan_component_revision(
             (profile_id, old["lineage_id"]),
         ).fetchone()[0]
     )
-    new_component_id = str(
-        uuid.uuid5(
-            uuid.NAMESPACE_URL,
-            "kassiber:custody-revision:"
-            f"{profile_id}:{component_id}:{action}:{next_revision}:"
-            f"{authored_source}:{int(activate)}:{reason or ''}:{canonical}",
-        )
+    new_component_id = _revision_component_id(
+        profile_id,
+        component_id,
+        action,
+        next_revision,
+        authored_source,
+        activate,
+        reason,
+        canonical,
     )
     if conn.execute(
         "SELECT 1 FROM custody_components WHERE id = ?", (new_component_id,)
