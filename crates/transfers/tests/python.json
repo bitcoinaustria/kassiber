@@ -1,0 +1,319 @@
+{
+  "sql": [
+    "INSERT INTO workspaces (id,label,created_at) VALUES('w','Main','2025-01-01T00:00:00Z');",
+    "INSERT INTO profiles (id,workspace_id,label,fiat_currency,tax_country,tax_long_term_days,gains_algorithm,require_coarse_review,bitcoin_rail_carrying_value,cost_basis_pool_scope,journal_input_version,last_processed_input_version,required_journal_semantics_version,journal_semantics_version,last_processed_at,last_processed_tx_count,ownership_review_counts_json,created_at,swap_candidate_count) VALUES('p','w','Book','EUR','at',365,'FIFO',0,1,'global',6,0,1,0,NULL,0,NULL,'2025-01-01T00:00:00Z',NULL);",
+    "INSERT INTO wallets (id,workspace_id,profile_id,account_id,label,kind,config_json,created_at) VALUES('source','w','p',NULL,'source','custom','{}','2025-01-01T00:00:00Z');",
+    "INSERT INTO wallets (id,workspace_id,profile_id,account_id,label,kind,config_json,created_at) VALUES('target','w','p',NULL,'target','custom','{}','2025-01-01T00:00:00Z');",
+    "INSERT INTO transactions (id,workspace_id,profile_id,wallet_id,external_id,external_id_kind,fingerprint,occurred_at,confirmed_at,direction,asset,amount,fee,amount_includes_fee,fiat_currency,fiat_rate,fiat_value,fiat_price_source,fiat_rate_exact,fiat_value_exact,pricing_source_kind,pricing_provider,pricing_pair,pricing_timestamp,pricing_fetched_at,pricing_granularity,pricing_method,pricing_external_ref,pricing_quality,pricing_review_accepted_price,commercial_applied_link_id,review_status,taxability_override,at_regime_override,at_category_override,kind_override,privacy_boundary,kind,description,counterparty,note,excluded,raw_json,payment_hash,payment_hash_source,swap_refund_funding_txid,swap_refund_funding_vout,created_at) VALUES('tx0','w','p','source','external0',NULL,'fp0','2025-02-01T00:00:00Z',NULL,'outbound','BTC',100000000001,0,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{}',NULL,NULL,NULL,NULL,'2025-01-01T00:00:00Z');",
+    "INSERT INTO transactions (id,workspace_id,profile_id,wallet_id,external_id,external_id_kind,fingerprint,occurred_at,confirmed_at,direction,asset,amount,fee,amount_includes_fee,fiat_currency,fiat_rate,fiat_value,fiat_price_source,fiat_rate_exact,fiat_value_exact,pricing_source_kind,pricing_provider,pricing_pair,pricing_timestamp,pricing_fetched_at,pricing_granularity,pricing_method,pricing_external_ref,pricing_quality,pricing_review_accepted_price,commercial_applied_link_id,review_status,taxability_override,at_regime_override,at_category_override,kind_override,privacy_boundary,kind,description,counterparty,note,excluded,raw_json,payment_hash,payment_hash_source,swap_refund_funding_txid,swap_refund_funding_vout,created_at) VALUES('tx1','w','p','target','external1',NULL,'fp1','2025-02-01T00:00:00Z',NULL,'inbound','BTC',70000000001,0,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{}',NULL,NULL,NULL,NULL,'2025-01-01T00:00:00Z');",
+    "INSERT INTO transactions (id,workspace_id,profile_id,wallet_id,external_id,external_id_kind,fingerprint,occurred_at,confirmed_at,direction,asset,amount,fee,amount_includes_fee,fiat_currency,fiat_rate,fiat_value,fiat_price_source,fiat_rate_exact,fiat_value_exact,pricing_source_kind,pricing_provider,pricing_pair,pricing_timestamp,pricing_fetched_at,pricing_granularity,pricing_method,pricing_external_ref,pricing_quality,pricing_review_accepted_price,commercial_applied_link_id,review_status,taxability_override,at_regime_override,at_category_override,kind_override,privacy_boundary,kind,description,counterparty,note,excluded,raw_json,payment_hash,payment_hash_source,swap_refund_funding_txid,swap_refund_funding_vout,created_at) VALUES('tx2','w','p','target','external2',NULL,'fp2','2025-02-01T00:00:00Z',NULL,'inbound','BTC',30000000000,0,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{}',NULL,NULL,NULL,NULL,'2025-01-01T00:00:00Z');",
+    "INSERT INTO transactions (id,workspace_id,profile_id,wallet_id,external_id,external_id_kind,fingerprint,occurred_at,confirmed_at,direction,asset,amount,fee,amount_includes_fee,fiat_currency,fiat_rate,fiat_value,fiat_price_source,fiat_rate_exact,fiat_value_exact,pricing_source_kind,pricing_provider,pricing_pair,pricing_timestamp,pricing_fetched_at,pricing_granularity,pricing_method,pricing_external_ref,pricing_quality,pricing_review_accepted_price,commercial_applied_link_id,review_status,taxability_override,at_regime_override,at_category_override,kind_override,privacy_boundary,kind,description,counterparty,note,excluded,raw_json,payment_hash,payment_hash_source,swap_refund_funding_txid,swap_refund_funding_vout,created_at) VALUES('tx3','w','p','source','external3',NULL,'fp3','2025-02-01T00:00:00Z',NULL,'outbound','BTC',9007199254740993,0,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'deposit',NULL,NULL,NULL,0,'{}',NULL,NULL,NULL,NULL,'2025-01-01T00:00:00Z');",
+    "INSERT INTO custody_components (id,lineage_id,workspace_id,profile_id,revision,component_type,conservation_mode,state,evidence_kind,evidence_grade,evidence_json,conversion_policy,conversion_reviewed,conversion_metadata_json,expected_leg_count,expected_allocation_count,expected_economic_term_count,expected_evidence_count,authored_source,notes,change_reason,supersedes_component_id,superseded_by_component_id,activated_at,superseded_at,created_at) VALUES('9726e8ad-6009-5876-8e89-6d0cfc7e88ed','d83c3cee-3c7e-5d72-8eb9-1212ee0740ab','w','p',1,'manual_bridge','quantity','superseded','reviewed_custody','reviewed','{\"review_id\":\"00000000-0000-0000-0000-000000000002\",\"term_kind\":\"transaction_pair\"}',NULL,0,'{}',3,2,1,2,'cli',NULL,NULL,NULL,'6cb6cb0f-6d36-507d-9fb9-0207f96f0595','2025-06-01T00:00:00Z','2025-06-01T00:00:00Z','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_components (id,lineage_id,workspace_id,profile_id,revision,component_type,conservation_mode,state,evidence_kind,evidence_grade,evidence_json,conversion_policy,conversion_reviewed,conversion_metadata_json,expected_leg_count,expected_allocation_count,expected_economic_term_count,expected_evidence_count,authored_source,notes,change_reason,supersedes_component_id,superseded_by_component_id,activated_at,superseded_at,created_at) VALUES('6cb6cb0f-6d36-507d-9fb9-0207f96f0595','d83c3cee-3c7e-5d72-8eb9-1212ee0740ab','w','p',2,'manual_bridge','quantity','active','reviewed_custody','reviewed','{\"review_id\":\"00000000-0000-0000-0000-000000000005\",\"term_kind\":\"transaction_pair\"}',NULL,0,'{}',4,2,2,3,'cli',NULL,'transaction_pair review revised','9726e8ad-6009-5876-8e89-6d0cfc7e88ed',NULL,'2025-06-01T00:00:00Z',NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_components (id,lineage_id,workspace_id,profile_id,revision,component_type,conservation_mode,state,evidence_kind,evidence_grade,evidence_json,conversion_policy,conversion_reviewed,conversion_metadata_json,expected_leg_count,expected_allocation_count,expected_economic_term_count,expected_evidence_count,authored_source,notes,change_reason,supersedes_component_id,superseded_by_component_id,activated_at,superseded_at,created_at) VALUES('ccd40a2c-426b-583f-b577-cf850791930b','a5a72f31-6c50-5a0a-95ec-cf81631dc2b7','w','p',1,'swap','conversion','active','reviewed_custody','reviewed','{\"review_id\":\"00000000-0000-0000-0000-000000000008\",\"term_kind\":\"direct_swap_payout\"}','carrying-value',1,'{}',2,1,1,1,'cli','literal \u20ac \ud83d\ude80',NULL,NULL,NULL,'2025-06-01T00:00:00Z',NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_legs (id,component_id,workspace_id,profile_id,ordinal,role,rail,chain,network,asset,exposure,conservation_unit,amount_msat,valuation_unit,valuation_amount,occurred_at,transaction_id,anchor_transaction_id,wallet_id,location_ref,notes,created_at) VALUES('26515206-cb03-59b9-aa8f-5be8268e2edb','9726e8ad-6009-5876-8e89-6d0cfc7e88ed','w','p',0,'source','bitcoin','bitcoin','main','BTC','bitcoin','msat',100000000001,NULL,NULL,'2025-02-01T00:00:00Z','tx0','tx0','source',NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_legs (id,component_id,workspace_id,profile_id,ordinal,role,rail,chain,network,asset,exposure,conservation_unit,amount_msat,valuation_unit,valuation_amount,occurred_at,transaction_id,anchor_transaction_id,wallet_id,location_ref,notes,created_at) VALUES('b005dd93-8859-5646-823f-2567d6257c8e','9726e8ad-6009-5876-8e89-6d0cfc7e88ed','w','p',1,'destination','bitcoin','bitcoin','main','BTC','bitcoin','msat',70000000001,NULL,NULL,'2025-02-01T00:00:00Z','tx1','tx1','target',NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_legs (id,component_id,workspace_id,profile_id,ordinal,role,rail,chain,network,asset,exposure,conservation_unit,amount_msat,valuation_unit,valuation_amount,occurred_at,transaction_id,anchor_transaction_id,wallet_id,location_ref,notes,created_at) VALUES('b3cb0fb3-a214-583b-8b94-098a050be15e','9726e8ad-6009-5876-8e89-6d0cfc7e88ed','w','p',2,'suspense','bitcoin','bitcoin','main','BTC','bitcoin','msat',30000000000,NULL,NULL,'2025-02-01T00:00:00Z',NULL,NULL,NULL,'reviewed-custody-suspense:00000000-0000-0000-0000-000000000002','reviewed_residual:suspense_continuation','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_legs (id,component_id,workspace_id,profile_id,ordinal,role,rail,chain,network,asset,exposure,conservation_unit,amount_msat,valuation_unit,valuation_amount,occurred_at,transaction_id,anchor_transaction_id,wallet_id,location_ref,notes,created_at) VALUES('f25fd0a0-6b8f-5bdc-9010-4962eb5bad7b','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',0,'source','bitcoin','bitcoin','main','BTC','bitcoin','msat',70000000001,NULL,NULL,'2025-02-01T00:00:00Z','tx0','tx0','source',NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_legs (id,component_id,workspace_id,profile_id,ordinal,role,rail,chain,network,asset,exposure,conservation_unit,amount_msat,valuation_unit,valuation_amount,occurred_at,transaction_id,anchor_transaction_id,wallet_id,location_ref,notes,created_at) VALUES('dd1f949a-7477-599c-94e3-a48a0cc6fbc4','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',1,'destination','bitcoin','bitcoin','main','BTC','bitcoin','msat',70000000001,NULL,NULL,'2025-02-01T00:00:00Z','tx1','tx1','target',NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_legs (id,component_id,workspace_id,profile_id,ordinal,role,rail,chain,network,asset,exposure,conservation_unit,amount_msat,valuation_unit,valuation_amount,occurred_at,transaction_id,anchor_transaction_id,wallet_id,location_ref,notes,created_at) VALUES('1e3e6860-1312-50d0-a31c-42f812427ef1','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',2,'source','bitcoin','bitcoin','main','BTC','bitcoin','msat',30000000000,NULL,NULL,'2025-02-01T00:00:00Z','tx0','tx0','source',NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_legs (id,component_id,workspace_id,profile_id,ordinal,role,rail,chain,network,asset,exposure,conservation_unit,amount_msat,valuation_unit,valuation_amount,occurred_at,transaction_id,anchor_transaction_id,wallet_id,location_ref,notes,created_at) VALUES('b69f2ddc-abf8-5f7d-b31c-ed0ea419079c','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',3,'destination','bitcoin','bitcoin','main','BTC','bitcoin','msat',30000000000,NULL,NULL,'2025-02-01T00:00:00Z','tx2','tx2','target',NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_legs (id,component_id,workspace_id,profile_id,ordinal,role,rail,chain,network,asset,exposure,conservation_unit,amount_msat,valuation_unit,valuation_amount,occurred_at,transaction_id,anchor_transaction_id,wallet_id,location_ref,notes,created_at) VALUES('0288ca65-f79d-5da8-af67-238aacc42126','ccd40a2c-426b-583f-b577-cf850791930b','w','p',0,'source','bitcoin','bitcoin','main','BTC','bitcoin','msat',9007199254740993,'reviewed_source_msat',9007199254740993,'2025-02-01T00:00:00Z','tx3','tx3','source',NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_legs (id,component_id,workspace_id,profile_id,ordinal,role,rail,chain,network,asset,exposure,conservation_unit,amount_msat,valuation_unit,valuation_amount,occurred_at,transaction_id,anchor_transaction_id,wallet_id,location_ref,notes,created_at) VALUES('507938f5-388e-56e6-8c79-cb888041795d','ccd40a2c-426b-583f-b577-cf850791930b','w','p',1,'retained','untracked',NULL,NULL,'LBTC','bitcoin','msat',9007199254740993,'reviewed_source_msat',9007199254740993,'2025-02-01T00:00:00Z',NULL,NULL,NULL,'legacy-payout:00000000-0000-0000-0000-000000000008',NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_allocations (id,component_id,workspace_id,profile_id,ordinal,source_leg_id,sink_leg_id,source_amount_msat,sink_amount_msat,created_at) VALUES('977e20b4-659f-5c07-a24d-34439f0bf20c','9726e8ad-6009-5876-8e89-6d0cfc7e88ed','w','p',0,'26515206-cb03-59b9-aa8f-5be8268e2edb','b005dd93-8859-5646-823f-2567d6257c8e',70000000001,70000000001,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_allocations (id,component_id,workspace_id,profile_id,ordinal,source_leg_id,sink_leg_id,source_amount_msat,sink_amount_msat,created_at) VALUES('707853d2-2cd8-54c2-95f8-1561733ad998','9726e8ad-6009-5876-8e89-6d0cfc7e88ed','w','p',1,'26515206-cb03-59b9-aa8f-5be8268e2edb','b3cb0fb3-a214-583b-8b94-098a050be15e',30000000000,30000000000,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_allocations (id,component_id,workspace_id,profile_id,ordinal,source_leg_id,sink_leg_id,source_amount_msat,sink_amount_msat,created_at) VALUES('436c13d4-6751-53df-af87-58d8cae24b14','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',0,'f25fd0a0-6b8f-5bdc-9010-4962eb5bad7b','dd1f949a-7477-599c-94e3-a48a0cc6fbc4',70000000001,70000000001,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_allocations (id,component_id,workspace_id,profile_id,ordinal,source_leg_id,sink_leg_id,source_amount_msat,sink_amount_msat,created_at) VALUES('2d7fb2aa-0e08-5119-90ed-0ec5d1cab72a','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',1,'1e3e6860-1312-50d0-a31c-42f812427ef1','b69f2ddc-abf8-5f7d-b31c-ed0ea419079c',30000000000,30000000000,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_allocations (id,component_id,workspace_id,profile_id,ordinal,source_leg_id,sink_leg_id,source_amount_msat,sink_amount_msat,created_at) VALUES('9f71e8f0-84f9-555d-aae0-67a57fbb1b6c','ccd40a2c-426b-583f-b577-cf850791930b','w','p',0,'0288ca65-f79d-5da8-af67-238aacc42126','507938f5-388e-56e6-8c79-cb888041795d',9007199254740993,9007199254740993,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_economic_terms (id,component_id,workspace_id,profile_id,ordinal,source_leg_id,target_leg_id,term_kind,legacy_source_id,source_row_hash,review_kind,tax_policy,reviewed_source_amount_msat,swap_fee_msat,swap_fee_kind,confidence_at_review,review_source,review_notes,payout_asset,payout_amount_msat,payout_occurred_at,payout_fiat_value_exact,payout_external_id,counterparty,created_at) VALUES('bc82517f-966b-5bab-bb3d-f1ba9d04ef5b','9726e8ad-6009-5876-8e89-6d0cfc7e88ed','w','p',0,'26515206-cb03-59b9-aa8f-5be8268e2edb','b005dd93-8859-5646-823f-2567d6257c8e','transaction_pair','00000000-0000-0000-0000-000000000002','0dab18ff2b24aa1142aad1311be8e5786e73366366031a756fdc5ea7d6feee3b','manual','carrying-value',70000000001,NULL,NULL,NULL,'manual',NULL,NULL,NULL,NULL,NULL,NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_economic_terms (id,component_id,workspace_id,profile_id,ordinal,source_leg_id,target_leg_id,term_kind,legacy_source_id,source_row_hash,review_kind,tax_policy,reviewed_source_amount_msat,swap_fee_msat,swap_fee_kind,confidence_at_review,review_source,review_notes,payout_asset,payout_amount_msat,payout_occurred_at,payout_fiat_value_exact,payout_external_id,counterparty,created_at) VALUES('b6c9b92f-1558-5e28-96b5-edc686205987','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',0,'f25fd0a0-6b8f-5bdc-9010-4962eb5bad7b','dd1f949a-7477-599c-94e3-a48a0cc6fbc4','transaction_pair','00000000-0000-0000-0000-000000000002','ce8a75dfa7437f36e50175cb1dab5dddd1195092003cbfa310c4d11bf088f9ec','manual','carrying-value',70000000001,NULL,NULL,NULL,'manual',NULL,NULL,NULL,NULL,NULL,NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_economic_terms (id,component_id,workspace_id,profile_id,ordinal,source_leg_id,target_leg_id,term_kind,legacy_source_id,source_row_hash,review_kind,tax_policy,reviewed_source_amount_msat,swap_fee_msat,swap_fee_kind,confidence_at_review,review_source,review_notes,payout_asset,payout_amount_msat,payout_occurred_at,payout_fiat_value_exact,payout_external_id,counterparty,created_at) VALUES('d7c36810-ef71-5483-8cc0-91f5a8bfb307','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',1,'1e3e6860-1312-50d0-a31c-42f812427ef1','b69f2ddc-abf8-5f7d-b31c-ed0ea419079c','transaction_pair','00000000-0000-0000-0000-000000000005','12d9bce2eeb6c6f1630a63b869652a521ab281b58f369b5b8d4f8c9f9d2437a2','manual','carrying-value',30000000000,NULL,NULL,NULL,'manual',NULL,NULL,NULL,NULL,NULL,NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_economic_terms (id,component_id,workspace_id,profile_id,ordinal,source_leg_id,target_leg_id,term_kind,legacy_source_id,source_row_hash,review_kind,tax_policy,reviewed_source_amount_msat,swap_fee_msat,swap_fee_kind,confidence_at_review,review_source,review_notes,payout_asset,payout_amount_msat,payout_occurred_at,payout_fiat_value_exact,payout_external_id,counterparty,created_at) VALUES('6325664b-083b-5f4d-ac11-2e7043e2d921','ccd40a2c-426b-583f-b577-cf850791930b','w','p',0,'0288ca65-f79d-5da8-af67-238aacc42126','507938f5-388e-56e6-8c79-cb888041795d','direct_swap_payout','00000000-0000-0000-0000-000000000008','944dd03ed6397e35066718a6dc6459859c6cfc986cd779e5b95407c99cd7cc59','direct-swap-payout','carrying-value',9007199254740993,0,'combined',NULL,NULL,'literal \u20ac \ud83d\ude80','LBTC',9007199254740993,NULL,'123.456789',NULL,NULL,'2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_transaction_memberships (component_id,profile_id,transaction_id,created_at) VALUES('6cb6cb0f-6d36-507d-9fb9-0207f96f0595','p','tx0','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_transaction_memberships (component_id,profile_id,transaction_id,created_at) VALUES('6cb6cb0f-6d36-507d-9fb9-0207f96f0595','p','tx1','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_transaction_memberships (component_id,profile_id,transaction_id,created_at) VALUES('6cb6cb0f-6d36-507d-9fb9-0207f96f0595','p','tx2','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_transaction_memberships (component_id,profile_id,transaction_id,created_at) VALUES('ccd40a2c-426b-583f-b577-cf850791930b','p','tx3','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_evidence_commitments (id,component_id,workspace_id,profile_id,ordinal,quantity_hash,detail_hash,created_at) VALUES('4f14c0a96683ab8e8e24f26b5cf147a34333dde06a0da500b7e980b941c9d60a','9726e8ad-6009-5876-8e89-6d0cfc7e88ed','w','p',0,'59ce031786b3e19df509ea0d0ee2fd7c607073058df2b61328ba9c24346f6de2','888805e61af383f77c778c6f0bdc6985c3c45c8664ccf6e190264772bc899f69','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_evidence_commitments (id,component_id,workspace_id,profile_id,ordinal,quantity_hash,detail_hash,created_at) VALUES('ba9882eef0691a4172a8ada727b676e86d86ac3c546c3cfc6b8298e2d8ddfe02','9726e8ad-6009-5876-8e89-6d0cfc7e88ed','w','p',1,'81d35eda727408def5bb472d2148cfe085862b625ff686468a5fb9241de9097d','7bf3080af02068d493abdfa8e9108dc62289e6bface90de1059f3632eda3d222','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_evidence_commitments (id,component_id,workspace_id,profile_id,ordinal,quantity_hash,detail_hash,created_at) VALUES('568e882267d94565a31e26181864784f549d75e8a3c4220209ba5ada7aadf72c','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',0,'59ce031786b3e19df509ea0d0ee2fd7c607073058df2b61328ba9c24346f6de2','888805e61af383f77c778c6f0bdc6985c3c45c8664ccf6e190264772bc899f69','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_evidence_commitments (id,component_id,workspace_id,profile_id,ordinal,quantity_hash,detail_hash,created_at) VALUES('35bb2836e672d42abf747ee78677a09e4854a8fb01b6972ed77d247f7977ae15','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',1,'81d35eda727408def5bb472d2148cfe085862b625ff686468a5fb9241de9097d','7bf3080af02068d493abdfa8e9108dc62289e6bface90de1059f3632eda3d222','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_evidence_commitments (id,component_id,workspace_id,profile_id,ordinal,quantity_hash,detail_hash,created_at) VALUES('03ce5ca93ca53c7dafe964193f3c4f46303c31658aa2c7cff5a44a71584c3e6b','6cb6cb0f-6d36-507d-9fb9-0207f96f0595','w','p',2,'f785e4f994e7ed1f15a680545f97dbf4b3d1575bf9245484ae4a9972346bd95c','4b7f98e93b6edcfa53f4626a0f853eec01ad67ddc98c8465ab51869a34fceb1b','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_component_evidence_commitments (id,component_id,workspace_id,profile_id,ordinal,quantity_hash,detail_hash,created_at) VALUES('b2f875e0545d331506aa9865e434ad1f48ab65a8228c51bbe110092ad7c2c2bc','ccd40a2c-426b-583f-b577-cf850791930b','w','p',0,'59af138057de177d8660b3f78d66adf4fe019aaa588dfc064316d6f5a50c1fca','8d080c9b2cf4060297c07bb74c4c5a51ab3ee28b440068f43198335d7fd155a4','2025-06-01T00:00:00Z');",
+    "INSERT INTO custody_gap_reviews (id,workspace_id,profile_id,gap_id,revision,candidate_fingerprint,action,event_kind,component_id,authored_source,reason,snapshot_json,created_at) VALUES('review1','w','p','gap',1,'fingerprint','dismissed','review_decision',NULL,'cli','reviewed','{\"retained_msat\": 9007199254740993, \"residual_msat\": 4, \"residual_classification\": {\"classification\": \"retained\"}, \"source_transaction_ids\": [\"never-disclose\"]}','2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_reviews (id,workspace_id,profile_id,gap_id,revision,candidate_fingerprint,action,event_kind,component_id,authored_source,reason,snapshot_json,created_at) VALUES('review2','w','p','gap',2,'fingerprint','resolved','bridge_reopened',NULL,'cli','reviewed','{\"retained_msat\": 9007199254740993, \"residual_msat\": 4, \"residual_classification\": {\"classification\": \"retained\"}, \"source_transaction_ids\": [\"never-disclose\"]}','2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_reviews (id,workspace_id,profile_id,gap_id,revision,candidate_fingerprint,action,event_kind,component_id,authored_source,reason,snapshot_json,created_at) VALUES('review3','w','p','gap',3,'fingerprint','resolved','review_decision',NULL,'cli','reviewed','{\"retained_msat\": 9007199254740993, \"residual_msat\": 4, \"residual_classification\": {\"classification\": \"retained\"}, \"source_transaction_ids\": [\"never-disclose\"]}','2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_review_transactions (id,review_id,workspace_id,profile_id,role,transaction_id,created_at) VALUES('9f193d9d53cf23d4e549a98e1621757b72137c37808b58b3da53307da0dec030','review1','w','p','source','tx0','2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_review_transactions (id,review_id,workspace_id,profile_id,role,transaction_id,created_at) VALUES('d038cafd0e8d5188da05440ffde7caf8a5031c5411c0f3fee9319251cab755b3','review1','w','p','return','tx1','2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_review_transactions (id,review_id,workspace_id,profile_id,role,transaction_id,created_at) VALUES('84b276c5499fd3434b88a51854fb2d4babc037df8e0e03a3af6f39e1b30a97e2','review2','w','p','source','tx0','2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_review_transactions (id,review_id,workspace_id,profile_id,role,transaction_id,created_at) VALUES('e6f65d0c05b3f9d28fe5a6496fccba96339bf3116946f615012e70c15bebb48a','review2','w','p','return','tx1','2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_review_transactions (id,review_id,workspace_id,profile_id,role,transaction_id,created_at) VALUES('a970bec81a352db972b2756f08c49f30e5eef9e6f91972ee7437805a8630c951','review3','w','p','source','tx0','2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_review_transactions (id,review_id,workspace_id,profile_id,role,transaction_id,created_at) VALUES('96c46846d98d265b958232b71e9e7369e4b5a750c9b0955284918c05a806d00d','review3','w','p','return','tx1','2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_review_relation_sets (id,review_id,workspace_id,profile_id,expected_source_count,expected_return_count,created_at) VALUES('25574af2c2241e2a5fa51c7ff8fb928cef372d99708549880111bb4496c75727','review1','w','p',1,1,'2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_review_relation_sets (id,review_id,workspace_id,profile_id,expected_source_count,expected_return_count,created_at) VALUES('54cd3b996baa7bfe6afa59000f8653a1abcd045327c6605cbdf73dcc19f2f170','review2','w','p',1,1,'2025-05-01T00:00:00Z');",
+    "INSERT INTO custody_gap_review_relation_sets (id,review_id,workspace_id,profile_id,expected_source_count,expected_return_count,created_at) VALUES('50b0aaa484cf9228e82bb5ba39d1426cf3ef61bcf7921f5569836b54fcda27cf','review3','w','p',1,1,'2025-05-01T00:00:00Z');",
+    "INSERT INTO swap_matching_rules (id,workspace_id,profile_id,name,predicate_json,kind,policy,enabled,created_at,updated_at) VALUES('00000000-0000-0000-0000-00000000000b','w','p','z','{}','manual','carrying-value',1,'2025-06-01T00:00:00Z','2025-06-01T00:00:00Z');",
+    "INSERT INTO swap_matching_rules (id,workspace_id,profile_id,name,predicate_json,kind,policy,enabled,created_at,updated_at) VALUES('00000000-0000-0000-0000-00000000000c','w','p','a','{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}','manual','carrying-value',1,'2025-06-01T00:00:00Z','2025-06-01T00:00:00Z');",
+    "INSERT INTO swap_matching_rules (id,workspace_id,profile_id,name,predicate_json,kind,policy,enabled,created_at,updated_at) VALUES('invalid','w','p',NULL,'{bad','bad','bad',1,'2025-06-01T00:00:00Z','2025-06-01T00:00:00Z');",
+    "INSERT INTO review_workflow_receipts (id,workspace_id,profile_id,idempotency_key,artifact_digest,receipt_json,created_at) VALUES('receipt','w','p','key','ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff','{\"id\": \"receipt\", \"status\": \"verified\", \"verification\": {\"report_ready\": false}, \"unicode\": \"\\u20ac \\ud83d\\ude80\", \"result_input_version\": 7}','2025-01-01T00:00:00Z');"
+  ],
+  "reads": [
+    {
+      "operation": "transfers.list",
+      "args": {},
+      "expected": [
+        {
+          "id": "00000000-0000-0000-0000-000000000005",
+          "component_id": "6cb6cb0f-6d36-507d-9fb9-0207f96f0595",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx2",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "notes": null,
+          "swap_fee_msat": null,
+          "swap_fee_kind": null,
+          "confidence_at_pair": null,
+          "pair_source": "manual",
+          "out_amount": 30000000000,
+          "deleted_at": null,
+          "created_at": "2025-06-01T00:00:00Z",
+          "review_required": false,
+          "review_codes": [],
+          "component": {
+            "id": "6cb6cb0f-6d36-507d-9fb9-0207f96f0595",
+            "source_count": 1,
+            "sink_count": 2,
+            "allocation_count": 2
+          },
+          "out": {
+            "transaction_id": "tx0",
+            "external_id": "external0",
+            "wallet": "source",
+            "wallet_kind": "custom",
+            "asset": "BTC",
+            "occurred_at": "2025-02-01T00:00:00Z",
+            "amount": 0.3,
+            "amount_msat": 30000000000,
+            "full_amount": 1.00000000001,
+            "full_amount_msat": 100000000001
+          },
+          "in": {
+            "transaction_id": "tx2",
+            "external_id": "external2",
+            "wallet": "target",
+            "wallet_kind": "custom",
+            "asset": "BTC",
+            "occurred_at": "2025-02-01T00:00:00Z",
+            "amount": 0.3,
+            "amount_msat": 30000000000,
+            "full_amount": 0.3,
+            "full_amount_msat": 30000000000
+          }
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000002",
+          "component_id": "6cb6cb0f-6d36-507d-9fb9-0207f96f0595",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "notes": null,
+          "swap_fee_msat": null,
+          "swap_fee_kind": null,
+          "confidence_at_pair": null,
+          "pair_source": "manual",
+          "out_amount": 70000000001,
+          "deleted_at": null,
+          "created_at": "2025-06-01T00:00:00Z",
+          "review_required": false,
+          "review_codes": [],
+          "component": {
+            "id": "6cb6cb0f-6d36-507d-9fb9-0207f96f0595",
+            "source_count": 1,
+            "sink_count": 2,
+            "allocation_count": 2
+          },
+          "out": {
+            "transaction_id": "tx0",
+            "external_id": "external0",
+            "wallet": "source",
+            "wallet_kind": "custom",
+            "asset": "BTC",
+            "occurred_at": "2025-02-01T00:00:00Z",
+            "amount": 0.70000000001,
+            "amount_msat": 70000000001,
+            "full_amount": 1.00000000001,
+            "full_amount_msat": 100000000001
+          },
+          "in": {
+            "transaction_id": "tx1",
+            "external_id": "external1",
+            "wallet": "target",
+            "wallet_kind": "custom",
+            "asset": "BTC",
+            "occurred_at": "2025-02-01T00:00:00Z",
+            "amount": 0.70000000001,
+            "amount_msat": 70000000001,
+            "full_amount": 0.70000000001,
+            "full_amount_msat": 70000000001
+          }
+        }
+      ]
+    },
+    {
+      "operation": "transfers.payouts.list",
+      "args": {},
+      "expected": [
+        {
+          "invalid": false,
+          "validation_error": null,
+          "id": "00000000-0000-0000-0000-000000000008",
+          "component_id": "ccd40a2c-426b-583f-b577-cf850791930b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx3",
+          "kind": "direct-swap-payout",
+          "policy": "carrying-value",
+          "payout_asset": "LBTC",
+          "payout_amount": 90071.99254740993,
+          "payout_amount_msat": 9007199254740993,
+          "payout_occurred_at": null,
+          "payout_fiat_value": 123.456789,
+          "payout_external_id": null,
+          "counterparty": null,
+          "notes": "literal \u20ac \ud83d\ude80",
+          "swap_fee_msat": 0,
+          "swap_fee_kind": "combined",
+          "out_amount": 9007199254740993,
+          "deleted_at": null,
+          "created_at": "2025-06-01T00:00:00Z",
+          "out": {
+            "transaction_id": "tx3",
+            "external_id": "external3",
+            "wallet": "source",
+            "asset": "BTC",
+            "amount": 90071.99254740993,
+            "amount_msat": 9007199254740993,
+            "full_amount": 90071.99254740993,
+            "full_amount_msat": 9007199254740993,
+            "occurred_at": "2025-02-01T00:00:00Z"
+          },
+          "payout": {
+            "asset": "LBTC",
+            "amount": 90071.99254740993,
+            "amount_msat": 9007199254740993,
+            "occurred_at": "2025-02-01T00:00:00Z",
+            "external_id": null,
+            "counterparty": null
+          }
+        }
+      ]
+    },
+    {
+      "operation": "transfers.rules.list",
+      "args": {},
+      "expected": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate": {},
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": true,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate": {
+            "out_asset": "BTC",
+            "max_fee_pct": 1e-06,
+            "min_confidence": "exact"
+          },
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": true,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate": {},
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": false,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z",
+          "invalid_reason": "predicate JSON is invalid; unsupported kind 'bad'; unsupported policy 'bad'"
+        }
+      ]
+    },
+    {
+      "operation": "transfers.gaps.history",
+      "args": {
+        "gap_id": "gap",
+        "limit": 2
+      },
+      "expected": {
+        "gap_id": "gap",
+        "count": 2,
+        "history": [
+          {
+            "revision": 2,
+            "event_kind": "bridge_reopened",
+            "status": "needs_review",
+            "component_id": null,
+            "component_revision": null,
+            "authored_source": "cli",
+            "created_at": "2025-05-01T00:00:00Z",
+            "reason": "reviewed",
+            "retained_msat": 9007199254740993,
+            "residual_msat": 4,
+            "residual_classification": "retained",
+            "filed_report_impact_count": 0
+          },
+          {
+            "revision": 3,
+            "event_kind": "review_decision",
+            "status": "resolved",
+            "component_id": null,
+            "component_revision": null,
+            "authored_source": "cli",
+            "created_at": "2025-05-01T00:00:00Z",
+            "reason": "reviewed",
+            "retained_msat": 9007199254740993,
+            "residual_msat": 4,
+            "residual_classification": "retained",
+            "filed_report_impact_count": 0
+          }
+        ]
+      }
+    },
+    {
+      "operation": "review.receipt",
+      "args": {
+        "receipt_id": "receipt"
+      },
+      "expected": {
+        "id": "receipt",
+        "status": "verified",
+        "verification": {
+          "report_ready": false
+        },
+        "unicode": "\u20ac \ud83d\ude80",
+        "result_input_version": 7
+      }
+    }
+  ]
+}

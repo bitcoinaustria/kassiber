@@ -1,0 +1,34 @@
+[
+  {
+    "id": "RVO-finite-json",
+    "file": "crates/transfers/src/review_operations.rs",
+    "find": ".compact().allow_nan(false)",
+    "replace": ".compact().allow_nan(true)",
+    "expect_failing": ["review_operations_match_python_normalization_digests_bounds_and_refusals"],
+    "rule": "Nonfinite JSON refuses before unsupported-field validation."
+  },
+  {
+    "id": "RVO-byte-boundary",
+    "file": "crates/transfers/src/review_operations.rs",
+    "find": "if encoded.len() > MAX_ARTIFACT_BYTES {",
+    "replace": "if encoded.len() >= MAX_ARTIFACT_BYTES {",
+    "expect_failing": ["review_operations_match_python_normalization_digests_bounds_and_refusals"],
+    "rule": "The exact one-million-byte boundary is admitted, including ASCII JSON escaping."
+  },
+  {
+    "id": "RVO-ordered-operations",
+    "file": "crates/transfers/src/review_operations.rs",
+    "find": "for operation in &mut operations {",
+    "replace": "operations.reverse(); for operation in &mut operations {",
+    "expect_failing": ["review_operations_match_python_normalization_digests_bounds_and_refusals"],
+    "rule": "Canonical proposals retain operation order and bind it into their digest."
+  },
+  {
+    "id": "RVO-decimal-scale",
+    "file": "crates/transfers/src/review_operations.rs",
+    "find": "set(operation, key, s(fixed));",
+    "replace": "set(operation, key, s(if fixed.contains('.') { fixed.trim_end_matches('0').trim_end_matches('.').to_string() } else { fixed }));",
+    "expect_failing": ["review_operations_match_python_normalization_digests_bounds_and_refusals"],
+    "rule": "Exact authored decimal scale survives normalization and content hashing."
+  }
+]

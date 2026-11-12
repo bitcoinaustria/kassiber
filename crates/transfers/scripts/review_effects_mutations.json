@@ -1,0 +1,92 @@
+[
+  {
+    "id": "RVE-full-holdings-digest",
+    "file": "crates/journals/src/review_effects.rs",
+    "find": "(\"holdings\", Value::List(holdings.clone()))",
+    "replace": "(\"holdings\", Value::List(holdings.iter().take(100).cloned().collect()))",
+    "expect_failing": [
+      "review_effects_bind_full_output_before_bounding_and_preserve_exact_scalars"
+    ],
+    "rule": "The journal commitment includes holdings beyond the bounded preview."
+  },
+  {
+    "id": "RVE-entry-scale",
+    "file": "crates/journals/src/review_effects.rs",
+    "find": "(\"quantity\", s(row.quantity.to_string()))",
+    "replace": "(\"quantity\", s(\"0\"))",
+    "expect_failing": [
+      "review_effects_bind_full_output_before_bounding_and_preserve_exact_scalars"
+    ],
+    "rule": "Full exact entry quantities and their decimal scale enter the commitment."
+  },
+  {
+    "id": "RVE-quantity-blockers",
+    "file": "crates/journals/src/review_effects.rs",
+    "find": "|| codec::truth(&state.custody_quantity[\"issues\"])",
+    "replace": "|| false",
+    "expect_failing": [
+      "review_effects_bind_full_output_before_bounding_and_preserve_exact_scalars"
+    ],
+    "rule": "Quantity issues block report readiness even without component blockers or quarantines."
+  },
+  {
+    "id": "RVE-policy-binding",
+    "file": "crates/journals/src/review_effects.rs",
+    "find": "key.starts_with(\"tax_\")",
+    "replace": "key == \"tax_country\"",
+    "expect_failing": [
+      "review_effects_read_pending_policy_and_need_no_database_for_unclassified_operations"
+    ],
+    "rule": "Every current tax policy field binds acquisition effects, including pending caller edits."
+  },
+  {
+    "id": "RVE-accounting-totals",
+    "file": "crates/journals/src/review_effects.rs",
+    "find": ".add(number, &Context::RP2)",
+    "replace": ".add(&Decimal::zero(), &Context::RP2)",
+    "expect_failing": [
+      "review_effects_bind_full_output_before_bounding_and_preserve_exact_scalars"
+    ],
+    "rule": "Acquisition, income, disposal, fee and transfer-fee totals use exact canonical amounts."
+  },
+  {
+    "id": "RVE-finite-tax-summary",
+    "file": "crates/journals/src/review_effects.rs",
+    "find": "if !number.is_finite() {",
+    "replace": "if false && !number.is_finite() {",
+    "expect_failing": [
+      "review_effects_bind_full_output_before_bounding_and_preserve_exact_scalars"
+    ],
+    "rule": "Nonfinite tax-summary floats refuse rather than silently becoming null in serde_json."
+  },
+  {
+    "id": "RVA-artifact-byte-limit",
+    "file": "crates/transfers/src/review_artifact.rs",
+    "find": "operations::canonical(artifact)?.len() > operations::MAX_ARTIFACT_BYTES",
+    "replace": "operations::canonical(artifact)?.len() >= operations::MAX_ARTIFACT_BYTES",
+    "expect_failing": [
+      "review_artifact_content_matches_python_bounds_digests_and_order"
+    ],
+    "rule": "The exact one-million-byte portable artifact remains admissible."
+  },
+  {
+    "id": "RVA-digest-admission",
+    "file": "crates/transfers/src/review_artifact.rs",
+    "find": "|| value(artifact, \"digest\") != s(operations::digest(&payload)?)",
+    "replace": "|| (false && value(artifact, \"digest\") != s(operations::digest(&payload)?))",
+    "expect_failing": [
+      "review_artifact_admission_matches_python_refusal_precedence_and_canonicality"
+    ],
+    "rule": "Tampered content refuses before scope, operation and idempotency admission."
+  },
+  {
+    "id": "RVA-canonical-operations",
+    "file": "crates/transfers/src/review_artifact.rs",
+    "find": "if !equal(&normalized, &value(artifact, \"operations\")) {",
+    "replace": "if false && !equal(&normalized, &value(artifact, \"operations\")) {",
+    "expect_failing": [
+      "review_artifact_admission_matches_python_refusal_precedence_and_canonicality"
+    ],
+    "rule": "A valid digest cannot authorize noncanonical operation content."
+  }
+]

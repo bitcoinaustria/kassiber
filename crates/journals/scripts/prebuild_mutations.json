@@ -1,0 +1,473 @@
+[
+  {
+    "id": "JP-writer",
+    "file": "crates/journals/src/prebuild.rs",
+    "find": "conn.transaction_state(Some(\"main\"))? != rusqlite::TransactionState::Write",
+    "replace": "conn.transaction_state(Some(\"main\"))? == rusqlite::TransactionState::Write",
+    "expect_failing": [
+      "prebuild_pricing_requires_caller_write_transaction"
+    ],
+    "rule": "Require the caller's reserved writer transaction before pricing reads."
+  },
+  {
+    "id": "JP-profile",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "WHERE profile_id=? AND excluded=0",
+    "replace": "WHERE profile_id IS NOT NULL AND excluded=0 AND ? IS NOT NULL",
+    "expect_failing": [
+      "prebuild_pricing_scopes_and_skips"
+    ],
+    "rule": "Keep pricing within the resolved profile."
+  },
+  {
+    "id": "JP-excluded",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "AND excluded=0 AND (",
+    "replace": "AND excluded IN (0,1) AND (",
+    "expect_failing": [
+      "prebuild_pricing_scopes_and_skips"
+    ],
+    "rule": "Excluded observations must not be auto-priced."
+  },
+  {
+    "id": "JP-exact-missing",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "AND (fiat_value_exact IS NULL OR CAST(fiat_value_exact AS REAL)<=0)",
+    "replace": "AND (fiat_value_exact IS NULL OR CAST(fiat_value_exact AS REAL)>=0)",
+    "expect_failing": [
+      "prebuild_pricing_full_python_dumps_and_refusals"
+    ],
+    "rule": "A usable exact fiat value prevents repricing imported evidence."
+  },
+  {
+    "id": "JP-provenance",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "pricing_source_kind IS NULL AND pricing_quality IS NULL",
+    "replace": "pricing_source_kind IS NOT NULL AND pricing_quality IS NULL",
+    "expect_failing": [
+      "prebuild_pricing_provenance_and_count"
+    ],
+    "rule": "Only unannotated legacy rates-cache prices receive provenance enrichment."
+  },
+  {
+    "id": "JP-confirmation",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": ".unwrap_or(&row.occurred_at);",
+    "replace": ".unwrap_or(&row.occurred_at);\n        let pricing_at = &row.occurred_at;",
+    "expect_failing": [
+      "prebuild_pricing_timestamp_selection"
+    ],
+    "rule": "Prefer confirmation time over observation time."
+  },
+  {
+    "id": "JP-time-bound",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "kassiber_timestamp_us(timestamp)<=kassiber_timestamp_us(?)",
+    "replace": "timestamp<=?",
+    "expect_failing": [
+      "prebuild_pricing_timestamp_selection"
+    ],
+    "rule": "Compare parsed rate instants including fractions and offsets."
+  },
+  {
+    "id": "JP-manual-tie",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "CASE WHEN source='manual' THEN 0 ELSE 1 END ASC",
+    "replace": "CASE WHEN source='manual' THEN 1 ELSE 0 END ASC",
+    "expect_failing": [
+      "prebuild_pricing_provenance_and_count"
+    ],
+    "rule": "Manual rates win equal-timestamp cache ties."
+  },
+  {
+    "id": "JP-rate-precedence",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "first(&[&row.rate_exact, &cached.rate_exact, &row.rate, &cached.rate])?",
+    "replace": "first(&[&cached.rate_exact, &row.rate_exact, &row.rate, &cached.rate])?",
+    "expect_failing": [
+      "prebuild_pricing_precedence_and_precision"
+    ],
+    "rule": "A stored exact transaction rate outranks the cached rate."
+  },
+  {
+    "id": "JP-exact-value",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "let mut value = first(&[&row.value_exact])?;",
+    "replace": "let mut value = None;",
+    "expect_failing": [
+      "prebuild_pricing_precedence_and_precision"
+    ],
+    "rule": "Keep a stored exact value before calculating a fallback."
+  },
+  {
+    "id": "JP-msat",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "Decimal::from(100_000_000_000i64)",
+    "replace": "Decimal::from(100_000_000i64)",
+    "expect_failing": [
+      "prebuild_pricing_precedence_and_precision"
+    ],
+    "rule": "Convert integer msat to BTC with the existing decimal context."
+  },
+  {
+    "id": "JP-provider-quality",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "\"daily\", \"coarse\", \"monthly\", \"yearly\"",
+    "replace": "\"none\", \"coarse\", \"monthly\", \"yearly\"",
+    "expect_failing": [
+      "prebuild_pricing_provenance_and_count"
+    ],
+    "rule": "Retain coarse pricing quality without adding a strict-review decision."
+  },
+  {
+    "id": "JP-count",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "if missing {",
+    "replace": "if !missing {",
+    "expect_failing": [
+      "prebuild_pricing_provenance_and_count"
+    ],
+    "rule": "Count only rows whose four legacy/exact pricing columns were all NULL."
+  },
+  {
+    "id": "JP-external-ref",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "Option::<String>::None,",
+    "replace": "Some(\"incorrect\"),",
+    "expect_failing": [
+      "prebuild_pricing_provenance_and_count"
+    ],
+    "rule": "Clear an old external pricing reference as the Python cache payload does."
+  },
+  {
+    "id": "JP-rollback",
+    "file": "crates/journals/src/prebuild.rs",
+    "find": "ROLLBACK TO {name}; RELEASE {name}",
+    "replace": "RELEASE {name}",
+    "expect_failing": [
+      "prebuild_pricing_refusal_rolls_back_earlier_writes",
+      "prebuild_sources_late_sql_refusal_restores_all_tables"
+    ],
+    "rule": "Roll back earlier pricing writes after a later refusal."
+  },
+  {
+    "id": "JS-source-profile",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "WHERE profile_id=? AND excluded=0 GROUP BY wallet_id",
+    "replace": "WHERE profile_id!=? AND excluded=0 GROUP BY wallet_id",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep activity counts scoped to the profile."
+  },
+  {
+    "id": "JS-source-excluded",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "AND excluded=0 GROUP BY wallet_id",
+    "replace": "AND excluded IN (0,1) GROUP BY wallet_id",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Excluded duplicates do not block address trimming."
+  },
+  {
+    "id": "JS-source-deprecated",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "sources.retain(|s| !s.deprecated || s.count > 0);",
+    "replace": "sources.retain(|s| !s.deprecated);",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Deprecated sources remain visible while active transactions exist."
+  },
+  {
+    "id": "JS-source-kind",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "!canonical(&text(&w[\"kind\"]))",
+    "replace": "canonical(&text(&w[\"kind\"]))",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Prefer descriptor authority over an address list."
+  },
+  {
+    "id": "JS-source-inventory",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "script(&row[\"script_pubkey\"])",
+    "replace": "script(&Value::Null)",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Use stored inventory script evidence."
+  },
+  {
+    "id": "JS-source-raw-inventory",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "script(&mapping(&row[\"raw_json\"])[\"script_pubkey\"])",
+    "replace": "script(&Value::Null)",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Use retained inventory raw script fallback."
+  },
+  {
+    "id": "JS-source-checkpoint",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "for (b, n) in highest {",
+    "replace": "for (b, n) in highest.iter().take(0) {",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Extend descriptor horizons from stored checkpoints."
+  },
+  {
+    "id": "JS-source-inventory-horizon",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "b), n.max(-1));",
+    "replace": "b), -1);",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Extend descriptor horizons from the inventory."
+  },
+  {
+    "id": "JS-source-descriptor-horizon",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": ".clamp(0, 20_000) as u32;",
+    "replace": ".clamp(0, 2) as u32;",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep the candidate horizon used by finite source evidence."
+  },
+  {
+    "id": "JS-economic-amount",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "economic_key(amount)?,",
+    "replace": "\"n0\".to_string(),",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep differing stored amounts out of duplicate groups."
+  },
+  {
+    "id": "JS-economic-fee",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "economic_key(fee)?\n",
+    "replace": "\"n0\".to_string()\n",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep differing stored fees out of duplicate groups."
+  },
+  {
+    "id": "JS-economic-direction",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "row[\"direction\"],\n            row[\"asset\"],",
+    "replace": "\"inbound\",\n            row[\"asset\"],",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep direction in the economic fingerprint."
+  },
+  {
+    "id": "JS-economic-asset",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "row[\"asset\"],\n            economic_key(amount)?",
+    "replace": "\"BTC\",\n            economic_key(amount)?",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep asset in the economic fingerprint."
+  },
+  {
+    "id": "JS-script-evidence",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "!s.is_disjoint(&evidence)",
+    "replace": "true",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Require concrete overlapping script evidence for exclusions."
+  },
+  {
+    "id": "JS-review-conflict",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "if let Some(c) = conflict(conn, profile, &tx)? {",
+    "replace": "if let Some(c) = None::<Value> {",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Never exclude an active reviewed custody anchor."
+  },
+  {
+    "id": "JS-unresolved-trim",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "&& unresolved.is_empty();",
+    "replace": ";",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Unresolved address-list transactions prevent trimming."
+  },
+  {
+    "id": "JS-audit-history",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "VALUES(?,?,'excluded','false','true','{}')",
+    "replace": "VALUES(?,?,'excluded','true','false','{}')",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Preserve the direction of the audited exclusion."
+  },
+  {
+    "id": "JS-audit-version",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "journal_input_version=journal_input_version+1",
+    "replace": "journal_input_version=journal_input_version+2",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Invalidate the journal input version exactly once per audited edit."
+  },
+  {
+    "id": "JS-trim-inventory",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "DELETE FROM wallet_utxos WHERE profile_id=?",
+    "replace": "DELETE FROM wallet_utxos WHERE profile_id!=?",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Clear only the matching output inventory."
+  },
+  {
+    "id": "JS-trim-checkpoint",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "DELETE FROM freshness_source_states WHERE profile_id=?",
+    "replace": "DELETE FROM freshness_source_states WHERE profile_id!=?",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Reset the trimmed wallet refresh checkpoint."
+  },
+  {
+    "id": "JS-trim-deprecate",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "c[\"deprecated\"] = json!(true);",
+    "replace": "c[\"deprecated\"] = json!(false);",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Deprecate a list whose final address was removed."
+  },
+  {
+    "id": "JS-raw-refusal",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "if truth(v) && (v.is_boolean() || v.is_number()) {",
+    "replace": "if false && (v.is_boolean() || v.is_number()) {",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Refuse non-iterable graph entries rather than skip malformed evidence."
+  },
+  {
+    "id": "JS-source-network",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "source.network.clone(),",
+    "replace": "String::new(),",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Keep network domains separate in finite overlap evidence."
+  },
+  {
+    "id": "JS-result-count",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "r[\"updated\"]==true",
+    "replace": "r[\"updated\"]==false",
+    "expect_failing": [
+      "prebuild_sources_full_python_dumps_and_refusals"
+    ],
+    "rule": "Count successfully updated duplicates in the repair result."
+  },
+  {
+    "id": "JS-audit-clock",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "let at = clock()?;",
+    "replace": "let at = String::new();",
+    "expect_failing": ["prebuild_sources_audited_duplicates_and_trimming"],
+    "rule": "Sample the caller clock for each audited exclusion."
+  },
+  {
+    "id": "JS-audit-clock-order",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "let at = clock()?;\n        let id = identity()?;\n        let field = identity()?;",
+    "replace": "let id = identity()?;\n        let field = identity()?;\n        let at = clock()?;",
+    "expect_failing": ["prebuild_sources_clock_refusal_restores_earlier_audits"],
+    "rule": "Refuse a failed clock before allocating that event's durable identities."
+  },
+  {
+    "id": "JS-result-order",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "\"addresses_removed\",\n                \"wallets_updated\",\n                \"duplicates_excluded\",",
+    "replace": "\"wallets_updated\",\n                \"addresses_removed\",\n                \"duplicates_excluded\",",
+    "expect_failing": ["prebuild_sources_audited_duplicates_and_trimming"],
+    "rule": "Preserve Python's nested dictionary order in serialized process result fields."
+  },
+  {
+    "id": "JS-deprecated-null",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "\"0\" | \"false\" | \"no\" | \"off\" => Ok(false),",
+    "replace": "\"none\" | \"0\" | \"false\" | \"no\" | \"off\" => Ok(false),",
+    "expect_failing": ["prebuild_sources_full_python_dumps_and_refusals"],
+    "rule": "Distinguish absent deprecation from the invalid text None."
+  },
+  {
+    "id": "JS-economic-legacy-number",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "        ValueRef::Real(n) if n.is_finite() && n.fract() == 0.0 => format!(\"n{n:.0}\"),\n",
+    "replace": "",
+    "expect_failing": ["economic_values_group_by_python_equality"],
+    "rule": "An integral REAL economic value groups with the equal integer, as Python's == does."
+  },
+  {
+    "id": "JS-economic-legacy-text",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "            \"s{}\",\n",
+    "replace": "            \"n{}\",\n",
+    "expect_failing": ["economic_values_group_by_python_equality"],
+    "rule": "Economic text stays text and never equals a stored number (41978c2df)."
+  },
+  {
+    "id": "JS-economic-nonfinite",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "if !n.is_finite() {",
+    "replace": "if false {",
+    "expect_failing": ["prebuild_sources_nonfinite_economics_stay_distinct_or_refuse_after_the_audit"],
+    "rule": "Refuse a non-finite stored amount or fee as int() does, not as a JSON null."
+  },
+  {
+    "id": "JS-economic-late-int",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "        stored_int(found.get_ref(0)?)?;\n        stored_int(found.get_ref(1)?)?;\n",
+    "replace": "",
+    "expect_failing": ["prebuild_sources_wide_economic_fingerprints"],
+    "rule": "Reading the excluded row back refuses its stored amount or fee after the audited write, as get_transaction_record does."
+  },
+  {
+    "id": "JS-economic-late-fee",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "        stored_int(found.get_ref(1)?)?;\n",
+    "replace": "",
+    "expect_failing": ["prebuild_sources_wide_economic_fingerprints"],
+    "rule": "The read-back converts the fee as well as the amount."
+  },
+  {
+    "id": "JS-economic-raw-text",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "        ValueRef::Text(raw) => format!(\n            \"s{}\",\n            std::str::from_utf8(raw).map_err(|_| Refusal::new(\"ValueError\", \"invalid UTF-8\"))?\n        ),",
+    "replace": "        ValueRef::Text(raw) => format!(\n            \"n{}\",\n            kassiber_pytext::parse_int(std::str::from_utf8(raw).unwrap_or(\"\")).map(|n| n.to_string()).unwrap_or_default()\n        ),",
+    "expect_failing": ["prebuild_sources_full_python_dumps_and_refusals"],
+    "rule": "Stored text stays its own key: '1_000' is not the integer 1000 (41978c2df)."
+  }
+]

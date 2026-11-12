@@ -14,6 +14,14 @@ starts both in a disposable per-worktree Compose project:
     ./scripts/integration-harness.sh sync-benchmark
     ./scripts/integration-harness.sh sync-benchmark --txs 5000 --addresses 1000
     ./scripts/integration-harness.sh sync-benchmark --smoke --profile-dir /tmp/kb-prof
+    ./scripts/integration-harness.sh sync-benchmark --runtimes python,rust
+
+`--runtimes python,rust` syncs one book per runtime from the same chain, each
+stage on every book in turn, with the Rust binary `KASSIBER_RUST_BIN` names;
+`python,python` is the control for differences between books alone.
+Rust has no in-process desktop journal step, so with more than one runtime
+both time the CLI's `journals process` instead, and the final books are
+compared table by table (`tests/integration/runtime_parity.py`).
 
 Every Kassiber backend in the benchmark book is a regtest backend on a loopback
 host, and child processes run under the test socket guard, so nothing leaves
@@ -285,14 +293,33 @@ class Chain:
 class Book:
     """One disposable Kassiber data root with the benchmark wallet."""
 
-    def __init__(self, data_root: Path, profile_dir: Path | None) -> None:
+    def __init__(
+        self,
+        data_root: Path,
+        profile_dir: Path | None,
+        runtime: str = "python",
+        journal_cli: bool = False,
+    ) -> None:
         self.data_root = data_root
         self.profile_dir = profile_dir
+        self.runtime = runtime
+        self.journal_cli = journal_cli
+        self.rust_bin = os.environ.get("KASSIBER_RUST_BIN", "")
+        if runtime == "rust" and not os.access(self.rust_bin, os.X_OK):
+            raise SystemExit("--runtimes rust needs KASSIBER_RUST_BIN naming the Rust binary")
+        data_root.parent.mkdir(parents=True, exist_ok=True)
         self.journal_script = data_root.parent / "journal_step.py"
         self.journal_script.write_text(JOURNAL_STEP, encoding="utf-8")
         self.profile_shim = data_root.parent / "profile_shim.py"
         self.profile_shim.write_text(PROFILE_SHIM, encoding="utf-8")
         self.env = self._child_env(data_root.parent)
+        if runtime == "rust":
+            from tests.integration.runtime_parity import rust_guard_capable
+
+            # A release build has no test socket guard and refuses it armed;
+            # every backend it can reach is a checked loopback URL.
+            if not rust_guard_capable(self.rust_bin):
+                self.env.pop("KASSIBER_TEST_NO_EGRESS", None)
 
     @staticmethod
     def _child_env(scratch: Path) -> dict[str, str]:
@@ -315,7 +342,9 @@ class Book:
 
     def _spawn(self, argv: list[str], stage: str | None) -> tuple[dict[str, Any], float, float]:
         command = [sys.executable, *argv]
-        if stage and self.profile_dir is not None:
+        if self.runtime == "rust" and argv[:2] == ["-m", "kassiber"]:
+            command = [self.rust_bin, *argv[2:]]
+        elif stage and self.profile_dir is not None:
             kind, target = ("module", argv[1]) if argv[0] == "-m" else ("path", argv[0])
             rest = argv[2:] if kind == "module" else argv[1:]
             command = [
@@ -340,6 +369,8 @@ class Book:
         return self._spawn(["-m", "kassiber", "--data-root", str(self.data_root), "--machine", *args], stage)
 
     def journal(self, stage: str) -> tuple[dict[str, Any], float, float]:
+        if self.runtime == "rust" or self.journal_cli:
+            return self.cli("journals", "process", stage=stage)
         return self._spawn([str(self.journal_script), str(self.data_root)], stage)
 
     def create(self, electrum_url: str, receive: str, change: str) -> None:
@@ -441,6 +472,7 @@ def _run_stage(book: Book, stage: str, action) -> dict[str, Any]:
         "event": "benchmark_result",
         "schema_version": SCHEMA_VERSION,
         "stage": stage,
+        "runtime": book.runtime,
         "ok": True,
         "seconds": round(seconds, 3),
         "peak_rss_mb": round(rss_mb, 1),
@@ -452,6 +484,43 @@ def _run_stage(book: Book, stage: str, action) -> dict[str, Any]:
     return result
 
 
+def _parity(books: list[Book]) -> dict[str, Any]:
+    """Compare every book with the first, identity- and order-blind.
+
+    Each runtime created its own rows, so random identities and clocks are
+    masked and every list is compared as a multiset.
+    """
+    from datetime import datetime, timezone
+
+    from tests.integration.runtime_parity import Masker, canonical, masked_book
+
+    now = datetime.now(timezone.utc)
+    dumps = [
+        canonical(masked_book(book.data_root, Masker(set(), now, anonymous=True))) for book in books
+    ]
+    differing: dict[str, list[str]] = {}
+    details: dict[str, dict[str, Any]] = {}
+    for book, dump in zip(books[1:], dumps[1:]):
+        tables = sorted(table for table in dumps[0] if dumps[0][table] != dump.get(table))
+        differing[book.runtime] = tables
+        for table in tables:
+            want, got = dumps[0][table][1], dump[table][1]
+            first = next(((a, b) for a, b in zip(want, got) if a != b), (None, None))
+            details[f"{book.runtime}:{table}"] = {
+                "rows": [len(want), len(got)],
+                "columns": dumps[0][table][0],
+                "first_difference": [str(first[0])[:1500], str(first[1])[:1500]],
+            }
+    return {
+        "event": "benchmark_parity",
+        "schema_version": SCHEMA_VERSION,
+        "reference": books[0].runtime,
+        "differing_tables": differing,
+        "details": details,
+        "ok": not any(differing.values()),
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument("--txs", type=int, default=2000, help="incoming payments to the wallet")
@@ -461,6 +530,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--noop-runs", type=int, default=3)
     parser.add_argument("--profile-dir", type=Path, help="write a cProfile file per stage and report the hottest functions")
     parser.add_argument("--smoke", action="store_true", help="tiny sizes to check the harness quickly")
+    parser.add_argument("--runtimes", default="python",
+                        help="comma-separated runtimes to time on the same chain: python, rust")
     args = parser.parse_args(argv)
     if args.smoke:
         args.txs, args.addresses, args.increment, args.noop_runs = 60, 20, 5, 1
@@ -479,6 +550,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.profile_dir.mkdir(parents=True, exist_ok=True)
 
     spends = int(args.txs * args.spend_ratio)
+    runtimes = [part.strip() for part in args.runtimes.split(",") if part.strip()]
+    if not runtimes or set(runtimes) - {"python", "rust"}:
+        raise SystemExit("--runtimes takes python and/or rust")
     _emit({
         "event": "benchmark_start",
         "schema_version": SCHEMA_VERSION,
@@ -505,24 +579,46 @@ def main(argv: Sequence[str] | None = None) -> int:
             "seconds": round(time.perf_counter() - started, 3),
         })
 
-        book = Book(scratch / "data", args.profile_dir)
-        book.create(electrum_url, chain.receive_descriptor, chain.change_descriptor)
-        sync = lambda *extra: (lambda stage: book.cli("wallets", "sync", "--wallet", WALLET_LABEL, *extra, stage=stage))
+        journal_cli = len(runtimes) > 1
+        # A repeated runtime (`python,python`) is the control: two books of
+        # one runtime over one chain show what differs between books alone.
+        books = [
+            Book(scratch / (f"{index}-{runtime}" if len(runtimes) > 1 else "") / "data", args.profile_dir, runtime,
+                 journal_cli)
+            for index, runtime in enumerate(runtimes)
+        ]
+        for book in books:
+            book.create(electrum_url, chain.receive_descriptor, chain.change_descriptor)
 
-        _run_stage(book, "sync_cold", sync())
-        _run_stage(book, "journal_cold", book.journal)
-        _emit({"event": "benchmark_book", "schema_version": SCHEMA_VERSION, **book.stats()})
+        def stage(name: str, *extra: str, journal: bool = False) -> None:
+            for book in books:
+                if journal:
+                    _run_stage(book, name, book.journal)
+                else:
+                    _run_stage(book, name, lambda s, book=book: book.cli(
+                        "wallets", "sync", "--wallet", WALLET_LABEL, *extra, stage=s))
+
+        def stats() -> None:
+            for book in books:
+                _emit({"event": "benchmark_book", "schema_version": SCHEMA_VERSION, "runtime": book.runtime,
+                       **book.stats()})
+
+        stage("sync_cold")
+        stage("journal_cold", journal=True)
+        stats()
         for run in range(args.noop_runs):
-            _run_stage(book, f"sync_noop_{run + 1}", sync())
-            _run_stage(book, f"journal_noop_{run + 1}", book.journal)
+            stage(f"sync_noop_{run + 1}")
+            stage(f"journal_noop_{run + 1}", journal=True)
         if args.increment:
             chain.receive_payments(args.increment)
             chain.wait_indexed()
-            _run_stage(book, "sync_incremental", sync())
-            _run_stage(book, "journal_incremental", book.journal)
-        _run_stage(book, "sync_force_full", sync("--force-full"))
-        _run_stage(book, "journal_force_full", book.journal)
-        _emit({"event": "benchmark_book", "schema_version": SCHEMA_VERSION, **book.stats()})
+            stage("sync_incremental")
+            stage("journal_incremental", journal=True)
+        stage("sync_force_full", "--force-full")
+        stage("journal_force_full", journal=True)
+        stats()
+        if len(books) > 1:
+            _emit(_parity(books))
     finally:
         chain.close()
         shutil.rmtree(scratch, ignore_errors=True)

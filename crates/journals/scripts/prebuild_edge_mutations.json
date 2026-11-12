@@ -1,0 +1,72 @@
+[
+  {
+    "id": "JX-integer-family",
+    "file": "crates/transfers/src/legacy_refresh.rs",
+    "find": "family: \"ValueError\",",
+    "replace": "family: \"TypeError\",",
+    "expect_failing": [
+      "prebuild_legacy_wide_and_malformed_reviewed_amounts"
+    ],
+    "rule": "Malformed reviewed integer text retains the Python exception family."
+  },
+  {
+    "id": "JX-integer-limit-message",
+    "file": "crates/transfers/src/legacy_refresh.rs",
+    "find": "value has {n} digits; use sys.set_int_max_str_digits()",
+    "replace": "value has 0 digits; use sys.set_int_max_str_digits()",
+    "expect_failing": [
+      "prebuild_legacy_wide_and_malformed_reviewed_amounts"
+    ],
+    "rule": "The integer digit-limit refusal retains the exact counted digits."
+  },
+  {
+    "id": "JX-wide-requested-details",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "(\"requested_msat\", Value::Int(requested.clone())),",
+    "replace": "(\"requested_msat\", Value::Int(0.into())),",
+    "expect_failing": [
+      "prebuild_legacy_wide_and_malformed_reviewed_amounts"
+    ],
+    "rule": "An oversized reviewed quantity is retained exactly in the blocking issue."
+  },
+  {
+    "id": "JX-negative-requested",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "let requested = if requested <= 0.into() {\n            0",
+    "replace": "let requested = if requested <= 0.into() {\n            1",
+    "expect_failing": [
+      "prebuild_legacy_wide_and_malformed_reviewed_amounts"
+    ],
+    "rule": "A nonpositive reviewed quantity never becomes an activated positive slice."
+  },
+  {
+    "id": "JX-decimal-cause",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "format!(\"[<class 'decimal.{}'>]\", error.name())",
+    "replace": "format!(\"[<class 'decimal.{}'>]\", \"ConversionSyntax\")",
+    "expect_failing": [
+      "prebuild_pricing_extreme_decimal_refusals"
+    ],
+    "rule": "Decimal construction range refusals preserve InvalidOperation as their cause."
+  },
+  {
+    "id": "JX-lazy-quantity",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "        let pricing_at = row\n",
+    "replace": "        let _ = quantity(&row.amount, scope.decimal_context)?;\n        let pricing_at = row\n",
+    "expect_failing": [
+      "prebuild_pricing_legacy_quantity_storage_and_lazy_refusals"
+    ],
+    "rule": "Do not inspect a legacy quantity before a cache hit actually needs it."
+  },
+  {
+    "id": "JX-fractional-quantity",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "Sql::Real(n) if n.is_finite() => format!(\"{:.0}\", n.trunc())",
+    "replace": "Sql::Real(n) if n.is_finite() => format!(\"{:.0}\", n.round())",
+    "expect_failing": [
+      "prebuild_pricing_legacy_quantity_storage_and_lazy_refusals"
+    ],
+    "rule": "Legacy REAL quantity conversion retains the reference truncation."
+  }
+]

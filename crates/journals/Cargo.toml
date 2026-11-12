@@ -1,0 +1,76 @@
+[package]
+name = "kassiber-journals"
+description = "Journal preparation, rendering, joins and caller-owned persistence"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-tax-countries = { path = "../tax-countries" }
+kassiber-custody = { path = "../custody" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pydecimal = { path = "../pydecimal" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-transfers = { path = "../transfers" }
+kassiber-transactions = { path = "../transactions" }
+kassiber-workspace = { path = "../workspace" }
+# Reuse the shared SQL driver for test-only review composition.
+kassiber-store = { path = "../store" }
+kassiber-wallets = { path = "../wallets" }
+kassiber-setup = { path = "../setup" }
+kassiber-tax-core = { path = "../../tax-engine/core" }
+# Reuse the book's SQLCipher driver and existing Python-compatible timestamp
+# parser; neither the standard library nor the renderer supplies these.
+kassiber-rates = { path = "../rates" }
+kassiber-reports = { path = "../reports" }
+# UUIDv5 resolution identities need SHA-1; reuse the locked Bitcoin hash crate.
+bitcoin_hashes = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
+
+[dev-dependencies]
+kassiber-store = { path = "../store", features = ["test-hooks"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+# std has no process CPU clock. Reuse the workspace's nix release for the
+# local benchmark probe, without adding a crate to the lockfile.
+[target.'cfg(unix)'.dev-dependencies]
+nix = { version = "0.30", features = ["resource"] }
+
+[features]
+timing = ["kassiber-custody/timing"]
+test-harness = ["kassiber-transfers/test-harness"]
+
+[[example]]
+name = "custody-load"
+required-features = ["test-harness"]
+
+[[example]]
+name = "journal-prebuild"
+required-features = ["test-harness"]
+
+[[example]]
+name = "journal-process"
+required-features = ["test-harness"]
+
+[[example]]
+name = "journal-fusion"
+required-features = ["test-harness"]
+
+[[example]]
+name = "review-build"
+required-features = ["test-harness"]
+
+[[example]]
+name = "journals-bench"
+required-features = ["timing"]
+
+[[example]]
+name = "journal-render"
+test = true

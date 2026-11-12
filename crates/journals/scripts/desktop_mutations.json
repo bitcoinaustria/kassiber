@@ -1,0 +1,292 @@
+[
+  {
+    "id": "JDESKTOP-advertise",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.push(\"ui.journals.process\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journals_match_ordered_envelopes_events_and_all_tables[exact-generic-False-False]"
+    ],
+    "rule": "Advertise the registered desktop journal route."
+  },
+  {
+    "id": "JDESKTOP-dispatch",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": "let journals = kind == \"ui.journals.process\";",
+    "replace": "let journals = false;",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journals_match_ordered_envelopes_events_and_all_tables[exact-generic-False-False]"
+    ],
+    "rule": "Dispatch desktop processing directly to the shared journal service without freshness queue mutations."
+  },
+  {
+    "id": "JDESKTOP-pairing",
+    "file": "crates/daemon/src/freshness/product.rs",
+    "find": "            auto_pair = !matches!(flag, Some(Value::Bool(false)));",
+    "replace": "            auto_pair = matches!(flag, Some(Value::Bool(true)));",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journals_match_ordered_envelopes_events_and_all_tables[exact-generic-False-False]"
+    ],
+    "rule": "Desktop processing pairs automatically unless the request turns auto_pair off."
+  },
+  {
+    "id": "JDESKTOP-progress",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "            &mut |phase| (emit.borrow_mut())(phase),\n            &mut writes,\n        )\n    };",
+    "replace": "            &mut |_| {},\n            &mut writes,\n        )\n    };",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journals_match_ordered_envelopes_events_and_all_tables[exact-generic-False-False]"
+    ],
+    "rule": "Publish every journal phase in order, including both rebuilds."
+  },
+  {
+    "id": "JDESKTOP-arguments",
+    "file": "crates/daemon/src/freshness/product.rs",
+    "find": "            if !unknown.is_empty() || flag.is_some_and(|flag| !matches!(flag, Value::Bool(_))) {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journal_arguments_cannot_change_scope_or_pairing_authority"
+    ],
+    "rule": "Desktop arguments cannot introduce scope or pairing authority."
+  },
+  {
+    "id": "JDESKTOP-cancellation",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "        cancel,\n        consent: None,",
+    "replace": "        cancel: &Default::default(),\n        consent: None,",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journal_cancellation_and_retirement_join_the_connection_owner[cancel-storing-False]"
+    ],
+    "rule": "Observe cancellation before journal writes and join the worker before retirement."
+  },
+  {
+    "id": "JDESKTOP-precommit",
+    "file": "crates/journals/src/process.rs",
+    "find": "    writes.check()?;\n    let commit = kassiber_custody::timing::span(\"commit\");",
+    "replace": "    let commit = kassiber_custody::timing::span(\"commit\");",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journal_cancellation_before_commit_rolls_back_pairs_and_every_journal_write[False]"
+    ],
+    "rule": "Recheck cancellation immediately before committing pairing and rebuilt journals."
+  },
+  {
+    "id": "JDESKTOP-output-closed",
+    "file": "crates/daemon/src/freshness.rs",
+    "find": ".map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\"))?;",
+    "replace": ".map_err(|_| AppError::new(\"cancelled\", \"Freshness output closed\")).unwrap_or(());",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journal_closed_terminal_output_preserves_committed_book_and_stops[False]"
+    ],
+    "rule": "Stop after the worker cannot publish its committed journal terminal response."
+  },
+  {
+    "id": "JDESKTOP-unresolved-context",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "    let result = if profile.is_empty() {",
+    "replace": "    let result = if false {",
+    "expect_failing": [
+      "tests/test_rust_journal_desktop.py::test_desktop_journals_unresolved_active_profile_matches_python_plain_resolution[no-context]"
+    ],
+    "rule": "An unresolved active profile takes Python's plain-processing resolution, not the scoped refresh."
+  },
+  {
+    "id": "JAI-no-pairing",
+    "file": "crates/daemon/src/test_kinds.rs",
+    "find": "            let auto_pair = matches!(\n                args.and_then(|v| get(v, \"auto_pair\")),\n                Some(Value::Bool(true))\n            );",
+    "replace": "            let auto_pair = true;",
+    "expect_failing": [
+      "tests/test_rust_journal_ai.py::test_ai_journal_step_never_pairs_and_matches_python[exact-False-False]"
+    ],
+    "rule": "The assistant tool's journal step never authors transfer pairs."
+  },
+  {
+    "id": "JROUTE-apperror-native",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "                && refusal.family != \"AppError\"\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_journal_commands.py::test_hybrid_plain_counts_native_and_proven_rollback_fallback_shapes[build-refusal-False]"
+    ],
+    "rule": "Typed AppError refusals are served natively; only exception families request development replay."
+  },
+  {
+    "id": "JROUTE-ordered-details",
+    "file": "crates/journals/src/service.rs",
+    "find": "details: refusal.ordered_details.clone().or_else(|| {",
+    "replace": "details: None.or_else(|| {",
+    "expect_failing": [
+      "tests/test_rust_journal_commands.py::test_hybrid_plain_counts_native_and_proven_rollback_fallback_shapes[label-refusal-False]"
+    ],
+    "rule": "Refusal details keep Python's insertion order in the transport envelope."
+  },
+  {
+    "id": "JVIEW-advertise",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.extend(journals::KINDS);\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_plain_books_match_python[False-unchanged-False]"
+    ],
+    "rule": "Advertise the registered desktop journal reads."
+  },
+  {
+    "id": "JVIEW-pair-type",
+    "file": "crates/journals/src/views.rs",
+    "find": "s(if py(out_asset) == py(in_asset) {",
+    "replace": "s(if py(out_asset) != py(in_asset) {",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_rows_carry_pair_metadata_like_python[False-False]"
+    ],
+    "rule": "A same-asset relation is a transfer and a cross-asset one a swap."
+  },
+  {
+    "id": "JVIEW-limit-cap",
+    "file": "crates/journals/src/views.rs",
+    "find": "let limit = limit(&args, 100, MAX_UI_LIST_LIMIT)?;",
+    "replace": "let limit = limit(&args, 100, 100_000)?;",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_plain_books_match_python[False-unchanged-False]"
+    ],
+    "rule": "Event listing caps its limit at Python's MAX_UI_LIST_LIMIT."
+  },
+  {
+    "id": "JVIEW-input-version",
+    "file": "crates/journals/src/views.rs",
+    "find": "    } else if input_version != processed_version {",
+    "replace": "    } else if false {",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_malformed_freshness_markers_match_python[stale-version]"
+    ],
+    "rule": "A changed journal input version makes the projection stale."
+  },
+  {
+    "id": "JQUAR-waiting-root",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "            waiting.insert(id.clone(), root);",
+    "replace": "            let _ = root;",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_generated_quarantines_match_python[gaps-10]"
+    ],
+    "rule": "A downstream row with a named root waits on it."
+  },
+  {
+    "id": "JQUAR-pair-fingerprint",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "            .separators(\",\", \":\")",
+    "replace": "            .separators(\", \", \": \")",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_quarantine_pair_evidence_and_refresh_error_match_python[False]"
+    ],
+    "rule": "Pair fingerprints hash Python's compact sorted reading."
+  },
+  {
+    "id": "JQUAR-category",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "        | \"price_currency_mismatch\" => info(\"missing_price\", &[\"set_price\"]),",
+    "replace": "        | \"price_currency_mismatch\" => info(\"needs_decision\", &[\"set_price\"]),",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_views_plain_books_match_python[True-blocked-False]"
+    ],
+    "rule": "A missing price is classified as missing_price."
+  },
+  {
+    "id": "JQUAR-redaction",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "s(kassiber_envelope::redaction::redact_operational_text(",
+    "replace": "s(String::from(",
+    "expect_failing": [
+      "tests/test_rust_journal_views.py::test_journal_quarantine_pair_evidence_and_refresh_error_match_python[False]"
+    ],
+    "rule": "A reported refresh error message is redacted."
+  },
+  {
+    "id": "JQRES-advertise",
+    "file": "crates/daemon/src/journals.rs",
+    "find": "    \"ui.journals.quarantine.resolve\",\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_journal_quarantine_resolve.py::test_quarantine_resolve_refusals_match_python_without_writes[False]"
+    ],
+    "rule": "Register the desktop quarantine resolution route."
+  },
+  {
+    "id": "JQRES-delete",
+    "file": "crates/journals/src/cli.rs",
+    "find": "            \"DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?\",\n            [scope.profile_id, transaction_id.as_str()],\n",
+    "replace": "            \"DELETE FROM journal_quarantines WHERE 0 AND profile_id = ? AND transaction_id = ?\",\n            [scope.profile_id, transaction_id.as_str()],\n",
+    "expect_failing": [
+      "tests/test_rust_journal_quarantine_resolve.py::test_quarantine_resolve_matches_python_envelope_and_book[exclude-False-False]"
+    ],
+    "rule": "A resolution removes the resolved quarantine row in the same transaction."
+  },
+  {
+    "id": "JQRES-precision",
+    "file": "crates/journals/src/views.rs",
+    "find": "    let context = Context::RP2;",
+    "replace": "    let context = Context::new(28, kassiber_pydecimal::Rounding::HalfEven);",
+    "expect_failing": [
+      "tests/test_rust_journal_quarantine_resolve.py::test_quarantine_resolve_matches_python_envelope_and_book[value-False-False]"
+    ],
+    "rule": "Derived override prices use Kassiber's 32-digit default decimal context."
+  },
+  {
+    "id": "S5-resolve-group-unsupported",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "        \"transaction\",\n        \"group_id\",\n        \"action\",",
+    "replace": "        \"transaction\",\n        \"action\",",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_resolve_by_group_reports_the_same_effect_and_book[root-reprocess-False]"
+    ],
+    "rule": "Resolve accepts a root group in place of a transaction."
+  },
+  {
+    "id": "S5-resolve-effect-dropped",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "    payload.extend(effect);",
+    "replace": "    let _ = effect;",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_resolve_by_group_reports_the_same_effect_and_book[root-unmeasured-False]"
+    ],
+    "rule": "Resolve reports which waiting rows cleared, or that the effect is unmeasured."
+  },
+  {
+    "id": "S5-groups-limit-zero",
+    "file": "crates/kassiber/src/real_store/journals.rs",
+    "find": "(1..=maximum).contains(n)",
+    "replace": "(0..=maximum).contains(n)",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_groups_leaf_matches_python_byte_for_byte[False]"
+    ],
+    "rule": "The groups leaf refuses a --limit below 1."
+  },
+  {
+    "id": "S5-summary-definitions-missing",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "        Key::from(\"definitions\"),",
+    "replace": "        Key::from(\"definitions_unused\"),",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_quarantine_summary_carries_currency_and_definitions[False]"
+    ],
+    "rule": "The quarantine summary defines each counter it reports."
+  },
+  {
+    "id": "S5-summary-currency-case",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "kassiber_pytext::upper(&py_str(&currency))",
+    "replace": "py_str(&currency)",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_quarantine_summary_carries_currency_and_definitions[False]"
+    ],
+    "rule": "The summary names the book's currency upper-cased."
+  },
+  {
+    "id": "S5-summary-freshness-ignores-semantics",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "                required == BigInt::from(0) || (built == version && built >= required)\n",
+    "replace": "                true || required == BigInt::from(0) || (built == version && built >= required)\n",
+    "expect_failing": [
+      "tests/test_rust_quarantine_groups.py::test_quarantine_summary_carries_currency_and_definitions[False]"
+    ],
+    "rule": "The quarantine summary's freshness includes the calculation-semantics term."
+  }
+]

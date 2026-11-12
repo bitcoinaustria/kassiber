@@ -1,0 +1,32 @@
+[
+  {
+    "id": "JH-import-order",
+    "file": "tests/rust_port/journal_prebuild_recorder.py",
+    "find": "ROOT = Path(__file__).resolve().parents[2]",
+    "replace": "from tests.rust_port.journal_pipeline_oracle import capture\nROOT = Path(__file__).resolve().parents[2]",
+    "expect_failing": [
+      "tests/test_journal_prebuild_campaign.py::test_prebuild_child_difference_cannot_be_swallowed"
+    ],
+    "rule": "Recorder installation must tolerate handler-first and oracle-first child imports."
+  },
+  {
+    "id": "JH-reentrant-install",
+    "file": "tests/rust_port/journal_prebuild_recorder.py",
+    "find": "    from kassiber.cli import handlers\n    if _ORIGINAL is not None:\n        return\n    original = handlers._repair_journal_source_overlaps",
+    "replace": "    from kassiber.cli import handlers\n    original = handlers._repair_journal_source_overlaps",
+    "expect_failing": [
+      "tests/test_journal_prebuild_campaign.py::test_prebuild_recorder_install_is_reentrant"
+    ],
+    "rule": "An import hook installing the recorder reentrantly must leave exactly one comparison wrapper."
+  },
+  {
+    "id": "JH-guard-import",
+    "file": "scripts/check-journal-prebuild.py",
+    "find": "    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))",
+    "replace": "    sys.modules.pop(\"resource\", None)\n    import resource\n    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))",
+    "expect_failing": [
+      "tests/test_journal_prebuild_campaign.py::test_prebuild_native_guard_preserves_import_time_diagnostics"
+    ],
+    "rule": "The pre-exec system-call guard must not generate import-time stderr that contaminates the native probe response."
+  }
+]

@@ -1,0 +1,502 @@
+[
+  {
+    "id": "JB-config-memo",
+    "file": "crates/journals/src/loader.rs",
+    "find": "\"BLOB\".into()",
+    "replace": "kassiber_pyjson::dumps(raw, &Options::new()).map_err(Error::Json)?",
+    "expect_failing": [
+      "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+    ],
+    "rule": "Ignore bytes configuration without attempting JSON serialization for the memo key."
+  },
+  {
+    "id": "JB-parsed-bytes",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Bytes(bytes) => kassiber_pyjson::json_bytes_string(bytes)",
+    "replace": "Value::Bytes(bytes) => kassiber_pyjson::json_bytes_string(&[])",
+    "expect_failing": [
+      "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+    ],
+    "rule": "Parse bytes only at json.loads consumers; normalized_config still ignores bytes."
+  },
+  {
+    "id": "JB-ownership-config",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "Value::Bytes(_) => {",
+    "replace": "Value::Bytes(_) if false => {",
+    "expect_failing": [
+      "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+    ],
+    "rule": "Ownership configuration uses json.loads(bytes), including numeric/non-mapping refusals."
+  },
+  {
+    "id": "JB-bytes-int-ascii",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "Value::Bytes(bytes) if bytes.is_ascii() =>",
+    "replace": "Value::Bytes(bytes) if false =>",
+    "expect_failing": [
+      "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+    ],
+    "rule": "Byte integer conversion accepts ASCII digits without converting their repr."
+  },
+  {
+    "id": "JB-bytes-int-error",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "kassiber_pyjson::bytes_repr(bytes)\n                        .chars()\n                        .take(200)\n                        .collect::<String>()",
+    "replace": "String::from(\"bytes\")",
+    "expect_failing": [
+      "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+    ],
+    "rule": "Keep the bytes repr in uncaught int(bytes) errors."
+  },
+  {
+    "id": "JB-typed-from-json",
+    "file": "crates/custody/src/codec.rs",
+    "find": "return Ok(Py::Bytes(bytes));",
+    "replace": "return Ok(Py::from(kassiber_pyjson::bytes_repr(&bytes)));",
+    "expect_failing": [
+      "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+    ],
+    "rule": "The private adapter restores a typed byte scalar, never text."
+  },
+  {
+    "id": "JB-typed-to-json",
+    "file": "crates/custody/src/codec.rs",
+    "find": "serde_json::json!({\"$kassiber_bytes\": hex})",
+    "replace": "serde_json::json!({\"$bytes\": hex})",
+    "expect_failing": [
+      "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+    ],
+    "rule": "Private scalar encoding remains distinct from diagnostic tags and literal maps."
+  },
+  {
+    "id": "JB-bytes-truth",
+    "file": "crates/custody/src/codec.rs",
+    "find": "return !bytes.is_empty();",
+    "replace": "return true;",
+    "expect_failing": [
+      "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+    ],
+    "rule": "Empty bytes are false, unlike a nonempty encoding container."
+  },
+  {
+    "id": "JB-bytes-string",
+    "file": "crates/custody/src/codec.rs",
+    "find": "return kassiber_pyjson::bytes_repr(&bytes);",
+    "replace": "return String::from_utf8_lossy(&bytes).into_owned();",
+    "expect_failing": [
+      "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+    ],
+    "rule": "str(bytes) is its repr, not decoded text."
+  },
+  {
+    "id": "JB-bytes-integer",
+    "file": "crates/custody/src/codec.rs",
+    "find": ".filter(|s| s.is_ascii())",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+    ],
+    "rule": "int(bytes) rejects non-ASCII decimal digits accepted by int(str)."
+  },
+  {
+    "id": "JB-bytes-fast-json",
+    "file": "crates/custody/src/codec.rs",
+    "find": "if raw_bytes(v).is_some() || escaped_dict(v).is_some() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+    ],
+    "rule": "Fast JSON serialization must fall back to typed bytes/default policy."
+  },
+  {
+    "id": "JB-literal-tag-escape",
+    "file": "crates/custody/src/codec.rs",
+    "find": "*value = json_dict(std::mem::take(map));",
+    "replace": "*value = Value::Object(std::mem::take(map));",
+    "expect_failing": [
+      "json_snapshot_cannot_forge_internal_byte_scalars"
+    ],
+    "rule": "A JSON request cannot forge native byte identity with a literal tag map."
+  },
+  {
+    "id": "JB-literal-map-roundtrip",
+    "file": "crates/custody/src/codec.rs",
+    "find": "serde_json::json!({\"$kassiber_dict\": map})",
+    "replace": "Value::Object(map)",
+    "expect_failing": [
+      "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+    ],
+    "rule": "Literal maps using private tag keys retain mapping identity."
+  },
+  {
+    "id": "JB-json-bytes-object",
+    "file": "crates/custody/src/codec.rs",
+    "find": "return load_json_bytes(&bytes)",
+    "replace": "return load_json_bytes(&[])",
+    "expect_failing": [
+      "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+    ],
+    "rule": "Mapping consumers decode JSON bytes with their own parse/fallback policy."
+  },
+  {
+    "id": "JB-component-int-kind",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "Value::Object(_) if bytes.is_none() => Some(\"dict\"),",
+    "replace": "Value::Object(_) => Some(\"dict\"),",
+    "expect_failing": [
+      "component_bytes_sort_and_integer_semantics_match_python"
+    ],
+    "rule": "A typed byte scalar is eligible for int conversion, not a mapping TypeError."
+  },
+  {
+    "id": "JB-component-int-repr",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "if v.is_string() || bytes.is_some() {",
+    "replace": "if v.is_string() {",
+    "expect_failing": [
+      "component_bytes_sort_and_integer_semantics_match_python"
+    ],
+    "rule": "Invalid byte integers retain Python\u2019s exact ValueError and byte repr."
+  },
+  {
+    "id": "JB-component-byte-sort",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "return a.cmp(&b);",
+    "replace": "return a.cmp(&b).reverse();",
+    "expect_failing": [
+      "component_bytes_sort_and_integer_semantics_match_python"
+    ],
+    "rule": "Byte creation times use byte lexicographic order, independent of repr quote choice."
+  },
+  {
+    "id": "JB-component-header-bytes",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "|| (codec::raw_bytes(a).is_some() && codec::raw_bytes(b).is_some())",
+    "replace": "|| false",
+    "expect_failing": [
+      "component_bytes_sort_and_integer_semantics_match_python"
+    ],
+    "rule": "Comparable bytes headers must reach lexical ordering rather than mixed-type refusal."
+  },
+  {
+    "id": "JB-revision-bind",
+    "file": "crates/journals/src/loader/revisions.rs",
+    "find": "return Ok(Self(SqlValue::Blob(bytes)));",
+    "replace": "return Ok(Self(SqlValue::Text(kassiber_pyjson::bytes_repr(&bytes))));",
+    "expect_failing": [
+      "native_loader_blob_revision_references_bind_and_refuse_before_output"
+    ],
+    "rule": "BLOB revision ids retain their SQLite binding and find only matching BLOB ids."
+  },
+  {
+    "id": "JB-revision-byte-order",
+    "file": "crates/journals/src/loader/revisions.rs",
+    "find": "(SqlValue::Blob(a), SqlValue::Blob(b)) => a.cmp(b),",
+    "replace": "(SqlValue::Blob(a), SqlValue::Blob(b)) => a.cmp(b).reverse(),",
+    "expect_failing": [
+      "native_loader_blob_revision_identity_is_distinct_and_lexicographic"
+    ],
+    "rule": "Bytes identity and ordering differ from string and numeric ids."
+  },
+  {
+    "id": "JB-revision-byte-type",
+    "file": "crates/journals/src/loader/revisions.rs",
+    "find": "SqlValue::Blob(_) => \"bytes\",",
+    "replace": "SqlValue::Blob(_) => \"str\",",
+    "expect_failing": [
+      "native_loader_blob_revision_identity_is_distinct_and_lexicographic"
+    ],
+    "rule": "Typed revision diagnostics name bytes."
+  },
+  {
+    "id": "JB-revision-mixed-text",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "revision_ids.iter().any(|id| !id.is_text())",
+    "replace": "false",
+    "expect_failing": [
+      "native_loader_blob_revision_references_bind_and_refuse_before_output"
+    ],
+    "rule": "Mixed TEXT/BLOB revisions refuse deterministically before any revision query or output."
+  },
+  {
+    "id": "JB-revision-mixed-number",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "revision_ids.iter().any(|id| !id.is_bytes())",
+    "replace": "false",
+    "expect_failing": [
+      "native_loader_refuses_mixed_blob_numeric_revisions_before_queries"
+    ],
+    "rule": "Mixed numeric/BLOB revisions refuse before SQLite can hide the type mismatch."
+  },
+  {
+    "id": "JB-json-bytes-refusal",
+    "file": "crates/pyjson/src/encode.rs",
+    "find": "return Err(Error::BytesNotSerializable);",
+    "replace": "return Ok(());",
+    "expect_failing": [
+      "bytes_json_policy_and_repr_match_python"
+    ],
+    "rule": "JSON without default=str refuses bytes with the exact TypeError message."
+  },
+  {
+    "id": "JB-json-bytes-default",
+    "file": "crates/pyjson/src/encode.rs",
+    "find": "self.string(&PyStr::from(crate::bytes_repr(bytes)));",
+    "replace": "self.string(&PyStr::from(String::from_utf8_lossy(bytes).into_owned()));",
+    "expect_failing": [
+      "bytes_json_policy_and_repr_match_python"
+    ],
+    "rule": "default=str serializes bytes repr without changing byte identity elsewhere."
+  },
+  {
+    "id": "JB-json-bytes-message",
+    "file": "crates/pyjson/src/encode.rs",
+    "find": "\"Object of type bytes is not JSON serializable\"",
+    "replace": "\"object of type bytes is not JSON serializable\"",
+    "expect_failing": [
+      "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+    ],
+    "rule": "Product TypeError spelling and capitalization match Python exactly."
+  },
+  {
+    "id": "JB-json-bytes-bom",
+    "file": "crates/pyjson/src/bytes.rs",
+    "find": "(&bytes[3..], 1, false)",
+    "replace": "(bytes, 1, false)",
+    "expect_failing": [
+      "json_bytes_detect_encoding_without_changing_bytes_identity"
+    ],
+    "rule": "UTF-8 byte BOM is consumed only for json.loads(bytes)."
+  },
+  {
+    "id": "JB-json-bytes-surrogates",
+    "file": "crates/pyjson/src/bytes.rs",
+    "find": "remaining = &remaining[3..];",
+    "replace": "return Err(\"invalid JSON byte encoding\");",
+    "expect_failing": [
+      "raw_bytes_preserve_identity_truth_integer_and_literal_maps"
+    ],
+    "rule": "JSON byte decoding preserves surrogatepass identity rather than discarding a Python-accepted input."
+  },
+  {
+    "id": "JB-audit-blob-variant",
+    "file": "crates/journals/scripts/audit_loader_storage.py",
+    "find": "stored_type in (\"integer\", \"real\", \"blob\")",
+    "replace": "stored_type in (\"integer\", \"real\")",
+    "expect_failing": [
+      "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
+    ],
+    "rule": "Include BLOB/TEXT mixed revisions in the exact deterministic refusal seed sweep."
+  },
+  {
+    "id": "JB-convert-literal-map",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Dict(values) => kassiber_custody::codec::json_dict(",
+    "replace": "Value::Dict(values) => J::Object(",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Auxiliary typed maps retain literal identity when their key resembles a private byte tag."
+  },
+  {
+    "id": "JB-gate-literal-map",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "|| kassiber_custody::codec::escaped_dict(value).is_some()",
+    "replace": "|| false",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "The v1 serializer restores escaped literal mappings rather than exposing private adapter tags."
+  },
+  {
+    "id": "JB-json-bytes-utf32-le",
+    "file": "crates/pyjson/src/bytes.rs",
+    "find": "(&bytes[4..], 4, true)",
+    "replace": "(&bytes[4..], 4, false)",
+    "expect_failing": [
+      "json_bytes_detect_encoding_without_changing_bytes_identity"
+    ],
+    "rule": "UTF-32 little-endian BOM decoding retains its byte order."
+  },
+  {
+    "id": "JB-json-bytes-utf32-be",
+    "file": "crates/pyjson/src/bytes.rs",
+    "find": "(&bytes[4..], 4, false)",
+    "replace": "(&bytes[4..], 4, true)",
+    "expect_failing": [
+      "json_bytes_detect_encoding_without_changing_bytes_identity"
+    ],
+    "rule": "UTF-32 big-endian BOM decoding retains its byte order."
+  },
+  {
+    "id": "JB-json-bytes-utf16-le",
+    "file": "crates/pyjson/src/bytes.rs",
+    "find": "(&bytes[2..], 2, true)",
+    "replace": "(&bytes[2..], 2, false)",
+    "expect_failing": [
+      "json_bytes_detect_encoding_without_changing_bytes_identity"
+    ],
+    "rule": "UTF-16 little-endian BOM decoding retains its byte order."
+  },
+  {
+    "id": "JB-json-bytes-utf16-be",
+    "file": "crates/pyjson/src/bytes.rs",
+    "find": "(&bytes[2..], 2, false)",
+    "replace": "(&bytes[2..], 2, true)",
+    "expect_failing": [
+      "json_bytes_detect_encoding_without_changing_bytes_identity"
+    ],
+    "rule": "UTF-16 big-endian BOM decoding retains its byte order."
+  },
+  {
+    "id": "JB-json-bytes-truncation",
+    "file": "crates/pyjson/src/bytes.rs",
+    "find": "if !bytes.len().is_multiple_of(width) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "json_bytes_detect_encoding_without_changing_bytes_identity"
+    ],
+    "rule": "Truncated encoded JSON bytes refuse instead of silently dropping the suffix."
+  },
+  {
+    "id": "JB-json-bytes-unpaired",
+    "file": "crates/pyjson/src/bytes.rs",
+    "find": ".unwrap_or_else(|e| u32::from(e.unpaired_surrogate()))",
+    "replace": ".unwrap_or(0xfffd)",
+    "expect_failing": [
+      "json_bytes_detect_encoding_without_changing_bytes_identity"
+    ],
+    "rule": "UTF-16 surrogatepass preserves an unpaired surrogate instead of replacement text."
+  },
+  {
+    "id": "JB-json-bytes-short-utf16",
+    "file": "crates/pyjson/src/bytes.rs",
+    "find": "} else if bytes.len() == 2 && bytes[0] == 0 {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "json_bytes_detect_encoding_without_changing_bytes_identity"
+    ],
+    "rule": "Two-byte big-endian JSON strings are detected without a BOM."
+  },
+  {
+    "id": "JB-bytes-repr-quotes",
+    "file": "crates/pyjson/src/value.rs",
+    "find": "if bytes.contains(&b'\\'') && !bytes.contains(&b'\"')",
+    "replace": "if false",
+    "expect_failing": [
+      "bytes_json_policy_and_repr_match_python"
+    ],
+    "rule": "Byte repr chooses Python\u2019s deterministic quote style."
+  },
+  {
+    "id": "JB-query-bytes-truth",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Bytes(value) => !value.is_empty(),",
+    "replace": "Value::Bytes(_) => true,",
+    "expect_failing": [
+      "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+    ],
+    "rule": "Auxiliary byte truth retains Python\u2019s false empty bytes case."
+  },
+  {
+    "id": "JB-outpoint-bytes-ascii",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !bytes.is_ascii() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_blob_conversions_preserve_bytes_and_consuming_policy"
+    ],
+    "rule": "Byte outpoint integers refuse Unicode digits that a text integer would accept."
+  },
+  {
+    "id": "JB-evidence-byte-policy",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "if let Some(bytes) = codec::raw_bytes(value) {",
+    "replace": "if let Some(bytes) = None::<Vec<u8>> {",
+    "expect_failing": [
+      "evidence_bytes_use_utf8_replacement_before_canonical_json"
+    ],
+    "rule": "Evidence bytes use UTF-8 replacement rather than JSON byte encoding detection."
+  },
+  {
+    "id": "JB-graph-byte-object",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "return codec::load_json_bytes(&bytes)",
+    "replace": "return codec::load_json_bytes(&[])",
+    "expect_failing": [
+      "stored_graph_json_bytes_decode_only_at_the_mapping_consumer"
+    ],
+    "rule": "Stored mapping consumers parse encoded JSON bytes with the Python encoding policy."
+  },
+  {
+    "id": "JB-graph-byte-parse",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "codec::load_json_bytes(&bytes).ok()",
+    "replace": "None",
+    "expect_failing": [
+      "stored_graph_json_bytes_decode_only_at_the_mapping_consumer"
+    ],
+    "rule": "Stored graph parsing admits valid byte JSON without discarding its graph facts."
+  },
+  {
+    "id": "JB-graph-byte-truth",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "Py::Bytes(v) => !v.is_empty(),",
+    "replace": "Py::Bytes(_) => true,",
+    "expect_failing": [
+      "stored_graph_json_bytes_decode_only_at_the_mapping_consumer"
+    ],
+    "rule": "Empty bytes retain Python false truth at the graph consumer."
+  },
+  {
+    "id": "JB-snapshot-wire-tag-guard",
+    "file": "crates/custody/src/snapshot/book.rs",
+    "find": "snapshot.escape_wire_tags();",
+    "replace": "();",
+    "expect_failing": [
+      "json_snapshot_cannot_forge_internal_byte_scalars"
+    ],
+    "rule": "The JSON request seam always escapes private scalar tags before native computation."
+  },
+  {
+    "id": "JB-json-raw-surrogates",
+    "file": "crates/pytext/src/json.rs",
+    "find": "pub fn loads_py(text: &PyStr) -> Result<Value, JsonError> {\n    let points: Vec<u32> = text.code_points().collect();",
+    "replace": "pub fn loads_py(text: &PyStr) -> Result<Value, JsonError> {\n    let points: Vec<u32> = text.code_points().map(|p| if (0xd800..=0xdfff).contains(&p) { 0xfffd } else { p }).collect();",
+    "expect_failing": [
+      "json_parser_preserves_raw_surrogate_identity"
+    ],
+    "rule": "JSON from decoded bytes retains raw surrogate code points separately from escaped pairs."
+  },
+  {
+    "id": "JB-shared-snapshot-tag-cache",
+    "file": "crates/custody/src/snapshot.rs",
+    "find": "self.rows.take();",
+    "replace": "();",
+    "expect_failing": [
+      "shared_snapshot_wire_tags_reset_cached_rows"
+    ],
+    "rule": "Escaping private scalar tags must invalidate a previously materialized transaction view."
+  },
+  {
+    "id": "JB-projection-byte-move",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "    if codec::raw_bytes(&value).is_some() || codec::escaped_dict(&value).is_some() {",
+    "replace": "    if codec::escaped_dict(&value).is_some() {",
+    "expect_failing": [
+      "projection_loaded_rows_keep_bytes_until_serialization"
+    ],
+    "rule": "Moving finalized row values restores native byte identity before serialization."
+  },
+  {
+    "id": "JB-projection-literal-map-move",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "    if codec::raw_bytes(&value).is_some() || codec::escaped_dict(&value).is_some() {",
+    "replace": "    if codec::raw_bytes(&value).is_some() {",
+    "expect_failing": [
+      "projection_json_rows_keep_literal_private_tag_maps"
+    ],
+    "rule": "Moving finalized JSON row values restores escaped literal mapping identity."
+  }
+]

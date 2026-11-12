@@ -1,0 +1,73 @@
+[
+  {
+    "id": "JP-source",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "let repair = run(conn, profile, idx, clock, identity)?;",
+    "replace": "let repair = None;",
+    "expect_failing": [
+      "prebuild_pipeline_matches_complete_python_dumps_and_ordered_fields"
+    ],
+    "rule": "Repair source overlaps before refreshing components or pricing."
+  },
+  {
+    "id": "JP-warning",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "let warning = source_overlap_warning(conn, profile, repair.as_ref())?;",
+    "replace": "let warning = None;",
+    "expect_failing": [
+      "prebuild_pipeline_matches_complete_python_dumps_and_ordered_fields"
+    ],
+    "rule": "Return the post-repair source warning."
+  },
+  {
+    "id": "JP-source-order",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "let repair = run(conn, profile, idx, clock, identity)?;\n        let warning = source_overlap_warning(conn, profile, repair.as_ref())?;",
+    "replace": "let warning = source_overlap_warning(conn, profile, None)?;\n        let repair = run(conn, profile, idx, clock, identity)?;",
+    "expect_failing": [
+      "prebuild_pipeline_matches_complete_python_dumps_and_ordered_fields"
+    ],
+    "rule": "Construct warnings from repaired inputs and the repair result."
+  },
+  {
+    "id": "JP-profile",
+    "file": "crates/journals/src/prebuild/pipeline.rs",
+    "find": "profile: legacy.profile,",
+    "replace": "profile: profile.clone(),",
+    "expect_failing": [
+      "prebuild_pipeline_matches_complete_python_dumps_and_ordered_fields"
+    ],
+    "rule": "Pass the profile reloaded after activation or skip to all later stages."
+  },
+  {
+    "id": "JP-optional-count",
+    "file": "crates/journals/src/prebuild/pipeline.rs",
+    "find": "if self.consolidation.activated != 0 {",
+    "replace": "if self.consolidation.activated == 0 {",
+    "expect_failing": [
+      "prebuild_pipeline_matches_complete_python_dumps_and_ordered_fields"
+    ],
+    "rule": "Emit the custody repair field only for activated groups."
+  },
+  {
+    "id": "JP-count-value",
+    "file": "crates/journals/src/prebuild/pipeline.rs",
+    "find": "kassiber_pyjson::Value::Int(self.consolidation.activated.into()),",
+    "replace": "kassiber_pyjson::Value::Int(self.consolidation.skipped.into()),",
+    "expect_failing": [
+      "prebuild_pipeline_matches_complete_python_dumps_and_ordered_fields"
+    ],
+    "rule": "The custody repair result counts activated groups, never skipped ones."
+  },
+  {
+    "id": "JP-later-rollback",
+    "file": "crates/journals/src/prebuild.rs",
+    "find": "let _ = conn.execute_batch(&format!(\"ROLLBACK TO {name}; RELEASE {name}\"));",
+    "replace": "let _ = conn.execute_batch(&format!(\"RELEASE {name}\"));",
+    "expect_failing": [
+      "prebuild_pipeline_rolls_back_after_actual_build_refusal",
+      "prebuild_pipeline_rolls_back_after_every_later_storage_failure_and_panic"
+    ],
+    "rule": "Restore successful pre-build and partial storage writes on later refusal or unwind."
+  }
+]

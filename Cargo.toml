@@ -15,6 +15,7 @@ members = [
   "crates/diagnostics",
   "crates/envelope",
   "crates/imports",
+  "crates/journals",
   "crates/net",
   "crates/rates",
   "crates/paths",
@@ -23,6 +24,7 @@ members = [
   "crates/ipc",
   "crates/store",
   "crates/transactions",
+  "crates/transfers",
   "crates/secrets",
   "crates/pydecimal",
   "crates/pyjson",
@@ -31,6 +33,7 @@ members = [
   "crates/xlsx",
   "crates/reports",
   "crates/wallets",
+  "crates/workspace",
   "tax-engine/core",
   "tax-engine/python",
 ]

@@ -1,0 +1,3182 @@
+[
+  {
+    "id": "JL-write-lock",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "conn.transaction_state(Some(\"main\"))? != rusqlite::TransactionState::Write",
+    "replace": "conn.transaction_state(Some(\"main\"))? == rusqlite::TransactionState::Write",
+    "expect_failing": [
+      "native_loader_requires_caller_write_transaction"
+    ],
+    "rule": "write lock"
+  },
+  {
+    "id": "JL-integer-storage",
+    "file": "crates/journals/src/loader.rs",
+    "find": "ValueRef::Integer(value) => Value::from(value),",
+    "replace": "ValueRef::Integer(value) => Value::Float(value as f64),",
+    "expect_failing": [
+      "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+    ],
+    "rule": "integer storage"
+  },
+  {
+    "id": "JL-real-storage",
+    "file": "crates/journals/src/loader.rs",
+    "find": "ValueRef::Real(value) => Value::Float(value),",
+    "replace": "ValueRef::Real(value) => Value::from(value.to_string()),",
+    "expect_failing": [
+      "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+    ],
+    "rule": "real storage"
+  },
+  {
+    "id": "JL-duplicate-column",
+    "file": "crates/journals/src/loader.rs",
+    "find": ".filter(|(_, name)| seen.insert(*name))",
+    "replace": ".filter(|(_, name)| { seen.insert(*name); true })",
+    "expect_failing": [
+      "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+    ],
+    "rule": "duplicate column"
+  },
+  {
+    "id": "JL-active-components",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "state='active'",
+    "replace": "state='superseded'",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "active components"
+  },
+  {
+    "id": "JL-leg-order",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "custody_component_legs WHERE component_id=? ORDER BY ordinal,id",
+    "replace": "custody_component_legs WHERE component_id=? ORDER BY ordinal DESC,id",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "leg order"
+  },
+  {
+    "id": "JL-anchor-lookup",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "WHERE t.id=?\",[&id],true",
+    "replace": "WHERE t.id=? AND t.excluded=0\",[&id],true",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "anchor lookup"
+  },
+  {
+    "id": "JL-loan-deletion",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "deleted_at IS NULL",
+    "replace": "deleted_at IS NOT NULL",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "loan deletion"
+  },
+  {
+    "id": "JL-evidence-subject",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "subject_kind='custody_component'",
+    "replace": "subject_kind='other'",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "evidence subject"
+  },
+  {
+    "id": "JL-migration-resolution",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "resolved_at IS NULL",
+    "replace": "resolved_at IS NOT NULL",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "migration resolution"
+  },
+  {
+    "id": "JL-latest-review",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "MAX(revision)",
+    "replace": "MIN(revision)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "latest review"
+  },
+  {
+    "id": "JL-channel-kind",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "r.record_type='channel'",
+    "replace": "r.record_type='payment'",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "channel kind"
+  },
+  {
+    "id": "JL-config-marker",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Bool(mentions)",
+    "replace": "Value::Bool(!mentions)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "config marker"
+  },
+  {
+    "id": "JL-script-source",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "(\"by_script\", self.scripts.encode(references))",
+    "replace": "(\"by_script\", self.outpoints.encode(references))",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "script source"
+  },
+  {
+    "id": "JL-outpoint-source",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "(\"by_outpoint\", self.outpoints.encode(references))",
+    "replace": "(\"by_outpoint\", self.scripts.encode(references))",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "outpoint source"
+  },
+  {
+    "id": "JL-retired-policy",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "status='retired'",
+    "replace": "status='active'",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "retired policy"
+  },
+  {
+    "id": "JL-inventory-account",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "match_facts(&wallet,\"\",&chain,&network,\"inventory\")",
+    "replace": "match_facts(&wallet,\"wrong\",&chain,&network,\"inventory\")",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "inventory account"
+  },
+  {
+    "id": "JL-scan-warning",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "ownership scan depth is invalid",
+    "replace": "ownership scan depth changed",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "scan warning"
+  },
+  {
+    "id": "JL-derived-history",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"derived_history\"",
+    "replace": "\"derived\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "derived history"
+  },
+  {
+    "id": "JL-worklist-threshold",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "count > 50_000",
+    "replace": "count > 500_000",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "worklist threshold"
+  },
+  {
+    "id": "JL-source-budget",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "64_usize.min(256 - sources.len())",
+    "replace": "63_usize.min(256 - sources.len())",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "source budget"
+  },
+  {
+    "id": "JL-typed-limit",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "LIMIT 256",
+    "replace": "LIMIT 255",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "typed limit"
+  },
+  {
+    "id": "JL-return-limit",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "LIMIT 512",
+    "replace": "LIMIT 511",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "return limit"
+  },
+  {
+    "id": "JL-nonobject-config",
+    "file": "crates/journals/src/loader.rs",
+    "find": "mapping && text(raw).to_lowercase().contains(\"samourai\")",
+    "replace": "(mapping || raw != &Value::Null) && text(raw).to_lowercase().contains(\"samourai\")",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Malformed and scalar config text cannot establish a Samourai marker."
+  },
+  {
+    "id": "JL-blob-refusal",
+    "file": "crates/journals/src/loader.rs",
+    "find": "ValueRef::Blob(value) => Value::Bytes(value.to_vec()),",
+    "replace": "ValueRef::Blob(_) => Value::Null,",
+    "expect_failing": [
+      "native_loader_keeps_sql_values_and_refuses_blob_coercion"
+    ],
+    "rule": "Preserve a raw SQLite BLOB until its consuming conversion or serialization, never replace it with null."
+  },
+  {
+    "id": "JL-direct-null",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ValueRef::Null => J::Null,",
+    "replace": "ValueRef::Null => J::Bool(false),",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Preserve SQL NULL."
+  },
+  {
+    "id": "JL-direct-integer",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ValueRef::Integer(value) => J::Number(value.into()),",
+    "replace": "ValueRef::Integer(value) => J::String(value.to_string()),",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Preserve SQL INTEGER exactly."
+  },
+  {
+    "id": "JL-direct-real",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "float_storage(value)?\n                .parse()",
+    "replace": "value.to_string()\n                .parse()",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Preserve integral REAL spelling."
+  },
+  {
+    "id": "JL-direct-blob",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ValueRef::Blob(value) => kassiber_custody::codec::to_json(&Value::Bytes(value.to_vec())),",
+    "replace": "ValueRef::Blob(_) => J::Null,",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Preserve raw BLOB identity in directly constructed custody records."
+  },
+  {
+    "id": "JL-direct-nonfinite",
+    "file": "crates/journals/src/loader.rs",
+    "find": "\"1e999\".into()",
+    "replace": "\"0.0\".into()",
+    "expect_failing": [
+      "native_loader_preserves_nonfinite_real_until_downstream"
+    ],
+    "rule": "Carry positive SQLite infinity losslessly to downstream validation."
+  },
+  {
+    "id": "JL-direct-duplicate",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": ".filter(|(_, name)| seen.insert(*name))",
+    "replace": ".filter(|(_, name)| { seen.insert(*name); true })",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Keep the first duplicate SQL column, as sqlite Row does."
+  },
+  {
+    "id": "JL-column-order",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "self.gate.columns.insert(path, order);",
+    "replace": "order.reverse(); self.gate.columns.insert(path, order);",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Retain prepared SQL column order for the byte gate."
+  },
+  {
+    "id": "JL-config-cache-hit",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "hit.clone()",
+    "replace": "(\"{}\".into(), false)",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "A config cache hit retains normalization and the marker."
+  },
+  {
+    "id": "JL-config-cache-insert",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "self.configs.insert(raw.into(), normalized.clone());",
+    "replace": "self.configs.remove(raw);",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Repeated private config text is normalized once per load."
+  },
+  {
+    "id": "JL-config-nontext",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "normalize(sql_value(raw)?)?",
+    "replace": "(\"changed\".into(), false)",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Nontext wallet config retains Python normalization."
+  },
+  {
+    "id": "JL-config-direct-marker",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "record.insert(index, J::Bool(mentions));",
+    "replace": "record.insert(index, J::Bool(!mentions));",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "The directly produced config marker matches the cold normalization."
+  },
+  {
+    "id": "JL-direct-threshold",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if count <= 50_000 {",
+    "replace": "if count <= 500_000 {",
+    "expect_failing": [
+      "native_loader_selects_bounded_worklist_from_active_count"
+    ],
+    "rule": "Use the bounded worklist for more than 50k active observations."
+  },
+  {
+    "id": "JL-direct-active-count",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "SELECT COUNT(*) FROM transactions WHERE profile_id=? AND excluded=0",
+    "replace": "SELECT COUNT(*) FROM transactions WHERE profile_id=? AND excluded=1",
+    "expect_failing": [
+      "native_loader_selects_bounded_worklist_from_active_count"
+    ],
+    "rule": "Included observations select the bounded worklist; excluded observations cannot substitute for them."
+  },
+  {
+    "id": "JL-receipt-precedence",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "kassiber_custody::receipt_source_error_precedence(&snapshot)",
+    "replace": "Ok::<(), kassiber_custody::Refusal>(())",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Earlier accounting and component refusals precede receipt-source errors."
+  },
+  {
+    "id": "JL-receipt-error-family",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "[\"ValueError\", \"TypeError\", \"KeyError\"].contains(&prior.code.as_str())",
+    "replace": "[\"ValueError\", \"KeyError\"].contains(&prior.code.as_str())",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Preserve Python TypeError family on malformed component revisions."
+  },
+  {
+    "id": "JL-receipt-alias-last",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "branches.insert(branch,index);",
+    "replace": "branches.entry(branch).and_modify(|n: &mut kassiber_pyjson::BigInt| *n=n.clone().max(index.clone())).or_insert(index);",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Int-normalized branch aliases use the final checkpoint value."
+  },
+  {
+    "id": "JL-receipt-negative-floor",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "*index = index.clone().max((-1).into());",
+    "replace": "*index = index.clone().max((-20).into());",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Clamp a known negative high-water to Python's minus-one floor."
+  },
+  {
+    "id": "JL-receipt-horizon",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": ".map(|n| n + plan.gap_limit + 1_u32)",
+    "replace": ".map(|n| n + plan.gap_limit)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Include the last high-water-derived receipt target."
+  },
+  {
+    "id": "JL-receipt-empty-candidate",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "if !candidate {",
+    "replace": "if candidate {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Only duplicated inbound custody scopes trigger receipt-source loading."
+  },
+  {
+    "id": "JL-receipt-lexical-admission",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "if !may_have_txid(row) {",
+    "replace": "if may_have_txid(row) {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "The lexical filter must admit possible identities."
+  },
+  {
+    "id": "JL-receipt-escaped-json",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "raw.contains('\\\\') || run(raw)",
+    "replace": "run(raw)",
+    "expect_failing": [
+      "native_loader_receipt_filter_never_rejects_possible_identities"
+    ],
+    "rule": "Escaped graph identities must take the full parser."
+  },
+  {
+    "id": "JL-receipt-identity-length",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "count >= 64",
+    "replace": "count >= 63",
+    "expect_failing": [
+      "native_loader_receipt_filter_never_rejects_possible_identities"
+    ],
+    "rule": "Reject a hex run shorter than a transaction id."
+  },
+  {
+    "id": "JL-receipt-identity-reset",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "count + 1 } else { 0 }",
+    "replace": "count + 1 } else { count }",
+    "expect_failing": [
+      "native_loader_receipt_filter_never_rejects_possible_identities"
+    ],
+    "rule": "A nonhex byte resets the consecutive identity run."
+  },
+  {
+    "id": "JL-receipt-numeric-id",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "external.is_number() && run(&external.to_string())",
+    "replace": "false",
+    "expect_failing": [
+      "native_loader_receipt_filter_never_rejects_possible_identities"
+    ],
+    "rule": "A numeric legacy identity takes the conservative full parser."
+  },
+  {
+    "id": "JL-receipt-object-graph",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "Some(serde_json::Value::Object(_) | serde_json::Value::Array(_)) => true,",
+    "replace": "Some(serde_json::Value::Object(_) | serde_json::Value::Array(_)) => false,",
+    "expect_failing": [
+      "native_loader_receipt_filter_never_rejects_possible_identities"
+    ],
+    "rule": "Decoded legacy graph containers take the full parser."
+  },
+  {
+    "id": "JL-owned-used-horizon",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".max(used + plan.gap_limit + 1_u32)",
+    "replace": ".max(used + 1_u32)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Inventory high-water plus the descriptor gap limit extends ownership scanning."
+  },
+  {
+    "id": "JL-owned-cache-horizon",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".entry((plan.fingerprint.clone(), ceiling))",
+    "replace": ".entry((plan.fingerprint.clone(), 0))",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Shared current and retired descriptors retain distinct scan horizons."
+  },
+  {
+    "id": "JL-direct-utf8",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "std::str::from_utf8(value)\n                .map_err(|_| Error::Unsupported(\"SQLite TEXT is not UTF-8\"))?\n                .into(),",
+    "replace": "String::from_utf8_lossy(value).into_owned(),",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Invalid UTF-8 cannot become replacement-character facts."
+  },
+  {
+    "id": "JL-direct-text",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ValueRef::Text(value) => J::String(\n            std::str::from_utf8(value)",
+    "replace": "ValueRef::Text(value) => J::String(\n            std::str::from_utf8(value).map(|_| \"changed\")",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Preserve decoded Unicode SQL TEXT."
+  },
+  {
+    "id": "JL-receipt-accounting-precedence",
+    "file": "crates/custody/src/lib.rs",
+    "find": "    gates::require_accounting(&typed)?;\n    components::compute(snapshot)",
+    "replace": "    components::compute(snapshot)",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Network and tax admission errors precede receipt acquisition failure."
+  },
+  {
+    "id": "JL-receipt-component-precedence",
+    "file": "crates/custody/src/lib.rs",
+    "find": "    components::compute(snapshot)\n        .map_err(|error| Refusal::new(\"components\", error.code, error.message))?;",
+    "replace": "",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Component errors precede receipt acquisition failure."
+  },
+  {
+    "id": "JL-receipt-empty-script-fallback",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if value.is_empty() || !value.len().is_multiple_of(2) {",
+    "replace": "if !value.len().is_multiple_of(2) {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "An empty inventory script permits raw-script/address fallback and cannot create a deprecated source."
+  },
+  {
+    "id": "JL-existing-config-marker",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "record[index] = J::Bool(mentions);",
+    "replace": "record[index] = J::Bool(!mentions);",
+    "expect_failing": [
+      "native_loader_reads_direct_columns_without_conversion"
+    ],
+    "rule": "Normalize an existing config marker in place, retaining SQL column order."
+  },
+  {
+    "id": "JL-owned-cache-descriptor",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".entry((plan.fingerprint.clone(), ceiling))",
+    "replace": ".entry((String::new(), ceiling))",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Distinct descriptor policies at the same scan horizon must not share derived targets or wallet facts."
+  },
+  {
+    "id": "JL-shared-column-order",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "pair[0] >= pair[1]",
+    "replace": "pair[0] <= pair[1]",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Sorted column layouts preserve field lookup."
+  },
+  {
+    "id": "JL-shared-column-unique",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "pair[0] >= pair[1]",
+    "replace": "pair[0] > pair[1]",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Column layouts reject duplicate names."
+  },
+  {
+    "id": "JL-shared-column-reuse",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "Self { columns, values }",
+    "replace": "Self { columns: Columns(columns.0.iter().cloned().collect()), values }",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Rows share the same prepared layout without per-row key copies."
+  },
+  {
+    "id": "JL-shared-get-position",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "let at = names.binary_search_by(|name| name.as_str().cmp(key)).ok()?;",
+    "replace": "let at = names.binary_search_by(|name| name.as_str().cmp(key)).ok().map(|at| (at + 1) % names.len())?;",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Column lookups select the corresponding value."
+  },
+  {
+    "id": "JL-shared-contains",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "self.get(key).is_some()",
+    "replace": "self.get(key).is_none()",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Membership distinguishes missing fields."
+  },
+  {
+    "id": "JL-shared-map-values",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": ".zip(self.values)",
+    "replace": ".zip(self.values.into_iter().rev())",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Compatibility maps preserve each column value."
+  },
+  {
+    "id": "JL-shared-serialize",
+    "file": "crates/custody/src/snapshot/record.rs",
+    "find": "map.serialize_entry(key, value)?;",
+    "replace": "map.serialize_entry(key, &Value::Null)?;",
+    "expect_failing": [
+      "shared_record_preserves_map_semantics"
+    ],
+    "rule": "Record serialization preserves values and SQLite classes."
+  },
+  {
+    "id": "JL-config-memo-admission",
+    "file": "crates/custody/src/snapshot.rs",
+    "find": "value.as_str().is_some_and(|text| checked.contains(text))",
+    "replace": "!checked.is_empty()",
+    "expect_failing": [
+      "shared_snapshot_config_admission_checks_every_population"
+    ],
+    "rule": "A previous valid configuration cannot admit a different invalid configuration."
+  },
+  {
+    "id": "JL-config-second-column",
+    "file": "crates/custody/src/snapshot.rs",
+    "find": "let names = [\"config_json\", \"wallet_config_json\"];",
+    "replace": "let names = [\"config_json\", \"config_json\"];",
+    "expect_failing": [
+      "shared_snapshot_config_admission_checks_every_population"
+    ],
+    "rule": "Both configuration columns retain admission checks."
+  },
+  {
+    "id": "JL-config-anchor-admission",
+    "file": "crates/custody/src/snapshot.rs",
+    "find": ".filter_map(Value::as_object)",
+    "replace": ".filter_map(|_| None::<&Map<String, Value>>)",
+    "expect_failing": [
+      "shared_snapshot_config_admission_checks_every_population"
+    ],
+    "rule": "Anchor configurations retain admission checks."
+  },
+  {
+    "id": "JL-safe-confirmation-column",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": ".filter(|(_, name)| !safe || *name != \"_closed_confirmation_observation\")",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "native_loader_filters_only_safe_confirmation_columns"
+    ],
+    "rule": "Safe rows discard physical closed-confirmation columns, including BLOB values, before v1 serialization."
+  },
+  {
+    "id": "JL-raw-confirmation-column",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": ".filter(|(_, name)| !safe || *name != \"_closed_confirmation_observation\")",
+    "replace": ".filter(|(_, name)| *name != \"_closed_confirmation_observation\")",
+    "expect_failing": [
+      "native_loader_filters_only_safe_confirmation_columns"
+    ],
+    "rule": "Raw structural rows retain physical fields that the Python safe-row projection removes elsewhere."
+  },
+  {
+    "id": "JL-safe-row-confirmation",
+    "file": "crates/journals/src/loader.rs",
+    "find": "values.retain(\n            |(key, _)| !matches!(key, Key::Str(key) if key.is(\"_closed_confirmation_observation\")),\n        );",
+    "replace": "values.retain(|_| true);",
+    "expect_failing": [
+      "native_loader_filters_only_safe_confirmation_columns"
+    ],
+    "rule": "The shared safe-row helper also drops closed confirmation observations."
+  },
+  {
+    "id": "JL-dropped-text-validation",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "sql_value(ValueRef::Text(bytes))?;",
+    "replace": "let _ = bytes;",
+    "expect_failing": [
+      "native_loader_filters_only_safe_confirmation_columns"
+    ],
+    "rule": "SQLite still decodes invalid TEXT before Python removes the safe-row column."
+  },
+  {
+    "id": "JL-owned-config-refusal-family",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"AttributeError\",\n            format!",
+    "replace": "\"TypeError\",\n            format!",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Non-mapping JSON wallet configurations preserve Python AttributeError."
+  },
+  {
+    "id": "JL-owned-config-refusal-message",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "'{}' object has no attribute 'get'",
+    "replace": "'{}' object is not a mapping",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Configuration refusal messages retain the exact Python scalar type and attribute."
+  },
+  {
+    "id": "JL-owned-address-refusal-family",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"TypeError\",\n                format!",
+    "replace": "\"ValueError\",\n                format!",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Non-iterable address scalar configurations preserve Python TypeError."
+  },
+  {
+    "id": "JL-owned-address-refusal-message",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "'{}' object is not iterable",
+    "replace": "'{}' object is not an address list",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Non-iterable address scalar refusals retain Python exact messages."
+  },
+  {
+    "id": "JL-owned-summary-refusal-order",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"SELECT id,label,kind,config_json FROM wallets WHERE profile_id=?\"",
+    "replace": "\"SELECT id,label,kind,config_json FROM wallets WHERE profile_id=? ORDER BY label ASC\"",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Ownership summary failures follow the reference summary query order, independently of derivation wallet order."
+  },
+  {
+    "id": "JL-owned-empty-inventory-label",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "set(&mut wallet,\"label\",Value::from(wallet_id.clone()));",
+    "replace": "set(&mut wallet,\"label\",Value::from(\"\"));",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Ownership inventory replaces an empty wallet label with its wallet id, independently of address-list labels."
+  },
+  {
+    "id": "JL-receipt-raw-inventory-label",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "set(&mut item,\"wallet_label\",Value::from(text(get(wallet,\"label\"))));",
+    "replace": "set(&mut item,\"wallet_label\",Value::from(\"\"));",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Receipt inventory stringifies the stored label without the address/descriptor source fallback, including None and empty labels."
+  },
+  {
+    "id": "JL-owned-outpoint-refusal",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "let vout = outpoint_integer(vout)?;",
+    "replace": "let vout = integer(vout).unwrap_or(0.into());",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Invalid inventory output indices preserve the reference refusal instead of guessing output zero."
+  },
+  {
+    "id": "JL-outpoint-repr-limit",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".chars().take(200)",
+    "replace": ".chars().take(199)",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Integer literal refusal messages retain CPython repr precision."
+  },
+  {
+    "id": "JL-outpoint-digit-limit",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "value has {count} digits; use sys.set_int_max_str_digits()",
+    "replace": "value has {count} digits; use other_limit()",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Integer digit-limit refusals retain the exact reference message."
+  },
+  {
+    "id": "JL-outpoint-nonfinite",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !value.is_finite() {",
+    "replace": "if value.is_finite() {",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Nonfinite output indices refuse before integer conversion while finite floats retain truncation."
+  },
+  {
+    "id": "JL-outpoint-nan-family",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "crate::Refusal::new(\"ValueError\", \"cannot convert float NaN to integer\")",
+    "replace": "crate::Refusal::new(\"TypeError\", \"cannot convert float NaN to integer\")",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "NaN integer conversion retains Python ValueError."
+  },
+  {
+    "id": "JL-outpoint-infinity-family",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "crate::Refusal::new(\"OverflowError\", \"cannot convert float infinity to integer\")",
+    "replace": "crate::Refusal::new(\"ValueError\", \"cannot convert float infinity to integer\")",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Infinite integer conversion retains Python OverflowError."
+  },
+  {
+    "id": "JL-outpoint-prefix-limit",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "raw.len() > 4300",
+    "replace": "raw.len() < 4300",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "An oversized numeric prefix raises the digit-limit error before an invalid suffix."
+  },
+  {
+    "id": "JL-outpoint-prefix-sign",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "body.strip_prefix(['+', '-']).unwrap_or(body)",
+    "replace": "body",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Signed numeric prefixes preserve integer refusal precedence."
+  },
+  {
+    "id": "JL-outpoint-prefix-unicode-space",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "kassiber_pytext::is_space(c as u32)",
+    "replace": "false",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "Non-ASCII leading whitespace preserves oversized numeric-prefix refusal precedence."
+  },
+  {
+    "id": "JL-outpoint-prefix-parse",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "kassiber_pytext::parse_int(&body[..end])",
+    "replace": "kassiber_pytext::parse_int(\"\")",
+    "expect_failing": [
+      "native_loader_outpoint_integer_preserves_python_refusals"
+    ],
+    "rule": "The numeric prefix is validated before selecting the exact integer refusal."
+  },
+  {
+    "id": "JL-utf8-column",
+    "file": "crates/journals/src/loader.rs",
+    "find": "message.extend(c_string(column.as_bytes()));",
+    "replace": "message.extend(b\"column\");",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-utf8-limit",
+    "file": "crates/journals/src/loader.rs",
+    "find": ".take(198)",
+    "replace": ".take(199)",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-utf8-nul",
+    "file": "crates/journals/src/loader.rs",
+    "find": "s.split(|b| *b == 0).next().unwrap_or_default().to_vec()",
+    "replace": "s.to_vec()",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-utf8-ascii",
+    "file": "crates/journals/src/loader.rs",
+    "find": "b.is_ascii()",
+    "replace": "true",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-utf8-physical-order",
+    "file": "crates/journals/src/loader.rs",
+    "find": "for index in 0..row.as_ref().column_count() {",
+    "replace": "for index in (0..row.as_ref().column_count()).rev() {",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-utf8-auxiliary-validation",
+    "file": "crates/journals/src/loader.rs",
+    "find": ".map_err(|error| row_error(row, error))?",
+    "replace": "?",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve the Python product-boundary refusal for invalid UTF-8, including column order, NULs, ASCII replacement and truncation."
+  },
+  {
+    "id": "JL-confirmation-capture",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "confirmation_quantity_refusals(&transactions)?;",
+    "replace": "",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Refuse Python confirmation quantity conversion failures during loading, in amount/fee order, before exposing a snapshot."
+  },
+  {
+    "id": "JL-confirmation-version",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ownership::legacy_integer(&version)? != Some(1.into())",
+    "replace": "ownership::integer(&version) != Some(2.into())",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Refuse Python confirmation quantity conversion failures during loading, in amount/fee order, before exposing a snapshot."
+  },
+  {
+    "id": "JL-confirmation-graph",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "kassiber_custody::codec::pystr(observed) != hash",
+    "replace": "kassiber_custody::codec::pystr(observed) == hash",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Refuse Python confirmation quantity conversion failures during loading, in amount/fee order, before exposing a snapshot."
+  },
+  {
+    "id": "JL-confirmation-field-order",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "for field in [\"amount\", \"fee\"]",
+    "replace": "for field in [\"fee\", \"amount\"]",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Refuse Python confirmation quantity conversion failures during loading, in amount/fee order, before exposing a snapshot."
+  },
+  {
+    "id": "JL-utf8-review-fallback",
+    "file": "crates/journals/src/loader.rs",
+    "find": "|| matches!(error, Error::Reference(refusal) if refusal.family == \"OperationalError\")",
+    "replace": "|| false",
+    "expect_failing": [
+      "native_loader_utf8_optional_reviews_preserve_python_fallback"
+    ],
+    "rule": "Optional review decoding errors take the same empty-list fallback as Python sqlite3.OperationalError."
+  },
+  {
+    "id": "JL-revision-reference-storage",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if mixed_revisions {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_refuses_mixed_revision_references_before_output"
+    ],
+    "rule": "Refuse incompatible revision-reference families before queries or output."
+  },
+  {
+    "id": "JL-negative-nonfinite",
+    "file": "crates/journals/src/loader.rs",
+    "find": "\"-1e999\".into()",
+    "replace": "\"1e999\".into()",
+    "expect_failing": [
+      "native_loader_preserves_nonfinite_real_until_downstream"
+    ],
+    "rule": "Preserve the sign of SQLite infinity."
+  },
+  {
+    "id": "JL-nan-storage",
+    "file": "crates/journals/src/loader.rs",
+    "find": "if value.is_nan() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_preserves_nonfinite_real_until_downstream"
+    ],
+    "rule": "Reject impossible SQLite REAL NaN rather than manufacture a transport value."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-integer-order",
+    "find": "(SqlValue::Integer(a), SqlValue::Integer(b)) => a.cmp(b),",
+    "replace": "(SqlValue::Integer(a), SqlValue::Integer(b)) => b.cmp(a),",
+    "rule": "Sort SQLite integer identities in Python numeric order."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-real-order",
+    "find": "a.partial_cmp(b).expect(\"SQLite REAL\")",
+    "replace": "b.partial_cmp(a).expect(\"SQLite REAL\")",
+    "rule": "Sort SQLite REAL identities in Python numeric order."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-mixed-integer-real",
+    "find": "int_float(*a, *b),",
+    "replace": "int_float(*a, *b).reverse(),",
+    "rule": "Compare INTEGER and REAL without losing identity."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-mixed-real-integer",
+    "find": "int_float(*b, *a).reverse(),",
+    "replace": "int_float(*b, *a),",
+    "rule": "Reverse mixed numeric comparisons exactly."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-upper-range",
+    "find": "real >= -(i64::MIN as f64)",
+    "replace": "real > -(i64::MIN as f64)",
+    "rule": "Handle float 2^63 before a saturating integer cast."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-lower-range",
+    "find": "real < i64::MIN as f64",
+    "replace": "false",
+    "rule": "Handle floats below i64::MIN before a saturating integer cast."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-fraction",
+    "find": "0.0_f64.partial_cmp(&real.fract())",
+    "replace": "real.fract().partial_cmp(&0.0_f64)",
+    "rule": "Retain fractional numeric order on either side of zero."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-exact-integer",
+    "find": "integer.cmp(&(real as i64))",
+    "replace": "(integer as f64).partial_cmp(&real).unwrap()",
+    "rule": "Keep distinct integer identities above 2^53."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-text-order",
+    "find": "(SqlValue::Text(a), SqlValue::Text(b)) => a.cmp(b),",
+    "replace": "(SqlValue::Text(a), SqlValue::Text(b)) => b.cmp(a),",
+    "rule": "Keep Python text ordering for revision references."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-is-text",
+    "find": "matches!(self.0, SqlValue::Text(_))",
+    "replace": "!matches!(self.0, SqlValue::Text(_))",
+    "rule": "Distinguish text identities from numeric identities."
+  },
+  {
+    "file": "crates/journals/src/loader/revisions.rs",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "id": "JL-revision-unsupported",
+    "find": "return Err(Error::Unsupported(\n                    \"custody revision reference is not a SQLite scalar\",\n                ))",
+    "replace": "return Ok(Self(SqlValue::Integer(0)))",
+    "rule": "Refuse non-SQL revision identity shapes."
+  },
+  {
+    "id": "JL-revision-bind",
+    "file": "crates/journals/src/loader/revisions.rs",
+    "find": "self.0.to_sql()",
+    "replace": "Ok(ToSqlOutput::Owned(SqlValue::Text(format!(\"{:?}\", self.0))))",
+    "expect_failing": [
+      "native_loader_revision_queries_keep_sqlite_binding_types"
+    ],
+    "rule": "Bind revision identities with their original SQLite storage class."
+  },
+  {
+    "id": "JL-integer-overflow",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "outpoint_integer(value)?;",
+    "replace": "let _ = value;",
+    "expect_failing": [
+      "native_loader_caught_integer_errors_still_propagate_overflow"
+    ],
+    "rule": "Do not swallow OverflowError in callers that catch only TypeError and ValueError."
+  },
+  {
+    "id": "JL-confirmation-overflow",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "ownership::legacy_integer(&version)? != Some(1.into())",
+    "replace": "ownership::integer(&version) != Some(1.into())",
+    "expect_failing": [
+      "native_loader_integer_overflow_refusals_match_python"
+    ],
+    "rule": "Authority-version int conversion propagates infinity overflow before checking stale authority."
+  },
+  {
+    "id": "JL-receipt-branch-overflow",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "legacy_integer(get(&row,\"branch_index\"))?",
+    "replace": "ownership::integer(get(&row,\"branch_index\"))",
+    "expect_failing": [
+      "native_loader_integer_overflow_refusals_match_python"
+    ],
+    "rule": "Receipt branch MAX conversion preserves Python OverflowError."
+  },
+  {
+    "id": "JL-receipt-index-overflow",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "legacy_integer(get(&row,\"max_index\"))?",
+    "replace": "ownership::integer(get(&row,\"max_index\"))",
+    "expect_failing": [
+      "native_loader_integer_overflow_refusals_match_python"
+    ],
+    "rule": "Receipt address MAX conversion preserves Python OverflowError."
+  },
+  {
+    "id": "JL-current-scan-overflow",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "legacy_integer(get(&config, \"ownership_scan_to_index\"))?",
+    "replace": "integer(get(&config, \"ownership_scan_to_index\"))",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Propagate OverflowError from embedded scan values while catching TypeError and ValueError."
+  },
+  {
+    "id": "JL-historic-scan-overflow",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "legacy_integer(get(&config, \"scan_to_index\"))?",
+    "replace": "integer(get(&config, \"scan_to_index\"))",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Propagate OverflowError from embedded scan values while catching TypeError and ValueError."
+  },
+  {
+    "id": "JL-checkpoint-overflow",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "legacy_integer(value)?",
+    "replace": "ownership::integer(value)",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Propagate OverflowError from embedded scan values while catching TypeError and ValueError."
+  },
+  {
+    "id": "JL-loaded-admission",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "self.snapshot.validate_loaded().map_err(Error::Invalid)?;",
+    "replace": "self.snapshot.validate().map_err(Error::Invalid)?;",
+    "expect_failing": [
+      "native_loader_legacy_scalars_keep_downstream_admission"
+    ],
+    "rule": "Database scalars survive native admission until their consuming stage."
+  },
+  {
+    "id": "JL-projection-loaded-admission",
+    "file": "crates/custody/src/lib.rs",
+    "find": ".validate_loaded()\n        .map_err",
+    "replace": ".validate()\n        .map_err",
+    "expect_failing": [
+      "native_loader_legacy_scalars_keep_downstream_admission"
+    ],
+    "rule": "Direct projection uses database admission rather than v1 transport admission."
+  },
+  {
+    "id": "JL-component-integer-infinity",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "if matches!(codec::from_json(v), Ok(kassiber_pyjson::Value::Float(value)) if value.is_infinite())",
+    "replace": "if matches!(codec::from_json(v), Ok(kassiber_pyjson::Value::Float(value)) if value.is_nan())",
+    "expect_failing": [
+      "component_integer_refusal_messages_match_python"
+    ],
+    "rule": "Component int(infinity) retains uncaught OverflowError."
+  },
+  {
+    "id": "JL-component-integer-message",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "invalid literal for int() with base 10: {}",
+    "replace": "invalid integer quantity: {}",
+    "expect_failing": [
+      "component_integer_refusal_messages_match_python"
+    ],
+    "rule": "Malformed component integer TEXT keeps Python's rendered message."
+  },
+  {
+    "id": "JL-component-sort-message",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "'<' not supported between instances of '{}' and '{}'",
+    "replace": "'>' not supported between instances of '{}' and '{}'",
+    "expect_failing": [
+      "component_header_sort_retains_python_type_errors"
+    ],
+    "rule": "Component timestamp sort errors retain operand types and comparison direction."
+  },
+  {
+    "id": "JL-price-message",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "message: format!(\"{field} {reason}\"),",
+    "replace": "message: format!(\"{reason}\"),",
+    "expect_failing": [
+      "finalized_price_errors_keep_field_code_and_message"
+    ],
+    "rule": "Finalized price validation names the original transaction and field."
+  },
+  {
+    "id": "JL-price-code",
+    "file": "crates/custody/src/finalized_projection/money.rs",
+    "find": "        let refused = |reason| super::Error {\n            code: \"validation\".into(),",
+    "replace": "        let refused = |reason| super::Error {\n            code: \"app_error\".into(),",
+    "expect_failing": [
+      "finalized_price_errors_keep_field_code_and_message"
+    ],
+    "rule": "Finalized decimal errors retain the validation code."
+  },
+  {
+    "id": "JL-revision-message-family",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "return Err(app_refusal(kassiber_envelope::AppError::new(\n            \"validation\",\n            \"Custody revision references contain incompatible types\",\n        )));",
+    "replace": "return Err(Error::Reference(crate::Refusal::new(\n            \"TypeError\",\n            \"Custody revision references contain incompatible types\",\n        )));",
+    "expect_failing": [
+      "native_loader_refuses_mixed_revision_references_before_output"
+    ],
+    "rule": "Preserve the typed AppError validation refusal for mixed revision references."
+  },
+  {
+    "id": "JL-revision-message-text",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "Custody revision references contain incompatible types",
+    "replace": "Custody revision references have unknown types",
+    "expect_failing": [
+      "native_loader_refuses_mixed_revision_references_before_output"
+    ],
+    "rule": "Preserve the exact deterministic revision validation message."
+  },
+  {
+    "id": "JL-revision-message-int",
+    "file": "crates/journals/src/loader/revisions.rs",
+    "find": "SqlValue::Integer(_) => \"int\",",
+    "replace": "SqlValue::Integer(_) => \"float\",",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "rule": "Preserve the SQLite scalar type identity in the revision witness."
+  },
+  {
+    "id": "JL-revision-message-real",
+    "file": "crates/journals/src/loader/revisions.rs",
+    "find": "SqlValue::Real(_) => \"float\",",
+    "replace": "SqlValue::Real(_) => \"int\",",
+    "expect_failing": [
+      "native_loader_revision_order_preserves_python_numeric_identity"
+    ],
+    "rule": "Preserve the SQLite scalar type identity in the revision witness."
+  },
+  {
+    "id": "JL-audit-seed-variants",
+    "file": "crates/journals/scripts/audit_loader_storage.py",
+    "find": "return actual == reference",
+    "replace": "return True",
+    "expect_failing": [
+      "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
+    ],
+    "rule": "Refusal comparison requires exact complete boundary pairs; obsolete operand-order variants must fail."
+  },
+  {
+    "id": "JL-audit-seed-code",
+    "file": "crates/journals/scripts/audit_loader_storage.py",
+    "find": "return actual == reference",
+    "replace": "return actual is not None and all(actual[key][\"message\"] == value[\"message\"] for key, value in reference.items())",
+    "expect_failing": [
+      "tests/test_rust_custody_loader.py::test_loader_revision_audit_requires_exact_refusal_pairs"
+    ],
+    "rule": "Refusal comparison must include error codes as well as messages."
+  },
+  {
+    "id": "JL-convert-null",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Null => J::Null,",
+    "replace": "Value::Null => J::Bool(false),",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-convert-bool",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Bool(value) => J::Bool(value),",
+    "replace": "Value::Bool(value) => J::Bool(!value),",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-convert-int",
+    "file": "crates/journals/src/loader.rs",
+    "find": "value\n                .to_string()",
+    "replace": "0\n                .to_string()",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-convert-list",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::List(values) => J::Array(values.into_iter().map(convert).collect::<Result<_>>()?),",
+    "replace": "Value::List(_values) => J::Array(vec![]),",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-convert-key",
+    "file": "crates/journals/src/loader.rs",
+    "find": "return Err(Error::Invalid(\"key\".into()));",
+    "replace": "return Ok((String::new(), J::Null));",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-get-found",
+    "file": "crates/journals/src/loader.rs",
+    "find": "return value;",
+    "replace": "return &Value::Null;",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-set-existing",
+    "file": "crates/journals/src/loader.rs",
+    "find": "*value = item;",
+    "replace": "let _ = (value, item);",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-set-new",
+    "file": "crates/journals/src/loader.rs",
+    "find": "values.push((Key::from(key), item));",
+    "replace": "let _ = (key, item);",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-truth-null",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Null => false,",
+    "replace": "Value::Null => true,",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-truth-bool",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Bool(value) => *value,",
+    "replace": "Value::Bool(value) => !*value,",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-truth-int",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Int(value) => *value != 0.into(),",
+    "replace": "Value::Int(value) => *value == 0.into(),",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-truth-float",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Float(value) => *value != 0.0,",
+    "replace": "Value::Float(value) => *value == 0.0,",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-truth-string",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Str(value) => !value.is(\"\"),",
+    "replace": "Value::Str(value) => value.is(\"\"),",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-truth-list",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::List(value) => !value.is_empty(),",
+    "replace": "Value::List(value) => value.is_empty(),",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-truth-dict",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Dict(value) => !value.is_empty(),",
+    "replace": "Value::Dict(value) => value.is_empty(),",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-parsed-string",
+    "file": "crates/journals/src/loader.rs",
+    "find": "and_then(|s| kassiber_pytext::loads(s).ok())",
+    "replace": "and_then(|_s| None)",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-sql-null",
+    "file": "crates/journals/src/loader.rs",
+    "find": "ValueRef::Null => Value::Null,",
+    "replace": "ValueRef::Null => Value::Bool(false),",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve Python scalar, mapping and missing-value semantics in loader helpers."
+  },
+  {
+    "id": "JL-app-family",
+    "file": "crates/journals/src/loader.rs",
+    "find": "crate::Refusal::new(\"AppError\", error.message)",
+    "replace": "crate::Refusal::new(\"ValueError\", error.message)",
+    "expect_failing": [
+      "native_loader_refusal_attributes_and_display_keep_private_values_out"
+    ],
+    "rule": "Preserve refusal attributes and redacted loader error rendering."
+  },
+  {
+    "id": "JL-app-code",
+    "file": "crates/journals/src/loader.rs",
+    "find": "refusal.code = Some(error.code);",
+    "replace": "refusal.code = None;",
+    "expect_failing": [
+      "native_loader_refusal_attributes_and_display_keep_private_values_out"
+    ],
+    "rule": "Preserve refusal attributes and redacted loader error rendering."
+  },
+  {
+    "id": "JL-app-hint",
+    "file": "crates/journals/src/loader.rs",
+    "find": "refusal.hint = error.hint.map(String::from);",
+    "replace": "refusal.hint = None;",
+    "expect_failing": [
+      "native_loader_refusal_attributes_and_display_keep_private_values_out"
+    ],
+    "rule": "Preserve refusal attributes and redacted loader error rendering."
+  },
+  {
+    "id": "JL-app-details",
+    "file": "crates/journals/src/loader.rs",
+    "find": ".map(kassiber_custody::codec::to_json)",
+    "replace": ".map(|_| serde_json::Value::Null)",
+    "expect_failing": [
+      "native_loader_refusal_attributes_and_display_keep_private_values_out"
+    ],
+    "rule": "Preserve refusal attributes and redacted loader error rendering."
+  },
+  {
+    "id": "JL-app-retryable",
+    "file": "crates/journals/src/loader.rs",
+    "find": "refusal.retryable = Some(error.retryable);",
+    "replace": "refusal.retryable = Some(false);",
+    "expect_failing": [
+      "native_loader_refusal_attributes_and_display_keep_private_values_out"
+    ],
+    "rule": "Preserve refusal attributes and redacted loader error rendering."
+  },
+  {
+    "id": "JL-display-database",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Self::Database(_) => \"custody snapshot database read failed\",",
+    "replace": "Self::Database(_) => \"private\",",
+    "expect_failing": [
+      "native_loader_refusal_attributes_and_display_keep_private_values_out"
+    ],
+    "rule": "Preserve refusal attributes and redacted loader error rendering."
+  },
+  {
+    "id": "JL-display-invalid",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Self::Invalid(_) => \"custody snapshot contains unsupported facts\",",
+    "replace": "Self::Invalid(_) => \"private\",",
+    "expect_failing": [
+      "native_loader_refusal_attributes_and_display_keep_private_values_out"
+    ],
+    "rule": "Preserve refusal attributes and redacted loader error rendering."
+  },
+  {
+    "id": "JL-display-reference",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Self::Reference(_) => \"custody snapshot reference refused\",",
+    "replace": "Self::Reference(_) => \"private\",",
+    "expect_failing": [
+      "native_loader_refusal_attributes_and_display_keep_private_values_out"
+    ],
+    "rule": "Preserve refusal attributes and redacted loader error rendering."
+  },
+  {
+    "id": "JL-operational-class",
+    "file": "crates/journals/src/loader.rs",
+    "find": "code.code == rusqlite::ErrorCode::Unknown",
+    "replace": "code.code != rusqlite::ErrorCode::Unknown",
+    "expect_failing": [
+      "native_loader_refusal_attributes_and_display_keep_private_values_out"
+    ],
+    "rule": "Preserve refusal attributes and redacted loader error rendering."
+  },
+  {
+    "id": "JL-address-case",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "        lower\n    } else {",
+    "replace": "        value.into()\n    } else {",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-address-base58",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "        value.into()\n    }\n}\npub(super) fn integer",
+    "replace": "        lower\n    }\n}\npub(super) fn integer",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-integer-int",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "Value::Int(value) => Some(value.clone()),",
+    "replace": "Value::Int(_value) => Some(0.into()),",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-integer-bool",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "Some(BigInt::from(u8::from(*value)))",
+    "replace": "Some(BigInt::from(u8::from(!*value)))",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-integer-float",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "value.trunc()",
+    "replace": "value.floor()",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-integer-string",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "Value::Str(value) => value\n            .as_str()\n            .and_then(|value| kassiber_pytext::parse_int(value).ok()),",
+    "replace": "Value::Str(_) => None,",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-script-space",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if b\" \\t\\n\\r\\x0b\\x0c\".contains(&byte) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-script-hex",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !byte.is_ascii_hexdigit() || !bytes.next().is_some_and(|b| b.is_ascii_hexdigit()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-addresses-string",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".split(',')",
+    "replace": ".split(';')",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-addresses-list",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "Value::List(values) => values.clone(),",
+    "replace": "Value::List(_values) => vec![],",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-addresses-dict",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "Key::Str(key) => Value::from(key.clone()),",
+    "replace": "Key::Str(_key) => Value::Null,",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-addresses-empty",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if value.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-addresses-dedupe",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "seen.insert(key).then(|| value.to_owned())",
+    "replace": "{ let _ = seen.insert(key); Some(value.to_owned()) }",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-chain-default",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"bitcoin\".into()\n    };",
+    "replace": "\"liquid\".into()\n    };",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-scope-fallback",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "kassiber_pytext::strip(&network).to_lowercase()",
+    "replace": "network.to_owned()",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-descriptor-presence",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "present(\"descriptor\") || (present(\"xpub\") && truth(get(config, \"script_types\")))",
+    "replace": "present(\"descriptor\")",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-descriptor-empty",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "&& !kassiber_pytext::strip(&text(get(config, key))).is_empty()",
+    "replace": "&& !text(get(config, key)).is_empty()",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-address-empty",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !key.is_empty() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-script-case",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "self.scripts.add(script.to_lowercase(), item.clone());",
+    "replace": "self.scripts.add(script, item.clone());",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-script-empty",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "script.filter(|s| !s.is_empty())",
+    "replace": "script",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-outpoint-absent",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !truth(txid) || vout == &Value::Null {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-outpoint-case",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "text(txid).to_lowercase());",
+    "replace": "text(txid));",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-txid-empty",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !truth(txid) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-txid-dedupe",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !self.txids.matches(&key).contains(&wallet) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-scoped-dedupe",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !wallets.contains(&wallet) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-reference-filter",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".filter(|(key, _)| references.contains(&key.to_lowercase()))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-scoped-filter",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".filter(|(key, _)| references.contains(&key.2.to_lowercase()))",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-index-txid-sort",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "values.sort_by_key(wallet_pair);",
+    "replace": "values.sort_by_key(wallet_pair); values.reverse();",
+    "expect_failing": [
+      "native_loader_ownership_helpers_keep_scope_and_evidence_separate"
+    ],
+    "rule": "Preserve exact ownership source normalization, identity, deduplication and network scope."
+  },
+  {
+    "id": "JL-owned-activation",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !rows.iter().any(|row| {",
+    "replace": "if rows.iter().any(|row| {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-wallet-scope",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !wallets.is_empty() && !summaries.contains_key(&wallet_id) { continue; }",
+    "replace": "if false { continue; }",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-inventory-chain",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "let chain=if truth(get(&row,\"chain\"))",
+    "replace": "let chain=if false",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-inventory-network",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "let network=if truth(get(&row,\"network\"))",
+    "replace": "let network=if false",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-inventory-script",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "script.or_else(||normalized_script(get(&row,\"script_pubkey\")))",
+    "replace": "script",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-current-scan",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".max(500.into())",
+    "replace": ".max(501.into())",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-scan-cap",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".min(20_000.into())",
+    "replace": ".min(1.into())",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-history-source",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"address_history\"",
+    "replace": "\"address_list\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-history-nonempty",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if matches!(&historic,Value::Dict(values) if !values.is_empty())",
+    "replace": "if false",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-descriptor-gate",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if !has_descriptor(&config) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-floor-warning",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "historic scan floor is invalid",
+    "replace": "historic scan floor is missing",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-derive-start",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "plan.derive(None, 0, ceiling)",
+    "replace": "plan.derive(None, 1, ceiling)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-derived-source",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"derived\"",
+    "replace": "\"derived_history\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-unconfidential",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "index.address(&Value::from(address), &item);",
+    "replace": "let _ = address;",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-infer-txid",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if txid.len()!=64 || !txid.bytes().all(|b|b.is_ascii_hexdigit())",
+    "replace": "if true",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-infer-observed",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if kassiber_pytext::strip(&observed).to_lowercase()!=txid",
+    "replace": "if false",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-infer-vout",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "matches!(get(&observation,\"vout\"),Value::Bool(_))",
+    "replace": "false",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-infer-negative",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": ".filter(|v|*v>=0.into())",
+    "replace": ".filter(|v|*v<0.into())",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-infer-exclusive",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "if owners != BTreeSet::from([text(get(&row,\"wallet_id\"))])",
+    "replace": "if false",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-reference-inputs",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "graph[\"inputs\"]",
+    "replace": "graph[\"outputs\"]",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-owned-reference-txid",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "references.insert(txid.to_lowercase());",
+    "replace": "let _ = txid;",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve ownership activation, provenance, horizon and conservative observation inference."
+  },
+  {
+    "id": "JL-receipt-scope-chain",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "scope.0 != \"bitcoin\"",
+    "replace": "scope.0 == \"bitcoin\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-scope-asset",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "scope.3 != \"BTC\"",
+    "replace": "scope.3 == \"BTC\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-wallet-count",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "wallets.len() > 1",
+    "replace": "wallets.len() > 2",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-wallet-direction",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "== Some(\"inbound\")",
+    "replace": "== Some(\"outbound\")",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-scope-empty",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "if chain.is_empty() || network.is_empty()",
+    "replace": "if false",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-address-label",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "Value::from(\"address\")",
+    "replace": "Value::from(\"external\")",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-script-raw",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": ".or_else(||normalized_script(get(&raw,\"script_pubkey\")))",
+    "replace": "",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-script-address",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": ".or_else(||bitcoin_address_script(&text(get(&row,\"address\"))))",
+    "replace": "",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-checkpoint-merge",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "*n = n.clone().max(index.clone())",
+    "replace": "*n = n.clone().min(index.clone())",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-default-horizon",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": ".unwrap_or(plan.gap_limit.into())",
+    "replace": ".unwrap_or(0.into())",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-derive-start",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "                0,\n                u32::try_from(end)",
+    "replace": "                1,\n                u32::try_from(end)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-script-filter",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": ".filter(|source| scripts.contains(&text(get(source, \"script_pubkey\"))))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-deprecated",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "Value::Bool(deprecated)",
+    "replace": "Value::Bool(!deprecated)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-receipt-count",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "counts.get(&id).cloned().unwrap_or(Value::from(0))",
+    "replace": "Value::from(0)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve receipt candidate activation, scoped sources and descriptor high-water precedence."
+  },
+  {
+    "id": "JL-worklist-budget-branch",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "if budget > 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "Preserve bounded worklist source selection and return matching."
+  },
+  {
+    "id": "JL-worklist-range-branch",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "if !ranges.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "Preserve bounded worklist source selection and return matching."
+  },
+  {
+    "id": "JL-worklist-source-order",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "keyed.sort_by(|a, b| a.0.cmp(&b.0));",
+    "replace": "keyed.sort_by(|a, b| b.0.cmp(&a.0));",
+    "expect_failing": [
+      "native_loader_worklist_ranks_sources_across_assets_before_budgeting"
+    ],
+    "rule": "Preserve bounded worklist source selection and return matching."
+  },
+  {
+    "id": "JL-parameter-null",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "Value::Null => rusqlite::types::Value::Null,",
+    "replace": "Value::Null => rusqlite::types::Value::Integer(0),",
+    "expect_failing": [
+      "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+    ],
+    "rule": "Bind worklist SQL operands without coercing storage types or unsupported values."
+  },
+  {
+    "id": "JL-parameter-int",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "i64::try_from(value).map_err",
+    "replace": "i64::try_from(value).map(|_| 0).map_err",
+    "expect_failing": [
+      "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+    ],
+    "rule": "Bind worklist SQL operands without coercing storage types or unsupported values."
+  },
+  {
+    "id": "JL-parameter-real",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "rusqlite::types::Value::Real(*value)",
+    "replace": "rusqlite::types::Value::Real(0.0)",
+    "expect_failing": [
+      "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+    ],
+    "rule": "Bind worklist SQL operands without coercing storage types or unsupported values."
+  },
+  {
+    "id": "JL-parameter-text",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "value\n                .as_str()",
+    "replace": "value\n                .as_str().map(|_| \"\")",
+    "expect_failing": [
+      "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+    ],
+    "rule": "Bind worklist SQL operands without coercing storage types or unsupported values."
+  },
+  {
+    "id": "JL-parameter-refusal",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "return Err(Error::Invalid(\"SQL parameter\".into()))",
+    "replace": "return Ok(rusqlite::types::Value::Null)",
+    "expect_failing": [
+      "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+    ],
+    "rule": "Bind worklist SQL operands without coercing storage types or unsupported values."
+  },
+  {
+    "id": "JL-worklist-string",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "if truth(value) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_worklist_parameters_keep_sqlite_scalar_types"
+    ],
+    "rule": "Bind worklist SQL operands without coercing storage types or unsupported values."
+  },
+  {
+    "id": "JL-gate-ordered",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "return Ok(ordered.clone());",
+    "replace": "return Ok(Value::Null);",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-gate-anchor-path",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if path == \"anchors\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-gate-fixed-order",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "} else if !fixed.is_empty() {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-gate-root-path",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "} else if path.is_empty() {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-network-table",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if !table_exists(conn, \"book_network_bindings\")? {",
+    "replace": "if true {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-network-reference-table",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if !table_exists(conn, table)? {",
+    "replace": "if true {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-network-reference-columns",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": ".all(|name| columns.iter().any(|row| text(get(row, \"name\")) == *name))",
+    "replace": ".all(|_| false)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-network-private",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "Value::Bool(matches!(private, Value::Dict(_)) && truth(&private))",
+    "replace": "Value::Bool(false)",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-network-source",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT 1 FROM wallet_policy_sources WHERE epoch_id=? LIMIT 1\"",
+    "replace": "\"SELECT 1 FROM wallet_policy_sources WHERE epoch_id=? AND 0 LIMIT 1\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-anchor-identity",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "anchor_ids.insert(string(leg,key));",
+    "replace": "let _ = (leg,key);",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-anchor-wallet",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "wallet_ids.insert(string(leg,\"wallet_id\"));",
+    "replace": "wallet_ids.insert(string(leg,\"wallet_id\")); wallet_ids.clear();",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-revision-identity",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "revision_ids.insert(revisions::Reference::from_json(value)?);",
+    "replace": "let _ = value;",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-confirmation-null",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if version.is_null() {",
+    "replace": "if !version.is_null() {",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-confirmation-truth",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if kassiber_custody::codec::truth(value) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "native_loader_preserves_receipt_error_precedence"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-rate-fallback",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "            Err(error) if index + 1 < attempts.len() && operational(error) => continue,",
+    "replace": "            Err(error) if false && index + 1 < attempts.len() && operational(error) => continue,",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-review-fallback",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if operational(&error) { Ok(vec![]) }",
+    "replace": "if false { Ok(vec![]) }",
+    "expect_failing": [
+      "native_loader_utf8_optional_reviews_preserve_python_fallback"
+    ],
+    "rule": "Preserve loader query boundaries, ordered v1 fields, reference facts and fallback precedence."
+  },
+  {
+    "id": "JL-convert-decimal",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Decimal(_) => return Err(Error::Invalid(\"unexpected Decimal\".into())),",
+    "replace": "Value::Decimal(_) => return Ok(J::Null),",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve scalar refusal, configuration allowlists and discarded-text validation on every helper path."
+  },
+  {
+    "id": "JL-convert-surrogate-string",
+    "file": "crates/journals/src/loader.rs",
+    "find": "value\n                .as_str()\n                .ok_or(Error::Unsupported(",
+    "replace": "value\n                .as_str().or(Some(\"\"))\n                .ok_or(Error::Unsupported(",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve scalar refusal, configuration allowlists and discarded-text validation on every helper path."
+  },
+  {
+    "id": "JL-convert-surrogate-key",
+    "file": "crates/journals/src/loader.rs",
+    "find": "key.as_str()\n                            .ok_or",
+    "replace": "key.as_str().or(Some(\"\"))\n                            .ok_or",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve scalar refusal, configuration allowlists and discarded-text validation on every helper path."
+  },
+  {
+    "id": "JL-truth-decimal",
+    "file": "crates/journals/src/loader.rs",
+    "find": "Value::Decimal(value) => !value.is_zero(),",
+    "replace": "Value::Decimal(value) => value.is_zero(),",
+    "expect_failing": [
+      "native_loader_scalar_helpers_preserve_types_and_missing_values"
+    ],
+    "rule": "Preserve scalar refusal, configuration allowlists and discarded-text validation on every helper path."
+  },
+  {
+    "id": "JL-query-discarded-text",
+    "file": "crates/journals/src/loader.rs",
+    "find": "sql_value(ValueRef::Text(bytes))?;",
+    "replace": "let _ = bytes;",
+    "expect_failing": [
+      "native_loader_utf8_refusals_preserve_python_column_order_and_message"
+    ],
+    "rule": "Preserve scalar refusal, configuration allowlists and discarded-text validation on every helper path."
+  },
+  {
+    "id": "JL-config-allowlist",
+    "file": "crates/journals/src/loader.rs",
+    "find": "[\"chain\",\"network\",\"samourai\",\"chain_instance_id\",\"bitcoin_network\",\"chain_network\"].iter().any(|name|key.is(name))",
+    "replace": "[\"chain\",\"network\",\"samourai\",\"chain_instance_id\",\"bitcoin_network\",\"chain_network\"].iter().all(|name|key.is(name))",
+    "expect_failing": [
+      "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+    ],
+    "rule": "Preserve scalar refusal, configuration allowlists and discarded-text validation on every helper path."
+  },
+  {
+    "id": "JL-config-samourai-fields",
+    "file": "crates/journals/src/loader.rs",
+    "find": "[\"role\", \"group_id\", \"section\"]",
+    "replace": "[\"role\", \"group_id\", \"secret\"]",
+    "expect_failing": [
+      "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+    ],
+    "rule": "Preserve scalar refusal, configuration allowlists and discarded-text validation on every helper path."
+  },
+  {
+    "id": "JL-config-samourai-shape",
+    "file": "crates/journals/src/loader.rs",
+    "find": "let sanitized = if let Value::Dict(_) = block {",
+    "replace": "let sanitized = if false {",
+    "expect_failing": [
+      "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+    ],
+    "rule": "Preserve scalar refusal, configuration allowlists and discarded-text validation on every helper path."
+  },
+  {
+    "id": "JL-config-object-raw",
+    "file": "crates/journals/src/loader.rs",
+    "find": "_ => raw.clone(),",
+    "replace": "_ => Value::Null,",
+    "expect_failing": [
+      "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+    ],
+    "rule": "Preserve scalar refusal, configuration allowlists and discarded-text validation on every helper path."
+  },
+  {
+    "id": "JL-config-cache-value",
+    "file": "crates/journals/src/loader.rs",
+    "find": "value.clone()\n            } else {",
+    "replace": "(String::new(), false)\n            } else {",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "Preserve scalar refusal, configuration allowlists and discarded-text validation on every helper path."
+  },
+  {
+    "id": "JL-adapter-list-shape",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "return Err(Error::Invalid(\"rows\".into()));",
+    "replace": "return Ok(vec![]);",
+    "expect_failing": [
+      "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+    ],
+    "rule": "Preserve adapter shape refusals and ordered native values."
+  },
+  {
+    "id": "JL-adapter-row-shape",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "Err(Error::Invalid(\"row\".into()))",
+    "replace": "Ok(Record::default())",
+    "expect_failing": [
+      "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+    ],
+    "rule": "Preserve adapter shape refusals and ordered native values."
+  },
+  {
+    "id": "JL-adapter-missing-string",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "unwrap_or_else(|| \"None\".into())",
+    "replace": "unwrap_or_else(|| String::new())",
+    "expect_failing": [
+      "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+    ],
+    "rule": "Preserve adapter shape refusals and ordered native values."
+  },
+  {
+    "id": "JL-gate-native-order",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "self.ordered.insert(path, value);",
+    "replace": "let _ = path;",
+    "expect_failing": [
+      "native_loader_adapter_preserves_order_and_refuses_invalid_shapes"
+    ],
+    "rule": "Preserve adapter shape refusals and ordered native values."
+  },
+  {
+    "id": "JL-receipt-scope-missing",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "if chain == &Value::Null",
+    "replace": "if chain != &Value::Null",
+    "expect_failing": [
+      "native_loader_receipt_defaults_preserve_missing_scope_and_source_facts"
+    ],
+    "rule": "Preserve missing receipt scope and source-specific fallback facts."
+  },
+  {
+    "id": "JL-receipt-config-fallback",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "if matches!(value, Value::Dict(_))",
+    "replace": "if true",
+    "expect_failing": [
+      "native_loader_receipt_defaults_preserve_missing_scope_and_source_facts"
+    ],
+    "rule": "Preserve missing receipt scope and source-specific fallback facts."
+  },
+  {
+    "id": "JL-receipt-kind-fallback",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "if kind == \"address_list\"",
+    "replace": "if false",
+    "expect_failing": [
+      "native_loader_receipt_defaults_preserve_missing_scope_and_source_facts"
+    ],
+    "rule": "Preserve missing receipt scope and source-specific fallback facts."
+  },
+  {
+    "id": "JL-receipt-label-fallback",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "id.clone()\n            }),",
+    "replace": "String::new()\n            }),",
+    "expect_failing": [
+      "native_loader_receipt_defaults_preserve_missing_scope_and_source_facts"
+    ],
+    "rule": "Preserve missing receipt scope and source-specific fallback facts."
+  },
+  {
+    "id": "JL-sql-loader-scope-01",
+    "file": "crates/journals/src/loader.rs",
+    "find": "\"SELECT 1 FROM sqlite_master WHERE type='table' AND name=?\"",
+    "replace": "\"SELECT 1 FROM sqlite_master WHERE type='table' AND name<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-loader-scope-02",
+    "file": "crates/journals/src/loader.rs",
+    "find": "\"SELECT t.*,w.label AS wallet_label,w.kind AS wallet_kind,w.account_id AS wallet_account_id,w.config_json AS config_json,observation.authority_version AS observation_authority_version,observation.observer_kinds_json AS observation_observer_kinds_json,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision,observation.observed_at AS observation_observed_at,COALESCE(a.code,'treasury') AS account_code,COALESCE(a.label,'Treasury') AS account_label FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN accounts a ON a.id=w.account_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.profile_id=? AND t.excluded=0 ORDER BY {order}\"",
+    "replace": "\"SELECT t.*,w.label AS wallet_label,w.kind AS wallet_kind,w.account_id AS wallet_account_id,w.config_json AS config_json,observation.authority_version AS observation_authority_version,observation.observer_kinds_json AS observation_observer_kinds_json,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision,observation.observed_at AS observation_observed_at,COALESCE(a.code,'treasury') AS account_code,COALESCE(a.label,'Treasury') AS account_label FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN accounts a ON a.id=w.account_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.profile_id<>? AND t.excluded=0 ORDER BY {order}\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-01",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT COUNT(*) FROM transactions WHERE profile_id=? AND excluded=0\"",
+    "replace": "\"SELECT COUNT(*) FROM transactions WHERE profile_id<>? AND excluded=0\"",
+    "expect_failing": [
+      "native_loader_selects_bounded_worklist_from_active_count"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-02",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT w.id,w.label,w.kind,w.config_json,w.account_id AS wallet_account_id,COALESCE(a.code,'treasury') AS account_code,COALESCE(a.label,'Treasury') AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id=?\"",
+    "replace": "\"SELECT w.id,w.label,w.kind,w.config_json,w.account_id AS wallet_account_id,COALESCE(a.code,'treasury') AS account_code,COALESCE(a.label,'Treasury') AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-03",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT * FROM custody_components WHERE profile_id=? AND state='active' ORDER BY created_at,revision,id\"",
+    "replace": "\"SELECT * FROM custody_components WHERE profile_id<>? AND state='active' ORDER BY created_at,revision,id\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-04",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT * FROM custody_component_legs WHERE component_id=? ORDER BY ordinal,id\"",
+    "replace": "\"SELECT * FROM custody_component_legs WHERE component_id<>? ORDER BY ordinal,id\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-05",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT * FROM custody_component_allocations WHERE component_id=? ORDER BY ordinal,id\"",
+    "replace": "\"SELECT * FROM custody_component_allocations WHERE component_id<>? ORDER BY ordinal,id\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-06",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT * FROM custody_component_economic_terms WHERE component_id=? ORDER BY ordinal,id\"",
+    "replace": "\"SELECT * FROM custody_component_economic_terms WHERE component_id<>? ORDER BY ordinal,id\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-07",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT * FROM custody_component_evidence_commitments WHERE component_id=? AND profile_id=? ORDER BY ordinal,id\"",
+    "replace": "\"SELECT * FROM custody_component_evidence_commitments WHERE component_id<>? AND profile_id=? ORDER BY ordinal,id\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-08",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id=?\"",
+    "replace": "\"SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-09",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT id,kind,config_json FROM wallets WHERE id=?\"",
+    "replace": "\"SELECT id,kind,config_json FROM wallets WHERE id<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-10",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT * FROM custody_components WHERE id=?\"",
+    "replace": "\"SELECT * FROM custody_components WHERE id<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-11",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT r.txid,r.outpoint,r.tag,r.wallet_id,r.channel_id,r.amount_msat,r.raw_json,w.config_json,b.chain,b.network FROM lightning_node_records r JOIN wallets w ON w.id=r.wallet_id LEFT JOIN backends b ON b.name=r.backend_name WHERE r.profile_id=? AND r.record_type='channel'\"",
+    "replace": "\"SELECT r.txid,r.outpoint,r.tag,r.wallet_id,r.channel_id,r.amount_msat,r.raw_json,w.config_json,b.chain,b.network FROM lightning_node_records r JOIN wallets w ON w.id=r.wallet_id LEFT JOIN backends b ON b.name=r.backend_name WHERE r.profile_id<>? AND r.record_type='channel'\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-12",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT t.id,t.profile_id,t.wallet_id,w.label AS wallet_label,w.kind AS wallet_kind,t.occurred_at,t.direction,t.asset,t.amount,t.fee,t.amount_includes_fee,t.excluded,t.kind,t.kind_override,t.privacy_boundary,t.external_id,t.raw_json,CASE WHEN w.profile_id=t.profile_id THEN w.config_json ELSE '{}' END AS wallet_config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id\"",
+    "replace": "\"SELECT t.id,t.profile_id,t.wallet_id,w.label AS wallet_label,w.kind AS wallet_kind,t.occurred_at,t.direction,t.asset,t.amount,t.fee,t.amount_includes_fee,t.excluded,t.kind,t.kind_override,t.privacy_boundary,t.external_id,t.raw_json,CASE WHEN w.profile_id=t.profile_id THEN w.config_json ELSE '{}' END AS wallet_config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id<>? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-13",
+    "file": "crates/journals/src/loader.rs",
+    "find": "format!(\"SELECT {columns} FROM transactions WHERE profile_id=? AND excluded=0{filter} ORDER BY {order}\")",
+    "replace": "format!(\"SELECT {columns} FROM transactions WHERE profile_id<>? AND excluded=0{filter} ORDER BY {order}\")",
+    "expect_failing": [
+      "native_loader_orders_same_time_rows_by_source_position"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-14",
+    "file": "crates/journals/src/loader.rs",
+    "find": "    let columns = if shape == 2 {",
+    "replace": "    let columns = if shape == 3 {",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "The last fallback reads only the float prices, for a narrow table without the exact columns."
+  },
+  {
+    "id": "JL-sql-direct-scope-15",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT r.* FROM custody_gap_reviews r JOIN (SELECT gap_id,MAX(revision) AS revision FROM custody_gap_reviews WHERE profile_id=? GROUP BY gap_id) latest ON latest.gap_id=r.gap_id AND latest.revision=r.revision WHERE r.profile_id=? ORDER BY r.gap_id,r.created_at,r.id\"",
+    "replace": "\"SELECT r.* FROM custody_gap_reviews r JOIN (SELECT gap_id,MAX(revision) AS revision FROM custody_gap_reviews WHERE profile_id<>? GROUP BY gap_id) latest ON latest.gap_id=r.gap_id AND latest.revision=r.revision WHERE r.profile_id=? ORDER BY r.gap_id,r.created_at,r.id\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-16",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT transaction_id,role FROM loan_legs WHERE profile_id=? AND deleted_at IS NULL\"",
+    "replace": "\"SELECT transaction_id,role FROM loan_legs WHERE profile_id<>? AND deleted_at IS NULL\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-17",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT subject_id,detail_hash,quantity_hash,payload_json,created_at FROM custody_authored_evidence_snapshots WHERE profile_id=? AND subject_kind='custody_component' ORDER BY subject_id,quantity_hash,detail_hash\"",
+    "replace": "\"SELECT subject_id,detail_hash,quantity_hash,payload_json,created_at FROM custody_authored_evidence_snapshots WHERE profile_id<>? AND subject_kind='custody_component' ORDER BY subject_id,quantity_hash,detail_hash\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-18",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT * FROM custody_authored_migration_issues WHERE profile_id=? AND resolved_at IS NULL ORDER BY created_at,id\"",
+    "replace": "\"SELECT * FROM custody_authored_migration_issues WHERE profile_id<>? AND resolved_at IS NULL ORDER BY created_at,id\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-19",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT * FROM transaction_pair_dismissals WHERE profile_id=?\"",
+    "replace": "\"SELECT * FROM transaction_pair_dismissals WHERE profile_id<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-20",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT * FROM book_network_bindings WHERE profile_id=?\"",
+    "replace": "\"SELECT * FROM book_network_bindings WHERE profile_id<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-21",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT t.id,t.wallet_id,t.asset,t.raw_json,w.kind AS wallet_kind,w.config_json AS wallet_config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? ORDER BY t.id\"",
+    "replace": "\"SELECT t.id,t.wallet_id,t.asset,t.raw_json,w.kind AS wallet_kind,w.config_json AS wallet_config_json FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id<>? ORDER BY t.id\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-22",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT * FROM \\\"{table}\\\" WHERE profile_id=?\"",
+    "replace": "\"SELECT * FROM \\\"{table}\\\" WHERE profile_id<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-direct-scope-23",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "\"SELECT 1 FROM wallet_policy_sources WHERE epoch_id=? LIMIT 1\"",
+    "replace": "\"SELECT 1 FROM wallet_policy_sources WHERE epoch_id<>? LIMIT 1\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-ownership-scope-01",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"SELECT w.id,w.label,w.kind,w.config_json,a.code AS account_code,a.label AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id=? ORDER BY w.label ASC\"",
+    "replace": "\"SELECT w.id,w.label,w.kind,w.config_json,a.code AS account_code,a.label AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id<>? ORDER BY w.label ASC\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-ownership-scope-02",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"SELECT id,label,kind,config_json FROM wallets WHERE profile_id=?\"",
+    "replace": "\"SELECT id,label,kind,config_json FROM wallets WHERE profile_id<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-ownership-scope-03",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"SELECT wallet_id,txid,vout,address,script_pubkey,branch_label,branch_index,address_index,chain,network FROM wallet_utxos WHERE profile_id=?\"",
+    "replace": "\"SELECT wallet_id,txid,vout,address,script_pubkey,branch_label,branch_index,address_index,chain,network FROM wallet_utxos WHERE profile_id<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-ownership-scope-04",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"SELECT private_material_json FROM wallet_policy_epochs WHERE wallet_id=? AND status='retired' ORDER BY created_at ASC,id ASC\"",
+    "replace": "\"SELECT private_material_json FROM wallet_policy_epochs WHERE wallet_id<>? AND status='retired' ORDER BY created_at ASC,id ASC\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-ownership-scope-05",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "\"SELECT external_id,wallet_id,raw_json FROM transactions WHERE profile_id=? AND external_id IS NOT NULL AND raw_json IS NOT NULL\"",
+    "replace": "\"SELECT external_id,wallet_id,raw_json FROM transactions WHERE profile_id<>? AND external_id IS NOT NULL AND raw_json IS NOT NULL\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-receipts-scope-01",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "\"SELECT wallet_id,COUNT(*) AS count FROM transactions WHERE profile_id=? AND excluded=0 GROUP BY wallet_id\"",
+    "replace": "\"SELECT wallet_id,COUNT(*) AS count FROM transactions WHERE profile_id<>? AND excluded=0 GROUP BY wallet_id\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-receipts-scope-02",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "\"SELECT id,label,kind,config_json FROM wallets WHERE profile_id=? ORDER BY label ASC,id ASC\"",
+    "replace": "\"SELECT id,label,kind,config_json FROM wallets WHERE profile_id<>? ORDER BY label ASC,id ASC\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-receipts-scope-03",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "\"SELECT DISTINCT wallet_id,chain,network,address,script_pubkey,branch_label,branch_index,address_index,raw_json FROM wallet_utxos WHERE profile_id=?\"",
+    "replace": "\"SELECT DISTINCT wallet_id,chain,network,address,script_pubkey,branch_label,branch_index,address_index,raw_json FROM wallet_utxos WHERE profile_id<>?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-receipts-scope-04",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "\"SELECT wallet_id,branch_index,MAX(address_index) AS max_index FROM wallet_utxos WHERE profile_id=? AND branch_index IS NOT NULL AND address_index IS NOT NULL GROUP BY wallet_id,branch_index\"",
+    "replace": "\"SELECT wallet_id,branch_index,MAX(address_index) AS max_index FROM wallet_utxos WHERE profile_id<>? AND branch_index IS NOT NULL AND address_index IS NOT NULL GROUP BY wallet_id,branch_index\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-receipts-scope-05",
+    "file": "crates/journals/src/loader/receipts.rs",
+    "find": "\"SELECT source_key,checkpoint_json FROM freshness_source_states WHERE profile_id=? AND source_key LIKE ?\"",
+    "replace": "\"SELECT source_key,checkpoint_json FROM freshness_source_states WHERE profile_id<>? AND source_key LIKE ?\"",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-worklist-scope-01",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "\"SELECT COUNT(*) FROM transactions WHERE profile_id=? AND excluded=0\"",
+    "replace": "\"SELECT COUNT(*) FROM transactions WHERE profile_id<>? AND excluded=0\"",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-worklist-scope-02",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "\"SELECT id,config_json FROM wallets WHERE profile_id=?\"",
+    "replace": "\"SELECT id,config_json FROM wallets WHERE profile_id<>?\"",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-sql-worklist-scope-03",
+    "file": "crates/journals/src/loader/worklist.rs",
+    "find": "\"SELECT DISTINCT t.asset FROM transactions t WHERE t.profile_id=? AND t.excluded=0 AND t.direction='outbound' ORDER BY t.asset\"",
+    "replace": "\"SELECT DISTINCT t.asset FROM transactions t WHERE t.profile_id<>? AND t.excluded=0 AND t.direction='outbound' ORDER BY t.asset\"",
+    "expect_failing": [
+      "native_loader_bounds_gap_worklist"
+    ],
+    "rule": "Keep the SQL source constrained to its requested profile, component, wallet or reference identity."
+  },
+  {
+    "id": "JL-index-scoped-sort",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "matches.sort_by_key(wallet_pair);",
+    "replace": "matches.sort_by_key(wallet_pair); matches.reverse();",
+    "expect_failing": [
+      "native_loader_scoped_index_preserves_evidence_order_and_sorts_wallet_pairs"
+    ],
+    "rule": "Sort scoped txid wallet pairs while preserving the authored order of scoped outpoint evidence."
+  },
+  {
+    "id": "JL-index-scoped-outpoint-order",
+    "file": "crates/journals/src/loader/ownership.rs",
+    "find": "scoped(self.scoped, false)",
+    "replace": "scoped(self.scoped, true)",
+    "expect_failing": [
+      "native_loader_scoped_index_preserves_evidence_order_and_sorts_wallet_pairs"
+    ],
+    "rule": "Sort scoped txid wallet pairs while preserving the authored order of scoped outpoint evidence."
+  },
+  {
+    "id": "JL-reference-mixed-type-guard",
+    "file": "kassiber/core/custody_snapshot.py",
+    "find": "if len(revision_types) > 1:",
+    "replace": "if False:",
+    "expect_failing": [
+      "tests/test_rust_custody_loader.py::test_loader_mixed_revision_refusal_is_stable_across_hash_seeds"
+    ],
+    "rule": "Refuse incompatible revision types before Python sorts the hash-randomized set."
+  },
+  {
+    "id": "JL-revision-validation-code",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "return Err(app_refusal(kassiber_envelope::AppError::new(\n            \"validation\",\n            \"Custody revision references contain incompatible types\",\n        )));",
+    "replace": "return Err(app_refusal(kassiber_envelope::AppError::new(\n            \"internal_error\",\n            \"Custody revision references contain incompatible types\",\n        )));",
+    "expect_failing": [
+      "native_loader_refuses_mixed_revision_references_before_output"
+    ],
+    "rule": "Mixed revision references carry the validation code rather than an internal failure."
+  },
+  {
+    "id": "JL-review-raw-admission",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",
+    "replace": "let typed = snapshot.typed().map_err(|message| Refusal::new(\"RuntimeError\", message))?; typed.validate().map_err(|message| Refusal::new(\"RuntimeError\", message))?; Self::from_snapshot(typed)",
+    "expect_failing": [
+      "review_assembler_preserves_raw_admission_and_refusal_ownership"
+    ],
+    "rule": "Preserve raw loader scalars until the consuming custody stage."
+  },
+  {
+    "id": "JL-review-raw-refusal",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",
+    "replace": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(|error| Refusal::new(\"RuntimeError\", error.message))?)",
+    "expect_failing": [
+      "review_assembler_preserves_raw_admission_and_refusal_ownership"
+    ],
+    "rule": "Preserve consuming-stage refusal families, codes and messages."
+  },
+  {
+    "id": "rules-country-keys-written",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "                } else if items.get(\"kind\").is_some_and(|v| v == \"rules\") {",
+    "replace": "                } else if false {",
+    "expect_failing": [
+      "a_rules_countrys_expenses_and_move_rows_decode"
+    ],
+    "rule": "The request writer knows a rules country's fields, so its request is written instead of refused."
+  },
+  {
+    "id": "journals-decode-expenses",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "        expenses: optional(v, \"expenses\")?,",
+    "replace": "        expenses: None,",
+    "expect_failing": [
+      "a_rules_countrys_expenses_and_move_rows_decode"
+    ],
+    "rule": "The text path keeps a fragment's expenses."
+  },
+  {
+    "id": "journals-decode-move-summary",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "                    Some(\"move\") => \"move\",",
+    "replace": "",
+    "expect_failing": [
+      "a_rules_countrys_expenses_and_move_rows_decode"
+    ],
+    "rule": "The text path reads a summary's move rows, which a fee-disposal country keeps."
+  },
+  {
+    "id": "rules-country-swap-values-written",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "                        \"swap_values\",\n",
+    "replace": "",
+    "expect_failing": [
+      "a_rules_countrys_expenses_and_move_rows_decode"
+    ],
+    "rule": "The request writer writes a rules country's swap values."
+  },
+  {
+    "id": "rules-country-gifts-written",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "                        \"gifts_given\",\n",
+    "replace": "",
+    "expect_failing": [
+      "a_rules_countrys_expenses_and_move_rows_decode"
+    ],
+    "rule": "The request writer writes a rules country's gift rules."
+  },
+  {
+    "id": "rules-country-pool-scope-written",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "                        \"pool_scope\",\n                        \"fee_units\",",
+    "replace": "                        \"fee_units\",",
+    "expect_failing": [
+      "a_rules_countrys_expenses_and_move_rows_decode"
+    ],
+    "rule": "The request writer writes a rules country's required pool scope."
+  }
+]

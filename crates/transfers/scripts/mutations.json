@@ -1,0 +1,2895 @@
+[
+  {
+    "id": "gap-report-year-range",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "if years.iter().any(|year| !(1900..=9999).contains(year)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Filed-report previews validate candidate years even when no report snapshots exist."
+  },
+  {
+    "id": "stored-membership",
+    "file": "crates/transfers/src/records.rs",
+    "find": "SELECT DISTINCT component_id FROM custody_component_transaction_memberships WHERE profile_id=?",
+    "replace": "SELECT DISTINCT component_id FROM custody_component_transaction_memberships WHERE profile_id=? AND 0",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "Only stored effective component memberships select current pair/payout terms."
+  },
+  {
+    "id": "stored-allocated-source",
+    "file": "crates/transfers/src/records.rs",
+    "find": "\"allocated_source_amount_msat\",\n                \"reviewed_source_amount_msat\",",
+    "replace": "\"reviewed_source_amount_msat\",\n                \"allocated_source_amount_msat\",",
+    "expect_failing": [
+      "stored_allocations_override_reviewed_amounts"
+    ],
+    "rule": "Stored allocation amounts take precedence over a review source amount."
+  },
+  {
+    "id": "history-bounds",
+    "file": "crates/transfers/src/history.rs",
+    "find": "(1..=500).contains(n)",
+    "replace": "(0..=501).contains(n)",
+    "expect_failing": [
+      "stored_scope_limits_and_receipt_selectors_fail_closed"
+    ],
+    "rule": "History accepts exact integers between 1 and 500."
+  },
+  {
+    "id": "history-newest-page",
+    "file": "crates/transfers/src/history.rs",
+    "find": "stored.iter().rev()",
+    "replace": "stored.iter()",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "History returns the newest bounded page in ascending revision order."
+  },
+  {
+    "id": "rule-unknown-fields",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !unknown.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Unknown predicate fields are rejected, not silently ignored."
+  },
+  {
+    "id": "rule-finite-nonnegative",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !n.is_finite() || n < 0.0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Fee threshold must be finite and nonnegative."
+  },
+  {
+    "id": "rule-confidence-values",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if ![s(\"exact\"), s(\"strong\")].contains(v) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Confidence must be exact or strong."
+  },
+  {
+    "id": "rule-invalid-disabled",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "parse_bool(&value(row, \"enabled\"))? && invalid.is_empty()",
+    "replace": "parse_bool(&value(row, \"enabled\"))?",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Invalid stored rules are force-disabled."
+  },
+  {
+    "id": "rule-kind",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !KINDS.contains(&kind.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "Unsupported stored kinds are disabled and projected with a safe default."
+  },
+  {
+    "id": "rule-policy",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !POLICIES.contains(&policy.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "Unsupported stored policies are disabled and projected with a safe default."
+  },
+  {
+    "id": "rule-string-type",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !matches!(v, Value::Str(_)) {\n                return Err(validation(format!(",
+    "replace": "if false {\n                return Err(validation(format!(",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Predicate wallet and asset fields must be strings."
+  },
+  {
+    "id": "rule-confidence-type",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !matches!(v, Value::Str(_)) {\n            return Err(validation(",
+    "replace": "if false {\n            return Err(validation(",
+    "expect_failing": [
+      "malformed_stored_rules_are_disabled_with_python_reasons"
+    ],
+    "rule": "Confidence must be text before checking allowed values."
+  },
+  {
+    "id": "payout-malformed-fiat",
+    "file": "crates/transfers/src/records.rs",
+    "find": "let invalid_price = price.is_err();",
+    "replace": "let invalid_price = false;",
+    "expect_failing": [
+      "malformed_stored_payout_value_remains_recoverable"
+    ],
+    "rule": "Legacy malformed payout prices remain listed with explicit invalid status for deletion and recreation."
+  },
+  {
+    "id": "authored-kind",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !KINDS.iter().any(|k| kind == s(*k)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Rule authoring refuses unsupported pair kinds."
+  },
+  {
+    "id": "authored-policy",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !POLICIES.iter().any(|p| policy == s(*p)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Rule authoring refuses unsupported policies."
+  },
+  {
+    "id": "rule-sorted-python-json",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "sort_keys: true,",
+    "replace": "sort_keys: false,",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Stored predicates use Python sorted-key JSON bytes."
+  },
+  {
+    "id": "rule-create-disabled",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "let enabled = get(args, \"enabled\").is_none_or(truthy);",
+    "replace": "let enabled = true;",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Explicitly disabled rule creation stays disabled."
+  },
+  {
+    "id": "rule-enable-invalid",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if let Some(reason) = get(&row, \"invalid_reason\") {",
+    "replace": "if let Some(reason) = get(&row, \"no_invalid_reason\") {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "An invalid stored rule cannot be enabled."
+  },
+  {
+    "id": "rule-scoped-mutation",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "SELECT * FROM swap_matching_rules WHERE id=? AND profile_id=?",
+    "replace": "SELECT * FROM swap_matching_rules WHERE id=? AND ? IS NOT NULL",
+    "expect_failing": [
+      "rule_scope_dismissal_reference_priority_and_rollback_are_preserved"
+    ],
+    "rule": "A rule write cannot touch another profile."
+  },
+  {
+    "id": "policy-same-asset",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if out == inbound {",
+    "replace": "if false {",
+    "expect_failing": [
+      "profile_policy_defaults_do_not_author_ownership_or_journal_freshness"
+    ],
+    "rule": "Same-asset policy defaults to carrying value independently of the rail preference."
+  },
+  {
+    "id": "policy-country",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "    if kassiber_tax_countries::cross_asset_carry(&country) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "profile_policy_defaults_do_not_author_ownership_or_journal_freshness"
+    ],
+    "rule": "Austria supports reviewed multi-asset carrying-value policy; configuration does not match observations."
+  },
+  {
+    "id": "policy-rail-preference",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "&& get(&profile, \"bitcoin_rail_carrying_value\").is_some_and(truthy)",
+    "replace": "&& true",
+    "expect_failing": [
+      "profile_policy_defaults_do_not_author_ownership_or_journal_freshness"
+    ],
+    "rule": "Generic BTC/LBTC carrying-value defaults honor the profile preference."
+  },
+  {
+    "id": "policy-python-uppercase",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "kassiber_pytext::upper(kassiber_pytext::strip(&s))",
+    "replace": "kassiber_pytext::strip(&s).to_uppercase()",
+    "expect_failing": [
+      "profile_policy_defaults_do_not_author_ownership_or_journal_freshness"
+    ],
+    "rule": "Asset policy normalization uses Python Unicode 14 uppercase, including newly assigned Rust characters."
+  },
+  {
+    "id": "dismiss-reference-ambiguity",
+    "file": "crates/transactions/src/lookup.rs",
+    "find": "    if found.len() > 1 {\n        let direction_hint",
+    "replace": "    if false {\n        let direction_hint",
+    "expect_failing": [
+      "rule_scope_dismissal_reference_priority_and_rollback_are_preserved"
+    ],
+    "rule": "An external transaction reference with multiple scoped rows is refused."
+  },
+  {
+    "id": "dismiss-id-priority",
+    "file": "crates/transactions/src/lookup.rs",
+    "find": "    if let Some(row) = exact.into_iter().next() {\n        return Ok(Some(row));",
+    "replace": "    if let Some(row) = exact.into_iter().filter(|_| false).next() {\n        return Ok(Some(row));",
+    "expect_failing": [
+      "rule_scope_dismissal_reference_priority_and_rollback_are_preserved"
+    ],
+    "rule": "A scoped Kassiber transaction ID takes precedence over external identifiers."
+  },
+  {
+    "id": "dismiss-reason-coalesce",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "reason=COALESCE(excluded.reason,transaction_pair_dismissals.reason)",
+    "replace": "reason=excluded.reason",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "A repeated dismissal without a reason retains the original reason."
+  },
+  {
+    "id": "dismiss-identity",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "DO UPDATE SET reason=",
+    "replace": "DO UPDATE SET id=excluded.id,reason=",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Repeated dismissals retain their original identity."
+  },
+  {
+    "id": "dismiss-expiry",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "let expires = if days > 0.into() {",
+    "replace": "let expires = if false {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Only positive expiry days set a dismissal expiry; zero and negative values never expire."
+  },
+  {
+    "id": "rule-no-journal-invalidation",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "        let id;",
+    "replace": "        conn.execute(\"UPDATE profiles SET journal_input_version=journal_input_version+1 WHERE id=?\",[scope.profile_id]).map_err(error)?;\n        let id;",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Rule authoring does not alter journal input or readiness facts."
+  },
+  {
+    "id": "dismiss-no-journal-invalidation",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "        let source = resolve(conn, scope, &value(args, \"tx_out\"))?;",
+    "replace": "        conn.execute(\"UPDATE profiles SET journal_input_version=journal_input_version+1 WHERE id=?\",[scope.profile_id]).map_err(error)?;\n        let source = resolve(conn, scope, &value(args, \"tx_out\"))?;",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "An advisory dismissal does not establish accounting facts or invalidate journals."
+  },
+  {
+    "id": "fee-bool-is-not-number",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "            _ => return Err(fail()),",
+    "replace": "            Value::Bool(v) => f64::from(u8::from(*v)),\n            _ => return Err(fail()),",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "A bool cannot author a numeric fee threshold."
+  },
+  {
+    "id": "dismiss-created-time",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "DO UPDATE SET reason=",
+    "replace": "DO UPDATE SET created_at=excluded.created_at,reason=",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Repeated dismissals retain their original creation time."
+  },
+  {
+    "id": "dismiss-days-range",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": "if days > 999999999 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Dismissal expiry retains the Python timedelta magnitude limit."
+  },
+  {
+    "id": "dismiss-days-c-int",
+    "file": "crates/transfers/src/dismissals.rs",
+    "find": ".parse::<i32>()",
+    "replace": ".parse::<i64>()",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Expiry conversion retains the Python C-int overflow boundary."
+  },
+  {
+    "id": "authoring-atomic-rollback",
+    "file": "crates/transfers/src/sql.rs",
+    "find": "        Err(e) => {\n            let _ = conn.execute_batch(\n                \"ROLLBACK TO SAVEPOINT transfers_service; RELEASE SAVEPOINT transfers_service\",",
+    "replace": "        Err(e) => {\n            let _ = conn.execute_batch(\n                \"RELEASE SAVEPOINT transfers_service\",",
+    "expect_failing": [
+      "rule_scope_dismissal_reference_priority_and_rollback_are_preserved"
+    ],
+    "rule": "An error after mutation restores the complete pre-operation rows and releases its savepoint."
+  },
+  {
+    "id": "rule-predicate-object",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "return Err(validation(\"predicate must be an object\"));",
+    "replace": "return Ok(dict::<&str>([]));",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Rule authoring requires an object predicate."
+  },
+  {
+    "id": "rule-integer-overflow",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "if !n.is_finite() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "Integer-to-float overflow retains Python's internal error rather than becoming a validation error."
+  },
+  {
+    "id": "history-snapshot-object",
+    "file": "crates/transfers/src/history.rs",
+    "find": "if !matches!(snapshot, Value::Dict(_)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "historical_snapshot_quantities_follow_python_integer_coercion"
+    ],
+    "rule": "A non-object historical snapshot fails rather than inventing zero quantities."
+  },
+  {
+    "id": "history-integer-coercion",
+    "file": "crates/transfers/src/lib.rs",
+    "find": "kassiber_pytext::parse_int(v.as_str().unwrap_or_default())",
+    "replace": "kassiber_pytext::parse_int(\"0\")",
+    "expect_failing": [
+      "historical_snapshot_quantities_follow_python_integer_coercion"
+    ],
+    "rule": "Historical quantities preserve Python integer parsing and refuse malformed values."
+  },
+  {
+    "id": "receipt-selector-exclusive",
+    "file": "crates/transfers/src/lib.rs",
+    "find": "(Some(id), None) => (\"id\", id),",
+    "replace": "(Some(id), _) => (\"id\", id),",
+    "expect_failing": [
+      "stored_scope_limits_and_receipt_selectors_fail_closed"
+    ],
+    "rule": "Receipt selectors are mutually exclusive."
+  },
+  {
+    "id": "receipt-profile-scope",
+    "file": "crates/transfers/src/lib.rs",
+    "find": "WHERE profile_id=? AND {field}=?",
+    "replace": "WHERE ? IS NOT NULL AND {field}=?",
+    "expect_failing": [
+      "stored_scope_limits_and_receipt_selectors_fail_closed"
+    ],
+    "rule": "Historical receipt selection is profile scoped."
+  },
+  {
+    "id": "dismiss-profile-scope",
+    "file": "crates/transactions/src/lookup.rs",
+    "find": "\"SELECT * FROM transactions WHERE profile_id = ? AND id = ?\",\n            params![profile_id, text],",
+    "replace": "\"SELECT * FROM transactions WHERE ? IS NOT NULL AND id = ?\",\n            params![profile_id, text],",
+    "expect_failing": [
+      "rule_scope_dismissal_reference_priority_and_rollback_are_preserved"
+    ],
+    "rule": "Dismissal transaction IDs are resolved within the active profile."
+  },
+  {
+    "id": "history-reopened-status",
+    "file": "crates/transfers/src/history.rs",
+    "find": "if event == s(\"bridge_reopened\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "Reopened gap history remains in needs-review status."
+  },
+  {
+    "id": "desktop-expiry-integer",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "Value::Float(n) if n.is_finite() => Ok(format!(\"{:.0}\", n.trunc())",
+    "replace": "Value::Float(n) if false => Ok(format!(\"{:.0}\", n.trunc())",
+    "expect_failing": [
+      "desktop_dismissal_expiry_uses_python_integer_coercion"
+    ],
+    "rule": "Desktop dismissal expiry truncates finite floats using Python int semantics."
+  },
+  {
+    "id": "pair-kind",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "validate_choice(&kind, \"pair kind\", KINDS)?;",
+    "replace": "let _ = &kind;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Creation validates the explicit pair kind."
+  },
+  {
+    "id": "pair-policy",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "validate_choice(&chosen, \"pair policy\", POLICIES)?;",
+    "replace": "let _ = &chosen;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Creation validates an explicit pair policy."
+  },
+  {
+    "id": "pair-source",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "&[\"manual\", \"bulk_exact\", \"bulk_selected\", \"rule_auto\"],",
+    "replace": "&[\"manual\", \"bulk_exact\", \"bulk_selected\", \"rule_auto\", \"bad\"],",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Pair source must be a supported authoring source."
+  },
+  {
+    "id": "pair-distinct-transactions",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if value(&out, \"id\") == value(&inbound, \"id\") {",
+    "replace": "if value(&out, \"id\") != value(&inbound, \"id\") {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Pair boundaries must be distinct transactions."
+  },
+  {
+    "id": "pair-profile-resolution",
+    "file": "crates/transactions/src/lookup.rs",
+    "find": "\"SELECT * FROM transactions WHERE profile_id = ? AND id = ? AND direction = ?\",",
+    "replace": "\"SELECT * FROM transactions WHERE ? IS NOT NULL AND id = ? AND direction = ?\",",
+    "expect_failing": [
+      "pair_writes_refuse_other_review_terms_and_profile_references"
+    ],
+    "rule": "Transaction resolution cannot escape the selected profile."
+  },
+  {
+    "id": "pair-external-ambiguity",
+    "file": "crates/transactions/src/lookup.rs",
+    "find": "    if found.len() > 1 {\n        let direction_hint",
+    "replace": "    if found.len() > 2 {\n        let direction_hint",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Ambiguous external transaction IDs are refused."
+  },
+  {
+    "id": "pair-direction",
+    "file": "crates/transactions/src/lookup.rs",
+    "find": "if d.as_str() == Some(direction)))",
+    "replace": "if d.as_str() != Some(direction)))",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "External references must have the requested direction."
+  },
+  {
+    "id": "pair-network-policy",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if policy != \"carrying-value\" {",
+    "replace": "if true {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Carrying-value reviews validate physical network domains."
+  },
+  {
+    "id": "pair-network-contradictions",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if !ov || !iv {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Contradictory network metadata cannot carry value."
+  },
+  {
+    "id": "pair-network-boundaries",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if od != id {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Distinct Bitcoin networks cannot carry value between them."
+  },
+  {
+    "id": "pair-same-asset-taxable",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if same && policy == \"taxable\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Same-asset taxable pairs are refused."
+  },
+  {
+    "id": "pair-cross-asset-policy",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if !kassiber_tax_countries::cross_asset_carry(&country)\n            && pair != BTreeSet::from([\"BTC\".into(), \"LBTC\".into()])\n        {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Generic profiles may carry value across assets only for BTC/LBTC rails."
+  },
+  {
+    "id": "pair-same-asset-out-amount",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if value(&out, \"asset\") == value(&inbound, \"asset\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Explicit outbound portions apply only to cross-asset pairs."
+  },
+  {
+    "id": "pair-positive-amount",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if decimal.signum() != std::cmp::Ordering::Greater {",
+    "replace": "if decimal.signum() == std::cmp::Ordering::Less {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "An explicit outbound BTC amount must be positive before rounding."
+  },
+  {
+    "id": "pair-amount-scale",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "&\"100000000000\".parse().unwrap(),",
+    "replace": "&\"100000000\".parse().unwrap(),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "BTC quantities convert exactly to integer msat."
+  },
+  {
+    "id": "pair-amount-rounding",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": ".to_fixed_places(0, Rounding::HalfUp)",
+    "replace": ".to_fixed_places(0, Rounding::HalfEven)",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "BTC to msat rounds halfway values away from zero."
+  },
+  {
+    "id": "pair-amount-exceeds-source",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if p > &full.into() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "An explicit portion cannot exceed the outbound principal."
+  },
+  {
+    "id": "pair-duplicate",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "text(r, \"term_kind\") == \"transaction_pair\"\n            && value(r, \"out_transaction_id\")",
+    "replace": "text(r, \"term_kind\") == \"unused\"\n            && value(r, \"out_transaction_id\")",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "An already reviewed pair is refused before a new revision is authored."
+  },
+  {
+    "id": "pair-nonpair-conflict",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "text(r, \"term_kind\") != \"transaction_pair\"\n            && [",
+    "replace": "text(r, \"term_kind\") == \"unused\"\n            && [",
+    "expect_failing": [
+      "pair_writes_refuse_other_review_terms_and_profile_references"
+    ],
+    "rule": "Payout and custody-component reviews exclude new pair authoring."
+  },
+  {
+    "id": "pair-leg-reuse",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if !(reusable(r) && reusable(row)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Only same-asset privacy/manual carrying-value pairs may reuse a leg."
+  },
+  {
+    "id": "pair-swap-fee",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "spec::num(a - spec::n(&value(inbound, \"amount\")) + network),",
+    "replace": "spec::num(a - spec::n(&value(inbound, \"amount\")) - network),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Swap fees include outbound network fees only when separate and unsplit."
+  },
+  {
+    "id": "pair-included-fee",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if split || truthy(&value(out, \"amount_includes_fee\")) {",
+    "replace": "if split {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A fee already included in outbound amount is not counted twice."
+  },
+  {
+    "id": "pair-split-fee",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if split || truthy(&value(out, \"amount_includes_fee\")) {",
+    "replace": "if truthy(&value(out, \"amount_includes_fee\")) {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Split swap fees exclude the separate full-transaction network fee."
+  },
+  {
+    "id": "pair-update-kind",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "validate_choice(&value(&revised, \"kind\"), \"pair kind\", KINDS)?;",
+    "replace": "let _ = KINDS;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Updates validate their resulting pair kind."
+  },
+  {
+    "id": "pair-update-policy",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "validate_choice(&value(&revised, \"policy\"), \"pair policy\", POLICIES)?;",
+    "replace": "let _ = POLICIES;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Updates validate their resulting pair policy."
+  },
+  {
+    "id": "pair-update-notes",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if let Some(notes) = get(args, \"notes\") {",
+    "replace": "if let Some(notes) = present(args, \"unused_notes\") {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Update distinguishes omitted notes from explicit empty notes."
+  },
+  {
+    "id": "pair-update-noop",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": ".all(|k| value(old, k) == value(&revised, k))",
+    "replace": ".all(|_| false)",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "An unchanged update does not append revisions or invalidate journals."
+  },
+  {
+    "id": "pair-update-fee-recompute",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if value(old, \"kind\") != value(&revised, \"kind\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A kind change recomputes the stored swap fee."
+  },
+  {
+    "id": "pair-group-collection",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "value(r, \"out_transaction_id\") == value(&row, \"out_transaction_id\")\n                || value(r, \"in_transaction_id\") == value(&row, \"in_transaction_id\")",
+    "replace": "value(r, \"out_transaction_id\") == value(&row, \"out_transaction_id\")\n                && value(r, \"in_transaction_id\") == value(&row, \"in_transaction_id\")",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Connected pair terms append one aggregate revision."
+  },
+  {
+    "id": "pair-unpair-history",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if !rows(c,\"SELECT 1 FROM custody_component_economic_terms",
+    "replace": "if rows(c,\"SELECT 1 FROM custody_component_economic_terms",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Deletion stays idempotent after a group revision removes a term."
+  },
+  {
+    "id": "pair-unpair-reslice",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "if !remaining.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Removing one group term reslices the remaining review into a forward revision."
+  },
+  {
+    "id": "pair-unpair-memberships",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "DELETE FROM custody_component_transaction_memberships WHERE profile_id=?",
+    "replace": "DELETE FROM custody_component_transaction_memberships WHERE profile_id=? AND 0",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Deleting the last term rebuilds effective memberships."
+  },
+  {
+    "id": "pair-service-atomic",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "    atomic(c, || match operation {\n        \"transfers.pair\" => create(c, scope, args, sources),\n        \"transfers.update\" => update(c, scope, args, sources),\n        _ => delete(c, scope, args, sources),\n    })",
+    "replace": "    (|| match operation {\n        \"transfers.pair\" => create(c, scope, args, sources),\n        \"transfers.update\" => update(c, scope, args, sources),\n        _ => delete(c, scope, args, sources),\n    })()",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership",
+      "pair_final_invalidation_refusals_are_atomic"
+    ],
+    "rule": "Each pair operation rolls back late failures and retains the caller transaction."
+  },
+  {
+    "id": "pair-stable-namespace",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "0x95, 0xed, 0x14, 0x8a",
+    "replace": "0x96, 0xed, 0x14, 0x8a",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Authored component identities preserve the Python UUIDv5 namespace."
+  },
+  {
+    "id": "pair-row-hash",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "hash(&project(r, FIELDS), false)",
+    "replace": "hash(&project(r, FIELDS), true)",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Pair source hashes use Python sorted non-ASCII JSON bytes."
+  },
+  {
+    "id": "pair-order",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "ordered.sort_by_key(|r| (text(r, \"created_at\"), text(r, \"id\")));",
+    "replace": "ordered.sort_by_key(|r| (text(r, \"id\"), text(r, \"created_at\")));",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Group identity and FIFO slices preserve creation-time then identity order."
+  },
+  {
+    "id": "pair-principal",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "amount - n(&value(row, \"fee\"))",
+    "replace": "amount",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Fee-inclusive outbound boundaries expose principal, not gross movement."
+  },
+  {
+    "id": "pair-available",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "let available = total - used.get(&source_id).unwrap_or(&0);",
+    "replace": "let available = total;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Each reused source is sliced only from its remaining principal."
+  },
+  {
+    "id": "pair-conversion-value",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "let b = if conversion { target } else { a };",
+    "replace": "let b = a;",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Conversion components keep separate native source and destination quantities."
+  },
+  {
+    "id": "pair-positive-slices",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "if a <= 0 || b <= 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Empty or negative reviewed slices are refused."
+  },
+  {
+    "id": "pair-reviewed-source",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "(\"reviewed_source_amount_msat\", num(a)),",
+    "replace": "(\"reviewed_source_amount_msat\", num(b)),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Economic terms retain reviewed source quantity for cross-asset swaps."
+  },
+  {
+    "id": "pair-group-full-residual",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "    if full {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A connected group accounts for residual source principal explicitly."
+  },
+  {
+    "id": "pair-residual-fee",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "    if fee > 0 && fee <= residual {\n        parts.push((\"network_fee\", fee, true));",
+    "replace": "    if false {\n        parts.push((\"network_fee\", fee, true));",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A residual separates the known network fee from the classified principal shortfall."
+  },
+  {
+    "id": "pair-refund-residual",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "if text(row, \"kind\") == \"swap-refund\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Swap-refund residuals are reviewed network fees."
+  },
+  {
+    "id": "pair-native-residual",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "if found.len() != 1 {",
+    "replace": "if true {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A unique exact native remainder becomes an explicitly retained leg."
+  },
+  {
+    "id": "pair-retarget",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "&[\"legacy_review_revision\", &text(spec, \"component_id\"), prior]",
+    "replace": "&[\"legacy_review_revision\", &text(spec, \"component_id\"), \"ignored\"]",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Retargeted revisions bind identities to the preceding immutable aggregate."
+  },
+  {
+    "id": "pair-optional-text",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "return Err(AppError::new(\n            \"custody_component_validation\",\n            format!(\"{field} must be text\"),",
+    "replace": "return Ok(s(py_str(v)));\n        return Err(AppError::new(\n            \"custody_component_validation\",\n            format!(\"{field} must be text\"),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Authored optional text refuses non-text values."
+  },
+  {
+    "id": "pair-invalidation-version",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "journal_input_version=journal_input_version+1",
+    "replace": "journal_input_version=journal_input_version",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Each successful aggregate and review write increments the journal input version."
+  },
+  {
+    "id": "pair-invalidation-cache",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "last_processed_at=NULL,last_processed_tx_count=0",
+    "replace": "last_processed_at=last_processed_at,last_processed_tx_count=last_processed_tx_count",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Custody writes clear processed-journal freshness."
+  },
+  {
+    "id": "pair-invalidation-ownership-cache",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "ownership_review_counts_json=NULL",
+    "replace": "ownership_review_counts_json=ownership_review_counts_json",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Custody writes invalidate cached ownership-review counts without granting ownership."
+  },
+  {
+    "id": "pair-activation-gate",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "if validation[\"activatable\"] != true {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Incomplete or nonconserving components cannot activate."
+  },
+  {
+    "id": "pair-revision-counter",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "COALESCE(MAX(revision),0)+1",
+    "replace": "COALESCE(MAX(revision),0)+2",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revisions append in exact lineage order."
+  },
+  {
+    "id": "pair-supersession",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "SET state='superseded',superseded_at=?,superseded_by_component_id=?",
+    "replace": "SET state='superseded',superseded_at=NULL || ?,superseded_by_component_id=?",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Forward revisions record the supersession timestamp."
+  },
+  {
+    "id": "pair-membership-insert",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "INSERT INTO custody_component_transaction_memberships(component_id,profile_id,transaction_id,created_at) VALUES(?,?,?,?)",
+    "replace": "INSERT INTO custody_component_transaction_memberships(component_id,profile_id,transaction_id,created_at) SELECT ?,?,?,? WHERE 0",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Activated anchors establish stored reviewed memberships."
+  },
+  {
+    "id": "pair-evidence-capture",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    for snapshot in snapshots {",
+    "replace": "    for snapshot in snapshots.into_iter().take(0) {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Activation captures author-bound raw evidence snapshots."
+  },
+  {
+    "id": "pair-evidence-count",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "pairs.len() as i64",
+    "replace": "pairs.len() as i64 + 1",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "The active header commits to the exact evidence count."
+  },
+  {
+    "id": "pair-commitment-id",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "s(\"custody-component-evidence-v1\"),",
+    "replace": "s(\"custody-component-evidence-v0\"),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Evidence commitment identities bind component and ordinal through pyjson."
+  },
+  {
+    "id": "pair-child-count",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "(list(spec, \"legs\").len() as i64).into(),",
+    "replace": "(list(spec, \"legs\").len() as i64 + 1).into(),",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "The authored header commits to its immutable child counts."
+  },
+  {
+    "id": "pair-raw-active-conflicts",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "    if !conflicts.is_empty() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Raw authored-active conflicts block activation even without memberships."
+  },
+  {
+    "id": "pair-draft-validation",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "let evidence = if h[\"state\"] == \"active\" {",
+    "replace": "let evidence = if true {",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A draft validates before activation evidence is captured."
+  },
+  {
+    "id": "pair-retain-trg_custody_authored_evidence_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_authored_evidence_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_authored_evidence_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_allocation_revision_delete_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_allocation_revision_delete_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_allocation_revision_delete_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_allocation_revision_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_allocation_revision_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_allocation_revision_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_evidence_revision_delete_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_evidence_revision_delete_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_evidence_revision_delete_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_evidence_revision_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_evidence_revision_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_evidence_revision_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_leg_revision_delete_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_leg_revision_delete_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_leg_revision_delete_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_leg_revision_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_leg_revision_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_leg_revision_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_revision_delete_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_revision_delete_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_revision_delete_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_revision_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_revision_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_revision_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_terms_delete_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_terms_delete_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_terms_delete_immutable."
+  },
+  {
+    "id": "pair-retain-trg_custody_component_terms_immutable",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "    let lineage = text(spec, \"lineage_id\");",
+    "replace": "    c.execute_batch(\"DROP TRIGGER IF EXISTS trg_custody_component_terms_immutable\").map_err(error)?;\n    let lineage = text(spec, \"lineage_id\");",
+    "expect_failing": [
+      "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership"
+    ],
+    "rule": "Pair authoring preserves the immutable aggregate trigger trg_custody_component_terms_immutable."
+  },
+  {
+    "id": "pair-draft-exists",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "AND state='draft' AND id!=?",
+    "replace": "AND state='draft' AND 0 AND id!=?",
+    "rule": "A lineage with an existing draft cannot author a competing revision.",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ]
+  },
+  {
+    "id": "pair-lineage-exists",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "WHERE profile_id=? AND lineage_id=? LIMIT 1",
+    "replace": "WHERE profile_id=? AND lineage_id=? AND 0 LIMIT 1",
+    "rule": "A previously authored lineage requires a forward revision.",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ]
+  },
+  {
+    "id": "pair-native-residual-ambiguity",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "if found.len() != 1 {",
+    "replace": "if found.is_empty() {",
+    "rule": "An ambiguous native remainder is never guessed into retained custody.",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ]
+  },
+  {
+    "id": "pair-asset-id-case",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "        lower\n    } else if",
+    "replace": "        kassiber_pytext::upper(text)\n    } else if",
+    "rule": "Opaque hexadecimal asset IDs normalize to lowercase.",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ]
+  },
+  {
+    "id": "desktop-pair-source",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "        kassiber_envelope::set(args, \"authored_source\", s(source));\n        if kind == \"ui.transfers.pair\"",
+    "replace": "        kassiber_envelope::set(args, \"authored_source\", s(\"cli\"));\n        if kind == \"ui.transfers.pair\"",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Desktop authorship is gui regardless of client fields."
+  },
+  {
+    "id": "desktop-pair-aliases",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "get(args, name)\n                    .filter(|v| kassiber_envelope::truthy(v))\n                    .or_else(|| get(args, alias))",
+    "replace": "get(args, name)\n                    .or_else(|| get(args, alias))",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Falsy primary transaction selectors fall back to desktop aliases."
+  },
+  {
+    "id": "desktop-pair-defaults",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "get(args, name)\n                    .filter(|v| kassiber_envelope::truthy(v))\n                    .map(kassiber_envelope::py_str)",
+    "replace": "get(args, name)\n                    .map(kassiber_envelope::py_str)",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Falsy pair kind and source receive Python defaults."
+  },
+  {
+    "id": "desktop-pair-required-id",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "get(args, \"pair_id\")\n                .filter(|v| kassiber_envelope::truthy(v))\n                .ok_or_else",
+    "replace": "get(args, \"pair_id\")\n                .ok_or_else",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Update and unpair require a nonempty pair identity."
+  },
+  {
+    "id": "desktop-pair-notes-unset",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "|| get(args, \"note\").is_some()",
+    "replace": "|| true",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Omitted update notes retain their prior value."
+  },
+  {
+    "id": "desktop-pair-note-alias",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "get(args, \"notes\")\n                .filter(|v| kassiber_envelope::truthy(v))\n                .or_else(|| get(args, \"note\"))",
+    "replace": "get(args, \"notes\")\n                .or_else(|| get(args, \"note\"))",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Empty notes fall back to the note alias and otherwise clear stored notes."
+  },
+  {
+    "id": "reference-native-review-atomic",
+    "file": "kassiber/core/custody_authored_migration.py",
+    "find": "with _savepoint(conn, \"custody_native_review\"):",
+    "replace": "if True:",
+    "expect_failing": [
+      "tests/test_custody_authored_migration.py::test_native_review_activation_failure_leaves_no_committed_draft"
+    ],
+    "rule": "Refused activation cannot commit a partial authored draft."
+  },
+  {
+    "id": "reference-pair-create-invalidation",
+    "file": "kassiber/core/custody_review_terms.py",
+    "find": "with custody_authored_migration._savepoint(conn, \"custody_pair_review\"):\n        pair_row = custody_authored_migration.create_pair_review_component(",
+    "replace": "if True:\n        pair_row = custody_authored_migration.create_pair_review_component(",
+    "expect_failing": [
+      "tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[create]"
+    ],
+    "rule": "Refused final invalidation rolls back the entire pair create operation."
+  },
+  {
+    "id": "reference-pair-update-invalidation",
+    "file": "kassiber/core/custody_review_terms.py",
+    "find": "with custody_authored_migration._savepoint(conn, \"custody_pair_review\"):\n        updated = custody_authored_migration.revise_pair_review_component(",
+    "replace": "if True:\n        updated = custody_authored_migration.revise_pair_review_component(",
+    "expect_failing": [
+      "tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[update]"
+    ],
+    "rule": "Refused final invalidation rolls back the entire pair update operation."
+  },
+  {
+    "id": "reference-pair-unpair-invalidation",
+    "file": "kassiber/core/custody_review_terms.py",
+    "find": "with custody_authored_migration._savepoint(conn, \"custody_pair_review\"):\n        custody_authored_migration.delete_authored_review(",
+    "replace": "if True:\n        custody_authored_migration.delete_authored_review(",
+    "expect_failing": [
+      "tests/test_custody_authored_migration.py::test_pair_invalidation_failure_keeps_complete_database_unchanged[unpair]"
+    ],
+    "rule": "Refused final invalidation rolls back the entire pair unpair operation."
+  },
+  {
+    "id": "desktop-pair-capability-order",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "\"ui.transfers.list\",\n    \"ui.transfers.payouts.list\",\n    \"ui.transfers.payouts.create\",\n    \"ui.transfers.payouts.delete\",\n    \"ui.transfers.pair\",",
+    "replace": "\"ui.transfers.pair\",\n    \"ui.transfers.payouts.list\",\n    \"ui.transfers.payouts.create\",\n    \"ui.transfers.payouts.delete\",\n    \"ui.transfers.list\",",
+    "expect_failing": [
+      "desktop_pair_aliases_defaults_and_absent_notes_match_python"
+    ],
+    "rule": "Desktop capability order matches the Python ready envelope."
+  },
+  {
+    "id": "pair-validation-wire-order",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "conservation_mode activatable issues suspense_msat",
+    "replace": "activatable conservation_mode issues suspense_msat",
+    "expect_failing": [
+      "pair_sequences_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Validation refusal objects retain Python field order."
+  },
+  {
+    "id": "payout-delete-atomic",
+    "file": "crates/transfers/src/sql.rs",
+    "find": "Err(e) => {\n            let _ = conn.execute_batch(\n                \"ROLLBACK TO SAVEPOINT transfers_service; RELEASE SAVEPOINT transfers_service\",\n            );",
+    "replace": "Err(e) => {\n            let _ = conn.execute_batch(\n                \"RELEASE SAVEPOINT transfers_service\",\n            );",
+    "expect_failing": [
+      "payout_deletion_rolls_back_late_failure_and_preserves_outer_transaction"
+    ],
+    "rule": "Payout deletion rolls back every write after late invalidation failure."
+  },
+  {
+    "id": "payout-delete-id",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "text(r, \"id\") == id",
+    "replace": "text(r, \"id\") != id",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Deletion selects exactly the requested review."
+  },
+  {
+    "id": "payout-delete-idempotent",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "if truthy(&value(&row, \"deleted_at\"))",
+    "replace": "if false && truthy(&value(&row, \"deleted_at\"))",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Repeated deletion preserves timestamp and input version."
+  },
+  {
+    "id": "payout-delete-state",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "SET state='superseded',superseded_at=?",
+    "replace": "SET state='active',superseded_at=?",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Deletion supersedes the authored component."
+  },
+  {
+    "id": "payout-delete-reason",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "direct_swap_payout review deleted by {source}",
+    "replace": "transaction_pair review deleted by {source}",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Persist the exact payout audit reason."
+  },
+  {
+    "id": "payout-delete-invalidations",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "store::invalidate(c, scope.profile_id)?;\n        let snapshot",
+    "replace": "let snapshot",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Both Python invalidations and cache clearing are preserved."
+  },
+  {
+    "id": "payout-delete-membership-clear",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "DELETE FROM custody_component_transaction_memberships WHERE profile_id=?",
+    "replace": "DELETE FROM custody_component_transaction_memberships WHERE profile_id=? AND 0",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Membership reconciliation removes deleted review anchors."
+  },
+  {
+    "id": "payout-delete-membership-effective",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "c[\"effective_state\"] == \"active\"",
+    "replace": "c[\"effective_state\"] != \"active\"",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Only effective active components regain memberships."
+  },
+  {
+    "id": "payout-delete-return-time",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "set(&mut row, \"deleted_at\", s(now));",
+    "replace": "set(&mut row, \"deleted_at\", Value::Null);",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Return the deletion time on the first successful delete."
+  },
+  {
+    "id": "payout-delete-final-invalidation",
+    "file": "crates/transfers/src/payout_delete.rs",
+    "find": "store::invalidate(c, scope.profile_id)?;\n        set(&mut row",
+    "replace": "set(&mut row",
+    "expect_failing": [
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Final journal invalidation increments the input version again."
+  },
+  {
+    "id": "desktop-payout-delete-source",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "        kassiber_envelope::set(args, \"authored_source\", s(source));\n    }\n\n    Ok(())",
+    "replace": "        kassiber_envelope::set(args, \"authored_source\", s(\"cli\"));\n    }\n\n    Ok(())",
+    "expect_failing": [
+      "desktop_payout_delete_requires_id_and_overrides_source"
+    ],
+    "rule": "Desktop payout deletion always attributes the GUI source."
+  },
+  {
+    "id": "desktop-payout-delete-id-string",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "let id = kassiber_envelope::py_str(id);\n        kassiber_envelope::set(args, \"payout_id\", s(id));",
+    "replace": "let id = id.clone();\n        kassiber_envelope::set(args, \"payout_id\", id);",
+    "expect_failing": [
+      "desktop_payout_delete_requires_id_and_overrides_source"
+    ],
+    "rule": "Desktop converts truthy payout identifiers using Python str."
+  },
+  {
+    "id": "payout-create-kind",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "if kind != s(\"direct-swap-payout\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Refuse unsupported payout kinds."
+  },
+  {
+    "id": "payout-create-policy",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "policy != s(\"taxable\") && policy != s(\"carrying-value\")",
+    "replace": "policy != s(\"taxable\")",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Accept the carrying-value payout policy."
+  },
+  {
+    "id": "payout-create-asset",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "let asset = spec::asset(&value(args, \"payout_asset\"));",
+    "replace": "let asset = \"BTC\".to_string();",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Normalize and retain the explicit payout asset."
+  },
+  {
+    "id": "payout-create-fee",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "let swap = reviewed - spec::n(&value(&base, \"payout_amount\")) + fee;",
+    "replace": "let swap = reviewed - spec::n(&value(&base, \"payout_amount\"));",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Include authoritative separate outbound fees."
+  },
+  {
+    "id": "payout-create-hash",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "store::hash(&canonical, false)?",
+    "replace": "store::hash(&canonical, true)?",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Hash exact Python UTF-8 payout payload bytes."
+  },
+  {
+    "id": "payout-create-residual",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "pair::finish_residual(c, &row, &mut plan)?;",
+    "replace": "// omit native residual",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Retain exact native split returns."
+  },
+  {
+    "id": "payout-create-invalidation",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "store::invalidate(c, scope.profile_id)?;",
+    "replace": "// omit final invalidation",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Invalidate journals after activation."
+  },
+  {
+    "id": "payout-create-raw-return",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "    Ok(result)\n}",
+    "replace": "    set(&mut result, \"out_amount\", spec::num(reviewed));\n    Ok(result)\n}",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Return original authored fields before normalization."
+  },
+  {
+    "id": "payout-create-atomic",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "sql::atomic(c, || create(c, scope, args, sources))",
+    "replace": "create(c, scope, args, sources)",
+    "expect_failing": [
+      "payout_creation_rolls_back_late_failure_and_preserves_outer_transaction"
+    ],
+    "rule": "Late invalidation failure rolls back every payout write."
+  },
+  {
+    "id": "desktop-payout-create-source",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "    set(args, \"authored_source\", s(source));\n}\n\nfn normalize_payout_delete_args",
+    "replace": "    set(args, \"authored_source\", s(\"cli\"));\n}\n\nfn normalize_payout_delete_args",
+    "expect_failing": [
+      "desktop_payout_creation_normalizes_aliases_and_authority"
+    ],
+    "rule": "Desktop authoring uses trusted GUI provenance."
+  },
+  {
+    "id": "payout-create-physical",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "let physical = reviewed.max(0);",
+    "replace": "let physical = reviewed;",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Negative observed principal cannot become a negative physical custody leg."
+  },
+  {
+    "id": "payout-create-nan",
+    "file": "crates/pydecimal/src/price.rs",
+    "find": "DecimalError::NonFinite => PriceError::NonFinite,",
+    "replace": "DecimalError::NonFinite => PriceError::Invalid,",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Nonfinite payout prices receive the same finite-decimal validation error as Python."
+  },
+  {
+    "id": "payout-create-range",
+    "file": "crates/transfers/src/payout_create.rs",
+    "find": "if n > &i64::MAX.into() {",
+    "replace": "if n > &i128::MAX.into() {",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Oversized payout quantities fail before SQLite with exact validation details."
+  },
+  {
+    "id": "trigger-refusal-message",
+    "file": "crates/transfers/src/sql.rs",
+    "find": "return AppError::new(\"internal_error\", message.clone());",
+    "replace": "return AppError::new(\"internal_error\", \"database operation failed\");",
+    "expect_failing": [
+      "payout_creations_match_python_complete_database_rows_and_refusals",
+      "payout_deletions_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Trigger refusal messages match Python on late failures while the operation rolls back every table."
+  },
+  {
+    "id": "component-bulk-id",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "\"kassiber:custody-bulk:{}:{source}:{}:{index}:{canonical}\",",
+    "replace": "\"kassiber:custody-bulk:{}:{source}:{}:{index}:\",",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Bulk component ids commit to the canonical authored spec."
+  },
+  {
+    "id": "component-revision-id",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": ".chain(raw_reason.code_points())",
+    "replace": ".chain(std::iter::empty())",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revision ids commit to the review reason."
+  },
+  {
+    "id": "component-row-id",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "\"kassiber:custody-component:{component}:{kind}:{ordinal}\"",
+    "replace": "\"kassiber:custody-component:{component}:{ordinal}\"",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Planned leg and allocation ids are kind-scoped deterministic UUIDv5s."
+  },
+  {
+    "id": "component-planned-wallet-casefold",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "kassiber_pytext::casefold(&label)",
+    "replace": "kassiber_pytext::lower(&label)",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Planned untracked wallet ids use full Unicode case folding."
+  },
+  {
+    "id": "component-batch-conflict",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "    for (tx, ids) in by_transaction {\n        if ids.len() > 1 {",
+    "replace": "    for (tx, ids) in by_transaction {\n        if ids.len() > 2 {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "An anchor shared by two planned active components blocks the batch."
+  },
+  {
+    "id": "component-plan-replacing-lineage",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "if replacing_lineage.is_some_and(|lineage| text(&row, \"lineage_id\") == lineage) {",
+    "replace": "if replacing_lineage.is_some_and(|lineage| text(&row, \"lineage_id\") == lineage) && false {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A revision does not conflict with the active revision it replaces."
+  },
+  {
+    "id": "component-quantity-range",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "let trimmed = raw.trim_start_matches('0');",
+    "replace": "let trimmed = raw;",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Decimal-string quantities drop leading zeros before the SQLite range check."
+  },
+  {
+    "id": "component-input-version",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "if Value::Int(current.into()) != *expected {",
+    "replace": "if Value::Int(current.into()) == *expected {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Apply refuses a plan whose input version is stale."
+  },
+  {
+    "id": "component-already-applied",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "if !persisted.is_empty() {",
+    "replace": "if persisted.is_empty() && !persisted.is_empty() {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Reapplying a persisted batch is a stale plan."
+  },
+  {
+    "id": "component-wallet-invalidation",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "        store::invalidate(c, scope.profile_id)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Creating a planned untracked wallet invalidates journals."
+  },
+  {
+    "id": "component-supersedes-link",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "\"UPDATE custody_components SET superseded_by_component_id=? WHERE id=? AND state='superseded'\",",
+    "replace": "\"UPDATE custody_components SET superseded_by_component_id=superseded_by_component_id WHERE ?1=?1 AND id=?2 AND state='superseded'\",",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Activating a revision links the superseded prior revision forward."
+  },
+  {
+    "id": "component-supersede-reconcile",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "        reconcile(c, scope, &profile, sources)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Superseding an active component rebuilds effective memberships."
+  },
+  {
+    "id": "component-default-type",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "or(\"component_type\", \"manual_bridge\")",
+    "replace": "or(\"component_type\", \"swap\")",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Created components default to manual bridges."
+  },
+  {
+    "id": "component-undo-reason",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "result.reason = if truthy(&reason) { reason } else { s(\"undo\") };",
+    "replace": "result.reason = reason;",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Undo defaults its reason so the revision identity and change reason match."
+  },
+  {
+    "id": "component-hidden-location",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "set(&mut leg, \"location_ref\", location.clone());",
+    "replace": "let _ = location;",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revisions preserve hidden local location references of unchanged legs."
+  },
+  {
+    "id": "component-json-constant",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "Ok(_) if has_constant(&raw) => return Err(valid()),",
+    "replace": "Ok(_) if false => return Err(valid()),",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "String evidence refuses JSON NaN/Infinity constants as invalid JSON."
+  },
+  {
+    "id": "component-lightning-rail",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "const LIGHTNING_KINDS: &[&str] = &[\"cln\", \"coreln\", \"lightning\", \"lnd\", \"nwc\", \"phoenix\"];",
+    "replace": "const LIGHTNING_KINDS: &[&str] = &[\"cln\", \"coreln\", \"lightning\", \"nwc\", \"phoenix\"];",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Legs in Lightning wallets default to the lightning rail."
+  },
+  {
+    "id": "component-economic-term-legs",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "let (Some(source_id), Some(target_id)) = (source_id, target_id) else {",
+    "replace": "let (Some(source_id), Some(target_id)) = (source_id.or(Some(String::new())), target_id.or(Some(String::new()))) else {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revisions refuse to drop legs bound by migrated economic terms."
+  },
+  {
+    "id": "component-apply-atomic",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "atomic(c, || apply_review(c, scope, &a, args, &source, sources))",
+    "replace": "apply_review(c, scope, &a, args, &source, sources)",
+    "expect_failing": [
+      "component_apply_rolls_back_late_failure_and_preserves_outer_transaction",
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "A late failure rolls back every component apply write and keeps the caller transaction."
+  },
+  {
+    "id": "component-effective-superseded",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "        result[\"effective_state\"] = json!(\"superseded\");",
+    "replace": "        result[\"effective_state\"] = json!(\"draft\");",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Superseded components materialize as superseded, not draft."
+  },
+  {
+    "id": "component-native-support",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "    let native = if h[\"state\"] == \"active\" {",
+    "replace": "    let native = if false {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Active components report recovered native-event support for their anchored boundaries."
+  },
+  {
+    "id": "component-batch-route-filter",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "ids.is_empty() || ids.iter().any(|id| planned.contains(&pystr(id)))",
+    "replace": "ids.is_empty()",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Batch route issues naming a planned component block activation."
+  },
+  {
+    "id": "component-valuation-groups",
+    "file": "crates/custody/src/components/review.rs",
+    "find": "let context = if context == \"groups\" && fields.contains_key(\"valuation_unit\") {",
+    "replace": "let context = if false {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Valuation conservation groups keep Python field order."
+  },
+  {
+    "id": "component-planned-wallet-anchor",
+    "file": "crates/transfers/src/component_rows.rs",
+    "find": "if found.is_empty() && planned_wallets.contains(&py_str(&wallet)) {",
+    "replace": "if found.is_empty() && planned_wallets.contains(&py_str(&wallet)) && false {",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Planned untracked wallets satisfy leg wallet scope before they exist."
+  },
+  {
+    "id": "desktop-component-cap",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "        if items.len() > 50 {",
+    "replace": "        if items.len() > 51 {",
+    "expect_failing": [
+      "desktop_component_review_caps_aliases_versions_and_authority"
+    ],
+    "rule": "Desktop component plans cap bulk components before scope resolution."
+  },
+  {
+    "id": "desktop-component-source",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "        (\"authored_source\", s(source)),\n    ]);\n    for key in [\"workspace\", \"profile\"] {",
+    "replace": "        (\"authored_source\", field(\"authored_source\")),\n    ]);\n    for key in [\"workspace\", \"profile\"] {",
+    "expect_failing": [
+      "desktop_component_review_caps_aliases_versions_and_authority"
+    ],
+    "rule": "Desktop component authorship is gui regardless of request fields."
+  },
+  {
+    "id": "desktop-component-version",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "if !matches!(&version, Value::Int(n) if n >= &0.into()) {",
+    "replace": "if matches!(&version, Value::Null) {",
+    "expect_failing": [
+      "desktop_component_review_caps_aliases_versions_and_authority"
+    ],
+    "rule": "Desktop apply requires a non-negative integer input version."
+  },
+  {
+    "id": "gap-input-version",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "cr::require_input_version(c, scope, field(args, \"expected_input_version\"))?;",
+    "replace": "// Omit stale-plan guard.",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Apply binds authoring to the planned journal input version."
+  },
+  {
+    "id": "gap-apply-atomic",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "sql::atomic(c, || {\n        cr::require_input_version(c, scope, field(args, \"expected_input_version\"))?;\n        let p = plan(c, scope, args, candidate, sources)?;\n        apply(c, scope, &p, sources)\n    })",
+    "replace": "{\n        cr::require_input_version(c, scope, field(args, \"expected_input_version\"))?;\n        let p = plan(c, scope, args, candidate, sources)?;\n        apply(c, scope, &p, sources)\n    }",
+    "expect_failing": [
+      "gap_apply_rolls_back_late_failure_and_preserves_outer_transaction"
+    ],
+    "rule": "Late review failure rolls back component creation and preserves caller transactions."
+  },
+  {
+    "id": "gap-candidate-recheck",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "if fingerprint(&current, false)? != fingerprint(&candidate, false)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_plan_rechecks_loaded_candidate_before_authoring"
+    ],
+    "rule": "Planning re-derives and fingerprints the loaded candidate."
+  },
+  {
+    "id": "gap-component-id",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "kassiber:custody-gap-bridge:{}:{}:{fp}",
+    "replace": "kassiber:custody-gap-bridge-wrong:{}:{}:{fp}",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Bridge identity binds profile, gap and authored claim."
+  },
+  {
+    "id": "gap-child-id",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "kassiber:custody-plan:{id}:allocation:{i}",
+    "replace": "kassiber:custody-plan-wrong:{id}:allocation:{i}",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Allocation identity is deterministic within its component plan."
+  },
+  {
+    "id": "gap-source-movement",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "amount(&boundary, \"wallet_movement_msat\")?",
+    "replace": "amount(&boundary, \"principal_msat\")?",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "The source includes network fees in its wallet movement."
+  },
+  {
+    "id": "gap-fifo",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "for (dest, mut remaining) in destinations {",
+    "replace": "for (dest, mut remaining) in destinations.into_iter().rev() {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "N:M allocation follows canonical destination FIFO order."
+  },
+  {
+    "id": "gap-residual-role",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "(\"role\", s(\"suspense\")),",
+    "replace": "(\"role\", s(\"external\")),",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Unresolved residuals remain suspense until explicit classification."
+  },
+  {
+    "id": "gap-residual-custody",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "if classification.starts_with(\"external_\") {\n        \"external_confirmed\"",
+    "replace": "if classification.starts_with(\"external_\") {\n        \"internal_reviewed\"",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Explicit external classifications project external reviewed custody."
+  },
+  {
+    "id": "gap-revision-fingerprint",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "kassiber:custody-gap-revision:{base}",
+    "replace": "kassiber:custody-gap-revision-wrong:{base}",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revision identity binds the immutable correction commitment."
+  },
+  {
+    "id": "gap-residual-fingerprint",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "kassiber:custody-gap-residual:{base}",
+    "replace": "kassiber:custody-gap-residual-wrong:{base}",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Residual correction identity binds the immutable correction commitment."
+  },
+  {
+    "id": "gap-dismiss-invalidation",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "cs::invalidate(c, scope.profile_id)?;",
+    "replace": "// Omit dismissal invalidation.",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Dismissal invalidates journal freshness exactly once."
+  },
+  {
+    "id": "gap-post-version",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "(\"input_version\", version.into()),",
+    "replace": "(\"input_version\", (version+1).into()),",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Plans report the current input version without advancing it."
+  },
+  {
+    "id": "desktop-gap-version",
+    "file": "crates/transfers/src/gap_review.rs",
+    "find": "if !matches!(get(args,\"expected_input_version\"),Some(Value::Int(v)) if v>=&0.into()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_desktop_version_validation_follows_candidate_resolution"
+    ],
+    "rule": "Desktop apply requires an exact nonnegative integer after resolving its candidate."
+  },
+  {
+    "id": "gap-evidence-check",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "if evidence[\"valid\"] != true {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Corrections refuse stale reviewed observation evidence."
+  },
+  {
+    "id": "gap-correction-state",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "if !valid {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Corrections require the matching active or reopened component state."
+  },
+  {
+    "id": "gap-correction-commitments",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "(\"evidence_commitments\", Value::List(commitments)),",
+    "replace": "(\"evidence_commitments\", Value::List(commitments.into_iter().take(0).collect())),",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Correction fingerprints commit immutable evidence hashes."
+  },
+  {
+    "id": "gap-review-history",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "cs::insert(c, \"custody_gap_reviews\", &row)?;",
+    "replace": "// Omit immutable review record.",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Successful authoring appends the immutable review event."
+  },
+  {
+    "id": "gap-review-relations",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "s(\"custody-gap-review-transaction-v2\")",
+    "replace": "s(\"custody-gap-review-transaction-v1\")",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Review relations use deterministic role-bound v2 identities."
+  },
+  {
+    "id": "gap-report-summary",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "if action == \"classify_residual\" && classification != \"suspense_continuation\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Filed-report previews distinguish explicit residual classifications."
+  },
+  {
+    "id": "gap-report-overlap",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "if overlap.is_empty() {",
+    "replace": "if !overlap.is_empty() {",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Filed-report impact previews include only affected period overlap."
+  },
+  {
+    "id": "gap-report-persistence",
+    "file": "crates/transfers/src/gap_review_store.rs",
+    "find": "cs::insert(c, \"custody_filed_report_impacts\", &row)?;",
+    "replace": "let _ = &row;",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Apply persists every filed-report impact and rolls back on late impact failure."
+  },
+  {
+    "id": "gap-current-journal",
+    "file": "crates/transfers/src/gap_candidates.rs",
+    "find": "    ) && count > 0\n        && truthy(&value(&profile, \"last_processed_at\"))",
+    "replace": "    ) && false && count > 0\n        && truthy(&value(&profile, \"last_processed_at\"))",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Current journals use their version-bound ignored population."
+  },
+  {
+    "id": "gap-stored-ignored",
+    "file": "crates/transfers/src/gap_candidates.rs",
+    "find": "ignored.extend(a.iter().filter(|v| truthy(v)).map(py_str));",
+    "replace": "ignored.extend(a.iter().take(0).map(py_str));",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Stored ignored transaction identities suppress already claimed candidates."
+  },
+  {
+    "id": "gap-large-worklist",
+    "file": "crates/transfers/src/gap_candidates.rs",
+    "find": "let large = count > 50_000;",
+    "replace": "let large = count > 500_000;",
+    "expect_failing": [
+      "gap_worklists_match_python_without_changing_database_rows"
+    ],
+    "rule": "Large books retain bounded and explicitly incomplete advisory search."
+  },
+  {
+    "id": "gap-error-detail",
+    "file": "crates/transfers/src/gap_candidates.rs",
+    "find": "return internal(\"date value out of range\");",
+    "replace": "return internal(\"OverflowError\");",
+    "expect_failing": [
+      "gap_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Service refusals preserve the reference exception message."
+  },
+  {
+    "id": "desktop-gap-unknown",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "if !unknown.is_empty() {\n        return Err(\n            AppError::new(\"validation\", format!(\"{kind} received unsupported fields\"))",
+    "replace": "if false {\n        return Err(\n            AppError::new(\"validation\", format!(\"{kind} received unsupported fields\"))",
+    "expect_failing": [
+      "desktop_gap_checks_shape_authority_and_dispatch"
+    ],
+    "rule": "Gap desktop requests reject unrecognized authority fields."
+  },
+  {
+    "id": "desktop-gap-source",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "set(&mut payload, \"authored_source\", s(source));",
+    "replace": "set(&mut payload, \"authored_source\", s(\"user\"));",
+    "expect_failing": [
+      "desktop_gap_checks_shape_authority_and_dispatch"
+    ],
+    "rule": "Desktop gap authoring always records GUI authorship."
+  },
+  {
+    "id": "desktop-gap-reason",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "t.code_points().count()<=500",
+    "replace": "t.code_points().count()<=501",
+    "expect_failing": [
+      "desktop_gap_checks_shape_authority_and_dispatch"
+    ],
+    "rule": "Desktop reasons are bounded by Unicode code point count."
+  },
+  {
+    "id": "desktop-gap-classification",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "if get(args, \"action\") == Some(&s(\"classify_residual\"))",
+    "replace": "if false && get(args, \"action\") == Some(&s(\"classify_residual\"))",
+    "expect_failing": [
+      "desktop_gap_checks_shape_authority_and_dispatch"
+    ],
+    "rule": "Residual authoring requires a textual classification."
+  },
+  {
+    "id": "pairing-command-time_window_seconds",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "bounded_integer(args, \"time_window_seconds\",",
+    "replace": "bounded_integer(args, \"missing_time_window_seconds\",",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing command numeric options preserve explicit CLI values."
+  },
+  {
+    "id": "pairing-command-fee_sats_min",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "bounded_integer(args, \"fee_sats_min\",",
+    "replace": "bounded_integer(args, \"missing_fee_sats_min\",",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing command numeric options preserve explicit CLI values."
+  },
+  {
+    "id": "pairing-command-fee-pct",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "get(args, \"fee_pct_max\")",
+    "replace": "get(args, \"missing_fee_pct_max\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "The fee percentage reaches the shared matcher unchanged."
+  },
+  {
+    "id": "pairing-command-confidence",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"confidence\")",
+    "replace": "option(args, \"missing_confidence\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-asset_pair",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"asset_pair\")",
+    "replace": "option(args, \"missing_asset_pair\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-route_pair",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"route_pair\")",
+    "replace": "option(args, \"missing_route_pair\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-method",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"method\")",
+    "replace": "option(args, \"missing_method\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-candidate_type",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"candidate_type\")",
+    "replace": "option(args, \"missing_candidate_type\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-authored_source",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "option(args, \"authored_source\")",
+    "replace": "option(args, \"missing_authored_source\")",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Pairing commands preserve this filter or authorship at the shared service boundary."
+  },
+  {
+    "id": "pairing-command-transaction",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "sql::atomic(c, run)",
+    "replace": "run()",
+    "expect_failing": [
+      "pairing_commands_preserve_dry_runs_caller_transactions_and_late_failure_rollback"
+    ],
+    "rule": "The command commits only its own transaction and preserves caller rollback."
+  },
+  {
+    "id": "pairing-command-dry-run",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "if get(args, \"dry_run\").is_some_and(truthy) {",
+    "replace": "if false && get(args, \"dry_run\").is_some_and(truthy) {",
+    "expect_failing": [
+      "pairing_commands_preserve_dry_runs_caller_transactions_and_late_failure_rollback"
+    ],
+    "rule": "Dry runs restore every database row after calculating the result."
+  },
+  {
+    "id": "pairing-command-dispatch",
+    "file": "crates/transfers/src/pairing_commands.rs",
+    "find": "if operation == \"transfers.bulk-pair\" {",
+    "replace": "if operation == \"transfers.rules.apply\" {",
+    "expect_failing": [
+      "pairing_commands_preserve_dry_runs_caller_transactions_and_late_failure_rollback"
+    ],
+    "rule": "Bulk pairing and rule application invoke their corresponding shared service."
+  },
+  {
+    "id": "desktop-pairing-authority",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "let mut payload = dict([(\"authored_source\", s(source))]);",
+    "replace": "let mut payload = dict([(\"authored_source\", s(\"cli\"))]);",
+    "expect_failing": [
+      "desktop_pairing_defaults_coercion_and_authority_match_python"
+    ],
+    "rule": "Desktop pairing uses Python truthy defaults and trusted GUI authorship."
+  },
+  {
+    "id": "desktop-pairing-window-default",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": ".unwrap_or(86400.into());",
+    "replace": ".unwrap_or(0.into());",
+    "expect_failing": [
+      "desktop_pairing_defaults_coercion_and_authority_match_python"
+    ],
+    "rule": "Desktop pairing uses Python truthy defaults and trusted GUI authorship."
+  },
+  {
+    "id": "desktop-pairing-fee-default",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": ".unwrap_or(Value::Float(0.01));",
+    "replace": ".unwrap_or(Value::Float(0.0));",
+    "expect_failing": [
+      "desktop_pairing_defaults_coercion_and_authority_match_python"
+    ],
+    "rule": "Desktop pairing uses Python truthy defaults and trusted GUI authorship."
+  },
+  {
+    "id": "desktop-pairing-floor-default",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": ".unwrap_or(2500.into());",
+    "replace": ".unwrap_or(0.into());",
+    "expect_failing": [
+      "desktop_pairing_defaults_coercion_and_authority_match_python"
+    ],
+    "rule": "Desktop pairing uses Python truthy defaults and trusted GUI authorship."
+  },
+  {
+    "id": "pairing-command-window-overflow",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "if options.time_window_seconds_overflow {",
+    "replace": "if false && options.time_window_seconds_overflow {",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Unbounded CLI integers preserve Python float conversion overflow at the timed comparison."
+  },
+  {
+    "id": "pairing-command-filter-types",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "if !matches!(raw, Value::Str(_)) {",
+    "replace": "if false && !matches!(raw, Value::Str(_)) {",
+    "expect_failing": [
+      "pairing_command_filters_numeric_options_and_authorship_match_python"
+    ],
+    "rule": "Non-text pair filters preserve Python split errors instead of silently stringifying containers."
+  },
+  {
+    "id": "pairing-window-overflow-cache",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "window_overflow: options.time_window_seconds_overflow,",
+    "replace": "window_overflow: false,",
+    "expect_failing": [
+      "pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options"
+    ],
+    "rule": "The matcher cache cannot hide a changed numeric option refusal."
+  },
+  {
+    "id": "component-read-profile",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "vec![\"c.profile_id=?\"]",
+    "replace": "vec![\"c.profile_id!=?\"]",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Component lists stay in the selected profile."
+  },
+  {
+    "id": "component-read-show-scope",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "cr::get_component(c, scope, id, true)?",
+    "replace": "cr::get_component(c, scope, id, false)?",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Component show refuses another profile."
+  },
+  {
+    "id": "component-read-local",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "let local = get(args, \"include_local_evidence\").is_some_and(truthy);",
+    "replace": "let local = true;",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Local evidence requires the explicit CLI opt-in."
+  },
+  {
+    "id": "component-read-location",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "(\"location_ref\".into(), value(&location, \"location_ref\"))",
+    "replace": "(\"location_ref\".into(), Value::Null)",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Explicit local views preserve the stored location reference."
+  },
+  {
+    "id": "component-read-limit",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "n > &1001.into()",
+    "replace": "n > &1002.into()",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Core list limits retain the Python upper bound."
+  },
+  {
+    "id": "component-read-state",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "conditions.push(\"c.state=?\")",
+    "replace": "conditions.push(\"c.component_type=?\")",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "The state filter selects stored state."
+  },
+  {
+    "id": "component-read-type",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "conditions.push(\"c.component_type=?\")",
+    "replace": "conditions.push(\"c.state=?\")",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "The component type filter selects the normalized type."
+  },
+  {
+    "id": "component-read-transaction",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "COALESCE(l.anchor_transaction_id,l.transaction_id)=?",
+    "replace": "COALESCE(l.anchor_transaction_id,l.transaction_id)!=?",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Transaction filters use the anchored transaction."
+  },
+  {
+    "id": "component-read-effective",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "if effective && text(&item, \"effective_state\") != \"active\" {",
+    "replace": "if false && effective && text(&item, \"effective_state\") != \"active\" {",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Effective-only reads materialize and exclude ineffective components."
+  },
+  {
+    "id": "component-read-order",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "ORDER BY c.created_at DESC,c.revision DESC,c.id DESC",
+    "replace": "ORDER BY c.created_at ASC,c.revision DESC,c.id DESC",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Component pagination preserves descending Python order."
+  },
+  {
+    "id": "component-read-pre-limit",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "let limit_sql = if effective {",
+    "replace": "let limit_sql = if false && effective {",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Effective filtering precedes page truncation."
+  },
+  {
+    "id": "component-read-boolean-order",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "get(args, \"desktop_kind\") == Some(&s(\"ui.transfers.components.list\"))",
+    "replace": "false && get(args, \"desktop_kind\") == Some(&s(\"ui.transfers.components.list\"))",
+    "expect_failing": [
+      "component_desktop_boolean_validation_follows_transaction_resolution"
+    ],
+    "rule": "Desktop boolean validation follows transaction resolution and precedes core list validation."
+  },
+  {
+    "id": "desktop-component-read-private",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "dict([(\"include_local_evidence\", Value::Bool(false))])",
+    "replace": "dict([(\"include_local_evidence\", Value::Bool(true))])",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "Desktop reads always exclude local evidence."
+  },
+  {
+    "id": "desktop-component-read-cap",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "n>=&1.into()&&n<=&1000.into()",
+    "replace": "n>=&1.into()&&n<=&1001.into()",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "Desktop component pages cap the requested limit at 1000."
+  },
+  {
+    "id": "desktop-component-read-extra",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "(limit + 1).into()",
+    "replace": "limit.into()",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "Desktop reads request an extra row to determine has_more."
+  },
+  {
+    "id": "desktop-component-read-more",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "components.len() > limit",
+    "replace": "components.len() >= limit",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "A full final page does not claim more rows."
+  },
+  {
+    "id": "desktop-component-read-truncate",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "components.truncate(limit);",
+    "replace": "components.truncate(limit + 1);",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "The probe row never leaks into the page."
+  },
+  {
+    "id": "component-read-surrogate-show",
+    "file": "crates/transfers/src/component_reads.rs",
+    "find": "reference_bind(id, 1)?",
+    "replace": "sql::bind(id, 1)?",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Component identifiers preserve Python UTF-8 binding refusals and never alias a scalar identifier."
+  },
+  {
+    "id": "component-read-surrogate-transaction",
+    "file": "crates/transactions/src/lookup.rs",
+    "find": "            kassiber_pytext::utf8_error(text).unwrap_or_default(),",
+    "replace": "            \"surrogates not allowed\".to_owned(),",
+    "expect_failing": [
+      "component_read_filters_privacy_and_paging_match_python"
+    ],
+    "rule": "Transaction reference encoding refusals preserve the original code point positions."
+  },
+  {
+    "id": "gap-read-scalar-id",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": ".find(|g| value(g, \"gap_id\") == id)",
+    "replace": ".find(|g| text(g, \"gap_id\") == py_str(&id))",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A non-scalar JSON identifier must never alias an existing gap."
+  },
+  {
+    "id": "gap-read-cursor-surrogate",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if matches!(cursor,Some(Value::Str(text)) if text.as_str().is_none()) {",
+    "replace": "if false && matches!(cursor,Some(Value::Str(text)) if text.as_str().is_none()) {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Non-scalar cursor strings are malformed, not a neutral first page."
+  },
+  {
+    "id": "gap-read-review-conflicts",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "signature(old) != signature(&row)",
+    "replace": "signature(old) == signature(&row)",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Concurrent review conflicts require distinct signatures at the same revision."
+  },
+  {
+    "id": "gap-read-fallback-conflict",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "number(candidate, \"conflict_size\")? > 1.into()",
+    "replace": "number(candidate, \"conflict_size\")? > 2.into()",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Two competing candidates remain conflicting."
+  },
+  {
+    "id": "gap-read-reopen",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if text(r, \"event_kind\") == \"bridge_reopened\" {",
+    "replace": "if false && text(r, \"event_kind\") == \"bridge_reopened\" {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A reopened bridge remains in needs_review."
+  },
+  {
+    "id": "gap-read-authored-fingerprint",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "gaps::authored_claim_fingerprint(&codec::to_json(candidate))",
+    "replace": "gaps::candidate_fingerprint(&codec::to_json(candidate))",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Resolved review displays bind the authored claim fingerprint."
+  },
+  {
+    "id": "gap-read-dismissal-fingerprint",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if !matches && !resolved {",
+    "replace": "if false && !matches && !resolved {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Evidence drift reopens a stale dismissal."
+  },
+  {
+    "id": "gap-read-resolution-admission",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if matches || (usable && [\"partial\", \"corroborated\"].contains(&native.as_str())) {",
+    "replace": "if usable && [\"partial\", \"corroborated\"].contains(&native.as_str()) {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A matching usable reviewed claim remains resolved without native corroboration."
+  },
+  {
+    "id": "gap-read-historical",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "historical(c, scope, r)",
+    "replace": "None",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A historical reviewed gap remains available by its original id."
+  },
+  {
+    "id": "gap-read-component-effective",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if text(&component, \"effective_state\") != \"active\" {",
+    "replace": "if text(&component, \"effective_state\") == \"active\" {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Only an effective component makes a resolved historical claim usable."
+  },
+  {
+    "id": "gap-read-residual-dedup",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "entry.clone().max(amount)",
+    "replace": "entry.clone() + amount",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Competing residuals count once per conflict cluster."
+  },
+  {
+    "id": "gap-read-canonical-priority",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if issues.is_empty() {",
+    "replace": "if !issues.is_empty() {",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Canonical quantity issues take priority over advisory residual totals."
+  },
+  {
+    "id": "gap-read-quantified-count",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "quantified += 1;",
+    "replace": "quantified += 0;",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Null-amount issues remain separately unquantified."
+  },
+  {
+    "id": "gap-read-canonical-fresh",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "\"current\" if issues.is_empty() =>",
+    "replace": "\"current\" if !issues.is_empty() =>",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Only a current projection with no canonical issues is described as clear."
+  },
+  {
+    "id": "gap-read-fail-closed",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "rows(c, issue_query, [scope.profile_id]).map_err",
+    "replace": "rows(c, issue_query, [scope.profile_id]).or_else(|_| Ok::<_, AppError>(Vec::new())).map_err",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "An unavailable quantity blocker table cannot turn into report clearance."
+  },
+  {
+    "id": "gap-read-limit",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "n>=&1.into()&&n<=&500.into()",
+    "replace": "n>=&1.into()&&n<=&501.into()",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "Core display page limits preserve the Python 500 bound."
+  },
+  {
+    "id": "gap-read-page-start",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "        n + 1\n",
+    "replace": "        n\n",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A continuation starts after its bound ordinal."
+  },
+  {
+    "id": "gap-read-cursor-scalar",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "Ok((n.clone(), parts[2].clone()))",
+    "replace": "Ok((n.clone(), s(py_str(&parts[2]))))",
+    "expect_failing": [
+      "gap_display_cursor_codec_matches_python_compact_payload_and_refusals"
+    ],
+    "rule": "Encoded cursor identities retain all Python string code points."
+  },
+  {
+    "id": "gap-read-cursor-key",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "value(&candidates[n], \"gap_id\") == id",
+    "replace": "true",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "A cursor binds both candidate ordinal and gap identity."
+  },
+  {
+    "id": "gap-read-cursor-ordinal",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "start + page.len() - 1",
+    "replace": "start + page.len()",
+    "expect_failing": [
+      "gap_snapshot_states_freshness_and_cursor_validation_match_python"
+    ],
+    "rule": "The next cursor binds the last returned candidate ordinal."
+  },
+  {
+    "id": "gap-read-cursor-version",
+    "file": "crates/transfers/src/gap_snapshot.rs",
+    "find": "if &parts[0] != version {",
+    "replace": "if false && &parts[0] != version {",
+    "expect_failing": [
+      "gap_display_cursor_codec_matches_python_compact_payload_and_refusals"
+    ],
+    "rule": "Projection cursors expire when the input version changes."
+  },
+  {
+    "id": "desktop-gap-read-cap",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "n>=&1.into()&&n<=&200.into()",
+    "replace": "n>=&1.into()&&n<=&201.into()",
+    "expect_failing": [
+      "desktop_gap_reads_bound_arguments_and_project_safe_exact_integers"
+    ],
+    "rule": "Desktop gap pages retain their narrower 200-row cap."
+  },
+  {
+    "id": "desktop-gap-read-unknown",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": ".filter(|k| !allowed.contains(&k.as_str()))",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "desktop_gap_reads_bound_arguments_and_project_safe_exact_integers"
+    ],
+    "rule": "Unknown gap display fields cannot expand the authority or projection."
+  },
+  {
+    "id": "desktop-gap-read-projection",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "let downstream = field(gap, \"downstream\");",
+    "replace": "kassiber_envelope::set(&mut projected,\"correction\",field(gap,\"correction\")); let downstream = field(gap, \"downstream\");",
+    "expect_failing": [
+      "desktop_gap_reads_bound_arguments_and_project_safe_exact_integers"
+    ],
+    "rule": "Desktop gap views exclude correction and native component details."
+  },
+  {
+    "id": "desktop-gap-read-exact",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "exact_integers(dict([\n        (\"summary\", summary),",
+    "replace": "std::convert::identity(dict([\n        (\"summary\", summary),",
+    "expect_failing": [
+      "desktop_gap_reads_bound_arguments_and_project_safe_exact_integers"
+    ],
+    "rule": "Desktop display quantities beyond the exact JavaScript range stay strings."
+  },
+  {
+    "id": "desktop-gap-read-scalar",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "set(&mut payload, \"gap_id\", Value::Str(gap));",
+    "replace": "set(&mut payload,\"gap_id\",s(kassiber_envelope::py_str(&Value::Str(gap))));",
+    "expect_failing": [
+      "desktop_gap_reads_bound_arguments_and_project_safe_exact_integers"
+    ],
+    "rule": "JSON gap identifiers retain every code point through the adapter."
+  },
+  {
+    "id": "desktop-component-read-scalar",
+    "file": "crates/daemon/src/transfers.rs",
+    "find": "set(&mut payload, \"component_id\", Value::Str(id));",
+    "replace": "set(&mut payload,\"component_id\",s(kassiber_envelope::py_str(&Value::Str(id))));",
+    "expect_failing": [
+      "desktop_component_reads_bound_pages_and_keep_local_evidence_private"
+    ],
+    "rule": "JSON component identifiers must not lose surrogate code points."
+  },
+  {
+    "id": "desktop-reading-missing",
+    "file": "crates/transfers/src/review_reading.rs",
+    "find": "first.is_none() || matches.next().is_some()",
+    "replace": "first.is_some() || matches.next().is_some()",
+    "expect_failing": [
+      "desktop_pair_readings_match_frozen_python_fingerprints_without_writes"
+    ],
+    "rule": "Missing pair reviews never acquire a reading."
+  },
+  {
+    "id": "desktop-reading-observation",
+    "file": "crates/transfers/src/review_reading.rs",
+    "find": "value(pair, &key)",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "desktop_pair_readings_match_frozen_python_fingerprints_without_writes"
+    ],
+    "rule": "Fingerprints bind both observed legs."
+  },
+  {
+    "id": "desktop-reading-allocations",
+    "file": "crates/transfers/src/review_reading.rs",
+    "find": "\"allocations\",\n        Value::List(keyed.into_iter().map(|(_, row)| row).collect()),",
+    "replace": "\"allocations\",\n        Value::List(vec![]),",
+    "expect_failing": [
+      "desktop_pair_readings_match_frozen_python_fingerprints_without_writes"
+    ],
+    "rule": "Fingerprints bind all authored allocations."
+  },
+  {
+    "id": "desktop-reading-source",
+    "file": "crates/transfers/src/review_reading.rs",
+    "find": "allocation.source_amount_msat,allocation.sink_amount_msat",
+    "replace": "allocation.sink_amount_msat AS source_amount_msat,allocation.sink_amount_msat",
+    "expect_failing": [
+      "desktop_pair_readings_match_frozen_python_fingerprints_without_writes"
+    ],
+    "rule": "Fingerprints preserve asymmetric allocation quantities."
+  },
+  {
+    "id": "desktop-reading-ambiguous",
+    "file": "crates/transfers/src/review_reading.rs",
+    "find": "first.is_none() || matches.next().is_some()",
+    "replace": "first.is_none()",
+    "expect_failing": [
+      "desktop_pair_readings_refuse_ambiguous_reviews_and_foreign_profiles"
+    ],
+    "rule": "Ambiguous current reviews do not grant an unpair fingerprint."
+  },
+  {
+    "id": "pair-list-review-guidance",
+    "file": "crates/transfers/src/records.rs",
+    "find": "        let guidance = crate::pair_guidance::guidance(&components, &entry);",
+    "replace": "        let guidance = Value::Null;",
+    "expect_failing": [
+      "stored_reads_match_python_bytes_without_touching_rows"
+    ],
+    "rule": "Listed pairs carry list_pair_reviews' review guidance (review_required, review_codes, repair) before the component."
+  },
+  {
+    "id": "rail-pair-needs-own-policy",
+    "file": "crates/transfers/src/rules.rs",
+    "find": "            .is_some_and(|entry| entry.rail_decision_required)\n    {",
+    "replace": "            .is_some_and(|_| false)\n    {",
+    "expect_failing": [
+      "rail_pairs_need_an_explicit_policy_where_the_country_requires_one"
+    ],
+    "rule": "Pairing a BTC/LBTC rail change needs its own policy where the country requires one (DE-RAIL)."
+  },
+  {
+    "id": "dismiss-expiry-system-clock",
+    "file": "crates/transfers/src/sql.rs",
+    "find": "    let _ = sources;\n    SystemSources.now(conn)\n}",
+    "replace": "    sources.now(conn)\n}",
+    "expect_failing": [
+      "a_dismissal_expiry_counts_from_the_system_clock"
+    ],
+    "rule": "Outside harness pins, a dismissal's expiry counts from the system clock (Python's datetime.now() + days), not the now_iso() seam that stamps created_at."
+  },
+  {
+    "id": "dismiss-expiry-harness-pin",
+    "file": "crates/transfers/src/sql.rs",
+    "find": "    if let Some(now) = sources.pinned_wall_clock() {",
+    "replace": "    if let Some(now) = sources.pinned_wall_clock().filter(|_| false) {",
+    "expect_failing": [
+      "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
+    ],
+    "rule": "A harness build counts the expiry from the pinned wall clock its Python vector froze."
+  }
+]

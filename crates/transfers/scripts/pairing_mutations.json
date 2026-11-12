@@ -1,0 +1,382 @@
+[
+  {
+    "id": "pairing-field-lookup-duplicate-order",
+    "file": "crates/transfers/src/pairing/mod.rs",
+    "find": "Value::Dict(pairs) => pairs\n            .iter()\n            .rev()\n            .find_map",
+    "replace": "Value::Dict(pairs) => pairs\n            .iter()\n            .find_map",
+    "expect_failing": [
+      "pairing_field_lookup_preserves_exact_keys_and_last_duplicate"
+    ],
+    "rule": "Pairing field lookup retains Python's last value for duplicate string keys."
+  },
+  {
+    "id": "pairing-field-lookup-exact-key",
+    "file": "crates/transfers/src/pairing/mod.rs",
+    "find": "kassiber_pyjson::Key::Str(name) if name.is(key) => Some(value),",
+    "replace": "kassiber_pyjson::Key::Str(name) if name.as_str().is_some_and(|name| name.starts_with(key)) => Some(value),",
+    "expect_failing": [
+      "pairing_field_lookup_preserves_exact_keys_and_last_duplicate"
+    ],
+    "rule": "Only an exact string key selects an observation or evidence field."
+  },
+  {
+    "id": "pairing-excluded",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "truthy(&value(&data, \"excluded\"))",
+    "replace": "false",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Excluded observations cannot participate in matching."
+  },
+  {
+    "id": "pairing-unknown-time",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "kassiber_pytext::strip(&when) == \"1970-01-01T00:00:00Z\"",
+    "replace": "false",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "The unknown-time placeholder is not a proximity signal."
+  },
+  {
+    "id": "pairing-fee-inclusive",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "truthy(&value(&o.data, \"amount_includes_fee\"))",
+    "replace": "false",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "Fee-inclusive amounts must not add the fee twice."
+  },
+  {
+    "id": "pairing-hash-cardinality",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "pop[0].len() != 1 || pop[1].len() != 1",
+    "replace": "pop[0].is_empty() || pop[1].is_empty()",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Full hash populations must be uniquely attributable."
+  },
+  {
+    "id": "pairing-hash-unscoped",
+    "file": "crates/transfers/src/pairing/htlc.rs",
+    "find": "\"chain_script\" => \"chain_htlc_unscoped\",",
+    "replace": "\"chain_script\" => \"provider_or_import\",",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "An unscoped HTLC label cannot establish a hash proof."
+  },
+  {
+    "id": "pairing-principal-tolerance",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "delta < 0 || delta > threshold",
+    "replace": "delta < 0 || delta >= threshold",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "Heuristic fee tolerance includes its exact boundary."
+  },
+  {
+    "id": "pairing-different-txids",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": ".is_some_and(|(o, i)| o.2 != i.2)",
+    "replace": ".is_some_and(|(o, i)| o.2 == i.2)",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Distinct known on-chain txids cannot form a same-asset heuristic move."
+  },
+  {
+    "id": "pairing-refund-precedence",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "\"htlc_refund\" => 0",
+    "replace": "\"htlc_refund\" => 9",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Duplicate edges retain the highest ranked evidence method."
+  },
+  {
+    "id": "pairing-global-cluster",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "parent[a] = b;",
+    "replace": "parent[a] = a;",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Shared legs remain globally conflicted before filtering."
+  },
+  {
+    "id": "pairing-provider-unique",
+    "file": "crates/transfers/src/pairing/provider.rs",
+    "find": "compatible_outs == 1 && compatible_ins == 1 && whole(&e, o, i)",
+    "replace": "whole(&e, o, i)",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Provider evidence cardinality is measured before occupancy and vetoes."
+  },
+  {
+    "id": "pairing-provider-amount",
+    "file": "crates/transfers/src/pairing/provider.rs",
+    "find": "&& !e.amount_conflict",
+    "replace": "&& true",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Contradictory provider amounts deny exact confidence."
+  },
+  {
+    "id": "pairing-provider-route",
+    "file": "crates/transfers/src/pairing/provider.rs",
+    "find": "if !route(&e, o, true) || !route(&e, i, false)",
+    "replace": "if false",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Declared route txids must agree with their own observations."
+  },
+  {
+    "id": "pairing-provider-semantic",
+    "file": "crates/transfers/src/pairing/provider.rs",
+    "find": "&& !e.semantic_conflict",
+    "replace": "&& true",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Contradictory provider flow or status denies exact confidence."
+  },
+  {
+    "id": "pairing-refund-proof",
+    "file": "crates/transfers/src/pairing/htlc.rs",
+    "find": "if proof\n                    && hex_id(&txid).is_some()",
+    "replace": "if true\n                    && hex_id(&txid).is_some()",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Refund exactness requires replayed outpoint proof."
+  },
+  {
+    "id": "pairing-htlc-template",
+    "file": "crates/transfers/src/pairing/htlc.rs",
+    "find": "script.get(at + 36..) != Some(&[0x68, 0xac])",
+    "replace": "script.get(at + 36..) != Some(&[0x68, 0xad])",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Only the recognized HTLC template supplies witness evidence."
+  },
+  {
+    "id": "pairing-stale-projection",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "!truthy(&value(&profile, \"last_processed_at\"))\n            || n(&value(&profile, \"last_processed_tx_count\"))?\n                != n(&value(&profile, \"active_count\"))?\n            || n(&value(&profile, \"journal_input_version\"))?\n                != n(&value(&profile, \"last_processed_input_version\"))?",
+    "replace": "false",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "Only current journal projections supply pairing guards."
+  },
+  {
+    "id": "pairing-rule-priority",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "std::cmp::Reverse(specificity(r))",
+    "replace": "specificity(r)",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "Rules sort by descending specificity before rule id."
+  },
+  {
+    "id": "pairing-rule-confidence",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "minimum = \"strong\".into();",
+    "replace": "minimum = \"exact\".into();",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "An omitted minimum confidence matches strong candidates, as the Python rule default does."
+  },
+  {
+    "id": "pairing-unpair-veto",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "if o.skip_user_unpaired {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "Automatic journals preserve explicit user unpairs."
+  },
+  {
+    "id": "pairing-bulk-confidence",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "(confidence == \"exact\" && !candidate.exact())",
+    "replace": "false",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "Bulk exact cannot author strong-only suggestions."
+  },
+  {
+    "id": "pairing-bulk-source",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "\"bulk_exact\"",
+    "replace": "\"bulk_selected\"",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "Automatic exact reviews retain their pair source."
+  },
+  {
+    "id": "pairing-frozen-guards",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "let bulk = mutate(c, scope, &pop, &o, &guards, false, sources)?;",
+    "replace": "let bulk = mutate(c, scope, &pop, &o, &ProjectionGuards::load(c, scope)?, false, sources)?;",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "Both write passes use guards captured before the first review invalidates journals."
+  },
+  {
+    "id": "pairing-cache-count",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "    let moves = (n(&value(counts, \"total\"))? - n(&value(counts, \"ownership\"))?).max(0);",
+    "replace": "    let moves = 0_i64;",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "The badge cache records the post-pair candidate count."
+  },
+  {
+    "id": "pairing-atomic",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "sql::atomic(c, f)",
+    "replace": "f()",
+    "expect_failing": [
+      "pairing_auto_pair_rolls_back_late_failure_and_leaves_commit_to_caller"
+    ],
+    "rule": "A late cache failure rolls back all pairing writes while preserving the caller transaction."
+  },
+  {
+    "id": "pairing-cache-paired",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "paired: paired.clone(),",
+    "replace": "paired: HashSet::new(),",
+    "expect_failing": [
+      "pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options"
+    ],
+    "rule": "Matcher cache must distinguish changes to paired."
+  },
+  {
+    "id": "pairing-cache-dismissed",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "dismissed: dismissed.clone(),",
+    "replace": "dismissed: HashSet::new(),",
+    "expect_failing": [
+      "pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options"
+    ],
+    "rule": "Matcher cache must distinguish changes to dismissed."
+  },
+  {
+    "id": "pairing-cache-booked",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "booked: booked.clone(),",
+    "replace": "booked: HashSet::new(),",
+    "expect_failing": [
+      "pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options"
+    ],
+    "rule": "Matcher cache must distinguish changes to booked."
+  },
+  {
+    "id": "pairing-cache-window",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "window: options.time_window_seconds,",
+    "replace": "window: 0,",
+    "expect_failing": [
+      "pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options"
+    ],
+    "rule": "Matcher cache must distinguish changes to window."
+  },
+  {
+    "id": "pairing-cache-pct",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "pct: options.fee_pct_max.to_bits(),",
+    "replace": "pct: 0,",
+    "expect_failing": [
+      "pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options"
+    ],
+    "rule": "Matcher cache must distinguish changes to pct."
+  },
+  {
+    "id": "pairing-cache-floor",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "floor: options.fee_sats_min,",
+    "replace": "floor: 0,",
+    "expect_failing": [
+      "pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options"
+    ],
+    "rule": "Matcher cache must distinguish changes to floor."
+  },
+  {
+    "id": "pairing-cache-heuristics",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "heuristics: options.include_heuristics,",
+    "replace": "heuristics: true,",
+    "expect_failing": [
+      "pairing_cache_rechecks_occupancy_dismissal_expiry_guards_and_options"
+    ],
+    "rule": "Matcher cache must distinguish changes to heuristics."
+  },
+  {
+    "id": "pairing-nonfinite-event-id",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "        let raw_txid = raw().field(\"txid\");",
+    "replace": "        let raw_txid = std::borrow::Cow::<Value>::Owned(codec::object(row.at(\"raw_json\"))[\"txid\"].clone());",
+    "expect_failing": [
+      "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
+    ],
+    "rule": "Nonfinite raw event ids retain Python text in authored evidence commitments."
+  },
+  {
+    "id": "pairing-rule-integer-division",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "&& fee_ratio(candidate.fee(), amount) <= expected",
+    "replace": "&& (candidate.fee().abs() as f64 / amount as f64) <= expected",
+    "expect_failing": [
+      "pairing_rule_fee_cap_rounds_the_integer_ratio_once"
+    ],
+    "rule": "Fee-cap rules round the exact integer quotient once, preserving the inclusive boundary above 2^53 msat."
+  },
+  {
+    "id": "pairing-falsey-identity",
+    "file": "crates/transfers/src/pairing/matcher.rs",
+    "find": "let surfaced = st(&raw, \"txid\");",
+    "replace": "let surfaced = get(&raw, \"txid\").map(py_str).unwrap_or_default();",
+    "expect_failing": [
+      "pairing_matcher_matches_python_transfer_fixtures_byte_for_byte"
+    ],
+    "rule": "Falsey outer txids are absent, allowing authoritative nested identity to prevent a guessed same-asset heuristic pair."
+  },
+  {
+    "id": "pairing-stage-commits-journal-transaction",
+    "file": "crates/transfers/src/pairing/service.rs",
+    "find": "        let a = value(&rules, \"summary\");",
+    "replace": "        c.execute_batch(\"COMMIT\").map_err(sql::error)?;\n        let a = value(&rules, \"summary\");",
+    "expect_failing": [
+      "pairing_stage_repeats_match_python_and_outer_journal_failure_reverts_every_table"
+    ],
+    "rule": "Pairing must leave every authored row and the candidate cache inside the caller's journal transaction."
+  },
+  {
+    "id": "pairing-ordered-raw-json",
+    "file": "crates/transfers/src/pairing/mod.rs",
+    "find": ".filter(|raw| !ordered_provider_text(raw))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "pairing_encoded_provider_metadata_preserves_python_mapping_order"
+    ],
+    "rule": "Encoded provider metadata preserves Python JSON object insertion order before textual evidence projection."
+  }
+]
