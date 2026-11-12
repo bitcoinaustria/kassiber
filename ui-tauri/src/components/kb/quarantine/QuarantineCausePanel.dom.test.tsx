@@ -17,6 +17,7 @@ const daemon = vi.hoisted(() => ({
   cases: vi.fn(),
   plan: vi.fn(),
   apply: vi.fn(),
+  sync: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
@@ -35,14 +36,15 @@ vi.mock("@/daemon/client", () => {
   };
   return {
     DaemonRequestError,
-    useDaemonStreamMutation: () => ({ mutate: vi.fn(), isPending: false }),
+    useDaemonStreamMutation: () => ({ mutate: daemon.sync, isPending: false }),
     useDaemonMutation: (kind: string) => ({ mutateAsync: byKind[kind] }),
   };
 });
 
 import "@/i18n";
 import { DaemonRequestError } from "@/daemon/client";
-import { useUiStore } from "@/store/ui";
+import { useFeedbackStore } from "@/lib/feedback";
+import { resetNotificationStore, useNotificationStore } from "@/store/notifications";
 
 import { QuarantineCausePanel } from "./QuarantineCausePanel";
 import type { QuarantineEvidence, QuarantineItem, QuarantineSnapshot } from "./types";
@@ -181,6 +183,8 @@ beforeEach(() => {
   daemon.cases.mockReset().mockResolvedValue({ data: { input_version: 7 } });
   daemon.plan.mockReset().mockImplementation(async (args: { operations: unknown[] }) => ({ data: artifactFor(args) }));
   daemon.apply.mockReset().mockResolvedValue({ data: {} });
+  daemon.sync.mockReset();
+  resetNotificationStore();
 });
 afterEach(cleanup);
 
@@ -259,7 +263,7 @@ describe("unpairing pairs that leave a suspense", () => {
     expect(applied.artifact.digest).toBe("d".repeat(64));
     expect(applied.expected_scope).toEqual({ workspace_id: "ws", profile_id: "book" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(useUiStore.getState().notifications.some((entry) => entry.title === "Unpaired 2 pairs")).toBe(true);
+    expect(useFeedbackStore.getState().items.some((entry) => entry.title === "Unpaired 2 pairs")).toBe(true);
   });
 
   it("unpairs one pair through the same preview, naming both wallets", async () => {
@@ -512,7 +516,7 @@ describe("entering prices on a cause's rows", () => {
     await waitFor(() => expect(daemon.apply).toHaveBeenCalledTimes(1));
     expect(daemon.apply.mock.calls[0][0]).toMatchObject({ expected_scope: BOOK, artifact: { operations: planned().operations } });
     await waitFor(() => expect(inputs()).toHaveLength(0));
-    expect(useUiStore.getState().notifications.some((entry) => entry.title === "1 price saved")).toBe(true);
+    expect(useFeedbackStore.getState().items.some((entry) => entry.title === "1 price saved")).toBe(true);
   });
 
   it("holds back a price that is not a number, and Cancel leaves nothing typed", () => {
@@ -549,5 +553,33 @@ describe("entering prices on a cause's rows", () => {
     const accept = screen.getByRole("button", { name: "Accept this price" });
     const exact = screen.getByRole("button", { name: "Enter exact prices" });
     expect(accept.compareDocumentPosition(exact) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("a cause's wallet sync", () => {
+  it("runs as a job and leaves a failure that opens that wallet", () => {
+    const item = root("tx-sync", "pair-sync");
+    item.actions = [{ kind: "sync_wallet", wallet_id: "w-cold", wallet_label: "Cold storage" }];
+    mount(snapshotOf([item]));
+    fireEvent.click(screen.getByRole("button", { name: "Sync Cold storage" }));
+
+    const [args, options] = daemon.sync.mock.calls[0] as [
+      unknown,
+      { onError: (error: Error) => void; onSettled: () => void },
+    ];
+    expect(args).toEqual({ wallet: "w-cold" });
+    expect(Object.values(useNotificationStore.getState().jobs)).toMatchObject([
+      { code: "connection-sync", scope: { source: "connection:w-cold" } },
+    ]);
+
+    options.onError(new Error("backend timed out"));
+    options.onSettled();
+    expect(useNotificationStore.getState().jobs).toEqual({});
+    const [condition] = Object.values(useNotificationStore.getState().conditions);
+    expect(condition).toMatchObject({
+      code: "connection.sync-failed",
+      action: { type: "open-connection", connectionId: "w-cold" },
+      details: [{ label: "Cold storage", message: "backend timed out" }],
+    });
   });
 });

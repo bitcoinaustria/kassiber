@@ -504,11 +504,7 @@
     "panel": {
       "blocksReports": "Blocks reports",
       "deprecatedWallet": "{{wallet}} is marked deprecated, so “Refresh all” skips it; sync it on its own.",
-      "gapReviewLocked": "Custody-gap review is currently part of the developer tools. Connect the missing wallet or ask the assistant to investigate.",
-      "syncStartedTitle": "Syncing {{wallet}}",
-      "syncStartedBody": "Kassiber syncs the wallet and then recalculates the quarantine.",
-      "syncFinishedTitle": "{{wallet}} synced",
-      "syncFailedTitle": "Sync of {{wallet}} failed"
+      "gapReviewLocked": "Custody-gap review is currently part of the developer tools. Connect the missing wallet or ask the assistant to investigate."
     },
     "freshness": {
       "staleTitle": "This list may be outdated",

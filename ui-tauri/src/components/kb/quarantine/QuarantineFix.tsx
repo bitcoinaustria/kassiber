@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { reviewArtifact, type ReviewArtifact } from "@/components/ai/reviewWorkflow";
+import { showFeedback } from "@/lib/feedback";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +17,6 @@ import { DaemonRequestError, useDaemonMutation } from "@/daemon/client";
 import { formatShortDate } from "@/lib/date";
 import { formatSats } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
-import { useUiStore } from "@/store/ui";
 
 import { fixOperations, reconcilePicks } from "./explain";
 import type { QuarantineBookScope, QuarantineItem } from "./types";
@@ -154,11 +154,12 @@ export function QuarantineFixDialog({
     setPhase({ kind: "applying", artifact, key });
     try {
       await apply.mutateAsync({ expected_scope: scope, artifact, idempotency_key: key });
-      useUiStore.getState().addNotification({
+      showFeedback({
         title: t("quarantine.fix.doneTitle", { count: artifact.operations.length }),
-        body: t("quarantine.fix.doneBody", { remaining: artifact.after.quarantine_count }),
+        description: t("quarantine.fix.doneBody", { remaining: artifact.after.quarantine_count }),
+        descriptionPrivacy: "safe",
         tone: "success",
-        dedupeKey: "quarantine-fix",
+        key: "quarantine-fix",
       });
       onClose();
     } catch (error) {

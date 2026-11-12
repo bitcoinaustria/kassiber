@@ -157,7 +157,7 @@ vi.mock("@/components/transactions", async (importOriginal) => {
   };
 });
 
-import { useUiStore } from "@/store/ui";
+import { useFeedbackStore } from "@/lib/feedback";
 
 import { QuarantineSection } from "./QuarantineSection";
 
@@ -500,8 +500,8 @@ describe("quarantine section", () => {
     expect(daemon.calls.some((call) => call.kind === "ui.transfers.unpair")).toBe(false);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(
-      useUiStore.getState().notifications.some((entry) =>
-        String(entry.body).includes("reads differently now than the sheet showed it"),
+      useFeedbackStore.getState().items.some((entry) =>
+        String(entry.description).includes("reads differently now than the sheet showed it"),
       ),
     ).toBe(true);
   });

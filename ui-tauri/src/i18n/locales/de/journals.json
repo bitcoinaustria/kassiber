@@ -504,11 +504,7 @@
     "panel": {
       "blocksReports": "Blockiert Berichte",
       "deprecatedWallet": "{{wallet}} ist als veraltet markiert, daher überspringt „Alles aktualisieren“ sie; synchronisiere sie einzeln.",
-      "gapReviewLocked": "Die Prüfung von Verwahrungslücken gehört derzeit zu den Entwickler-Tools. Verbinde die fehlende Wallet oder lass den Assistenten untersuchen.",
-      "syncStartedTitle": "{{wallet}} wird synchronisiert",
-      "syncStartedBody": "Kassiber synchronisiert die Wallet und berechnet danach die Quarantäne neu.",
-      "syncFinishedTitle": "{{wallet}} synchronisiert",
-      "syncFailedTitle": "Synchronisierung von {{wallet}} fehlgeschlagen"
+      "gapReviewLocked": "Die Prüfung von Verwahrungslücken gehört derzeit zu den Entwickler-Tools. Verbinde die fehlende Wallet oder lass den Assistenten untersuchen."
     },
     "freshness": {
       "staleTitle": "Diese Liste ist möglicherweise veraltet",
