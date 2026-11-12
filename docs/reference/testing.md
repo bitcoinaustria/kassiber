@@ -145,6 +145,14 @@ readings (`crates/session-replay/tests/figures.rs` enforces this). Sessions
 that could not replay identically are listed with their reason in
 `tests/data/sessions/dropped.tsv`.
 
+Stdin replays after the recorded number of stdout lines and the network tape
+answers at once, so a recording whose test held a request in flight would
+race on replay. The sessions of
+`test_live_freshness_controls_remain_available_during_fetch` get that hold
+back from the tape (`KASSIBER_TEST_NET_TAPE_HOLD`): the first history request
+waits, the control goes in once it is held, and the request finishes after the
+control has answered (`held_request` in `crates/session-replay/src/replay.rs`).
+
 The recorder needed the pytest suite, so no new sessions are recorded. New
 coverage goes into Rust tests. A reviewed, deliberate change re-records the
 sessions it changes, with the same argv, environment and starting state:

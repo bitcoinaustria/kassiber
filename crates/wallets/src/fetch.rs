@@ -893,6 +893,27 @@ impl Fetch {
         Ok(())
     }
 
+    /// The network part of `revalidate`, cheap enough to run before every
+    /// request: the book's network binding and the wallet's network guard
+    /// decide where requests may go, so a change refuses the next request,
+    /// not only the publication. `kind` is the wallet row's kind, which the
+    /// caller has compared with the captured selection.
+    pub(crate) fn check_network(&self, conn: &Connection, kind: &str) -> Result<()> {
+        let profile_id = &self.scope.profile_id;
+        let (routed, _) = network_scope(conn, profile_id, kind, &self.captured_config)?;
+        let (_, environment) = network_scope(conn, profile_id, kind, &routed)?;
+        // `Scope::environment_id` holds the encoded JSON text, as `prepare`
+        // builds it; compare text, not the JSON value.
+        let current = encode(&environment)?.to_string();
+        if current != self.scope.environment_id {
+            return Err(AppError::new(
+                "stale_context",
+                "Wallet sync network changed",
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) fn check_permission(
         &self,
         gate: &Gate,
