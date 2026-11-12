@@ -356,6 +356,17 @@ or owner locks (`test_rust_store_interop`, the MCP privacy fence). Their
 behaviour is covered by the porters' Rust tests where they hold kills, or
 listed in `dropped.tsv`.
 
+A replay must not depend on where the checkout lives. Test builds seed
+SQLite's PRNG from every argument, `argv[0]` (the binary's absolute path)
+included, so each session carries the `argv0` it was recorded with and the
+replay passes it on; without it, a checkout elsewhere drew other random ids,
+and hashes over them differed. A full replay from a second checkout at
+another path then found two sessions that started the AI broker with
+`KASSIBER_AI_BROKER_NODE` pointing at the removed `.venv/bin/python`, a Python
+stand-in for Node that replayed only where that directory survived; they are
+dropped (`dropped.tsv`), and the broker's image and tool paths keep their
+Rust tests (`crates/ai/src/broker`, `crates/ai/tests/broker.rs`).
+
 Two sessions were repaired by hand after full replays showed them to depend on
 the replaying machine, each without changing what the process reads:
 - `test_rust_store_interop` `test_passphrase_fd_matches_python[]`: the store
