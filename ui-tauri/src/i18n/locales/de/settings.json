@@ -978,9 +978,9 @@
     "newInstance": "Neue Instanz",
     "unknown": "Netzwerk nicht aufgezeichnet",
     "declareAll": {
-      "label": "Connections ohne Netzwerk-Beleg zuordnen",
-      "description_one": "{{count}} Connection zeigt kein Netzwerk. Ordne sie {{environment}} zu; fehlende Quellbelege bleiben unbekannt.",
-      "description_other": "{{count}} Connections zeigen kein Netzwerk. Ordne sie {{environment}} zu; fehlende Quellbelege bleiben unbekannt."
+      "label": "Connections ohne Quellbeleg bestätigen",
+      "description_one": "{{count}} Connection hat keinen Quellbeleg für ihr Netzwerk. Ordne sie {{environment}} zu; der fehlende Beleg bleibt unbekannt.",
+      "description_other": "{{count}} Connections haben keinen Quellbeleg für ihr Netzwerk. Ordne sie {{environment}} zu; fehlende Belege bleiben unbekannt."
     },
     "preview": "Zuordnung prüfen",
     "confirmHelp": "Diese Zuordnung ist dauerhaft. Quelldaten und frühere Berichte werden nicht umgeschrieben.",

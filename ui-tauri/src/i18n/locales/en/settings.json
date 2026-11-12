@@ -978,9 +978,9 @@
     "newInstance": "New instance",
     "unknown": "Network not recorded",
     "declareAll": {
-      "label": "Assign connections without network evidence",
-      "description_one": "{{count}} connection shows no network. Assign it to {{environment}}; its missing source evidence stays unknown.",
-      "description_other": "{{count}} connections show no network. Assign them to {{environment}}; their missing source evidence stays unknown."
+      "label": "Confirm connections without source evidence",
+      "description_one": "{{count}} connection has no source record proving its network. Assign it to {{environment}}; the missing evidence stays unknown.",
+      "description_other": "{{count}} connections have no source record proving their network. Assign them to {{environment}}; the missing evidence stays unknown."
     },
     "preview": "Review binding",
     "confirmHelp": "This binding is permanent. Source records and past reports will not be rewritten.",
