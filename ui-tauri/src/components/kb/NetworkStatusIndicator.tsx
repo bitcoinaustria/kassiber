@@ -2,7 +2,6 @@ import { Plus, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { currentUiLocale } from "@/lib/localeFormat";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
@@ -25,7 +24,6 @@ import {
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 import {
-  AUTOMATIC_CONNECTION_CHECK_INTERVAL_MS,
   AUTOMATIC_CONNECTION_CHECK_RETRY_MS,
   automaticCheckDelay,
   currentHealthRecord,
@@ -354,7 +352,6 @@ export function NetworkStatusIndicator({
     readNetworkStatus(),
   );
   const [open, setOpen] = React.useState(false);
-  const autoCheckDescriptionId = React.useId();
   const [documentVisible, setDocumentVisible] = React.useState(() =>
     readDocumentVisible(),
   );
@@ -365,10 +362,8 @@ export function NetworkStatusIndicator({
   const clearHealthResults = useConnectionHealthStore(
     (state) => state.clearResults,
   );
-  const autoCheckBooks = useUiStore((state) => state.connectionAutoCheckBooks);
-  const setConnectionAutoCheck = useUiStore(
-    (state) => state.setConnectionAutoCheck,
-  );
+  const contacted = useConnectionHealthStore((state) => state.contacted);
+  const observeBook = useConnectionHealthStore((state) => state.observeBook);
   const offlineMode = useOfflineMode(daemonEnabled);
   // Rows, checks and the indicator treat KASSIBER_NO_EGRESS like the switch:
   // backend connections are blocked either way.
@@ -381,8 +376,8 @@ export function NetworkStatusIndicator({
     undefined,
     { enabled: daemonEnabled },
   );
-  // The automatic check is opted into per book, so it needs to know which
-  // book is open. A local read, like the backend list.
+  // Contact counts for the open book only, so the automatic check needs to
+  // know which book that is. A local read, like the backend list.
   const activeBookQuery = useDaemon<ActiveBookData>(
     "ui.profiles.snapshot",
     undefined,
@@ -397,11 +392,14 @@ export function NetworkStatusIndicator({
         : null,
     [activeWorkspaceId, activeProfileId],
   );
-  const connectionAutoCheck =
-    bookScope !== null && autoCheckBooks.includes(bookScope.profile_id);
+  React.useEffect(() => {
+    if (activeProfileId) observeBook(activeProfileId);
+  }, [activeProfileId, observeBook]);
+  const connectionAutoCheck = bookScope !== null && contacted;
   // The daemon's own answer to "which backends does this book sync from",
-  // defaults included. Asked only once this book opted in, and bound to it:
-  // the daemon refuses if another book is open by the time it answers.
+  // defaults included. Asked only once this session reached those servers,
+  // and bound to the book: the daemon refuses if another one is open by the
+  // time it answers.
   const inUseBackendsQuery = useDaemon<InUseBackendsData>(
     "ui.backends.list",
     bookScope ? { expected_scope: bookScope } : undefined,
@@ -479,11 +477,6 @@ export function NetworkStatusIndicator({
         : connectionIndicatorLabel(indicatorTone, t);
   const Icon =
     offline || status === "offline" || nothingConnected ? WifiOff : Wifi;
-  const lastCheckedAt = connectionRows
-    .map((row) => currentHealthRecord(healthRecords, row)?.checkedAt)
-    .filter((value): value is string => Boolean(value))
-    .sort()
-    .at(-1);
   const canCheckConnections = !offline && canRunConnectionHealthChecks({
     checking,
     checkableConnectionCount: checkableRows.length,
@@ -510,8 +503,8 @@ export function NetworkStatusIndicator({
   }, []);
 
   // Two callers only: the refresh button, which checks every listed
-  // connection, and the opt-in timer below, which checks the book's own.
-  // Nothing probes on mount, so the indicator stays unchecked until asked.
+  // connection, and the timer below, which checks the book's own once this
+  // session reached them. Nothing probes on mount.
   const probeConnections = React.useCallback(async (
     rows: ConnectionHealthRow[],
     options: ProbeOptions = {},
@@ -521,6 +514,7 @@ export function NetworkStatusIndicator({
     const now = new Date().toISOString();
     // Results from a round that offline mode interrupted must not come back.
     const generation = health.generation;
+    health.markContact(Date.now());
     health.setChecking(true);
     const results: Array<[string, ConnectionHealthRecord]> = [];
     // The daemon currently executes foreground requests serially. Send
@@ -629,11 +623,12 @@ export function NetworkStatusIndicator({
     bookScopeRef.current = bookScope;
   });
 
-  // The opt-in timer. It runs only while every gate holds (this book opted
-  // in, online, visible, no maintenance) and probes only backends this book's
-  // wallets use -- never rate providers or other listed services. The last
-  // round's time lives in the session store, so remounting does not re-probe
-  // early; hiding the window pauses it.
+  // The automatic timer. It runs only while every gate holds (this session
+  // already reached the book's servers, online, visible, no maintenance) and
+  // probes only backends this book's wallets use -- never rate providers or
+  // other listed services. The first round comes one interval after that first
+  // contact. The last round's time lives in the session store, so remounting
+  // does not re-probe early; hiding the window pauses it.
   React.useEffect(() => {
     if (!automaticCheckActive) return;
     let cancelled = false;
@@ -729,57 +724,7 @@ export function NetworkStatusIndicator({
         align="end"
         className="w-[min(64rem,calc(100vw-1rem))]"
       >
-        <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-          <DropdownMenuLabel className="p-0">
-            {t("network.outboundConnections")}
-          </DropdownMenuLabel>
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <Switch
-                checked={offlineMode.offline}
-                disabled={!offlineMode.known || offlineMode.pending}
-                onCheckedChange={offlineMode.setOffline}
-                aria-label={t("network.offlineMode.switch")}
-              />
-              {t("network.offlineMode.label")}
-            </label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              disabled={!canCheckConnections}
-              aria-label={t("network.checkConnections")}
-              title={t("network.checkConnections")}
-              onClick={(event) => {
-                event.preventDefault();
-                void runConnectionChecks();
-              }}
-            >
-              <RefreshCw
-                className={cn("size-3.5", checking && "animate-spin")}
-                aria-hidden="true"
-              />
-            </Button>
-          </div>
-        </div>
-        {offline || offlineMode.failed ? (
-          <p
-            className={cn(
-              "m-0 px-3 pb-2 text-xs",
-              offlineMode.failed
-                ? "text-red-700 dark:text-red-300"
-                : "text-muted-foreground",
-            )}
-            role={offlineMode.failed ? "alert" : undefined}
-          >
-            {offlineMode.failed
-              ? t("network.offlineMode.failed")
-              : offlineMode.offline
-                ? t("network.offlineMode.on")
-                : t("network.offlineMode.environment")}
-          </p>
-        ) : null}
+        <DropdownMenuLabel>{t("network.outboundConnections")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <div className="px-1 py-1">
           {backendSettingsQuery.isLoading ? (
@@ -902,42 +847,56 @@ export function NetworkStatusIndicator({
             </div>
           )}
         </div>
-        {connectionRows.length > 0 ? (
-          <div className="space-y-1 border-t px-3 py-2 text-xs text-muted-foreground">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-              <label className="flex items-center gap-2">
-                <Switch
-                  checked={connectionAutoCheck}
-                  disabled={offline || bookScope === null}
-                  onCheckedChange={(next) => {
-                    if (bookScope) {
-                      setConnectionAutoCheck(bookScope.profile_id, next);
-                    }
-                  }}
-                  aria-label={t("network.autoCheck.label", {
-                    minutes: AUTOMATIC_CONNECTION_CHECK_INTERVAL_MS / 60_000,
-                  })}
-                  aria-describedby={autoCheckDescriptionId}
-                />
-                {t("network.autoCheck.label", {
-                  minutes: AUTOMATIC_CONNECTION_CHECK_INTERVAL_MS / 60_000,
-                })}
-              </label>
-              {lastCheckedAt && !offline ? (
-                <span>
-                  {t("network.lastChecked", {
-                    time: new Date(lastCheckedAt).toLocaleTimeString(
-                      currentUiLocale(),
-                    ),
-                  })}
-                </span>
-              ) : null}
-            </div>
-            <p id={autoCheckDescriptionId} className="m-0">
-              {t("network.autoCheck.description")}
-            </p>
+        {/* One switch: online lets Kassiber reach these servers, and once this
+            session has, it keeps checking the book's own. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-3 py-2">
+          <p
+            className={cn(
+              "m-0 min-w-0 flex-1 text-xs",
+              offlineMode.failed
+                ? "text-red-700 dark:text-red-300"
+                : "text-muted-foreground",
+            )}
+            role={offlineMode.failed ? "alert" : undefined}
+          >
+            {offlineMode.failed
+              ? t("network.offlineMode.failed")
+              : offlineMode.offline
+                ? t("network.offlineMode.on")
+                : offline
+                  ? t("network.offlineMode.environment")
+                  : null}
+          </p>
+          <div className="ml-auto flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Switch
+                checked={!offlineMode.offline}
+                disabled={!offlineMode.known || offlineMode.pending}
+                onCheckedChange={(online) => offlineMode.setOffline(!online)}
+                aria-label={t("network.offlineMode.label")}
+              />
+              {t("network.offlineMode.label")}
+            </label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              disabled={!canCheckConnections}
+              aria-label={t("network.checkConnections")}
+              title={t("network.checkConnections")}
+              onClick={(event) => {
+                event.preventDefault();
+                void runConnectionChecks();
+              }}
+            >
+              <RefreshCw
+                className={cn("size-3.5", checking && "animate-spin")}
+                aria-hidden="true"
+              />
+            </Button>
           </div>
-        ) : null}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

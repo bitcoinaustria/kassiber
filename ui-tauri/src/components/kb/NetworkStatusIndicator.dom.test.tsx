@@ -49,10 +49,11 @@ vi.mock("react-i18next", () => ({
 }));
 
 import {
+  AUTOMATIC_CONNECTION_CHECK_INTERVAL_MS,
   AUTOMATIC_CONNECTION_CHECK_RETRY_MS,
+  noteDaemonRequest,
   useConnectionHealthStore,
 } from "@/store/connectionHealth";
-import { useUiStore } from "@/store/ui";
 
 import { NetworkStatusIndicator } from "./NetworkStatusIndicator";
 
@@ -89,8 +90,18 @@ function resetStores() {
     generation: 0,
     checking: false,
     lastAutomaticCheckAt: null,
+    contacted: false,
+    contactBook: null,
   });
-  useUiStore.setState({ connectionAutoCheckBooks: [] });
+}
+
+/** This session already reached book p1's servers; the next round is due now. */
+function contactedDue() {
+  useConnectionHealthStore.setState({
+    contacted: true,
+    contactBook: "p1",
+    lastAutomaticCheckAt: null,
+  });
 }
 
 describe("NetworkStatusIndicator offline mode", () => {
@@ -113,8 +124,8 @@ describe("NetworkStatusIndicator offline mode", () => {
 
   it("turns offline mode on from the panel", async () => {
     await openPanel();
-    const toggle = screen.getByRole("switch", { name: "network.offlineMode.switch" });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    const toggle = screen.getByRole("switch", { name: "network.offlineMode.label" });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
 
     await act(async () => {
       fireEvent.click(toggle);
@@ -146,8 +157,8 @@ describe("NetworkStatusIndicator offline mode", () => {
     daemon.reads["ui.network.offline"] = { offline: false, environment_blocked: true };
     await openPanel();
 
-    const toggle = screen.getByRole("switch", { name: "network.offlineMode.switch" });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    const toggle = screen.getByRole("switch", { name: "network.offlineMode.label" });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
     expect(toggle.hasAttribute("disabled")).toBe(false);
     expect(screen.getByText("network.offlineMode.environment")).toBeTruthy();
     expect(screen.getByLabelText("network.health.offline")).toBeTruthy();
@@ -168,7 +179,7 @@ describe("NetworkStatusIndicator offline mode", () => {
     await openPanel();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("switch", { name: "network.offlineMode.switch" }));
+      fireEvent.click(screen.getByRole("switch", { name: "network.offlineMode.label" }));
     });
     expect(screen.getByRole("alert").textContent).toBe("network.offlineMode.failed");
   });
@@ -242,14 +253,43 @@ describe("NetworkStatusIndicator automatic checks", () => {
     });
   }
 
-  it("never probes on a timer without the opt-in", async () => {
+  it("never probes on a timer before this session reached the servers", async () => {
     render(<NetworkStatusIndicator daemonEnabled />);
+    // Rate and exchange requests reach other servers, so they do not count.
+    noteDaemonRequest("ui.rates.sync");
+    noteDaemonRequest("ui.connections.exchange.sync");
     await advance(30 * 60 * 1000);
     expect(probeCalls()).toBe(0);
   });
 
+  it("starts one interval after a wallet sync reached the servers", async () => {
+    render(<NetworkStatusIndicator daemonEnabled />);
+    await advance(0);
+    await act(async () => {
+      noteDaemonRequest("ui.wallets.sync", Date.now());
+    });
+    await advance(AUTOMATIC_CONNECTION_CHECK_INTERVAL_MS - 1000);
+    expect(probeCalls()).toBe(0);
+    await advance(1000);
+    expect(probeCalls()).toBe(1);
+  });
+
+  it("starts one interval after a manual check", async () => {
+    await openPanel();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "network.checkConnections" }));
+    });
+    // The manual check probes every listed connection once.
+    const manual = probeCalls();
+    expect(useConnectionHealthStore.getState().contacted).toBe(true);
+    await advance(AUTOMATIC_CONNECTION_CHECK_INTERVAL_MS - 1000);
+    expect(probeCalls()).toBe(manual);
+    await advance(1000);
+    expect(probeCalls()).toBe(manual + 1);
+  });
+
   it("probes only the book's own connections, then every interval", async () => {
-    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
+    contactedDue();
     render(<NetworkStatusIndicator daemonEnabled />);
     await advance(0);
 
@@ -270,23 +310,20 @@ describe("NetworkStatusIndicator automatic checks", () => {
     expect(probeCalls()).toBe(2);
   });
 
-  it("applies the opt-in to that book only", async () => {
-    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
+  it("starts over when another book opens", async () => {
+    contactedDue();
     daemon.reads["ui.profiles.snapshot"] = { ...ACTIVE_BOOK, activeProfileId: "p2" };
-    await openPanel();
+    render(<NetworkStatusIndicator daemonEnabled />);
     await advance(30 * 60 * 1000);
     expect(probeCalls()).toBe(0);
-    const toggle = screen.getByRole("switch", { name: "network.autoCheck.label" });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-
-    await act(async () => {
-      fireEvent.click(toggle);
+    expect(useConnectionHealthStore.getState()).toMatchObject({
+      contacted: false,
+      contactBook: "p2",
     });
-    expect(useUiStore.getState().connectionAutoCheckBooks).toEqual(["p1", "p2"]);
   });
 
   it("stops a round once another book is open", async () => {
-    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
+    contactedDue();
     daemon.mutations["ui.backends.electrum.test"] = vi.fn(async () => {
       throw Object.assign(new Error("stale"), {
         envelope: { kind: "error", error: { code: "stale_context" } },
@@ -300,7 +337,7 @@ describe("NetworkStatusIndicator automatic checks", () => {
   });
 
   it("waits for a running manual check instead of skipping the round", async () => {
-    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
+    contactedDue();
     useConnectionHealthStore.setState({ checking: true });
     render(<NetworkStatusIndicator daemonEnabled />);
     await advance(0);
@@ -315,7 +352,7 @@ describe("NetworkStatusIndicator automatic checks", () => {
   });
 
   it("stays silent while offline mode is on", async () => {
-    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
+    contactedDue();
     daemon.reads["ui.network.offline"] = { offline: true, environment_blocked: false };
     render(<NetworkStatusIndicator daemonEnabled />);
     await advance(30 * 60 * 1000);
@@ -323,7 +360,7 @@ describe("NetworkStatusIndicator automatic checks", () => {
   });
 
   it("does not re-probe early when the panel remounts", async () => {
-    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
+    contactedDue();
     const first = render(<NetworkStatusIndicator daemonEnabled />);
     await advance(0);
     expect(probeCalls()).toBe(1);

@@ -9,6 +9,7 @@
  * whitelisted requests to the local daemon.
  */
 
+import { noteDaemonRequest } from "@/store/connectionHealth";
 import { useUiStore } from "@/store/ui";
 import {
   emitAppLog,
@@ -430,6 +431,7 @@ function withDaemonLogging(
       }
       const request = requestWithId(req);
       const startedAt = performance.now();
+      noteDaemonRequest(request.kind);
       recordDaemonLog(
         "debug",
         source,
@@ -473,6 +475,7 @@ function withDaemonLogging(
       }
       const request = requestWithId(req);
       const startedAt = performance.now();
+      noteDaemonRequest(request.kind);
       recordDaemonLog(
         "debug",
         source,
