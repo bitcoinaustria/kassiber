@@ -10,10 +10,14 @@
 //! replayed, and so do the hashes a book keeps over them (a pair's
 //! `source_row_hash` covers its `created_at`).
 //!
-//! `clock_gettime` stays real: Rust's `SystemTime` reads it, and code that
-//! measures work with it (age's scrypt calibration doubles its cost until a
-//! second passes) must see real time. Monotonic clocks are untouched. Linux
-//! only.
+//! `clock_gettime`'s realtime clocks read `base + real elapsed time`, so the
+//! calendar is the recording's (a balance history "to today", a certificate's
+//! validity) while durations stay real: code that measures work with
+//! `SystemTime` (age's scrypt calibration doubles its cost until a second
+//! passes) still sees time pass at the real rate. A replay of a session
+//! recorded without the shared clock passes its recorded start as
+//! `KASSIBER_REPLAY_REALTIME_BASE_US`; then `gettimeofday` and `time` read
+//! that realtime too. Monotonic clocks are untouched. Linux only.
 
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::OnceLock;
@@ -24,7 +28,10 @@ const GRACE_US: i64 = 2_000_000;
 
 struct State {
     base_us: i64,
-    started_monotonic_us: i64,
+    /// `gettimeofday` and `time` count reads (the shared SQLite clock);
+    /// otherwise they read the virtual realtime.
+    frozen: bool,
+    started_monotonic_ns: i128,
     real: ClockGettime,
 }
 
@@ -42,37 +49,56 @@ fn real_clock_gettime() -> ClockGettime {
     }
 }
 
-fn micros(real: ClockGettime, clock: libc::clockid_t) -> i64 {
+fn nanos(real: ClockGettime, clock: libc::clockid_t) -> i128 {
     let mut now = libc::timespec {
         tv_sec: 0,
         tv_nsec: 0,
     };
     // SAFETY: `now` is a valid timespec to write.
     unsafe { real(clock, &mut now) };
-    now.tv_sec * 1_000_000 + now.tv_nsec / 1000
+    i128::from(now.tv_sec) * 1_000_000_000 + i128::from(now.tv_nsec)
+}
+
+fn micros(real: ClockGettime, clock: libc::clockid_t) -> i64 {
+    (nanos(real, clock) / 1000) as i64
 }
 
 fn state() -> Option<&'static State> {
     STATE
         .get_or_init(|| {
-            let base_us = std::env::var("KASSIBER_TEST_CLOCK_BASE_US")
-                .ok()?
-                .parse::<i64>()
-                .ok()?;
+            let base = |name: &str| std::env::var(name).ok()?.parse::<i64>().ok();
+            let (base_us, frozen) = match base("KASSIBER_TEST_CLOCK_BASE_US") {
+                Some(base_us) => (base_us, true),
+                None => (base("KASSIBER_REPLAY_REALTIME_BASE_US")?, false),
+            };
             let real = real_clock_gettime();
             Some(State {
                 base_us,
-                started_monotonic_us: micros(real, libc::CLOCK_MONOTONIC),
+                frozen,
+                started_monotonic_ns: nanos(real, libc::CLOCK_MONOTONIC),
                 real,
             })
         })
         .as_ref()
 }
 
+/// Real time elapsed since the clock started, in nanoseconds.
+fn elapsed_ns(state: &State) -> i128 {
+    nanos(state.real, libc::CLOCK_MONOTONIC) - state.started_monotonic_ns
+}
+
+/// The virtual realtime: the session's base plus real elapsed time.
+fn realtime_ns(state: &State) -> i128 {
+    i128::from(state.base_us) * 1000 + elapsed_ns(state)
+}
+
 /// The session's wall clock in microseconds, strictly increasing.
 fn now_us(state: &State) -> i64 {
+    if !state.frozen {
+        return (realtime_ns(state) / 1000) as i64;
+    }
     let reads = READS.fetch_add(1, Ordering::SeqCst) as i64;
-    let elapsed = micros(state.real, libc::CLOCK_MONOTONIC) - state.started_monotonic_us;
+    let elapsed = (elapsed_ns(state) / 1000) as i64;
     let candidate = state.base_us + reads + (elapsed - GRACE_US).max(0);
     // Never step back when elapsed time starts to count.
     let previous = LAST.fetch_max(candidate, Ordering::SeqCst);
@@ -103,6 +129,34 @@ pub unsafe extern "C" fn gettimeofday(
         }
     }
     0
+}
+
+/// # Safety
+/// As libc's `clock_gettime`.
+#[no_mangle]
+pub unsafe extern "C" fn clock_gettime(
+    clock: libc::clockid_t,
+    out: *mut libc::timespec,
+) -> libc::c_int {
+    let realtime = matches!(
+        clock,
+        libc::CLOCK_REALTIME | libc::CLOCK_REALTIME_COARSE | libc::CLOCK_TAI
+    );
+    match state().filter(|_| realtime) {
+        Some(state) => {
+            let now = realtime_ns(state);
+            if !out.is_null() {
+                // SAFETY: the caller passes a valid timespec.
+                unsafe {
+                    (*out).tv_sec = now.div_euclid(1_000_000_000) as libc::time_t;
+                    (*out).tv_nsec = now.rem_euclid(1_000_000_000) as libc::c_long;
+                }
+            }
+            0
+        }
+        // SAFETY: as the caller's contract, passed on to libc's.
+        None => unsafe { real_clock_gettime()(clock, out) },
+    }
 }
 
 /// # Safety

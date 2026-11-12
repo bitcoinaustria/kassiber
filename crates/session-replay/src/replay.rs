@@ -487,18 +487,15 @@ pub fn replay(
     }
     // The runner's own I/O shim (the tests' fast-io wrapper), never the
     // session's.
-    // A session recorded on the shared clock replays on it: the shim sits
-    // beside the session-replay binary.
-    let clock = session
-        .env
-        .contains_key("KASSIBER_TEST_CLOCK_BASE_US")
-        .then(|| {
-            std::env::current_exe().ok().and_then(|exe| {
-                exe.parent()
-                    .map(|dir| dir.join("libkassiber_clock_shim.so"))
-            })
-        })
-        .flatten();
+    // Every session replays on the clock shim beside the session-replay
+    // binary: one recorded on the shared SQLite clock replays on it, and
+    // every one sees the wall calendar of its recording (realtime is the
+    // recorded start plus real elapsed time), so "today" and certificate
+    // validity do not move with the date of the replay.
+    let clock = std::env::current_exe().ok().and_then(|exe| {
+        exe.parent()
+            .map(|dir| dir.join("libkassiber_clock_shim.so"))
+    });
     if let Some(clock) = &clock {
         if !clock.is_file() {
             return Err(format!(
@@ -516,6 +513,10 @@ pub fn replay(
         command.env("LD_PRELOAD", preload.join(":"));
     }
     command.env("HOME", scratch.join("home"));
+    command.env(
+        "KASSIBER_REPLAY_REALTIME_BASE_US",
+        session.started_us.to_string(),
+    );
     for (key, value) in &session.env {
         if key == "PATH" {
             // The recorded search path, minus directories this host lacks
