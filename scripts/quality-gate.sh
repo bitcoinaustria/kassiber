@@ -27,6 +27,18 @@ if ! command -v cargo >/dev/null 2>&1; then
   echo "quality gate requires a Rust toolchain for the tax engine; run ./scripts/bootstrap-dev-env.sh" >&2
   exit 2
 fi
+# CI builds every crate with the toolchain rust-toolchain.toml pins; formatting
+# and lints differ between versions, so the gate refuses any other.
+RUST_CHANNEL="$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' rust-toolchain.toml)"
+RUSTC_VERSION="$(rustc --version)"
+case "$RUSTC_VERSION" in
+  "rustc $RUST_CHANNEL "*) ;;
+  *)
+    echo "quality gate requires Rust $RUST_CHANNEL (rust-toolchain.toml), found: $RUSTC_VERSION" >&2
+    echo "install it with: rustup toolchain install $RUST_CHANNEL --profile minimal --component rustfmt --component clippy" >&2
+    exit 2
+    ;;
+esac
 export MATURIN_NO_INSTALL_RUST=1
 # Tests read generated data the lock pins (docs/reference/testing.md).
 ./scripts/fetch-test-data.sh --check
@@ -35,8 +47,9 @@ py() {
   uv run --locked python "$@"
 }
 
-run cargo fmt --manifest-path tax-engine/Cargo.toml --all --check
-run cargo test --manifest-path tax-engine/Cargo.toml --locked
+run cargo fmt --all --check
+run cargo clippy --workspace --all-targets --locked -- -D warnings
+run cargo test --workspace --locked
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
 run py scripts/python_test_shards.py validate
 

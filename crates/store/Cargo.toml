@@ -1,0 +1,47 @@
+[package]
+name = "kassiber-store"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Kassiber SQLite/SQLCipher storage and durable book creation"
+
+[features]
+# Explicitly enabled only for the development probe and parity tests.
+test-hooks = ["rusqlite/hooks"]
+
+[dependencies]
+kassiber-paths = { path = "../paths" }
+kassiber-ownership = { path = "../ownership" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+# The credential scrub kassiber/redaction.py applies, byte for byte.
+kassiber-credentials = { path = "../credentials" }
+kassiber-pydecimal = { path = "../pydecimal" }
+serde_json = "1"
+sha2 = "0.11"
+zeroize = "1"
+tempfile = "3"
+
+# SQLCipher's amalgamation selects CommonCrypto on Apple; Linux and Windows
+# compile OpenSSL from source rather than requiring a system crypto library.
+[target.'cfg(target_os = "macos")'.dependencies]
+rusqlite = { version = "=0.40.1", features = ["bundled-sqlcipher", "backup", "functions"] }
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+rusqlite = { version = "=0.40.1", features = ["bundled-sqlcipher-vendored-openssl", "backup", "functions"] }
+
+[dev-dependencies]
+kassiber-secrets = { path = "../secrets" }
+kassiber-ipc = { path = "../ipc" }
+serde = { version = "1", features = ["derive"] }
+
+[[example]]
+name = "kassiber-store-probe"
+path = "examples/probe.rs"
+
+[[example]]
+name = "kassiber-storage-probe"
+path = "examples/storage_probe.rs"
+required-features = ["test-hooks"]

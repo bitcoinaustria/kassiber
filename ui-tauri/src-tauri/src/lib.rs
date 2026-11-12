@@ -651,6 +651,9 @@ impl AppRuntimeState {
     }
 }
 
+// Both arms are the same envelope, serialized for the webview; boxing the
+// error would not shrink what crosses the IPC boundary.
+#[allow(clippy::result_large_err)]
 #[tauri::command]
 async fn daemon_invoke(
     app: tauri::AppHandle,
@@ -950,6 +953,9 @@ async fn pick_chain_analysis_source(
     }
 }
 
+// The shared body of the picker commands, which pass their review binding
+// through unchanged.
+#[allow(clippy::too_many_arguments)]
 async fn pick_staged_source(
     app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
@@ -1785,6 +1791,8 @@ fn update_desktop_biometric_stale_guard(
         .ok_or_else(|| "Managed settings path has no parent directory.".to_string())?;
     fs::create_dir_all(parent)
         .map_err(|error| format!("Managed settings directory could not be created: {error}"))?;
+    // A held file lock on macOS, `()` elsewhere; it must live to the end.
+    #[allow(clippy::let_unit_value)]
     let _settings_lock = lock_managed_settings(&settings_path)?;
     let mut payload = match fs::read_to_string(&settings_path) {
         Ok(raw) => serde_json::from_str::<Value>(&raw)
@@ -2300,7 +2308,7 @@ fn terminal_command_paths() -> Result<TerminalCommandPaths, String> {
     #[cfg(target_os = "windows")]
     let candidates = terminal_command_windows_candidate_dirs(&home);
     #[cfg(not(target_os = "windows"))]
-    let candidates = vec![home.join(".local").join("bin"), home.join("bin")];
+    let candidates = [home.join(".local").join("bin"), home.join("bin")];
 
     let bin_dir = candidates
         .iter()
@@ -3186,12 +3194,8 @@ fn validated_report_export_target(
 }
 
 fn managed_report_exports_root(path: &Path) -> Option<&Path> {
-    let Some(parent) = path.parent() else {
-        return None;
-    };
-    let Some(grandparent) = parent.parent() else {
-        return None;
-    };
+    let parent = path.parent()?;
+    let grandparent = parent.parent()?;
     if parent.file_name().and_then(|name| name.to_str()) == Some("reports")
         && grandparent.file_name().and_then(|name| name.to_str()) == Some("exports")
     {

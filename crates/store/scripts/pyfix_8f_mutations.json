@@ -1,0 +1,285 @@
+[
+  {
+    "id": "store-import-sequence-trigger",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "    execute(&tx, super::sql(FUNCTION, 4))?;\n    observer(\"import_batch_sequence.after\")?;",
+    "replace": "    observer(\"import_batch_sequence.after\")?;",
+    "expect_failing": [
+      "pre_8f_storage_numbers_batches_by_time_then_rowid_and_audits_pair_fees"
+    ],
+    "rule": "Existing books gain the insert trigger that numbers every later import batch (46b7b6217)."
+  },
+  {
+    "id": "store-import-sequence-base",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "rusqlite::params![base + offset, batch]",
+    "replace": "rusqlite::params![offset, batch]",
+    "expect_failing": [
+      "partly_numbered_batches_continue_after_the_largest_sequence"
+    ],
+    "rule": "Unnumbered batches continue after the largest existing import_sequence."
+  },
+  {
+    "id": "store-legacy-pair-fee-left-for-python",
+    "file": "crates/store/src/semantics.rs",
+    "find": "    if candidates {\n        return Err(Error::new(\n            ErrorKind::UnsupportedSchemaLayout,",
+    "replace": "    if candidates && false {\n        return Err(Error::new(\n            ErrorKind::UnsupportedSchemaLayout,",
+    "expect_failing": [
+      "legacy_pair_fee_candidates_are_left_for_python"
+    ],
+    "rule": "A book with legacy pair fee candidates and no audit is refused for Python to migrate (ca630b9a6)."
+  },
+  {
+    "id": "store-legacy-pair-fee-audit",
+    "file": "crates/store/src/semantics.rs",
+    "find": "AND fee.role = 'fee' AND fee.notes = 'reviewed_residual:network_fee')\",",
+    "replace": "AND fee.role = 'fee' AND fee.notes = 'never')\",",
+    "expect_failing": [
+      "legacy_pair_fee_candidates_are_left_for_python"
+    ],
+    "rule": "Legacy candidates are active quantity components with a reviewed_residual:network_fee fee leg."
+  },
+  {
+    "id": "chain-lnd-forwarding-one-page",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "            if next <= offset {\n                return Err(history_incomplete(\n                    \"LND forwarding history cursor did not advance\",\n                ));\n            }\n            offset = next;",
+    "replace": "            let _ = next;\n            break;",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Forwarding events are paged by index_offset until an empty page (004c10fc9, 84ddfa5f1)."
+  },
+  {
+    "id": "chain-lnd-history-incomplete-code",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "AppError::new(\"lightning_history_incomplete\", message)",
+    "replace": "AppError::new(\"lightning_unavailable\", message)",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "A non-empty page whose cursor does not advance refuses lightning_history_incomplete (6638582c5)."
+  },
+  {
+    "id": "chain-lnd-history-short-page-stops",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "        let next = cursor(&payload, \"last_index_offset\", \"last_offset_index\")?;\n        if page.is_empty() {",
+    "replace": "        let next = cursor(&payload, \"last_index_offset\", \"last_offset_index\")?;\n        if page.len() < LND_MAX_PAGE_SIZE as usize {",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "A short payments or invoices page continues while its cursor advances (84ddfa5f1)."
+  },
+  {
+    "id": "wallets-electrum-txid",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "    if tx.compute_txid().to_string() != txid.to_lowercase() {",
+    "replace": "    if false && tx.compute_txid().to_string() != txid.to_lowercase() {",
+    "expect_failing": [
+      "acquisition_raw_transaction_identity_and_encoding_fail_closed"
+    ],
+    "rule": "Every Electrum raw transaction must hash to its requested txid (1ec7e7da0)."
+  },
+  {
+    "id": "wallets-electrum-graph-version",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "is_some_and(|n| n == 2.into())",
+    "replace": "is_some_and(|n| n >= 1.into())",
+    "expect_failing": [
+      "compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries"
+    ],
+    "rule": "Only stored graph version 2 (txid-verified) is reused (1ec7e7da0)."
+  },
+  {
+    "id": "wallets-wasabi-float-tokens",
+    "file": "crates/wallets/src/file_import/wasabi.rs",
+    "find": "            Py::Bool(_) | Py::Float(_) => {",
+    "replace": "            Py::Bool(_) => {",
+    "expect_failing": [
+      "python_wasabi_import_vectors"
+    ],
+    "rule": "Wasabi numeric amounts must be JSON integer tokens (9f4cc18fb, 5f909dbfa)."
+  },
+  {
+    "id": "wallets-ledger-unit-asset",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "            if canonical_unit(&unit) != canonical_unit(asset) {",
+    "replace": "            if false && canonical_unit(&unit) != canonical_unit(asset) {",
+    "expect_failing": [
+      "python_ledger_import_vectors",
+      "python_blockpit_import_vectors"
+    ],
+    "rule": "A ledger amount unit must name the cell's asset column (f3ad4eab3)."
+  },
+  {
+    "id": "wallets-ledger-long-s",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": " || (lower == 's' && actual == 'ſ')",
+    "replace": "",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Unit suffixes match case-insensitively as Python's re.IGNORECASE does, so U+017F matches s (11b553bca)."
+  },
+  {
+    "id": "wallets-ledger-lbtc-unit",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "\"$\", \"€\", \"£\", \"CHF\", \"USD\", \"EUR\", \"GBP\", \"L-BTC\", \"LBTC\", \"BTC\",",
+    "replace": "\"$\", \"€\", \"£\", \"CHF\", \"USD\", \"EUR\", \"GBP\", \"LBTC\", \"LBTC\", \"BTC\",",
+    "expect_failing": [
+      "python_ledger_import_vectors"
+    ],
+    "rule": "Generic ledger amount cells strip an L-BTC suffix (11b553bca)."
+  },
+  {
+    "id": "wallets-economic-id-decimal-form",
+    "file": "crates/wallets/src/file_import/synthetic.rs",
+    "find": "                        text.trim_end_matches('0').trim_end_matches('.').to_owned()",
+    "replace": "                        text",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors",
+      "python_coinfinity_import_vectors"
+    ],
+    "rule": "Economic IDs hash amounts in normalized decimal form (9b4ce57c9)."
+  },
+  {
+    "id": "wallets-economic-occurrence",
+    "file": "crates/wallets/src/file_import/synthetic.rs",
+    "find": "data.insert(\"txid\".into(), json!(format!(\"{identity}:{occurrence}\")));",
+    "replace": "data.insert(\"txid\".into(), json!(format!(\"{identity}:1\")));",
+    "expect_failing": [
+      "python_ledgerlive_import_vectors",
+      "python_pocket_import_vectors"
+    ],
+    "rule": "Identical ID-less rows in one export are numbered per occurrence (9b4ce57c9)."
+  },
+  {
+    "id": "wallets-cross-import-excess",
+    "file": "crates/wallets/src/import_identity.rs",
+    "find": "        if batches.len() >= 2 && active.len() as i64 > largest {",
+    "replace": "        if false && batches.len() >= 2 && active.len() as i64 > largest {",
+    "expect_failing": [
+      "python_import_identity_state_matches_every_8f_scenario"
+    ],
+    "rule": "Active copies beyond the largest export across imports hold every member (5a8a786c2)."
+  },
+  {
+    "id": "wallets-pre-batch-one-second",
+    "file": "crates/wallets/src/import_identity.rs",
+    "find": "            largest = largest_export_count(&members, true);",
+    "replace": "            largest = largest_export_count(&members, false);",
+    "expect_failing": [
+      "python_import_identity_state_matches_every_8f_scenario"
+    ],
+    "rule": "Rows that all predate batches count as one export only when stored in one second (46b7b6217)."
+  },
+  {
+    "id": "wallets-refilled-copy",
+    "file": "crates/wallets/src/import_identity.rs",
+    "find": "            refilled = true;\n            copies.extend(freed);",
+    "replace": "            copies.extend(freed);",
+    "expect_failing": [
+      "python_import_identity_state_matches_every_8f_scenario"
+    ],
+    "rule": "A current row refilling a number only an excluded copy held is held for review (46b7b6217)."
+  },
+  {
+    "id": "wallets-excluded-excess-slot",
+    "file": "crates/wallets/src/import_identity.rs",
+    "find": "    assign_slots(&refs, &excluded_excess(members))",
+    "replace": "    assign_slots(&refs, &BTreeSet::new())",
+    "expect_failing": [
+      "python_import_identity_state_matches_every_8f_scenario"
+    ],
+    "rule": "An excluded cross-batch excess copy holds no occurrence number (68de47d64)."
+  },
+  {
+    "id": "wallets-current-suffix-slot",
+    "file": "crates/wallets/src/import_identity.rs",
+    "find": "        slots.entry(row.ordinal).or_insert(*row);",
+    "replace": "        let _ = row;",
+    "expect_failing": [
+      "python_import_identity_state_matches_every_8f_scenario"
+    ],
+    "rule": "Current occurrence suffixes hold their exact number before old positional rows fill gaps (f0c75ffdd)."
+  },
+  {
+    "id": "custody-legacy-pair-fee-issue",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "        if text(&sink[\"notes\"]) == \"reviewed_residual:network_fee\"",
+    "replace": "        if text(&sink[\"notes\"]) == \"never\"",
+    "expect_failing": [
+      "components_legacy_pair_fee_hold"
+    ],
+    "rule": "A reviewed_residual:network_fee allocation that may consume principal raises legacy_pair_fee_allocation_review_required (ca630b9a6)."
+  },
+  {
+    "id": "custody-partial-review-fee-cap",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "            principal + allocated.min(fee)",
+    "replace": "            principal + allocated",
+    "expect_failing": [
+      "components_legacy_pair_fee_partial_overallocated"
+    ],
+    "rule": "A partial review covers the principal plus at most the observed fee it allocates (ca630b9a6)."
+  },
+  {
+    "id": "transfers-review-kinds",
+    "file": "crates/transfers/src/review_operations.rs",
+    "find": "            \"repair_legacy_pair\",\n            \"confirm_distinct_import_rows\",\n        ]\n        .contains(&kind)",
+    "replace": "            \"repair_legacy_pair\",\n        ]\n        .contains(&kind)",
+    "expect_failing": [
+      "review_operations_match_python_normalization_digests_bounds_and_refusals"
+    ],
+    "rule": "confirm_distinct_import_rows is a review operation with transaction_id, expected_fingerprint and reason (7ab2dbe5d)."
+  },
+  {
+    "id": "transfers-review-target",
+    "file": "crates/transfers/src/review_operations.rs",
+    "find": "            let target = if kind == \"confirm_distinct_import_rows\" {",
+    "replace": "            let target = if kind == \"repair_legacy_pair\" {",
+    "expect_failing": [
+      "review_operations_match_python_normalization_digests_bounds_and_refusals"
+    ],
+    "rule": "repair_legacy_pair names a pair_id; confirm_distinct_import_rows names a transaction_id (27ac84310, 7ab2dbe5d)."
+  },
+  {
+    "id": "reports-cross-check-nonfinite-value",
+    "file": "crates/reports/src/cross_check_csv.rs",
+    "find": "            Ok(_) => value_error = \"Comparison values must be finite\".into(),",
+    "replace": "            Ok(_) => {}",
+    "expect_failing": [
+      "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
+    ],
+    "rule": "A non-finite tool value cell makes only its row not comparable (57d07e07e)."
+  },
+  {
+    "id": "reports-lightning-export-write-failed",
+    "file": "crates/reports/src/export.rs",
+    "find": "    AppError::new(\n        \"export_write_failed\",",
+    "replace": "    AppError::new(\n        \"internal_error\",",
+    "expect_failing": [
+      "lightning_csv_publication_uses_the_report_writer_and_no_registration"
+    ],
+    "rule": "Lightning CSV storage failures answer export_write_failed with destination and errno (88a46b51e)."
+  },
+  {
+    "id": "reports-report-csv-hard-link",
+    "file": "crates/store/src/layout.rs",
+    "find": "    if target.as_ref().is_some_and(|m| !m.is_file()) || linked {",
+    "replace": "    if target.as_ref().is_some_and(|m| !m.is_file()) {",
+    "expect_failing": [
+      "lightning_csv_publication_uses_the_report_writer_and_no_registration"
+    ],
+    "rule": "The report CSV writer writes a hard-linked file in place instead of replacing it (88a46b51e)."
+  },
+  {
+    "id": "reports-report-csv-parent",
+    "file": "crates/store/src/layout.rs",
+    "find": "    std::fs::create_dir_all(parent_directory(path))?;\n    // Like `open(\"w\")`",
+    "replace": "    // Like `open(\"w\")`",
+    "expect_failing": [
+      "lightning_csv_publication_uses_the_report_writer_and_no_registration"
+    ],
+    "rule": "The report CSV writer creates the requested parent directory (88a46b51e)."
+  }
+]

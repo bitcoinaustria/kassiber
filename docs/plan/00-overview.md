@@ -92,6 +92,7 @@ checklists and test counts are not current delivery evidence.
 | Attachments | Landed | use shipped `attachments`; keep links/file blobs bounded |
 | Austrian tax path | Active | processing and review-gated E 1kv PDF/XLSX export work; domestic-provider KESt metadata pending |
 | Kassiber tax engine | Active | phases 0-4 implemented: the pure Rust engine is the default, with RP2-identical results and RP2 as a test-only oracle; phase 4 moved the boundary to the finalized projection, froze the phase-3 adapter as that oracle, and retired its RP2-shaped mirror (authoritative Austrian fixtures and version provenance still open), per [20-kassiber-tax-engine.md](20-kassiber-tax-engine.md) |
+| Rust backend | Planned, R0 in progress | move custody, storage, the daemon, the CLI, and the rest of the backend to Rust and retire Python, per [21-rust-backend.md](21-rust-backend.md) |
 | Organizational accounting and AI | Removed | plans 16-18 removed 2026-09-30 under plan 19; code preserved at git tag `archive/general-ledger` |
 | Desktop UI | In progress | Tauri 2 + React + TypeScript with a Python sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
 | Project storage | Implemented | per-project databases; [compatibility](../reference/database-compatibility.md) covers legacy upgrades |
@@ -145,6 +146,8 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
   split, monorepo boundary checks, and asset-model prerequisites
 - `20-kassiber-tax-engine.md`: RP2 replacement by a Kassiber-owned Rust tax
   engine, parity requirements, country manifests, and phases
+- `21-rust-backend.md`: moving the whole backend to Rust and retiring Python:
+  contracts, transition, recorded-corpus verification, and stages
 
 ## Highest-Risk Drift Points
 

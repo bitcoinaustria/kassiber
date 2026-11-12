@@ -1,0 +1,384 @@
+[
+  {
+    "id": "accepted-price-before-msat",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "        (\"transactions\", \"pricing_review_accepted_price\"),\n    )?;",
+    "replace": "        (\"transactions\", \"pricing_quality\"),\n    )?;",
+    "expect_failing": [
+      "main_sync_storage_upgrades_a_pre_sync_book_and_admits_it"
+    ],
+    "rule": "Existing books gain transactions.pricing_review_accepted_price after pricing_quality."
+  },
+  {
+    "id": "accepted-price-after-msat",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "    if ensure_column(\n        conn,\n        \"transactions\",\n        \"pricing_review_accepted_price\",\n        \"TEXT\",\n    )? {\n        commit(conn)?;\n    }",
+    "replace": "",
+    "expect_failing": [
+      "ordered_pass_restores_the_accepted_price_the_msat_rebuild_drops"
+    ],
+    "rule": "The msat rebuild drops the accepted coarse price; the pass must add it again after the rebuild."
+  },
+  {
+    "id": "provider-agent-access",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "        (\"ai_providers\", \"agent_access\"),",
+    "replace": "        (\"ai_providers\", \"omit_store_field\"),",
+    "expect_failing": [
+      "main_sync_storage_upgrades_a_pre_sync_book_and_admits_it"
+    ],
+    "rule": "Existing books gain ai_providers.agent_access with default 'full'."
+  },
+  {
+    "id": "audit-consent-step-skipped",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "    repairs::ai_audit_consent(conn, observer)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "main_sync_storage_upgrades_a_pre_sync_book_and_admits_it"
+    ],
+    "rule": "Existing books rebuild the custody AI audit to admit mode_auto, mode_full_access and mcp_host."
+  },
+  {
+    "id": "audit-consent-current-check",
+    "file": "crates/store/src/compat_schema.rs",
+    "find": "    if [\"mode_auto\", \"mode_full_access\", \"mcp_host\"]\n        .iter()\n        .all(|decision| current.contains(&format!(\"'{decision}'\")))",
+    "replace": "    if [\"mode_auto\", \"mode_full_access\"]\n        .iter()\n        .all(|decision| current.contains(&format!(\"'{decision}'\")))",
+    "expect_failing": [
+      "ai_audit_consent_rebuild_copies_rows_and_rolls_back_on_failure"
+    ],
+    "rule": "A table lacking any one of the three widened decisions must be rebuilt."
+  },
+  {
+    "id": "audit-consent-no-copy",
+    "file": "crates/store/src/compat_schema.rs",
+    "find": "        execute(\n            conn,\n            &format!(\n                \"INSERT INTO custody_ai_assistance_audits ({fields}) SELECT {fields} FROM custody_ai_assistance_audits__pre_consent_widening\"\n            ),\n        )?;",
+    "replace": "        let _ = fields;",
+    "expect_failing": [
+      "ai_audit_consent_rebuild_copies_rows_and_rolls_back_on_failure",
+      "main_sync_storage_upgrades_a_pre_sync_book_and_admits_it"
+    ],
+    "rule": "The rebuild copies every audit row unchanged."
+  },
+  {
+    "id": "audit-consent-no-trigger",
+    "file": "crates/store/src/compat_schema.rs",
+    "find": "        for prefix in [\"DROP TABLE\", \"CREATE INDEX\", \"CREATE TRIGGER\"] {",
+    "replace": "        for prefix in [\"DROP TABLE\", \"CREATE INDEX\"] {",
+    "expect_failing": [
+      "ai_audit_consent_rebuild_copies_rows_and_rolls_back_on_failure"
+    ],
+    "rule": "The rebuild restores the audit's immutability trigger."
+  },
+  {
+    "id": "audit-consent-not-atomic",
+    "file": "crates/store/src/compat_schema.rs",
+    "find": "        observe(\"ai-audit.after_rename\")?;",
+    "replace": "        conn.execute_batch(\"COMMIT; BEGIN IMMEDIATE\")\n            .map_err(map_sqlite_error)?;\n        observe(\"ai-audit.after_rename\")?;",
+    "expect_failing": [
+      "ai_audit_consent_rebuild_copies_rows_and_rolls_back_on_failure"
+    ],
+    "rule": "The rebuild publishes nothing before its single commit; an interruption leaves the old table intact."
+  },
+  {
+    "id": "gate-unknown-audit",
+    "file": "crates/store/src/schema.rs",
+    "find": "            || (!known\n                && ![",
+    "replace": "            || (false\n                && ![",
+    "expect_failing": [
+      "newer_unknown_layouts_and_audits_are_refused"
+    ],
+    "rule": "An unknown migration audit is refused."
+  },
+  {
+    "id": "gate-unknown-objects",
+    "file": "crates/store/src/schema.rs",
+    "find": "    if objects(conn)? != expected[\"objects\"] {\n        crate::schema_structure::verify(conn, &expected)?;\n    }",
+    "replace": "    let _ = &expected[\"objects\"];",
+    "expect_failing": [
+      "newer_unknown_layouts_and_audits_are_refused",
+      "historical_layout_uses_normalized_gate_and_still_refuses_constraint_drift"
+    ],
+    "rule": "Unknown tables, columns, indexes, triggers and views are refused."
+  },
+  {
+    "id": "restore-staging-root-resolved",
+    "file": "crates/store/src/restore.rs",
+    "find": "    let staging = &staging_root(staging)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "a_link_above_the_staging_root_installs_and_one_at_or_below_refuses"
+    ],
+    "rule": "A restore staged under a symlinked temp root (macOS /var) resolves the links above the staging directory and installs."
+  },
+  {
+    "id": "stored-errors-step-skipped",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "    crate::stored_errors::migrate(conn, observer)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "main_sync_storage_upgrades_a_pre_sync_book_and_admits_it"
+    ],
+    "rule": "The migrating open runs the stored-error scrub after the freshness schema."
+  },
+  {
+    "id": "stored-errors-runs-again",
+    "file": "crates/store/src/stored_errors.rs",
+    "find": "    {\n        return Ok(());\n    }\n    let tables = tables(&tx)?;",
+    "replace": "    {\n    }\n    let tables = tables(&tx)?;",
+    "expect_failing": [
+      "every_error_column_loses_the_books_credentials_once"
+    ],
+    "rule": "The scrub runs once per book, keyed by its audit."
+  },
+  {
+    "id": "stored-errors-json-as-text",
+    "file": "crates/store/src/stored_errors.rs",
+    "find": "            if column.ends_with(\"_json\") {",
+    "replace": "            if column.ends_with(\"_text\") {",
+    "expect_failing": [
+      "json_is_scrubbed_decoded_and_rewritten_compactly"
+    ],
+    "rule": "JSON columns are scrubbed decoded and rewritten compactly."
+  },
+  {
+    "id": "stored-errors-first-duplicate-wins",
+    "file": "crates/store/src/stored_errors.rs",
+    "find": "Some(slot) => slot.1 = item,",
+    "replace": "Some(_) => {}",
+    "expect_failing": [
+      "json_is_scrubbed_decoded_and_rewritten_compactly"
+    ],
+    "rule": "Keys that become equal keep the later value, as a Python dict."
+  },
+  {
+    "id": "stored-errors-config-ints",
+    "file": "crates/store/src/stored_errors.rs",
+    "find": "        PyValue::Int(number) => number.to_string(),",
+    "replace": "        PyValue::Int(_) => String::new(),",
+    "expect_failing": [
+      "every_error_column_loses_the_books_credentials_once"
+    ],
+    "rule": "An integer password in config_json is withheld as its digits."
+  },
+  {
+    "id": "stored-errors-ai-keys",
+    "file": "crates/store/src/stored_errors.rs",
+    "find": "                if !key.is_empty() {\n                    found.push(key);",
+    "replace": "                if key.is_empty() {\n                    found.push(key);",
+    "expect_failing": [
+      "every_error_column_loses_the_books_credentials_once"
+    ],
+    "rule": "AI provider API keys are withheld."
+  },
+  {
+    "id": "stored-errors-lightning-column",
+    "file": "crates/store/src/stored_errors.rs",
+    "find": "    (\"lightning_node_syncs\", \"id\", \"error_json\"),\n",
+    "replace": "    (\"lightning_node_syncs\", \"id\", \"fetched_counts_json\"),\n",
+    "expect_failing": [
+      "every_error_column_loses_the_books_credentials_once"
+    ],
+    "rule": "lightning_node_syncs.error_json is scrubbed."
+  },
+  {
+    "id": "stored-errors-audit-count",
+    "file": "crates/store/src/stored_errors.rs",
+    "find": "            scrubbed += 1;",
+    "replace": "            scrubbed += 0;",
+    "expect_failing": [
+      "every_error_column_loses_the_books_credentials_once"
+    ],
+    "rule": "The audit counts the values the scrub changed."
+  },
+  {
+    "id": "S-r58a-short-stage",
+    "file": "crates/store/src/layout.rs",
+    "find": "    builder.prefix(\".kassiber-\").rand_bytes(32).suffix(\".tmp\");",
+    "replace": "    let prefix = format!(\".{}.\", destination.file_name().unwrap_or_default().to_string_lossy());\n    builder.prefix(&prefix).suffix(\".tmp\");",
+    "expect_failing": [
+      "report_csv_stages_under_a_short_private_name"
+    ],
+    "rule": "Report CSVs stage under a short private name, so long destination names still publish (1750ae701)."
+  },
+  {
+    "id": "S-r58a-directory-fsync",
+    "file": "crates/store/src/layout.rs",
+    "find": "        Err(error) if !unsupported(&error) => Err(error),",
+    "replace": "        Err(error) => Err(error),",
+    "expect_failing": [
+      "report_csv_tolerates_unopenable_directories_for_fsync"
+    ],
+    "rule": "A directory the platform cannot open or fsync does not fail a complete report (1750ae701)."
+  },
+  {
+    "id": "write-lock-reservation-only-reads",
+    "file": "crates/store/src/write_lock.rs",
+    "find": "const RESERVE: &str = \"UPDATE settings SET value = value WHERE 0\";",
+    "replace": "const RESERVE: &str = \"SELECT value FROM settings WHERE 0\";",
+    "expect_failing": [
+      "write_openers_wait_for_a_held_writer_and_deferred_ones_fail_at_once"
+    ],
+    "rule": "A write savepoint asks for the writer lock with its first statement, so it waits for a held writer."
+  },
+  {
+    "id": "write-lock-transaction-deferred",
+    "file": "crates/store/src/write_lock.rs",
+    "find": "        TransactionBehavior::Immediate\n    };\n    Transaction::new_unchecked",
+    "replace": "        TransactionBehavior::Deferred\n    };\n    Transaction::new_unchecked",
+    "expect_failing": [
+      "write_openers_wait_for_a_held_writer_and_deferred_ones_fail_at_once"
+    ],
+    "rule": "write_transaction begins IMMEDIATE on a connection that can write."
+  },
+  {
+    "id": "write-lock-refusal-keeps-savepoint",
+    "file": "crates/store/src/write_lock.rs",
+    "find": "            let _ = conn.execute_batch(&format!(\n                \"ROLLBACK TO SAVEPOINT {name}; RELEASE SAVEPOINT {name}\"\n            ));\n",
+    "replace": "",
+    "expect_failing": [
+      "a_refused_reservation_leaves_no_savepoint_open"
+    ],
+    "rule": "A refused reservation leaves no savepoint open."
+  },
+  {
+    "id": "write-lock-query-only-reserves",
+    "file": "crates/store/src/write_lock.rs",
+    "find": "        || conn.query_row(\"PRAGMA query_only\", [], |row| row.get::<_, bool>(0))?\n    {\n        return Ok(None);",
+    "replace": "        || false\n    {\n        return Ok(None);",
+    "expect_failing": [
+      "connections_that_cannot_write_and_partial_schemas_take_no_reservation"
+    ],
+    "rule": "A query_only connection (an MCP pin) takes no reservation, so its reads neither wait nor fail."
+  },
+  {
+    "id": "write-lock-partial-schema-reserves",
+    "file": "crates/store/src/write_lock.rs",
+    "find": "            if message.starts_with(\"no such table\") =>",
+    "replace": "            if message.starts_with(\"no such index\") =>",
+    "expect_failing": [
+      "connections_that_cannot_write_and_partial_schemas_take_no_reservation"
+    ],
+    "rule": "A schema without settings opens a plain savepoint, as Python 63047edfe does."
+  },
+  {
+    "id": "write-lock-document-import-deferred",
+    "file": "crates/wallets/src/file_import/document/coordinator.rs",
+    "find": "kassiber_store::begin_write_savepoint(conn, \"document_import\")",
+    "replace": "conn.execute_batch(\"SAVEPOINT document_import\")",
+    "expect_failing": [
+      "writes_never_begin_deferred"
+    ],
+    "rule": "No product write transaction begins deferred outside the named allowlist."
+  },
+  {
+    "id": "write-lock-wallet-publication-deferred",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "kassiber_store::write_savepoint(conn).map_err(database_error)?;\n    check_cancelled()?;",
+    "replace": "conn.savepoint().map_err(database_error)?;\n    check_cancelled()?;",
+    "expect_failing": [
+      "writes_never_begin_deferred"
+    ],
+    "rule": "Wallet sync publication reserves the writer before its first read."
+  },
+  {
+    "id": "write-lock-freshness-deferred",
+    "file": "crates/wallets/src/freshness/execution.rs",
+    "find": "conn.execute_batch(\"BEGIN IMMEDIATE\")",
+    "replace": "conn.execute_batch(\"BEGIN DEFERRED\")",
+    "expect_failing": [
+      "writes_never_begin_deferred"
+    ],
+    "rule": "Freshness job transactions begin IMMEDIATE."
+  },
+  {
+    "id": "write-lock-allowlist-stale",
+    "file": "crates/wallets/src/analysis_index/views.rs",
+    "find": "    conn.execute_batch(\"SAVEPOINT chain_analysis_view_read\")",
+    "replace": "    kassiber_store::begin_write_savepoint(conn, \"chain_analysis_view_read\")",
+    "expect_failing": [
+      "the_allowlist_names_live_openers"
+    ],
+    "rule": "Every allowlisted deferred opener still exists."
+  },
+  {
+    "id": "price-currency-migration-filter",
+    "file": "crates/store/src/semantics.rs",
+    "find": "AND ({priced}) AND NOT {})\",",
+    "replace": "AND ({priced}))\",",
+    "expect_failing": [
+      "price_currency_invalidates_only_processed_books_holding_another_currency"
+    ],
+    "rule": "The price-currency migration invalidates only books holding a price in another currency."
+  },
+  {
+    "id": "price-currency-migration-required",
+    "file": "crates/store/src/semantics.rs",
+    "find": "const PRICE_CURRENCY_REQUIRED: i64 = 10;",
+    "replace": "const PRICE_CURRENCY_REQUIRED: i64 = 8;",
+    "expect_failing": [
+      "price_currency_invalidates_only_processed_books_holding_another_currency"
+    ],
+    "rule": "The price-currency migration requires calculation semantics 10."
+  },
+  {
+    "id": "price-currency-predicate-trim",
+    "file": "crates/store/src/price_currency.rs",
+    "find": "\"(TRIM(COALESCE({column}, '')) = '' OR UPPER(TRIM({column})) = \\",
+    "replace": "\"(TRIM(COALESCE({column}, '')) = '' OR {column} = \\",
+    "expect_failing": [
+      "the_predicate_is_pythons_text_and_compares_like_currency_code"
+    ],
+    "rule": "The book-currency predicate compares currencies as UPPER(TRIM(x)), as Python's currency_code does."
+  },
+  {
+    "id": "liquid-keeps-committed-graph",
+    "file": "crates/store/src/compat_liquid.rs",
+    "find": "            if graph_hash(&raw)? == observed {\n                continue;\n            }",
+    "replace": "            if graph_hash(&raw)? == observed && false {\n                continue;\n            }",
+    "expect_failing": [
+      "compat::liquid::tests::committed_liquid_observation_keeps_its_graph"
+    ],
+    "rule": "The Liquid backfill never rewrites a graph its observer committed to."
+  },
+  {
+    "id": "liquid-restores-rewritten-graph",
+    "file": "crates/store/src/compat_liquid.rs",
+    "find": "            if let Some(restored) = observed_graph(&fields, &expected, &observed)? {",
+    "replace": "            if let Some(restored) = None::<Value> {",
+    "expect_failing": [
+      "compat::liquid::tests::rewritten_liquid_observation_is_restored_to_its_committed_graph"
+    ],
+    "rule": "A graph an earlier backfill rewrote is restored when its committed hash proves the original."
+  },
+  {
+    "id": "liquid-observed-state-current",
+    "file": "crates/store/src/compat_liquid.rs",
+    "find": "    if graph_hash(&raw)? == observed {\n        return Ok(Observed::Current);",
+    "replace": "    if graph_hash(&raw)? == observed {\n        return Ok(Observed::Other);",
+    "expect_failing": [
+      "compat::liquid::tests::committed_liquid_observation_keeps_its_graph"
+    ],
+    "rule": "Verification recognizes an observer-committed Liquid graph as current."
+  },
+  {
+    "id": "verify-admits-committed-liquid-graph",
+    "file": "crates/store/src/schema.rs",
+    "find": "crate::compat::liquid::Observed::Current => continue,",
+    "replace": "crate::compat::liquid::Observed::Current => {}",
+    "expect_failing": [
+      "compat::liquid::tests::committed_liquid_observation_keeps_its_graph"
+    ],
+    "rule": "A book whose Liquid rows carry committed graphs opens without a Python migration."
+  },
+  {
+    "id": "verify-refuses-restorable-liquid-graph",
+    "file": "crates/store/src/schema.rs",
+    "find": "            crate::compat::liquid::Observed::Restorable => {\n                return Err(Error::migration(\"liquid_observation_backfill\"))\n            }",
+    "replace": "            crate::compat::liquid::Observed::Restorable => {}",
+    "expect_failing": [
+      "compat::liquid::tests::rewritten_liquid_observation_is_restored_to_its_committed_graph"
+    ],
+    "rule": "A Liquid graph still awaiting restoration requires the migrating open."
+  }
+]

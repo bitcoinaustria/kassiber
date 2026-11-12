@@ -153,8 +153,9 @@ files contain adapted upstream code.
   JSON, and `engine_version`; the core keeps the schema-1 `compute` and
   `check_entry` as the lot engine's fixture API.
 - `tax-engine` is its own Cargo workspace, separate from `ui-tauri/src-tauri`
-  but on the same Rust version. The remaining phase 0 choices are recorded
-  below.
+  but on the same Rust version. [Plan 21](21-rust-backend.md) since made both
+  crates members of the repository's root workspace. The remaining phase 0
+  choices are recorded below.
 
 ### Boundary
 
@@ -245,7 +246,8 @@ Recorded 2026-10-01, from the behavioral specs written before implementation:
 - **Crates.** `tax-engine/core` is the pure engine; `tax-engine/python` is the
   PyO3 0.25 binding (abi3, CPython 3.10 and newer), built by an exactly pinned
   maturin as a uv workspace member. Both declare Rust 1.77, and CI builds them
-  with exactly that toolchain.
+  with exactly that toolchain. Superseded by [plan 21](21-rust-backend.md):
+  `rust-toolchain.toml` now pins one newer toolchain for every crate.
 - **Decimal.** Fixed-size Rust decimals hold about 28 digits and normalize
   exponents, so the engine has its own decimal type over `num-bigint` that
   matches CPython's `decimal` exactly, checked against generated CPython

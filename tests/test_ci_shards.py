@@ -108,22 +108,64 @@ class PythonShardContractTest(unittest.TestCase):
             | optional_jobs,
         )
 
-    def test_tax_engine_job_builds_with_the_declared_msrv(self):
-        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    def test_every_rust_build_uses_the_pinned_toolchain(self):
+        pin = (ROOT / "rust-toolchain.toml").read_text(encoding="utf-8")
+        channel = re.search(r'(?m)^channel\s*=\s*"(\d+\.\d+\.\d+)"$', pin)
+        self.assertIsNotNone(channel, "rust-toolchain.toml must pin an exact release")
+        self.assertIn('components = ["rustfmt", "clippy"]', pin)
+        major_minor = channel.group(1).rsplit(".", 1)[0]
+        for manifest in ("Cargo.toml", "ui-tauri/src-tauri/Cargo.toml"):
+            with self.subTest(manifest=manifest):
+                text = (ROOT / manifest).read_text(encoding="utf-8")
+                self.assertEqual(
+                    re.findall(r'(?m)^rust-version\s*=\s*"([^"]+)"', text), [major_minor]
+                )
+        # src-tauri is its own workspace; Cargo refuses to build it if the root
+        # workspace would contain it without listing it.
+        root = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
+        self.assertRegex(root, r'(?m)^exclude = \["ui-tauri"\]$')
+        action = (ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8")
+        self.assertIn("rust-toolchain.toml", action)
+        self.assertIn("--component rustfmt --component clippy", action)
+        self.assertIn('rustup default "$channel"', action)
+
+        # Every job that compiles Rust (cargo, maturin through uv sync, or a
+        # Tauri build) installs the pinned toolchain first; none picks another.
+        compiles = re.compile(r"\bcargo\b|\buv sync\b|\btauri build\b")
+        checked = 0
+        for path in sorted((ROOT / ".github/workflows").glob("*.yml")):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("dtolnay/rust-toolchain", text, path.name)
+            self.assertNotRegex(text, r"cargo \+|rustup toolchain install|toolchain: stable")
+            for job_name, job in yaml.safe_load(text)["jobs"].items():
+                steps = job.get("steps") or []
+                setups = [
+                    index
+                    for index, step in enumerate(steps)
+                    if step.get("uses") == "./.github/actions/setup-rust"
+                ]
+                for index, step in enumerate(steps):
+                    if compiles.search(str(step.get("run") or "")):
+                        checked += 1
+                        with self.subTest(workflow=path.name, job=job_name, step=step.get("name")):
+                            self.assertTrue(setups and setups[0] < index)
+                            if "if" in step:
+                                self.assertEqual(steps[setups[0]].get("if"), step["if"])
+        self.assertGreater(checked, 10)
+
+        ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
         runs = "\n".join(
-            str(step.get("run") or "") for step in workflow["jobs"]["tax-engine"]["steps"]
+            str(step.get("run") or "") for step in ci["jobs"]["tax-engine"]["steps"]
         )
-        manifest = (ROOT / "tax-engine/Cargo.toml").read_text(encoding="utf-8")
-        msrv = re.search(r'(?m)^rust-version\s*=\s*"([^"]+)"', manifest)
-        self.assertIsNotNone(msrv)
-        self.assertIn(f"rustup toolchain install {msrv.group(1)}.0", runs)
-        self.assertIn(f"cargo +{msrv.group(1)}.0 fmt", runs)
-        self.assertIn(f"cargo +{msrv.group(1)}.0 test", runs)
+        self.assertIn("cargo fmt", runs)
+        self.assertIn("cargo clippy", runs)
+        self.assertIn("-D warnings", runs)
         self.assertIn("--locked", runs)
 
     def test_platform_workflows_run_when_only_the_tax_engine_changes(self):
         # The engine's binding is built by uv sync on every platform, so a
-        # tax-engine-only change must still reach the macOS and Windows lanes.
+        # change to it, its workspace, or its crates must still reach the
+        # macOS and Windows lanes.
         for name, events in (
             ("prerelease-binaries.yml", ("pull_request",)),
             ("credential-platforms.yml", ("pull_request", "push")),
@@ -134,6 +176,9 @@ class PythonShardContractTest(unittest.TestCase):
             for event in events:
                 with self.subTest(workflow=name, event=event):
                     self.assertIn("tax-engine/**", triggers[event]["paths"])
+                    for path in ("Cargo.toml", "Cargo.lock", "crates/**", "rust-toolchain.toml"):
+                        self.assertIn(path, triggers[event]["paths"])
+                    self.assertIn(".github/actions/setup-rust/**", triggers[event]["paths"])
 
     def test_dependency_caches_and_failure_artifacts_stay_enabled(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())

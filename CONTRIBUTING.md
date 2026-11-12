@@ -28,7 +28,8 @@ Python development uses the locked `uv` environment:
 ```
 
 The script checks system prerequisites, including the Rust toolchain that
-builds the [tax engine](docs/reference/tax-engine.md), runs `uv sync --locked`,
+builds the [tax engine](docs/reference/tax-engine.md) (it installs the Rust
+release `rust-toolchain.toml` pins through rustup), runs `uv sync --locked`,
 and verifies imports. Use `uv run --locked` for Python commands so a stale lockfile fails
 instead of being rewritten. End-user pip installation remains a packaging
 contract, not a second contributor workflow. A pip install needs the tax
@@ -81,7 +82,7 @@ Before push or PR, run the full gate:
 ./scripts/quality-gate.sh
 ```
 
-It checks the tax engine's Rust formatting and runs its tests, compiles Python,
+It checks the tax engine's Rust formatting and clippy lints and runs its tests, compiles Python,
 validates the test inventory, runs all Python tests once, reruns the modules
 that reach the tax engine against its frozen oracle, and runs TypeScript,
 ESLint, and Vitest. CI partitions that Python inventory

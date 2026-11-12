@@ -1,10 +1,11 @@
 [package]
 name = "kassiber-tax"
 description = "Python binding for Kassiber's tax engine"
-version.workspace = true
+# Shared with kassiber-tax-core and pyproject.toml; bump them together.
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "MIT"
 authors.workspace = true
 publish.workspace = true
 
@@ -15,7 +16,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 kassiber-tax-core = { path = "../core" }
-# 0.25 is the newest line that builds with Rust 1.77; >= 0.24.1 is required
-# for RUSTSEC-2025-0020. abi3-py310 builds one wheel for every supported
-# CPython (requires-python >= 3.10).
+# 0.25 was the newest line that built with plan 20's Rust 1.77; moving to a
+# newer line is its own change now that the toolchain is newer. >= 0.24.1 is
+# required for RUSTSEC-2025-0020. abi3-py310 builds one wheel for every
+# supported CPython (requires-python >= 3.10).
 pyo3 = { version = "0.25.1", default-features = false, features = ["macros", "abi3-py310"] }

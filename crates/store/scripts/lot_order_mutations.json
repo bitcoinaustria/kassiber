@@ -1,0 +1,182 @@
+[
+  {
+    "id": "store-same-time-order-step",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "    import_batch_sequence(conn, observer)?;\n    crate::semantics::same_time_order(conn, observer)?;\n",
+    "replace": "    import_batch_sequence(conn, observer)?;\n",
+    "expect_failing": [
+      "source_order_storage_adds_positions_and_requires_version_8_once"
+    ],
+    "rule": "Opening an existing book runs same-time-source-order-v1 after the import batch sequence, as Python's compatibility pass does."
+  },
+  {
+    "id": "store-source-position-column",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "        (\"import_batch_transactions\", \"source_position\"),\n    )?;",
+    "replace": "        (\"journal_entries\", \"calculation_compact\"),\n    )?;",
+    "expect_failing": [
+      "source_order_storage_adds_positions_and_requires_version_8_once"
+    ],
+    "rule": "Existing books gain the nullable import_batch_transactions.source_position after journal_entries.calculation_compact."
+  },
+  {
+    "id": "store-same-time-required",
+    "file": "crates/store/src/semantics.rs",
+    "find": "const SAME_TIME_ORDER_REQUIRED: i64 = 8;",
+    "replace": "const SAME_TIME_ORDER_REQUIRED: i64 = 7;",
+    "expect_failing": [
+      "source_order_storage_adds_positions_and_requires_version_8_once"
+    ],
+    "rule": "Processed books require the semantics version that orders same-time rows by source order."
+  },
+  {
+    "id": "store-same-time-affected",
+    "file": "crates/store/src/semantics.rs",
+    "find": "MAX(required_journal_semantics_version, {SAME_TIME_ORDER_REQUIRED})\\n        WHERE {AFFECTED}",
+    "replace": "MAX(required_journal_semantics_version, {SAME_TIME_ORDER_REQUIRED})\\n        WHERE 1",
+    "expect_failing": [
+      "source_order_storage_adds_positions_and_requires_version_8_once"
+    ],
+    "rule": "Only processed books (last_processed_at or retained entries) need a rebuild."
+  },
+  {
+    "id": "store-semantics-version",
+    "file": "crates/store/src/semantics.rs",
+    "find": "pub const JOURNAL_CALCULATION_SEMANTICS_VERSION: i64 = 10;",
+    "replace": "pub const JOURNAL_CALCULATION_SEMANTICS_VERSION: i64 = 7;",
+    "expect_failing": [
+      "global_version_refuses_older_stamps_even_with_a_lower_requirement"
+    ],
+    "rule": "Journals stamped before the same-time order are stale."
+  },
+  {
+    "id": "store-order-source-position",
+    "file": "crates/store/src/transaction_order.rs",
+    "find": "[BLOCK_HEIGHT, SOURCE_POSITION]",
+    "replace": "[BLOCK_HEIGHT]",
+    "expect_failing": [
+      "matches_python_text"
+    ],
+    "rule": "The file position follows the block height in the source order."
+  },
+  {
+    "id": "store-order-block-height",
+    "file": "crates/store/src/transaction_order.rs",
+    "find": "[BLOCK_HEIGHT, SOURCE_POSITION]",
+    "replace": "[SOURCE_POSITION, BLOCK_HEIGHT]",
+    "expect_failing": [
+      "matches_python_text"
+    ],
+    "rule": "A confirmed chain row's block height orders before its file position."
+  },
+  {
+    "id": "journals-loader-order",
+    "file": "crates/journals/src/loader.rs",
+    "find": "    transactions_sql(&kassiber_store::transaction_order::transaction_order_sql(\n        \"t\", false,\n    ))\n",
+    "replace": "    transactions_sql(\"t.occurred_at ASC, t.created_at ASC, t.id ASC\")\n",
+    "expect_failing": [
+      "native_loader_orders_same_time_rows_by_source_position"
+    ],
+    "rule": "Custody composition reads same-time rows in source order, not by creation time and id."
+  },
+  {
+    "id": "journals-rate-order",
+    "file": "crates/journals/src/loader.rs",
+    "find": "kassiber_store::transaction_order::same_time_order_sql(\"transactions\", true)",
+    "replace": "\"created_at DESC,id DESC\"",
+    "expect_failing": [
+      "native_loader_orders_same_time_rows_by_source_position"
+    ],
+    "rule": "The latest transaction rate is the last same-time row in source order."
+  },
+  {
+    "id": "journals-narrow-fallback",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "Err(error) if missing_column(&error) =>",
+    "replace": "Err(error) if false && missing_column(&error) =>",
+    "expect_failing": [
+      "native_loader_matches_python_database_bytes"
+    ],
+    "rule": "A narrow table without the source order's columns loads in the legacy order, as Python falls back."
+  },
+  {
+    "id": "custody-anchor-rank",
+    "file": "crates/custody/src/finalized_projection/composition.rs",
+    "find": "(string_ref(&r[\"occurred_at\"]), rank, string_ref(&r[\"id\"]))",
+    "replace": "(string_ref(&r[\"occurred_at\"]), 0, string_ref(&r[\"id\"]))",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "Same-time projection rows follow their anchor's source rank before the row id."
+  },
+  {
+    "id": "custody-row-order",
+    "file": "crates/custody/src/finalized_projection/runtime.rs",
+    "find": "    input.insert(\n        \"row_order\".into(),\n        Value::Array(transaction_ids(snapshot).map(Value::String).collect()),\n    );\n",
+    "replace": "",
+    "expect_failing": [
+      "projection_adapter_input_families"
+    ],
+    "rule": "The Python-value adapter hands the compiler the snapshot's transaction order."
+  },
+  {
+    "id": "wallets-source-position",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "params![batch,id,position]",
+    "replace": "params![batch,id,None::<i64>]",
+    "expect_failing": [
+      "csv_import_records_each_created_rows_source_position"
+    ],
+    "rule": "A file import records each created row's place among the run's created rows."
+  },
+  {
+    "id": "reports-holdings-order",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "kassiber_store::transaction_order::transaction_order_sql(\"transactions\", true)",
+    "replace": "\"occurred_at DESC,created_at DESC,id DESC\"",
+    "expect_failing": [
+      "holdings_rate_is_the_last_same_time_row_in_source_order"
+    ],
+    "rule": "The latest transaction rate is the last same-time row in source order."
+  },
+  {
+    "id": "reports-summary-order",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "kassiber_store::transaction_order::transaction_order_sql(\"transactions\", true)",
+    "replace": "\"occurred_at DESC,created_at DESC,id DESC\"",
+    "expect_failing": [
+      "summary_rate_is_the_last_same_time_row_in_source_order"
+    ],
+    "rule": "The latest transaction rate is the last same-time row in source order."
+  },
+  {
+    "id": "reports-handoff-order",
+    "file": "crates/reports/src/year_handoff.rs",
+    "find": "kassiber_store::transaction_order::transaction_order_sql(\"transactions\", true)",
+    "replace": "\"occurred_at DESC,created_at DESC,id DESC\"",
+    "expect_failing": [
+      "year_end_fallback_is_the_last_same_time_row_in_source_order"
+    ],
+    "rule": "The latest transaction rate is the last same-time row in source order."
+  },
+  {
+    "id": "reports-exit-order",
+    "file": "crates/reports/src/exit_tax.rs",
+    "find": "kassiber_store::transaction_order::same_time_order_sql(\"transactions\", true)",
+    "replace": "\"created_at DESC,id DESC\"",
+    "expect_failing": [
+      "fallback_rate_is_the_last_same_time_row_in_source_order"
+    ],
+    "rule": "The exit-tax fallback rate is the last same-time row in source order."
+  },
+  {
+    "id": "workspace-dashboard-order",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "            kassiber_store::transaction_order::transaction_order_sql(\"transactions\", true)\n",
+    "replace": "            \"occurred_at DESC, created_at DESC, id DESC\"\n",
+    "expect_failing": [
+      "dashboard_rate_is_the_last_same_time_row_in_source_order"
+    ],
+    "rule": "The dashboard's transaction rate is the last same-time row in source order."
+  }
+]

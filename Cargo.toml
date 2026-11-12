@@ -1,0 +1,49 @@
+# Kassiber's Rust workspace (docs/plan/21-rust-backend.md): the tax engine
+# and the backend crates. ui-tauri/src-tauri is its own workspace on the same
+# toolchain (rust-toolchain.toml).
+[workspace]
+# Cargo would otherwise claim ui-tauri/src-tauri as an undeclared member.
+exclude = ["ui-tauri"]
+resolver = "2"
+members = [
+  "crates/backup",
+  "crates/credentials",
+  "crates/envelope",
+  "crates/paths",
+  "crates/ownership",
+  "crates/ipc",
+  "crates/store",
+  "crates/secrets",
+  "crates/pydecimal",
+  "crates/pyjson",
+  "crates/pytext",
+  "tax-engine/core",
+  "tax-engine/python",
+]
+
+[workspace.package]
+edition = "2021"
+# The repository's pinned toolchain (rust-toolchain.toml), which also builds
+# ui-tauri/src-tauri.
+rust-version = "1.99"
+license = "AGPL-3.0-only"
+authors = ["Bitcoin Austria"]
+publish = false
+
+[profile.release]
+# A panic is a bug; keep unwinding so the binding can turn it into an error.
+panic = "unwind"
+
+# age calibrates scrypt from elapsed CPU time. Unoptimized crypto can otherwise
+# reject ordinary pyrage/release-built bundles as excessive work in the native
+# debug/parity binary. Keep calibration on the same optimized primitives.
+[profile.dev.package.scrypt]
+opt-level = 3
+[profile.dev.package.salsa20]
+opt-level = 3
+
+# The bundled SQLCipher (C) runs every test book's queries, page codec and
+# key derivation. Unoptimized it made a quarter of the Rust test time; the
+# Rust code it serves stays at the dev level.
+[profile.dev.package.libsqlite3-sys]
+opt-level = 3

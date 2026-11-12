@@ -12,7 +12,7 @@ concurrency:
 
 env:
   # uv builds the tax engine's binding with maturin. Never let maturin fetch
-  # its own Rust toolchain mid-build; the runner image provides one.
+  # its own Rust toolchain mid-build; the setup-rust step installs the pinned one.
   MATURIN_NO_INSTALL_RUST: "1"
   # Tests that compare with the frozen tax oracle fail here, instead of
   # skipping, when its RP2 dev dependency is missing.
@@ -40,6 +40,9 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
 
       - name: Sync Python dependencies
         run: uv sync --locked
@@ -108,6 +111,9 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -183,6 +189,9 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -285,6 +294,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+
       - name: Sync dependencies
         run: uv sync --locked
 
@@ -320,9 +332,18 @@ jobs:
           retention-days: 7
 
   tax-engine:
-    name: Tax engine (Rust 1.77)
+    name: Rust crates
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # With every backend crate the workspace's test binaries alone run about
+    # 18 minutes on the build machine (4 test threads), before this job's
+    # builds and clippy.
+    timeout-minutes: 60
+    env:
+      # With debug info the workspace's test build outgrows the runner's disk
+      # ("No space left on device" while linking): 11 GB without it, 32 GB
+      # or more with line tables only. Panic messages keep their file and line.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
@@ -330,16 +351,18 @@ jobs:
         shell: bash
         run: scripts/fetch-test-data.sh
 
-      # The crates declare rust-version 1.77, like ui-tauri/src-tauri. Building
-      # with exactly that toolchain keeps newer-only dependencies out.
-      - name: Install Rust 1.77
-        run: rustup toolchain install 1.77.0 --profile minimal --component rustfmt
+      # rust-toolchain.toml pins one toolchain for every crate and workflow.
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
 
       - name: Check formatting
-        run: cargo +1.77.0 fmt --manifest-path tax-engine/Cargo.toml --all --check
+        run: cargo fmt --all --check
 
-      - name: Run engine tests
-        run: cargo +1.77.0 test --manifest-path tax-engine/Cargo.toml --locked
+      - name: Lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --locked
 
   chain-observers:
     name: Chain observers (Linux Docker)
@@ -399,6 +422,10 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Set up Rust
+        if: steps.observer_paths.outputs.run == 'true'
+        uses: ./.github/actions/setup-rust
+
       - name: Sync dependencies
         if: steps.observer_paths.outputs.run == 'true'
         run: uv sync --locked
@@ -437,7 +464,7 @@ jobs:
           echo "- Tax shadow: ${{ needs.tax-shadow.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- CLI smoke: ${{ needs.cli-smoke.result }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Tax engine: ${{ needs.tax-engine.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Rust crates: ${{ needs.tax-engine.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce required checks
