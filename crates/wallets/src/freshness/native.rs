@@ -368,7 +368,7 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
             grant,
             graph,
         } = discovered;
-        let fetch = self.run_fetch(conn, &id, &selected, &action, &action, &grant, emit)?;
+        let fetch = self.run_fetch(conn, &id, &selected, &action, &grant, emit)?;
         Ok(Prepared {
             id,
             selected,
@@ -405,7 +405,7 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
                     ("phase", s("discovery")),
                     ("wallet", field(&selected.wallet, "label").clone()),
                 ]))?;
-                self.run_fetch(conn, &id, &selected, &action, repair, repair_grant, emit)
+                self.run_fetch(conn, &id, &selected, repair, repair_grant, emit)
             },
         )?;
         Ok(Prepared {
@@ -419,14 +419,17 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
     }
 
     /// Run `fetch` (the job's own or its widened repair) under the batch's
-    /// checks, which revalidate the job's own action between requests.
+    /// checks. Between requests they fence cancellation, consent, the job,
+    /// the book, the wallet row and its backend; all cheap reads. The full
+    /// `Fetch::revalidate` rebuilds the observer plan (key derivation and a
+    /// BDK wallet), so it runs once before publication in `run`, not here:
+    /// the transport calls this per request and per record.
     #[allow(clippy::too_many_arguments)]
     fn run_fetch(
         &mut self,
         conn: &Connection,
         id: &str,
         selected: &Source,
-        action: &Fetch,
         fetch: &Fetch,
         grant: &FetchConsent,
         emit: &mut dyn FnMut(&Value) -> Result<()>,
@@ -464,8 +467,7 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
                     "Wallet sync backend changed",
                 ));
             }
-            self.proof.permitted(conn, &selected.profile)?;
-            action.revalidate(conn)
+            self.proof.permitted(conn, &selected.profile)
         };
         let control = Checked {
             cancel: self.cancel,
