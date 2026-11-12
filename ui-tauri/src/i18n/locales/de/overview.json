@@ -101,7 +101,12 @@
     "transferReviewTitle_other": "{{count}} Swap-/Transfer-Kandidaten prüfen",
     "finishedTitle": "Buch-Aktualisierung abgeschlossen",
     "failedTitle": "Buch-Aktualisierung fehlgeschlagen",
-    "failedBody": "Buch-Aktualisierung fehlgeschlagen"
+    "failedBody": "Buch-Aktualisierung fehlgeschlagen",
+    "actions": {
+      "retry": "Erneut versuchen",
+      "openSettings": "Einstellungen öffnen",
+      "review": "Prüfen"
+    }
   },
   "stats": {
     "btcPrice": "BTC-Kurs",

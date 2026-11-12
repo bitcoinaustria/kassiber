@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  freshnessRunProblemDetails,
   describeFreshnessSourceState,
   freshnessRunAutoPairCount,
   freshnessRunQuarantineCount,
@@ -433,5 +434,55 @@ describe("syncResults", () => {
       "1 needs attention: Market-rate coverage: HTTP 500",
     );
     expect(freshnessRunNeedsAttention(payload)).toBe(true);
+  });
+});
+
+describe("freshnessRunProblemDetails", () => {
+  it("names every source that did not finish, once", () => {
+    const lines = freshnessRunProblemDetails({
+      completed: [
+        { id: "1", source_label: "Hot wallet", status: "done" },
+        {
+          id: "2",
+          source_label: "Cold storage",
+          status: "error",
+          error: { message: "Electrum timeout", hint: "Check the backend." },
+        },
+        { id: "3", source_label: "Savings", status: "rate_limited" },
+      ],
+      sources: [
+        {
+          source_key: "w:cold",
+          source_type: "onchain_wallet",
+          source_label: "Cold storage",
+          status: "failed",
+          last_error_message: "Electrum timeout",
+        },
+        {
+          source_key: "w:btcpay",
+          source_type: "btcpay_wallet",
+          source_label: "Shop",
+          status: "blocking_reports",
+          blocking_reports: true,
+        },
+      ],
+      results: [{ wallet: "Paper", status: "error", message: "bad descriptor" }],
+    });
+
+    expect(lines).toEqual([
+      "Cold storage failed: Electrum timeout Check the backend.",
+      "Savings cooling down.",
+      "Shop is blocking reports.",
+      "Paper refresh failed: bad descriptor",
+    ]);
+  });
+
+  it("is empty for a clean run", () => {
+    expect(
+      freshnessRunProblemDetails({
+        completed: [{ id: "1", source_label: "Hot wallet", status: "done" }],
+      }),
+    ).toEqual([]);
+    expect(freshnessRunProblemDetails(null)).toEqual([]);
   });
 });

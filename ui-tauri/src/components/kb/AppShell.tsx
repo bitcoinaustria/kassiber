@@ -1721,6 +1721,10 @@ export function AppShell() {
             tone: signal === "worker-error" ? "error" : "warning",
             dedupeKey: "background-freshness",
             target: "/logs",
+            action: {
+              label: t("overview:bookRefresh.actions.retry"),
+              command: "refresh-book",
+            },
           });
         }),
       )

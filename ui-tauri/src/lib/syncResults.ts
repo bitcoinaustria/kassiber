@@ -461,6 +461,70 @@ export function summarizeFreshnessRun(data: FreshnessRunData | null | undefined)
     : summary;
 }
 
+/** Most detail lines a notification carries; the body keeps the summary. */
+const MAX_PROBLEM_DETAILS = 12;
+
+/**
+ * One line per source that did not finish cleanly in a freshness run: failed
+ * or cancelled jobs with their error, failed or report-blocking sources not
+ * already named by a job, wallet results that errored, and a skipped
+ * automatic pairing or journal step. The summary in the notification body
+ * names only the first problem; these lines name the rest.
+ */
+export function freshnessRunProblemDetails(
+  data: FreshnessRunData | null | undefined,
+): string[] {
+  const lines: string[] = [];
+  const named = new Set<string>();
+  for (const job of data?.completed ?? []) {
+    if (!job.status || job.status === "done") continue;
+    const label = job.source_label || job.job_type || "Source";
+    const detail = [job.error?.message || job.error?.code, job.error?.hint]
+      .filter(Boolean)
+      .join(" ");
+    const state =
+      job.status === "rate_limited"
+        ? "cooling down"
+        : job.status === "cancelled"
+          ? "cancelled"
+          : "failed";
+    lines.push(detail ? `${label} ${state}: ${detail}` : `${label} ${state}.`);
+    if (job.source_label) named.add(job.source_label);
+  }
+  for (const source of data?.sources ?? []) {
+    if (source.status !== "failed" && !source.blocking_reports) continue;
+    if (named.has(source.source_label)) continue;
+    lines.push(describeFreshnessSourceState(source));
+    named.add(source.source_label);
+  }
+  for (const result of data?.results ?? []) {
+    if (result.status !== "error" || named.has(result.wallet)) continue;
+    const detail = syncResultDetail(result);
+    lines.push(
+      detail
+        ? `${result.wallet} refresh failed: ${detail}`
+        : `${result.wallet} refresh failed.`,
+    );
+    named.add(result.wallet);
+  }
+  for (const job of data?.completed ?? []) {
+    if (job.job_type !== "journal_refresh" || !autoPairNeedsAttention(job)) {
+      continue;
+    }
+    const message = autoPairSummary(job)?.error?.message;
+    lines.push(
+      message
+        ? `Automatic pairing skipped: ${message}`
+        : "Automatic pairing skipped.",
+    );
+  }
+  if (journalStepNeedsAttention(data?.journals)) {
+    const journals = describeJournalStep(data?.journals);
+    if (journals) lines.push(journals);
+  }
+  return [...new Set(lines)].slice(0, MAX_PROBLEM_DETAILS);
+}
+
 export function describeFreshnessSourceState(source: FreshnessSourceState): string {
   const label = source.source_label || source.source_key;
   if (source.status === "fresh") return `${label} is fresh.`;

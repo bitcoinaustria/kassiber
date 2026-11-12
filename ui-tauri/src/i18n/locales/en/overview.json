@@ -101,7 +101,12 @@
     "transferReviewTitle_other": "Review {{count}} swap/transfer candidates",
     "finishedTitle": "Book refresh finished",
     "failedTitle": "Book refresh failed",
-    "failedBody": "Book refresh failed"
+    "failedBody": "Book refresh failed",
+    "actions": {
+      "retry": "Retry",
+      "openSettings": "Open settings",
+      "review": "Review"
+    }
   },
   "stats": {
     "btcPrice": "BTC price",

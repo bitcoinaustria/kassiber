@@ -19,7 +19,8 @@
       "storing": "Journalprojektion wird gespeichert",
       "complete": "Journalprojektion wurde gespeichert",
       "fallback": "Journale werden verarbeitet"
-    }
+    },
+    "retry": "Erneut versuchen"
   },
   "ledger": {
     "tabs": {

@@ -7,6 +7,7 @@ import { useUiStore } from "@/store/ui";
 import {
   EXCHANGE_PROVIDER_NAMES,
   exchangeErrorInfo,
+  refusedPermissions,
   type ExchangeConnectionStatus,
   type ExchangeErrorInfo,
   type ExchangeKind,
@@ -65,10 +66,20 @@ export function useExchangeSync({
     } catch (error) {
       const info = exchangeErrorInfo(error);
       setLastError(info);
+      // The hint and any permissions the key still holds, which the wallet
+      // page shows inline; the bell keeps them in memory only.
+      const permissions = refusedPermissions(info);
+      const details = [
+        info.hint,
+        permissions.length
+          ? t("exchange.error.permissions", { list: permissions.join(", ") })
+          : null,
+      ].filter((line): line is string => Boolean(line));
       updateNotification(noticeId, {
         title: t("exchange.sync.failedTitle", { label }),
         body: info.message ?? t("exchange.error.unknown", { provider }),
         tone: "error",
+        details: details.length ? details : undefined,
       });
     } finally {
       void status.refetch();

@@ -19,7 +19,8 @@
       "storing": "Saving the journal projection",
       "complete": "Journal projection saved",
       "fallback": "Processing journals"
-    }
+    },
+    "retry": "Retry"
   },
   "ledger": {
     "tabs": {

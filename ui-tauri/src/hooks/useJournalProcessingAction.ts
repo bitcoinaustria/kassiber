@@ -223,6 +223,11 @@ export function useJournalProcessingAction(
               : t("processing.failedBody"),
           tone: "error",
           dedupeKey: "journal-processing",
+          // The shell's Retry runs the default processing (auto-pair on), so
+          // offer it only when that is what failed.
+          action: autoPair
+            ? { label: t("processing.retry"), command: "process-journals" }
+            : undefined,
         });
         clearActiveMaintenanceProgress(JOURNAL_PROCESSING_PROGRESS_ID);
       },

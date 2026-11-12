@@ -8,6 +8,7 @@ import {
   freshnessRunHasPendingJobs,
   freshnessRunNeedsBackend,
   freshnessRunOnlyJournalsPending,
+  freshnessRunProblemDetails,
   journalStepNeedsAttention,
   freshnessRunQuarantineCount,
   freshnessRunTransferReviewCount,
@@ -24,7 +25,11 @@ import {
   syncProgressNotification,
   type WalletSyncProgress,
 } from "@/lib/syncProgress";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import {
+  bookIdentityKey,
+  useUiStore,
+  type NotificationAction,
+} from "@/store/ui";
 
 type WalletSyncOptions = {
   onTrustedSuccess?: () => void;
@@ -211,6 +216,47 @@ export function useWalletSyncAction() {
               });
               target = "/swaps";
             }
+            const failedMaintenance = needsAttention
+              ? failedSyncMaintenanceProgress(
+                  failedSyncProgressForRun(
+                    envelope.data,
+                    jobProgressRef.current,
+                    lastProgressRef.current,
+                  ),
+                  progressValueRef.current,
+                  body,
+                  {
+                    title,
+                    startedAt: startedAtRef.current ?? undefined,
+                    updatedAt: new Date().toISOString(),
+                  },
+                )
+              : null;
+            // Which sources failed and why, then the last progress the
+            // full-screen card showed. In memory only: `kb.ui` drops them.
+            const problemLines = freshnessRunProblemDetails(envelope.data);
+            const details = [
+              ...new Set([
+                ...problemLines,
+                ...(failedMaintenance?.details ?? []),
+              ]),
+            ];
+            const action: NotificationAction | undefined = needsBackend
+              ? {
+                  label: t("bookRefresh.actions.openSettings"),
+                  target: "/settings/bitcoin",
+                }
+              : needsAttention
+                ? {
+                    label: t("bookRefresh.actions.retry"),
+                    command: "refresh-book",
+                  }
+                : quarantineCount > 0 || transferReviewCount > 0
+                  ? {
+                      label: t("bookRefresh.actions.review"),
+                      target: quarantineCount > 0 ? "/review" : "/swaps",
+                    }
+                  : undefined;
             // Route the notification by a language-independent target instead of
             // letting the header guess from the (localized) title: failures /
             // blocking sources go to the logs (settings when dev tools are off),
@@ -223,6 +269,8 @@ export function useWalletSyncAction() {
                 tone: needsReview ? "warning" : "success",
                 dedupeKey: "book-refresh",
                 progress: undefined,
+                details: details.length ? details : undefined,
+                action,
                 target,
               });
               noticeIdRef.current = null;
@@ -232,6 +280,8 @@ export function useWalletSyncAction() {
                 body,
                 tone: needsReview ? "warning" : "success",
                 dedupeKey: "book-refresh",
+                details: details.length ? details : undefined,
+                action,
                 target,
               });
             }
@@ -244,25 +294,8 @@ export function useWalletSyncAction() {
               // forever once the core sync and journals are clean.
               if (bookKey) markFirstSyncDone(bookKey);
             }
-            if (needsAttention) {
-              const failedProgress = failedSyncProgressForRun(
-                envelope.data,
-                jobProgressRef.current,
-                lastProgressRef.current,
-              );
-              const now = new Date().toISOString();
-              setActiveMaintenanceProgress(
-                failedSyncMaintenanceProgress(
-                  failedProgress,
-                  progressValueRef.current,
-                  body,
-                  {
-                    title,
-                    startedAt: startedAtRef.current ?? now,
-                    updatedAt: now,
-                  },
-                ),
-              );
+            if (failedMaintenance) {
+              setActiveMaintenanceProgress(failedMaintenance);
             } else {
               clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
             }
@@ -273,6 +306,25 @@ export function useWalletSyncAction() {
               error instanceof Error
                 ? error.message
                 : t("bookRefresh.failedBody");
+            const now = new Date().toISOString();
+            const failedMaintenance = failedSyncMaintenanceProgress(
+              lastProgressRef.current ?? { phase: "error" },
+              progressValueRef.current,
+              body,
+              {
+                title: t("bookRefresh.failedTitle"),
+                startedAt: startedAtRef.current ?? now,
+                updatedAt: now,
+              },
+            );
+            // Where the run was when it failed, as the sync card shows it.
+            const details = failedMaintenance.details?.length
+              ? failedMaintenance.details
+              : undefined;
+            const action: NotificationAction = {
+              label: t("bookRefresh.actions.retry"),
+              command: "refresh-book",
+            };
             if (noticeIdRef.current) {
               updateNotification(noticeIdRef.current, {
                 title: t("bookRefresh.failedTitle"),
@@ -284,6 +336,8 @@ export function useWalletSyncAction() {
                 // set it explicitly so a stale /review target from a prior
                 // run's completion can't bypass that error fallback.
                 target: "/logs",
+                details,
+                action,
               });
               noticeIdRef.current = null;
             } else {
@@ -293,21 +347,11 @@ export function useWalletSyncAction() {
                 tone: "error",
                 dedupeKey: "book-refresh",
                 target: "/logs",
+                details,
+                action,
               });
             }
-            const now = new Date().toISOString();
-            setActiveMaintenanceProgress(
-              failedSyncMaintenanceProgress(
-                lastProgressRef.current ?? { phase: "error" },
-                progressValueRef.current,
-                body,
-                {
-                  title: t("bookRefresh.failedTitle"),
-                  startedAt: startedAtRef.current ?? now,
-                  updatedAt: now,
-                },
-              ),
-            );
+            setActiveMaintenanceProgress(failedMaintenance);
             startedAtRef.current = null;
           },
         },
