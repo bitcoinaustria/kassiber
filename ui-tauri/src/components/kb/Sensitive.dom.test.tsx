@@ -110,17 +110,35 @@ describe("import plan totals", () => {
   });
 });
 
-describe("title-bar privacy button", () => {
-  it("steps normal → hide amounts → hide all → normal", () => {
+describe("title-bar privacy menu", () => {
+  it("names the current mode and switches modes from the menu", async () => {
     render(<PrivacyModeButton />);
-    const button = screen.getByRole("button");
-    expect(button.getAttribute("data-privacy-mode")).toBe("normal");
-    expect(button.getAttribute("aria-label")).toBe("Privacy: Show all. Switch to Hide amounts.");
-    for (const mode of ["hideAmounts", "hideAll", "normal"]) {
-      fireEvent.click(button);
+    const initial = screen.getByRole("button");
+    expect(initial.getAttribute("data-privacy-mode")).toBe("normal");
+    expect(initial.getAttribute("aria-label")).toBe("Privacy: Show all");
+    cleanup();
+    for (const [label, mode] of [
+      ["Hide amounts", "hideAmounts"],
+      ["Hide all", "hideAll"],
+      ["Show all", "normal"],
+    ] as const) {
+      // A fresh mount per pick: the closing menu's exit state is not under test.
+      cleanup();
+      render(<PrivacyModeButton />);
+      fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+      fireEvent.click(await screen.findByRole("menuitemradio", { name: new RegExp(label) }));
       expect(store().privacyMode).toBe(mode);
-      expect(button.getAttribute("data-privacy-mode")).toBe(mode);
+      expect(screen.getByRole("button").getAttribute("data-privacy-mode")).toBe(mode);
     }
+  });
+
+  it("toggles hide-on-unlock from the menu", async () => {
+    render(<PrivacyModeButton />);
+    fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+    fireEvent.click(
+      await screen.findByRole("menuitemcheckbox", { name: "Hide amounts when Kassiber unlocks" }),
+    );
+    expect(store().hideAmountsOnUnlock).toBe(true);
   });
 });
 

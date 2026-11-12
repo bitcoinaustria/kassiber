@@ -768,9 +768,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           )}
         >
           <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-3 py-6 sm:px-6 sm:py-10">
-            <div className="mb-5 flex items-center justify-center gap-3">
-              <KassiberWordmark />
-              <span className="text-sm text-ink-3">{t("frame.setup")}</span>
+            <div className="mb-6 flex items-center justify-center gap-3">
+              <KassiberWordmark cell={2} />
+              <span className="text-base text-ink-3">{t("frame.setup")}</span>
             </div>
             <div className="overflow-hidden rounded-(--kb-radius-window) border border-border bg-card shadow-sm">
               <header className="px-5 pt-5 pb-4 sm:px-6">

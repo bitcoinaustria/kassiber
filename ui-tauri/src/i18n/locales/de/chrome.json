@@ -231,12 +231,19 @@
     "title": "Anzeigewährung: {{current}}. Zu {{next}} wechseln."
   },
   "sensitive": {
-    "cycle": "Privatsphäre: {{current}}. Zu „{{next}}“ wechseln.",
+    "trigger": "Privatsphäre: {{current}}",
+    "menuTitle": "Privatsphäre",
     "modes": {
       "normal": "Alles anzeigen",
       "hideAmounts": "Beträge ausblenden",
       "hideAll": "Alles ausblenden"
-    }
+    },
+    "descriptions": {
+      "normal": "Beträge und Prozentwerte werden angezeigt.",
+      "hideAmounts": "Guthaben und Beträge sind verborgen.",
+      "hideAll": "Verbirgt auch Prozentwerte und Anteile."
+    },
+    "hideOnUnlock": "Beträge beim Entsperren ausblenden"
   },
   "theme": {
     "label": "Erscheinungsbild",

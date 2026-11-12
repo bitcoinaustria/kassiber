@@ -231,12 +231,19 @@
     "title": "Display currency: {{current}}. Switch to {{next}}."
   },
   "sensitive": {
-    "cycle": "Privacy: {{current}}. Switch to {{next}}.",
+    "trigger": "Privacy: {{current}}",
+    "menuTitle": "Privacy",
     "modes": {
       "normal": "Show all",
       "hideAmounts": "Hide amounts",
       "hideAll": "Hide all"
-    }
+    },
+    "descriptions": {
+      "normal": "Amounts and percentages are shown.",
+      "hideAmounts": "Balances and amounts are hidden.",
+      "hideAll": "Also hides percentages and shares."
+    },
+    "hideOnUnlock": "Hide amounts when Kassiber unlocks"
   },
   "theme": {
     "label": "Theme",

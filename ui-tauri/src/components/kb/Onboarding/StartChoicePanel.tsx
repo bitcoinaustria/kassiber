@@ -64,10 +64,7 @@ export function StartChoicePanel({
   return (
     <div className="mx-auto grid min-h-full w-full max-w-6xl content-center items-center gap-8 px-6 py-10 sm:px-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-12">
       <div className="flex flex-col gap-9 animate-in fade-in-0 slide-in-from-bottom-2 duration-500">
-        <div className="flex items-start justify-between gap-4">
-          <KassiberWordmark cell={2} animate reveal="rain" />
-          <StartLanguageSelect />
-        </div>
+        <KassiberWordmark cell={2} animate reveal="rain" />
 
         <header className="space-y-4">
           <h1 className="text-5xl leading-[1.05] font-semibold tracking-tight text-balance text-ink">
@@ -148,18 +145,6 @@ export function StartChoicePanel({
             </button>
           </div>
         </div>
-
-        <ul className="flex list-none flex-wrap gap-x-6 gap-y-2 border-t border-border p-0 pt-6">
-          {START_HIGHLIGHTS.map(({ icon: Icon, titleKey }) => (
-            <li
-              key={titleKey}
-              className="flex items-center gap-2 text-sm text-ink-2"
-            >
-              <Icon className="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />
-              {t(`start.highlights.${titleKey}.title`)}
-            </li>
-          ))}
-        </ul>
       </div>
 
       {/* Three mined blocks and the next one filling from the mempool, on a
@@ -170,6 +155,23 @@ export function StartChoicePanel({
         fill={0.5}
         className="order-first h-56 animate-in fade-in-0 duration-700 lg:order-none lg:h-[30rem]"
       />
+
+      {/* Spans both columns: the promises on the left, the UI language on the
+          right, so the language stays reachable without crowding the brand. */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-6 lg:col-span-2">
+        <ul className="flex list-none flex-wrap gap-x-6 gap-y-2 p-0">
+          {START_HIGHLIGHTS.map(({ icon: Icon, titleKey }) => (
+            <li
+              key={titleKey}
+              className="flex items-center gap-2 text-sm text-ink-2"
+            >
+              <Icon className="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />
+              {t(`start.highlights.${titleKey}.title`)}
+            </li>
+          ))}
+        </ul>
+        <StartLanguageSelect />
+      </div>
     </div>
   );
 }
