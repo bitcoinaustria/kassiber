@@ -529,8 +529,8 @@ An unlocked daemon owns a separate identity-checked database connection and chec
 committed projection revisions and time-based source expiry. Lock/project switch
 cancels and joins the worker before releasing book resources; restart catches up
 from durable checkpoints. Notification delivery has a separate receipt and is
-at least once. Both wake-up events and persisted UI notifications are generic;
-subjects, attribution text and watch history stay in the encrypted book. The UI
+at least once. Both wake-up events and the desktop's in-memory notifications are
+generic; subjects, attribution text and watch history stay in the encrypted book. The UI
 also reads unread inbox state after reconnect, so a missed wake-up loses no event.
 There is no OS scheduler, network permission or background AI authorization in a
 local watch. Explicit recurring acquisition is a separate policy/service.

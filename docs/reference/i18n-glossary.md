@@ -230,3 +230,6 @@ Buttons are infinitive; the du-imperative (in parentheses) is for prose.
 | status / type / actions | Status / Typ / Aktionen | |
 | Nothing to show yet | Noch nichts vorhanden | neutral empty state. |
 | Something went wrong | Etwas ist schiefgelaufen | generic error. |
+| Notification | Benachrichtigung | the title-bar bell's list. |
+| Needs attention | Braucht Aufmerksamkeit | notification section for unresolved conditions. |
+| Recent (notifications) | Zuletzt | notification section for finished results; „Zuletzt leeren". |

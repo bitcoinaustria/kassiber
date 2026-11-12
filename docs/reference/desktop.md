@@ -624,20 +624,52 @@ choice is stored in the desktop's local UI state, so it survives updates;
 `ui-tauri/src/components/kb/devMode.ts` holds the route lists.
 
 The title bar's bell opens the notification list
-(`ui-tauri/src/components/kb/NotificationCenter.tsx`): the last 12 notices,
-plus entries derived from the book (journals waiting to be processed, the
-Review count), filtered to All or Needs action. Each entry shows how long
-ago it arrived, with the full date on hover, and clips its text to two lines
-until Show more, which also reveals detail lines such as the sources a book
-refresh could not finish. Its title opens the screen that explains it; a
-button can open a specific place (Settings -> Bitcoin when a backend is
-missing, Review) or retry the book refresh or journal processing. A notice
-that arrives again word for word replaces the earlier one and shows a repeat
-count. The × dismisses one stored notice and Clear all removes them all;
-derived entries go away when their cause does. Notices are kept in the
-desktop's local UI state without their progress bars and detail lines,
-which quote backend error text, so after a restart an entry keeps its title
-and body only. Notification text carries no amounts.
+(`ui-tauri/src/components/kb/NotificationCenter.tsx`, model in
+`ui-tauri/src/store/notifications.ts`) in three sections:
+
+- **Needs attention**: unresolved conditions, blockers first. Journals waiting
+  to be processed and the Review count come from `ui.review.badges`; sources
+  that could not refresh come from `ui.freshness.status`, book refreshes, and
+  background freshness events, tracked per source and folded into one row;
+  a failed book refresh, a failed journal run, a missing backend, and a
+  stopped background worker each have their own. Each row says what is wrong
+  and what it means for reports, offers one action, and keeps diagnostics
+  behind Show details. A condition clears only when a successful read or run
+  for the same book and source shows it resolved; a failed read, a lock, or a
+  source still syncing leaves it in place. Rows cannot be dismissed, and
+  re-reading the same state does not count as a repeat.
+- **Running**: the book refresh and journal processing in progress, with
+  their progress. A running book refresh reopens the sync card.
+- **Recent**: up to 30 finished results from this session, newest first,
+  each dismissible; Clear recent empties this section only. Senders not yet
+  moved to the structured model also land here, without a badge.
+
+The badge counts Needs attention groups for the open book. Conditions from
+another book stay in memory and return when that book is open again. Every
+action carries the book it came from and is checked against the open book
+when clicked: Retry repeats the original operation with its options (a
+rescan stays a rescan, journal processing keeps its auto-pair setting), while
+an action from another book only opens its review page. Actions name typed
+routes or operations from a closed list; anything else shows no button.
+Asking for a book refresh or journal run while one is running shows no
+notice; the menu's refresh reopens the sync card.
+
+Rows render from stable codes in the current language and privacy mode, not
+from stored sentences. Hide amounts withholds any free text (such as a backend
+error) that contains digits; Hide all shows generic titles and no labels,
+file names, paths, or error text, while actions keep working. The list and
+the toasts are hidden while Kassiber is locked.
+
+Short confirmations ("Book refreshed", "Journals processed") show as toasts
+at the bottom right: at most three, about four seconds for a success,
+paused while the pointer or focus is on them, dismissed with Escape or ×, and
+announced to screen readers. Equivalent confirmations replace each other.
+Toasts keep no history and are never sent to the operating system.
+
+Notifications live in memory only. Nothing of them (text, details, scope,
+timestamps, or actions) is written to the desktop's local UI state; a
+restart starts with an empty list and rebuilds conditions from the book after
+unlock. UI state version 5 removes notifications that older versions stored.
 
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
 launcher without administrator privileges. It writes a small managed launcher
