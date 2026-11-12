@@ -5,7 +5,7 @@ description = "Kassiber's tax engine: pure lot, pool, and gain computation"
 version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "MIT"
 authors.workspace = true
 publish.workspace = true
 
