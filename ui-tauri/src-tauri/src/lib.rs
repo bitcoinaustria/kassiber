@@ -1,4 +1,5 @@
 mod app_update;
+mod os_notifications;
 mod secret_floor;
 #[allow(dead_code)]
 mod secret_store;
@@ -3496,7 +3497,10 @@ pub fn run() {
 
     builder = builder
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_deep_link::init());
+        .plugin(tauri_plugin_deep_link::init())
+        // Rust-only delivery: the renderer has no `notification:*`
+        // permission, so the plugin's own commands are refused.
+        .plugin(tauri_plugin_notification::init());
 
     // After single-instance and deep-link, which have to register first.
     #[cfg(not(target_os = "macos"))]
@@ -3611,7 +3615,13 @@ pub fn run() {
             Ok(())
         })
         .manage(ChatDropState::default())
+        .manage(os_notifications::OsNotificationState::default())
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(true) = event {
+                if window.label() == "main" {
+                    os_notifications::on_main_window_focused(window.app_handle());
+                }
+            }
             // Kept natively so the webview can stage a drop without naming
             // a path; see `stage_dropped_chat_attachment`.
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
@@ -3649,7 +3659,9 @@ pub fn run() {
             terminal_command_status_command,
             terminal_command_install_command,
             terminal_command_remove_command,
-            set_menu_state
+            set_menu_state,
+            os_notifications::set_os_notification_preferences,
+            os_notifications::deliver_os_notification
         ])
         .run(tauri::generate_context!())
         .expect("error while running Kassiber desktop shell");
