@@ -59,6 +59,7 @@ _PREFLIGHT_MODULES = frozenset(
         "test_dependency_drift",
         "test_homebrew_cask",
         "test_report_contract_drift",
+        "test_test_data_lock",
         "test_workflow_pins",
     }
 )
@@ -195,6 +196,11 @@ _SHADOW_EXTRA_MODULES = frozenset(
         # `kassiber.core.review_workflow` builds the ledger for its previews.
         "test_review_cli_ai",
         "test_review_workflow",
+        "test_coarse_price_acceptance",
+        "test_review_batch_operations",
+        # Their AI read tools reach the auto-maintained journals below.
+        "test_chat_visuals",
+        "test_mcp_server",
         # The daemon processes stale journals before its AI read tools and
         # its `_DIRECT_AUTO_JOURNAL_REFRESH_KINDS` reads
         # (`daemon_freshness._auto_maintain_for_read`).

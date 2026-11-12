@@ -28,6 +28,8 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 2
 fi
 export MATURIN_NO_INSTALL_RUST=1
+# Tests read generated data the lock pins (docs/reference/testing.md).
+./scripts/fetch-test-data.sh --check
 
 py() {
   uv run --locked python "$@"

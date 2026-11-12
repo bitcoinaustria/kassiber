@@ -37,7 +37,7 @@ import urllib.request
 from .. import egress_policy
 from ..egress_ledger import get_egress_ledger, http_request_bytes_out
 from ..errors import AppError
-from ..redaction import provider_error_body_preview
+from ..redaction import provider_error_body_preview, url_credentials, withhold_credentials
 from .broker_client import BrokerAIClient
 from .contracts import (
     AI_API_FORMAT_AUTO,
@@ -926,19 +926,22 @@ def _provider_error(
     error: dict[str, Any],
     *,
     invalid_message: str = "AI provider rejected the request",
+    withheld: Iterable[str | None] = (),
 ) -> AppError:
     """Map an error object a provider sent inside a 200 stream or body.
 
     A numeric ``code`` is kept as the error's ``status``, marked ``in_stream``
     so only decisions that ask for it read it (see `_error_status`).
+    ``withheld`` credentials (the API key) never reach the error's text.
     """
 
     raw_code = error.get("code")
     status = raw_code if isinstance(raw_code, int) and not isinstance(raw_code, bool) else None
-    provider_code = str(raw_code if raw_code is not None else "").lower()
+    # Withheld before lowercasing, which would hide a key's spelling.
+    provider_code = withhold_credentials(str(raw_code if raw_code is not None else ""), withheld).lower()
     error_type = str(error.get("type") or "").lower()
     encoded = json.dumps(error, sort_keys=True, default=str)
-    preview, truncated = provider_error_body_preview(encoded)
+    preview, truncated = provider_error_body_preview(encoded, withheld=withheld)
     details: dict[str, Any] = {
         "provider_code": provider_code or None,
         "body": preview,
@@ -983,7 +986,7 @@ def _provider_error(
     )
 
 
-def _response_stream_error(event: dict[str, Any]) -> AppError:
+def _response_stream_error(event: dict[str, Any], withheld: Iterable[str | None] = ()) -> AppError:
     response = event.get("response") if isinstance(event.get("response"), dict) else {}
     error = event.get("error") if isinstance(event.get("error"), dict) else None
     if error is None and isinstance(response, dict) and isinstance(response.get("error"), dict):
@@ -995,7 +998,9 @@ def _response_stream_error(event: dict[str, Any]) -> AppError:
             if key not in {"type", "sequence_number"}
         }
     return _provider_error(
-        error or {}, invalid_message="AI provider rejected the Responses request"
+        error or {},
+        invalid_message="AI provider rejected the Responses request",
+        withheld=withheld,
     )
 
 
@@ -1513,7 +1518,9 @@ def _chat_completion_output(
     return output
 
 
-def _chat_completion_stream_error(event: dict[str, Any]) -> AppError | None:
+def _chat_completion_stream_error(
+    event: dict[str, Any], withheld: Iterable[str | None] = ()
+) -> AppError | None:
     """An error object inside a stream chunk (OpenRouter, vLLM), if any."""
 
     error = event.get("error")
@@ -1524,7 +1531,7 @@ def _chat_completion_stream_error(event: dict[str, Any]) -> AppError | None:
         return None
     if not isinstance(error, dict):
         error = {"message": str(error)}
-    return _provider_error(error)
+    return _provider_error(error, withheld=withheld)
 
 
 def _normalized_tool_calls(raw_calls: object, *, id_prefix: str) -> list[dict[str, Any]]:
@@ -1621,7 +1628,9 @@ def parse_sse_chunks(lines: Iterable[str]) -> Iterator[dict]:
         yield payload
 
 
-def _http_error_app_error(exc: urllib.error.HTTPError) -> AppError:
+def _http_error_app_error(
+    exc: urllib.error.HTTPError, withheld: Iterable[str | None] = ()
+) -> AppError:
     status = exc.code
     body = ""
     try:
@@ -1630,7 +1639,7 @@ def _http_error_app_error(exc: urllib.error.HTTPError) -> AppError:
         body = ""
     details = {"status": status}
     if body:
-        preview, truncated = provider_error_body_preview(body)
+        preview, truncated = provider_error_body_preview(body, withheld=withheld)
         details["body"] = preview
         details["body_truncated"] = truncated
     if status == 401 or status == 403:
@@ -1666,11 +1675,11 @@ def _http_error_app_error(exc: urllib.error.HTTPError) -> AppError:
     )
 
 
-def _network_error_app_error(exc: Exception) -> AppError:
+def _network_error_app_error(exc: Exception, withheld: Iterable[str | None] = ()) -> AppError:
     return AppError(
         "AI provider is unreachable",
         code="ai_unavailable",
-        details={"reason": str(exc)},
+        details={"reason": withhold_credentials(str(exc), withheld)},
         hint="Is the provider running? For local Ollama, try `ollama serve`. For remote providers, check connectivity.",
         retryable=True,
     )
@@ -1742,6 +1751,12 @@ class OpenAICompatibleClient:
             return str(self.detected_api_format)
         return AI_API_FORMAT_RESPONSES
 
+    def _withheld(self) -> tuple[str, ...]:
+        """The credentials a provider error must not repeat: the API key and
+        any userinfo or key-like query value in the base URL."""
+
+        return (self.api_key or "", *url_credentials(self.base_url))
+
     def _headers(self, *, json_body: bool = False, accept_sse: bool = False) -> dict[str, str]:
         headers = {"Accept": "application/json", "User-Agent": self.user_agent}
         if json_body:
@@ -1798,9 +1813,9 @@ class OpenAICompatibleClient:
                 raise AppError("AI request cancelled", code="ai_cancelled")
             return response
         except urllib.error.HTTPError as exc:
-            raise _http_error_app_error(exc) from exc
+            raise _http_error_app_error(exc, self._withheld()) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            raise _network_error_app_error(exc) from exc
+            raise _network_error_app_error(exc, self._withheld()) from exc
 
     def list_models(self, *, strict: bool = False) -> list[dict]:
         """`GET /v1/models`.
@@ -2221,14 +2236,14 @@ class OpenAICompatibleClient:
         if wire_format == AI_API_FORMAT_CHAT_COMPLETIONS:
             result = self._chat_completions_result(payload)
         else:
-            result = self._responses_result(payload)
+            result = self._responses_result(payload, self._withheld())
         self._note_answer(wire_format)
         return result
 
     @staticmethod
-    def _responses_result(payload: dict[str, Any]) -> dict[str, Any]:
+    def _responses_result(payload: dict[str, Any], withheld: tuple[str, ...] = ()) -> dict[str, Any]:
         if payload.get("status") == "failed" or isinstance(payload.get("error"), dict):
-            raise _response_stream_error({"type": "response.failed", "response": payload})
+            raise _response_stream_error({"type": "response.failed", "response": payload}, withheld)
         reasoning = _response_reasoning_summary(payload)
         result: dict[str, Any] = {
             "role": "assistant",
@@ -2245,7 +2260,7 @@ class OpenAICompatibleClient:
         return result
 
     def _chat_completions_result(self, payload: dict[str, Any]) -> dict[str, Any]:
-        error = _chat_completion_stream_error(payload)
+        error = _chat_completion_stream_error(payload, self._withheld())
         if error is not None:
             raise error
         choices = payload.get("choices")
@@ -2367,7 +2382,7 @@ class OpenAICompatibleClient:
             if not self._cancelled.is_set():
                 self._note_answer(wire_format)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            raise _network_error_app_error(exc) from exc
+            raise _network_error_app_error(exc, self._withheld()) from exc
         finally:
             self._active_response = None
 
@@ -2528,7 +2543,7 @@ class OpenAICompatibleClient:
             if isinstance(event_type, str) and event_type.startswith("response."):
                 spoke_format = True
             if event_type in {"error", "response.failed"}:
-                raise _response_stream_error(event)
+                raise _response_stream_error(event, self._withheld())
             delta: dict[str, Any] = {}
             if event_type == "response.output_text.delta":
                 text = event.get("delta")
@@ -2643,7 +2658,7 @@ class OpenAICompatibleClient:
             received = True
             if self._cancelled.is_set():
                 return
-            error = _chat_completion_stream_error(event)
+            error = _chat_completion_stream_error(event, self._withheld())
             if error is not None:
                 raise error
             if isinstance(event.get("usage"), dict):

@@ -2605,7 +2605,7 @@ def _freshness_control_payload(
         else:
             raise AppError(f"Unsupported freshness control action '{action}'", code="validation", retryable=False)
     conn.commit()
-    return {"result": result, **_freshness_status_payload(conn)}
+    return _freshness_payload_for_ui({"result": result, **_freshness_status_payload(conn)})
 
 
 def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:

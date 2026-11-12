@@ -21,6 +21,7 @@ from tests.test_ai_core_http_transport import (
     message_item,
     responses_stream,
 )
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -149,11 +150,8 @@ def _run(data_root, *args, input_text=None):
     stdin_kwargs = (
         {"stdin": subprocess.DEVNULL} if input_text is None else {"input": input_text}
     )
-    return subprocess.run(
+    return cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             *args,
@@ -1281,11 +1279,8 @@ class CliChatPersistenceTest(unittest.TestCase):
                 data_root = Path(tmp) / "data"
                 _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
                 _run_json(data_root, "chats", "config", "--history", "on")
-                daemon = subprocess.Popen(
+                daemon = cli_runner.popen(
                     [
-                        sys.executable,
-                        "-m",
-                        "kassiber",
                         "--data-root",
                         str(data_root),
                         "daemon",
@@ -1341,11 +1336,8 @@ class CliChatPersistenceTest(unittest.TestCase):
             _run_json(data_root, "init")
             _run_json(data_root, "workspaces", "create", "Demo")
             _run_json(data_root, "profiles", "create", "Main")
-            daemon = subprocess.Popen(
+            daemon = cli_runner.popen(
                 [
-                    sys.executable,
-                    "-m",
-                    "kassiber",
                     "--data-root",
                     str(data_root),
                     "daemon",

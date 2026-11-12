@@ -528,24 +528,37 @@ def _normalize_backend_config_patch(config):
     return cleaned, cleared
 
 
+_PLAIN_BACKEND_LOCATION_RE = re.compile(
+    r"(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?"
+)
+
+
+def _unparsed_backend_location(value):
+    """Show a location that is not a URL only when it is a bare host[:port].
+
+    Anything else may carry credentials or tokens in an unparsed position, so it
+    is never echoed.
+    """
+    return value if _PLAIN_BACKEND_LOCATION_RE.fullmatch(value) else "<redacted>"
+
+
 def redact_backend_url(url):
     value = str_or_none(url)
     if value is None:
         return ""
     try:
         parts = urlsplit(value)
+        hostname = parts.hostname or ""
+        port = parts.port
     except ValueError:
-        return value
-    if not parts.scheme or not parts.netloc:
-        return value
-    hostname = parts.hostname or ""
-    if not hostname:
-        return value
+        return _unparsed_backend_location(value)
+    if not parts.scheme or not parts.netloc or not hostname:
+        return _unparsed_backend_location(value)
     host = hostname
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
-    if parts.port is not None:
-        host = f"{host}:{parts.port}"
+    if port is not None:
+        host = f"{host}:{port}"
     if parts.username or parts.password:
         host = f"<redacted>@{host}"
     return urlunsplit((parts.scheme, host, parts.path, "", ""))
@@ -559,16 +572,17 @@ def redact_backend_proxy_url(url):
     parse_value = value if has_scheme else f"socks5h://{value}"
     try:
         parts = urlsplit(parse_value)
+        hostname = parts.hostname
+        port = parts.port
     except ValueError:
-        return value
-    if not parts.scheme or not parts.netloc or not parts.hostname:
-        return value
-    hostname = parts.hostname
+        return _unparsed_backend_location(value)
+    if not parts.scheme or not parts.netloc or not hostname:
+        return _unparsed_backend_location(value)
     host = hostname
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
-    if parts.port is not None:
-        host = f"{host}:{parts.port}"
+    if port is not None:
+        host = f"{host}:{port}"
     if parts.username or parts.password:
         host = f"redacted@{host}"
     redacted = urlunsplit((parts.scheme, host, "", "", ""))

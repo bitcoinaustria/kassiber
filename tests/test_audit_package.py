@@ -1387,11 +1387,10 @@ class AuditPackageCoreTest(unittest.TestCase):
                 "filed_report_impact_count": 1,
             },
         )
-        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 6)
-        self.assertIn(
-            "custody-fail-closed-holds-v1",
-            [audit["migration_name"] for audit in summary["schema_migration_audits"]],
-        )
+        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 7)
+        migration_names = [audit["migration_name"] for audit in summary["schema_migration_audits"]]
+        self.assertIn("stored-error-credentials-v1", migration_names)
+        self.assertIn("custody-fail-closed-holds-v1", migration_names)
         valuation_migration_audit = next(
             audit
             for audit in summary["schema_migration_audits"]

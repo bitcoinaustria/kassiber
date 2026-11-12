@@ -14,8 +14,6 @@ import json
 import os
 import queue
 import stat
-import subprocess
-import sys
 import tempfile
 import threading
 import unittest
@@ -24,6 +22,7 @@ from kassiber import daemon
 from kassiber import daemon_chat_uploads
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from tests import cli_runner
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -49,9 +48,8 @@ class ChatAttachmentUploadTests(unittest.TestCase):
             ("profiles", "create", "P", "--workspace", "W",
              "--fiat-currency", "EUR", "--tax-country", "at"),
         ):
-            subprocess.run(
-                [sys.executable, "-m", "kassiber", "--data-root", self.data_root,
-                 "--machine", *args],
+            cli_runner.run(
+                ["--data-root", self.data_root, "--machine", *args],
                 capture_output=True, text=True, cwd=REPO_ROOT, check=True,
             )
         self.conn = open_db(self.data_root)

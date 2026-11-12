@@ -45,7 +45,11 @@ bundles.
 - **Macaroons, commando runes, TLS keys, Unix socket paths, RPC URLs**.
   SQLCipher-encrypted `backends.config_json` only, gated by the
   reveal-token round-trip. Never in envelopes, AI tool output, logs,
-  or diagnostics bundles.
+  diagnostics bundles, or a child process's argv or environment.
+  `lightning-cli` takes a commando rune only in argv, which every local
+  user can read, so Core Lightning commando connections are refused before
+  any process starts (`call_core_lightning`); see
+  [Core Lightning read-only sync](backends.md#core-lightning-read-only-sync).
 
 ### Evidence vault (future opt-in)
 

@@ -625,29 +625,61 @@ class RpcAllowlistTest(unittest.TestCase):
                 msg=f"non-read method allowed: {method}",
             )
 
-    def test_commando_rune_is_passed_without_shell_placeholder_and_redacted(self) -> None:
+    def test_commando_connections_are_refused_before_spawning(self) -> None:
+        # lightning-cli takes a commando rune only on its command line
+        # (`--commando=peerid:rune`), readable by every local user, so a
+        # commando connection is refused instead of spawned.
+        peer = "02" + "ab" * 32
+        cases = (
+            {"url": "cln://commando", "token": "secret-rune-value", "commando_peer_id": peer},
+            {"url": "cln://local", "token": "secret-rune-value"},
+            {"url": "cln://local", "commando_peer_id": peer},
+            {"url": "CLN://Commando"},
+        )
+        for extra in cases:
+            with self.subTest(extra=extra):
+                backend = {"kind": "coreln", "name": "cln", "lightning_cli": "/bin/false", **extra}
+                with patch("kassiber.core.lightning.cln.subprocess.run") as run:
+                    with patch.object(
+                        core_cln.egress_policy,
+                        "require_online",
+                        side_effect=AssertionError("checked egress before refusing"),
+                    ):
+                        with self.assertRaises(AppError) as ctx:
+                            core_cln.call_core_lightning(backend, "getinfo")
+                run.assert_not_called()
+                self.assertEqual(ctx.exception.code, "validation")
+                self.assertEqual(
+                    str(ctx.exception), "Core Lightning commando connections are not supported"
+                )
+                self.assertIn("rpc_file", ctx.exception.hint)
+                self.assertNotIn("secret-rune-value", repr(ctx.exception.__dict__))
+
+    def test_local_rpc_connection_runs_without_commando_arguments(self) -> None:
         backend = {
             "kind": "coreln",
             "name": "cln",
-            "url": "cln://commando",
-            "token": "secret-rune-value",
-            "commando_peer_id": "02" + "ab" * 32,
+            "url": "cln://local",
+            "lightning_cli": "lightning-cli",
+            "rpc_file": "/srv/cln/lightning-rpc",
+            "commando_peer_id": "  ",
+            "token": "",
         }
         seen = {}
 
-        def _fake_run(command, **_kwargs):
+        def _fake_run(command, **kwargs):
             seen["command"] = command
-            return SimpleNamespace(returncode=1, stdout="", stderr="denied")
+            seen["env"] = kwargs.get("env")
+            return SimpleNamespace(returncode=0, stdout='{"id": "x"}', stderr="")
 
         with patch("kassiber.core.lightning.cln.subprocess.run", side_effect=_fake_run):
-            with self.assertRaises(AppError) as ctx:
-                core_cln.call_core_lightning(backend, "getinfo")
-
-        command = seen["command"]
-        self.assertNotIn("--commando-rune=${LIGHTNING_RUNE}", command)
-        self.assertIn("--commando-rune=secret-rune-value", command)
-        self.assertNotIn("secret-rune-value", str(ctx.exception.details))
-        self.assertIn("<commando rune redacted>", str(ctx.exception.details))
+            with patch.object(core_cln.egress_policy, "require_online", lambda *_a, **_k: None):
+                self.assertEqual(core_cln.call_core_lightning(backend, "getinfo"), {"id": "x"})
+        self.assertEqual(
+            seen["command"],
+            ["lightning-cli", "--json", "--raw", "--rpc-file=/srv/cln/lightning-rpc", "getinfo"],
+        )
+        self.assertIsNone(seen["env"])
 
 
 class PersistenceIdempotenceTest(unittest.TestCase):

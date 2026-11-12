@@ -1199,6 +1199,22 @@ class HttpErrorMappingTest(unittest.TestCase):
         self.assertTrue(app_err.details["body_truncated"])
         self.assertLessEqual(len(app_err.details["body"]), 512)
 
+    def test_redacted_provider_body_stays_parseable(self):
+        from kassiber.ai.client import _error_body_parts
+
+        body = json.dumps({
+            "error": {"message": "max_tokens is too large", "param": "max_tokens", "code": None},
+            "request": {"max_tokens": None, "seed": 42, "temperature": 4096.0, "stream": False,
+                        "usage": {"prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}}},
+            "api_key": "sk-provider-json-secret",
+        }, separators=(",", ":")).encode()
+        app_err = _http_error_app_error(self._err(400, body))
+        self.assertNotIn("sk-provider-json-secret", app_err.details["body"])
+        self.assertIsInstance(json.loads(app_err.details["body"]), dict)
+        parts = _error_body_parts(app_err)
+        self.assertIsNotNone(parts)
+        self.assertEqual(parts.fields, frozenset({"max_tokens"}))
+
     def test_404_is_request_invalid(self):
         app_err = _http_error_app_error(self._err(404))
         self.assertEqual(app_err.code, "ai_request_invalid")

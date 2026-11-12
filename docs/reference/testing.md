@@ -228,6 +228,34 @@ cargo test filters. It is too slow for CI; run it when `mutations.json` or
 the code it edits changes. CI only checks that every entry still applies once
 and names existing tests (`tests/test_tax_mutations.py`).
 
+## Product subprocesses
+
+[Plan 21](../plan/21-rust-backend.md) verifies a Rust backend against the
+Python reference at the process boundary. A test-only variable serves it;
+product code never reads it.
+
+### The candidate switch
+
+Every test, integration lane, and regtest seed that runs the CLI or
+`kassiber daemon` as a child builds the command with `tests/cli_runner.py`
+(`run`, `popen`, `argv`); `tests/test_cli_runner.py` fails on a new
+`python -m kassiber` construction anywhere under `tests/`, `dev/`, or
+`scripts/`, except the two scripts it lists with their reason. The working
+directory defaults to the repository root.
+
+| `KASSIBER_TEST_CLI` | The command |
+| --- | --- |
+| unset | `python -m kassiber` from this checkout |
+| `/path/to/kassiber` | that executable |
+| `["/path/to/kassiber", "--flag"]` | that argv prefix, without a shell |
+
+A value that names no runnable executable fails the call. Call sites that pin
+the Python reference itself pass `reference=True`, which ignores the switch;
+only they may pass interpreter options (the tax shadow harness does both).
+`tests/_child_hooks/` and with it the no-egress guard reach Python children
+only, so a non-Python candidate runs unguarded until plan 21's Rust guard
+exists.
+
 ## Tiers
 
 | Tier | Command | Docker | Purpose |
@@ -1078,7 +1106,17 @@ mode.
   sets it before collection for every non-integration run. It blocks Python
   DNS, TCP connects, and UDP sends to non-loopback hosts. A `sitecustomize` on
   `PYTHONPATH` carries it into spawned Python children and stops a child if the
-  guard cannot start. The separate product override `KASSIBER_NO_EGRESS=1`
+  guard cannot start. A child that would not load it fails instead of running
+  unguarded (`tests/egress_guard.py`): while the session is armed,
+  `cli_runner.run`/`popen` and `runtime_parity.child_env` refuse a Python
+  child whose environment drops the switch, whose `PYTHONPATH` does not
+  resolve `sitecustomize` to `tests/_child_hooks`, or whose interpreter
+  options skip site (`-I`, `-S`, `-E`), and every `python -m tests.<module>`
+  reference exits 78 at import when the guard is not live in it. Build child
+  environments by copying `os.environ` and use `guarded_pythonpath()` rather
+  than replacing `PYTHONPATH`; a child that brings a stricter guard of its own
+  names it with `own_egress_guard=` (`tests/rust_port/contracts.py`). The
+  separate product override `KASSIBER_NO_EGRESS=1`
   blocks BDK/LWK observer construction, shared backend HTTP/SOCKS and Python
   Electrum connections, and chain-analysis acquisition, including loopback.
   It is not used suite-wide and is not an OS-wide network firewall.
@@ -1178,3 +1216,24 @@ Existing accounting/Lightning/Elements lanes cover their stated adapters. LDK,
 Ark and Spark still need Kassiber observation adapters and real protocol evidence
 before a cross-rail edge can claim more than a reviewed custody relation. A
 successful payment in an external demo alone does not establish that integration.
+
+## Generated test data
+
+Fixtures a generator or recorder produces (Python-produced vectors, oracle
+outputs, recorded server replies) are not in this tree. They live on the
+orphan branch `t3code/test-data`, and `tests/test-data.lock` pins the commit
+and the git blob id of every file this tree's tests read. Small fixtures
+people write and read stay next to their tests.
+
+- `scripts/fetch-test-data.sh` fetches the pinned commit from the same
+  repository with git, writes each locked file at its path (the `.gitignore`
+  block lists them all), and verifies every hash. CI runs it before any Python
+  or Rust test; `scripts/quality-gate.sh` refuses to start without it.
+- Without the data, pytest stops at once with "run scripts/fetch-test-data.sh",
+  and a Rust test build names the missing file; nothing is skipped silently.
+  `scripts/fetch-test-data.sh --check` verifies without fetching.
+- To change data: run the generator (it writes at the same paths), then
+  `scripts/fetch-test-data.sh --publish [new paths]` commits the files to the
+  data branch locally and rewrites the lock and the `.gitignore` block. Push
+  `t3code/test-data`, and commit the lock in the same PR as the generator or
+  code change. A new data file needs its path on the `--publish` line once.

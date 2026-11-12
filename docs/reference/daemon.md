@@ -938,6 +938,9 @@ source-scoped to that wallet, while a book/global refresh can enqueue the
 remaining wallet, rate, and journal jobs without duplicating the already queued
 source. `ui.freshness.cancel`, `ui.freshness.pause`, and `ui.freshness.resume`
 mutate the job/source state.
+Their entire response, including `result`, uses the shared freshness UI
+projection. Private source checkpoints stay in SQLite and are omitted from
+cancel, pause, and resume results as well as status snapshots.
 
 Every user-triggered `ui.wallets.sync` (unless `process_journals: false`),
 `ui.wallets.import_file`, `ui.wallets.document_import.import`, and

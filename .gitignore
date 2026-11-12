@@ -13,6 +13,8 @@ dist/
 .claude/settings.local.json
 .claude/launch.json
 .kassiber-test/
+# Recorded test sessions (tests/session_harness/); never committed by default.
+.session-recordings/
 log/
 /temp
 /reports
@@ -21,3 +23,6 @@ log/
 # Built by `pnpm --dir ui-tauri run broker:build`; shipped as package data,
 # built in CI before packaging rather than committed.
 kassiber/ai/provider_broker/*.mjs
+# >>> generated test data: tests/test-data.lock (scripts/fetch-test-data.sh --ignore)
+/.test-data/
+# <<< generated test data

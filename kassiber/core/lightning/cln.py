@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import sqlite3
 import subprocess
 import uuid
@@ -42,6 +41,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from ... import egress_policy
 from ...backends import backend_timeout, backend_value, redact_backend_url
+from ...redaction import backend_credentials, withhold_credentials
 from ...envelope import json_ready
 from ...errors import AppError
 from ...msat import msat_to_btc
@@ -235,45 +235,31 @@ def _base_command(backend: Mapping[str, Any], method: str, args: Sequence[str] |
     return command
 
 
-def _commando_invocation(
-    backend: Mapping[str, Any], base_command: Sequence[str]
-) -> tuple[list[str], dict[str, str], str | None, str | None]:
-    """Decide whether the call needs commando and how to pass the rune."""
-    peer_id = backend_value(backend, "commando_peer_id")
-    rune = backend_value(backend, "token")
+def _refuse_commando(backend: Mapping[str, Any]) -> None:
+    """Refuse a commando connection before anything is spawned.
+
+    ``lightning-cli`` takes a commando rune only on its command line
+    (``--commando=peerid:rune``), where any local user can read it from the
+    process list, and documents no config-file, environment, or stdin form.
+    No secret-free channel exists, so a commando connection is refused
+    rather than putting the rune in argv.
+    """
     wants_commando = (
-        bool(peer_id)
-        or bool(rune)
+        backend_value(backend, "commando_peer_id") is not None
+        or backend_value(backend, "token") is not None
         or str(backend.get("url") or "").lower().startswith("cln://commando")
     )
-    if not wants_commando:
-        return list(base_command), {}, None, None
-    if not (peer_id and rune):
+    if wants_commando:
         raise AppError(
-            "Core Lightning commando sync requires both --commando-peer-id and a rune token",
+            "Core Lightning commando connections are not supported",
             code="validation",
-            hint="Pipe a restricted rune through --token-stdin or --token-fd FD.",
+            hint=(
+                "lightning-cli accepts a commando rune only on its command line,"
+                " where other local users can read it. Clear the rune and commando"
+                " peer and use a local rpc_file, or set lightning_cli to a wrapper"
+                " you control."
+            ),
         )
-    command = list(base_command)
-    insert_at = 3  # after [binary, "--json", "--raw"]
-    command[insert_at:insert_at] = [
-        f"--commando-peer={peer_id}",
-        f"--commando-rune={rune}",
-    ]
-    return command, {}, None, "<commando rune redacted>"
-
-
-def _redacted_command(command: Sequence[str]) -> list[str]:
-    return [
-        "<commando rune redacted>"
-        if (
-            "${LIGHTNING_RUNE}" in part
-            or part.startswith("--commando-rune=")
-            or part.startswith("--commando=")
-        )
-        else part
-        for part in command
-    ]
 
 
 def call_core_lightning(
@@ -293,12 +279,10 @@ def call_core_lightning(
             code="validation",
             hint="Only read-only list/get/bookkeeper methods are allowed.",
         )
+    _refuse_commando(backend)
     # lightning-cli is an external process, outside the shared transport.
-    egress_policy.require_online("Core Lightning calls are")
-    base = _base_command(backend, method, args)
-    command, env_extra, _stdin, _redacted = _commando_invocation(backend, base)
-    env = dict(os.environ)
-    env.update(env_extra)
+    egress_policy.require_egress_enabled("Core Lightning calls are")
+    command = _base_command(backend, method, args)
     try:
         completed = subprocess.run(
             command,
@@ -306,7 +290,6 @@ def call_core_lightning(
             capture_output=True,
             text=True,
             timeout=backend_timeout(backend, default=30),
-            env=env,
         )
     except FileNotFoundError as exc:
         raise AppError(
@@ -323,11 +306,16 @@ def call_core_lightning(
         raise AppError(
             f"Core Lightning RPC method '{method}' timed out",
             code="timeout",
-            details={"method": method, "command": _redacted_command(command)},
+            details={"method": method, "command": command},
             retryable=True,
         ) from exc
     if completed.returncode != 0:
-        stderr = (completed.stderr or completed.stdout or "").strip()
+        # lightning-cli's output may repeat the rune (a commando error quoting
+        # its arguments); withhold it before keeping the tail.
+        stderr = withhold_credentials(
+            (completed.stderr or completed.stdout or "").strip(),
+            backend_credentials(backend),
+        )
         raise AppError(
             f"Core Lightning RPC method '{method}' failed",
             code="sync_error",
@@ -337,7 +325,7 @@ def call_core_lightning(
             ),
             details={
                 "method": method,
-                "command": _redacted_command(command),
+                "command": command,
                 "stderr": stderr[-800:],
             },
             retryable=True,
@@ -348,7 +336,7 @@ def call_core_lightning(
         raise AppError(
             f"Core Lightning RPC method '{method}' did not return JSON",
             code="sync_error",
-            details={"method": method, "command": _redacted_command(command)},
+            details={"method": method, "command": command},
             retryable=True,
         ) from exc
     return payload if isinstance(payload, Mapping) else {"result": payload}
@@ -586,6 +574,8 @@ def fetch_core_lightning_snapshot(
         try:
             return caller(method, None)
         except AppError as exc:
+            if exc.code == "network_egress_disabled":
+                raise
             errors[method] = str(exc)
             return None
 

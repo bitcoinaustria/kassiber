@@ -2,8 +2,6 @@
 
 import json
 import sqlite3
-import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +9,7 @@ from pathlib import Path
 from kassiber.core import legacy_ledger, maintenance
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from tests import cli_runner
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -56,8 +55,8 @@ CREATE TRIGGER gl_evidence_document_no_replace
 
 
 def _run_cli(data_root, *args):
-    result = subprocess.run(
-        [sys.executable, "-m", "kassiber", "--data-root", str(data_root), "--machine", *args],
+    result = cli_runner.run(
+        ["--data-root", str(data_root), "--machine", *args],
         cwd=ROOT, capture_output=True, text=True, check=False,
     )
     payload = json.loads(result.stdout.strip())

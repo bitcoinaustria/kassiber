@@ -6,8 +6,6 @@ import contextlib
 import io
 import json
 import os
-import subprocess
-import sys
 import tempfile
 import threading
 import unittest
@@ -38,6 +36,7 @@ from kassiber.mcp.protocol import (
 from kassiber.operator.build import build_identity
 from kassiber.operator.cli import route_brokered_command
 from tests.integration.env import no_egress_guard
+from tests import cli_runner
 
 
 _ACCESS_DIR: tempfile.TemporaryDirectory | None = None
@@ -1047,8 +1046,8 @@ class StdioProcessTests(unittest.TestCase):
                 _request(2, "tools/list"),
                 _request(3, "server/discover", {"_meta": MODERN_META}),
             ]
-            completed = subprocess.run(
-                [sys.executable, "-m", "kassiber", "--data-root", str(Path(root) / "data"), "mcp", "serve"],
+            completed = cli_runner.run(
+                ["--data-root", str(Path(root) / "data"), "mcp", "serve"],
                 input="".join(json.dumps(m) + "\n" for m in messages).encode(),
                 capture_output=True,
                 timeout=120,

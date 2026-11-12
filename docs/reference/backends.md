@@ -234,11 +234,13 @@ xxd -p -c 256 readonly.macaroon | \
 
 Core Lightning-specific fields:
 
-- `TOKEN` for a commando rune when using the least-privilege remote path
-- `COMMANDO_PEER_ID`
 - `LIGHTNING_CLI`
 - `LIGHTNING_DIR`
 - `RPC_FILE`
+
+A Core Lightning backend with a `TOKEN` (rune), a `COMMANDO_PEER_ID`, or a
+`cln://commando` URL is refused; see
+[Core Lightning read-only sync](#core-lightning-read-only-sync).
 
 Both Lightning adapters expose the desktop node snapshot via
 `ui.connections.node.snapshot` and the profitability summary via
@@ -295,8 +297,8 @@ The backend CLI now accepts the common backend-specific knobs directly:
   LND also accepts its `tls.cert` path or PEM contents
 - `--cookiefile` or `--username` / `--password` for Bitcoin Core RPC auth
 - `--wallet-prefix` for Bitcoin Core watch-only wallet naming
-- `--lightning-cli`, `--lightning-dir`, `--rpc-file`, and
-  `--commando-peer-id` for Core Lightning
+- `--lightning-cli`, `--lightning-dir`, and `--rpc-file` for Core
+  Lightning (`--commando-peer-id` is still stored, but sync refuses it)
 
 ### Core Lightning read-only sync
 
@@ -307,24 +309,16 @@ mutation, wallet mutation, or signing methods, and the allowlist in
 `CLN_ALLOWED_METHODS` rejects any unsupported method at the transport
 boundary even if the rune would permit it.
 
-Preferred least-privilege setup is a commando rune restricted to read
-and bookkeeper methods with a rate cap:
+Kassiber reaches the node by running `lightning-cli` against a local
+`lightning-rpc` socket, either directly or through a `lightning_cli` wrapper
+you control (for example one that runs `lightning-cli` inside a container):
 
 ```bash
-lightning-cli commando-rune restrictions='[["method^list","method^get","method^bkpr-list","method=summary"],["method/listdatastore"],["rate=60"]]'
-```
-
-Store that rune through stdin or an fd so it does not land in shell
-history. Kassiber passes the rune through the `LIGHTNING_RUNE`
-environment variable when invoking `lightning-cli`, so it never appears
-in `/proc/<pid>/cmdline`:
-
-```bash
-printf %s "$CLN_READONLY_RUNE" | python3 -m kassiber backends create cln \
+python3 -m kassiber backends create cln \
   --kind coreln \
-  --url cln://commando \
-  --commando-peer-id <node-id> \
-  --token-stdin
+  --url cln://local \
+  --lightning-dir ~/.lightning \
+  --network bitcoin
 
 python3 -m kassiber wallets create \
   --label routing-node \
@@ -338,15 +332,28 @@ python3 -m kassiber reports export-lightning-profitability-csv \
   --file /tmp/kassiber-lightning-profitability.csv
 ```
 
-In the desktop app, add Core Lightning from Settings -> Sync backends.
-The Core Lightning form stores the backend and creates the matching
-read-only node connection so normal wallet sync can refresh it.
+Local RPC access is not least-privilege on its own: the method allowlist
+above is what keeps Kassiber read-only.
 
-Local RPC-file use is also supported for operators who run Kassiber on
-the same machine as `lightningd`, but local RPC access is not
-least-privilege on its own. Prefer the commando rune path when you want
-the connection itself to be unable to pay, create invoices, close
-channels, or mutate wallet state.
+Commando connections are refused. `lightning-cli` accepts a commando rune
+only on its command line (`--commando=peerid:rune`), where every local user
+can read it from the process list (`ps`, `/proc/<pid>/cmdline`), and it
+documents no config-file, environment, or stdin form. A backend with a rune
+(`TOKEN`), a `COMMANDO_PEER_ID`, or a `cln://commando` URL therefore fails
+with a `validation` error before `lightning-cli` is started. Earlier versions
+passed `--commando-peer=`/`--commando-rune=`, flags `lightning-cli` does not
+have, so no commando setup ever worked. Clear the rune and peer
+(`backends update cln --clear token --clear commando-peer-id --url cln://local`)
+to switch to the local path. Remote nodes would need a native commando client
+(tracked in [`TODO.md`](../../TODO.md)).
+
+In the desktop app, add Core Lightning from Settings -> Sync backends.
+The Core Lightning form asks only for local access (lightning-dir,
+rpc-file, or a `lightning-cli` path or wrapper), stores the backend, and
+creates the matching read-only node connection so normal wallet sync can
+refresh it. An existing commando backend is marked unsupported in the
+backend list with the same hint; saving it in the form switches it to local
+RPC and removes the stored rune and commando peer.
 
 Persisted CLN records follow the discard policy in
 [lightning-opsec.md](lightning-opsec.md): forwards are aggregated to

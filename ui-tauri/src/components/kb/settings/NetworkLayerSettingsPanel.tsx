@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ANALYSIS_NETWORKS, type AnalysisNetwork, useUiStore } from "@/store/ui";
 
 import { Button } from "@/components/ui/button";
+import { isCoreLightningCommandoBackend } from "@/lib/lightning";
 import {
   SettingsDisclosure,
   SettingsGroup,
@@ -107,6 +108,7 @@ export function BackendLayerRow({
   const { t } = useTranslation(["settings", "common"]);
   const trust = backendTrust(backend);
   const explorerBaseUrl = backendExplorerBaseUrl(backend);
+  const commandoUnsupported = isCoreLightningCommandoBackend(backend);
   const summary = [
     backend.isDefault ? t("networkLayer.default") : null,
     backendProtocolLabel(backend),
@@ -127,6 +129,15 @@ export function BackendLayerRow({
             {summary}
           </span>
           <span className="block truncate font-mono text-xs">{backend.url}</span>
+          {commandoUnsupported ? (
+            <span
+              role="alert"
+              className="block text-amber-600 dark:text-amber-400"
+            >
+              {t("networkLayer.commandoUnsupported")}{" "}
+              {t("backendModal.corelnCommandoHint")}
+            </span>
+          ) : null}
         </>
       }
     >

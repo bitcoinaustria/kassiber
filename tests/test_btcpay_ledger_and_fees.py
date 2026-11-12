@@ -501,6 +501,50 @@ class StoreSyncStateTest(_BookTest):
         self.assertTrue(old["stale"])
 
 
+class ReadOnlyKeyLabelsTest(_BookTest):
+    """A key without wallet-history access degrades label enrichment."""
+
+    WALLET_PATH = "/api/v1/stores/S1/payment-methods/BTC-CHAIN/wallet/transactions"
+
+    def setUp(self):
+        super().setUp()
+        self._wallet("w", "Settlement", {"btcpay_provenance": [{"backend": "shop", "store_id": "S1"}]})
+
+    def _enrich(self, missing):
+        routes = {
+            "/api/v1/stores/S1/invoices": _first_page([]),
+            "/api/v1/stores/S1/payouts": [],
+            "/api/v1/stores/S1/pull-payments": [],
+            self.WALLET_PATH: (403, {"code": "missing-permission", "missingPermission": missing}),
+        }
+        wallet = self.conn.execute("SELECT * FROM wallets WHERE id = 'w'").fetchone()
+        opener = _RoutedOpener(routes)
+        with patch.object(sync_btcpay, "_backend_http_opener", lambda backend: opener):
+            return handlers.enrich_wallet_from_btcpay_provenance(self.conn, self.runtime_config, self.profile, wallet)
+
+    def test_unscoped_and_this_store_scoped_permission_mean_a_read_only_key(self):
+        for missing in ("btcpay.store.canmodifystoresettings", "btcpay.store.canmodifystoresettings:S1"):
+            with self.subTest(missing=missing):
+                outcome = self._enrich(missing)
+                self.assertEqual(outcome["labels_unavailable_routes"], 1)
+                (route,) = outcome["route_results"]
+                self.assertEqual(route["labels"], "unavailable_read_only_key")
+                self.assertEqual(route["invoice_provenance"]["status"], "synced")
+
+    def test_other_store_or_other_permission_still_fails(self):
+        for missing in (
+            "btcpay.store.canmodifystoresettings:S2",
+            "btcpay.store.canmodifystoresettings:",
+            "btcpay.store.canviewstoresettings:S1",
+            "btcpay.store.canmodifystoresettingsx:S1",
+        ):
+            with self.subTest(missing=missing):
+                with self.assertRaises(AppError) as ctx:
+                    self._enrich(missing)
+                self.assertEqual(ctx.exception.code, "auth_error")
+                self.assertEqual(ctx.exception.details["missing_permission"], missing)
+
+
 class LedgerPlanTest(_BookTest):
     def _inspection(self):
         methods = []

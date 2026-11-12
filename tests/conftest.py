@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -130,6 +131,30 @@ def _default_to_scope_distribution(config: pytest.Config) -> None:
     config.option.dist = "loadscope"
 
 
+def _require_test_data() -> None:
+    """Refuse to run without the generated data tests/test-data.lock pins.
+
+    scripts/fetch-test-data.sh puts the data in place and stamps the lock it
+    fetched; a missing or older stamp would otherwise surface as scattered
+    FileNotFoundErrors (docs/reference/testing.md#generated-test-data).
+    """
+    lock = _ROOT / "tests" / "test-data.lock"
+    if not lock.exists():
+        return
+    import hashlib
+
+    data = lock.read_bytes()
+    blob = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+    stamp = _ROOT / ".test-data" / "stamp"
+    stamped = stamp.read_text(encoding="utf-8").split() if stamp.exists() else []
+    paths = [line.split(" ", 1)[1] for line in data.decode("utf-8").splitlines() if re.fullmatch(r"[0-9a-f]{40} \S+", line)]
+    if blob not in stamped or not all((_ROOT / path).is_file() for path in paths):
+        pytest.exit(
+            "Generated test data is missing or older than tests/test-data.lock: run scripts/fetch-test-data.sh",
+            returncode=4,
+        )
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Fail any test that tries to leave the machine.
 
@@ -155,6 +180,7 @@ def pytest_configure(config: pytest.Config) -> None:
     service/provider probes" clause is *not* covered here -- a test that
     needs that asserts it directly.
     """
+    _require_test_data()
     config.addinivalue_line(
         "markers",
         "stubs_tax_engine: the test replaces parts of the production tax engine, so the shadow mode runs "

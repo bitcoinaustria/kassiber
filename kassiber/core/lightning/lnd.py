@@ -46,6 +46,7 @@ from ...db import APP_NAME
 from ...errors import AppError
 from ...msat import msat_to_btc
 from ...proxy import urlopen_with_proxy
+from ...redaction import backend_credentials, withhold_credentials
 from ...time_utils import UNKNOWN_OCCURRED_AT, now_iso, timestamp_to_iso
 from ...transfers import canonical_txid
 from .. import imports as core_imports
@@ -182,6 +183,9 @@ class LndRestClient:
         self.timeout = backend_timeout(backend)
         self.macaroon = _macaroon_hex(backend)
         self.context = _ssl_context(backend)
+        # A server error that repeats the macaroon (in either hex case) or
+        # another backend credential shows ``<redacted>`` instead.
+        self.withheld = (self.macaroon, *backend_credentials(backend))
 
     def request(
         self,
@@ -237,6 +241,7 @@ class LndRestClient:
                     "Check that the macaroon is read-only and valid for this"
                     " node."
                 )
+            detail = withhold_credentials(detail, self.withheld)
             raise AppError(
                 f"LND returned HTTP {exc.code}: {detail[:200]}",
                 code="backend_error",
@@ -245,7 +250,8 @@ class LndRestClient:
             ) from exc
         except urlerror.URLError as exc:
             raise AppError(
-                f"Failed to reach LND backend: {exc.reason}",
+                "Failed to reach LND backend: "
+                + withhold_credentials(str(exc.reason), self.withheld),
                 code="backend_error",
                 hint=(
                     "Check the LND REST host, port, TLS certificate, and"
@@ -261,7 +267,7 @@ class LndRestClient:
             raise AppError(
                 "LND returned non-JSON data",
                 code="backend_error",
-                details={"response_preview": raw[:120]},
+                details={"response_preview": withhold_credentials(raw, self.withheld)[:120]},
                 retryable=True,
             ) from exc
         if not isinstance(payload_obj, dict):

@@ -591,7 +591,11 @@ The boundary in this phase is the on-chain backend refresh path that the
 BDK/LWK migration will consume. File, BTCPay, Core Lightning and LND ingestion
 retain their existing source-specific orchestration; they use `commit=False`
 when invoked by the shared wallet coordinator, but their transport-specific
-fetch/apply decomposition is outside the chain-observer contract.
+fetch/apply decomposition is outside the chain-observer contract. Core
+Lightning sync runs only over local `lightning-rpc` access: a commando
+backend (rune, commando peer, or `cln://commando` URL) is refused before
+`lightning-cli` starts, because `lightning-cli` takes the rune only in argv
+([details](backends.md#core-lightning-read-only-sync)).
 
 ## Cross-platform packaging checkpoint
 

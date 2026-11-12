@@ -13,7 +13,6 @@ import io
 import json
 import queue
 import subprocess
-import sys
 import tempfile
 import threading
 import unittest
@@ -44,6 +43,7 @@ from tests.test_ai_core_http_transport import (
     message_item,
     responses_stream,
 )
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -1093,8 +1093,8 @@ class ConnectionTestDaemonTest(ProviderTestCase):
 
 
 def _run_json(data_root, *args):
-    result = subprocess.run(
-        [sys.executable, "-m", "kassiber", "--data-root", str(data_root), "--machine", *args],
+    result = cli_runner.run(
+        ["--data-root", str(data_root), "--machine", *args],
         cwd=ROOT,
         capture_output=True,
         text=True,

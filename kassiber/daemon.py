@@ -15919,7 +15919,13 @@ def _ui_attachment_payload_from_conn(
         stored_relpath = attachment.get("stored_relpath")
         if not stored_relpath:
             raise AppError("Attachment has no stored file path", code="not_found")
-        path = (resolve_attachments_root(data_root) / stored_relpath).resolve(strict=False)
+        attachments_root = resolve_attachments_root(data_root).resolve()
+        path = (attachments_root / stored_relpath).resolve(strict=False)
+        if Path(stored_relpath).is_absolute() or not path.is_relative_to(attachments_root):
+            raise AppError(
+                "Attachment has an invalid managed storage path",
+                code="validation",
+            )
         if not path.exists():
             raise AppError(
                 "Attachment file is missing",
@@ -16598,16 +16604,19 @@ def _bitcoinrpc_backend_for_probe(
             retryable=False,
         )
     url = _optional_str_arg(args, "url")
-    if url is not None:
-        if not _same_rpc_origin(str(backend.get("url") or ""), url):
+    pending_config = _backend_config_arg(args) or {}
+    effective_url = pending_config.get("url", url)
+    if effective_url is not None:
+        if not _same_rpc_origin(str(backend.get("url") or ""), str(effective_url)):
             # Credentials are saved for one endpoint. A renderer-supplied URL
             # pointing somewhere else must not carry them along, so the caller
             # re-supplies auth for the host it wants to reach -- the same rule
             # cookie-file probes already enforce through loopback validation.
             for field in _BITCOINRPC_PROBE_CREDENTIAL_FIELDS:
                 backend.pop(field, None)
+    if url is not None:
         backend["url"] = url
-    backend.update(_backend_config_arg(args) or {})
+    backend.update(pending_config)
     proxy = _optional_str_arg(args, "proxy") or _optional_str_arg(args, "tor_proxy")
     if proxy is not None:
         backend["tor_proxy"] = proxy
@@ -18539,7 +18548,7 @@ def handle_request(
                 ),
                 request_id,
             ),
-            True,
+            False,
         )
 
     if kind == "ui.backends.update":
@@ -18554,7 +18563,7 @@ def handle_request(
                 ),
                 request_id,
             ),
-            True,
+            False,
         )
 
     if kind == "ui.backends.delete":
@@ -18569,7 +18578,7 @@ def handle_request(
                 ),
                 request_id,
             ),
-            True,
+            False,
         )
 
     if kind == "ui.backends.set_default":

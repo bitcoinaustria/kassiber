@@ -187,6 +187,21 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertNotIn("password", backend)
         self.assertNotIn("auth_header", backend)
 
+    def test_saved_backend_probe_drops_credentials_for_config_url_override(self):
+        ctx = SimpleNamespace(runtime_config={})
+        saved = {
+            "name": "core", "kind": "bitcoinrpc", "url": "http://first.example:8332",
+            "username": "saved-user", "password": "saved-password",
+        }
+        with patch("kassiber.daemon.resolve_backend", return_value=saved):
+            backend = daemon._bitcoinrpc_backend_for_probe(
+                ctx, {"backend": "core", "config": {"url": "http://second.example:8332"}},
+            )
+        self.assertEqual(backend["url"], "http://second.example:8332")
+        self.assertNotIn("username", backend)
+        self.assertNotIn("password", backend)
+        self.assertEqual(saved["username"], "saved-user")
+
     def test_saved_backend_probe_uses_credentials_supplied_for_the_new_url(self):
         ctx = SimpleNamespace(
             runtime_config={

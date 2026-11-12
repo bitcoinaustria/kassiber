@@ -821,6 +821,124 @@ def _migrate_tax_engine_semantics(conn) -> int:
     return 1
 
 
+STORED_ERROR_CREDENTIALS_MIGRATION = "stored-error-credentials-v1"
+# Columns where a failed sync or provider check kept error text that a server
+# could have filled with a credential it echoed. ``*_json`` columns hold JSON.
+STORED_ERROR_COLUMNS = (
+    ("freshness_jobs", "id", "error_json"),
+    ("freshness_source_states", "rowid", "last_error_message"),
+    ("btcpay_store_sync_states", "rowid", "last_error_message"),
+    ("lightning_node_syncs", "id", "error_json"),
+    ("ai_provider_checks", "rowid", "error_json"),
+)
+
+
+def _stored_error_credentials(conn) -> tuple[str, ...]:
+    from .redaction import backend_credentials, url_credentials
+
+    credentials: list[str] = []
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if "backends" in tables:
+        for row in conn.execute(
+            "SELECT url, auth_header, token, tor_proxy, config_json FROM backends ORDER BY name"
+        ).fetchall():
+            try:
+                config = json.loads(row[4] or "{}")
+            except ValueError:
+                config = {}
+            backend = dict(config) if isinstance(config, dict) else {}
+            backend.update({"url": row[0], "auth_header": row[1], "token": row[2], "tor_proxy": row[3]})
+            credentials.extend(backend_credentials(backend))
+    if "ai_providers" in tables:
+        for row in conn.execute("SELECT api_key, base_url FROM ai_providers ORDER BY name").fetchall():
+            if isinstance(row[0], str) and row[0]:
+                credentials.append(row[0])
+            if isinstance(row[1], str):
+                credentials.extend(url_credentials(row[1]))
+    return tuple(credentials)
+
+
+def _withhold_stored_json(value, forms):
+    from .redaction import _withhold_forms
+
+    if isinstance(value, dict):
+        return {
+            (_withhold_forms(key, forms) if isinstance(key, str) else key): _withhold_stored_json(item, forms)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_withhold_stored_json(item, forms) for item in value]
+    if isinstance(value, str):
+        return _withhold_forms(value, forms)
+    return value
+
+
+def _migrate_stored_error_credentials(conn) -> int:
+    """Withhold the book's own credentials from error text stored before the scrub.
+
+    Until servers' echoes were scrubbed at the source, a failed BTCPay, LND,
+    Esplora, Core or exchange sync could store a repeated API key, macaroon or
+    password in these columns. Every credential the book holds (backend
+    tokens, auth headers, RPC and proxy passwords, AI provider keys) is
+    withheld once, with a local audit. A credential no longer in the book
+    (deleted or rotated, or set only in an env file) cannot be recognized.
+    """
+
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (STORED_ERROR_CREDENTIALS_MIGRATION,),
+    ).fetchone():
+        return 0
+    from .redaction import _withhold_forms, credential_forms
+
+    forms = credential_forms(_stored_error_credentials(conn))
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    scrubbed = 0
+    for table, key, column in STORED_ERROR_COLUMNS:
+        if not forms or table not in tables:
+            continue
+        rows = conn.execute(
+            f'SELECT {key}, "{column}" FROM "{table}" WHERE "{column}" IS NOT NULL ORDER BY {key}'
+        ).fetchall()
+        for row_key, text in rows:
+            if not isinstance(text, str):
+                continue
+            updated = _withhold_forms(text, forms)
+            if updated == text:
+                continue
+            if column.endswith("_json"):
+                # Scrub decoded strings so a replacement cannot break the JSON;
+                # text that does not decode is scrubbed as text.
+                try:
+                    updated = json.dumps(
+                        _withhold_stored_json(json.loads(text), forms),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                except (ValueError, RecursionError):
+                    pass
+            conn.execute(f'UPDATE "{table}" SET "{column}" = ? WHERE {key} = ?', (updated, row_key))
+            scrubbed += 1
+    conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (
+            STORED_ERROR_CREDENTIALS_MIGRATION,
+            STORED_ERROR_CREDENTIALS_MIGRATION,
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "migration": STORED_ERROR_CREDENTIALS_MIGRATION,
+                    "scrubbed_value_count": scrubbed,
+                },
+                sort_keys=True,
+            ),
+        ),
+    )
+    return 1
+
+
 SCHEMA = """
 PRAGMA foreign_keys = ON;
 
@@ -5580,6 +5698,8 @@ def ensure_schema_compat(conn):
         conn.commit()
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
+    if _migrate_stored_error_credentials(conn):
+        conn.commit()
     _ensure_transaction_graph_cache_schema(conn)
 
     # General accounting was removed (plan 19). Drop its leftover storage only

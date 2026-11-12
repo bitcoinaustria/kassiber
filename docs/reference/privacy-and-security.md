@@ -134,6 +134,8 @@ they establish neither ownership nor accounting facts.
 Raw transport checkpoints, including cached script and transaction memberships,
 remain in local source state. Sanitized job results and desktop/AI freshness
 responses omit these containers before projection.
+The same projection covers control results from freshness pause and resume;
+those actions retain the private checkpoint locally for the next sync.
 
 Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview
@@ -250,7 +252,8 @@ transport configuration.
 
 `KASSIBER_NO_EGRESS=1` blocks the shared backend HTTP/SOCKS and Python Electrum
 connect boundaries, native BDK/LWK observer construction, and chain-analysis
-acquisition, including loopback nodes. Acquisition rechecks it for every
+acquisition and Core Lightning client subprocesses, including loopback nodes.
+Acquisition rechecks it for every
 request. It is not an OS firewall and does not govern external browsers or
 provider CLI processes. The update checker has its own
 `KASSIBER_DISABLE_UPDATE_CHECK` override. The test-suite socket guard uses the
@@ -258,6 +261,12 @@ separate `KASSIBER_TEST_NO_EGRESS` variable and cannot intercept native-library
 sockets; native transport policy therefore also needs explicit routing tests.
 
 ### Offline mode
+
+The configuration-posture report labels only valid loopback endpoints as
+`on_device`. Private LAN addresses and `.local` names can reach another machine;
+they require explicit self-hosted ownership to receive that label instead of
+the remote classification. Malformed endpoints remain unknown. Classification
+never resolves a hostname or probes a service.
 
 **Offline** in the title-bar connection panel, **Settings → Privacy → Work
 offline**, and `kassiber offline on|off|status` set one machine-wide switch,
@@ -612,6 +621,11 @@ safe-to-record contract for secret-bearing config values:
   through the edit form instead of silently clearing it. A CA certificate is
   public material, but the value can be a local filesystem path, so this stays
   off the CLI and AI surfaces, which keep `has_certificate` presence only
+- error text a server, proxy or tool sends back (an HTTP error body, a JSON
+  `message`, `lightning-cli` output) shows `<redacted>` wherever it repeats a
+  credential the request carried, in any spelling Kassiber sent it; see
+  [credential echoes](credential-echo.md) for every integration and what to
+  rotate if older output was shared
 
 This contract is intentionally narrow. It does **not** mean every CLI surface
 is safe to paste into a hosted model, issue tracker, or shared log. Addresses,
@@ -689,14 +703,13 @@ rows, and stack locals. `--save` writes the artifact under
   copies then deletes state or merges roots. Unknown top-level entries count as
   state; only `bin` and `run` are excluded and remain fixed. Unsupported or
   conflicting layouts stay legacy. `kassiber status` shows the effective path.
-- **Lightning node wallet kinds.** `coreln` can sync through read-only
-  Core Lightning RPC methods. Prefer a commando rune restricted to list,
-  get, and `bkpr-list*` methods with a rate cap (e.g.
-  `restrictions='[["method^list","method^get","method^bkpr-list","method=summary"],["method/listdatastore"],["rate=60"]]'`).
-  Kassiber passes the rune through the `LIGHTNING_RUNE` environment
-  variable so it does not appear in `/proc/<pid>/cmdline`. Local
-  `lightning-rpc` file access is also supported but is not least-privilege
-  on its own. `lnd` and `nwc` remain declared but inactive.
+- **Lightning node wallet kinds.** `coreln` syncs through read-only
+  Core Lightning RPC methods over local `lightning-rpc` access, which is
+  not least-privilege on its own; the method allowlist keeps Kassiber
+  read-only. Commando connections are refused before `lightning-cli`
+  starts: it accepts a rune only in argv (`--commando=peerid:rune`), which
+  every local user can read from `/proc/<pid>/cmdline`, and Kassiber never
+  puts a secret there. `lnd` and `nwc` remain declared but inactive.
 
 ## AI provider configuration
 

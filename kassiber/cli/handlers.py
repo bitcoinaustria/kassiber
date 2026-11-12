@@ -108,6 +108,7 @@ from ..envelope import (
     print_table,
 )
 from ..errors import AppError
+from ..redaction import backend_credentials, withhold_error_credentials
 from ..msat import (
     MSAT_PER_BTC,
     SATS_PER_BTC,
@@ -2610,11 +2611,17 @@ def sync_wallet(
     return results
 
 
-def _is_missing_wallet_history_permission(exc):
+def _is_missing_wallet_history_permission(exc, store_id):
     details = exc.details if isinstance(exc.details, dict) else {}
     missing = str(details.get("missing_permission") or "")
+    # BTCPay may scope the missing permission to the store
+    # (`btcpay.store.canmodifystoresettings:<storeId>`). Only this store's
+    # scope marks a read-only key here; another store's scope is a different
+    # permission.
+    name, scoped, scope = missing.partition(":")
     return exc.code == "auth_error" and (
-        missing == BTCPAY_MODIFY_STORE_SETTINGS or (not missing and details.get("http_status") == 403)
+        (name == BTCPAY_MODIFY_STORE_SETTINGS and (not scoped or scope == store_id))
+        or (not missing and details.get("http_status") == 403)
     )
 
 
@@ -2990,7 +2997,7 @@ def enrich_wallet_from_btcpay_provenance(
                 metadata=btcpay_meta,
             )
         except AppError as exc:
-            if not _is_missing_wallet_history_permission(exc):
+            if not _is_missing_wallet_history_permission(exc, route["store_id"]):
                 raise
             records = None
             route_result.update(
@@ -3343,6 +3350,10 @@ def sync_btcpay_commercial_provenance(
         if include_payouts:
             payouts = fetch_btcpay_payouts(backend, store_id, metadata=payout_meta)
     except AppError as exc:
+        # The client withholds credentials from server text; scrub the error
+        # again with every credential the backend holds before it is stored
+        # here and, through the caller, in a freshness job.
+        withhold_error_credentials(exc, backend_credentials(backend))
         core_commercial.record_btcpay_store_sync(
             conn,
             profile["id"],

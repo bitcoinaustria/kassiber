@@ -402,23 +402,23 @@ def _endpoint_host(url: Any) -> str:
     try:
         parsed = urlparse(parse_value)
     except ValueError:
-        return raw.lower().strip("[]")
+        return ""
     return (parsed.hostname or raw).lower().strip("[]")
 
 
-def _is_local_or_private_host(host: str) -> bool:
+def _is_loopback_host(host: str) -> bool:
     normalized = (host or "").lower().strip("[]")
     if not normalized:
         return False
-    if normalized in {"localhost", "0.0.0.0", "::1"}:
+    if normalized in {"localhost", "::1"}:
         return True
-    if normalized.endswith(".local") or normalized.endswith(".localhost"):
+    if normalized.endswith(".localhost"):
         return True
     try:
         ip = ipaddress.ip_address(normalized)
     except ValueError:
         return False
-    return bool(ip.is_loopback or ip.is_private or ip.is_link_local)
+    return bool(ip.is_loopback)
 
 
 def _backend_privacy_posture(
@@ -431,7 +431,7 @@ def _backend_privacy_posture(
     host = _endpoint_host(url)
     normalized_kind = str(kind or "").strip().lower()
     normalized_ownership = str(ownership or "").strip().lower()
-    if _is_local_or_private_host(host):
+    if _is_loopback_host(host):
         return "on_device"
     if normalized_ownership == "self":
         return "self_hosted"

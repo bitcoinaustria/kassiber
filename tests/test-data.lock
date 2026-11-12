@@ -1,0 +1,5 @@
+# Generated test data this tree's tests read. Fetch it with
+# scripts/fetch-test-data.sh; never edit by hand (see
+# docs/reference/testing.md#generated-test-data). <git blob id> <path>
+branch t3code/test-data
+commit fcb97231d0828d16c168618601c75449a7b53a67

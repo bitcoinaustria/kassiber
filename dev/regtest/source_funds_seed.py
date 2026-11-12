@@ -7,10 +7,10 @@ import json
 import os
 import tempfile
 import sqlite3
-import subprocess
-import sys
 from decimal import Decimal
 from pathlib import Path
+
+from tests import cli_runner
 
 LABEL = "SYNTHETIC — Strike purchase to own wallet"
 DESCRIPTION = (
@@ -62,8 +62,8 @@ def seed(home: Path) -> dict:
     scope = ["--workspace", workspace, "--profile", profile]
 
     def cli(*args: str, target_scope: list[str] | None = None):
-        result = subprocess.run(
-            [sys.executable, "-m", "kassiber", "--data-root", str(home / "data"), "--machine",
+        result = cli_runner.run(
+            ["--data-root", str(home / "data"), "--machine",
              *args, *(scope if target_scope is None else target_scope)],
             capture_output=True, text=True,
         )

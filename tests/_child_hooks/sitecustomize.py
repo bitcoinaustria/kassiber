@@ -37,8 +37,13 @@ _EGRESS_MODE = os.environ.get("KASSIBER_TEST_NO_EGRESS") or os.environ.get(
     "KASSIBER_NO_EGRESS"
 )
 
+# True while this hook imports the guard: `tests/__init__.py` (imported on the
+# way) defers its own guard check to this hook (tests/egress_guard.py).
+_ARMING = False
+
 if _EGRESS_MODE:
     try:
+        _ARMING = True
         from tests.integration.env import no_egress_guard
 
         # `strict` also blocks loopback, for the launch-path regression that
@@ -50,6 +55,8 @@ if _EGRESS_MODE:
     except Exception as exc:
         print("Kassiber test no-egress guard could not start", file=sys.stderr)
         raise SystemExit(78) from exc
+    finally:
+        _ARMING = False
 
 
 _TAX_MODE = os.environ.get("KASSIBER_TEST_TAX_ENGINE", "").strip().lower()

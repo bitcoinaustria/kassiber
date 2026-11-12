@@ -475,7 +475,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     setupKind: "backend-settings",
     walletKind: "coreln",
     details: [
-      "Prefer restricted commando runes",
+      "Connects through the node's local RPC socket or a lightning-cli wrapper you control",
       "Syncs bookkeeper events, forwards, payments, invoices, channels, and node wallet rows",
       "Reports routing profit and per-channel break-even status",
     ],

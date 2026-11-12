@@ -10,13 +10,12 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 import tempfile
 import unittest
 
 from kassiber.core import wallet_completeness as wc
 from kassiber.time_utils import UNKNOWN_OCCURRED_AT
+from tests import cli_runner
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -128,9 +127,8 @@ class SharedListSurfaceTests(unittest.TestCase):
         )
 
     def run_cli(self, *args):
-        completed = subprocess.run(
-            [sys.executable, "-m", "kassiber", "--data-root", self.data_root,
-             "--machine", *args],
+        completed = cli_runner.run(
+            ["--data-root", self.data_root, "--machine", *args],
             capture_output=True,
             text=True,
             cwd=REPO_ROOT,

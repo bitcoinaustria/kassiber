@@ -378,6 +378,36 @@ class SanitizeTest(unittest.TestCase):
 
 
 class OperationalRedactionTest(unittest.TestCase):
+    def test_complete_hex_ids_survive_all_amount_passes(self):
+        ids = [
+            '00000000-cad1-4000-8000-000000000000',
+            '00000000-1cad-4000-8000-000000000000',
+            '00000000-CAD1-4000-8000-000000000000',
+            'cad10000000000000000000000000000',
+            '00000000000000000000000000001cad',
+            '00000000000000000000000000000000',
+        ]
+        for identity in ids:
+            for text in (identity, f'{{"component_id":"{identity}"}}',
+                         f"amount_sat={identity}", f"€{identity}", f"{identity}€"):
+                with self.subTest(text=text):
+                    self.assertEqual(redact_operational_text(text), text)
+            text = f"CAD 1; {identity}; 1 CAD; cad1; 1cad; amount_sat=5; €5"
+            out = redact_operational_text(text)
+            self.assertIn(identity, out)
+            self.assertEqual(out.count("amount#"), 6)
+            self.assertEqual(redact_operational_value({"id": identity}), {"id": identity})
+
+    def test_partial_uuid_shapes_do_not_exempt_amounts(self):
+        for text in [
+            '00000000-cad1-4000-8000',
+            '00000000-1cad-4000-8000',
+            '00000000-cad1-4000-8000-00000000000',
+            '00000000-cad1-4000-8000-000000000000-extra',
+        ]:
+            with self.subTest(text=text):
+                self.assertIn("amount#", redact_operational_text(text))
+
     def test_txid_becomes_stable_pseudonym(self):
         out = redact_operational_text(f"could not price {TXID} now")
         self.assertNotIn(TXID, out)
