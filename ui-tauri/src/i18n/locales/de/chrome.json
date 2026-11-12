@@ -213,6 +213,15 @@
       "title": "Wartet auf deine Prüfung",
       "body_one": "{{count}} Entscheidung offen.",
       "body_other": "{{count}} Entscheidungen offen."
+    },
+    "filter": {
+      "label": "Benachrichtigungen anzeigen",
+      "all": "Alle",
+      "needsAction": "Handlungsbedarf ({{count}})"
+    },
+    "empty": {
+      "all": "Keine Benachrichtigungen.",
+      "needsAction": "Nichts braucht deine Aufmerksamkeit."
     }
   },
   "currencyToggle": {
