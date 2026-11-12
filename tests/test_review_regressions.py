@@ -13629,9 +13629,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(disposal_categories["btc-to-lbtc-out"], "neu_swap")
         self.assertEqual(disposal_categories["a-lbtc-to-xyz-out"], "neu_swap")
 
-    def test_austrian_cross_asset_swap_uses_rp2_multi_asset_hook(self):
+    def test_austrian_cross_asset_swap_uses_multi_asset_hook(self):
         profile, inputs = self._direct_austrian_cross_asset_swap_inputs()
-        from rp2.plugin.country.at import AT
+        # The active tax backend's Austrian country, whichever backend runs.
+        AT = rp2_engine._load_at_country_module().AT
 
         calls: list[set[str]] = []
         original = AT.compute_tax_for_assets
@@ -14293,9 +14294,16 @@ class ReviewRegressionTest(unittest.TestCase):
             or not key.startswith(("KASSIBER_", "SATBOOKS_"))
         }
         env["HOME"] = str(home_dir)
+        # An inherited XDG_DATA_HOME would point the child at the account's
+        # real app-data root, outside the temporary HOME.
+        env.pop("XDG_DATA_HOME", None)
         if os.name == "nt":
             env["USERPROFILE"] = str(home_dir)
+            env["LOCALAPPDATA"] = str(home_dir / "AppData" / "Local")
         env["PYTHONPATH"] = str(ROOT) if not env.get("PYTHONPATH") else f"{ROOT}{os.pathsep}{env['PYTHONPATH']}"
+        # Checked before the child runs, so a leak fails without writing.
+        app_root = native_state_root(environ=env, home=home_dir)
+        self.assertTrue(app_root.is_relative_to(home_dir), app_root)
 
         payload, result = self._run_json(
             "init",
@@ -14304,7 +14312,6 @@ class ReviewRegressionTest(unittest.TestCase):
             cwd=repo_dir,
         )
         self._assert_ok(payload, result, "init")
-        app_root = native_state_root(environ=env, home=home_dir)
         expected_root = app_root / "projects" / "default"
         self.assertEqual(payload["data"]["project_id"], "default")
         self.assertEqual(payload["data"]["project_root"], str(expected_root))

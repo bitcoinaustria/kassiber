@@ -27,6 +27,11 @@ on:
     # Weekly generated-truth demo oracle over disposable Bitcoin + Liquid regtest.
     - cron: "47 3 * * 0"
 
+env:
+  # uv builds the tax engine's binding with maturin. Never let maturin fetch
+  # its own Rust toolchain mid-build; the runner image provides one.
+  MATURIN_NO_INSTALL_RUST: "1"
+
 jobs:
   fast:
     # The nightly schedule runs the fast lane; on manual dispatch it runs only

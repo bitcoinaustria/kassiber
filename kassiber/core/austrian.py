@@ -2,16 +2,17 @@
 
 Kassiber owns the normalization layer: raw transaction rows become
 `NormalizedTaxEvent` values with typed Austrian fields (`at_regime`,
-`at_swap_link`) plus a country-neutral cost-basis pool id. The rp2 adapter
-serializes those fields into rp2's `notes` wire format; the rp2 AT
-plugin (`rp2.plugin.country.at`) interprets them.
+`at_swap_link`) plus a country-neutral cost-basis pool id. The adapter
+(`engines/rp2.py`) serializes those fields into the `notes` wire format;
+the tax engine's Austrian country (`tax-engine/core/src/austria.rs`)
+interprets them.
 
 This module holds the classification logic that runs inside
 `normalize_tax_asset_inputs` and the engine layer when the profile's
-`tax_country == "at"`. It is deliberately small and has no rp2 import —
-rp2 defines the same cutoff in `rp2.plugin.country.at.AT_NEU_CUTOFF`,
-but duplicating the constant here keeps the normalization layer free
-of rp2 imports (Kassiber-core does not depend on rp2 types).
+`tax_country == "at"`. It is deliberately small and has no engine
+import — the engine defines the same cutoff as `NEU_CUTOFF_US`, but
+duplicating the constant here keeps the normalization layer free of
+engine types.
 """
 
 from __future__ import annotations
@@ -34,8 +35,8 @@ from .pair_allocation import (
 
 # Altvermögen / Neuvermögen cutoff per § 27b EStG. Acquisitions on or before
 # 2021-02-28 Europe/Vienna are Altvermögen; after that, Neuvermögen.
-# Matches `rp2.plugin.country.at.AT_NEU_CUTOFF` — if rp2 ever revises the
-# cutoff we must update this constant in lockstep.
+# Matches `NEU_CUTOFF_US` in `tax-engine/core/src/austria.rs`; a revised
+# cutoff must update both in lockstep (docs/austrian-handoff.md).
 AT_TAX_TZ = ZoneInfo("Europe/Vienna")
 AT_NEU_CUTOFF = datetime(2021, 3, 1, 0, 0, 0, tzinfo=AT_TAX_TZ)
 

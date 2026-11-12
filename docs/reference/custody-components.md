@@ -170,8 +170,8 @@ principal outflow with a 0.0001 BTC miner fee, 9.9 BTC reviewed return, and
 
 The custody-quantity projection decreases the source wallet by the complete
 observed debit and reports the residual as suspense. The tax projection emits
-only finalized component edges; suspense never becomes an RP2 sale, purchase,
-fee, or fallback external row. Report readiness separately discloses affected
+only finalized component edges; suspense never becomes a tax-engine sale,
+purchase, fee, or fallback external row. Report readiness separately discloses affected
 unresolved quantity. Reclassifying the residual or attaching recovered evidence
 requires a new immutable component revision.
 

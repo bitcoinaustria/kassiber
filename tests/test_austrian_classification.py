@@ -448,6 +448,24 @@ class AustrianNormalizationTest(unittest.TestCase):
         self.assertEqual(result.events[1].at_regime, REGIME_ALT)
 
 
+
+def _austrian_backends():
+    """(AT, AbstractCountry, ValueError type) for every installed tax backend.
+
+    Patching each backend keeps these adapter tests meaningful whichever
+    backend runs, including shadow runs that drive both.
+    """
+    from kassiber.core.engines import native
+
+    backends = [(native.AT, native.AbstractCountry, native.EngineValueError)]
+    try:
+        from rp2.abstract_country import AbstractCountry
+        from rp2.plugin.country.at import AT
+        from rp2.rp2_error import RP2ValueError
+    except ImportError:
+        return backends
+    return backends + [(AT, AbstractCountry, RP2ValueError)]
+
 class ATCrossAssetValidationWiringTest(unittest.TestCase):
     """Pin that ``GenericRP2TaxEngine.build_ledger_state`` runs the country's cross-asset
     validator between the parse and compute phases — the new backstop that catches
@@ -522,47 +540,56 @@ class ATCrossAssetValidationWiringTest(unittest.TestCase):
         engine = self.GenericRP2TaxEngine(self._profile())
         inputs = self._build_inputs()
 
-        # Spy by patching the AT country's method at class level. build_tax_policy builds a
-        # fresh `rp2.plugin.country.at.AT` on every call, so patching the class affects the
-        # instance used by `_rp2_configuration`.
-        from rp2.plugin.country.at import AT
+        # Spy by patching each backend's AT country at class level. build_tax_policy
+        # builds a fresh AT on every call, so patching the class affects the instance
+        # used by `_rp2_configuration`.
+        calls_by_backend: list[list[list[object]]] = []
+        originals = []
+        for at_class, _abstract, _error in _austrian_backends():
+            calls: list[list[object]] = []
+            original = at_class.validate_input_data
 
-        calls: list[list[object]] = []
-        original = AT.validate_input_data
+            def spy(self, input_data_list, _calls=calls, _original=original):
+                _calls.append(list(input_data_list))
+                return _original(self, input_data_list)
 
-        def spy(self, input_data_list):
-            calls.append(list(input_data_list))
-            return original(self, input_data_list)
-
-        AT.validate_input_data = spy  # type: ignore[assignment]
+            at_class.validate_input_data = spy  # type: ignore[assignment]
+            calls_by_backend.append(calls)
+            originals.append((at_class, original))
         try:
             engine.build_ledger_state(inputs)
         finally:
-            AT.validate_input_data = original  # type: ignore[assignment]
+            for at_class, original in originals:
+                at_class.validate_input_data = original  # type: ignore[assignment]
 
-        self.assertEqual(len(calls), 1, "validator must be called exactly once per build_ledger_state")
-        self.assertEqual(len(calls[0]), 2, "validator must receive one InputData per non-empty asset")
-        seen_assets = {getattr(input_data, "asset", None) for input_data in calls[0]}
-        self.assertEqual(seen_assets, {"BTC", "ETH"})
+        ran = [calls for calls in calls_by_backend if calls]
+        self.assertTrue(ran, "the active backend's validator must run")
+        for calls in ran:
+            self.assertEqual(len(calls), 1, "validator must be called exactly once per build_ledger_state")
+            self.assertEqual(len(calls[0]), 2, "validator must receive one InputData per non-empty asset")
+            seen_assets = {getattr(input_data, "asset", None) for input_data in calls[0]}
+            self.assertEqual(seen_assets, {"BTC", "ETH"})
 
     def test_validator_failure_surfaces_as_apperror_with_code(self):
         from kassiber.errors import AppError
-        from rp2.plugin.country.at import AT
-        from rp2.rp2_error import RP2ValueError
 
         engine = self.GenericRP2TaxEngine(self._profile())
         inputs = self._build_inputs()
 
-        def failing(self, input_data_list):
-            raise RP2ValueError("Unpaired `at_swap_link=orphan` marker")
+        originals = []
+        for at_class, _abstract, error_class in _austrian_backends():
 
-        original = AT.validate_input_data
-        AT.validate_input_data = failing  # type: ignore[assignment]
+            def failing(self, input_data_list, _error=error_class):
+                raise _error("Unpaired `at_swap_link=orphan` marker")
+
+            originals.append((at_class, at_class.validate_input_data))
+            at_class.validate_input_data = failing  # type: ignore[assignment]
         try:
             with self.assertRaises(AppError) as ctx:
                 engine.build_ledger_state(inputs)
         finally:
-            AT.validate_input_data = original  # type: ignore[assignment]
+            for at_class, original in originals:
+                at_class.validate_input_data = original  # type: ignore[assignment]
 
         self.assertEqual(ctx.exception.code, "rp2_input_validation")
         self.assertIn("at_swap_link=orphan", str(ctx.exception))
@@ -572,26 +599,23 @@ class ATCrossAssetValidationWiringTest(unittest.TestCase):
         # stale rp2 pin has no `validate_input_data`. The compat guard must raise a clear
         # upgrade hint, not a generic `rp2_input_validation` wrapped AttributeError.
         from kassiber.errors import AppError
-        from rp2.abstract_country import AbstractCountry
-        from rp2.plugin.country.at import AT
 
         engine = self.GenericRP2TaxEngine(self._profile())
         inputs = self._build_inputs()
 
-        original_at = AT.__dict__.get("validate_input_data")
-        original_abstract = AbstractCountry.__dict__.get("validate_input_data")
-        if original_at is not None:
-            delattr(AT, "validate_input_data")
-        if original_abstract is not None:
-            delattr(AbstractCountry, "validate_input_data")
+        removed = []
+        for at_class, abstract_class, _error in _austrian_backends():
+            for owner in (at_class, abstract_class):
+                original = owner.__dict__.get("validate_input_data")
+                if original is not None:
+                    delattr(owner, "validate_input_data")
+                    removed.append((owner, original))
         try:
             with self.assertRaises(AppError) as ctx:
                 engine.build_ledger_state(inputs)
         finally:
-            if original_abstract is not None:
-                AbstractCountry.validate_input_data = original_abstract  # type: ignore[assignment]
-            if original_at is not None:
-                AT.validate_input_data = original_at  # type: ignore[assignment]
+            for owner, original in reversed(removed):
+                owner.validate_input_data = original  # type: ignore[assignment]
 
         self.assertEqual(ctx.exception.code, "unsupported")
         self.assertIn("PR #4", str(ctx.exception))

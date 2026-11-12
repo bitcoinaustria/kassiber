@@ -27,10 +27,15 @@ Python development uses the locked `uv` environment:
 ./scripts/bootstrap-dev-env.sh
 ```
 
-The script checks system prerequisites, runs `uv sync --locked`, and verifies
-imports. Use `uv run --locked` for Python commands so a stale lockfile fails
+The script checks system prerequisites, including the Rust toolchain that
+builds the [tax engine](docs/reference/tax-engine.md), runs `uv sync --locked`,
+and verifies imports. Use `uv run --locked` for Python commands so a stale lockfile fails
 instead of being rewritten. End-user pip installation remains a packaging
-contract, not a second contributor workflow.
+contract, not a second contributor workflow. A pip install needs the tax
+engine's binding installed from the checkout first, for example
+`pip install ./tax-engine/python .`, which needs a Rust toolchain. Kassiber pins
+the binding to a local version (`kassiber-tax==0.1.0+local`) that PyPI cannot
+host, so pip never fetches an unrelated `kassiber-tax` from PyPI.
 
 For frontend development, use the pnpm version pinned in
 [ui-tauri/package.json](ui-tauri/package.json):
@@ -72,8 +77,9 @@ Before push or PR, run the full gate:
 ./scripts/quality-gate.sh
 ```
 
-It compiles Python, validates the test inventory, runs all Python tests once,
-and runs TypeScript, ESLint, and Vitest. CI partitions that Python inventory
+It checks the tax engine's Rust formatting and runs its tests, compiles Python,
+validates the test inventory, runs all Python tests once, and runs TypeScript,
+ESLint, and Vitest. CI partitions that Python inventory
 into disjoint shards; the required aggregate and specialized integration lanes
 are explained in [Testing](docs/reference/testing.md#pull-request-ci).
 The full gate is required before calling work push-ready.

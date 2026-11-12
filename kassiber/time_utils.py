@@ -13,14 +13,24 @@ converts between:
 Call sites should never call `datetime.fromisoformat` directly; use
 `parse_timestamp`, `_parse_iso_datetime`, or `parse_iso_datetime_or_none`
 so users get the intended validation-or-best-effort behavior.
+`parse_legacy_timestamp` is only for re-reading values stored before their
+write path validated them.
 """
 
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 
 from .errors import AppError
 
 
 UNKNOWN_OCCURRED_AT = "1970-01-01T00:00:00Z"
+
+_LEGACY_TIMESTAMP = re.compile(
+    r"(?P<year>\d{4})-?(?P<month>\d{2})-?(?P<day>\d{2})"
+    r"(?:[T ](?P<hour>\d{2})(?::?(?P<minute>\d{2})"
+    r"(?::?(?P<second>\d{2})(?:[.,](?P<fraction>\d+))?)?)?"
+    r"\s*(?P<zone>Z|UTC|GMT|[+-]\d{2}(?::?\d{2})?)?)?"
+)
 
 
 def now_iso():
@@ -57,6 +67,88 @@ def parse_timestamp(value):
     else:
         dt = dt.astimezone(timezone.utc)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+_RFC2822_MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
+_RFC2822 = re.compile(
+    r"(?:(?:MON|TUE|WED|THU|FRI|SAT|SUN),\s*)?"
+    r"(?P<day>\d{1,2})\s+(?P<month>" + "|".join(_RFC2822_MONTHS) + r")\s+(?P<year>\d{4})\s+"
+    r"(?P<hour>\d{2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?\s+"
+    r"(?P<zone>[+-]\d{2}:?\d{2}|GMT|UTC|UT|Z)"
+)
+
+
+def _parse_rfc2822(raw):
+    """An RFC 2822 date (`Mon, 01 Sep 2025 12:00:30 +0000`) as canonical UTC, or None.
+
+    The whole value must have that shape, with a four-digit year and a zone
+    that fixes the instant: a numeric offset (with or without a colon),
+    GMT/UT/UTC/Z, or `-0000`. The standard library's parser is lenient about
+    both and could shift the instant, so it is not used.
+    """
+    match = _RFC2822.fullmatch(raw.upper())
+    if match is None:
+        return None
+    zone = match["zone"]
+    offset = 0
+    if zone[0] in "+-":
+        digits = zone[1:].replace(":", "")
+        offset = (int(digits[:2]) * 60 + int(digits[2:])) * (-1 if zone[0] == "-" else 1)
+    try:
+        dt = datetime(
+            int(match["year"]), _RFC2822_MONTHS.index(match["month"]) + 1, int(match["day"]),
+            int(match["hour"]), int(match["minute"]), int(match["second"] or 0),
+            tzinfo=timezone(timedelta(minutes=offset)),
+        )
+    except ValueError:
+        return None
+    return _iso_z(dt.astimezone(timezone.utc))
+
+
+def parse_legacy_timestamp(value):
+    """Canonicalize a stored timestamp that predates write-time validation.
+
+    Older reviews stored some typed timestamps (a direct payout's
+    `payout_occurred_at`) verbatim. On top of what `parse_timestamp` takes,
+    this accepts the forms a user plausibly typed and RP2's dateutil parsing
+    accepted: surrounding whitespace, lowercase `t`/`z`, a space before the
+    offset or `Z`, a trailing `UTC`/`GMT`, the basic format
+    (`20250301T090030Z`), and RFC 2822 (`Mon, 01 Sep 2025 12:00:30 +0000`).
+    Returns the canonical RFC3339 UTC string and raises the same validation
+    `AppError` as `parse_timestamp` for anything else, including the
+    day/month-ambiguous forms dateutil guessed at (`01.09.2025`).
+    """
+    raw = str(value or "").strip()
+    match = _LEGACY_TIMESTAMP.fullmatch(raw.upper())
+    if match is None:
+        try:
+            return parse_timestamp(raw)
+        except AppError:
+            rfc2822 = _parse_rfc2822(raw)
+            if rfc2822 is None:
+                raise
+            return rfc2822
+    parts = match.groupdict()
+    text = f"{parts['year']}-{parts['month']}-{parts['day']}"
+    if parts["hour"] is not None:
+        text += f"T{parts['hour']}:{parts['minute'] or '00'}:{parts['second'] or '00'}"
+        if parts["fraction"]:
+            text += "." + parts["fraction"][:6].ljust(6, "0")
+        zone = parts["zone"]
+        if zone in ("Z", "UTC", "GMT"):
+            text += "+00:00"
+        elif zone:
+            digits = zone[1:].replace(":", "")
+            text += f"{zone[0]}{digits[:2]}:{digits[2:4] or '00'}"
+    try:
+        return parse_timestamp(text)
+    except AppError as exc:
+        # Name the stored value, not the rebuilt one (e.g. month 13).
+        raise AppError(
+            f"Invalid occurred_at/date value '{value}'",
+            code="validation",
+            hint="Use RFC3339 UTC like 2025-01-01T00:00:00Z",
+        ) from exc
 
 
 def iso_to_unix(value):

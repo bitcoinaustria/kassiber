@@ -3,7 +3,9 @@
 **Status:** Live backlog of unresolved or practitioner-sensitive Austrian tax
 assumptions.
 **Current source of truth:** this file plus `docs/austrian-handoff.md`,
-`kassiber/core/austrian.py`, RP2 AT plugin behavior, and tests.
+`kassiber/core/austrian.py`, the [tax engine](../reference/tax-engine.md)'s
+Austrian rules (`tax-engine/core/src/austria.rs`, which reproduce RP2's AT
+plugin), and tests.
 **Rule:** if provenance is insufficient, quarantine. Do not silently apply these
 defaults.
 
