@@ -168,7 +168,9 @@ run cp "$ROOT/ui-tauri/provider-broker/dist/index.mjs" "$BINARIES_DIR/kassiber-c
 TAURI_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-tauri-config.XXXXXX")"
 trap 'rm -rf "$smoke_root" "$TAURI_CONFIG_DIR"' EXIT
 TAURI_BUILD_CONFIG="$TAURI_CONFIG_DIR/build.json"
-printf '{ "version": "%s", "productName": "%s", "identifier": "%s" }\n' \
+# Tauri seals the bundle only when a signing identity is set; "-" asks for an
+# ad-hoc signature, so the app is sealed before the DMG is made from it.
+printf '{ "version": "%s", "productName": "%s", "identifier": "%s", "bundle": { "macOS": { "signingIdentity": "-" } } }\n' \
   "$APP_VERSION" "$APP_PRODUCT_NAME" "$APP_IDENTIFIER" > "$TAURI_BUILD_CONFIG"
 
 # CI=true makes Tauri skip create-dmg's flaky Finder styling step (it scripts
