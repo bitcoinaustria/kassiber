@@ -16,6 +16,8 @@ from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     MAX_DESCRIPTOR_GAP_LIMIT,
     default_policy_asset_id,
+    invalid_descriptor_error,
+    is_embit_error,
     load_descriptor_plan,
     liquid_plan_can_unblind,
     normalize_asset_code,
@@ -216,10 +218,43 @@ def has_silent_payment_sync_material(config):
     return silent_payments.has_silent_payment_sync_material(config)
 
 
+def stored_wallet_config(wallet) -> dict:
+    """A wallet row's stored configuration, refusing one that is not an object.
+
+    Planning a sync from a guessed configuration could skip or misroute the
+    wallet's sources, so an unreadable one stops the sync with a typed error.
+    """
+    try:
+        config = json.loads(wallet["config_json"] or "{}")
+    except (TypeError, ValueError):
+        config = None
+    if not isinstance(config, dict):
+        raise AppError(
+            f"Wallet '{wallet['label']}' has an unreadable stored configuration",
+            code="invalid_wallet_config",
+            hint="Edit or remove this wallet, then sync again.",
+            details={"wallet": wallet["label"]},
+            retryable=False,
+        )
+    return config
+
+
 def wallet_is_deprecated(config):
     if not isinstance(config, dict):
         return False
     return parse_bool(config.get(WALLET_DEPRECATED_CONFIG_KEY), default=False)
+
+
+def wallet_in_sync_all(config, *, force_full=False):
+    """Whether a sync of all wallets includes this wallet.
+
+    Retired wallets are skipped only for ongoing syncs. One whose history the
+    book has not imported (never synced, or cleared by a book reset) is
+    included, and so is every retired wallet in a forced full rescan.
+    """
+    if force_full or not wallet_is_deprecated(config):
+        return True
+    return not str(config.get("last_synced_at") or "").strip()
 
 
 def _reset_onchain_freshness_checkpoint(conn, profile_id: str, wallet_id: str) -> None:
@@ -256,6 +291,12 @@ def load_wallet_descriptor_plan_from_config(config):
         return load_descriptor_plan(config)
     except ValueError as exc:
         raise AppError(str(exc)) from exc
+    except AppError:
+        raise
+    except Exception as exc:
+        if not is_embit_error(exc):
+            raise
+        raise invalid_descriptor_error() from exc
 
 
 def wallet_policy_asset_id(config, chain, network):
@@ -646,6 +687,15 @@ def _validated_wallet_config(normalized_kind, config):
     if WALLET_DEPRECATED_CONFIG_KEY in config:
         config[WALLET_DEPRECATED_CONFIG_KEY] = wallet_is_deprecated(config)
     if normalized_kind == silent_payments.WALLET_KIND:
+        # Inactive ordinary wallet fields are still persisted secret-bearing input.
+        from ..wallet_security import (
+            assert_descriptor_text_is_watch_only,
+            assert_standalone_key_is_watch_only,
+        )
+
+        assert_descriptor_text_is_watch_only(config.get("descriptor"))
+        assert_descriptor_text_is_watch_only(config.get("change_descriptor"))
+        assert_standalone_key_is_watch_only(config.get("xpub"))
         return silent_payments.validate_wallet_config(config)
     # An otherwise inactive change branch is still secret-bearing input.
     # Run the loader's watch-only preflight before it can reach storage.
@@ -749,6 +799,12 @@ def _wallet_descriptor_state(config):
             if exc.code != "dependency_missing":
                 raise
             descriptor_state = "invalid"
+        except Exception as exc:
+            # embit's own errors (a Liquid view key that does not mirror the
+            # descriptor) refuse as the wallet's other paths do.
+            if not is_embit_error(exc):
+                raise
+            raise invalid_descriptor_error() from exc
     return descriptor_state, chain, network
 
 
@@ -1215,6 +1271,7 @@ __all__ = [
     "has_silent_payment_sync_material",
     "OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY",
     "normalize_addresses",
+    "wallet_in_sync_all",
     "wallet_is_deprecated",
     "normalize_btcpay_payment_method_id",
     "normalize_btcpay_store_id",

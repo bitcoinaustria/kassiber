@@ -127,6 +127,13 @@ def _utc(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _shift_utc(moment: datetime, delta: timedelta) -> datetime:
+    try:
+        return moment + delta
+    except OverflowError:
+        return (datetime.min if delta < timedelta() else datetime.max).replace(tzinfo=timezone.utc)
+
+
 def _rows(count: int) -> str:
     return f"{count} row" if count == 1 else f"{count} rows"
 
@@ -159,7 +166,10 @@ def _decimal_cell(text: str) -> Decimal | None:
     else:
         cleaned = cleaned.replace(",", "")
     try:
-        return abs(Decimal(cleaned))
+        number = Decimal(cleaned)
+        if not number.is_finite():
+            raise AppError("Comparison values must be finite", code="validation", retryable=False)
+        return abs(number)
     except ArithmeticError:
         return None
 
@@ -239,14 +249,18 @@ def _tool_rows(tool: str, file_path, book_currency: str) -> tuple[list[_ToolRow]
         asset = describe_asset(normalized["asset"])
         value = None
         currency = ""
+        error = ""
         fiat_value = normalized.get("fiat_value")
         fiat_currency = str(normalized.get("fiat_currency") or "").upper()
         if fiat_value is not None and fiat_currency in {"", book_currency}:
             value, currency = dec(fiat_value), book_currency
         else:
-            column_value = _decimal_cell(_cell(record, *_VALUE_COLUMNS[direction]))
-            if column_value is not None:
-                value, currency = column_value, book_currency
+            try:
+                column_value = _decimal_cell(_cell(record, *_VALUE_COLUMNS[direction]))
+                if column_value is not None:
+                    value, currency = column_value, book_currency
+            except AppError as exc:
+                error = str(exc)
         rows.append(
             _ToolRow(
                 index=item["index"],
@@ -261,6 +275,7 @@ def _tool_rows(tool: str, file_path, book_currency: str) -> tuple[list[_ToolRow]
                 kind=normalized.get("kind"),
                 value=value,
                 value_currency=currency,
+                error=error,
             )
         )
     return rows, other_assets
@@ -319,13 +334,22 @@ def _book_rows(conn, profile, wallet_ids: set[str] | None, book_currency: str):
             value = dec(row["fiat_value"])
         else:
             value = None
+        if value is not None and not value.is_finite():
+            raise AppError("Stored comparison values must be finite", code="validation", retryable=False)
+        occurred_at = _utc(row["occurred_at"])
+        if occurred_at is None:
+            raise AppError(
+                "Stored comparison dates must be valid timestamps",
+                code="validation",
+                retryable=False,
+            )
         rows.append(
             _BookRow(
                 id=row["id"],
                 wallet=row["wallet"],
                 wallet_id=row["wallet_id"],
                 txid=row["external_id"],
-                occurred_at=_utc(row["occurred_at"]) or datetime.min.replace(tzinfo=timezone.utc),
+                occurred_at=occurred_at,
                 direction=amounts.direction,
                 asset_id=asset.asset_id,
                 principal_msat=int(amounts.principal_msat or 0),
@@ -410,10 +434,10 @@ class _Index:
         bucket = self._rows.get(key)
         if not bucket:
             return None
-        moment = tool.occurred_at - offset
+        moment = _shift_utc(tool.occurred_at, -offset)
         times = self._times[key]
-        start = bisect.bisect_left(times, moment - _PROBABLE_WINDOW)
-        end = bisect.bisect_right(times, moment + _PROBABLE_WINDOW)
+        start = bisect.bisect_left(times, _shift_utc(moment, -_PROBABLE_WINDOW))
+        end = bisect.bisect_right(times, _shift_utc(moment, _PROBABLE_WINDOW))
         best = None
         for row in bucket[start:end]:
             if row.matched or _conflicting_ids(tool, row) or not _amount_fits(tool, row):
@@ -543,7 +567,7 @@ def _differences(
             )
 
     if tool.occurred_at is not None:
-        shifted = tool.occurred_at - offset
+        shifted = _shift_utc(tool.occurred_at, -offset)
         drift = shifted - book.occurred_at
         # A different tax year matters however small the drift: 22:59Z and
         # 23:01Z on 31 December are two years in an Austrian book.
@@ -767,14 +791,14 @@ def cross_check(
 
     # 2. The same id on a transaction the user excluded. An exact id beats any
     # amount match, so an excluded row is never hidden behind a look-alike.
-    excluded_by_id: dict[tuple[str, str], _BookRow] = {}
+    excluded_by_id: dict[tuple[str, str, str], _BookRow] = {}
     for row in excluded:
         for key in {row.txid.lower(), row.id.lower()} - {""}:
-            excluded_by_id.setdefault((key, row.direction), row)
+            excluded_by_id.setdefault((key, row.direction, row.asset_id), row)
     excluded_pairs: list[tuple[_ToolRow, _BookRow, str]] = []
     without_id_match: list[_ToolRow] = []
     for tool_row in unmatched_tool:
-        book = excluded_by_id.get((tool_row.txid.lower(), tool_row.direction)) if tool_row.txid else None
+        book = excluded_by_id.get((tool_row.txid.lower(), tool_row.direction, tool_row.asset_id)) if tool_row.txid else None
         if book is not None and not book.matched and book.asset_id == tool_row.asset_id:
             book.matched = True
             excluded_pairs.append((tool_row, book, "txid"))
@@ -830,7 +854,7 @@ def cross_check(
             bucket["fees"] += row.fee_msat
 
     for tool_row, book, match in pairs:
-        if not (in_period(tool_row.occurred_at - offset) or in_period(book.occurred_at)):
+        if not (in_period(_shift_utc(tool_row.occurred_at, -offset)) or in_period(book.occurred_at)):
             continue
         diffs = _differences(tool_row, book, offset=offset, calendar=calendar, compare_types=compare_types)
         status = "different" if any(diff["severity"] == "tax" for diff in diffs) else "matched"
@@ -843,14 +867,14 @@ def cross_check(
                 "differences": diffs,
             }
         )
-        if in_period(tool_row.occurred_at - offset):
+        if in_period(_shift_utc(tool_row.occurred_at, -offset)):
             add_tool_total(tool_row)
         if in_period(book.occurred_at):
             add_book_total(book)
         source_wallets[tool_row.source][book.wallet] += 1
         source_matched[tool_row.source] += 1
     for tool_row, book, match in excluded_pairs:
-        if not (in_period(tool_row.occurred_at - offset) or in_period(book.occurred_at)):
+        if not (in_period(_shift_utc(tool_row.occurred_at, -offset)) or in_period(book.occurred_at)):
             continue
         rows.append(
             {
@@ -861,10 +885,10 @@ def cross_check(
                 "differences": [],
             }
         )
-        if in_period(tool_row.occurred_at - offset):
+        if in_period(_shift_utc(tool_row.occurred_at, -offset)):
             add_tool_total(tool_row)
     for tool_row in only_tool:
-        if not in_period(tool_row.occurred_at - offset):
+        if not in_period(_shift_utc(tool_row.occurred_at, -offset)):
             continue
         rows.append({"status": "only_tool", "match": None, "tool": _tool_payload(tool_row), "kassiber": None, "differences": []})
         add_tool_total(tool_row)

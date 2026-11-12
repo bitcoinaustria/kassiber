@@ -45,7 +45,7 @@ from ..command_capabilities import (
     cli_capability,
     daemon_capability,
 )
-from ..db import pinned_context_scope
+from ..db import pinned_context_scope, sqlite_error_is_readonly
 from ..errors import AppError
 
 
@@ -582,7 +582,7 @@ def _sync_analysis_index(conn: Any, runtime: Any, *, refresh: bool) -> None:
                 code="database_busy",
                 retryable=True,
             ) from None
-        if not _is_readonly_refusal(exc):
+        if not sqlite_error_is_readonly(exc):
             raise
         raise AppError(
             "Kassiber's local analysis index is out of date for this book",
@@ -596,16 +596,6 @@ def _sync_analysis_index(conn: Any, runtime: Any, *, refresh: bool) -> None:
         ) from None
     finally:
         conn.execute("PRAGMA query_only = OFF")
-
-
-def _is_readonly_refusal(exc: BaseException) -> bool:
-    """SQLite refused a write under `query_only` (stdlib or SQLCipher driver)."""
-
-    code = getattr(exc, "sqlite_errorcode", None)
-    if isinstance(code, int):
-        return (code & 0xFF) == 8  # SQLITE_READONLY
-    # sqlcipher3 exceptions carry no error code; SQLite's message is stable.
-    return "readonly database" in str(exc).lower()
 
 
 def _execute_write(conn: Any, tool: McpTool, call: Any, runtime: Any, client_name: str | None) -> dict[str, Any]:

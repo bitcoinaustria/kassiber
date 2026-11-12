@@ -105,7 +105,7 @@ def resolve_lightning_connection(
         )
     try:
         config: dict[str, Any] = json.loads(row.pop("config_json") or "{}")
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
         # A wallet with malformed config_json is recoverable for read-only
         # snapshot calls: adapters can still see the kind/profile and use
         # their defaults. We surface an empty config so the caller does

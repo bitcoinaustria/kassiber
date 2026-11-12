@@ -104,19 +104,22 @@ def projection_freshness_sql(profile_alias: str) -> str:
     Keep SQL consumers here rather than maintaining private, partial checks.
     ``profile_alias`` is an internal SQL identifier, never user input.
     """
-    p = profile_alias
-    return f"""(
-        {p}.last_processed_at IS NOT NULL
-        AND {p}.last_processed_tx_count = (
-            SELECT COUNT(*) FROM transactions freshness_tx
-            WHERE freshness_tx.profile_id = {p}.id AND freshness_tx.excluded = 0
-        )
-        AND {p}.journal_input_version = {p}.last_processed_input_version
-        AND ({p}.required_journal_semantics_version = 0 OR (
-            {p}.journal_semantics_version = {JOURNAL_CALCULATION_SEMANTICS_VERSION}
-            AND {p}.journal_semantics_version >= {p}.required_journal_semantics_version
+    # An uncorrelated IN subquery is evaluated once even when the caller
+    # filters thousands of transactions. Count each profile's active rows once.
+    return f"""({profile_alias}.id IN (
+        SELECT freshness_profile.id FROM profiles freshness_profile
+        LEFT JOIN (
+            SELECT profile_id, COUNT(*) AS active_count FROM transactions
+            WHERE excluded = 0 GROUP BY profile_id
+        ) freshness_counts ON freshness_counts.profile_id = freshness_profile.id
+        WHERE freshness_profile.last_processed_at IS NOT NULL
+        AND freshness_profile.last_processed_tx_count = COALESCE(freshness_counts.active_count, 0)
+        AND freshness_profile.journal_input_version = freshness_profile.last_processed_input_version
+        AND (freshness_profile.required_journal_semantics_version = 0 OR (
+            freshness_profile.journal_semantics_version = {JOURNAL_CALCULATION_SEMANTICS_VERSION}
+            AND freshness_profile.journal_semantics_version >= freshness_profile.required_journal_semantics_version
         ))
-    )"""
+    ))"""
 
 
 def projection_freshness(

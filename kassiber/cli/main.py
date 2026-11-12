@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import functools
+import io
 import json
 import logging
 import os
@@ -388,15 +389,17 @@ def _backend_auth_header(args: argparse.Namespace) -> str | None:
 
 
 def _prepare_wallet_secret_args(args: argparse.Namespace) -> None:
-    enforce_single_stdin_consumer(args, ("sp_descriptor",))
-    sp_descriptor = read_secret_from_args(
-        args,
-        "sp-descriptor",
-        legacy_attr="sp_descriptor",
-        label="Silent Payments descriptor",
-    )
-    if sp_descriptor is not None:
-        args.sp_descriptor = sp_descriptor
+    enforce_single_stdin_consumer(args, ("descriptor", "change_descriptor", "sp_descriptor"))
+    for name, label in (
+        ("descriptor", "Descriptor"),
+        ("change_descriptor", "Change descriptor"),
+        ("sp_descriptor", "Silent Payments descriptor"),
+    ):
+        value = read_secret_from_args(
+            args, name.replace("_", "-"), legacy_attr=name, label=label
+        )
+        if value is not None:
+            setattr(args, name, value)
 
 
 def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
@@ -734,9 +737,11 @@ def _cli_export_lightning_profitability_csv(
         snapshot=snapshot,
     )
     rows = core_lightning.profitability_csv_rows(report)
-    with open(file_path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        writer.writerows(rows)
+    buffer = io.StringIO(newline="")
+    csv.writer(buffer).writerows(rows)
+    content = buffer.getvalue()
+    content.encode("utf-8")
+    core_reports._export_csv_rows(file_path, rows)
     return {
         "connection": {
             "id": connection.get("id"),

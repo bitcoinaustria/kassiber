@@ -4876,7 +4876,7 @@ def _build_transactions_page_snapshot(
         params.extend([like] * 8)
 
     sort = raw_args.get("sort", "occurred-at")
-    sort_column = _UI_TRANSACTION_SORT_COLUMNS.get(sort)
+    sort_column = _UI_TRANSACTION_SORT_COLUMNS.get(sort) if isinstance(sort, str) else None
     if sort_column is None:
         raise AppError(
             "sort must be one of: occurred-at, amount, fiat-value, fee",
@@ -4885,7 +4885,7 @@ def _build_transactions_page_snapshot(
             retryable=False,
         )
     order = raw_args.get("order", "desc")
-    if order not in {"asc", "desc"}:
+    if not isinstance(order, str) or order not in {"asc", "desc"}:
         raise AppError(
             "order must be asc or desc",
             code="validation",
@@ -5223,7 +5223,15 @@ def _history_years(earliest: str, end: datetime) -> float:
     )
 
 
+# Every accepted spelling of a period sizes buckets like its canonical name.
+_UI_TRANSACTION_PERIOD_BY_DAYS = {
+    _UI_TRANSACTION_PERIOD_DAYS[name]: name
+    for name in ("30days", "3months", "6months", "1year", "4years", "5years", "10years", "15years")
+}
+
+
 def _dashboard_bucket_size(period: str, history_years: float) -> str:
+    period = _UI_TRANSACTION_PERIOD_BY_DAYS.get(_UI_TRANSACTION_PERIOD_DAYS.get(period), period)
     if period == "30days":
         return "day"
     if period == "3months":
@@ -5607,9 +5615,16 @@ def build_transactions_dashboard_snapshot(
         "pending": 0,
         "failed": 0,
     }
+    # Measure the history up to the requested window's end, as the automatic
+    # period does, not the wall clock.
     bucket_size = _dashboard_bucket_size(
         period,
-        _history_years(str(history["earliest"]), datetime.now(display_timezone))
+        _history_years(
+            str(history["earliest"]),
+            _parse_iso_datetime(until, "until").astimezone(display_timezone)
+            if until
+            else datetime.now(display_timezone),
+        )
         if history["earliest"]
         else 0.0,
     )

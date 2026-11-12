@@ -40,7 +40,7 @@ from .reports import (
     ReportHooks,
     _generic_report_transaction_rows,
     _optional_decimal_pref,
-    _report_query_rows,
+    _report_transaction_query_rows,
     _require_report_context,
     export_wallet_scope_label,
     resolve_export_wallets,
@@ -158,7 +158,7 @@ def _cointracking_row(row: PlatformRow) -> dict[str, str]:
         "Exchange": row.wallet,
         "Trade-Group": "Kassiber",
         "Comment": row.comment,
-        "Date": row.occurred_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "Date": f"{row.occurred_at.year:04d}-" + row.occurred_at.strftime("%m-%d %H:%M:%S"),
         "Tx-ID": row.transaction_id,
         "Buy Value in Account Currency": row.value if inbound else "",
         "Sell Value in Account Currency": "" if inbound else row.value,
@@ -216,7 +216,7 @@ _BLOCKPIT_LABELS = {
 def _blockpit_row(row: PlatformRow) -> dict[str, str]:
     inbound = row.event in _INBOUND_EVENTS
     output = {
-        "Date (UTC)": row.occurred_at.strftime("%d.%m.%Y %H:%M:%S"),
+        "Date (UTC)": row.occurred_at.strftime("%d.%m.") + f"{row.occurred_at.year:04d} " + row.occurred_at.strftime("%H:%M:%S"),
         "Integration Name": row.wallet,
         "Label": _BLOCKPIT_LABELS[row.event],
         "Outgoing Asset": "" if inbound else row.asset_code,
@@ -294,6 +294,8 @@ def _journal_values(conn, profile_id) -> dict[str, dict[str, Decimal]]:
         bucket = values.setdefault(row["transaction_id"], {})
         key = {"income": "income", "disposal": "proceeds", "acquisition": "cost"}[row["entry_type"]]
         amount = dec(row["proceeds"] if key == "proceeds" else row["fiat_value"])
+        if not amount.is_finite():
+            raise AppError("Journal cash values must be finite", code="validation", retryable=False)
         bucket[key] = bucket.get(key, Decimal("0")) + amount
     return values
 
@@ -392,7 +394,9 @@ def build_platform_rows(
         details={"wallet": export_wallet_scope_label(wallets)},
     )
 
-    query_rows = _report_query_rows(conn, profile, wallet=wallets[0] if wallets and len(wallets) == 1 else None)
+    query_rows = {"transactions": _report_transaction_query_rows(
+        conn, profile, wallet=wallets[0] if wallets and len(wallets) == 1 else None
+    )}
     export_rows = _generic_report_transaction_rows({"query_rows": query_rows})
     tx_meta = {
         row["id"]: row

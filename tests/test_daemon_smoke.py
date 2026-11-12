@@ -8995,6 +8995,17 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertNotIn("private-node.local", encoded)
             self.assertNotIn("secret-path", encoded)
 
+    def test_maintenance_run_refuses_a_non_string_sync_mode_as_validation(self):
+        # A list or object used to escape as an unhashable TypeError.
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            self.addCleanup(conn.close)
+            for value in ([], ["always"], {}, {"always": True}, 1, None, "sometimes"):
+                with self.assertRaises(AppError) as raised:
+                    _maintenance_run_payload(conn, {}, {"sync": value}, state={})
+                self.assertEqual(raised.exception.code, "validation", value)
+                self.assertEqual(raised.exception.details, {"sync": value})
+
     def test_daemon_safe_read_tool_kinds_return_workspace_state(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
             data_root = Path(tmp) / "data"
@@ -12579,7 +12590,9 @@ class DaemonSmokeTest(unittest.TestCase):
                             },
                         },
                     )
-                    self.assertEqual(_read_payload_timeout(proc)["kind"], "ui.secrets.init")
+                    self.assertEqual(
+                        _read_payload_timeout(proc, timeout=15.0)["kind"], "ui.secrets.init"
+                    )
                     _write_payload(
                         proc,
                         {
@@ -12743,14 +12756,33 @@ class DaemonSmokeTest(unittest.TestCase):
                         },
                     },
                 )
-                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.tool_call.consent")
-                while True:
+                # The control's reply and the chat's records interleave either
+                # way: the request loop answers the decision while the chat
+                # worker, released by it, writes the denied call's result.
+                control = None
+                chat_records = []
+                while control is None or not (
+                    chat_records and chat_records[-1].get("kind") == "ai.chat"
+                ):
                     payload = _read_payload_timeout(proc)
-                    if (
-                        payload.get("request_id") == "chat-mutating-redact"
-                        and payload.get("kind") == "ai.chat"
-                    ):
-                        break
+                    if payload.get("request_id") == "consent-redact-1":
+                        self.assertIsNone(control, payload)
+                        control = payload
+                    elif payload.get("request_id") == "chat-mutating-redact":
+                        chat_records.append(payload)
+                self.assertEqual(control["kind"], "ai.tool_call.consent", control)
+                self.assertEqual(control["data"], {"recorded": True})
+                results = [
+                    record["data"]
+                    for record in chat_records
+                    if record.get("kind") == "ai.chat.tool_result"
+                ]
+                self.assertEqual(len(results), 1, chat_records)
+                self.assertEqual(results[0]["call_id"], "call_1")
+                self.assertIs(results[0]["ok"], False)
+                self.assertEqual(results[0]["reason"], "user_denied")
+                # Nothing the denied call carried leaks into its records.
+                self.assertNotIn("secret", json.dumps(chat_records))
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
@@ -13165,10 +13197,13 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
 
     _MESSAGES = [{"role": "user", "content": "What is my balance?"}]
     _REPLY = "Your balance is in the report."
+    # The next request: the visible transcript, then one new prompt.
+    _PRIOR = [*_MESSAGES, {"role": "assistant", "content": _REPLY}]
+    _FOLLOW_UP = [*_PRIOR, {"role": "user", "content": "And last year?"}]
 
-    def _validated(self):
+    def _validated(self, messages=None):
         return {
-            "messages": list(self._MESSAGES),
+            "messages": list(self._MESSAGES if messages is None else messages),
             "model": "default",
             "options": {},
             "session_id": "chat-1",
@@ -13181,16 +13216,18 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
             "attachments": [],
         }
 
-    def _run(self, active_ai_chats, client, seen_options):
+    def _run(self, active_ai_chats, client, seen_options, messages=None, turns=None, saved=None):
+        turns = list(turns or [daemon_module.AiToolTurnResult(
+            tool_calls=[],
+            content=self._REPLY,
+            reasoning="",
+            finish_reason="stop",
+            response_output=[],
+        )])
+
         def fake_turn(_request_id, _client, validated, _context, _tools, _out, _cancel):
             seen_options.append(dict(validated["options"]))
-            return daemon_module.AiToolTurnResult(
-                tool_calls=[],
-                content=self._REPLY,
-                reasoning="",
-                finish_reason="stop",
-                response_output=[],
-            )
+            return turns.pop(0)
 
         runtime = daemon_module.AiToolRuntime(
             data_root="/tmp/kassiber-session-test",
@@ -13204,13 +13241,15 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
         ), patch.object(
             daemon_module, "_run_auto_read_tools", lambda **_kwargs: None
         ), patch.object(
-            daemon_module, "_write_ai_chat_terminal", lambda *a, **k: None
+            daemon_module,
+            "_write_ai_chat_terminal",
+            lambda *a, **k: (saved if saved is not None else []).append(k["assistant_content"]),
         ):
             daemon_module._run_ai_chat_tool_loop(
                 "req-1",
                 client,
                 {"name": "codex", "base_url": "codex-cli://default"},
-                self._validated(),
+                self._validated(messages),
                 daemon_module._OutputChannel(io.StringIO()),
                 active_chat,
                 runtime,
@@ -13248,7 +13287,7 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
             provider_name="codex",
             provider_session_id="kdt-abc:thread-1",
             history_fingerprint=daemon_module._provider_session_history_fingerprint(
-                self._MESSAGES
+                self._PRIOR
             ),
         )
         seen_options = []
@@ -13257,11 +13296,105 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
             active_ai_chats,
             SimpleNamespace(last_provider_session_id="kdt-abc:thread-1"),
             seen_options,
+            self._FOLLOW_UP,
         )
 
         self.assertEqual(
             seen_options[-1].get("provider_session_id"), "kdt-abc:thread-1"
         )
+
+    def test_the_next_turn_resumes_the_cursor_the_last_turn_stored(self):
+        # The regression: the cursor was recorded against the transcript plus
+        # its answer but looked up against the next request, which also ends
+        # with the new prompt, so no turn ever resumed.
+        active_ai_chats = daemon_module.ActiveAiChats()
+        seen_options = []
+        client = SimpleNamespace(last_provider_session_id="kdt-abc:thread-1")
+        self._run(active_ai_chats, client, seen_options)
+        self._run(active_ai_chats, client, seen_options, self._FOLLOW_UP)
+        self.assertIsNone(seen_options[0].get("provider_session_id"))
+        self.assertEqual(seen_options[1].get("provider_session_id"), "kdt-abc:thread-1")
+
+    def test_a_tool_turn_binds_its_cursor_to_every_leg_the_user_saw(self):
+        active_ai_chats = daemon_module.ActiveAiChats()
+        seen_options = []
+        legs = [
+            daemon_module.AiToolTurnResult(
+                tool_calls=[{"id": "call-1", "type": "function", "function": {
+                    "name": "unknown_tool", "arguments": "{}"}}],
+                content="Let me check. ",
+                reasoning="",
+                finish_reason="tool_calls",
+                response_output=[],
+            ),
+            daemon_module.AiToolTurnResult(
+                tool_calls=[],
+                content=self._REPLY,
+                reasoning="",
+                finish_reason="stop",
+                response_output=[],
+            ),
+        ]
+        client = SimpleNamespace(last_provider_session_id="kdt-abc:thread-1")
+        self._run(active_ai_chats, client, seen_options, turns=legs)
+        shown = "Let me check. " + self._REPLY
+        self._run(active_ai_chats, client, seen_options, [
+            *self._MESSAGES,
+            {"role": "assistant", "content": shown},
+            {"role": "user", "content": "And last year?"},
+        ])
+        self.assertEqual(seen_options[-1].get("provider_session_id"), "kdt-abc:thread-1")
+        # A transcript holding only the last leg is a different branch.
+        self._run(active_ai_chats, client, seen_options, self._FOLLOW_UP)
+        self.assertIsNone(seen_options[-1].get("provider_session_id"))
+
+    def test_a_tool_turn_saves_the_whole_answer_the_user_saw(self):
+        # The saved history message is what reopening the chat shows and what
+        # the next request sends back; it is every leg, not the last one.
+        legs = [
+            daemon_module.AiToolTurnResult(
+                tool_calls=[{"id": "call-1", "type": "function", "function": {
+                    "name": "unknown_tool", "arguments": "{}"}}],
+                content="Let me check. ",
+                reasoning="",
+                finish_reason="tool_calls",
+                response_output=[],
+            ),
+            daemon_module.AiToolTurnResult(
+                tool_calls=[],
+                content=self._REPLY,
+                reasoning="",
+                finish_reason="stop",
+                response_output=[],
+            ),
+        ]
+        saved = []
+        self._run(
+            daemon_module.ActiveAiChats(),
+            SimpleNamespace(last_provider_session_id=None),
+            [],
+            turns=legs,
+            saved=saved,
+        )
+        self.assertEqual(saved, ["Let me check. " + self._REPLY])
+
+    def test_a_request_not_ending_with_a_new_prompt_resumes_nothing(self):
+        active_ai_chats = daemon_module.ActiveAiChats()
+        active_ai_chats.remember_provider_session(
+            chat_session_id="chat-1",
+            provider_name="codex",
+            provider_session_id="kdt-abc:thread-1",
+            history_fingerprint=daemon_module._provider_session_history_fingerprint(
+                self._MESSAGES
+            ),
+        )
+        for messages in ([], self._PRIOR):
+            self.assertIsNone(daemon_module._provider_session_resume_fingerprint(messages))
+            self.assertIsNone(active_ai_chats.provider_session(
+                chat_session_id="chat-1",
+                provider_name="codex",
+                history_fingerprint=daemon_module._provider_session_resume_fingerprint(messages),
+            ))
 
     def test_incognito_marks_the_turn_stateless(self):
         def validated(**extra):
@@ -13289,14 +13422,14 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
             provider_name="codex",
             provider_session_id="kdt-abc:thread-1",
             history_fingerprint=daemon_module._provider_session_history_fingerprint(
-                self._MESSAGES
+                self._PRIOR
             ),
         )
         seen_options = []
         original = self._validated
 
-        def stateless_validated():
-            payload = original()
+        def stateless_validated(messages=None):
+            payload = original(self._FOLLOW_UP)
             payload["options"] = {"stateless_session": True}
             return payload
 
@@ -13315,7 +13448,7 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
                 provider_name="codex",
                 history_fingerprint=(
                     daemon_module._provider_session_history_fingerprint(
-                        [*self._MESSAGES, {"role": "assistant", "content": self._REPLY}]
+                        [*self._FOLLOW_UP, {"role": "assistant", "content": self._REPLY}]
                     )
                 ),
             )
@@ -13338,11 +13471,11 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
                 provider_name="codex",
                 provider_session_id="kdt-abc:thread-1",
                 history_fingerprint=daemon_module._provider_session_history_fingerprint(
-                    self._MESSAGES
+                    self._PRIOR
                 ),
             )
             validated = {
-                **self._validated(),
+                **self._validated(self._FOLLOW_UP),
                 "tools_enabled": False,
                 "timeout_seconds": 30.0,
                 "options": dict(options),
@@ -13373,7 +13506,7 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
                 chat_session_id="chat-1",
                 provider_name="codex",
                 history_fingerprint=daemon_module._provider_session_history_fingerprint(
-                    [*self._MESSAGES, {"role": "assistant", "content": "ok"}]
+                    [*self._FOLLOW_UP, {"role": "assistant", "content": "ok"}]
                 ),
             )
             if options:

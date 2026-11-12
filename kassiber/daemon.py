@@ -373,6 +373,8 @@ from .sync_btcpay import (
 from .wallet_descriptors import (
     MAX_DESCRIPTOR_GAP_LIMIT,
     derive_descriptor_targets,
+    invalid_descriptor_error,
+    is_embit_error,
     load_descriptor_plan,
     normalize_network,
 )
@@ -1085,9 +1087,9 @@ class ActiveAiChats:
         *,
         chat_session_id: str | None,
         provider_name: str,
-        history_fingerprint: str,
+        history_fingerprint: str | None,
     ) -> str | None:
-        if not chat_session_id:
+        if not chat_session_id or history_fingerprint is None:
             return None
         with self._lock:
             entry = self._provider_sessions.get((chat_session_id, provider_name))
@@ -2234,6 +2236,8 @@ def _ui_swap_matching_payload_from_conn(
                 activate=True if activate is None else activate,
             )
         resolved_workspace, resolved_profile = resolve_scope(conn, workspace, profile)
+        if not isinstance(action, str):
+            raise AppError("Custody component review action is unsupported", code="validation")
         if authored_source == "ai_tool" and action in {"revise", "activate"}:
             _validate_ai_custody_state_boundary(
                 conn,
@@ -8022,6 +8026,8 @@ def _validate_ai_review_operations(
         if not isinstance(operation, dict):
             raise AppError("Review operation must be an object", code="validation")
         kind = operation.get("type")
+        if not isinstance(kind, str):
+            raise AppError("Review operation type is unsupported", code="validation")
         if kind == "repair_legacy_pair":
             raise AppError("Legacy pair revision is a local CLI review workflow",
                            code="interaction_required")
@@ -10433,6 +10439,19 @@ def _provider_session_history_fingerprint(messages: list[dict[str, Any]]) -> str
     ).hexdigest()
 
 
+def _provider_session_resume_fingerprint(messages: list[dict[str, Any]]) -> str | None:
+    """Fingerprint the branch a resumable cursor was recorded against.
+
+    A cursor is remembered after a turn under the transcript plus its answer.
+    The next request carries that transcript followed by one new user prompt,
+    so look up everything before the prompt. Any other shape resumes nothing.
+    """
+
+    if not messages or not isinstance(messages[-1], dict) or messages[-1].get("role") != "user":
+        return None
+    return _provider_session_history_fingerprint(messages[:-1])
+
+
 # Finish reasons of an answer that was cut off before it ended on its own.
 _AI_CUT_OFF_FINISH_REASONS = frozenset({"length", "content_filter"})
 
@@ -10857,7 +10876,7 @@ def _run_ai_chat_tool_loop(
         active_ai_chats.provider_session(
             chat_session_id=validated["session_id"],
             provider_name=provider_snapshot["name"],
-            history_fingerprint=_provider_session_history_fingerprint(
+            history_fingerprint=_provider_session_resume_fingerprint(
                 validated["messages"]
             ),
         )
@@ -10980,7 +10999,10 @@ def _run_ai_chat_tool_loop(
     )
     response_context = responses_request_context(messages)
     finish_reason = None
-    content = ""
+    # Every leg streams its text to the user, who sends all of it back as the
+    # assistant message; the provider cursor and the saved answer are bound
+    # to that visible answer.
+    shown_parts: list[str] = []
     review_checkpoint: dict[str, Any] = {}
     for _iteration in range(validated["tool_loop_max_iterations"]):
         if cancel_event.is_set():
@@ -11001,7 +11023,7 @@ def _run_ai_chat_tool_loop(
         notices = _ai_chat_notices(runtime)
         notices.extend(phase for phase in turn.notices if phase not in notices)
         tool_calls = turn.tool_calls
-        content = turn.content
+        shown_parts.append(turn.content)
         finish_reason = turn.finish_reason
         if cancel_event.is_set():
             finish_reason = "cancelled"
@@ -11040,6 +11062,20 @@ def _run_ai_chat_tool_loop(
                 preview_arguments, consent_summary = _ai_plan_consent_preview(
                     runtime, entry, call.arguments
                 )
+            summary_refusal = None
+            if (
+                entry is not None
+                and advertised
+                and entry.requires_consent
+                and not call.argument_error
+                and consent_summary is None
+            ):
+                # A call the consent card cannot describe is malformed: the
+                # model gets a validation result instead of a consent prompt.
+                try:
+                    consent_summary = summarize_tool_call(entry, call.arguments)
+                except AppError as exc:
+                    summary_refusal = exc
             proposal_seen_at = now_iso()
             consent_applies = (
                 entry is not None
@@ -11047,6 +11083,7 @@ def _run_ai_chat_tool_loop(
                 and not duplicate_call_id
                 and entry.requires_consent
                 and not call.argument_error
+                and summary_refusal is None
             )
             # The chat's permission mode (or an earlier "allow for this chat")
             # may approve the call without asking.
@@ -11108,6 +11145,8 @@ def _run_ai_chat_tool_loop(
                 result = _tool_result_denied("duplicate_tool_call_id")
             elif entry is not None and not advertised:
                 result = _tool_result_denied("tool_not_advertised")
+            elif summary_refusal is not None:
+                result = _tool_result_from_app_error(summary_refusal, entry)
             elif entry is not None and entry.requires_consent and not call.argument_error:
                 consent_requested_at = proposal_seen_at
                 if needs_consent:
@@ -11118,8 +11157,7 @@ def _run_ai_chat_tool_loop(
                                 {
                                     "call_id": call.call_id,
                                     "name": display_name,
-                                    "summary": consent_summary
-                                    or summarize_tool_call(entry, call.arguments),
+                                    "summary": consent_summary,
                                     "arguments_preview": preview_arguments,
                                     "reversible": entry.reversible,
                                     "egresses": entry.egresses,
@@ -11267,7 +11305,7 @@ def _run_ai_chat_tool_loop(
                 "unapplied proposals must be planned again. Applied receipts remain available.\n"
                 "```json\n" + json.dumps({"review_checkpoint": review_checkpoint}, sort_keys=True) + "\n```"
             )
-            content = (content or "") + continuation
+            shown_parts.append(continuation)
             out.write(_with_request_id(build_envelope(
                 "ai.chat.delta", {"delta": {"content": continuation}},
             ), request_id))
@@ -11282,7 +11320,7 @@ def _run_ai_chat_tool_loop(
             history_fingerprint=_provider_session_history_fingerprint(
                 [
                     *validated["messages"],
-                    {"role": "assistant", "content": content or ""},
+                    {"role": "assistant", "content": "".join(shown_parts)},
                 ]
             ),
         )
@@ -11294,7 +11332,7 @@ def _run_ai_chat_tool_loop(
         validated,
         finish_reason,
         runtime,
-        assistant_content=content or "",
+        assistant_content="".join(shown_parts),
     )
 
 
@@ -11387,7 +11425,7 @@ def _run_ai_chat_stream(
                 active_ai_chats.provider_session(
                     chat_session_id=validated["session_id"],
                     provider_name=provider_snapshot["name"],
-                    history_fingerprint=_provider_session_history_fingerprint(
+                    history_fingerprint=_provider_session_resume_fingerprint(
                         validated["messages"]
                     ),
                 )
@@ -12827,7 +12865,7 @@ def _coerce_int(
 ) -> int:
     try:
         result = int(value) if value is not None else default
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     if minimum is not None and result < minimum:
         return minimum
@@ -14307,7 +14345,8 @@ def _document_import_stage_payload(
 ) -> dict[str, Any]:
     source_file = _required_str_arg(args, "source_file", "Selected document")
     purpose = args.get("purpose", "document_import")
-    if purpose not in {"document_import", "chat_attachment"}:
+    # A list or object purpose is refused like any unknown one, not hashed.
+    if not isinstance(purpose, str) or purpose not in {"document_import", "chat_attachment"}:
         raise AppError("Unknown staging purpose", code="validation", retryable=False)
     if purpose == "chat_attachment":
         # Exports as well as statements and photos; the OCR preview still
@@ -16922,6 +16961,17 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         raise AppError(
             f"Could not parse descriptor: {exc}",
+            code="validation",
+            retryable=False,
+        ) from exc
+    except Exception as exc:
+        # embit's own errors (e.g. a Liquid view key whose wildcard or
+        # branches do not mirror the descriptor) are not ValueErrors; refuse
+        # them without the parser's text instead of crashing the daemon.
+        if not is_embit_error(exc):
+            raise
+        raise AppError(
+            f"Could not parse descriptor: {invalid_descriptor_error()}",
             code="validation",
             retryable=False,
         ) from exc
@@ -19651,6 +19701,18 @@ def handle_request(
                 hint="Send clear_shared_rates as true only when the shared fiat-rate cache should be cleared.",
                 details={"field": "clear_shared_rates"},
             )
+        wipe_everything_arg = args.get("wipe_everything")
+        if wipe_everything_arg is None:
+            wipe_everything = False
+        elif isinstance(wipe_everything_arg, bool):
+            wipe_everything = wipe_everything_arg
+        else:
+            raise AppError(
+                "Wipe-everything flag must be a boolean.",
+                code="validation",
+                hint="Send wipe_everything as true only when the user chose to delete the book's decisions and documents too.",
+                details={"field": "wipe_everything"},
+            )
         auth_result = _require_sensitive_local_auth(
             ctx,
             args=args,
@@ -19670,6 +19732,7 @@ def handle_request(
                         ctx.conn,
                         ctx.data_root,
                         clear_shared_rates=clear_shared_rates,
+                        wipe_everything=wipe_everything,
                     ),
                 ),
                 request_id,

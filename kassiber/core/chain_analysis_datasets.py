@@ -134,7 +134,7 @@ def canonical_subject(chain, network, subject):
             elif base58check_decode(value)[0] not in ({0, 5} if network == "main" else {111, 196}):
                 raise ValueError
         else:
-            from embit.liquid.addresses import addr_decode
+            from ..liquid_descriptors import addr_decode
             from embit.liquid.networks import NETWORKS
             net = NETWORKS[network]
             hrp = value.lower().split("1", 1)[0]

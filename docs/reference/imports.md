@@ -380,6 +380,8 @@ compares a tool's own transaction CSV with the book without importing it. The
 file is read with the same parser as `wallets import-cointracking` /
 `import-blockpit`, but one unreadable row does not stop the rest: it is listed
 as unreadable with the importer's message.
+Non-finite tool value cells also mark only their own row unreadable; healthy
+rows continue through matching and totals.
 
 Rows are paired by transaction id and direction first (Kassiber's own tool
 exports carry the txid, or the Kassiber row id for rows without one), then by
@@ -397,6 +399,8 @@ calendar are a tax-relevant difference however close they are. Types compare
 by tax meaning: a tool's deposit next to Kassiber's acquisition from an unknown
 sender agrees, a tool's withdrawal next to Kassiber's disposal does not. Stale
 journals switch the type comparison off with a notice instead of blocking.
+Malformed stored book timestamps refuse the comparison with `validation`;
+they cannot become year-1 dates or silently disappear from a year filter.
 
 The result lists every row as `different`, `only_tool`, `only_kassiber`,
 `excluded_in_kassiber`, `matched` or `not_comparable`, with per-asset totals.
@@ -562,7 +566,13 @@ number; an explicit `Fiat Value` does not turn those assets into fiat. For a
 separately valued Bitcoin leg, omit the opposing asset and amount and enter
 its reviewed `Fiat Value` in the book currency. Crypto-to-crypto rows (Bitcoin
 on both sides) are rejected. Amounts are in BTC (e.g. `0.05000000`) unless the asset is `SATS`,
-in which case whole satoshis are converted. Numbers may use either a dot or a
+in which case whole satoshis are converted. Amount suffixes accept `L-BTC` as
+well as `LBTC` and case-insensitive unit spellings such as `sats`.
+An amount's unit must agree with its asset column: `1000 sats` with asset
+`BTC`, or `0.5 L-BTC` with asset `BTC`, is rejected. Use asset `SATS` for
+satoshi amounts; the importer converts them exactly to BTC (1 sat = 1,000 msat).
+The same check applies to sent amounts and fees, including a fee's default unit.
+Numbers may use either a dot or a
 comma decimal separator (`0,05` and `3.000,00` are read the same as `0.05` and
 `3000.00`), so a sheet exported from a German/Austrian-locale spreadsheet
 imports correctly. Fiat columns must be in the book's currency — a EUR book
@@ -1201,6 +1211,9 @@ Behavior:
 
 - `gethistory` rows become wallet transactions using Wasabi's signed net wallet
   effect, timestamp/block height, label, txid, and `islikelycoinjoin` evidence
+- JSON numeric amounts must be integer tokens in satoshis. Decimal or exponent
+  tokens, including `1.0` and `1e0`, are refused rather than guessed to be BTC or sats. Legacy
+  decimal strings explicitly retain BTC units, while integer strings are sats.
 - `listcoins` / `listunspentcoins` refresh the durable Coins/UTXO inventory,
   including amount, confirmations, address label, safe receive/change branch
   and index, anonymity score, spent-by txid, CoinJoin exclusion, key state, and
@@ -1345,6 +1358,7 @@ Behavior:
 
 - Bitcoin/Liquid/Lightning -> fiat rows become outbound `sell` transactions
 - fiat -> Bitcoin/Liquid/Lightning rows become inbound `buy` transactions
+- formatted amounts may include an `LBTC` suffix without losing decimal precision
 - payout/payin fiat amounts are stored as exact `exchange_execution` pricing
   from provider `Bull Bitcoin`
 - relevant imports are match-existing-only and never create standalone
@@ -1417,6 +1431,9 @@ Behavior:
   chain data alone is not identifying. Route-only exports remain `strong`;
   `exact` additionally requires canonical route txids and explicit integer-msat
   principal amounts that cover both complete imported rows
+  (JSON integers or ASCII decimal digit strings; non-ASCII digits and
+  superscripts are ignored as amount evidence, as described in
+  [transfer matching](tax.md))
 - `preimage` is not stored in raw metadata; the importer records that it was
   redacted
 - `direction=self` rows and `status=failed` / `status=expired` /

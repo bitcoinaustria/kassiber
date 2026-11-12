@@ -17,13 +17,14 @@ it is a named read-only snapshot or a one-time open migration.
 from __future__ import annotations
 
 import ast
+import sqlite3
 import tempfile
 import threading
 import time
 import unittest
 from pathlib import Path
 
-from kassiber.db import begin_write_savepoint, open_db
+from kassiber.db import DEFAULT_DB_FILENAME, begin_write_savepoint, open_db
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -157,6 +158,45 @@ class WriteSavepointTest(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "locked|busy"):
             begin_write_savepoint(conn, "refused")
         self.assertFalse(conn.in_transaction)
+
+    def test_a_connection_that_cannot_write_reads_without_a_reservation(self):
+        # Lazily derived reads (the chain-analysis index) open a write
+        # savepoint and write only when stale; MCP reads run `query_only`.
+        data_root = self.base / "plaintext"
+        open_db(data_root).close()
+        query_only = open_db(data_root)
+        self.addCleanup(query_only.close)
+        query_only.execute("PRAGMA query_only = ON")
+        read_only = sqlite3.connect(f"file:{data_root / DEFAULT_DB_FILENAME}?mode=ro", uri=True)
+        self.addCleanup(read_only.close)
+        for label, conn in (("query_only", query_only), ("read-only", read_only)):
+            with self.subTest(label):
+                conn.execute("PRAGMA busy_timeout = 0")
+                self.hold_writer(data_root, None, 0.5)
+                begin_write_savepoint(conn, "reader")
+                self.assertTrue(conn.in_transaction)
+                conn.execute("SELECT COUNT(*) FROM settings").fetchone()
+                with self.assertRaisesRegex(Exception, "readonly"):
+                    conn.execute("INSERT INTO settings(key, value) VALUES('probe', 'x')")
+                conn.execute("RELEASE SAVEPOINT reader")
+                self.assertFalse(conn.in_transaction)
+                time.sleep(0.7)
+
+    def test_a_nested_write_savepoint_inside_the_writer_needs_no_wait(self):
+        data_root = self.base / "plaintext"
+        conn = open_db(data_root)
+        self.addCleanup(conn.close)
+        begin_write_savepoint(conn, "outer")
+        begin_write_savepoint(conn, "inner")
+        conn.execute("INSERT INTO settings(key, value) VALUES('probe', 'nested')")
+        conn.execute("RELEASE SAVEPOINT inner")
+        conn.execute("RELEASE SAVEPOINT outer")
+        self.assertFalse(conn.in_transaction)
+        with open_db(data_root) as other:
+            self.assertEqual(
+                other.execute("SELECT value FROM settings WHERE key = 'probe'").fetchone()[0],
+                "nested",
+            )
 
 
 class TransactionOpenerTest(unittest.TestCase):

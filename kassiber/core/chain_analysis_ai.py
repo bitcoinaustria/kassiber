@@ -65,7 +65,7 @@ _SOURCE_CODES = {
     "stored_transaction", "wallet_inventory", "reference_cache", "local_label",
     "journal_custody_decisions", "journal_custody_economic_relations",
     "reviewed_or_imported_privacy_boundary", "invalid_privacy_metadata",
-    "equal_output_coinjoin", "large_equal_output_coinjoin", "local_acquisition", "observer_exclusion",
+    "equal_output_coinjoin", "large_equal_output_coinjoin", "distinct_value_coinjoin", "local_acquisition", "observer_exclusion",
     "psbt", "psbt_proposal", "psbt_supplied", "local_dataset",
 }
 # Unknown additions are omitted until their disclosure has been considered.

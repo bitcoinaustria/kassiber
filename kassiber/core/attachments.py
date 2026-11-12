@@ -745,6 +745,11 @@ def gc_attachments(conn, data_root: str, *, dry_run: bool = False):
             "SELECT stored_relpath FROM attachments WHERE stored_relpath IS NOT NULL AND stored_relpath != ''"
         ).fetchall()
     }
+    # A reset keeps transaction attachments parked until the resync; their
+    # files are not orphans.
+    from .book_reset import parked_attachment_relpaths
+
+    live_paths |= parked_attachment_relpaths(conn)
     orphan_files = []
     orphan_paths: list[Path] = []
     total_bytes = 0

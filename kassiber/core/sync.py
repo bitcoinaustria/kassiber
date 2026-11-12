@@ -19,7 +19,9 @@ from ..transfers import canonical_txid
 from ..util import str_or_none
 from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, MAX_DESCRIPTOR_GAP_LIMIT
 from . import source_overlap
+from .sync_control import checked_parallel_map, run_sync_network, sync_progress_emitter, sync_transport_check
 from .esplora_history import full_scan_checkpoint
+from .silent_payments import is_silent_payment_plan
 from .onchain import stored_tx_mapping
 from .chain_observer import (
     PreparedObserverUpdate,
@@ -315,13 +317,6 @@ WALLET_FETCH_FANOUT = 4
 # common high-index receive/change gaps without permanently mutating the wallet.
 NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT = 500
 
-
-# Contextvar threaded by the daemon when it wants long-running source refreshes
-# to emit progress over the JSONL stream. The CLI leaves this empty so terminal
-# sync behavior stays unchanged.
-sync_progress_emitter: contextvars.ContextVar[ProgressCallback | None] = (
-    contextvars.ContextVar("kassiber.sync_progress_emitter", default=None)
-)
 
 # Serializes progress-callback invocation so concurrent fetch workers (within a
 # wallet and, for cross-wallet parallel fetch, across wallets) cannot interleave
@@ -623,6 +618,22 @@ def discover_wallet_backend(
     )
 
 
+def silent_payment_scan_authoritative(
+    adapter_meta: Mapping[str, Any] | None,
+    records: Sequence[Mapping[str, Any]],
+) -> bool:
+    """Whether a silent-payment scan may publish with observer authority.
+
+    Only a scan the scanner reports complete, with every record carrying its
+    confirmation time, is a full observation. Anything less must not retire,
+    supersede or mark spent what the book already holds, whatever backend
+    served it.
+    """
+    return (adapter_meta or {}).get("silent_payment_scan_complete") is True and all(
+        record.get("confirmed_at") not in (None, "") for record in records
+    )
+
+
 def fetch_wallet_backend_from_discovery(
     wallet: WalletRow,
     hooks: WalletSyncHooks,
@@ -665,6 +676,15 @@ def fetch_wallet_backend_from_discovery(
     finally:
         if token is not None:
             sync_progress_emitter.reset(token)
+    authoritative = (
+        sync_state.chain in {"bitcoin", "liquid"}
+        and discovery.kind in {"esplora", "electrum", "bitcoinrpc"}
+    )
+    if authoritative and is_silent_payment_plan(sync_state.descriptor_plan):
+        # Bitcoin Core RPC reaches the scanner through this ordinary path; an
+        # incomplete scan is no more authoritative here than on the
+        # compatibility route.
+        authoritative = silent_payment_scan_authoritative(adapter_meta, normalized_records)
     return WalletBackendFetch(
         backend=discovery.backend,
         sync_state=sync_state,
@@ -673,10 +693,7 @@ def fetch_wallet_backend_from_discovery(
         kind=discovery.kind,
         started=discovery.started,
         force_full=discovery.force_full,
-        authoritative_chain_observer=(
-            sync_state.chain in {"bitcoin", "liquid"}
-            and discovery.kind in {"esplora", "electrum", "bitcoinrpc"}
-        ),
+        authoritative_chain_observer=authoritative,
     )
 
 
@@ -690,16 +707,17 @@ def fetch_wallet_backend(
     force_full: bool = False,
     source_overlap_preflight: SourceOverlapPreflight | None = None,
     observer_fetch_preflight: ObserverFetchPreflight | None = None,
+    check_cancelled: Callable[[], None] | None = None,
 ) -> WalletBackendFetch:
     """Run discovery, optional overlap preflight, then backend fetch."""
-    discovery = discover_wallet_backend(
+    discovery = run_sync_network(lambda: discover_wallet_backend(
         runtime_config,
         profile,
         wallet,
         hooks,
         checkpoint,
         force_full=force_full,
-    )
+    ), check_cancelled)
     if (
         source_overlap_preflight is not None
         and discovery.skip_outcome is None
@@ -712,14 +730,18 @@ def fetch_wallet_backend(
         )
     if observer_fetch_preflight is not None:
         token = _wrap_sync_progress_for_wallet(wallet)
+        check_token = sync_transport_check.set(check_cancelled)
         try:
+            if check_cancelled is not None:
+                check_cancelled()
             observer_fetch = observer_fetch_preflight(wallet, discovery)
             if observer_fetch is not None:
                 return observer_fetch
         finally:
+            sync_transport_check.reset(check_token)
             if token is not None:
                 sync_progress_emitter.reset(token)
-    return fetch_wallet_backend_from_discovery(wallet, hooks, discovery)
+    return run_sync_network(lambda: fetch_wallet_backend_from_discovery(wallet, hooks, discovery), check_cancelled)
 
 
 def apply_fetch_observer_updates(
@@ -1111,6 +1133,11 @@ def sync_wallet_from_backend(
                 observed_utxos,
             )
         )
+    elif conn is not None and adapter_meta.get("utxos_skipped_unchanged"):
+        from .output_inventory import refresh_wallet_output_confirmations
+        checkpoint = adapter_meta.get("freshness_checkpoint") or {}
+        tip_height = checkpoint.get(f"{kind}_tip_height") if kind in {"esplora", "electrum"} else None
+        refresh_wallet_output_confirmations(conn, profile, wallet, backend, sync_state, tip_height)
     notify_apply_stage(hooks, APPLY_STAGE_OUTPUT_INVENTORY)
     if hooks.update_derivation_coverage is not None:
         hooks.update_derivation_coverage(
@@ -1373,6 +1400,7 @@ def prefetch_wallets_backend(
     max_workers: int = WALLET_FETCH_FANOUT,
     source_overlap_preflight: SourceOverlapPreflight | None = None,
     observer_fetch_preflight: ObserverFetchPreflight | None = None,
+    check_wallet_cancelled: Callable[[WalletRow], None] | None = None,
 ) -> dict[str, "WalletBackendFetch | BaseException"]:
     """Run discovery/preflight/fetch for several backend wallets.
 
@@ -1389,6 +1417,11 @@ def prefetch_wallets_backend(
         return {}
 
     def _parallel_wallet_step(step):
+        if check_wallet_cancelled is not None:
+            return dict(zip(
+                (str(wallet["id"]) for wallet in wallets),
+                checked_parallel_map(step, wallets, check_wallet_cancelled, max(1, min(max_workers, len(wallets)))),
+            ))
         if len(wallets) == 1 or max_workers <= 1:
             return {str(wallet["id"]): step(wallet) for wallet in wallets}
         results: dict[str, Any] = {}
@@ -1448,13 +1481,19 @@ def prefetch_wallets_backend(
             if isinstance(discovery, BaseException) or discovery is None:
                 continue
             token = _wrap_sync_progress_for_wallet(wallet)
+            check_token = sync_transport_check.set(
+                (lambda: check_wallet_cancelled(wallet)) if check_wallet_cancelled is not None else None
+            )
             try:
+                if check_wallet_cancelled is not None:
+                    check_wallet_cancelled(wallet)
                 observer_fetch = observer_fetch_preflight(wallet, discovery)
                 if observer_fetch is not None:
                     observer_fetches[wallet_id] = observer_fetch
             except Exception as exc:
                 observer_fetches[wallet_id] = exc
             finally:
+                sync_transport_check.reset(check_token)
                 if token is not None:
                     sync_progress_emitter.reset(token)
 

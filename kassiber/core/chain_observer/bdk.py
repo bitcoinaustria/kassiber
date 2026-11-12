@@ -20,6 +20,7 @@ from ...util import parse_bool
 from ...wallet_descriptors import branch_descriptor
 from ..onchain import graph_scoped_scripts
 from ..sync import emit_sync_progress, normalize_backend_kind
+from ..sync_control import check_sync_transport
 from .bdk_persistence import SqlCipherBdkPersistence, deserialize_changeset
 from .contract import ChainFacts, ObserverApplication, ObserverPrepareRequest
 from .host_trust import operator_ca_override
@@ -261,6 +262,7 @@ class BdkObserver:
     def _client(self) -> Any:
         import bdkpython as bdk
 
+        check_sync_transport()
         endpoint = str(self.backend.get("url") or "").strip()
         proxy = backend_value(self.backend, "tor_proxy", "proxy")
         if not endpoint:
@@ -349,6 +351,7 @@ class BdkObserver:
         return wallet, persister
 
     def _remote_block_hash(self, client: Any, height: int) -> str:
+        check_sync_transport()
         if self.backend_kind == "esplora":
             remote_height = int(client.get_height())
             if remote_height < height:
@@ -363,6 +366,7 @@ class BdkObserver:
                     },
                     retryable=True,
                 )
+            check_sync_transport()
             return str(client.get_block_hash(height))
         notification = client.block_headers_subscribe()
         remote_height = int(notification.height)
@@ -378,6 +382,7 @@ class BdkObserver:
                 },
                 retryable=True,
             )
+        check_sync_transport()
         return _electrum_header_hash(client.block_header(height))
 
     def _reveal_scan_horizon(self, wallet: Any) -> bool:
@@ -406,7 +411,9 @@ class BdkObserver:
             )
             if current is None or int(current) < target:
                 wallet.reveal_addresses_to(keychain, target)
-                changed = True
+                # Non-ranged descriptors cap revelation at index zero. Asking
+                # for a larger horizon does not necessarily reveal a new script.
+                changed |= wallet.derivation_index(keychain) != current
         return changed
 
     def _coverage_point(
@@ -447,6 +454,7 @@ class BdkObserver:
 
     def _full_scan(self, client: Any, wallet: Any) -> Any:
         scan_request = wallet.start_full_scan().build()
+        check_sync_transport()
         if self.backend_kind == "esplora":
             return client.full_scan(
                 scan_request,
@@ -462,6 +470,7 @@ class BdkObserver:
 
     def _incremental_sync(self, client: Any, wallet: Any) -> Any:
         request = wallet.start_sync_with_revealed_spks().build()
+        check_sync_transport()
         if self.backend_kind == "esplora":
             return client.sync(
                 request,
@@ -479,6 +488,7 @@ class BdkObserver:
         self._reveal_scan_horizon(wallet)
         for _pass in range(64):
             wallet.apply_update(self._incremental_sync(client, wallet))
+            check_sync_transport()
             if not self._reveal_scan_horizon(wallet):
                 return
         raise AppError(
@@ -738,7 +748,9 @@ class BdkObserver:
             wallet, persister = self._wallet_from_state(wallet_state)
             self._wallet = wallet
             emit_sync_progress({"phase": "backend_fetch", "observer": "bdk", "status": "scanning"})
+            check_sync_transport()
             client = self._client()
+            check_sync_transport()
             use_full_scan = wallet_state is None
             if wallet_state is not None:
                 prior_tip = wallet.latest_checkpoint()
@@ -757,9 +769,11 @@ class BdkObserver:
                 self._remote_block_hash(client, int(identity_checkpoint["tip_height"]))
             if use_full_scan:
                 wallet.apply_update(self._full_scan(client, wallet))
+                check_sync_transport()
                 self._reveal_scan_horizon(wallet)
             else:
                 self._sync_revealed_horizon(client, wallet)
+            check_sync_transport()
             wallet.persist(persister)
             reusable_txids: frozenset[str] = frozenset()
             prior_fingerprints: Mapping[str, str] = {}

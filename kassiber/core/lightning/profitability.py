@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ...errors import AppError
 from .types import NodeChannel, NodeSnapshot
 
 # Coarse default open-cost heuristic: ~2_500 sat for a 200 vB open+close at
@@ -136,20 +137,10 @@ def build_profitability_report(
     """
     routing = snapshot.routing
     if routing is None:
-        return LightningProfitabilityReport(
-            connection_id=connection_id,
-            connection_label=connection_label,
-            connection_kind=connection_kind,
-            window_label="No routing window reported",
-            routing_revenue_sat=0,
-            payment_cost_sat=0,
-            rebalance_cost_sat=0,
-            onchain_cost_sat=0,
-            net_profit_sat=0,
-            forward_count=0,
-            payment_count=0,
-            rebalance_count=0,
-            channels=tuple(_channel_open_cost_checks(snapshot.channels, default_open_cost_sat)),
+        raise AppError(
+            "The Lightning node did not report a routing window.",
+            code="lightning_routing_unavailable",
+            hint="Retry the explicit report request when routing data is available.",
         )
     return LightningProfitabilityReport(
         connection_id=connection_id,
@@ -239,4 +230,5 @@ def profitability_csv_rows(
 
 
 def _sat_to_btc(value: int) -> str:
-    return f"{value / 100_000_000:.8f}"
+    whole, fraction = divmod(abs(value), 100_000_000)
+    return f"{'-' if value < 0 else ''}{whole}.{fraction:08d}"

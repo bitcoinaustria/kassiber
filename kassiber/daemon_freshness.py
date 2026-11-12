@@ -1038,8 +1038,10 @@ def _freshness_wallet_source_specs(
         return payload
 
     for wallet in _load_wallets_for_freshness(conn, profile_id, wallet_ref):
-        config = json.loads(wallet["config_json"] or "{}")
-        if wallet_ref is None and core_wallets.wallet_is_deprecated(config):
+        config = core_wallets.stored_wallet_config(wallet)
+        if wallet_ref is None and not core_wallets.wallet_in_sync_all(
+            config, force_full=force_full
+        ):
             continue
         if core_wallets.wallet_btcpay_sync_config(config):
             specs.append(
@@ -1762,6 +1764,11 @@ def _prefetch_onchain_freshness_jobs(
         for wallet in wallets
     }
     prefetched_by_job: dict[str, Any] = {}
+
+    def check_wallet_cancelled(wallet) -> None:
+        job = eligible_job_by_wallet_id[str(wallet["id"])]
+        core_freshness._check_cancelled(conn, str(job["id"]))
+
     # Both force-full groups reuse one shared Electrum pool so the incremental
     # and forced-full prefetches do not tear down and re-establish the same
     # backend connection between groups.
@@ -1786,6 +1793,7 @@ def _prefetch_onchain_freshness_jobs(
                     for wallet in grouped_wallets
                 },
                 force_full=force_full,
+                check_wallet_cancelled=check_wallet_cancelled,
             )
             for wallet in grouped_wallets:
                 wallet_id = str(wallet["id"])
@@ -2904,7 +2912,8 @@ def _maintenance_run_payload(
             retryable=False,
         )
     sync_mode = args.get("sync", "if_enabled")
-    if sync_mode not in {"never", "if_enabled", "always"}:
+    # A list or object is unhashable: check the type before set membership.
+    if not isinstance(sync_mode, str) or sync_mode not in {"never", "if_enabled", "always"}:
         raise AppError(
             "ui.maintenance.run sync must be never, if_enabled, or always",
             code="validation",

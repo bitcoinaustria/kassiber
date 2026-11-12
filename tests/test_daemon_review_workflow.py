@@ -278,3 +278,75 @@ def test_malformed_component_plan_has_typed_error_without_writes(book, component
     assert caught.value.code == "validation"
     assert not conn.in_transaction
     assert conn.execute("SELECT COUNT(*) FROM review_workflow_receipts").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("authored_source", ["user", "ai_tool"])
+@pytest.mark.parametrize("kind", [[], {}, ["exclude"], {"type": "exclude"}])
+def test_unhashable_operation_type_is_a_validation_refusal(book, kind, authored_source):
+    conn, _runtime = book
+    with pytest.raises(AppError) as caught:
+        daemon._review_workflow_payload(conn, "ui.review.plan", {
+            "expected_input_version": 0,
+            "operations": [{"type": kind, "transaction_id": "in", "reason": "Confirmed"}],
+        }, authored_source=authored_source)
+    assert (caught.value.code, str(caught.value)) == ("validation", "Review operation type is unsupported")
+    assert not conn.in_transaction
+    assert conn.execute("SELECT COUNT(*) FROM review_workflow_receipts").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("full_access", [False, True])
+@pytest.mark.parametrize("kind", [[], {}])
+def test_ai_review_validation_refuses_an_unhashable_type(kind, full_access):
+    with pytest.raises(AppError) as caught:
+        daemon._validate_ai_review_operations(
+            [{"type": kind, "transaction_id": "in", "reason": "Confirmed"}], full_access=full_access
+        )
+    assert caught.value.code == "validation"
+
+
+@pytest.mark.parametrize("action", [[], {}])
+def test_unhashable_component_action_is_refused_without_ending_the_turn(book, action):
+    import io
+    import json
+    from types import SimpleNamespace
+
+    conn, runtime = book
+    chats = daemon.ActiveAiChats()
+    _key, active = chats.register("component-action")
+    output = io.StringIO()
+    validated = daemon._ai_chat_args({
+        "model": "test-model", "tools_enabled": True,
+        "messages": [{"role": "user", "content": "Retire the stale custody component."}],
+    })
+    results = []
+
+    def fake_turn(_rid, _client, _validated, context, _offered, _out, _cancel):
+        outputs = [json.loads(item["output"]) for item in context.input_items if item.get("type") == "function_call_output"]
+        if outputs:
+            results.extend(outputs)
+            return daemon.AiToolTurnResult([], "That action was invalid.", "", "stop", [])
+        entry = daemon.get_tool("ui.transfers.components.apply")
+        args = {"action": action, "component_id": "c-1", "expected_input_version": 0}
+        call = {"id": "component-0", "function": {"name": entry.provider_name, "arguments": json.dumps(args)}}
+        return daemon.AiToolTurnResult([call], "", "", "tool_calls", [])
+
+    with (
+        patch.object(daemon, "_stream_ai_chat_tool_turn", fake_turn),
+        patch.object(daemon, "_run_auto_read_tools", lambda **kwargs: None),
+        patch.object(daemon, "_ai_tool_is_advertised", lambda entry, runtime: True),
+        patch.object(active.consent, "wait") as consent,
+        patch.object(daemon, "_write_ai_chat_terminal") as terminal,
+    ):
+        daemon._run_ai_chat_tool_loop(
+            "component-action", SimpleNamespace(last_provider_session_id=None),
+            {"name": "test", "kind": "local", "base_url": "http://localhost"},
+            validated, daemon._OutputChannel(output), active, runtime, chats,
+        )
+    consent.assert_not_called()
+    assert [(result["ok"], result["reason"]) for result in results] == [(False, "validation")]
+    events = [json.loads(line) for line in output.getvalue().splitlines()]
+    assert not any(event["kind"] == "ai.chat.tool_consent_required" for event in events)
+    call_event = next(event["data"] for event in events if event["kind"] == "ai.chat.tool_call")
+    assert call_event["needs_consent"] is False
+    terminal.assert_called_once()
+    assert terminal.call_args.args[4] == "stop"

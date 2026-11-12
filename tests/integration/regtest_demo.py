@@ -28,6 +28,7 @@ from kassiber.db import open_db
 from kassiber.importers import GENERIC_LEDGER_COLUMNS
 from kassiber.msat import btc_to_msat, dec
 from tests import cli_runner
+from tests.integration.test_live_bdk_observer import _wait_for_electrum_height
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -4771,6 +4772,13 @@ def run_demo(
                 current_ts=current_ts,
                 plan=tick_plan,
             )
+            # The tick mines a block that Fulcrum indexes asynchronously. Let
+            # every Electrum backend of ordinary wallets reach the node's tip,
+            # or the resync races the indexer and misses those wallets' new rows.
+            tip_height = int(rpc(url, username, password, "getblockcount"))
+            for spec in _local_backend_specs():
+                if spec["kind"] == "electrum" and spec["chain"] == "bitcoin" and not spec.get("silent_payments"):
+                    _wait_for_electrum_height(spec["url"], tip_height)
             resync_sync = run_cli(data_root, "wallets", "sync", *scope, "--all")["data"]
             resync_rows = resync_sync if isinstance(resync_sync, list) else [resync_sync]
             imported = sum(int(row.get("imported") or 0) for row in resync_rows)

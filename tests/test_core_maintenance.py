@@ -222,7 +222,9 @@ class CoreMaintenanceTest(unittest.TestCase):
                         "2026-01-01T10:00:00Z",
                     ),
                 )
-                payload = maintenance.reset_current_profile_data(conn, str(data_root))
+                payload = maintenance.reset_current_profile_data(
+                    conn, str(data_root), wipe_everything=True
+                )
 
                 self.assertTrue(payload["reset"])
                 self.assertEqual(payload["profile"]["label"], "Main")
@@ -285,6 +287,7 @@ class CoreMaintenanceTest(unittest.TestCase):
                     conn,
                     str(data_root),
                     clear_shared_rates=True,
+                    wipe_everything=True,
                 )
                 self.assertEqual(rates_payload["removed"]["rates_cache"], 1)
                 self.assertEqual(rates_payload["rates_scope"], "global")

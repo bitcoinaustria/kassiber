@@ -17,7 +17,13 @@ from kassiber.ai.tools import TOOL_CATALOG, get_tool
 from kassiber.cli.command_registry import describe_command_catalog
 from kassiber.cli.main import build_parser, main
 from kassiber.command_capabilities import Capability, cli_capability
-from kassiber.db import get_setting, open_db, pinned_context_scope, set_setting
+from kassiber.db import (
+    get_setting,
+    open_db,
+    pinned_context_scope,
+    set_setting,
+    sqlite_error_is_readonly,
+)
 from kassiber.errors import AppError
 from kassiber.mcp import cli as mcp_cli
 from kassiber.mcp import tools as mcp_tools
@@ -1539,11 +1545,11 @@ class GrantExecutionTests(_GrantFixture):
         class SqlcipherError(Exception):
             pass
 
-        self.assertTrue(mcp_tools._is_readonly_refusal(SqlcipherError("attempt to write a readonly database")))
+        self.assertTrue(sqlite_error_is_readonly(SqlcipherError("attempt to write a readonly database")))
         stdlib = sqlite3.OperationalError("attempt to write a readonly database")
         stdlib.sqlite_errorcode = 8
-        self.assertTrue(mcp_tools._is_readonly_refusal(stdlib))
-        self.assertFalse(mcp_tools._is_readonly_refusal(SqlcipherError("database is locked")))
+        self.assertTrue(sqlite_error_is_readonly(stdlib))
+        self.assertFalse(sqlite_error_is_readonly(SqlcipherError("database is locked")))
 
     def test_admin_tools_are_never_listed_or_callable(self):
         self.grant("accounting_decisions", "full")
@@ -1613,6 +1619,71 @@ class GrantExecutionTests(_GrantFixture):
         self.grant("read")
         # A claimed grant never widens the user's.
         self.assertEqual(access("reports_balance_sheet", "accounting_decisions"), "read")
+
+
+class AnalysisIndexReadTests(_GrantFixture):
+    """Reads of the lazily published chain-analysis index under `query_only`.
+
+    `projection.read_index` opens `db.begin_write_savepoint`, since it writes
+    a new index generation when stale. Its writer reservation is itself a
+    write, so it must be skipped where the connection cannot write, or every
+    one of these reads fails at the read grant (470334f61).
+    """
+
+    READS = ("reports_privacy_mirror", "chain_analysis_query", "chain_analysis_entropy", "chain_analysis_cases_compare")
+
+    def arguments(self, name: str) -> dict:
+        return {
+            "chain_analysis_entropy": {"subject": self.TXID, "chain": "bitcoin", "network": "main"},
+            "chain_analysis_cases_compare": {"id": self.case_id},
+        }.get(name, {})
+
+    def save_case(self) -> None:
+        from kassiber.core.chain_analysis import run_analysis
+        from kassiber.core.chain_analysis_cases import save_case
+
+        conn = open_db(self.data_root)
+        try:
+            profile_id = conn.execute("SELECT id FROM profiles WHERE label = 'Main'").fetchone()["id"]
+            snapshot = run_analysis(conn, profile_id, {})["snapshot_id"]
+            self.case_id = save_case(
+                conn, profile_id, {"title": "Case", "query": {}, "expected_snapshot_id": snapshot}
+            )["id"]
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_reads_of_a_current_index_answer_at_every_grant(self):
+        self.save_case()
+        for grant in ("read", "operator", "accounting_decisions"):
+            self.grant(grant)
+            for name in self.READS:
+                with self.subTest(grant=grant, tool=name):
+                    result = self.call(name, self.arguments(name))
+                    if name == "chain_analysis_entropy":
+                        # The book's one Lightning payment is no graph subject;
+                        # the index lookup refusing it shows the read ran.
+                        self.assertEqual(result["error"]["code"], "not_found", result)
+                    else:
+                        self.assertNotIn("error", result, result)
+
+    def test_a_stale_index_is_reported_at_the_read_grant_and_published_above_it(self):
+        self.case_id = "missing"
+        self.grant("read")
+        for name in ("reports_privacy_mirror", "chain_analysis_query", "chain_analysis_entropy"):
+            with self.subTest(tool=name):
+                result = self.call(name, self.arguments(name))
+                self.assertEqual(result["error"]["code"], "derived_state_stale", result)
+        self.assertFalse(self.published())
+        self.grant("operator")
+        result = self.call("chain_analysis_query")
+        self.assertNotIn("error", result, result)
+        self.assertTrue(self.published())
+
+    def published(self) -> bool:
+        if self.row("SELECT 1 FROM sqlite_master WHERE name = 'chain_index_state'") is None:
+            return False
+        return self.row("SELECT 1 FROM chain_index_state") is not None
 
 
 class BrokeredGrantTests(_GrantFixture):

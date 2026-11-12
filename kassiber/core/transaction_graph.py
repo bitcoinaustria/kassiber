@@ -67,7 +67,7 @@ from .sync_backends import (
 
 GRAPH_LOOKUP_TIMEOUT_SECONDS = 5
 GRAPH_LOOKUP_BUDGET_SECONDS = 10
-GRAPH_CACHE_SCHEMA_VERSION = 1
+GRAPH_CACHE_SCHEMA_VERSION = 2
 SATS_TO_MSAT = 1000
 COINBASE_PREVOUT_TXID = "00" * 32
 COINBASE_PREVOUT_VOUT = 0xFFFFFFFF
@@ -2151,6 +2151,15 @@ def _store_graph_lookup_cache(
     return sanitized
 
 
+def _decode_verified_bitcoin_transaction(raw_hex: str, txid: str) -> Mapping[str, Any]:
+    from embit.transaction import Transaction
+
+    transaction = Transaction.parse(bytes.fromhex(raw_hex))
+    if transaction.txid().hex() != txid.lower():
+        raise AppError("Electrum returned different transaction bytes", code="invalid_observation")
+    return decode_raw_transaction(raw_hex)
+
+
 def _fetch_bitcoin_electrum_graph_raw(
     conn: sqlite3.Connection,
     backend: Mapping[str, Any],
@@ -2161,7 +2170,7 @@ def _fetch_bitcoin_electrum_graph_raw(
     client_backend = _graph_backend_with_timeout_cap(backend)
     with ElectrumClient(client_backend) as client:
         raw_hex = client.call("blockchain.transaction.get", [txid])
-        decoded = decode_raw_transaction(str(raw_hex))
+        decoded = _decode_verified_bitcoin_transaction(str(raw_hex), txid)
         raw = _bitcoin_electrum_decoded_to_graph_raw(txid, decoded, str(raw_hex))
         raw = _attach_bitcoin_prevouts(
             conn,
@@ -2194,6 +2203,8 @@ def _fetch_liquid_electrum_graph_raw(
     with ElectrumClient(_graph_backend_with_timeout_cap(backend)) as client:
         raw_hex = client.call("blockchain.transaction.get", [txid])
     decoded = decode_liquid_transaction(str(raw_hex))
+    if decoded.txid().hex() != txid.lower():
+        raise AppError("Electrum returned different transaction bytes", code="invalid_observation")
     raw = _liquid_electrum_decoded_to_graph_raw(txid, decoded, str(raw_hex))
     return _store_graph_lookup_cache(conn, chain, network, txid, raw)
 
@@ -2214,7 +2225,7 @@ def _electrum_missing_prevout_graphs(
     return {
         prev_txid: _bitcoin_electrum_decoded_to_graph_raw(
             prev_txid,
-            decode_raw_transaction(str(raw_hex)),
+            _decode_verified_bitcoin_transaction(str(raw_hex), prev_txid),
             str(raw_hex),
         )
         for prev_txid, raw_hex in zip(missing, raw_hexes)

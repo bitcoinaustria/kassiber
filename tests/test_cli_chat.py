@@ -375,6 +375,92 @@ finally:
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("ready", result.stdout)
 
+    @unittest.skipIf(sys.platform == "win32", "terminal process groups are POSIX")
+    def test_terminal_ctrl_c_reaches_the_chat_but_not_its_daemon(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-sigint-") as tmp:
+            tmp_path = Path(tmp)
+            fake_daemon = tmp_path / "fake_daemon.py"
+            fake_daemon.write_text(
+                """
+import json
+import sys
+
+sys.stdout.write(json.dumps({"kind": "daemon.ready"}) + "\\n")
+sys.stdout.flush()
+for line in sys.stdin:
+    sys.stdout.write(json.dumps({"kind": "echo", "data": json.loads(line)}) + "\\n")
+    sys.stdout.flush()
+""".lstrip(),
+                encoding="utf-8",
+            )
+            probe = tmp_path / "probe.py"
+            probe.write_text(
+                f"""
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, {str(ROOT)!r})
+from kassiber.cli.chat import _DaemonChatClient
+
+# Lead a group of our own, as a terminal's foreground job does.
+os.setpgid(0, 0)
+received = []
+signal.signal(signal.SIGINT, lambda *_: received.append("SIGINT"))
+
+
+class Args:
+    data_root = {str(tmp_path / "data")!r}
+    env_file = None
+    db_passphrase_fd = None
+
+
+class Client(_DaemonChatClient):
+    def _daemon_command(self, args):
+        return [sys.executable, {str(fake_daemon)!r}]
+
+
+client = Client(Args())
+try:
+    assert os.getpgid(client._proc.pid) != os.getpgrp()
+    os.killpg(os.getpgrp(), signal.SIGINT)
+    deadline = time.monotonic() + 5
+    while not received and time.monotonic() < deadline:
+        time.sleep(0.01)
+    time.sleep(0.2)
+    assert received == ["SIGINT"], received
+    assert client._proc.poll() is None, client._proc.poll()
+    client.send({{"kind": "ai.chat.cancel"}})
+    assert client.read()["kind"] == "echo"
+    print("daemon survived")
+finally:
+    client.close()
+""".lstrip(),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [sys.executable, str(probe)],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=20,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("daemon survived", result.stdout)
+
+    def test_daemon_child_on_windows_ignores_console_ctrl_c(self):
+        from kassiber.cli import chat
+
+        with patch.object(chat.os, "name", "nt"), patch.object(
+            chat.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, create=True
+        ):
+            self.assertEqual(chat._away_from_terminal_interrupts(), {"creationflags": 0x200})
+
     def test_chat_runs_daemon_tool_loop(self):
         server = _start_tool_chat_server(
             [

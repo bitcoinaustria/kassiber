@@ -47,6 +47,7 @@ BACKOFF_CAP_SECONDS = 8.0
 # Keep the in-request retry well under any caller's scheduler backoff window so
 # the two never fight; a server asking for longer is deferred to the scheduler.
 MAX_CUMULATIVE_WAIT_SECONDS = 20.0
+CANCELLATION_WAIT_SLICE_SECONDS = 0.1
 
 _HOST_LIMITERS: dict[str, threading.BoundedSemaphore] = {}
 _HOST_LIMITER_LOCK = threading.Lock()
@@ -103,6 +104,22 @@ def _rate_limited_error(url, exc, source_label):
         retryable=True,
         details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
     )
+
+
+def _sleep_before_retry(delay, sleeper):
+    from .core.sync_control import sync_transport_check
+
+    check = sync_transport_check.get()
+    if check is None:
+        sleeper(delay)
+        return
+    remaining = delay
+    while remaining > 0:
+        check()
+        interval = min(CANCELLATION_WAIT_SLICE_SECONDS, remaining)
+        sleeper(interval)
+        remaining -= interval
+    check()
 
 
 def request_with_retry(
@@ -181,7 +198,7 @@ def request_with_retry(
             raise AppError("Backend request budget exhausted", code="backend_timeout", retryable=True)
         if on_retry is not None:
             on_retry(attempt + 1, attempts - 1, delay)
-        sleeper(delay)
+        _sleep_before_retry(delay, sleeper)
         cumulative += delay
     raise _rate_limited_error(url, last_error, source_label)
 

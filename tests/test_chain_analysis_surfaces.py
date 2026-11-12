@@ -177,7 +177,16 @@ def test_book_reset_removes_investigations_and_reference_history(book):
     dispatch(conn, "ui.chain_analysis.labels.upsert", {"subject": f"{1:064x}", "chain": "bitcoin", "network": "main", "label": "Local claim", "category": "other", "source": "User supplied record", "confidence": "unverified"})
     conn.execute("INSERT INTO chain_analysis_observations VALUES(?,?,?,?,?,?,?,?)", ("profile", "bitcoin", "main", f"{1:064x}", json.dumps({"txid": f"{1:064x}", "vin": [{"is_coinbase": True}], "vout": [{"value": 100}]}), "{}", "test node", "2026-09-06T12:00:00Z"))
     conn.commit()
-    reset = reset_current_profile_data(conn, str(root))
+    # "Reset book data" rebuilds observations but keeps the user's cases and
+    # labels; the wipe-everything reset removes them too.
+    kept = reset_current_profile_data(conn, str(root))
+    assert kept["removed"]["chain_analysis_observations"] == 1
+    for table in ("chain_analysis_cases", "chain_analysis_labels"):
+        assert kept["decisions"]["kept_in_place"][table] == 1
+        assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 1
+    conn.execute("INSERT INTO chain_analysis_observations VALUES(?,?,?,?,?,?,?,?)", ("profile", "bitcoin", "main", f"{1:064x}", json.dumps({"txid": f"{1:064x}", "vin": [{"is_coinbase": True}], "vout": [{"value": 100}]}), "{}", "test node", "2026-09-06T12:00:00Z"))
+    conn.commit()
+    reset = reset_current_profile_data(conn, str(root), wipe_everything=True)
     for table in ("chain_analysis_cases", "chain_analysis_labels", "chain_analysis_label_history", "chain_analysis_observations"):
         assert reset["removed"][table] == 1
         assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0

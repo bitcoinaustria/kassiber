@@ -192,6 +192,38 @@ encode the policy where they can:
   the capability before dispatching a feature; unsupported features fail
   with `lightning_capability_unsupported`.
 
+### Profitability exports
+
+The operator CSV formats satoshi amounts as exact eight-place BTC strings,
+including values beyond floating-point integer precision. A missing routing
+window refuses the report with `lightning_routing_unavailable`; unavailable
+earnings are never represented as a successful zero summary.
+CSV output is fully rendered and UTF-8 validated before touching the destination,
+then uses the shared CSV writer with platform newline translation disabled.
+Ordinary files use a sibling file and atomic replacement, preserving existing
+permissions and writing through final symlinks; new files use the process umask.
+Parent directories are created, device/pipe destinations are written directly,
+and storage failures use `export_write_failed`. Encoding failure leaves every
+destination untouched; publication failure preserves an ordinary staged file's
+previous artifact.
+
+LND profitability pages forwarding events across the requested time window and
+payments in stable index order before filtering their timestamps. Invoice
+counts also page to exhaustion: only an empty page ends a history. Any
+non-empty page whose cursor does not advance refuses with
+`lightning_history_incomplete`, whatever its size, because a proxy may cap pages
+below the requested size; a partial total cannot masquerade as a complete
+report. An advancing cursor continues even when a proxy returns fewer events
+than requested. These reads occur only within the explicitly requested
+snapshot/report action; constructing an adapter contacts nothing.
+
+Core Lightning profitability requires successful channel, forward, payment and
+bookkeeper-income resources. A complete empty window has known zero totals;
+failed resources leave routing unavailable. The requested window bounds settled
+forward revenue, completed payment fees and bookkeeper fee events by their
+timestamps, including channel earnings. A relevant event with no usable time
+leaves the window unavailable instead of assigning it to a guessed period.
+
 ### AI tool surface redaction
 
 The daemon's AI dispatch path swaps the full payload helpers

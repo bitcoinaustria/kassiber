@@ -54,6 +54,38 @@ caches while preserving these observation candidates. The configured backend
 remains the source of this evidence; counter checks are not a cryptographic or
 atomic snapshot guarantee against a malicious server.
 
+Cancellation fences native observer connection creation, each exposed SDK
+network step, repeated incremental BDK scans, and transitions between source
+identities. The pinned bindings cannot interrupt one BDK `full_scan`/`sync` or
+LWK `full_scan_to_index`; its internal requests may finish before cancellation
+is observed. The next SDK step is refused and no observer result is applied.
+Esplora remains on the compatibility route with per-request cancellation checks.
+
+Compatibility Esplora and Electrum history caches are bound to the observed
+highest observed history/header block, including block identity rather than
+height alone. A history read that races above the initial tip advances the
+anchor to that exact block (and the exact timestamp-supplying Electrum header).
+Advancement also requires a post-read proof that the initial tip still belongs
+to the chain. Esplora verifies every history block above that initial tip;
+Electrum re-reads every timestamp-supplying header above it, including heights
+below the highest one. A failed, missing or malformed proof clears the anchor
+so the next sync refreshes instead of reusing mixed-fork entries. Esplora
+version-2 anchors and Electrum version-3 anchors rebuild older checkpoints
+once. Earlier Electrum anchors could accept a mixed-fork header batch even
+when the highest block and initial tip remained unchanged. An identical tip
+permits the existing counter/status cache checks. On a taller tip, the observer
+checks that the previously saved tip block still belongs to the current chain;
+Esplora also binds its new tip height to the observed hash. When unchanged histories
+allow UTXO membership reuse, sync derives current confirmation counts from
+the proven height locally, scoped to that wallet/backend/chain/network. This
+does not refresh output observation timestamps or create network traffic. Proven extensions
+reuse unchanged history and confirmation timestamps on Bitcoin and Liquid.
+A changed, missing or invalid anchor (including legacy checkpoints without a
+height) refreshes histories and Electrum confirmation timestamps, so unchanged
+statistics cannot hide a reorg from transaction evidence or saved-report
+impacts. Validated Bitcoin Electrum transaction graphs remain reusable during
+that refresh. Tip and ancestry reads occur only within the requested wallet sync.
+
 Widened discovery runs only for a provable inventory deficit. Missing occurrence
 times and equal-time movements cannot acquire an order from row IDs or import
 timing. The shared rescan check preserves their uncertainty and still detects
@@ -351,13 +383,24 @@ delta with `amount_includes_fee=true`, keeps the whole transaction fee only as
 graph evidence, and lets transfer/custody conservation require an explicit
 component rather than charging the entire fee to one participant.
 
+An explicit (unblinded) output paid to a wallet script has a public amount
+and asset. LWK 0.18.0 lists it among the transaction's owned outputs, and its
+later spend among the owned inputs, but leaves it out of `WalletTx.balance()`
+and `Wollet.utxos()`. Kassiber adds those explicit owned amounts back into the
+per-asset wallet delta and publishes an unspent explicit output in the
+inventory with `raw.confidential=false`, so it is booked like a confidential
+receipt or spend. A book synced before this correction is repaired by the next
+ordinary sync, which re-projects every wollet transaction.
+
 Elements consensus values are stored as integer 1e-8 base units for every
 asset; Kassiber preserves that canonical unit even when an issued asset has
 separate display metadata. The pinned binding declares
 `WalletTxOut.wildcard_index() -> int`, so fixed-descriptor outputs do not expose
 an optional-index state in this version. Forced rebuilds compare the backend
 tip height with the persisted checkpoint before scanning, preventing a lagging
-backend from retracting newer facts.
+backend from retracting newer facts. `full_scan_checkpoint` keeps each observer
+instance's `tip_height` and `canonical_txids` for this guard and the retraction
+baseline while discarding scan caches such as `highest_used`.
 
 ## Manual observer inventory
 
@@ -480,6 +523,24 @@ must provide one complete output projection inside the atomic refresh result.
 - Durable wallet-policy epochs retain new rollover material and its observed
   scan coverage. Legacy inline `ownership_history` remains read-only compatible.
 
+When two wallets watch the same finite script, one canonical wallet owns it:
+non-deprecated first, then descriptor/xpub/silent-payment kinds, then the
+strongest evidence (output inventory or stored descriptor horizon, address
+list, sync target), then a wallet with active transactions, then label and id.
+`_overlap_payload` aggregates each wallet's flags across all its sources, so
+the indexed prefetch, Esplora's online re-filter and the publish re-check name
+the same owner whatever order they read the sources in. With a duplicated
+descriptor the owner syncs the shared scripts and imports each payment once;
+the other wallet reports `skipped` ("all sync targets are already covered by
+canonical wallet sources") or syncs only its own scripts. Ownership that
+changes between prefetch and publication within one operation (an earlier
+wallet's import gives it activity) refuses `source_overlap_retry`, and the
+retry converges. Books synced before this rule, where Esplora imported a
+shared payment into neither wallet or Electrum refused on every retry, are
+repaired by the next ordinary sync: the owner's never-fetched shared scripts
+have no stored history, so they are fetched in full
+(`tests/test_source_overlap_owner_order.py`).
+
 Kassiber keeps ownership policy. BDK/LWK replace manual supported-route
 derivation and supply coverage/output facts; they do not decide beneficial
 ownership or source precedence.
@@ -506,6 +567,16 @@ possible.
   and correlate Liquid inputs/outputs only on named compatibility routes.
 - `wallet_policy_asset_id`, `liquid_asset_code`, and the DB compatibility
   backfills map policy-asset identifiers to `LBTC`.
+
+`liquid_blinding_secret` derives the branch exactly as
+`derive_descriptor_target` does, so the unblinding key always belongs to the
+address the wallet hands out. Until round 14 a fixed (non-ranged) branch such
+as `elwpkh(xpub/0/7)` or a view key `xprv/0/7` skipped `derive(0)` and was
+tweaked with the account key's script, so every confidential output to it
+failed the compatibility sync (`Failed to decode Liquid output`), for SLIP-77
+and `ct(<key>, ...)` alike. That failure rolled the whole sync back, so an
+affected book holds no partial state: its next ordinary sync fetches and
+unblinds the history (`LiquidBlindingSecretTests`).
 
 LWK is the authoritative supported Electrum-route wollet state and unblinding
 engine. Private view/blinding material stays inside SQLCipher and must never
@@ -564,6 +635,23 @@ private spend leaves, including leaves nested in spend-key expressions.
 
 ## Atomic chain refresh boundary
 
+Every Electrum raw transaction is checked against its requested txid before
+use, including wallet histories, batched and lazy parent fetches, Liquid output
+inventory, and on-chain ownership verification. Bitcoin txids exclude witness
+data; Liquid uses its native transaction identity. A mismatch refuses with
+`invalid_observation`. Bitcoin stored graph version 2 rebuilds earlier graphs
+on the next explicitly requested sync, so an unverified old cache cannot bypass
+this check. Opening a book or reading status does not initiate that refresh.
+Malformed, truncated, or trailing transaction bytes and parser failures also
+refuse with `invalid_observation`; complete serialization must match the bytes
+received before their transaction identity is used.
+
+Bitcoin compatibility Electrum treats the coinbase null outpoint (all-zero txid
+and output index `0xffffffff`) as issuance, with no previous transaction to
+fetch or attach. It still imports the observed receipt; this adds no custody or
+tax classification. `tests/test_electrum_coinbase.py` pins both prefetch and
+graph normalization, including an ordinary output index on a zero txid.
+
 Phase 3 routes single-wallet refresh, `--all`, and daemon freshness through the
 same `_apply_wallet_sync_atomically` primitive. Chain discovery, source-overlap
 preflight, backend fetching, retry/backoff and any widened negative-balance
@@ -582,7 +670,9 @@ then records a redacted error for that wallet and continues without disturbing
 already committed wallets.
 
 Freshness progress callbacks use the same SQLite connection and historically
-committed their progress rows. Network progress is emitted during preparation;
+committed their progress rows. Network workers synchronously route progress and
+cancellation checks to the thread owning that connection, including isolated
+single-wallet jobs and widened repair fetches. Network progress is emitted during preparation;
 commit-capable progress callbacks are suppressed during local apply so they
 cannot invalidate the wallet savepoint. Deterministic fault injection covers
 all six state boundaries and compares the exact before/after database state.
@@ -623,6 +713,14 @@ than failed BDK attempts. Bitcoin Core range/import logic, Silent Payments,
 protocol decoding, HTLC evidence,
 normalization, and Kassiber's ownership/tax domain logic remain intentionally
 separate.
+
+A Silent Payments scan publishes with observer authority only when the
+scanner reports it complete (`silent_payment_scan_complete`) and every record
+carries its confirmation time, whichever backend served it
+(`core.sync.silent_payment_scan_authoritative`). Bitcoin Core RPC reaches the
+scanner through the ordinary adapter path, which granted authority to every
+Core scan until round 14; an incomplete scan there now publishes without it,
+like the compatibility route's (`test_core_rpc_scans_are_authoritative_only_when_complete`).
 
 Descriptor configurations that BDK/LWK cannot faithfully express, including
 all Esplora HTTP routes, remote-DNS Tor, custom CA/auth and binding-specific

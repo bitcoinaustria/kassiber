@@ -109,14 +109,32 @@ class DerivedTarget:
     key_origins: tuple[str, ...]
 
 
+def is_embit_error(exc: BaseException) -> bool:
+    """Whether ``exc`` is one of embit's own descriptor/miniscript errors,
+    which are not ``ValueError`` subclasses."""
+    try:
+        from embit.base import EmbitError
+    except ImportError:
+        return False
+    return isinstance(exc, EmbitError)
+
+
+def invalid_descriptor_error() -> AppError:
+    """The refusal for an embit error. Its parser text is withheld: a
+    malformed operator or blinding key can quote key material."""
+    return AppError("Invalid wallet descriptor", code="validation")
+
+
 def get_embit_modules():
     global _EMBIT_MODULES
     if _EMBIT_MODULES is not None:
         return _EMBIT_MODULES
     try:
+        from .liquid_descriptors import LiquidDescriptor
+
         _EMBIT_MODULES = {
             "Descriptor": import_module("embit.descriptor").Descriptor,
-            "LDescriptor": import_module("embit.liquid.descriptor").LDescriptor,
+            "LDescriptor": LiquidDescriptor,
             "BTC_NETWORKS": import_module("embit.networks").NETWORKS,
             "LIQUID_NETWORKS": import_module("embit.liquid.networks").NETWORKS,
             "LTransaction": import_module("embit.liquid.transaction").LTransaction,
@@ -507,7 +525,10 @@ def derive_descriptor_target(plan, branch_index, address_index):
     else:
         if address_index != 0:
             raise ValueError(f"Descriptor branch '{branch.branch_label}' is not ranged")
-        derived = descriptor
+        # A fixed suffix (xpub/0/5) still needs applying. embit keeps it in
+        # allowed_derivation until derive() is called; using the parsed object
+        # directly would silently return the account-key address instead.
+        derived = descriptor.derive(0)
     modules = get_embit_modules()
     network_map = modules["BTC_NETWORKS"] if plan.chain == "bitcoin" else modules["LIQUID_NETWORKS"]
     network = network_map[plan.network]
@@ -571,8 +592,10 @@ def liquid_blinding_secret(plan, branch_index, address_index):
     derived_target = derive_descriptor_target(plan, branch_index, address_index)
     branch = next(item for item in plan.branches if item.branch_index == branch_index)
     descriptor = branch_descriptor(branch)
-    if getattr(descriptor, "is_wildcard", False):
-        descriptor = descriptor.derive(address_index)
+    # Derive exactly as derive_descriptor_target does: a fixed suffix
+    # (xpub/0/7, a view key's xprv/0/7) only applies through derive(0), and
+    # the address's blinding key comes from that derived script and key.
+    descriptor = descriptor.derive(address_index if getattr(descriptor, "is_wildcard", False) else 0)
     script_pubkey = descriptor.script_pubkey()
     blinding_key = descriptor.blinding_key.get_blinding_key(script_pubkey)
     if not hasattr(blinding_key, "secret"):

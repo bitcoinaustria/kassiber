@@ -16,6 +16,15 @@ current behavior, not a long-term contract.
 
 ## The big gotcha: not running your own node
 
+Compatibility wallet sync reads Esplora's `blocks/tip/hash` or Electrum's
+`blockchain.headers.subscribe` to bind local history caches to block identity.
+During that same sync, Esplora tip-height and block-at-height reads or Electrum
+header-at-height reads prove that a taller tip extends the previously observed
+chain before reusing unchanged histories.
+These reads use the selected backend's existing authenticated transport and
+proxy policy during that sync; configuration, launch and display do not trigger
+them.
+
 When **Built-in Bitcoin servers** is selected during desktop setup, Kassiber
 enables two Bitcoin mainchain backends:
 
@@ -124,6 +133,18 @@ jobs recheck the current source-class and triggering-feature settings before
 starting transport work; disabling either cancels that work. A manual refresh
 executes only the jobs selected by that action, including its prefetch stage.
 An already transmitted request cannot be recalled.
+Saved freshness cancellation is rechecked before each subsequent compatibility
+HTTP request or Electrum batch, including active-book prefetch. Network workers
+wait for that check on the thread owning the book's SQLite connection.
+HTTP retry backoff with an active cancellation check sleeps in at most 100 ms
+slices and rechecks between slices; it keeps the same retry and total-wait caps.
+Native BDK/LWK Electrum observers check before opening connections, between
+SDK calls (including tip/header reads and repeated scans), and between observer
+identities. A BDK `full_scan` or `sync`, or LWK `full_scan_to_index`, already in
+progress cannot be interrupted through the pinned Python bindings: all requests
+inside that call may finish after cancellation, but no later SDK call or identity
+starts and its result is not applied. Esplora uses the compatibility transport
+on both chains and retains its per-request checks.
 Graph follow-ups use an in-memory grant tied to the successful sync, active book,
 wallet configuration and backend. They recheck cancellation, the no-egress switch,
 and any automatic-sync permission before transport and cache writes. Locking or
@@ -267,6 +288,9 @@ The configuration-posture report labels only valid loopback endpoints as
 they require explicit self-hosted ownership to receive that label instead of
 the remote classification. Malformed endpoints remain unknown. Classification
 never resolves a hostname or probes a service.
+
+If a local privacy-report count cannot be read, it remains unknown (`null`),
+with an unknown evidence label and a limitation; it cannot claim an exact zero.
 
 **Offline** in the title-bar connection panel, **Settings → Privacy → Work
 offline**, and `kassiber offline on|off|status` set one machine-wide switch,

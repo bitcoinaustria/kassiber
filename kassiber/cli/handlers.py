@@ -2102,8 +2102,13 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
             for row in rows
             if str(row.get("external_id") or "").strip().lower() not in retracted
         ]
+    # A chain observation is one row per (txid, asset): a multi-asset Liquid
+    # transaction must not let one asset's record replace another's.
+    def overlay_key(external_id, asset):
+        return (str(external_id or "").strip().lower(), str(asset or ""))
+
     by_external_id = {
-        str(row.get("external_id") or "").strip().lower(): index
+        overlay_key(row.get("external_id"), row.get("asset")): index
         for index, row in enumerate(rows)
         if str(row.get("external_id") or "").strip()
     }
@@ -2114,6 +2119,7 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
             source_label=f"backend:{fetch.backend['name']}",
         )
         external_id = str(normalized.get("external_id") or "").strip().lower()
+        key = overlay_key(external_id, normalized["asset"])
         candidate = {
             "id": f"prefetched:{external_id or index}",
             "external_id": normalized.get("external_id"),
@@ -2126,11 +2132,11 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
             "fee": btc_to_msat(normalized["fee"]),
             "created_at": normalized["occurred_at"],
         }
-        existing_index = by_external_id.get(external_id) if external_id else None
+        existing_index = by_external_id.get(key) if external_id else None
         if existing_index is None:
             rows.append(candidate)
             if external_id:
-                by_external_id[external_id] = len(rows) - 1
+                by_external_id[key] = len(rows) - 1
         else:
             candidate["id"] = rows[existing_index]["id"]
             candidate["created_at"] = rows[existing_index]["created_at"]
@@ -2147,6 +2153,7 @@ def _prepare_negative_balance_repairs(
     prefetched,
     *,
     source_overlap_index=None,
+    check_wallet_cancelled=None,
 ):
     """Fetch any widened descriptor repair before opening the apply savepoint."""
 
@@ -2183,6 +2190,7 @@ def _prepare_negative_balance_repairs(
                 hooks,
                 checkpoint=core_sync.full_scan_checkpoint(fetch.sync_state.checkpoint),
                 force_full=True,
+                check_cancelled=(lambda: check_wallet_cancelled(wallet)) if check_wallet_cancelled is not None else None,
                 source_overlap_preflight=(
                     lambda candidate, state: core_source_overlap.filter_sync_state_for_canonical_owner(
                         conn,
@@ -2232,6 +2240,7 @@ def _prefetch_chain_wallets(
     *,
     freshness_checkpoints=None,
     force_full=False,
+    check_wallet_cancelled=None,
 ):
     """Finish chain discovery and backend I/O before any write savepoint."""
 
@@ -2286,6 +2295,7 @@ def _prefetch_chain_wallets(
                 if hooks.prepare_observer_fetch is not None
                 else None
             ),
+            check_wallet_cancelled=check_wallet_cancelled,
         )
         prepared = _prepare_negative_balance_repairs(
             conn,
@@ -2295,6 +2305,7 @@ def _prefetch_chain_wallets(
             hooks,
             prefetched,
             source_overlap_index=source_overlap_index,
+            check_wallet_cancelled=check_wallet_cancelled,
         )
         scope_by_wallet = {str(row["id"]): row.get("_book_environment_id") for row in wallets}
         return {wallet_id: replace(result, book_environment_id=scope_by_wallet.get(wallet_id)) if isinstance(result, core_sync.WalletBackendFetch) else result for wallet_id, result in prepared.items()}
@@ -2437,6 +2448,7 @@ def sync_wallet_from_backend(
             hooks,
             freshness_checkpoints={str(wallet["id"]): checkpoint or {}},
             force_full=force_full,
+            check_wallet_cancelled=(lambda _wallet: check_cancelled()) if check_cancelled is not None else None,
         )
     results = _apply_wallet_sync_atomically(
         conn,
@@ -2466,6 +2478,7 @@ def prefetch_wallets_from_backend(
     *,
     freshness_checkpoints=None,
     force_full=False,
+    check_wallet_cancelled=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     return _prefetch_chain_wallets(
@@ -2476,6 +2489,7 @@ def prefetch_wallets_from_backend(
         _wallet_sync_hooks(commit=False),
         freshness_checkpoints=freshness_checkpoints,
         force_full=force_full,
+        check_wallet_cancelled=check_wallet_cancelled,
     )
 
 
@@ -2532,8 +2546,8 @@ def sync_wallet(
         wallets = [
             wallet
             for wallet in wallet_rows
-            if not core_wallets.wallet_is_deprecated(
-                json.loads(wallet["config_json"] or "{}")
+            if core_wallets.wallet_in_sync_all(
+                core_wallets.stored_wallet_config(wallet), force_full=force_full
             )
         ]
     else:

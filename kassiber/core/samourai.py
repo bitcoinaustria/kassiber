@@ -16,6 +16,8 @@ from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     MAX_DESCRIPTOR_GAP_LIMIT,
     derive_descriptor_target,
+    invalid_descriptor_error,
+    is_embit_error,
     load_descriptor_plan,
 )
 from . import wallets as core_wallets
@@ -401,6 +403,12 @@ def _validate_descriptor_config(config: dict[str, Any]) -> None:
             hint="Check the descriptor or xpub set before importing.",
             retryable=False,
         ) from exc
+    except AppError:
+        raise
+    except Exception as exc:
+        if not is_embit_error(exc):
+            raise
+        raise invalid_descriptor_error() from exc
 
 
 def _validate_descriptor_origin_matches_template(
@@ -449,6 +457,10 @@ def _validate_descriptor_origin_matches_template(
             details={"expected_root_path": root_path},
             retryable=False,
         ) from exc
+    except Exception as exc:
+        if not is_embit_error(exc):
+            raise
+        raise invalid_descriptor_error() from exc
 
 
 def _template_for(

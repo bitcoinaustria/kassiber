@@ -178,10 +178,21 @@ An ordinary `wallets sync` reuses the wallet's persisted freshness checkpoint:
 scripts whose backend status is unchanged since the last sync are skipped and
 their records are not re-emitted. That means a plain resync will not restore
 transaction rows that were removed locally while the chain view stayed
-unchanged. `wallets sync --force-full` ignores the stored checkpoint and
-replays the full backend history; it is the repair path whenever local rows
+unchanged. `wallets sync --force-full` ignores the stored checkpoint's scan
+caches and replays the full backend history; it keeps only Esplora history
+memberships and each dependency observer's persisted tip height and canonical
+txids, so a backend behind the book is refused with `backend_tip_behind`
+instead of retracting newer transactions. It is the repair path whenever local rows
 may have diverged from an unchanged-chain checkpoint (the desktop app's
 forced-full refresh is the same path).
+
+Syncing all wallets (`wallets sync --all`, the desktop's Sync) skips retired
+(`deprecated`) wallets only for ongoing syncs. A retired wallet whose history
+the book has not imported, because it never synced or "Reset book data"
+cleared its last sync time, is included until it syncs once (that sync also
+re-binds the decisions the reset kept, see [book reset](book-reset.md)); `--all
+--force-full` always includes retired wallets. A single wallet named with
+`--wallet` always syncs.
 
 Common fields:
 

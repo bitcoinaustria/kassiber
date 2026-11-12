@@ -1166,6 +1166,51 @@ class ProviderEvidenceExactMatchTests(unittest.TestCase):
         self.assertEqual(candidate.method, METHOD_PROVIDER_SWAP_ID)
         self.assertEqual(candidate.confidence, CONFIDENCE_STRONG)
 
+    def test_provider_amount_strings_require_ascii_digits_on_both_legs(self):
+        for field in ("send_amount_msat", "receive_amount_msat"):
+            for invalid in ("²", "١٠٠٠٠٠٠٠٠", "９９５０００００", "100_000_000", "+100000000", "9" * 5000):
+                for encoded_json in (False, True):
+                    with self.subTest(field=field, invalid=invalid[:20], encoded_json=encoded_json):
+                        raw = {
+                            "provider": "boltz", "swap_id": "non-ascii", "flow": "chain",
+                            "send_txid": _TXID_A, "receive_txid": _TXID_B,
+                            "send_amount_msat": 100_000_000, "receive_amount_msat": 99_500_000,
+                            field: invalid,
+                        }
+                        out = _row(id="out", external_id=_TXID_A, direction="outbound",
+                            wallet_id="btc", asset="BTC", amount=100_000_000,
+                            raw_json={**raw, "txid": _TXID_A, "chain": "bitcoin", "network": "main"})
+                        inbound = _row(id="in", external_id=_TXID_B, direction="inbound",
+                            wallet_id="liquid", asset="LBTC", amount=99_500_000,
+                            raw_json={**raw, "txid": _TXID_B, "chain": "liquid", "network": "liquidv1",
+                                      "component": {"asset_id": _LIQUID_ASSET_ID, "asset": "LBTC"}})
+                        if encoded_json:
+                            for row in (out, inbound):
+                                row["raw_json"] = json.dumps(row["raw_json"])
+                        candidate = suggest_swap_candidates([out, inbound])[0]
+                        self.assertEqual(candidate.method, METHOD_PROVIDER_SWAP_ID)
+                        self.assertEqual(candidate.confidence, CONFIDENCE_STRONG)
+                        self.assertIsNone(getattr(candidate, f"evidence_{field}"))
+
+    def test_provider_integer_and_ascii_string_amounts_preserve_exactness(self):
+        for amounts in ((100_000_000, 99_500_000), (" 100000000 ", "099500000")):
+            with self.subTest(amounts=amounts):
+                raw = {
+                    "provider": "boltz", "swap_id": "ascii", "flow": "chain",
+                    "send_txid": _TXID_A, "receive_txid": _TXID_B,
+                    "send_amount_msat": amounts[0], "receive_amount_msat": amounts[1],
+                }
+                out = _row(id="out", external_id=_TXID_A, direction="outbound",
+                    wallet_id="btc", asset="BTC", amount=100_000_000,
+                    raw_json={**raw, "txid": _TXID_A, "chain": "bitcoin", "network": "main"})
+                inbound = _row(id="in", external_id=_TXID_B, direction="inbound",
+                    wallet_id="liquid", asset="LBTC", amount=99_500_000,
+                    raw_json={**raw, "txid": _TXID_B, "chain": "liquid", "network": "liquidv1",
+                              "component": {"asset_id": _LIQUID_ASSET_ID, "asset": "LBTC"}})
+                candidate = suggest_swap_candidates([out, inbound])[0]
+                self.assertEqual(candidate.method, METHOD_PROVIDER_SWAP_ID)
+                self.assertEqual(candidate.confidence, CONFIDENCE_EXACT)
+
     def test_refunded_provider_status_overrides_chain_swap_flow(self):
         raw = {
             "source": "bullbitcoin_wallet_csv",

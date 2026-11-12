@@ -2,15 +2,88 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 from ..db import resolve_attachments_root
 from ..errors import AppError
+from . import book_reset
+from . import freshness as core_freshness
 from . import legacy_ledger
 from .chain_observer import delete_profile_observer_state
 from .repo import current_context_snapshot
+from ..time_utils import now_iso
+
+# What a keep-decisions reset deletes, reported in `removed`: observations
+# and everything derived from them. See docs/reference/book-reset.md.
+_DERIVED_RESET_COUNTS = (
+    "transactions",
+    "chain_analysis_observations",
+    "chain_observer_instances",
+    "chain_observer_coverage",
+    "chain_observer_values",
+    "journal_entries",
+    "journal_quarantines",
+    "journal_tax_summary",
+    "journal_account_holdings",
+    "journal_wallet_holdings",
+    "journal_quantity_postings",
+    "journal_quantity_issues",
+    "journal_quantity_balances",
+    "journal_custody_decisions",
+    "journal_custody_economic_relations",
+    "journal_custody_gap_inputs",
+    "journal_custody_reconciliations",
+    "rates_cache",
+    "rates_checked_minutes",
+)
+_DERIVED_PROFILE_TABLES = (
+    "chain_analysis_observations",
+    "journal_wallet_holdings",
+    "journal_quantity_balances",
+    "journal_custody_decisions",
+    "journal_custody_economic_relations",
+    "journal_custody_reconciliations",
+    "journal_custody_gap_inputs",
+    "journal_quantity_issues",
+    "journal_quantity_postings",
+    "journal_account_holdings",
+    "journal_tax_summary",
+    "journal_quarantines",
+    "journal_entries",
+)
+# Authored rows a keep-decisions reset leaves untouched (none names a
+# transaction through a cascading key). Book-level attachments are counted
+# separately; transaction attachments are parked.
+_KEPT_IN_PLACE_TABLES = (
+    "custody_components",
+    "custody_gap_reviews",
+    "custody_authored_evidence_snapshots",
+    "filed_report_snapshots",
+    "review_workflow_receipts",
+    "external_documents",
+    "source_funds_sources",
+    "source_funds_recipients",
+    "tags",
+    "saved_views",
+    "swap_matching_rules",
+    "bip329_labels",
+    "chain_analysis_cases",
+    "chain_analysis_labels",
+    "chain_analysis_datasets",
+    "ai_chat_sessions",
+)
+
+# Wallet sources whose checkpoints gate re-importing a book's history.
+_WALLET_SOURCE_TYPES = frozenset(
+    {
+        core_freshness.SOURCE_ONCHAIN,
+        core_freshness.SOURCE_BTCPAY_WALLET,
+        core_freshness.SOURCE_BTCPAY_PROVENANCE,
+    }
+)
 
 
 def _count_where(
@@ -102,8 +175,17 @@ def reset_current_profile_data(
     data_root: str,
     *,
     clear_shared_rates: bool = False,
+    wipe_everything: bool = False,
 ) -> dict[str, Any]:
-    """Clear re-creatable data for the active book while preserving connections."""
+    """Rebuild the active book's derived data, keeping its decisions.
+
+    Synced transactions, journals and observer state are deleted; the user's
+    decisions and documents are kept and bind again as the resync brings
+    their transactions back (`core/book_reset.py`). `wipe_everything` is the
+    separate blank-book action: it also deletes those decisions, documents
+    and their files, and every decision still kept from an earlier reset.
+    Connections (accounts, wallets, backends) survive both.
+    """
     context = current_context_snapshot(conn)
     workspace_id = context.get("workspace_id")
     workspace_label = context.get("workspace_label")
@@ -120,10 +202,10 @@ def reset_current_profile_data(
     legacy_ledger.require_absent(conn, profile_ids=[profile_id], action="resetting its data")
 
     attachments_root = _attachments_root_path(data_root)
-    attachment_paths = _managed_attachment_paths_for_profile(
-        conn,
-        attachments_root,
-        profile_id,
+    attachment_paths = (
+        _managed_attachment_paths_for_profile(conn, attachments_root, profile_id)
+        if wipe_everything
+        else []
     )
     rates_cache_count = _count_where(conn, "rates_cache", "1 = 1", ())
     rates_checked_minutes_count = _count_where(
@@ -354,133 +436,53 @@ def reset_current_profile_data(
         ),
     }
 
+    if not wipe_everything:
+        kept_in_place = {
+            table: _count_profile_rows(conn, table, profile_id)
+            for table in _KEPT_IN_PLACE_TABLES
+        }
+        kept_in_place["attachments"] = _count_where(
+            conn, "attachments", "profile_id = ? AND transaction_id IS NULL", (profile_id,)
+        )
+        removed = {key: removed[key] for key in _DERIVED_RESET_COUNTS}
     with conn:
-        delete_profile_observer_state(conn, profile_id)
-        # Review rows are immutable in normal use. Remove them before their
-        # component FK would otherwise attempt an ON DELETE SET NULL update.
-        conn.execute(
-            "DELETE FROM custody_filed_report_impact_resolutions WHERE profile_id = ?",
-            (profile_id,),
-        )
-        conn.execute(
-            "DELETE FROM custody_filed_report_impacts WHERE profile_id = ?",
-            (profile_id,),
-        )
-        conn.execute(
-            "DELETE FROM custody_gap_review_transactions WHERE profile_id = ?",
-            (profile_id,),
-        )
-        conn.execute(
-            "DELETE FROM custody_gap_review_relation_sets WHERE profile_id = ?",
-            (profile_id,),
-        )
-        conn.execute(
-            "DELETE FROM custody_gap_reviews WHERE profile_id = ?", (profile_id,)
-        )
-        conn.execute(
-            "DELETE FROM filed_report_snapshots WHERE profile_id = ?", (profile_id,)
-        )
-        conn.execute(
-            "INSERT INTO custody_component_purge_authorizations(profile_id) VALUES(?)",
-            (profile_id,),
-        )
-        conn.execute(
-            "DELETE FROM custody_components WHERE profile_id = ?", (profile_id,)
-        )
-        conn.execute(
-            "DELETE FROM custody_component_purge_authorizations WHERE profile_id = ?",
-            (profile_id,),
-        )
-        # These child-row deletes are explicit so the reset response can report
-        # per-table counts; profile deletion would otherwise cascade them.
-        conn.execute(
-            """
-            DELETE FROM source_funds_snapshots
-            WHERE case_id IN (
-                SELECT id FROM source_funds_cases WHERE profile_id = ?
+        if wipe_everything:
+            removed.update(book_reset.discard_profile(conn, profile_id))
+            _wipe_profile_decisions(conn, profile_id)
+        else:
+            rebind = book_reset.park_profile(conn, workspace_id, profile_id, now_iso())
+            _delete_profile_derived_rows(conn, profile_id)
+        # Sync checkpoints and last-sync times describe history this book no
+        # longer holds. Clear them so the next sync re-imports every wallet in
+        # full, retired wallets included; each source keeps its user flags.
+        removed["sync_checkpoints"] = 0
+        for state in core_freshness.list_source_states(conn, profile_id):
+            if state["source_type"] not in _WALLET_SOURCE_TYPES:
+                continue
+            core_freshness.reset_source_checkpoint(
+                conn,
+                profile_id,
+                state["source_key"],
+                stale_reason="book_data_reset",
             )
-            """,
+            removed["sync_checkpoints"] += 1
+        removed["wallet_sync_times"] = 0
+        for wallet in conn.execute(
+            "SELECT id, config_json FROM wallets WHERE profile_id = ? ORDER BY id",
             (profile_id,),
-        )
-        conn.execute(
-            """
-            DELETE FROM source_funds_link_attachments
-            WHERE link_id IN (
-                SELECT id FROM source_funds_links WHERE profile_id = ?
+        ).fetchall():
+            try:
+                config = json.loads(wallet["config_json"] or "{}")
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(config, dict) or "last_synced_at" not in config:
+                continue
+            del config["last_synced_at"]
+            conn.execute(
+                "UPDATE wallets SET config_json = ? WHERE id = ?",
+                (json.dumps(config, sort_keys=True), wallet["id"]),
             )
-            """,
-            (profile_id,),
-        )
-        conn.execute(
-            """
-            DELETE FROM source_funds_source_attachments
-            WHERE source_id IN (
-                SELECT id FROM source_funds_sources WHERE profile_id = ?
-            )
-            """,
-            (profile_id,),
-        )
-        conn.execute(
-            """
-            DELETE FROM ai_chat_messages
-            WHERE session_id IN (
-                SELECT id FROM ai_chat_sessions WHERE profile_id = ?
-            )
-            """,
-            (profile_id,),
-        )
-        for table in (
-            "chain_analysis_observations",
-            "chain_analysis_cases",
-            "chain_analysis_labels",
-            "chain_analysis_datasets",
-            "source_funds_links",
-            "source_funds_cases",
-            "source_funds_sources",
-            "source_funds_recipients",
-            "ai_chat_sessions",
-            "saved_views",
-            "swap_matching_rules",
-            "transaction_pair_dismissals",
-            "direct_swap_payouts",
-            "transaction_pairs",
-            "bip329_labels",
-            "journal_wallet_holdings",
-            "journal_quantity_balances",
-            "journal_custody_decisions",
-            "journal_custody_economic_relations",
-            "journal_custody_reconciliations",
-            "journal_custody_gap_inputs",
-            "journal_quantity_issues",
-            "journal_quantity_postings",
-            "custody_gap_review_transactions",
-            "custody_gap_review_relation_sets",
-            "custody_gap_reviews",
-            "review_workflow_receipts",
-            "synthetic_import_duplicate_reviews",
-            "custody_filed_report_impact_resolutions",
-            "custody_filed_report_impacts",
-            "filed_report_snapshots",
-            "custody_authored_evidence_snapshots",
-            "journal_account_holdings",
-            "journal_tax_summary",
-            "journal_quarantines",
-            "journal_entries",
-            "attachments",
-        ):
-            conn.execute(f"DELETE FROM {table} WHERE profile_id = ?", (profile_id,))
-        conn.execute(
-            """
-            DELETE FROM transaction_tags
-            WHERE tag_id IN (SELECT id FROM tags WHERE profile_id = ?)
-               OR transaction_id IN (
-                   SELECT id FROM transactions WHERE profile_id = ?
-               )
-            """,
-            (profile_id, profile_id),
-        )
-        conn.execute("DELETE FROM tags WHERE profile_id = ?", (profile_id,))
-        conn.execute("DELETE FROM transactions WHERE profile_id = ?", (profile_id,))
+            removed["wallet_sync_times"] += 1
         if clear_shared_rates:
             conn.execute("DELETE FROM rates_cache")
             conn.execute("DELETE FROM rates_checked_minutes")
@@ -514,8 +516,9 @@ def reset_current_profile_data(
             0 if clear_shared_rates else rates_checked_minutes_count
         ),
     }
-    return {
+    payload = {
         "reset": True,
+        "mode": "wipe_everything" if wipe_everything else "keep_decisions",
         "workspace": {"id": workspace_id, "label": workspace_label},
         "profile": {"id": profile_id, "label": profile_label},
         "preserved": preserved,
@@ -523,3 +526,152 @@ def reset_current_profile_data(
         "rates_scope": "global" if clear_shared_rates else "preserved",
         "shared_rates_cleared": clear_shared_rates,
     }
+    if not wipe_everything:
+        payload["decisions"] = {
+            "kept": sum(rebind.values()) + sum(kept_in_place.values()),
+            "bind_after_resync": rebind,
+            "kept_in_place": kept_in_place,
+        }
+    return payload
+
+
+def _wipe_profile_decisions(conn: sqlite3.Connection, profile_id: str) -> None:
+    delete_profile_observer_state(conn, profile_id)
+    # Review rows are immutable in normal use. Remove them before their
+    # component FK would otherwise attempt an ON DELETE SET NULL update.
+    conn.execute(
+        "DELETE FROM custody_filed_report_impact_resolutions WHERE profile_id = ?",
+        (profile_id,),
+    )
+    conn.execute(
+        "DELETE FROM custody_filed_report_impacts WHERE profile_id = ?",
+        (profile_id,),
+    )
+    conn.execute(
+        "DELETE FROM custody_gap_review_transactions WHERE profile_id = ?",
+        (profile_id,),
+    )
+    conn.execute(
+        "DELETE FROM custody_gap_review_relation_sets WHERE profile_id = ?",
+        (profile_id,),
+    )
+    conn.execute(
+        "DELETE FROM custody_gap_reviews WHERE profile_id = ?", (profile_id,)
+    )
+    conn.execute(
+        "DELETE FROM filed_report_snapshots WHERE profile_id = ?", (profile_id,)
+    )
+    conn.execute(
+        "INSERT INTO custody_component_purge_authorizations(profile_id) VALUES(?)",
+        (profile_id,),
+    )
+    conn.execute(
+        "DELETE FROM custody_components WHERE profile_id = ?", (profile_id,)
+    )
+    conn.execute(
+        "DELETE FROM custody_component_purge_authorizations WHERE profile_id = ?",
+        (profile_id,),
+    )
+    # These child-row deletes are explicit so the reset response can report
+    # per-table counts; profile deletion would otherwise cascade them.
+    conn.execute(
+        """
+        DELETE FROM source_funds_snapshots
+        WHERE case_id IN (
+            SELECT id FROM source_funds_cases WHERE profile_id = ?
+        )
+        """,
+        (profile_id,),
+    )
+    conn.execute(
+        """
+        DELETE FROM source_funds_link_attachments
+        WHERE link_id IN (
+            SELECT id FROM source_funds_links WHERE profile_id = ?
+        )
+        """,
+        (profile_id,),
+    )
+    conn.execute(
+        """
+        DELETE FROM source_funds_source_attachments
+        WHERE source_id IN (
+            SELECT id FROM source_funds_sources WHERE profile_id = ?
+        )
+        """,
+        (profile_id,),
+    )
+    conn.execute(
+        """
+        DELETE FROM ai_chat_messages
+        WHERE session_id IN (
+            SELECT id FROM ai_chat_sessions WHERE profile_id = ?
+        )
+        """,
+        (profile_id,),
+    )
+    for table in (
+        "chain_analysis_observations",
+        "chain_analysis_cases",
+        "chain_analysis_labels",
+        "chain_analysis_datasets",
+        "source_funds_links",
+        "source_funds_cases",
+        "source_funds_sources",
+        "source_funds_recipients",
+        "ai_chat_sessions",
+        "saved_views",
+        "swap_matching_rules",
+        "transaction_pair_dismissals",
+        "direct_swap_payouts",
+        "transaction_pairs",
+        "bip329_labels",
+        "journal_wallet_holdings",
+        "journal_quantity_balances",
+        "journal_custody_decisions",
+        "journal_custody_economic_relations",
+        "journal_custody_reconciliations",
+        "journal_custody_gap_inputs",
+        "journal_quantity_issues",
+        "journal_quantity_postings",
+        "custody_gap_review_transactions",
+        "custody_gap_review_relation_sets",
+        "custody_gap_reviews",
+        "review_workflow_receipts",
+        "synthetic_import_duplicate_reviews",
+        "custody_filed_report_impact_resolutions",
+        "custody_filed_report_impacts",
+        "filed_report_snapshots",
+        "custody_authored_evidence_snapshots",
+        "journal_account_holdings",
+        "journal_tax_summary",
+        "journal_quarantines",
+        "journal_entries",
+        "attachments",
+    ):
+        conn.execute(f"DELETE FROM {table} WHERE profile_id = ?", (profile_id,))
+    conn.execute(
+        """
+        DELETE FROM transaction_tags
+        WHERE tag_id IN (SELECT id FROM tags WHERE profile_id = ?)
+           OR transaction_id IN (
+               SELECT id FROM transactions WHERE profile_id = ?
+           )
+        """,
+        (profile_id, profile_id),
+    )
+    conn.execute("DELETE FROM tags WHERE profile_id = ?", (profile_id,))
+    conn.execute("DELETE FROM transactions WHERE profile_id = ?", (profile_id,))
+
+
+def _delete_profile_derived_rows(conn: sqlite3.Connection, profile_id: str) -> None:
+    """Delete what the resync and the next journal run rebuild.
+
+    Decision rows that reference a transaction were parked first; deleting the
+    transactions cascades them and the derived per-transaction rows away, and
+    nulls custody leg transactions, whose anchors keep the reference.
+    """
+    delete_profile_observer_state(conn, profile_id)
+    for table in _DERIVED_PROFILE_TABLES:
+        conn.execute(f"DELETE FROM {table} WHERE profile_id = ?", (profile_id,))
+    conn.execute("DELETE FROM transactions WHERE profile_id = ?", (profile_id,))

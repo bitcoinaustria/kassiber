@@ -149,7 +149,7 @@ def test_shared_prevout_budget_and_electrum_batching(book, monkeypatch):
         def batch_call(self, requests):
             self.batches.append(requests)
             return super().batch_call(requests)
-    with patch.object(graph, 'ElectrumClient', Client), patch.object(graph, 'decode_raw_transaction', side_effect=lambda value: decoded[value]):
+    with patch.object(graph, 'ElectrumClient', Client), patch.object(graph, '_decode_verified_bitcoin_transaction', side_effect=lambda value, _txid: decoded[value]):
         grants, _ = sync(book)
         events = follow(book, grants[0])
     assert len(Client.batches) == 1 and len(Client.batches[0]) == 2
@@ -180,7 +180,7 @@ def test_budget_refused_row_is_first_in_the_next_pass(book, monkeypatch):
             if any(params and params[0] in parents[:2] for _method, params in requests):
                 raise OSError('parents unavailable')
             return super().batch_call(requests)
-    with patch.object(graph, 'ElectrumClient', Client), patch.object(graph, 'decode_raw_transaction', side_effect=lambda value: decoded[value]):
+    with patch.object(graph, 'ElectrumClient', Client), patch.object(graph, '_decode_verified_bitcoin_transaction', side_effect=lambda value, _txid: decoded[value]):
         for _ in range(2):
             grants, _ = sync(book)
             follow(book, grants[0])

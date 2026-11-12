@@ -1278,7 +1278,7 @@ def _all_text(payload: Mapping, *keys: str) -> list[str]:
 
 
 def _first_nonnegative_int(payload: Mapping, *keys: str) -> int | None:
-    """Read only explicitly msat-denominated provider amount evidence."""
+    """Read integer msat evidence; string amounts use ASCII decimal digits."""
 
     for key in keys:
         value = payload.get(key)
@@ -1286,8 +1286,15 @@ def _first_nonnegative_int(payload: Mapping, *keys: str) -> int | None:
             continue
         if isinstance(value, int):
             parsed = value
-        elif isinstance(value, str) and value.strip().isdigit():
-            parsed = int(value.strip())
+        elif isinstance(value, str):
+            text = value.strip()
+            if not text.isascii() or not text.isdigit():
+                continue
+            try:
+                parsed = int(text)
+            except ValueError:
+                # Oversized decimal strings can exceed Python's int limit.
+                continue
         else:
             # ``int(100.9)`` truncates. A fractional JSON number must never be
             # promoted into exact/bulk-eligible whole-row amount evidence.

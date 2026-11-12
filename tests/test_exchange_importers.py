@@ -26,12 +26,32 @@ from kassiber.errors import AppError
 from kassiber.log_ring import LogRing, RingHandler, sanitize_traceback_text
 from kassiber.importers import (
     load_binance_supplemental_csv_records,
+    load_import_records,
     load_ledgerlive_csv_records,
     load_river_csv_records,
+    normalize_bullbitcoin_record,
 )
 
 
 class ExchangeImporterTest(unittest.TestCase):
+    def test_bullbitcoin_parser_accepts_lbtc_amount_suffix(self):
+        for buy in (True, False):
+            with self.subTest(buy=buy):
+                record = normalize_bullbitcoin_record({
+                    "ORDER_STATUS": "completed",
+                    "PAYIN_AMOUNT": "100 EUR" if buy else "0.002 LBTC",
+                    "PAYIN_CURRENCY": "EUR" if buy else "LBTC",
+                    "PAYOUT_AMOUNT": "0.002 LBTC" if buy else "100 EUR",
+                    "PAYOUT_CURRENCY": "LBTC" if buy else "EUR",
+                    "COMPLETED_AT (UTC)": "2025-01-02T00:00:00Z",
+                    "TRANSACTION_ID": "liquid-order",
+                })
+                self.assertEqual(record["asset"], "LBTC")
+                self.assertEqual(str(record["amount"]), "0.002")
+                self.assertEqual(record["fiat_value"], 100)
+                self.assertEqual(record["fiat_rate"], 50000)
+                self.assertEqual(record["kind"], "buy" if buy else "sell")
+
     def test_kraken_api_fetcher_paginates_ledgers_and_trades(self):
         class Response:
             def __init__(self, payload):
@@ -548,6 +568,30 @@ class ExchangeCredentialEchoTest(unittest.TestCase):
                     fetch(self._backend(), opener=_Opener(status=401, body=body[190:]))
                 self.assertIn("<redacted>", str(raised.exception))
                 self._assert_withheld(raised.exception)
+
+
+class JsonImportFormatTest(unittest.TestCase):
+    """A JSON format chosen for a non-JSON file is a typed refusal."""
+
+    def test_csv_or_non_utf8_file_under_a_json_format_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_file = Path(tmp) / "export.csv"
+            csv_file.write_text("date,txid,direction,asset,amount\n2025-01-02,ab,inbound,BTC,0.1\n")
+            latin = Path(tmp) / "latin.json"
+            latin.write_bytes(b'[{"description": "caf\xe9"}]')
+            for path in (csv_file, latin):
+                for input_format in ("json", "btcpay_json", "wasabi_bundle"):
+                    with self.subTest(file=path.name, input_format=input_format):
+                        with self.assertRaises(AppError) as raised:
+                            load_import_records(str(path), input_format)
+                        self.assertEqual(raised.exception.code, "validation")
+                        self.assertIn("not valid UTF-8 JSON", str(raised.exception))
+
+    def test_valid_json_still_loads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rows.json"
+            path.write_text(json.dumps({"transactions": [{"txid": "ab", "amount": "0.1"}]}))
+            self.assertEqual(load_import_records(str(path), "json"), [{"txid": "ab", "amount": "0.1"}])
 
 
 if __name__ == "__main__":

@@ -511,6 +511,16 @@ def sqlite_error_is_busy(details: dict[str, object]) -> bool:
     }
 
 
+def sqlite_error_is_readonly(exc: Exception) -> bool:
+    """SQLite refused a write on a read-only or `query_only` connection."""
+
+    code = getattr(exc, "sqlite_errorcode", None)
+    if isinstance(code, int):
+        return (code & 0xFF) == sqlite3.SQLITE_READONLY
+    # sqlcipher3 exceptions carry no error code; SQLite's message is stable.
+    return "readonly database" in str(exc).lower()
+
+
 def begin_write_savepoint(conn, name: str) -> None:
     """Open SAVEPOINT `name` for a write, holding SQLite's writer lock from the start.
 
@@ -523,21 +533,32 @@ def begin_write_savepoint(conn, name: str) -> None:
     writer lock with the transaction's first statement waits like any write.
     RELEASE of an outermost savepoint still commits. Read-only snapshots keep
     a plain SAVEPOINT; they never upgrade.
+
+    A connection that cannot write (`query_only`, as MCP reads run, or opened
+    read-only) needs no reservation: no upgrade can follow, and SQLite would
+    refuse the reservation itself. Lazily derived reads such as the
+    chain-analysis index open this savepoint and write only when stale, so
+    there they read, and a stale write is refused as before. One that already
+    holds the writer reserves again at no cost; the stdlib driver cannot tell.
     """
     # Every Kassiber book has `settings`; partial test schemas may not. Look
-    # before the savepoint opens, so this read holds no lock afterwards.
+    # before the savepoint opens, so these reads hold no lock afterwards.
     reservable = bool(
         conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings'"
         ).fetchall()
-    )
+    ) and not conn.execute("PRAGMA query_only").fetchone()[0]
     conn.execute(f"SAVEPOINT {name}")
     if not reservable:
         return
     try:
         # Changes nothing; requesting the writer lock is its only effect.
         conn.execute("UPDATE settings SET value = value WHERE 0")
-    except BaseException:
+    except BaseException as exc:
+        if isinstance(exc, Exception) and sqlite_error_is_readonly(exc):
+            # A read-only connection: Python's drivers expose no
+            # sqlite3_db_readonly, so the refusal is how it shows.
+            return
         conn.execute(f"ROLLBACK TO SAVEPOINT {name}")
         conn.execute(f"RELEASE SAVEPOINT {name}")
         raise
@@ -3060,6 +3081,50 @@ CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
     created_at TEXT NOT NULL,
     rotated_at TEXT
 );
+
+-- "Reset book data" keeps the user's decisions (core/book_reset.py). Each
+-- transaction it deletes leaves its stable identity here, so the resync can
+-- give the re-observed row its old id back; `pending` until then, `changed`
+-- when it came back with different facts.
+CREATE TABLE IF NOT EXISTS book_reset_transactions (
+    transaction_id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    fingerprint TEXT NOT NULL,
+    external_id TEXT,
+    occurred_at TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    fee INTEGER NOT NULL,
+    amount_includes_fee INTEGER NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending', 'changed')),
+    changed_fields_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_book_reset_transactions_fingerprint
+    ON book_reset_transactions(profile_id, fingerprint);
+
+CREATE INDEX IF NOT EXISTS idx_book_reset_transactions_identity
+    ON book_reset_transactions(wallet_id, external_id, asset, direction);
+
+-- Decision rows that referenced a reset transaction, verbatim, in the order
+-- they are restored (parents first).
+CREATE TABLE IF NOT EXISTS book_reset_parked_rows (
+    seq INTEGER PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    table_name TEXT NOT NULL,
+    row_json TEXT NOT NULL,
+    transaction_ids_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_book_reset_parked_rows_profile
+    ON book_reset_parked_rows(profile_id, seq);
 """
 
 

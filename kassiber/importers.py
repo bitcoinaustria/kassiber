@@ -82,6 +82,25 @@ from .wallet_descriptors import normalize_asset_code
 # -- generic coordinator -----------------------------------------------------
 
 
+def _read_json_file(file_path, label):
+    """Parse a JSON import file, refusing one that is not UTF-8 JSON.
+
+    A CSV export imported with a JSON format, or a file in another encoding,
+    is a wrong-format choice, not an internal error.
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except ValueError:
+        # Covers both JSONDecodeError and UnicodeDecodeError.
+        raise AppError(
+            f"{label} is not valid UTF-8 JSON",
+            code="validation",
+            hint="Choose the import format that matches the file.",
+            retryable=False,
+        ) from None
+
+
 def _read_csv_rows(file_path, *, encoding="utf-8", skip_blank=False):
     with open(file_path, "r", encoding=encoding, newline="") as handle:
         rows = list(csv.DictReader(handle))
@@ -109,8 +128,7 @@ def load_import_records(file_path, input_format, column_map=None):
             hint="Check the wallet source_file or pass an existing --file path.",
         )
     if input_format == "json":
-        with open(file_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
+        payload = _read_json_file(file_path, "JSON import")
         if isinstance(payload, dict):
             payload = payload.get("transactions", [])
         if not isinstance(payload, list):
@@ -275,7 +293,9 @@ def _wasabi_int(value: Any, field: str, *, default: int | None = None) -> int | 
 def _wasabi_amount_sats(value: Any) -> int:
     if value is None or value == "":
         raise AppError("Wasabi transaction is missing amount", code="validation")
-    if isinstance(value, int):
+    if isinstance(value, (bool, int, float, Decimal)):
+        if type(value) is not int:
+            raise AppError("Wasabi numeric amounts must be integer satoshis", code="validation")
         return value
     text = str(value).strip()
     try:
@@ -572,8 +592,7 @@ def load_wasabi_bundle(file_path: str) -> dict[str, Any]:
     top-level ``result`` key. A bare list is treated as ``gethistory`` for
     backwards-compatible one-shot exports.
     """
-    with open(file_path, "r", encoding="utf-8") as handle:
-        payload = json.load(handle)
+    payload = _read_json_file(file_path, "Wasabi bundle")
     return load_wasabi_bundle_payload(payload)
 
 
@@ -724,8 +743,7 @@ def normalize_btcpay_record(record):
 def load_btcpay_export_records(file_path, input_format):
     """Load a BTCPay export file (JSON list or CSV) and normalize every row."""
     if input_format == "json":
-        with open(file_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
+        payload = _read_json_file(file_path, "BTCPay JSON export")
         if not isinstance(payload, list):
             raise AppError("BTCPay JSON export must be a list of transaction objects")
         rows = payload
@@ -960,7 +978,7 @@ def _clean_decimal_text(value):
     if text.startswith("(") and text.endswith(")"):
         negative = True
         text = text[1:-1].strip()
-    for symbol in ("$", "€", "£", "CHF", "USD", "EUR", "GBP", "BTC", "XBT", "LBTC"):
+    for symbol in ("$", "€", "£", "CHF", "USD", "EUR", "GBP", "LBTC", "BTC", "XBT"):
         text = text.replace(symbol, "")
     text = text.replace(",", "").replace(" ", "").strip()
     if not text:
@@ -2322,6 +2340,17 @@ def normalize_binance_supplemental_autoinvest_record(record, index=0):
         _get_cell(sanitized, "base asset amount + symbol", "Base Asset Amount + Symbol"),
         "base asset amount",
     )
+    declared_base_asset = _currency_cell(_get_cell(sanitized, "base asset symbol", "Base Asset Symbol"))
+    if (
+        declared_base_asset and parsed_base_asset
+        and (base_asset is not None or canonical_bitcoin_asset(parsed_base_asset) is not None)
+        and (canonical_bitcoin_asset(declared_base_asset) or declared_base_asset)
+            != (canonical_bitcoin_asset(parsed_base_asset) or parsed_base_asset)
+    ):
+        raise AppError(
+            "Binance supplemental base asset symbols conflict",
+            code="validation", retryable=False,
+        )
     fee_amount, fee_asset = _binance_supplemental_fee(
         _get_cell(sanitized, "trading fee (in quote asset)", "Trading Fee")
     )
@@ -3199,7 +3228,7 @@ _GENERIC_LEDGER_DATE_HEADERS = {
 }
 
 _GENERIC_LEDGER_CURRENCY_SYMBOLS = (
-    "$", "€", "£", "CHF", "USD", "EUR", "GBP", "BTC", "XBT", "LBTC", "SATS", "SAT",
+    "$", "€", "£", "CHF", "USD", "EUR", "GBP", "L-BTC", "LBTC", "BTC", "XBT", "SATS", "SAT",
 )
 _GENERIC_LEDGER_EURO_DATE_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ T](.+))?$")
 
@@ -3227,7 +3256,7 @@ def _is_native_ledger(cells):
     )
 
 
-def _generic_ledger_decimal_cell(value, field, row_label):
+def _generic_ledger_decimal_cell(value, field, row_label, *, asset=None):
     """Parse a hand-typed number, accepting both ``1,234.56`` and European
     ``1.234,56`` / ``0,05`` decimal-comma formats. Raises a row-numbered
     ``validation`` error rather than a context-free one on non-numeric input."""
@@ -3239,8 +3268,24 @@ def _generic_ledger_decimal_cell(value, field, row_label):
     negative = text.startswith("(") and text.endswith(")")
     if negative:
         text = text[1:-1].strip()
-    for symbol in _GENERIC_LEDGER_CURRENCY_SYMBOLS:
-        text = text.replace(symbol, "")
+    def strip_unit(match):
+        unit = {"$": "USD", "€": "EUR", "£": "GBP"}.get(match.group().upper(), match.group().upper())
+        def canonical_unit(code):
+            if code in _GENERIC_LEDGER_SATS_ASSETS:
+                return "SATS"
+            return canonical_bitcoin_asset(code) or code
+        if asset and canonical_unit(unit) != canonical_unit(asset):
+            raise AppError(
+                f"{row_label}: {field} unit {unit} does not match asset {asset}",
+                code="validation",
+                hint="Use the amount unit named by the asset column; SATS and BTC have different units.",
+            )
+        return ""
+
+    text = re.sub(
+        "|".join(re.escape(symbol) for symbol in _GENERIC_LEDGER_CURRENCY_SYMBOLS),
+        strip_unit, text, flags=re.IGNORECASE,
+    )
     text = text.replace("\xa0", "").replace(" ", "").strip()
     if not text:
         return None
@@ -3261,7 +3306,10 @@ def _generic_ledger_decimal_cell(value, field, row_label):
     if negative and not text.startswith("-"):
         text = "-" + text
     try:
-        return dec(text)
+        number = dec(text)
+        if not number.is_finite():
+            raise AppError("Amount must be finite", code="validation")
+        return number
     except AppError as exc:
         raise AppError(
             f"{row_label}: {field} is not a number ({value!r})",
@@ -3347,15 +3395,18 @@ def normalize_generic_ledger_record(record, index=0):
         _get_cell(sanitized, "Sent Asset", "Sent Cur.", "Sell Asset", "Sell Cur.")
     )
     received_amount = _generic_ledger_decimal_cell(
-        _get_cell(sanitized, "Received Amount", "Buy Amount"), "Received Amount", row_label
+        _get_cell(sanitized, "Received Amount", "Buy Amount"), "Received Amount", row_label,
+        asset=received_asset,
     )
     sent_amount = _generic_ledger_decimal_cell(
-        _get_cell(sanitized, "Sent Amount", "Sell Amount"), "Sent Amount", row_label
-    )
-    fee_amount = _generic_ledger_decimal_cell(
-        _get_cell(sanitized, "Fee Amount", "Fee"), "Fee Amount", row_label
+        _get_cell(sanitized, "Sent Amount", "Sell Amount"), "Sent Amount", row_label,
+        asset=sent_asset,
     )
     fee_asset = _generic_ledger_asset(_get_cell(sanitized, "Fee Asset", "Fee Cur."))
+    fee_amount = _generic_ledger_decimal_cell(
+        _get_cell(sanitized, "Fee Amount", "Fee"), "Fee Amount", row_label,
+        asset=fee_asset or (received_asset if _generic_ledger_is_crypto(received_asset) else sent_asset),
+    )
     explicit_fiat = _generic_ledger_decimal_cell(
         _get_cell(
             sanitized,
@@ -3601,9 +3652,9 @@ def _read_generic_ledger_csv(file_path):
     except csv.Error:
         dialect = None
     reader = (
-        csv.reader(io.StringIO(text), dialect)
+        csv.reader(io.StringIO(text, newline=""), dialect)
         if dialect is not None
-        else csv.reader(io.StringIO(text))
+        else csv.reader(io.StringIO(text, newline=""))
     )
     return [list(row) for row in reader]
 

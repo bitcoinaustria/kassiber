@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import unittest
 
-from embit import bip32, bip39
+from embit import bip32, bip39, script
 
 from kassiber.cli.handlers import resolve_descriptor_branch_index
 from kassiber.errors import AppError
@@ -271,6 +271,12 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
         )
 
         self.assertEqual([branch.branch_label for branch in plan.branches], ["receive"])
+        # A concrete suffix is still a derivation. Only the range is absent.
+        targets = derive_descriptor_targets(plan, start=0, end=5)
+        self.assertEqual(len(targets), 1)
+        expected_key = root.derive("m/84h/0h/0h/0/5").to_public().key
+        self.assertEqual(targets[0].address, script.p2wpkh(expected_key).address())
+        self.assertEqual(targets[0].derivation_path, "m/0/5")
 
     def test_receive_only_liquid_descriptor_synthesizes_change_branch(self):
         root = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(_MNEMONIC))
@@ -289,6 +295,35 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
         self.assertTrue(receive.startswith("lq1"))
         self.assertTrue(change.startswith("lq1"))
         self.assertNotEqual(receive, change)
+
+    def test_liquid_taproot_uses_elements_domain_tags(self):
+        account = bip32.HDKey.from_seed(b"\x01" * 32).derive("m/84h/0h/0h")
+        xpub = account.to_public().to_base58()
+        plan = load_descriptor_plan({
+            "descriptor": f"ct(slip77({'03' * 32}),eltr({xpub}/0/*))",
+            "chain": "liquid",
+        })
+        target = derive_descriptor_targets(plan, branch_index=0, start=0, end=1)[0]
+        # Independently checked against LWK's Elements Miniscript descriptor.
+        self.assertEqual(target.script_pubkey,
+            "512062c19c2b47006d8b25909a0ed9b856823e87405577897abbf769d40ac33bef59")
+        # LWK accepts this Blech32m address; embit's Blech32 checksum is invalid
+        # for witness v1 even when the script and blinding public key match.
+        self.assertEqual(target.address,
+            "lq1pqwggyacalg0wkkqwz8ad7va0vgslt0c6dxqw2vtu7e5zr2hx3zffwckpns45wqrd3vjepxswmxu9dq37saq92auf02alw6w5ptpnhm6eg88xm0sxxck8")
+        from kassiber.liquid_descriptors import addr_decode
+        for address in (target.address, target.address.upper(), target.unconfidential_address):
+            decoded, _ = addr_decode(address)
+            self.assertEqual(decoded.data.hex(), target.script_pubkey)
+        with self.assertRaises(ValueError):
+            addr_decode(target.address[:-1] + "q")
+        scripted = load_descriptor_plan({
+            "descriptor": f"ct(slip77({'03' * 32}),eltr({xpub}/0/*,pk({xpub}/1/*)))",
+            "chain": "liquid",
+        })
+        scripted_target = derive_descriptor_targets(scripted, branch_index=0, start=0, end=1)[0]
+        self.assertNotEqual(scripted_target.script_pubkey, target.script_pubkey)
+        self.assertEqual(len(scripted_target.key_origins), 2)
 
     def _assert_change_matches_explicit(self, descriptor_for, chain, *, count=5):
         """Assert the synthesized change branch equals an explicit `/1/*` config.
@@ -395,6 +430,36 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
         self.assertTrue(liquid_plan_can_unblind(plan))
         secret, _target = liquid_blinding_secret(plan, branch_index=1, address_index=0)
         self.assertEqual(len(secret), 32)
+
+
+class LiquidBlindingSecretTests(unittest.TestCase):
+    """The unblinding key must belong to the address the wallet hands out."""
+
+    def test_secret_matches_the_target_address_on_fixed_and_ranged_branches(self):
+        # A fixed branch (`xpub/0/7`) used to be tweaked with the account
+        # key's script and an underived view key, so its own confidential
+        # outputs could never be unblinded.
+        from embit import ec
+        from kassiber.liquid_descriptors import addr_decode
+
+        account = bip32.HDKey.from_seed(bytes([1]) * 32).derive("m/84h/0h/0h").to_public().to_base58()
+        view = ec.PrivateKey(bytes([3]) * 32).wif()
+        view_xprv = bip32.HDKey.from_seed(bytes([3]) * 32).to_base58()
+        cases = {
+            "slip77-fixed": f"ct(slip77({'03' * 32}),elwpkh({account}/0/7))",
+            "wif-fixed": f"ct({view},elwpkh({account}/0/7))",
+            "xprv-fixed": f"ct({view_xprv}/0/7,elwpkh({account}/0/7))",
+            "xprv-bare-fixed": f"ct({view_xprv},elwpkh({account}/0/7))",
+            "slip77-ranged": f"ct(slip77({'03' * 32}),elwpkh({account}/<0;1>/*))",
+            "xprv-ranged": f"ct({view_xprv}/<0;1>/*,elwpkh({account}/<0;1>/*))",
+        }
+        for name, descriptor in cases.items():
+            with self.subTest(name):
+                plan = load_descriptor_plan({"descriptor": descriptor, "chain": "liquid"})
+                for target in derive_descriptor_targets(plan, start=0, end=2):
+                    secret, _ = liquid_blinding_secret(plan, target.branch_index, target.address_index)
+                    _, address_key = addr_decode(target.address)
+                    self.assertEqual(ec.PrivateKey(secret).sec(), address_key.sec())
 
 
 class WatchOnlyDescriptorBoundaryTests(unittest.TestCase):

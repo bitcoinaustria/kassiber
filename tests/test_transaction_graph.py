@@ -1159,7 +1159,7 @@ class TransactionGraphTest(unittest.TestCase):
         _FakeElectrumClient.responses = {txid: "coinbase-raw"}
 
         with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
-            "kassiber.core.transaction_graph.decode_raw_transaction",
+            "kassiber.core.transaction_graph._decode_verified_bitcoin_transaction",
             return_value=decoded,
         ):
             payload = self._graph("coinbase-electrum-row", allow_public_lookup=True)
@@ -1824,7 +1824,7 @@ class TransactionGraphTest(unittest.TestCase):
         _FakeElectrumClient.responses = {txid: "current-raw"}
 
         with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
-            "kassiber.core.transaction_graph.decode_raw_transaction",
+            "kassiber.core.transaction_graph._decode_verified_bitcoin_transaction",
             return_value=decoded,
         ):
             payload = self._graph(
@@ -2287,6 +2287,7 @@ class TransactionGraphTest(unittest.TestCase):
         _FakeElectrumClient.calls = []
         _FakeElectrumClient.backends = []
         _FakeElectrumClient.responses = {txid: "liquid-current-raw"}
+        decoded.txid = lambda: bytes.fromhex(txid)
 
         with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
             "kassiber.core.transaction_graph.decode_liquid_transaction",
@@ -2794,7 +2795,7 @@ class TransactionGraphTest(unittest.TestCase):
             "kassiber.core.transaction_graph.ElectrumClient",
             _FakeElectrumClient,
         ), patch(
-            "kassiber.core.transaction_graph.decode_raw_transaction",
+            "kassiber.core.transaction_graph._decode_verified_bitcoin_transaction",
             return_value=decoded_current,
         ):
             payload = self._graph("default-electrum-row", allow_public_lookup=True)
@@ -2835,7 +2836,7 @@ class TransactionGraphTest(unittest.TestCase):
         }
 
         with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
-            "kassiber.core.transaction_graph.decode_raw_transaction",
+            "kassiber.core.transaction_graph._decode_verified_bitcoin_transaction",
             return_value=decoded_current,
         ):
             payload = self._graph(
@@ -3226,7 +3227,7 @@ class TransactionGraphTest(unittest.TestCase):
             "vout": [{"n": 0, "script_hex": SCRIPT_B, "value_sats": 600_000}],
         }
         with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
-            "kassiber.core.transaction_graph.decode_raw_transaction",
+            "kassiber.core.transaction_graph._decode_verified_bitcoin_transaction",
             return_value=decoded_current,
         ) as decode:
             payload = self._graph("electrum-row", allow_public_lookup=True)
@@ -3236,7 +3237,7 @@ class TransactionGraphTest(unittest.TestCase):
             [("blockchain.transaction.get", (txid,))],
         )
         self.assertEqual(_FakeElectrumClient.backends[0]["timeout"], 5)
-        decode.assert_called_once_with("current-raw")
+        decode.assert_called_once_with("current-raw", txid)
         self.assertEqual(payload["supportLevel"], "full")
         self.assertEqual(payload["inputs"][0]["outpoint"], f"{prev_txid}:0")
         self.assertEqual(payload["inputs"][0]["valueSats"], 700_000)
@@ -3423,7 +3424,7 @@ class TransactionGraphTest(unittest.TestCase):
         _FakeElectrumClient.responses = {txid: "current-raw"}
 
         with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
-            "kassiber.core.transaction_graph.decode_raw_transaction",
+            "kassiber.core.transaction_graph._decode_verified_bitcoin_transaction",
             return_value=decoded_current,
         ) as decode:
             payload = self._graph("fan-in-limit-row", allow_public_lookup=True)
@@ -3432,7 +3433,7 @@ class TransactionGraphTest(unittest.TestCase):
             _FakeElectrumClient.calls,
             [("blockchain.transaction.get", (txid,))],
         )
-        decode.assert_called_once_with("current-raw")
+        decode.assert_called_once_with("current-raw", txid)
         self.assertEqual(_FakeElectrumClient.backends[0]["timeout"], 5)
         self.assertEqual(payload["supportLevel"], "partial")
         self.assertEqual(payload["unsupportedReason"], "input_prevout_values_missing")
@@ -3462,7 +3463,7 @@ class TransactionGraphTest(unittest.TestCase):
         }
 
         with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
-            "kassiber.core.transaction_graph.decode_raw_transaction",
+            "kassiber.core.transaction_graph._decode_verified_bitcoin_transaction",
             return_value=decoded_current,
         ):
             payload = self._graph("coinbase-electrum-row", allow_public_lookup=True)
@@ -3515,7 +3516,7 @@ class TransactionGraphTest(unittest.TestCase):
             ],
         }
 
-        def decode(raw_hex):
+        def decode(raw_hex, expected_txid):
             if raw_hex == "current-raw":
                 return decoded_current
             if raw_hex == "prev-raw":
@@ -3523,7 +3524,7 @@ class TransactionGraphTest(unittest.TestCase):
             raise AssertionError(f"Unexpected raw tx decode: {raw_hex}")
 
         with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
-            "kassiber.core.transaction_graph.decode_raw_transaction",
+            "kassiber.core.transaction_graph._decode_verified_bitcoin_transaction",
             side_effect=decode,
         ) as decode_spy:
             first = self._graph("duplicate-prev-row", allow_public_lookup=True)
@@ -3552,7 +3553,7 @@ class TransactionGraphTest(unittest.TestCase):
         _FakeElectrumClient.calls = []
         _FakeElectrumClient.responses = {}
         with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
-            "kassiber.core.transaction_graph.decode_raw_transaction"
+            "kassiber.core.transaction_graph._decode_verified_bitcoin_transaction"
         ) as decode_cached:
             second = self._graph("duplicate-prev-row", allow_public_lookup=True)
 

@@ -72,7 +72,13 @@ from .onchain import (
     output_value_sats,
 )
 from .privacy_hops import privacy_boundary_from_import_record
-from .sync import WalletSyncState, emit_sync_progress, normalize_backend_kind
+from .sync import (
+    WalletSyncState,
+    emit_sync_progress,
+    normalize_backend_kind,
+    silent_payment_scan_authoritative,
+)
+from .sync_control import check_sync_transport, run_sync_network, sync_transport_check
 from .wallets import (
     load_wallet_descriptor_plan_from_config,
     normalize_addresses,
@@ -80,7 +86,7 @@ from .wallets import (
 )
 
 
-ELECTRUM_STORED_GRAPH_VERSION = 1
+ELECTRUM_STORED_GRAPH_VERSION = 2
 ELECTRUM_STORED_GRAPH_MARKER = "_kassiber_electrum_graph"
 
 
@@ -121,6 +127,7 @@ def http_get_json(
     _max_attempts=None,
 ):
     def _opener():
+        check_sync_transport()
         request_headers = {
             "Accept": "application/json",
             "User-Agent": f"{APP_NAME}/{__version__}",
@@ -161,6 +168,7 @@ def http_get_text(
     _max_attempts=None,
 ):
     def _opener():
+        check_sync_transport()
         request_headers = {
             "Accept": accept,
             "User-Agent": f"{APP_NAME}/{__version__}",
@@ -203,6 +211,7 @@ def http_post_json(
     deadline=None,
 ):
     def _opener():
+        check_sync_transport()
         request = urlrequest.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
@@ -292,6 +301,7 @@ def parse_socket_backend_url(url, default_scheme="ssl", default_ports=None):
 
 
 def _connect_backend_socket(backend, host, port):
+    check_sync_transport()
     require_egress_enabled()
     timeout = backend_timeout(backend)
     proxy = backend_value(backend, "tor_proxy", "proxy")
@@ -402,6 +412,7 @@ class ElectrumClient:
             return self._call_locked(method, params)
 
     def _call_locked(self, method, params=None):
+        check_sync_transport()
         if self.socket is None or self.reader is None:
             raise AppError("Electrum client is not connected")
         self.request_id += 1
@@ -453,6 +464,7 @@ class ElectrumClient:
             return self._batch_call_locked(requests)
 
     def _batch_call_locked(self, requests):
+        check_sync_transport()
         if self.socket is None or self.reader is None:
             raise AppError("Electrum client is not connected")
         if not requests:
@@ -580,6 +592,7 @@ class _ElectrumBatchDispatcher:
             return []
         pending = {
             "requests": requests,
+            "check": sync_transport_check.get(),
             "event": threading.Event(),
             "result": None,
             "error": None,
@@ -646,14 +659,25 @@ class _ElectrumBatchDispatcher:
                     # and must not mask the error being reported to callers.
                     pass
 
-        def execute_requests(requests):
+        def check_callers(pending_calls):
+            for pending in pending_calls:
+                if pending["check"] is not None:
+                    try:
+                        pending["check"]()
+                    except Exception as exc:
+                        pending["error"] = exc
+                        raise
+
+        def execute_requests(requests, pending_calls):
             nonlocal client
+            check_callers(pending_calls)
             if client is None:
                 candidate = ElectrumClient(self.backend)
                 candidate.__enter__()
                 client = candidate
             results = []
             for start in range(0, len(requests), self.batch_size):
+                check_callers(pending_calls)
                 results.extend(
                     client.batch_call(requests[start : start + self.batch_size])
                 )
@@ -686,31 +710,40 @@ class _ElectrumBatchDispatcher:
                         for request in pending["requests"]
                     ]
                     try:
-                        combined_results = execute_requests(combined)
+                        combined_results = execute_requests(combined, pending_calls)
                     except Exception as combined_error:
                         discard_client()
-                        can_isolate_rpc_error = (
+                        can_isolate_call_error = (
                             len(pending_calls) > 1
-                            and isinstance(combined_error, AppError)
-                            and combined_error.code == "electrum_rpc_error"
+                            and (
+                                any(pending["error"] is combined_error for pending in pending_calls)
+                                or (
+                                    isinstance(combined_error, AppError)
+                                    and combined_error.code == "electrum_rpc_error"
+                                )
+                            )
                         )
-                        if can_isolate_rpc_error:
+                        if can_isolate_call_error:
                             # Read-only Electrum calls are safe to retry. Split a
-                            # request-level RPC error back into its logical callers
-                            # so one rejected request cannot contaminate another
-                            # wallet. Transport/session failures affect the whole
+                            # request-level RPC error or cancellation back into its
+                            # logical callers so one wallet cannot cancel another.
+                            # Transport/session failures affect the whole
                             # connection and must not multiply timeouts per caller.
                             for index, pending in enumerate(pending_calls):
+                                if pending["error"] is not None:
+                                    continue
                                 try:
                                     pending["result"] = execute_requests(
-                                        pending["requests"]
+                                        pending["requests"],
+                                        [pending],
                                     )
                                 except Exception as exc:
+                                    check_failed = pending["error"] is exc
                                     pending["error"] = exc
                                     discard_client()
                                     if not (
-                                        isinstance(exc, AppError)
-                                        and exc.code == "electrum_rpc_error"
+                                        check_failed
+                                        or (isinstance(exc, AppError) and exc.code == "electrum_rpc_error")
                                     ):
                                         for remaining in pending_calls[index + 1 :]:
                                             remaining["error"] = exc
@@ -1466,12 +1499,12 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
             descriptor_plan is not None
             and getattr(descriptor_plan, "kind", None) != "silent-payment"
         ):
-            online_discovery = discover_compatibility_descriptor_targets(
+            online_discovery = run_sync_network(lambda: discover_compatibility_descriptor_targets(
                 discovery.backend,
                 descriptor_plan,
                 discovery.kind,
                 checkpoint=state.checkpoint,
-            )
+            ))
             online_targets = list(online_discovery["targets"])
             compatibility_state = replace(
                 state,
@@ -1515,7 +1548,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
                 )
         adapter = COMPATIBILITY_SYNC_BACKEND_ADAPTERS[discovery.kind]
         try:
-            records, meta = adapter(discovery.backend, wallet, compatibility_state)
+            records, meta = run_sync_network(lambda: adapter(discovery.backend, wallet, compatibility_state))
         except AppError:
             raise
         except Exception as exc:
@@ -1536,12 +1569,8 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
             else "compatibility"
         )
         normalized_records = tuple(records)
-        authoritative = reason != "silent_payment" or (
-            (meta or {}).get("silent_payment_scan_complete") is True
-            and all(
-                record.get("confirmed_at") not in (None, "")
-                for record in normalized_records
-            )
+        authoritative = reason != "silent_payment" or silent_payment_scan_authoritative(
+            meta, normalized_records
         )
         return WalletBackendFetch(
             backend=discovery.backend,
@@ -1590,6 +1619,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
     prepared = []
     try:
         for identity in identities:
+            check_sync_transport()
             if dependency_kind == "lwk":
                 # A full refresh reconstructs the wollet in memory. Existing
                 # encrypted values remain durable until successful apply, but
@@ -1640,6 +1670,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
                     ),
                 )
             )
+        check_sync_transport()
         discovered_targets = _observer_discovered_targets(prepared)
         newly_discovered = [
             target
@@ -1924,6 +1955,7 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
         else:
             with _electrum_client_context(backend) as owned_client:
                 raw_hex = owned_client.call("blockchain.transaction.get", [txid])
+        verify_electrum_transaction_id(raw_hex, txid, normalized_chain)
         if normalized_chain == "liquid":
             return _legs_from_liquid_tx(decode_liquid_transaction(raw_hex))
         return _legs_from_bitcoin_tx(decode_raw_transaction(raw_hex))
@@ -2011,6 +2043,34 @@ def _confirmations_from_heights(block_height, tip_height):
     if normalized_block_height <= 0 or normalized_tip_height < normalized_block_height:
         return None
     return normalized_tip_height - normalized_block_height + 1
+
+
+def _esplora_tip_hash(
+    base_url, timeout=30, *, headers=None, proxy_url=None, ssl_context=None
+):
+    """Read a cache anchor only during an explicitly requested wallet sync."""
+    try:
+        value = http_get_text(
+            append_url_path(base_url, "blocks/tip/hash"),
+            **_esplora_call_kwargs(timeout=timeout, headers=headers,
+                                   proxy_url=proxy_url, ssl_context=ssl_context),
+        ).strip()
+    except AppError:
+        return None
+    return canonical_txid(value)
+
+
+def _esplora_block_hash(base_url, height, **kwargs):
+    try:
+        return canonical_txid(http_get_text(
+            append_url_path(base_url, f"block-height/{height}"), **kwargs,
+        ).strip())
+    except AppError:
+        return None
+
+
+def _cache_anchor_height(value):
+    return value if type(value) is int and 0 <= value <= 0xFFFFFFFF else None
 
 
 def _esplora_tip_height(
@@ -2945,6 +3005,28 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
     proxy_url = _backend_proxy_url(backend)
     ssl_context = _backend_ssl_context(backend)
     checkpoint = _checkpoint_mapping(sync_state)
+    kwargs = _esplora_call_kwargs(timeout=timeout, headers=headers,
+                                 proxy_url=proxy_url, ssl_context=ssl_context)
+    tip_hash = _esplora_tip_hash(
+        backend["url"],
+        **_esplora_call_kwargs(timeout=timeout, headers=headers,
+                               proxy_url=proxy_url, ssl_context=ssl_context),
+    )
+    same_tip = tip_hash is not None and checkpoint.get("esplora_tip_hash") == tip_hash
+    previous_height = _cache_anchor_height(checkpoint.get("esplora_tip_height"))
+    tip_height = previous_height if same_tip else None
+    if tip_hash is not None and tip_height is None:
+        observed_height = _cache_anchor_height(_esplora_tip_height(backend["url"], **kwargs))
+        # Bind height to the actual observed hash, including a racing tip read.
+        if observed_height is not None and _esplora_block_hash(
+            backend["url"], observed_height, **kwargs,
+        ) == tip_hash:
+            tip_height = observed_height
+            if previous_height is not None and tip_height > previous_height:
+                previous_hash = _esplora_block_hash(backend["url"], previous_height, **kwargs)
+                same_tip = previous_hash is not None and previous_hash == checkpoint.get("esplora_tip_hash")
+    # Older checkpoints can contain confirmations above their recorded anchor.
+    same_tip = same_tip and checkpoint.get("compatibility_history_anchor_version") == 2
     # Bind the complete private transport configuration, not just the backend
     # name. This digest remains inside the local-only freshness checkpoint.
     # A different endpoint, credential, route or TLS policy cannot inherit
@@ -3008,7 +3090,8 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
         previous = previous_stats.get(scripthash) if isinstance(previous_stats, dict) else None
         previous_dirty = isinstance(previous, dict) and bool(previous.get("mempool_dirty"))
         unchanged = (
-            isinstance(previous, dict)
+            same_tip
+            and isinstance(previous, dict)
             and previous.get("fingerprint") == fingerprint
             and not previous_dirty
             and memberships.reusable(scripthash, fingerprint)
@@ -3180,10 +3263,37 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
                 transactions_total=len(sorted_transactions),
                 records=len(records),
             )
+    # A block can arrive after the initial tip read. Every newer entry must
+    # belong to the current chain, and that chain must still contain the initial
+    # tip: otherwise older reused rows could be promoted onto a replacement fork.
+    raced_statuses = [
+        tx.get("status") or {} for tx in transactions_by_txid.values()
+        if tip_height is not None
+        and (_cache_anchor_height((tx.get("status") or {}).get("block_height")) or 0) > tip_height
+    ]
+    if raced_statuses:
+        observed_hashes = {
+            height: _esplora_block_hash(backend["url"], height, **kwargs)
+            for height in sorted({status["block_height"] for status in raced_statuses})
+        }
+        entries_on_chain = all(
+            observed_hashes[status["block_height"]] is not None
+            and observed_hashes[status["block_height"]] == status.get("block_hash")
+            for status in raced_statuses
+        )
+        initial_hash = _esplora_block_hash(backend["url"], tip_height, **kwargs)
+        if entries_on_chain and initial_hash is not None and initial_hash == tip_hash:
+            tip_height = max(observed_hashes)
+            tip_hash = observed_hashes[tip_height]
+        else:
+            tip_height = tip_hash = None
     membership_checkpoint, retracted, history_complete = memberships.finish()
     checkpoint.update(
         {
             "backend": _backend_identity(backend, sync_state),
+            "esplora_tip_hash": tip_hash,
+            "compatibility_history_anchor_version": 2,
+            "esplora_tip_height": tip_height,
             "esplora_scripthashes": dict(sorted(next_stats.items())),
             "esplora_history_memberships": membership_checkpoint,
             "highest_used": dict(sorted(highest_used.items())),
@@ -4484,6 +4594,26 @@ def read_varint(payload, offset):
     return int.from_bytes(payload[offset : offset + 8], "little"), offset + 8
 
 
+def verify_electrum_transaction_id(raw_hex, txid, chain):
+    """Bind every fetched raw transaction to its requested identity before use."""
+    try:
+        payload = bytes.fromhex(raw_hex)
+        if chain == "liquid":
+            transaction = decode_liquid_transaction(raw_hex)
+        else:
+            from embit.transaction import Transaction
+            transaction = Transaction.parse(payload)
+        # Some parser reads pad truncated integer fields with zero. Require the
+        # complete wire representation, including witness, before trusting txid.
+        if transaction.serialize() != payload:
+            raise ValueError("Incomplete or noncanonical transaction encoding")
+        actual = transaction.txid().hex()
+    except Exception as exc:
+        raise AppError("Electrum returned invalid transaction bytes", code="invalid_observation") from exc
+    if actual.lower() != str(txid).lower():
+        raise AppError("Electrum returned different transaction bytes", code="invalid_observation")
+
+
 def decode_raw_transaction(raw_hex):
     payload = bytes.fromhex(raw_hex)
     offset = 0
@@ -4665,6 +4795,14 @@ def _electrum_graph_output_payload(output):
     }
 
 
+def _is_bitcoin_coinbase_input(txin):
+    return (
+        isinstance(txin, dict)
+        and txin.get("txid") == "0" * 64
+        and txin.get("vout") == 0xFFFFFFFF
+    )
+
+
 def _normalize_electrum_bitcoin_graph_for_storage(tx, tx_lookup):
     """Persist the public graph shape that local consumers expect.
 
@@ -4692,6 +4830,8 @@ def _normalize_electrum_bitcoin_graph_for_storage(tx, tx_lookup):
         return tx
     for entry in vin:
         if not isinstance(entry, dict):
+            continue
+        if _is_bitcoin_coinbase_input(entry):
             continue
         if isinstance(entry.get("prevout"), dict):
             continue
@@ -4721,6 +4861,31 @@ def _electrum_utxo_status(raw_utxo, header_timestamps):
         "block_height": height,
         "block_time": timestamp_to_iso(header_timestamps.get(height), default=None),
     }
+
+
+def _electrum_tip_fingerprint(client, *, anchor=None):
+    """Anchor history and timestamp caches to the full header, not its height."""
+    try:
+        tip = client.call("blockchain.headers.subscribe", [])
+    except AppError:
+        return None
+    if not isinstance(tip, dict) or type(tip.get("height")) is not int or tip["height"] < 0:
+        return None
+    if anchor is not None:
+        anchor["height"] = _cache_anchor_height(tip["height"])
+    return _electrum_header_fingerprint(tip.get("hex"))
+
+
+def _electrum_header_fingerprint(header):
+    if not isinstance(header, str):
+        return None
+    try:
+        raw = bytes.fromhex(header)
+    except ValueError:
+        return None
+    if len(raw) < 80:
+        return None
+    return hashlib.sha256(raw).hexdigest()
 
 
 def _electrum_tip_height(client):
@@ -4793,6 +4958,7 @@ def compatibility_electrum_utxos_for_wallet(backend, sync_state: WalletSyncState
         def liquid_tx(txid):
             if txid not in liquid_tx_cache:
                 raw_tx = client.call("blockchain.transaction.get", [txid])
+                verify_electrum_transaction_id(raw_tx, txid, "liquid")
                 liquid_tx_cache[txid] = decode_liquid_transaction(raw_tx)
             return liquid_tx_cache[txid]
 
@@ -4905,6 +5071,29 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
     changed_scripts = 0
     header_cache_hits = 0
     with _electrum_client_context(backend) as client:
+        tip_anchor = {}
+        tip_fingerprint = _electrum_tip_fingerprint(client, anchor=tip_anchor)
+        tip_height = tip_anchor.get("height")
+        same_tip = (
+            tip_fingerprint is not None
+            and checkpoint.get("electrum_tip_fingerprint") == tip_fingerprint
+        )
+        previous_height = _cache_anchor_height(checkpoint.get("electrum_tip_height"))
+        if (not same_tip and tip_fingerprint is not None and previous_height is not None
+                and tip_height is not None and tip_height > previous_height):
+            try:
+                previous_header = client.call("blockchain.block.header", [previous_height])
+            except AppError:
+                previous_header = None
+            previous_fingerprint = _electrum_header_fingerprint(previous_header)
+            same_tip = (previous_fingerprint is not None and previous_fingerprint
+                        == checkpoint.get("electrum_tip_fingerprint"))
+        same_tip = same_tip and checkpoint.get("compatibility_history_anchor_version") == 3
+        header_fingerprints = {}
+        if not same_tip:
+            # Subscription statuses contain txids/heights, not block identity.
+            # Even identical history entries can have new confirmation times.
+            header_timestamps.clear()
         histories = []
         target_by_scripthash = {}
         scripthashes = []
@@ -4939,7 +5128,8 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     )
                 continue
             if (
-                stored_graph_current
+                same_tip
+                and stored_graph_current
                 and status == previous_statuses.get(scripthash)
                 and scripthash not in previous_dirty
             ):
@@ -4991,7 +5181,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     for item in normalized_history
                     if isinstance(item, dict)
                     and item.get("tx_hash")
-                    and prior_entries.get(str(item["tx_hash"])) != json_ready(item)
+                    and (not same_tip or prior_entries.get(str(item["tx_hash"])) != json_ready(item))
                 )
                 next_history_entries[scripthash] = current_entries
                 if any(_history_needs_recheck(item) for item in normalized_history):
@@ -5017,6 +5207,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     transactions[txid] = cached
                 else:
                     raw_tx = client.call("blockchain.transaction.get", [txid])
+                    verify_electrum_transaction_id(raw_tx, txid, sync_state.chain)
                     if sync_state.chain == "liquid":
                         transactions[txid] = {
                             "raw_hex": raw_tx,
@@ -5033,6 +5224,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             if normalized_height not in header_timestamps:
                 header_hex = client.call("blockchain.block.header", [normalized_height])
                 header_timestamps[normalized_height] = block_header_timestamp(header_hex)
+                header_fingerprints[normalized_height] = _electrum_header_fingerprint(header_hex)
             return header_timestamps[normalized_height]
 
         txids = {}
@@ -5056,6 +5248,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 batch_size=batch_size,
             )
             for txid, raw_tx in zip(missing_ordered_txids, raw_transactions):
+                verify_electrum_transaction_id(raw_tx, txid, sync_state.chain)
                 if sync_state.chain == "liquid":
                     transactions[txid] = {
                         "raw_hex": raw_tx,
@@ -5069,6 +5262,8 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             current_tx = transactions[txid]["decoded"] if sync_state.chain == "liquid" else transactions[txid]
             vins = current_tx.vin if sync_state.chain == "liquid" else current_tx.get("vin", [])
             for vin in vins:
+                if sync_state.chain == "bitcoin" and _is_bitcoin_coinbase_input(vin):
+                    continue
                 prev_txid = liquid_input_txid(vin) if sync_state.chain == "liquid" else vin.get("txid")
                 if not prev_txid or prev_txid in seen_txids:
                     continue
@@ -5087,6 +5282,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 batch_size=batch_size,
             )
             for txid, raw_tx in zip(prev_txids, raw_prev_transactions):
+                verify_electrum_transaction_id(raw_tx, txid, sync_state.chain)
                 if sync_state.chain == "liquid":
                     transactions[txid] = {
                         "raw_hex": raw_tx,
@@ -5113,6 +5309,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 )
                 for height, header_hex in zip(missing_heights, header_hexes):
                     header_timestamps[height] = block_header_timestamp(header_hex)
+                    header_fingerprints[height] = _electrum_header_fingerprint(header_hex)
         for tx_index, (txid, history) in enumerate(ordered_histories, start=1):
             occurred_at = _history_occurred_at(history, height_to_timestamp)
             if sync_state.chain == "liquid":
@@ -5158,6 +5355,31 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     transactions_total=len(ordered_histories),
                     records=len(records),
                 )
+        highest_height = max(header_timestamps, default=0)
+        if tip_height is not None and highest_height > tip_height:
+            raced_headers_valid = True
+            for height in sorted(header_timestamps):
+                if height <= tip_height:
+                    continue
+                try:
+                    reread_header = client.call("blockchain.block.header", [height])
+                except AppError:
+                    reread_header = None
+                fingerprint = _electrum_header_fingerprint(reread_header)
+                if fingerprint is None or fingerprint != header_fingerprints.get(height):
+                    raced_headers_valid = False
+                    break
+            try:
+                initial_header = client.call("blockchain.block.header", [tip_height])
+            except AppError:
+                initial_header = None
+            initial_fingerprint = _electrum_header_fingerprint(initial_header)
+            if raced_headers_valid and initial_fingerprint is not None and initial_fingerprint == tip_fingerprint:
+                # Keep the exact header that supplied the cached timestamp.
+                tip_fingerprint = header_fingerprints.get(highest_height)
+                tip_height = highest_height if tip_fingerprint is not None else None
+            else:
+                tip_height = tip_fingerprint = None
     # The known-txid set is fully derivable from the persisted history
     # entries, so drop the redundant legacy key instead of storing the same
     # txids twice per scripthash (including any copy left by older syncs).
@@ -5165,6 +5387,9 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
     checkpoint.update(
         {
             "backend": _backend_identity(backend, sync_state),
+            "electrum_tip_fingerprint": tip_fingerprint,
+            "compatibility_history_anchor_version": 3,
+            "electrum_tip_height": tip_height,
             "electrum_dirty_scripthashes": sorted(dirty_scripthashes),
             "electrum_headers": {
                 str(height): header_timestamps[height] for height in sorted(header_timestamps)

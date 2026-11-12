@@ -172,7 +172,7 @@ def validate_subject(subject, chain, network):
             if base58check_decode(subject)[0] not in ({0, 5} if network == "main" else {111, 196}):
                 raise ValueError
         else:
-            from embit.liquid.addresses import addr_decode
+            from ..liquid_descriptors import addr_decode
             addr_decode(subject)
             # embit decoding validates checksum. Network prefixes are distinct
             # for Liquid main/test/regtest, including confidential addresses.

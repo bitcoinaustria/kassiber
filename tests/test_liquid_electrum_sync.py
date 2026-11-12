@@ -62,6 +62,11 @@ def _header_hex(timestamp):
 
 
 class LiquidElectrumSyncTest(unittest.TestCase):
+    def setUp(self):
+        anchor = patch("kassiber.core.sync_backends._electrum_tip_fingerprint", return_value="ab" * 32)
+        anchor.start()
+        self.addCleanup(anchor.stop)
+
     def test_validate_backend_allows_liquid_electrum(self):
         backend = {
             "name": "liquid",
@@ -231,6 +236,8 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                 return responses[key]
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_liquid_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(
@@ -316,6 +323,8 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                 return responses[key]
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_liquid_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(
@@ -404,6 +413,8 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                 return responses
 
         with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.verify_electrum_transaction_id", return_value=None,
+        ), patch(
             "kassiber.core.sync_backends.decode_liquid_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(

@@ -219,7 +219,12 @@ so they keep their normal payment/receipt treatment.
 source-qualified canonical Lightning hash with compatible whole-row semantics;
 a unique provider key with canonical route txids and explicit full-row integer
 msat principals; or a witness-proven unique HTLC funding outpoint with amount
-coverage. Everything else stays strong/manual, except same-asset legs already
+coverage. Provider send/receive msat amounts accept nonnegative JSON integers
+or strings of ASCII decimal digits with optional surrounding whitespace.
+Booleans, fractional numbers, signs, separators, superscripts and other
+non-ASCII digits do not establish amount evidence. Malformed values supply no
+principal claim and never abort matching or establish exactness.
+Everything else stays strong/manual, except same-asset legs already
 observed inside two *different* on-chain transactions: one movement between two
 of your wallets is one physical transaction, so distinct txids are never paired
 from time/amount proximity (use `transfers pair` if a multi-hop route really

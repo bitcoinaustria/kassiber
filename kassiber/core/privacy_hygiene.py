@@ -64,6 +64,22 @@ ROUND_BTC_DENOMINATIONS_SATS = {
     1_000_000_000,
 }
 MEANINGFUL_ROUND_AMOUNT_FLOOR_SATS = 10_000
+# CoinJoin shapes: at least five inputs and five non-OP_RETURN outputs, and
+# fewer than five times as many legs on one side as on the other (beyond that
+# the shape is a batch payout or a consolidation). The large variant keeps no
+# balance limit so no transaction it ever recognized is dropped.
+COINJOIN_MIN_INPUTS = 5
+COINJOIN_MIN_OUTPUTS = 5
+COINJOIN_MIN_EQUAL_OUTPUTS = 5
+COINJOIN_MAX_LEG_RATIO = 5
+LARGE_COINJOIN_MIN_LEGS = 20
+COINJOIN_SHAPE_IMPACT = {
+    "equal_output_coinjoin": 18,
+    "large_equal_output_coinjoin": 20,
+    "distinct_value_coinjoin": 16,
+}
+# Public chain facts alone decide these, so a public observer may keep them.
+COINJOIN_SHAPE_SOURCES = frozenset(COINJOIN_SHAPE_IMPACT)
 FINDING_SEVERITY_RANK = {
     "positive": 0,
     "info": 1,
@@ -714,7 +730,7 @@ def _parse_local_transaction(
         prevout = entry.get("prevout") if isinstance(entry.get("prevout"), Mapping) else {}
         script = normalized_script_hex(input_script(entry))
         address = output_address(prevout)
-        value_sats = input_value_sats(entry)
+        observed_value_sats = value_sats = input_value_sats(entry)
         if value_sats is None and owner is not None:
             value_sats = owner["amount_sats"]
         script_type = _script_type(address, script)
@@ -726,6 +742,8 @@ def _parse_local_transaction(
                 "txid": txid,
                 "vout": vout_index,
                 "value_sats": value_sats,
+                "observed_value_sats": observed_value_sats,
+                "script": script,
                 "script_type": script_type,
                 "owner": owner,
                 "sequence": _int_or_none(entry.get("sequence")),
@@ -758,6 +776,7 @@ def _parse_local_transaction(
             {
                 "index": n,
                 "value_sats": value_sats,
+                "script": script,
                 "script_type": _script_type(address, script),
                 "owner": owner,
                 "op_return": _is_op_return(entry, script),
@@ -837,21 +856,55 @@ def _coinjoin_signal(
                 else "imported"
             ),
         }
-    if parsed["input_count"] >= 5 and 5 <= len(outputs) <= 12 and most_common_count >= 5:
-        return {
-            "pattern": "equal_output_coinjoin",
-            "participant_count": most_common_count,
-            "impact": 18,
-            "evidence_level": "heuristic",
-        }
-    if parsed["input_count"] >= 20 and len(outputs) >= 20 and most_common_count >= 5:
-        return {
-            "pattern": "large_equal_output_coinjoin",
-            "participant_count": most_common_count,
-            "impact": 20,
-            "evidence_level": "heuristic",
-        }
-    return None
+    pattern = _coinjoin_shape(parsed["input_count"], parsed["inputs"], outputs, most_common_count)
+    if pattern is None:
+        return None
+    return {
+        "pattern": pattern,
+        "participant_count": most_common_count,
+        "impact": COINJOIN_SHAPE_IMPACT[pattern],
+        "evidence_level": "heuristic",
+    }
+
+
+def _coinjoin_shape(
+    input_count: int,
+    inputs: list[Mapping[str, Any]],
+    outputs: list[Mapping[str, Any]],
+    most_common_count: int,
+) -> str | None:
+    """Name the public CoinJoin-like shape of non-OP_RETURN ``outputs``.
+
+    A shape is a collaboration boundary that suppresses ownership guesses; it
+    never proves participation and never grants ownership. See "CoinJoin shape
+    rules" in docs/reference/local-chain-analysis.md for thresholds and sources.
+    """
+    if input_count < COINJOIN_MIN_INPUTS or len(outputs) < COINJOIN_MIN_OUTPUTS:
+        return None
+    if most_common_count >= COINJOIN_MIN_EQUAL_OUTPUTS:
+        if input_count >= LARGE_COINJOIN_MIN_LEGS and len(outputs) >= LARGE_COINJOIN_MIN_LEGS:
+            return "large_equal_output_coinjoin"
+        if len(outputs) < COINJOIN_MAX_LEG_RATIO * input_count:
+            return "equal_output_coinjoin"
+    if (
+        len(outputs) >= COINJOIN_MAX_LEG_RATIO * input_count
+        or input_count >= COINJOIN_MAX_LEG_RATIO * len(outputs)
+        or len(inputs) != input_count
+        or most_common_count < 2
+    ):
+        return None
+    # Only values and scripts the transaction itself carries: an unavailable
+    # leg is neither repetition nor reuse, so the rule is not evaluated.
+    input_values = [item["observed_value_sats"] for item in inputs]
+    output_values = [item["value_sats"] for item in outputs]
+    scripts = [item["script"] for item in (*inputs, *outputs)]
+    if any(value is None or value < 0 for value in (*input_values, *output_values)) or None in scripts:
+        return None
+    if len(set(scripts)) != len(scripts):
+        return None
+    if 2 * (len(set(input_values)) + len(set(output_values))) > input_count + len(outputs):
+        return None
+    return "distinct_value_coinjoin"
 
 
 def _stored_privacy_boundary(raw: Mapping[str, Any]) -> str | None:
@@ -887,9 +940,14 @@ def collaborative_transaction_evidence(
         return None
     parsed = {
         "input_count": len(vin),
+        "inputs": [
+            {"observed_value_sats": input_value_sats(item), "script": normalized_script_hex(input_script(item))}
+            for item in vin if isinstance(item, Mapping)
+        ],
         "outputs": [
-            {"value_sats": output_value_sats(item), "op_return": _is_op_return(item, normalized_script_hex(output_script(item)))}
+            {"value_sats": output_value_sats(item), "script": script, "op_return": _is_op_return(item, script)}
             for item in vout if isinstance(item, Mapping)
+            for script in (normalized_script_hex(output_script(item)),)
         ],
     }
     signal = _coinjoin_signal({"privacy_boundary": None, "review_status": None}, {}, parsed)
