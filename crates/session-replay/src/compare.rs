@@ -35,6 +35,23 @@ fn stamp_suffix() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"<time>-[0-9]+(\.[A-Za-z][A-Za-z0-9]*)").unwrap())
 }
 
+/// A diagnostics report's host platform (`uname`): system, kernel release
+/// and machine, in JSON or in JSON inside a string. They describe the
+/// machine that ran the process, not the product.
+fn host_platform() -> &'static [Regex; 2] {
+    static RE: OnceLock<[Regex; 2]> = OnceLock::new();
+    RE.get_or_init(|| {
+        let triple = |q: &str| {
+            let value = format!(r#"{q}(?:[^"\\]|\\[^"])*{q}"#);
+            Regex::new(&format!(
+                r#"({q}platform{q}\s*:\s*\{{\s*{q}system{q}\s*:\s*){value}(\s*,\s*{q}release{q}\s*:\s*){value}(\s*,\s*{q}machine{q}\s*:\s*){value}"#
+            ))
+            .unwrap()
+        };
+        [triple("\""), triple(r#"\\""#)]
+    })
+}
+
 fn uuid4() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -443,7 +460,12 @@ impl<'a> Canon<'a> {
         // one group compared as a multiset by content, so a missing, extra,
         // overwritten or changed file still differs; only which file of a
         // second carries which suffix is not compared.
-        stamp_suffix().replace_all(&out, "<time>$1").into_owned()
+        let out = stamp_suffix().replace_all(&out, "<time>$1");
+        let [plain, escaped] = host_platform();
+        let out = plain.replace_all(&out, "${1}\"<host>\"${2}\"<host>\"${3}\"<host>\"");
+        escaped
+            .replace_all(&out, r#"${1}\"<host>\"${2}\"<host>\"${3}\"<host>\""#)
+            .into_owned()
     }
 
     /// Table rows in an order both runs share: by their shape with generated
@@ -756,6 +778,31 @@ mod tests {
             local_offset_us: HOUR_US,
             also: Vec::new(),
         }
+    }
+
+    #[test]
+    fn host_platform_facts_are_masked_and_nothing_beside_them() {
+        let pinned = HashSet::new();
+        let mut canon = Canon::new(window(), &pinned);
+        let pretty = "\"platform\": {\n  \"system\": \"Linux\",\n  \"release\": \"7.2.8-9-omarchy\",\n  \"machine\": \"x86_64\"\n},\n\"sqlite_version\": \"3.51.3\"";
+        let other = pretty.replace("7.2.8-9-omarchy", "7.0.0-1017-azure");
+        assert_eq!(canon.rewrite(pretty, false), canon.rewrite(&other, false));
+        assert!(canon
+            .rewrite(pretty, false)
+            .contains("\"sqlite_version\": \"3.51.3\""));
+        assert!(canon
+            .rewrite(pretty, false)
+            .contains("\"release\": \"<host>\""));
+        let compact = r#"{"text":"{\"platform\":{\"system\":\"Linux\",\"release\":\"6.1\",\"machine\":\"aarch64\"}}"}"#;
+        assert_eq!(
+            canon.rewrite(compact, false),
+            r#"{"text":"{\"platform\":{\"system\":\"<host>\",\"release\":\"<host>\",\"machine\":\"<host>\"}}"}"#
+        );
+        // A release field anywhere else stays.
+        assert_eq!(
+            canon.rewrite(r#"{"release":"v1.2.3","machine":"x"}"#, false),
+            r#"{"release":"v1.2.3","machine":"x"}"#
+        );
     }
 
     #[test]
