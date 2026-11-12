@@ -339,6 +339,11 @@ export interface UiState {
   /** Launch and unlock raise the mode to at least "hideAmounts". */
   hideAmountsOnUnlock: boolean;
   clearClipboard: boolean;
+  /**
+   * Opt-in OS notifications with generic text only (Settings → Privacy).
+   * Off by default; only this boolean is stored.
+   */
+  desktopNotifications: boolean;
   explorerSettings: ExplorerSettings;
   appLockPolicy: AppLockPolicy;
   identity: Identity | null;
@@ -460,6 +465,7 @@ export interface UiState {
   /** Applies "hide amounts when Kassiber unlocks" if the user enabled it. */
   enforceUnlockPrivacy: () => void;
   setClearClipboard: (clearClipboard: boolean) => void;
+  setDesktopNotifications: (enabled: boolean) => void;
   setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
@@ -702,6 +708,7 @@ export function uiStatePartialForStorage(state: UiState) {
     privacyMode: state.privacyMode,
     hideAmountsOnUnlock: state.hideAmountsOnUnlock,
     clearClipboard: state.clearClipboard,
+    desktopNotifications: state.desktopNotifications,
     appScale: state.appScale,
     explorerSettings: state.explorerSettings,
     appLockPolicy: state.appLockPolicy,
@@ -823,6 +830,7 @@ export const useUiStore = create<UiState>()(
       hideSensitive: false,
       hideAmountsOnUnlock: false,
       clearClipboard: true,
+      desktopNotifications: false,
       explorerSettings: DEFAULT_EXPLORER_SETTINGS,
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
@@ -900,6 +908,8 @@ export const useUiStore = create<UiState>()(
             : state,
         ),
       setClearClipboard: (clearClipboard) => set({ clearClipboard }),
+      setDesktopNotifications: (desktopNotifications) =>
+        set({ desktopNotifications }),
       setExplorerSettings: (settings) =>
         set((state) => ({
           explorerSettings: { ...state.explorerSettings, ...settings },
@@ -1214,6 +1224,8 @@ export const useUiStore = create<UiState>()(
           dataMode,
           appScale: normalizeAppScale(restored.appScale ?? current.appScale),
           clearClipboard: restored.clearClipboard ?? current.clearClipboard,
+          // Added without a version bump: only an explicit `true` opts in.
+          desktopNotifications: restored.desktopNotifications === true,
           ...restoredPrivacy(restored, current),
           explorerSettings: {
             ...DEFAULT_EXPLORER_SETTINGS,

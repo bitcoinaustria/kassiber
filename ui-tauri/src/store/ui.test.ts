@@ -53,6 +53,19 @@ describe("UI persistence", () => {
     useUiStore.getState().setAppUpdate(null);
   });
 
+  it("keeps desktop notifications off by default and stores only the boolean", () => {
+    expect(useUiStore.getInitialState().desktopNotifications).toBe(false);
+
+    useUiStore.getState().setDesktopNotifications(true);
+    const stored = uiStatePartialForStorage(useUiStore.getState());
+    expect(stored.desktopNotifications).toBe(true);
+    // No delivery history, token, or destination travels with it.
+    expect(Object.keys(stored).filter((key) => /notif/i.test(key))).toEqual([
+      "desktopNotifications",
+    ]);
+    useUiStore.getState().setDesktopNotifications(false);
+  });
+
   it("refuses a late update result after consent is disabled", () => {
     useUiStore.getState().setAutomaticUpdateChecks(false);
     useUiStore.getState().setAppUpdate({
