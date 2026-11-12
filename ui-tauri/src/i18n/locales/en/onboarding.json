@@ -8,9 +8,6 @@
     "errorImportProject": "Could not import project.",
     "errorReturnDefaultRoot": "Could not return to the default project root."
   },
-  "brand": {
-    "tagline": "Local-first Bitcoin accounting"
-  },
   "books": {
     "intro": "Each book has its own tax and currency settings. Use separate books for private and business activity; use separate Kassiber files for different clients.",
     "newBookSet": "New book set",
@@ -120,7 +117,6 @@
     }
   },
   "frame": {
-    "step": "Step {{current}} of {{total}}",
     "setup": "Setup",
     "setupConnects": "Setup connects to nothing unless you test a server."
   },
@@ -163,7 +159,6 @@
       "body": "Skip setup and open the generated regtest book connected to the local Docker stack."
     },
     "quickStart": "Or create with recommended defaults",
-    "quickStartDetail": "Built-in Bitcoin servers, local AI, encrypted books, no update checks.",
     "highlights": {
       "localDatabase": {
         "title": "One local database"

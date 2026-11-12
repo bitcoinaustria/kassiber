@@ -177,9 +177,8 @@ The app icon keeps the K and Bitcoin-orange wedge on a pixel grid. Standalone
 light- and dark-background wordmarks live in `docs/assets/` for reuse.
 
 The setup steps run in one wizard card laid out after T3 Code's welcome
-wizard: the identity, a "Step 4 of 5" position, and a segmented step track in
-its header, the step in an inset panel. The express path opens on Security, so
-it counts from there over the same five steps. Each step leads with its main decision as option cards; the Sync
+wizard: the identity centred above the card, a segmented step track in the
+card's header, and the step in an inset panel. Each step leads with its main decision as option cards; the Sync
 step starts with none chosen, so no server is picked for the user. Every card
 says what that option lets Kassiber reach and when (the internet when you
 sync, this device when you use the assistant, or no connections) and names the

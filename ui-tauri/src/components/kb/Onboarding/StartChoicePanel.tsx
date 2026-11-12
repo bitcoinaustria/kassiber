@@ -70,9 +70,6 @@ export function StartChoicePanel({
         </div>
 
         <header className="space-y-4">
-          <p className="font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
-            {t("brand.tagline")}
-          </p>
           <h1 className="text-5xl leading-[1.05] font-semibold tracking-tight text-balance text-ink">
             {t("start.headline")}
           </h1>
@@ -137,7 +134,7 @@ export function StartChoicePanel({
               {t("start.openExisting.desktopOnly")}
             </p>
           )}
-          <div className="space-y-1">
+          <div>
             <button
               type="button"
               onClick={onQuickStart}
@@ -149,11 +146,6 @@ export function StartChoicePanel({
                 aria-hidden="true"
               />
             </button>
-            {/* The express path chooses the built-in Bitcoin servers, so say
-                so before it is taken. */}
-            <p className="max-w-sm text-xs leading-relaxed text-ink-3">
-              {t("start.quickStartDetail")}
-            </p>
           </div>
         </div>
 

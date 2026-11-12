@@ -88,27 +88,3 @@ export const OnboardingStepper = ({
     </nav>
   );
 };
-
-/**
- * "Step 4 of 5" for the setup header, counted over the same list the step
- * track shows, so the express path (which opens on Security) reads the same
- * position as the track. `current` is the zero-based step index.
- */
-export const OnboardingStepCount = ({
-  current,
-  total,
-  className,
-}: {
-  current: number;
-  total: number;
-  className?: string;
-}) => {
-  const { t } = useTranslation("onboarding");
-  if (total <= 0) return null;
-  const position = Math.min(Math.max(current, 0), total - 1) + 1;
-  return (
-    <span className={cn("text-xs tabular-nums text-ink-3", className)}>
-      {t("frame.step", { current: position, total })}
-    </span>
-  );
-};
