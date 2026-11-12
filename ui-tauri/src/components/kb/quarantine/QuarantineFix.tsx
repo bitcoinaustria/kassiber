@@ -20,6 +20,7 @@ import { useUiStore } from "@/store/ui";
 
 import { fixOperations, reconcilePicks } from "./explain";
 import type { QuarantineBookScope, QuarantineItem } from "./types";
+import { sensitiveClass } from "@/lib/sensitive";
 
 /** Pairs named in the dialog before the rest are counted. */
 const LISTED = 5;
@@ -36,8 +37,6 @@ type Phase =
   | { kind: "failed"; message: string }
   /** Apply failed without saying whether it ran: retry the same proposal. */
   | { kind: "uncertain"; artifact: ReviewArtifact; key: string; message: string };
-
-const sensitiveClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 /** The book changed between preview and confirmation; preview again. */
 const STALE = new Set([

@@ -1,7 +1,6 @@
 import type { ConnectionStatus } from "@/mocks/seed";
 
-export const hiddenSensitiveClassName = (hidden: boolean) =>
-  hidden ? "sensitive" : "";
+export { sensitiveClass as hiddenSensitiveClassName } from "@/lib/sensitive";
 
 export const formatBtc = (value: number) => value.toFixed(8);
 

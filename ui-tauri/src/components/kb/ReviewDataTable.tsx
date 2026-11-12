@@ -43,6 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatUiNumber } from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
+import { sensitiveClass as blurClass } from "@/lib/sensitive";
 
 export type ReviewTableKind = "journal-events";
 
@@ -174,8 +175,6 @@ const priorityLabelKey = {
 
 export type ReviewTone = "good" | "warning" | "alert" | "neutral";
 type SortDirection = "desc" | "asc";
-
-const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 export function ReviewDataTable({
   kind,
