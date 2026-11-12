@@ -72,11 +72,17 @@ export const NOTIFICATION_OPERATION_KINDS = [
 
 /**
  * One button. `navigate` opens a route from the allowlist in
- * `notificationRouting.ts`; `operation` repeats a closed-list operation and
- * names `review`, the route a stale action opens instead of mutating.
+ * `notificationRouting.ts`, optionally revealing one settings row (`anchor`,
+ * a `SettingsAnchorId` of that section). `open-connection` and
+ * `open-transaction` open one record of the originating book; from another
+ * book they open the list instead. `operation` repeats a closed-list
+ * operation and names `review`, the route a stale action opens instead of
+ * mutating.
  */
 export type NotificationActionSpec =
-  | { type: "navigate"; to: string }
+  | { type: "navigate"; to: string; anchor?: string }
+  | { type: "open-connection"; connectionId: string }
+  | { type: "open-transaction"; transactionId: string }
   | { type: "operation"; operation: NotificationOperation; review: string };
 
 /**

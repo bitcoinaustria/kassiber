@@ -51,6 +51,7 @@ import {
   shouldHideNotificationProgressLabel,
 } from "./notificationDisplay";
 import { projectFreeText } from "./notificationPrivacy";
+import { requestSettingsAnchor } from "./settings/settingsSearch";
 import {
   projectConditionGroup,
   projectJob,
@@ -250,11 +251,27 @@ export function NotificationCenter({
     );
     if (!resolved) return;
     setOpen(false);
-    if (resolved.kind === "operation") {
-      runOperation(resolved.operation);
-      return;
+    switch (resolved.kind) {
+      case "operation":
+        runOperation(resolved.operation);
+        return;
+      case "open-connection":
+        void navigate({
+          to: "/connections/$connectionId",
+          params: { connectionId: resolved.connectionId },
+        });
+        return;
+      case "open-transaction":
+        void navigate({
+          to: "/transactions",
+          search: { tx: resolved.transactionId },
+        });
+        return;
+      case "navigate":
+        if (resolved.anchor) requestSettingsAnchor(resolved.anchor);
+        void navigate({ to: resolved.to });
+        return;
     }
-    void navigate({ to: resolved.to });
   };
 
   const runLegacyAction = (action: ResolvedNotificationAction) => {
