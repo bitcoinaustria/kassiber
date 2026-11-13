@@ -58,10 +58,7 @@ export function Activity() {
   const [staleOnly, setStaleOnly] = React.useState(false);
   const { revert: onRevert, isReverting } = useActivityHistoryRevert();
   const { runJournalProcessing, isProcessingJournals } =
-    useJournalProcessingAction({
-      notifyStart: true,
-      notifyAlreadyRunning: true,
-    });
+    useJournalProcessingAction();
 
   const args = React.useMemo(() => {
     const payload: Record<string, unknown> = { limit: 50, include_stale: false };

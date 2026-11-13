@@ -198,38 +198,120 @@
   "notifications": {
     "label": "Notifications",
     "labelActive": "Notifications ({{count}} active)",
-    "clearAll": "Clear all",
+    "sections": {
+      "attention": "Needs attention",
+      "running": "Running",
+      "recent": "Recent"
+    },
+    "clearRecent": "Clear recent",
     "dismiss": "Dismiss notification: {{title}}",
     "dismissShort": "Dismiss",
-    "showMore": "Show more",
-    "showLess": "Show less",
+    "showDetails": "Show details",
+    "hideDetails": "Hide details",
     "details": "Details",
     "repeatBadge": "×{{count}}",
     "repeated_one": "Arrived {{count}} time",
     "repeated_other": "Arrived {{count}} times",
-    "ledgerStale": {
-      "title": "Ledger needs processing",
-      "body": "Reports are not trusted until journal processing runs.",
-      "action": "Process now"
-    },
     "processing": "Processing...",
-    "bookRefreshRunning": {
-      "title": "Book refresh already running",
-      "body": "Kassiber is already refreshing sources, rates, or journals."
+    "refreshing": "Refreshing...",
+    "otherBook": "Started in another book",
+    "bookUnknown": "Kassiber is still opening this book. Try again in a moment.",
+    "staleBook": "Another book is open now, so nothing ran. Return to that book to try again.",
+    "staleAction": "Review",
+    "withheld": "Hidden while amounts are hidden.",
+    "empty": "No notifications.",
+    "detailLine": "{{label}}: {{message}}",
+    "generic": {
+      "attentionTitle": "Something needs attention",
+      "failedTitle": "Something went wrong",
+      "doneTitle": "Task finished",
+      "noticeTitle": "Notice",
+      "body": "Details are hidden in this privacy mode."
     },
-    "review": {
-      "title": "Waiting for your review",
-      "body_one": "{{count}} decision left.",
-      "body_other": "{{count}} decisions left."
+    "phrase": {
+      "failed": "failed",
+      "cancelled": "cancelled",
+      "coolingDown": "cooling down",
+      "blocksReports": "blocks reports",
+      "autoPairSkipped": "automatic pairing skipped"
     },
-    "filter": {
-      "label": "Show notifications",
-      "all": "All",
-      "needsAction": "Needs action ({{count}})"
+    "condition": {
+      "journalsStale": {
+        "title": "Journals need processing",
+        "body": "Reports are not trusted until journal processing runs.",
+        "action": "Process now"
+      },
+      "reviewPending": {
+        "title": "Waiting for your review",
+        "body_one": "{{count}} decision left.",
+        "body_other": "{{count}} decisions left.",
+        "blockingBody_one": "{{count}} decision left. Quarantined transactions keep reports blocked.",
+        "blockingBody_other": "{{count}} decisions left. Quarantined transactions keep reports blocked.",
+        "action": "Open review"
+      },
+      "sourceFailed": {
+        "title_one": "{{count}} source could not refresh",
+        "title_other": "{{count}} sources could not refresh",
+        "body": "Reports may use older observations.",
+        "blockingBody": "Reports stay blocked until these sources refresh.",
+        "action": "Review sources"
+      },
+      "workerError": {
+        "title": "Background refresh stopped",
+        "body": "Reports may use older observations until a refresh succeeds.",
+        "action": "Review sources"
+      },
+      "bookRefreshFailed": {
+        "title": "Book refresh failed",
+        "rescanTitle": "Book rescan failed",
+        "body": "Reports may use older observations until a refresh succeeds.",
+        "action": "Retry",
+        "rescanAction": "Retry rescan"
+      },
+      "backendRequired": {
+        "title": "Add a backend to sync wallets",
+        "body": "Wallets cannot refresh until a backend is configured.",
+        "action": "Open settings"
+      },
+      "journalsFailed": {
+        "title": "Journal processing failed",
+        "body": "Reports keep the previous journal state until processing succeeds.",
+        "action": "Retry"
+      }
     },
-    "empty": {
-      "all": "No notifications.",
-      "needsAction": "Nothing needs your action."
+    "result": {
+      "bookRefreshed": {
+        "title": "Book refreshed",
+        "rescanTitle": "Book rescanned"
+      },
+      "bookRefreshPending": {
+        "title": "Some sources are still queued",
+        "body": "They refresh when the queue reaches them.",
+        "action": "Open wallets"
+      },
+      "bookRefreshProblems": {
+        "title": "Book refresh finished with problems",
+        "body": "Needs attention lists what to fix."
+      },
+      "journalsProcessed": {
+        "title": "Journals processed",
+        "transactions_one": "{{count}} transaction",
+        "transactions_other": "{{count}} transactions",
+        "entries_one": "{{count}} entry",
+        "entries_other": "{{count}} entries",
+        "quarantined_one": "{{count}} quarantined",
+        "quarantined_other": "{{count}} quarantined",
+        "autoPaired_one": "{{count}} transfer pair applied",
+        "autoPaired_other": "{{count}} transfer pairs applied",
+        "warnings_one": "{{count}} warning",
+        "warnings_other": "{{count}} warnings",
+        "action": "Open journals"
+      }
+    },
+    "job": {
+      "bookRefresh": "Refreshing book",
+      "bookRescan": "Rescanning book",
+      "journalProcessing": "Processing journals"
     }
   },
   "currencyToggle": {
@@ -453,5 +535,10 @@
   },
   "screen": {
     "refreshing": "Refreshing"
+  },
+  "feedback": {
+    "label": "Messages",
+    "region": "Messages ({hotkey})",
+    "dismiss": "Dismiss"
   }
 }

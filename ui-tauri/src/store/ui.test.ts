@@ -118,14 +118,14 @@ describe("UI persistence", () => {
     expect(encoded).toContain('"clearClipboard":false');
   });
 
-  it("keeps notification details in memory but never in kb.ui", () => {
+  it("keeps notifications in memory but never in kb.ui", () => {
     useUiStore.setState({ notifications: [] });
     useUiStore.getState().addNotification({
       title: "Book refresh needs attention",
       body: "1 needs attention",
       tone: "warning",
       details: ["Cold wallet: HTTP 502 from https://node.example:3002/api"],
-      action: { label: "Retry", command: "refresh-book" },
+      action: { label: "Open settings", target: "/settings/bitcoin" },
     });
 
     expect(useUiStore.getState().notifications[0].details).toEqual([
@@ -136,8 +136,28 @@ describe("UI persistence", () => {
     );
     expect(encoded).not.toContain("node.example");
     expect(encoded).not.toContain('"details"');
-    // The action is plain data and survives a restart.
-    expect(encoded).toContain('"command":"refresh-book"');
+    // Nothing of a notification survives a restart, its action least of all:
+    // replayed later, it would run against whichever book is open then.
+    expect(encoded).not.toContain("/settings/bitcoin");
+    expect(encoded).not.toContain("Book refresh needs attention");
+  });
+
+  it("drops stored notifications when migrating to v5", () => {
+    const migrated = migrateUiState(
+      {
+        theme: "light",
+        notifications: [
+          {
+            id: "old",
+            title: "Book refresh failed",
+            action: { label: "Retry", command: "refresh-book" },
+          },
+        ],
+      },
+      4,
+    );
+    expect(migrated).toMatchObject({ theme: "light" });
+    expect((migrated as { notifications?: unknown }).notifications).toBeUndefined();
   });
 
   it("clears the replaced entry's details and action on a dedupe update", () => {
@@ -149,7 +169,7 @@ describe("UI persistence", () => {
       tone: "error",
       dedupeKey: "book-refresh",
       details: ["Cold wallet: timeout"],
-      action: { label: "Retry", command: "refresh-book" },
+      action: { label: "Open settings", target: "/settings/bitcoin" },
     });
     addNotification({
       title: "Book refresh started",

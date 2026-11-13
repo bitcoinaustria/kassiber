@@ -323,11 +323,11 @@ export function SettingsScreen({
         setAppLockPolicy({ touchIdUnlock: false });
       } catch (error: unknown) {
         addNotification({
-          title: t("touchId.removedTitle"),
+          title: t("touchId.removeFailedTitle"),
           body:
             error instanceof Error
               ? error.message
-              : t("touchId.removedBody"),
+              : t("touchId.removeFailedBody"),
           tone: "warning",
         });
       }

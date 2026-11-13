@@ -98,10 +98,13 @@ describe("notificationTarget", () => {
 });
 
 describe("resolveNotificationAction", () => {
-  it("runs known shell commands", () => {
+  it("refuses commands: a legacy entry has no book scope to run them in", () => {
     expect(
-      resolveNotificationAction({ label: "Retry", command: "refresh-book" }, false),
-    ).toEqual({ label: "Retry", kind: "command", command: "refresh-book" });
+      resolveNotificationAction(
+        { label: "Retry", command: "refresh-book" } as never,
+        false,
+      ),
+    ).toBeNull();
   });
 
   it("navigates to app routes and settings sections", () => {
@@ -128,7 +131,7 @@ describe("resolveNotificationAction", () => {
     ).toBeNull();
     expect(
       resolveNotificationAction(
-        { label: "Run", command: "rm -rf" as never },
+        { label: "Run", command: "rm -rf" } as never,
         true,
       ),
     ).toBeNull();

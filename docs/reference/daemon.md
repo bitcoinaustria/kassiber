@@ -1093,7 +1093,11 @@ and cancel jobs through the same tables. Because background passes have no
 originating request, the worker reports through unsolicited event envelopes
 (`event: true`, no `request_id`): `ui.freshness.progress` per job phase,
 `ui.freshness.background` after a pass that enqueued or completed work, and
-`ui.freshness.worker` for worker lifecycle errors. Wallet and journal sources use the
+`ui.freshness.worker` for worker lifecycle errors. Background and worker-error
+events name the book they ran for as `data.profile.id`; the desktop applies an
+event only when that is the open book, and otherwise just re-reads the open
+book's state, so an event delivered after a book switch cannot raise or clear
+anything in the new book. Wallet and journal sources use the
 general 15-minute background interval; market-rate sources use an hourly
 interval by default. Kassiber checks `SELECT sqlite_version()` on each actual
 connection, including SQLCipher after keying. WAL with `synchronous=NORMAL` is

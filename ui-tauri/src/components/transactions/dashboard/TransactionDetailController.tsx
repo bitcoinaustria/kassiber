@@ -137,10 +137,7 @@ export function TransactionDetailController({
   const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
   const revertHistory = useDaemonMutation("ui.transactions.history.revert");
   const { runJournalProcessing, isProcessingJournals } =
-    useJournalProcessingAction({
-      notifyStart: true,
-      notifyAlreadyRunning: true,
-    });
+    useJournalProcessingAction();
 
   const detailId = transaction?.id ?? "";
   const enabled = Boolean(transaction);

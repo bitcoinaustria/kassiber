@@ -180,8 +180,8 @@
     "notifyBody": "Ein eigenes Desktop-Passwort wurde für die Touch-ID-Entsperrung in der macOS-Keychain gespeichert."
   },
   "touchId": {
-    "removedTitle": "Touch-ID-Passwort wurde nicht entfernt",
-    "removedBody": "Die macOS-Keychain hat das gespeicherte Passwort nicht entfernt.",
+    "removeFailedTitle": "Touch-ID-Passwort wurde nicht entfernt",
+    "removeFailedBody": "Die macOS-Keychain hat das gespeicherte Passwort nicht entfernt.",
     "disabledTitle": "Touch-ID-Entsperrung wurde deaktiviert",
     "disabledBody": "Das Datenbank-Passwort wurde geändert, aber die macOS-Keychain hat das aktualisierte Desktop-Passwort für Touch ID nicht akzeptiert.",
     "forgetAllTitle": "Gespeicherte Entsperrmethoden entfernt",

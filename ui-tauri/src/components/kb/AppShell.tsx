@@ -97,11 +97,22 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useRightPanelStore } from "@/store/rightPanel";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
-import type {
-  Identity,
-  NotificationCommand,
-  ThemePreference,
-} from "@/store/ui";
+import type { Identity, ThemePreference } from "@/store/ui";
+import {
+  attentionGroupCount,
+  conditionsInScope,
+  resetNotificationStore,
+  useNotificationStore,
+  type NotificationOperation,
+} from "@/store/notifications";
+import { clearFeedback } from "@/lib/feedback";
+import {
+  readActiveBook,
+  trackBookSwitch,
+  useActiveBook,
+  type DaemonBookScope,
+} from "@/lib/activeBook";
+import { applyFreshnessEvent } from "@/lib/notificationConditions";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
@@ -166,8 +177,8 @@ import {
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
 import {
-  classifyDaemonFreshnessEvent,
   DAEMON_EVENT_CHANNEL,
+  parseDaemonFreshnessEvent,
 } from "@/lib/daemonFreshnessEvent";
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 import { useAgentAccessMasterSync } from "@/lib/agentAccess";
@@ -210,10 +221,9 @@ import {
   isDevLockedRoute,
 } from "./devMode";
 import { notificationProgressValue } from "./notificationDisplay";
-import {
-  NotificationCenter,
-  type SystemNotificationItem,
-} from "./NotificationCenter";
+import { FeedbackToaster } from "./FeedbackToaster";
+import { useLiveNotificationConditions } from "./useLiveNotificationConditions";
+import { NotificationCenter } from "./NotificationCenter";
 import { planHeaderRefresh } from "./headerRefresh";
 
 const BUG_REPORT_URL =
@@ -1151,10 +1161,14 @@ export function AppShell() {
   const switchProject = React.useCallback(
     async (project: ProjectCatalogEntry) => {
       try {
-        const envelope = await getTransport().invoke<ProjectSelectSnapshot>({
-          kind: "ui.projects.select",
-          args: { project_id: project.id },
-        });
+        // Until the new book is known, notification actions have no book
+        // to bind to and stay refused.
+        const envelope = await trackBookSwitch(
+          getTransport().invoke<ProjectSelectSnapshot>({
+            kind: "ui.projects.select",
+            args: { project_id: project.id },
+          }),
+        );
         if (envelope.kind === "ui.projects.select" && envelope.data?.project) {
           const nextIdentity = identityFromProject(
             envelope.data.project,
@@ -1211,6 +1225,9 @@ export function AppShell() {
   const resetLocalUiSession = React.useCallback(() => {
     clearSessionUnlockPassphrase();
     clearDaemonQueryCache();
+    // The session's notifications go with it; they are RAM only anyway.
+    resetNotificationStore();
+    useUiStore.setState({ notifications: [] });
     setDaemonAuthRequired(false);
     setHideSensitive(false);
     void clearImportedProjectRoot()
@@ -1288,8 +1305,6 @@ export function AppShell() {
   const { runJournalProcessing: runMenuJournalProcessing } =
     useJournalProcessingAction({
       beforeRun: ensureWorkspaceForMenuAction,
-      notifyAlreadyRunning: true,
-      notifyStart: true,
     });
 
   const runMenuWalletSync = React.useCallback(
@@ -1300,22 +1315,20 @@ export function AppShell() {
         isDaemonKindMutating("ui.freshness.run") ||
         isDaemonKindMutating("ui.wallets.sync")
       ) {
-        addNotification({
-          title: t("notifications.bookRefreshRunning.title"),
-          body: t("notifications.bookRefreshRunning.body"),
-          tone: "info",
-        });
+        // Already running: bring the running job back into view rather than
+        // announcing it again.
+        if (bookKey !== null) restoreSyncCardStore(bookKey);
         return;
       }
       syncAll({ forceFull: Boolean(options?.forceFull) });
     },
     [
-      addNotification,
+      bookKey,
       ensureWorkspaceForMenuAction,
       isDaemonKindMutating,
       isSyncing,
+      restoreSyncCardStore,
       syncAll,
-      t,
     ],
   );
 
@@ -1325,7 +1338,7 @@ export function AppShell() {
   // background) and start the book refresh. `syncAll` no-ops while one is
   // already running, so a mid-refresh trigger just re-opens the card.
   const runHeaderRefresh = React.useCallback(
-    (options?: { forceFull?: boolean }) => {
+    (options?: { forceFull?: boolean; expectedScope?: DaemonBookScope }) => {
       const plan = planHeaderRefresh({
         hasWorkspace: ensureWorkspaceForMenuAction(),
         bookKey,
@@ -1334,7 +1347,10 @@ export function AppShell() {
         restoreSyncCardStore(plan.reopenSyncCardForBook);
       }
       if (plan.startRefresh) {
-        syncAll({ forceFull: Boolean(options?.forceFull) });
+        syncAll({
+          forceFull: Boolean(options?.forceFull),
+          expectedScope: options?.expectedScope,
+        });
       }
     },
     [bookKey, ensureWorkspaceForMenuAction, restoreSyncCardStore, syncAll],
@@ -1699,33 +1715,14 @@ export function AppShell() {
             addNotification({ title: t("chainAnalysis:watch.notificationTitle"), body: t("chainAnalysis:watch.notificationBody"), tone: "info", dedupeKey: "local-evidence-watches", target: "/chain-analysis" });
             return;
           }
-          const signal = classifyDaemonFreshnessEvent(event.payload);
-          if (!signal) return;
+          const freshness = parseDaemonFreshnessEvent(event.payload);
+          if (!freshness) return;
 
           void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-          if (signal === "refresh") {
-            const store = useUiStore.getState();
-            const previousFailure = store.notifications.find(
-              (item) => item.dedupeKey === "background-freshness",
-            );
-            if (previousFailure) store.clearNotification(previousFailure.id);
-            return;
-          }
-
-          addNotification({
-            title:
-              signal === "worker-error"
-                ? t("overview:bookRefresh.failedTitle")
-                : t("overview:bookRefresh.needsAttentionTitle"),
-            body: t("overview:bookRefresh.failedBody"),
-            tone: signal === "worker-error" ? "error" : "warning",
-            dedupeKey: "background-freshness",
-            target: "/logs",
-            action: {
-              label: t("overview:bookRefresh.actions.retry"),
-              command: "refresh-book",
-            },
-          });
+          // Applied only when the event names the open book; anything else
+          // (delayed past a switch, or naming no book) is left to the
+          // re-read the invalidation above starts.
+          applyFreshnessEvent(freshness, readActiveBook(queryClient));
         }),
       )
       .then((nextUnlisten) => {
@@ -1744,6 +1741,11 @@ export function AppShell() {
       safeTauriUnlisten(unlisten);
     };
   }, [addNotification, daemonEnabled, queryClient, t]);
+
+  // Toasts never show over the lock screen, and nothing queued survives it.
+  React.useEffect(() => {
+    if (!shellUnlocked) clearFeedback();
+  }, [shellUnlocked]);
 
   React.useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
@@ -1914,6 +1916,7 @@ export function AppShell() {
                     progress={shellProgress}
                     announce={!showSyncCard}
                   />
+                  <FeedbackToaster />
                   {showSyncCard ? (
                     <FirstSyncCard
                       progress={syncCardProgress}
@@ -2900,7 +2903,10 @@ function AppVersion() {
 type ShellTitlebarControlsProps = {
   meta: RouteMeta;
   onLock: () => void;
-  onRefresh: (options?: { forceFull?: boolean }) => void;
+  onRefresh: (options?: {
+    forceFull?: boolean;
+    expectedScope?: DaemonBookScope;
+  }) => void;
   isRefreshing: boolean;
   daemonEnabled: boolean;
 };
@@ -3048,55 +3054,30 @@ function ShellTitlebarControls({
   const identity = useUiStore((s) => s.identity);
   const reopenFirstSyncCard = useUiStore((s) => s.reopenFirstSyncCard);
   const headerBookKey = bookIdentityKey(identity);
-  const { runJournalProcessing, isProcessingJournals } =
+  const queryClient = useQueryClient();
+  const { runJournalProcessing, runJournalProcessingWith, isProcessingJournals } =
     useJournalProcessingAction();
-  // The same counts as the sidebar's Review badge, from the same read.
-  const { data } = useDaemon<ReviewBadges>(
-    "ui.review.badges",
-    undefined,
-    { enabled: daemonEnabled },
-  );
-  const badges = data?.data;
-  const reviewCount = reviewTotal(badges);
-  const needsJournals = Boolean(badges?.journals_needs_processing);
-  const blocksReports = (badges?.quarantine ?? 0) > 0;
-
-  const systemNotificationItems: SystemNotificationItem[] = [
-    ...(needsJournals
-      ? [
-          {
-            id: "journals-stale",
-            title: t("notifications.ledgerStale.title"),
-            body: t("notifications.ledgerStale.body"),
-            tone: "warning" as const,
-            to: "/review" as const,
-            action: {
-              label: t("notifications.ledgerStale.action"),
-              command: "process-journals" as const,
-            },
-          },
-        ]
-      : []),
-    ...(reviewCount > 0
-      ? [
-          {
-            id: "review",
-            title: t("notifications.review.title"),
-            body: t("notifications.review.body", { count: reviewCount }),
-            tone: "warning" as const,
-            to: "/review" as const,
-          },
-        ]
-      : []),
-  ];
-  const runNotificationCommand = (command: NotificationCommand) => {
-    if (command === "process-journals") runJournalProcessing();
-    else onRefresh();
+  const activeBook = useActiveBook(daemonEnabled);
+  const activeBookKey = activeBook?.key ?? null;
+  useLiveNotificationConditions(daemonEnabled, activeBook);
+  const conditions = useNotificationStore((s) => s.conditions);
+  const inScope = conditionsInScope(conditions, activeBookKey);
+  const attentionCount = attentionGroupCount(conditions, activeBookKey);
+  const blocksReports = inScope.some((entry) => entry.priority === "blocking");
+  const runNotificationOperation = (
+    operation: NotificationOperation,
+    expectedScope: DaemonBookScope,
+  ) => {
+    if (operation.kind === "process-journals") {
+      runJournalProcessingWith({ autoPair: operation.autoPair, expectedScope });
+    } else {
+      onRefresh({ forceFull: operation.forceFull, expectedScope });
+    }
   };
   const notificationAlertClassName =
     blocksReports
       ? "border border-red-500/35 bg-red-500/10 text-red-700 hover:bg-red-500/15 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300"
-      : needsJournals || reviewCount > 0
+      : attentionCount > 0
         ? "border border-amber-500/35 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300"
         : "";
   return (
@@ -3197,13 +3178,14 @@ function ShellTitlebarControls({
           </DropdownMenu>
         </div>
         <NotificationCenter
-          systemItems={systemNotificationItems}
           triggerClassName={cn(
             shellIconButtonClassName,
             notificationAlertClassName,
           )}
-          runCommand={runNotificationCommand}
-          pendingCommands={{
+          currentBook={activeBook}
+          resolveCurrentBook={() => readActiveBook(queryClient)}
+          runOperation={runNotificationOperation}
+          pendingOperations={{
             "process-journals": isProcessingJournals,
             "refresh-book": isRefreshing,
           }}

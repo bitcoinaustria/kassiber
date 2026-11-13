@@ -440,6 +440,14 @@ layouts stay legacy, while `~/.kassiber/{bin,run}` stay fixed. An active legacy
 desktop or operator owner defers migration; startup keeps using the legacy root
 until that process stops. `kassiber status` reports the effective root.
 
+- The desktop's UI preferences (`kb.ui` in the webview's local storage:
+  language, theme, privacy mode, panel layout, the open book's identity,
+  table sorts, and similar) hold no notifications. Notification text, detail
+  lines, book and source scope, timestamps, and actions stay in RAM for the
+  session; UI state version 5 deletes notifications earlier versions stored
+  there, and none is ever restored, so a stored Retry cannot run against
+  another book. Toasts keep no history and are not forwarded to the
+  operating system.
 - Main-window geometry (size, position, maximized) is kept outside the state
   root: in the app's AppKit preferences on macOS, and in
   `.window-state.json` under Tauri's config directory on Windows and Linux. It

@@ -350,10 +350,7 @@ const TransactionsTable = ({
     return map;
   }, [loanMarkByTransaction]);
   const { runJournalProcessing, isProcessingJournals } =
-    useJournalProcessingAction({
-      notifyStart: true,
-      notifyAlreadyRunning: true,
-    });
+    useJournalProcessingAction();
   const attachmentsQuery = useDaemon<AttachmentsListData>(
     "ui.attachments.list",
     { transaction: detailTransaction?.id ?? "" },
