@@ -1894,14 +1894,22 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 - [ ] Other crypto assets per [plan 23](docs/plan/23-crypto-assets.md).
   Done: the foundation (`asset_scope`, the skip tally, exact units, swap
-  pairing) and Bitpanda. Open: Kraken and Binance APIs, the Coinbase API,
-  CoinTracking and Blockpit exports, the desktop toggle (exchange card and
-  import result), per-asset overview, transactions and wallets views, and an
-  assistant tool that sets a wallet's asset scope under the usual consent
-  (AI tools must not see wallet configuration, so it needs its own narrow
-  tool). Then further sources from the Rotki survey: Bitvavo (API), Bison,
+  pairing), Bitpanda, Kraken, Binance (without spot trades, which Binance
+  serves only per market), Coinbase, the desktop toggle (exchange card and
+  import result), and the per-asset overview backend. Open: CoinTracking and
+  Blockpit exports, the desktop's per-asset overview, transactions and
+  wallets views, Binance spot trades (the user would have to name markets),
+  and an assistant tool that sets a wallet's asset scope under the usual
+  consent (AI tools must not see wallet configuration, so it needs its own
+  narrow tool). Then further sources from the Rotki survey: Bitvavo (API), Bison,
   Trade Republic and Crypto.com App (CSV; need real samples), Bitstamp,
   Revolut, Nexo, KuCoin, Bybit, OKX and Bitcoin.de.
+- [ ] Coinbase API keys: Coinbase expired the legacy HMAC keys the sync
+  signs with in February 2025 and accepts only CDP keys, which sign a
+  short-lived JWT per request (ES256 or Ed25519), so `wallets sync-coinbase`
+  cannot authenticate against real Coinbase today, BTC-only included. Add CDP
+  key auth (likely a signing dependency, with a license review) and update
+  the desktop key guide. See [Coinbase](docs/exchanges/coinbase.md).
 - [ ] Price crypto-to-crypto swaps outside Austria: Bitpanda states no fiat
   value for a swap, so taxable swap legs wait in `missing_spot_price` review.
   Needs per-asset rate sources (the rates crate is BTC-only) or a provider
