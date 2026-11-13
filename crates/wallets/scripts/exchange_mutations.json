@@ -519,8 +519,8 @@
   {
     "id": "bitpanda-internal-move-balance",
     "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
-    "find": "        if btc.iter().all(|l| l.fee.is_none()) && total(true)? == total(false)? {",
-    "replace": "        if btc.iter().all(|l| l.fee.is_none()) {",
+    "find": "            .all(|l| l.holding == held[0].holding && l.fee.is_none())\n            && total(true)? == total(false)?\n",
+    "replace": "            .all(|l| l.holding == held[0].holding && l.fee.is_none())\n",
     "expect_failing": [
       "bitpanda_refuses_ambiguous_btc_events"
     ],
@@ -656,6 +656,78 @@
       "bitpanda_balance_is_unavailable_rather_than_guessed"
     ],
     "rule": "A BTC leg without a wallet makes the reported balance unknown."
+  },
+  {
+    "id": "bitpanda-crypto-needs-scope",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "            Holding::Asset(_, Class::Crypto) => self.scope == assets::Scope::Crypto,",
+    "replace": "            Holding::Asset(_, Class::Crypto) => true,",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event",
+      "bitpanda_bitcoin_scope_points_swaps_at_the_asset_scope"
+    ],
+    "rule": "Other crypto assets are imported only in the wallet's crypto asset scope."
+  },
+  {
+    "id": "bitpanda-tally-skipped",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "                        tally.admit(context.scope, code, *class);",
+    "replace": "                        let _ = (code, class);",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "Every asset the scope leaves out is counted by ticker."
+  },
+  {
+    "id": "bitpanda-unlisted-refused-in-crypto",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "                    Holding::Unlisted(asset) if context.scope == assets::Scope::Crypto => {",
+    "replace": "                    Holding::Unlisted(asset) if false => {",
+    "expect_failing": [
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "In crypto scope an asset Bitpanda does not list is refused, not left out unseen."
+  },
+  {
+    "id": "bitpanda-shared-ticker",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        entry.shared = seen[&entry.code] > 1;",
+    "replace": "        entry.shared = seen[&entry.code] > 2;",
+    "expect_failing": [
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "A ticker two Bitpanda crypto assets share is never imported under that ticker."
+  },
+  {
+    "id": "bitpanda-fee-third-asset-only",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        let third = context.admitted(holding) && legs.iter().all(|other| other.holding != *holding);\n",
+    "replace": "        let third = true;\n",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events",
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "Only a fee in a third imported asset becomes its own row; a fee in a leg's asset or in cash stays refused."
+  },
+  {
+    "id": "bitpanda-swap-opposite-flows",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    if a.inbound == b.inbound {\n        return Err(refuse.because(\n            format!(\n                \"moves {} and {} the same way\",",
+    "replace": "    if false {\n        return Err(refuse.because(\n            format!(\n                \"moves {} and {} the same way\",",
+    "expect_failing": [
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "A swap's two legs flow opposite ways."
+  },
+  {
+    "id": "bitpanda-other-asset-precision",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    if refuse.context.admitted(&holding) && (amount.is_zero() || finer) {",
+    "replace": "    if false && (amount.is_zero() || finer) {",
+    "expect_failing": [
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "Another crypto asset's amount must be positive and at most 11 decimal places."
   },
   {
     "id": "exchange-provider-balance-book-sum",

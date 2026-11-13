@@ -86,7 +86,9 @@ rows}, excluded: {TICKER: rows}, next_step?}` to the result envelope.
    which fiat currency the export's value columns use).
 4. Views: per-asset overview, transactions and portfolio (the overview's
    `asset IN ('BTC','LBTC')` filters), asset-aware formatting in the desktop.
-   Bitcoin reports stay BTC-only unless the user asks for other assets.
+   Bitcoin-specific views (chain, UTXO, privacy, the Bitcoin balance) stay
+   BTC-only; tax reports (capital gains, E 1kv) cover every asset the book
+   holds, as tax law does.
 5. Further exchanges and export formats, prioritised from the Rotki survey
    (Rotki is AGPL; Kassiber reimplements from public API docs and samples,
    never from its code).
