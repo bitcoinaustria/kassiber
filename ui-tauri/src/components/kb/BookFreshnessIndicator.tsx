@@ -5,6 +5,7 @@ import { useBookRefreshStore } from "@/daemon/bookRefresh";
 import { bookFreshnessState, type BookFreshnessState } from "@/lib/bookFreshness";
 import { daemonMutationKey } from "@/daemon/client";
 import { formatBtc } from "@/lib/currency";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -44,7 +45,7 @@ export function BookFreshnessIndicator({
         (item) => item.dedupeKey === "background-freshness" && item.tone !== "success",
       ),
   );
-  const hideSensitive = useUiStore((state) => state.hideSensitive);
+  const hideSensitive = useSensitive("amount");
   if (!daemonEnabled) return null;
   return (
     <BookFreshnessView
@@ -96,11 +97,13 @@ export function BookFreshnessView({
       ? formatBtc(change.balanceDeltaSat / 1e8, { sign: true })
       : null;
   return (
+    // Kept in the tree on narrow windows (visually hidden) so the update
+    // is still announced; it is the screens' one live region for refreshes.
     <div
-      className="hidden min-w-0 items-center gap-1.5 px-2 text-xs text-muted-foreground sm:flex"
+      className="flex min-w-0 items-center gap-1.5 px-2 text-xs text-muted-foreground max-sm:sr-only"
       role="status"
       aria-live="polite"
-      aria-label={t("shell.freshness.label")}
+      title={t("shell.freshness.label")}
       data-state={state.kind}
     >
       <span
@@ -115,7 +118,10 @@ export function BookFreshnessView({
         <span className="hidden truncate tabular-nums lg:inline">
           ·{" "}
           {t("shell.freshness.balance")}{" "}
-          <span className={hideSensitive ? "sensitive" : undefined}>{balance}</span>
+          {/* Replaced, not only blurred: the live region reads it aloud. */}
+          <span className={hideSensitive ? "sensitive" : undefined}>
+            {maskSensitive(balance, hideSensitive)}
+          </span>
         </span>
       ) : null}
     </div>

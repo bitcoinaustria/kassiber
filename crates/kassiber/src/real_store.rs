@@ -1011,6 +1011,18 @@ impl kassiber_setup::Sources for SetupSources {
 /// across a reopen (SQLite's change counters restart with each connection).
 static OPENED_BOOKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// A random value per process, so a restarted daemon's first open never
+/// repeats the previous process's tokens either.
+fn process_nonce() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    static NONCE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *NONCE.get_or_init(|| {
+        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+        hasher.write_u32(std::process::id());
+        hasher.finish()
+    })
+}
+
 struct RealBook {
     /// This open's number from `OPENED_BOOKS`.
     opened: u64,
@@ -3168,7 +3180,8 @@ impl Book for RealBook {
             .map_err(map_sqlite_error)
             .map_err(error)?;
         Ok(Some(format!(
-            "{}:{data_version}:{}",
+            "{:016x}.{}:{data_version}:{}",
+            process_nonce(),
             self.opened,
             conn.total_changes()
         )))

@@ -252,6 +252,9 @@ const TransactionsTable = ({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const highlightedTxIds = useBookRefreshStore((state) => state.highlightedTxIds);
+  // A book refresh cycle may still be landing other reads after this list's
+  // own refetch; a page loaded meanwhile would mix states.
+  const bookRefreshCycling = useBookRefreshStore((state) => state.cycling);
   const {
     status: statusFilter,
     flow: flowFilter,
@@ -1152,7 +1155,7 @@ const TransactionsTable = ({
   }, [isExpanded]);
 
   React.useEffect(() => {
-    if (isRefreshing) return;
+    if (isRefreshing || bookRefreshCycling) return;
     if (!hasMoreRecords || isLoadingMoreRecords || !onLoadMoreRecords) {
       lastAutoLoadRowCountRef.current = null;
       return;
@@ -1168,6 +1171,7 @@ const TransactionsTable = ({
     hasMoreRecords,
     isLoadingMoreRecords,
     isRefreshing,
+    bookRefreshCycling,
     lastVirtualIndex,
     onLoadMoreRecords,
   ]);

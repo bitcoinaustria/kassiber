@@ -158,6 +158,7 @@ async function runCycles(
     }
   } finally {
     running = null;
+    queued = null;
     const waiters = queuedWaiters;
     queuedWaiters = [];
     waiters.forEach((resolve) => resolve());
@@ -170,12 +171,16 @@ async function runCycle(
   deps: BookRefreshDeps,
 ): Promise<void> {
   const now = deps.now ?? Date.now;
-  const before = captureBookView(queryClient, deps.overviewKey());
+  // Fixed for the whole cycle: a book or profile switch mid-cycle must not
+  // compare one book's figures with another's.
+  const overviewKey = deps.overviewKey();
+  let before: BookView | null = null;
   useBookRefreshStore.setState({ holding: true, cycling: true });
   const holdLimit = setTimeout(() => {
     useBookRefreshStore.setState({ holding: false });
   }, HOLD_LIMIT_MS);
   try {
+    before = captureBookView(queryClient, overviewKey);
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       const start = await deps.readRevision();
       await queryClient
@@ -186,7 +191,6 @@ async function runCycle(
         .catch(() => undefined);
       // The overview carries the balance and count the change summary
       // names; refetch it too when it is cached but not mounted.
-      const overviewKey = deps.overviewKey();
       if (overviewKey && queryClient.getQueryState(overviewKey)?.isInvalidated) {
         await queryClient
           .refetchQueries({ queryKey: overviewKey, exact: true, type: "inactive" })
@@ -195,42 +199,70 @@ async function runCycle(
       const end = await deps.readRevision();
       if (start === null || end === null || start === end) break;
     }
+  } catch {
+    // Each read keeps its own error state; the cycle still has to end.
   } finally {
+    // Release first: nothing below may leave the screens held.
     clearTimeout(holdLimit);
-    const after = captureBookView(queryClient, deps.overviewKey());
-    const change = describeChange(before, after, now());
-    const newIds = newTransactionIds(before, after);
-    useBookRefreshStore.setState((state) => ({
-      holding: false,
-      cycling: false,
-      lastChange: change ?? state.lastChange,
-      highlightedTxIds: newIds.size > 0 ? newIds : state.highlightedTxIds,
-    }));
-    if (newIds.size > 0) {
-      clearTimeout(highlightTimer);
-      highlightTimer = setTimeout(
-        () => useBookRefreshStore.setState({ highlightedTxIds: EMPTY_IDS }),
-        HIGHLIGHT_MS,
-      );
-    }
-    if (change) {
-      clearTimeout(summaryTimer);
-      summaryTimer = setTimeout(() => {
-        const current = useBookRefreshStore.getState().lastChange;
-        if (current?.at === change.at) {
-          useBookRefreshStore.setState({ lastChange: null });
-        }
-      }, CHANGE_SUMMARY_MS);
-    }
+    useBookRefreshStore.setState({ holding: false, cycling: false });
   }
+  try {
+    const current = deps.overviewKey();
+    const sameBook =
+      before !== null &&
+      (overviewKey === null
+        ? current === null
+        : current !== null && hashKey(current) === hashKey(overviewKey));
+    if (before && sameBook) publishChange(before, captureBookView(queryClient, overviewKey), now());
+  } catch {
+    // The summary is a courtesy; a malformed payload must not break the cycle.
+  }
+}
+
+function publishChange(before: BookView, after: BookView, at: number) {
+  const change = describeChange(before, after, at);
+  // Rows "new" to a list whose book did not gain transactions are rows that
+  // moved up (one was removed), not arrivals.
+  const gained =
+    before.transactionCount === null ||
+    after.transactionCount === null ||
+    after.transactionCount > before.transactionCount;
+  const newIds = gained ? newTransactionIds(before, after) : new Set<string>();
+  if (!change && newIds.size === 0) return;
+  useBookRefreshStore.setState((state) => ({
+    lastChange: change ?? state.lastChange,
+    highlightedTxIds: newIds.size > 0 ? newIds : state.highlightedTxIds,
+  }));
+  if (newIds.size > 0) {
+    clearTimeout(highlightTimer);
+    highlightTimer = setTimeout(
+      () => useBookRefreshStore.setState({ highlightedTxIds: EMPTY_IDS }),
+      HIGHLIGHT_MS,
+    );
+  }
+  if (change) {
+    clearTimeout(summaryTimer);
+    summaryTimer = setTimeout(() => {
+      if (useBookRefreshStore.getState().lastChange?.at === change.at) {
+        useBookRefreshStore.setState({ lastChange: null });
+      }
+    }, CHANGE_SUMMARY_MS);
+  }
+}
+
+/** Forget the last change and highlights (another book, profile, or mode). */
+export function clearBookChange() {
+  clearTimeout(highlightTimer);
+  clearTimeout(summaryTimer);
+  useBookRefreshStore.setState({ lastChange: null, highlightedTxIds: EMPTY_IDS });
 }
 
 /** What a refresh can compare: the overview's figures and the visible rows. */
 export interface BookView {
   transactionCount: number | null;
   balanceSat: number | null;
-  /** Visible transaction ids, per cached query (hashed key). */
-  rows: Map<string, Set<string>>;
+  /** Visible transaction ids per cached query (hashed key), page by page. */
+  rows: Map<string, string[][]>;
 }
 
 interface OverviewLike {
@@ -243,9 +275,12 @@ interface TransactionsLike {
   txs?: Array<{ id?: unknown }>;
 }
 
-function ids(rows: Array<{ id?: unknown }> | undefined): string[] {
-  return (rows ?? [])
-    .map((row) => row.id)
+function ids(rows: unknown): string[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row: unknown) =>
+      row && typeof row === "object" ? (row as { id?: unknown }).id : undefined,
+    )
     .filter((id): id is string => typeof id === "string" && id.length > 0);
 }
 
@@ -256,21 +291,21 @@ export function captureBookView(
   const overview = overviewKey
     ? queryClient.getQueryData<DaemonEnvelope<OverviewLike>>(overviewKey)?.data
     : undefined;
-  const rows = new Map<string, Set<string>>();
+  const rows = new Map<string, string[][]>();
   for (const query of queryClient.getQueryCache().getAll()) {
     const key = query.queryKey;
     if (key[0] !== "daemon") continue;
     const data = query.state.data;
     if (key.includes("ui.overview.snapshot")) {
       const envelope = data as DaemonEnvelope<OverviewLike> | undefined;
-      rows.set(query.queryHash, new Set(ids(envelope?.data?.txs)));
+      rows.set(query.queryHash, [ids(envelope?.data?.txs)]);
     } else if (key.includes("ui.transactions.list")) {
       const pages = (data as InfiniteData<DaemonEnvelope<TransactionsLike>> | undefined)
         ?.pages;
-      if (!pages) continue;
+      if (!Array.isArray(pages)) continue;
       rows.set(
         query.queryHash,
-        new Set(pages.flatMap((page) => ids(page.data?.txs))),
+        pages.map((page) => ids(page?.data?.txs)),
       );
     }
   }
@@ -308,11 +343,16 @@ export function describeChange(
 /** Ids that a cached list shows now and did not show before the cycle. */
 export function newTransactionIds(before: BookView, after: BookView): Set<string> {
   const fresh = new Set<string>();
-  for (const [hash, now] of after.rows) {
-    const earlier = before.rows.get(hash);
+  for (const [hash, pages] of after.rows) {
+    const earlierPages = before.rows.get(hash);
     // A list that was not loaded before has nothing to compare with.
-    if (!earlier) continue;
-    for (const id of now) if (!earlier.has(id)) fresh.add(id);
+    if (!earlierPages) continue;
+    const earlier = new Set(earlierPages.flat());
+    // Only as many pages as were loaded before: a page loaded meanwhile
+    // (scrolling) holds older rows, not new ones.
+    for (const id of pages.slice(0, earlierPages.length).flat()) {
+      if (!earlier.has(id)) fresh.add(id);
+    }
   }
   return fresh;
 }
@@ -331,6 +371,10 @@ export function useHeldQueryResult<R extends { data: unknown }>(
   const holding = useBookRefreshStore((state) => state.holding);
   const keyHash = hashKey(queryKey);
   const live = result.data;
+  // Placeholder data is another key's (`keepPreviousData`); it is never the
+  // copy a hold keeps, or the old dataset would stay up as this key's.
+  const placeholder =
+    (result as { isPlaceholderData?: unknown }).isPlaceholderData === true;
   const committed = useRef<{ key: string; data: unknown } | null>(null);
   const shown = committed.current;
   if (
@@ -339,19 +383,28 @@ export function useHeldQueryResult<R extends { data: unknown }>(
     shown.key !== keyHash ||
     shown.data === undefined
   ) {
-    committed.current = { key: keyHash, data: live };
+    committed.current = { key: keyHash, data: placeholder ? undefined : live };
     return result;
   }
   if (shown.data === live) return result;
-  return withData(result, shown.data);
+  return withHeldData(result, shown.data);
 }
 
-function withData<R extends object>(result: R, data: unknown): R {
+/** The live result with the held data; it still counts as refreshing. */
+function withHeldData<R extends object>(result: R, data: unknown): R {
+  const live = result as Record<string, unknown>;
   const held = {} as R;
   for (const key of Object.keys(result)) {
     Object.defineProperty(held, key, {
       enumerable: true,
-      get: () => (key === "data" ? data : (result as Record<string, unknown>)[key]),
+      get: () => {
+        if (key === "data") return data;
+        // Newer data is waiting behind the hold: the screen is refreshing,
+        // and what it shows is this key's own earlier data.
+        if (key === "isFetching") return true;
+        if (key === "isPlaceholderData") return false;
+        return live[key];
+      },
     });
   }
   return held;

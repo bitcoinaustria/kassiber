@@ -4,6 +4,7 @@
 // until the book's revision holds still across the reads, and then lets all
 // of them change in the same render.
 import {
+  keepPreviousData,
   QueryClient,
   QueryClientProvider,
   useQuery,
@@ -138,6 +139,144 @@ describe("book refresh cycle", () => {
     await act(async () => {
       gate.resolve("r");
       await cycle;
+    });
+  });
+
+  it("shows a new key's own data during a hold, never the previous key's placeholder", async () => {
+    const { client, wrapper } = setup();
+    const gates: Record<string, ReturnType<typeof deferred<string>>> = {};
+    const { result, rerender } = renderHook(
+      ({ period }: { period: string }) => {
+        const key = ["daemon", "real", 0, "ui.transactions.dashboard", period];
+        const live = useQuery({
+          queryKey: key,
+          queryFn: () =>
+            period === "2024"
+              ? Promise.resolve("figures-2024")
+              : (gates[period] = deferred<string>()).promise,
+          staleTime: Infinity,
+          placeholderData: keepPreviousData,
+        });
+        const held = useHeldQueryResult(key, live);
+        return {
+          data: held.data,
+          isPlaceholderData: held.isPlaceholderData,
+          isFetching: held.isFetching,
+        };
+      },
+      { wrapper, initialProps: { period: "2024" } },
+    );
+    await waitFor(() => expect(result.current.data).toBe("figures-2024"));
+
+    const revision = deferred<string>();
+    let cycle!: Promise<void>;
+    act(() => {
+      cycle = refreshBookQueries(
+        client,
+        { queryKey: ["daemon", "real"], predicate: () => false },
+        { readRevision: () => revision.promise, overviewKey: () => null },
+      );
+    });
+    expect(useBookRefreshStore.getState().holding).toBe(true);
+    // The user picks another period mid-cycle: the old figures show as a
+    // placeholder, marked as such...
+    rerender({ period: "2025" });
+    await waitFor(() => expect(gates["2025"]).toBeDefined());
+    expect(result.current.data).toBe("figures-2024");
+    expect(result.current.isPlaceholderData).toBe(true);
+    // ...and the period's own figures replace them as soon as they arrive,
+    // hold or not.
+    await act(async () => gates["2025"].resolve("figures-2025"));
+    await waitFor(() => expect(result.current.data).toBe("figures-2025"));
+    expect(result.current.isPlaceholderData).toBe(false);
+    await act(async () => {
+      revision.resolve("r");
+      await cycle;
+    });
+  });
+
+  it("marks held data as still refreshing", async () => {
+    const { client, wrapper } = setup();
+    let generation = 1;
+    const second = deferred<string>();
+    const { result } = renderHook(
+      () => ({
+        a: useHeld(["daemon", "real", 0, "a"], async () => `a-${generation}`),
+        b: useHeld(["daemon", "real", 0, "b"], () =>
+          generation === 1 ? Promise.resolve("b-1") : second.promise,
+        ),
+      }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.b.data).toBe("b-1"));
+    generation = 2;
+    let cycle!: Promise<void>;
+    act(() => {
+      cycle = refreshBookQueries(
+        client,
+        { queryKey: ["daemon", "real"] },
+        { readRevision: async () => "r", overviewKey: () => null },
+      );
+    });
+    await waitFor(() => expect(client.getQueryData(["daemon", "real", 0, "a"])).toBe("a-2"));
+    // `a` finished its own fetch but still shows its held data: refreshing.
+    expect(result.current.a.data).toBe("a-1");
+    expect(result.current.a.isFetching).toBe(true);
+    await act(async () => {
+      second.resolve("b-2");
+      await cycle;
+    });
+    expect(result.current.a).toEqual({ data: "a-2", isFetching: false });
+  });
+
+  it("releases the hold when a revision read fails", async () => {
+    const { client } = setup();
+    await refreshBookQueries(
+      client,
+      { queryKey: ["daemon", "real"] },
+      {
+        readRevision: () => Promise.reject(new Error("transport closed")),
+        overviewKey: () => null,
+      },
+    );
+    expect(useBookRefreshStore.getState()).toMatchObject({
+      holding: false,
+      cycling: false,
+    });
+    // The next request runs a fresh cycle instead of waiting forever.
+    await refreshBookQueries(
+      client,
+      { queryKey: ["daemon", "real"] },
+      { readRevision: async () => "r", overviewKey: () => null },
+    );
+  });
+
+  it("ignores malformed rows and keeps no summary across a book switch", async () => {
+    const { client } = setup();
+    client.setQueryDefaults(OVERVIEW, {
+      queryFn: async () => ({
+        kind: "ui.overview.snapshot",
+        schema_version: 1,
+        data: { status: { transactionCount: 5 }, txs: [null, { id: 7 }, "x"] },
+      }),
+    });
+    client.setQueryData(OVERVIEW, overview(4, 0.1, ["t1"]));
+    let key: QueryKey = OVERVIEW;
+    await refreshBookQueries(
+      client,
+      { queryKey: ["daemon", "real"] },
+      {
+        readRevision: async () => {
+          // The profile switched while the cycle ran.
+          key = ["daemon", "real", 1, "ui.overview.snapshot"];
+          return "r";
+        },
+        overviewKey: () => key,
+      },
+    );
+    expect(useBookRefreshStore.getState()).toMatchObject({
+      holding: false,
+      lastChange: null,
     });
   });
 
@@ -317,6 +456,23 @@ describe("book view comparison", () => {
       pageParams: [null],
     });
     expect([...newTransactionIds(after, captureBookView(client, null))]).toEqual(["y"]);
+  });
+
+  it("compares only the pages that were loaded before the refresh", () => {
+    const client = new QueryClient();
+    const page = (rows: string[]) => ({
+      kind: "ui.transactions.list",
+      schema_version: 1,
+      data: { txs: rows.map((id) => ({ id })) },
+    });
+    client.setQueryData(LIST, { pages: [page(["b", "a"])], pageParams: [null] });
+    const before = captureBookView(client, null);
+    // One new row on top, and a second page scrolled in meanwhile.
+    client.setQueryData(LIST, {
+      pages: [page(["c", "b"]), page(["a", "older"])],
+      pageParams: [null, "cursor"],
+    });
+    expect([...newTransactionIds(before, captureBookView(client, null))]).toEqual(["c"]);
   });
 
   it("names a removed transaction and keeps an unknown balance unknown", () => {

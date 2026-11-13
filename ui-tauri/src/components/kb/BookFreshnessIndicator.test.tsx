@@ -71,7 +71,9 @@ describe("book freshness view", () => {
       />,
     );
     expect(html).toContain("1 transaction removed");
-    expect(html).toContain('class="sensitive">− ₿ 0.00000500');
+    // Masked, not only blurred: the status region is read aloud.
+    expect(html).not.toContain("0.00000500");
+    expect(html).toContain('class="sensitive">••••');
   });
 
   it("names why the book is updating", () => {

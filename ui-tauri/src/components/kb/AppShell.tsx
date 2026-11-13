@@ -890,8 +890,11 @@ export function AppShell() {
       void getTransport().invoke({ kind: "daemon.lock" });
       return;
     }
+    // Every lock empties the read cache: no book data waits in memory behind
+    // the lock screen.
     if (!hasSessionUnlockPassphrase()) {
       clearSessionUnlockPassphrase();
+      clearDaemonQueryCache();
       void clearImportedProjectRoot()
         .catch(() => {})
         .finally(() => {
@@ -900,6 +903,7 @@ export function AppShell() {
         });
       return;
     }
+    clearDaemonQueryCache();
     setLocked(true);
   }, [
     clearDaemonQueryCache,

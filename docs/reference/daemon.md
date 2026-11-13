@@ -829,8 +829,8 @@ regeneration first.
 `status` with `args.revision: true` adds `revision`, an opaque token for the
 open book's committed state: it changes whenever a write commits through the
 daemon's connection or another one (a background sync, watch, or graph
-worker), and never repeats across a reopen. `null` means the store cannot
-tell. It is opt-in for the same reason as `storage`. `status` stays answerable
+worker), and never repeats across a reopen or a daemon restart. `null` means
+the store cannot tell. It is opt-in for the same reason as `storage`. `status` stays answerable
 while a refresh runs, so the desktop reads the token before and after a
 refresh's reads and repeats the reads when it moved (see
 [desktop loading and freshness](desktop.md#loading-and-freshness)). Compare

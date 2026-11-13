@@ -707,18 +707,25 @@ revision (`status` with `revision: true`, see
 [request routing](daemon.md#request-routing)) before and after the refetch, and
 refetches again when a write landed in between, up to three passes. Then all
 screens switch to the new data in the same render, so the Overview balance
-and its transaction list always come from one state of the book. A cycle
-holds the screen for at most 15 seconds. Daemon reads are refused while a
-sync runs, so a cycle never shows the book halfway through one.
+and its transaction list always come from one state of the book. Each cycle
+holds the screen for at most 15 seconds; requests made during a cycle merge
+into one follow-up cycle. The daemon refuses reads while a user-started sync
+runs, so a cycle never shows the book halfway through one; background
+workers can commit between cycles, which the next cycle picks up. While a
+cycle runs, every mounted read waits for it, including polling ones, and a
+read that changed its own key (another filter, period, or year) is never
+held.
 
 The title bar's book status names one state for the whole book: updating
 (syncing wallets, processing journals, or loading changes), refresh needs
 attention, journals need processing, or up to date. After a cycle it names
 what changed for 30 seconds (new or removed transactions and the balance
-move, hidden in privacy mode), and rows the cycle brought in are highlighted
-on Transactions and the Overview's latest transactions for a few seconds.
-While the book updates, screens dim only the figures that will change; they
-stay readable and clickable, and the table pauses loading more rows until the
-update lands. Cached reads stay for 30 minutes after a screen closes, so
-reopening it shows its data at once; locking, switching books, or switching
-profiles empties the cache.
+move, masked in privacy mode), and rows the cycle brought in are highlighted
+on Transactions and the Overview's latest transactions for a few seconds. It
+is the screens' one live region for refreshes, kept for screen readers on
+narrow windows where it is not shown. While the book updates, screens dim
+only the figures that will change; they stay readable and clickable, and the
+table pauses loading more rows until the update lands. Cached reads stay for
+30 minutes after a screen closes, so reopening it shows its data at once and
+refetches if stale. Every lock, book switch, and profile switch empties the
+cache and forgets the change summary.
