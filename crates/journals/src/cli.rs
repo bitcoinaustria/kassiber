@@ -647,6 +647,14 @@ fn stored_transfer_audit(conn: &Connection, profile_id: &str) -> Result<[Py; 5]>
         let out_amount = int_of(row.get("source_amount_msat"))?;
         let payout_amount = int_of(row.get("target_amount_msat"))?;
         let swap_fee = int_or_zero(row.get("swap_fee_msat"))?;
+        // A payout in another asset (BTC sent, USDT paid out) has no fee in
+        // raw units: their difference is meaningless (plan 23).
+        let code = |key: &str| match row.get(key) {
+            Sql::Text(text) => text.clone(),
+            _ => String::new(),
+        };
+        let comparable =
+            kassiber_store::assets::units_comparable(&code("source_asset"), &code("target_asset"));
         payouts.push(dict([
             ("payout_id", py(row.get("relation_id"))),
             ("kind", py(row.get("review_kind"))),
@@ -664,8 +672,22 @@ fn stored_transfer_audit(conn: &Connection, profile_id: &str) -> Result<[Py; 5]>
             ("payout_occurred_at", py(row.get("target_occurred_at"))),
             ("payout_external_id", py(row.get("target_external_id"))),
             ("counterparty", py(row.get("counterparty"))),
-            ("swap_fee", Py::Float(btc_of(&swap_fee)?)),
-            ("swap_fee_msat", Py::Int(swap_fee)),
+            (
+                "swap_fee",
+                if comparable {
+                    Py::Float(btc_of(&swap_fee)?)
+                } else {
+                    Py::Null
+                },
+            ),
+            (
+                "swap_fee_msat",
+                if comparable {
+                    Py::Int(swap_fee)
+                } else {
+                    Py::Null
+                },
+            ),
             ("swap_fee_kind", py(row.get("swap_fee_kind"))),
         ]));
     }

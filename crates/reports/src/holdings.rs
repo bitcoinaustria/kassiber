@@ -46,6 +46,29 @@ fn rates(
     Ok(rates)
 }
 
+/// The book's own value of one whole unit of each asset, in its currency:
+/// the newest transaction priced in the book currency (its rate, or value
+/// over amount), else a cached market rate for a pair the rates crate knows.
+/// The same lookup `reports portfolio-summary` values its holdings with; an
+/// asset absent from the map has no value in the book (unknown, not zero).
+pub fn holding_rates(
+    conn: &Connection,
+    profile: &Value,
+    assets: &[&str],
+) -> Result<BTreeMap<String, f64>> {
+    let assets: Vec<Value> = assets
+        .iter()
+        .map(|asset| dict([("asset", Value::from(*asset))]))
+        .collect();
+    let mut output = BTreeMap::new();
+    for (asset, rate) in rates(conn, profile, &assets)? {
+        if let Value::Float(rate) = float(&rate)? {
+            output.insert(asset, rate);
+        }
+    }
+    Ok(output)
+}
+
 pub fn report(conn: &Connection, profile: &Value, wallet: bool) -> Result<Value> {
     report_with(conn, profile, wallet, false)
 }
@@ -93,9 +116,20 @@ pub fn report_with(
             ),
             ("asset", value(&row, "asset").clone()),
             ("quantity", float(&quantity)?),
-            ("quantity_sat", Value::Float(quantity_msat as f64 / 1000.0)),
-            ("quantity_msat", Value::Int(quantity_msat.into())),
         ]);
+        // Sats and msat name Bitcoin units: another asset (ETH) keeps its
+        // exact `quantity` and leaves both empty (plan 23).
+        if kassiber_store::assets::is_bitcoin(&text(&row, "asset")) {
+            fields.extend([
+                ("quantity_sat", Value::Float(quantity_msat as f64 / 1000.0)),
+                ("quantity_msat", Value::Int(quantity_msat.into())),
+            ]);
+        } else {
+            fields.extend([
+                ("quantity_sat", Value::Null),
+                ("quantity_msat", Value::Null),
+            ]);
+        }
         if wallet {
             fields.push((
                 "avg_cost",
