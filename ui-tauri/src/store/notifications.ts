@@ -376,7 +376,12 @@ export type NewOccurrence =
       entry: ConditionEntry;
       previous?: ConditionEntry;
     }
-  | { lane: "result"; entry: ResultEntry };
+  | {
+      lane: "result";
+      entry: ResultEntry;
+      /** The row this result replaced (same code, book, and source). */
+      previous?: ResultEntry;
+    };
 
 const occurrenceListeners = new Set<(occurrence: NewOccurrence) => void>();
 
@@ -492,20 +497,19 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
       action: input.action,
       details: boundDetails(input.details),
     };
+    let previous: ResultEntry | undefined;
     set((state) => {
       // One result per job outcome, book, and source: a repeat replaces the
       // earlier row rather than filling Recent.
-      const rest = state.results.filter(
-        (item) =>
-          !(
-            item.code === input.code &&
-            item.scope.book === input.scope.book &&
-            item.scope.source === input.scope.source
-          ),
-      );
+      const same = (item: ResultEntry) =>
+        item.code === input.code &&
+        item.scope.book === input.scope.book &&
+        item.scope.source === input.scope.source;
+      previous = state.results.find(same);
+      const rest = state.results.filter((item) => !same(item));
       return { results: [entry, ...rest].slice(0, MAX_RESULTS) };
     });
-    emitOccurrence({ lane: "result", entry });
+    emitOccurrence({ lane: "result", entry, ...(previous ? { previous } : {}) });
   },
   dismissResult: (id) =>
     set((state) => ({

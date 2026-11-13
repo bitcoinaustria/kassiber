@@ -405,7 +405,7 @@
     "notificationsLabel": "Systembenachrichtigungen",
     "notificationsOn": "Ein. Solange Kassiber nicht im Vordergrund ist, meldet eine allgemeine Systembenachrichtigung, wenn Hintergrundarbeit fertig ist oder deine Aufmerksamkeit braucht.",
     "notificationsOff": "Aus. Kassiber meldet Hintergrundarbeit nur in der App.",
-    "notificationsDisclosure": "Eine Benachrichtigung lautet immer nur „Eine Hintergrundaufgabe braucht deine Aufmerksamkeit.“ oder „Eine Hintergrundaufgabe ist abgeschlossen.“: nie Beträge, Anzahlen, Buch- oder Wallet-Namen, Adressen oder Fehlerdetails. Dein Betriebssystem kann Benachrichtigungen trotzdem speichern und am Sperrbildschirm anzeigen, und sie zeigen, dass du Kassiber verwendest.",
+    "notificationsDisclosure": "Eine Benachrichtigung lautet immer nur „Eine Hintergrundaufgabe braucht deine Aufmerksamkeit.“, „Eine Hintergrundaufgabe ist abgeschlossen.“ oder „Neue Aktivität in Kassiber.“: nie Beträge, Anzahlen, Buch- oder Wallet-Namen, Adressen oder Fehlerdetails. Dein Betriebssystem kann Benachrichtigungen trotzdem speichern und am Sperrbildschirm anzeigen, und sie zeigen, dass du Kassiber verwendest.",
     "updatesHeading": "Software-Updates",
     "updatesLabel": "GitHub-Update-Prüfungen erlauben",
     "updatesOn": "Nach dem Start darf Kassiber GitHub einmal täglich prüfen; Menü und CLI können außerdem auf deine Anforderung prüfen. GitHub sieht deine IP-Adresse, die genaue Kassiber-Version und den Zeitpunkt der Anfrage; Buch- oder Wallet-Daten werden nicht gesendet.",

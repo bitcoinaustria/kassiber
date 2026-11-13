@@ -219,6 +219,30 @@ describe("new occurrences", () => {
     expect(candidateForOccurrence(seen[3])).toBeNull();
   });
 
+  it("does not call queued work finished", () => {
+    const seen: NewOccurrence[] = [];
+    onNewOccurrence((occurrence) => seen.push(occurrence));
+    const store = useNotificationStore.getState();
+    store.addResult({ code: "book-refresh.pending", scope: { book: BOOK }, severity: "info" });
+    store.addResult({ code: "book-refresh.finished", scope: { book: BOOK }, severity: "info" });
+    expect(candidateForOccurrence(seen[0])).toBeNull();
+    expect(candidateForOccurrence(seen[1])).toMatchObject({ category: "job-finished" });
+  });
+
+  it("does not re-announce transactions merged into an entry not yet seen", () => {
+    const seen: NewOccurrence[] = [];
+    onNewOccurrence((occurrence) => seen.push(occurrence));
+    const store = useNotificationStore.getState();
+    const activity = { code: "activity.new" as const, scope: { book: BOOK }, severity: "info" as const };
+    store.addResult(activity);
+    store.addResult(activity);
+    expect(candidateForOccurrence(seen[0])?.isNew).toBe(true);
+    expect(candidateForOccurrence(seen[1])?.isNew).toBe(false);
+    store.markSeen();
+    store.addResult(activity);
+    expect(candidateForOccurrence(seen[2])?.isNew).toBe(true);
+  });
+
   it("announces new transactions as new activity, once per book until seen", () => {
     const seen: NewOccurrence[] = [];
     onNewOccurrence((occurrence) => seen.push(occurrence));
@@ -256,6 +280,23 @@ describe("delivery", () => {
     for (const planted of [SECRET_LABEL, SECRET_ERROR, BOOK, "wallet:1", "/connections"]) {
       expect(wire).not.toContain(planted);
     }
+  });
+
+  it("lets a failure win over new activity from the same refresh", async () => {
+    const h = harness();
+    const offers = [
+      offerOsNotification({
+        category: "new-activity",
+        dedupeKey: "new-activity:x",
+        isNew: true,
+      }),
+      offerOsNotification({ ...candidate, dedupeKey: "condition:y" }),
+    ];
+    const [activity, failureDecision] = await Promise.all(offers);
+    expect(failureDecision).toEqual({ eligible: true });
+    expect(activity).toEqual({ eligible: false, reason: "cooldown" });
+    expect(h.invoke).toHaveBeenCalledTimes(1);
+    expect(h.invoke.mock.calls[0][1]).toEqual({ category: "needs-attention" });
   });
 
   it("does not touch the native side while the setting is off", async () => {

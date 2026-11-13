@@ -405,7 +405,7 @@
     "notificationsLabel": "Desktop notifications",
     "notificationsOn": "On. While Kassiber is not focused, background work that finishes or needs your attention shows a generic system notification.",
     "notificationsOff": "Off. Kassiber reports background work only inside the app.",
-    "notificationsDisclosure": "A notification only ever says “Background work needs your attention.” or “Background work has finished.”: never amounts, counts, book or wallet names, addresses or error details. Your operating system may still save notifications and show them on the lock screen, and they reveal that you use Kassiber.",
+    "notificationsDisclosure": "A notification only ever says “Background work needs your attention.”, “Background work has finished.” or “New activity in Kassiber.”: never amounts, counts, book or wallet names, addresses or error details. Your operating system may still save notifications and show them on the lock screen, and they reveal that you use Kassiber.",
     "updatesHeading": "Software updates",
     "updatesLabel": "Allow GitHub update checks",
     "updatesOn": "After startup, Kassiber may check GitHub once per day; the menu and CLI can also check when you ask. GitHub sees your IP address, exact Kassiber version, and request time; no book or wallet data is sent.",

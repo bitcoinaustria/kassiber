@@ -1,4 +1,8 @@
-import type { ConditionCode, NewOccurrence } from "@/store/notifications";
+import type {
+  ConditionCode,
+  NewOccurrence,
+  ResultCode,
+} from "@/store/notifications";
 
 /**
  * Opt-in OS (desktop) notifications. Every decision about *whether* an event
@@ -108,6 +112,20 @@ const ATTENTION_CONDITION_CODES: ReadonlySet<ConditionCode> = new Set([
 ]);
 
 /**
+ * Results that mean background work is done. `book-refresh.pending` is not:
+ * its sources or journals are still queued.
+ */
+const FINISHED_RESULT_CODES: ReadonlySet<ResultCode> = new Set([
+  "book-refresh.finished",
+  "journals.processed",
+  "connection.synced",
+  "report.exported",
+  "pricing.rebuilt",
+  "workspace.refreshed",
+  "backup.restored",
+]);
+
+/**
  * What a new center occurrence offers the OS. A condition is news when it is
  * new or was already seen; a repeat the user has not looked at yet is not.
  */
@@ -122,15 +140,20 @@ export function candidateForOccurrence(
       isNew: !occurrence.previous || Boolean(occurrence.previous.seenAt),
     };
   }
-  const { entry } = occurrence;
+  const { entry, previous } = occurrence;
   // New transactions are their own category ("New activity in Kassiber"),
-  // one per book until the center has shown the entry.
+  // once per entry: more transactions merged into an entry the center has
+  // not shown yet are not news again.
   if (entry.code === "activity.new") {
     return {
       category: "new-activity",
       dedupeKey: `new-activity:${JSON.stringify(entry.scope.book)}`,
-      isNew: true,
+      isNew: !previous || Boolean(previous.seenAt),
     };
+  }
+  if (entry.severity === "info" && !FINISHED_RESULT_CODES.has(entry.code)) {
+    // Not finished (work still queued) or not background work at all.
+    return null;
   }
   return {
     category: entry.severity === "info" ? "job-finished" : "needs-attention",
@@ -209,6 +232,7 @@ export function resetOsNotifications(): void {
   lastDeliveredAt = null;
   lastDeliveredByKey.clear();
   queue = Promise.resolve();
+  batch = [];
 }
 
 async function offerNow(
@@ -269,9 +293,48 @@ export function offerOsNotification(
   if (!candidate) {
     return Promise.resolve({ eligible: false, reason: "category" });
   }
-  const next = queue.then(() => offerNow(candidate));
-  queue = next.catch(() => undefined);
-  return next;
+  return new Promise((resolve, reject) => {
+    if (batch.length === 0) queueMicrotask(flushBatch);
+    batch.push({ candidate, resolve, reject });
+  });
+}
+
+/**
+ * Which of several events from one moment wins the cooldown: what needs
+ * the user first, then a watch change, new activity, and a finished job.
+ */
+const CATEGORY_PRIORITY: Record<OsNotificationCategory, number> = {
+  "needs-attention": 0,
+  "evidence-changed": 1,
+  "new-activity": 2,
+  "job-finished": 3,
+};
+
+interface PendingOffer {
+  candidate: OsNotificationCandidate;
+  resolve: (decision: OsNotificationDecision) => void;
+  reject: (error: unknown) => void;
+}
+
+/**
+ * Offers made in the same task (a refresh that files new transactions and a
+ * failure together) are decided as one batch, most important first, so the
+ * cooldown never lets a "finished" or "new activity" notice hide a failure.
+ */
+let batch: PendingOffer[] = [];
+
+function flushBatch(): void {
+  const current = batch;
+  batch = [];
+  current.sort(
+    (a, b) =>
+      CATEGORY_PRIORITY[a.candidate.category] - CATEGORY_PRIORITY[b.candidate.category],
+  );
+  for (const item of current) {
+    const next = queue.then(() => offerNow(item.candidate));
+    queue = next.catch(() => undefined);
+    next.then(item.resolve, item.reject);
+  }
 }
 
 /** Mirror the opt-in and UI language to the native side. */
