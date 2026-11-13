@@ -13,8 +13,9 @@ import {
   useOsNotificationActivation,
 } from "@/lib/osNotifications";
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
+import type { ActiveBook } from "@/lib/activeBook";
 import { onNewOccurrence, useNotificationStore } from "@/store/notifications";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { useUiStore } from "@/store/ui";
 
 /**
  * The shell's side of OS notifications: offers new center occurrences to
@@ -22,8 +23,17 @@ import { bookIdentityKey, useUiStore } from "@/store/ui";
  * language in step, and routes an activated notification once the shell is
  * unlocked. A click never syncs, approves, opens a file, or unlocks.
  */
-export function useOsNotifications(shellUnlocked: boolean): void {
+export function useOsNotifications(
+  shellUnlocked: boolean,
+  activeBook: ActiveBook | null,
+): void {
   const navigate = useNavigate();
+  // Read when an activation is routed, not when it arrived: the book open
+  // after unlock is the one the destination is checked against.
+  const activeBookRef = React.useRef(activeBook);
+  React.useEffect(() => {
+    activeBookRef.current = activeBook;
+  });
   const enabled = useUiStore((s) => s.desktopNotifications);
   const lang = useUiStore((s) => s.lang);
   const pending = useOsNotificationActivation((s) => s.pending);
@@ -76,7 +86,7 @@ export function useOsNotifications(shellUnlocked: boolean): void {
     const ui = useUiStore.getState();
     const notifications = useNotificationStore.getState();
     const route = resolveActivation(pending, {
-      currentBook: bookIdentityKey(ui.identity),
+      currentBook: activeBookRef.current,
       developerToolsEnabled: ui.developerToolsEnabled,
       conditions: notifications.conditions,
       results: notifications.results,

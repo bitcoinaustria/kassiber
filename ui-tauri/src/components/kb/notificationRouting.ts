@@ -1,14 +1,11 @@
+import type { ActiveBook, DaemonBookScope } from "@/lib/activeBook";
 import {
   NOTIFICATION_OPERATION_KINDS,
   type NotificationActionSpec,
   type NotificationOperation,
   type NotificationScope,
 } from "@/store/notifications";
-import {
-  NOTIFICATION_COMMANDS,
-  type NotificationAction,
-  type NotificationCommand,
-} from "@/store/ui";
+import type { NotificationAction } from "@/store/ui";
 
 import { APP_ROUTE_PATHS, type AppRoutePath } from "./menuIntent";
 import {
@@ -102,16 +99,20 @@ export function notificationTarget(
   return tone === "error" ? logsOrSettings : undefined;
 }
 
-/** A notification button, checked against the routes and commands it may use. */
-export type ResolvedNotificationAction =
-  | { label: string; kind: "navigate"; to: NotificationTarget }
-  | { label: string; kind: "command"; command: NotificationCommand };
+/** A legacy notification button: navigation to a known route, nothing else. */
+export type ResolvedNotificationAction = {
+  label: string;
+  kind: "navigate";
+  to: NotificationTarget;
+};
 
 /**
- * Resolve a stored action into something the bell can run, or null. Persisted
- * state is not trusted to name a route or command: anything outside the known
- * lists is dropped, and a `/logs` target takes the same developer-tools
- * detour as a notification's own click target.
+ * Resolve a legacy action into a route the bell may open, or null. Only
+ * known routes pass, and a `/logs` target takes the same developer-tools
+ * detour as a notification's own click target. A legacy entry has no book
+ * scope or original options, so anything that would mutate (a `command`
+ * from an older sender) is refused rather than replayed against the open
+ * book.
  */
 export function resolveNotificationAction(
   action: NotificationAction | undefined,
@@ -119,12 +120,6 @@ export function resolveNotificationAction(
 ): ResolvedNotificationAction | null {
   const label = action?.label?.trim();
   if (!action || !label) return null;
-  if (
-    action.command &&
-    (NOTIFICATION_COMMANDS as readonly string[]).includes(action.command)
-  ) {
-    return { label, kind: "command", command: action.command };
-  }
   const target = asRoutePath(action.target);
   if (!target) return null;
   if (target === "/logs") {
@@ -140,7 +135,12 @@ export function resolveNotificationAction(
 /** A structured entry's button, checked and bound to the open book. */
 export type ResolvedEntryAction =
   | { kind: "navigate"; to: NotificationTarget; stale: boolean }
-  | { kind: "operation"; operation: NotificationOperation };
+  | {
+      kind: "operation";
+      operation: NotificationOperation;
+      /** Sent as `expected_scope`: the daemon refuses it in another book. */
+      expectedScope: DaemonBookScope;
+    };
 
 function validOperation(
   operation: NotificationOperation | undefined,
@@ -174,30 +174,41 @@ function navigationTarget(
 }
 
 /**
- * Resolve a structured action against the book open right now. Unknown
- * routes and operations fail closed (no button). An operation whose book is
- * no longer open never replays: it becomes navigation to its review route,
+ * Resolve a structured action against the book open right now (`current`,
+ * null while unknown or while a switch is in flight). Unknown routes and
+ * operations fail closed (no button). An operation runs only for the book it
+ * came from, and only with that book's daemon ids to send as
+ * `expected_scope`; otherwise it becomes navigation to its review route,
  * marked stale, so the user decides again in the right place.
  */
 export function resolveEntryAction(
   action: NotificationActionSpec | undefined,
   scope: NotificationScope,
-  currentBook: string | null,
+  current: ActiveBook | null,
   developerToolsEnabled: boolean,
 ): ResolvedEntryAction | null {
   if (!action || typeof action !== "object") return null;
+  const sameBook = current !== null && scope.book === current.key;
   if (action.type === "navigate") {
     const to = navigationTarget(action.to, developerToolsEnabled);
-    return to ? { kind: "navigate", to, stale: scope.book !== currentBook } : null;
+    return to
+      ? { kind: "navigate", to, stale: scope.book !== null && !sameBook }
+      : null;
   }
   if (action.type === "operation") {
     const operation = validOperation(action.operation);
     const review = navigationTarget(action.review, developerToolsEnabled);
     if (!operation || !review) return null;
-    if (scope.book !== currentBook) {
+    if (
+      current === null ||
+      !sameBook ||
+      !scope.expected ||
+      scope.expected.workspace_id !== current.expected.workspace_id ||
+      scope.expected.profile_id !== current.expected.profile_id
+    ) {
       return { kind: "navigate", to: review, stale: true };
     }
-    return { kind: "operation", operation };
+    return { kind: "operation", operation, expectedScope: scope.expected };
   }
   return null;
 }

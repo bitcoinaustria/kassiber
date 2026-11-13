@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
 
+import { SENSITIVE_MASK } from "@/lib/sensitive";
 import type { PrivacyMode } from "@/store/ui";
 
 /**
@@ -28,4 +29,18 @@ export function projectFreeText(
     return t("notifications.withheld");
   }
   return trimmed;
+}
+
+/**
+ * A user-chosen label (a wallet or source name) inside a line: whole in
+ * Normal, masked under Hide amounts if it contains a digit (a name like
+ * "Savings (0.42 BTC)" can carry an amount), and dropped under Hide all.
+ */
+export function projectLabel(
+  label: string | undefined,
+  mode: PrivacyMode,
+): string | undefined {
+  const trimmed = label?.trim();
+  if (!trimmed || mode === "hideAll") return undefined;
+  return mode === "hideAmounts" && mayHoldAmount(trimmed) ? SENSITIVE_MASK : trimmed;
 }

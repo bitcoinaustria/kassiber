@@ -44,7 +44,9 @@ export function FeedbackToaster() {
   const privacyMode = useUiStore((s) => s.privacyMode);
 
   return (
-    <ToastProvider swipeDirection="right" label={t("feedback.region")}>
+    // The provider's label prefixes each announcement; the viewport's names
+    // the region and its F8 shortcut.
+    <ToastProvider swipeDirection="right" label={t("feedback.label")}>
       {items.map((item) => {
         const Icon = TONE_ICON[item.tone];
         const description =
@@ -53,8 +55,11 @@ export function FeedbackToaster() {
             : projectFreeText(item.description, privacyMode, t);
         return (
           <Toast
-            // A coalesced receipt remounts, which restarts its timer.
-            key={`${item.id}:${item.revision}`}
+            // A coalesced receipt remounts, which restarts its timer. So
+            // does a privacy change: Radix keeps the announcement it built
+            // from the text at mount, so the old wording would otherwise
+            // stay in the live region after amounts or names are hidden.
+            key={`${item.id}:${item.revision}:${privacyMode}`}
             type={item.tone === "error" ? "foreground" : "background"}
             duration={item.durationMs}
             onOpenChange={(open) => {
@@ -93,7 +98,7 @@ export function FeedbackToaster() {
           </Toast>
         );
       })}
-      <ToastViewport />
+      <ToastViewport label={t("feedback.region")} />
     </ToastProvider>
   );
 }

@@ -632,11 +632,16 @@ The title bar's bell opens the notification list
   that could not refresh come from `ui.freshness.status`, book refreshes, and
   background freshness events, tracked per source and folded into one row;
   a failed book refresh, a failed journal run, a missing backend, and a
-  stopped background worker each have their own. Each row says what is wrong
+  stopped background worker each have their own. Background freshness
+  events apply only to the book they name; the conditions' reads carry the
+  open book as `expected_scope`. Each row says what is wrong
   and what it means for reports, offers one action, and keeps diagnostics
   behind Show details. A condition clears only when a successful read or run
   for the same book and source shows it resolved; a failed read, a lock, or a
-  source still syncing leaves it in place. Rows cannot be dismissed, and
+  source still syncing leaves it in place. A failed journal run clears on any
+later run whose journal step reports success (journal processing, a book
+refresh, a background refresh, or a sync or import that processes
+journals), in the same book. Rows cannot be dismissed, and
   re-reading the same state does not count as a repeat.
 - **Running**: the book refresh and journal processing in progress, with
   their progress. A running book refresh reopens the sync card.
@@ -644,19 +649,25 @@ The title bar's bell opens the notification list
   each dismissible; Clear recent empties this section only. Senders not yet
   moved to the structured model also land here, without a badge.
 
-The badge counts Needs attention groups for the open book. Conditions from
+The badge counts Needs attention groups for the open book (a project's
+books are told apart by their workspace and profile ids). Conditions from
 another book stay in memory and return when that book is open again. Every
 action carries the book it came from and is checked against the open book
 when clicked: Retry repeats the original operation with its options (a
-rescan stays a rescan, journal processing keeps its auto-pair setting), while
-an action from another book only opens its review page. Actions name typed
+rescan stays a rescan, journal processing keeps its auto-pair setting) and
+sends that book's ids as `expected_scope`, so the daemon refuses it if
+another book opened in the meantime. An action from another book, or one
+clicked while a book switch is in flight, only opens its review page.
+Book refreshes and journal runs started anywhere carry the open book's ids
+the same way. Actions name typed
 routes or operations from a closed list; anything else shows no button.
 Asking for a book refresh or journal run while one is running shows no
 notice; the menu's refresh reopens the sync card.
 
 Rows render from stable codes in the current language and privacy mode, not
 from stored sentences. Hide amounts withholds any free text (such as a backend
-error) that contains digits; Hide all shows generic titles and no labels,
+error or a progress caption) that contains digits and masks wallet or source
+names that do; Hide all shows generic titles and no labels,
 file names, paths, or error text, while actions keep working. The list and
 the toasts are hidden while Kassiber is locked.
 

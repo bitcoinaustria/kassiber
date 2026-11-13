@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import type { ActiveBook } from "@/lib/activeBook";
 import type { NotificationTarget } from "@/components/kb/notificationRouting";
 import { resolveEntryAction } from "@/components/kb/notificationRouting";
 import type { FreshnessRunData } from "@/lib/syncResults";
@@ -434,7 +435,7 @@ export type OsNotificationRoute =
 export function resolveActivation(
   destination: OsNotificationDestination,
   context: {
-    currentBook: string | null;
+    currentBook: ActiveBook | null;
     developerToolsEnabled: boolean;
     conditions: Record<string, ConditionEntry>;
     results: readonly ResultEntry[];
@@ -442,7 +443,9 @@ export function resolveActivation(
 ): OsNotificationRoute {
   if (destination.kind !== "entry") return { kind: "center" };
   const { scope, action, ref } = destination;
-  if (scope.book !== context.currentBook) return { kind: "center" };
+  if (!context.currentBook || scope.book !== context.currentBook.key) {
+    return { kind: "center" };
+  }
   if (ref?.lane === "condition" && !(ref.key in context.conditions)) {
     return { kind: "center" };
   }

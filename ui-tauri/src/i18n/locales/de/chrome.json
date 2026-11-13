@@ -215,6 +215,8 @@
     "processing": "Wird verarbeitet…",
     "refreshing": "Wird aktualisiert…",
     "otherBook": "In einem anderen Buch gestartet",
+    "bookUnknown": "Kassiber öffnet dieses Buch noch. Versuch es gleich noch einmal.",
+    "staleBook": "Inzwischen ist ein anderes Buch offen, daher wurde nichts ausgeführt. Wechsle zurück zu diesem Buch, um es erneut zu versuchen.",
     "staleAction": "Prüfen",
     "withheld": "Ausgeblendet, solange Beträge verborgen sind.",
     "empty": "Keine Benachrichtigungen.",
@@ -535,6 +537,7 @@
     "refreshing": "Wird aktualisiert"
   },
   "feedback": {
+    "label": "Meldungen",
     "region": "Meldungen ({hotkey})",
     "dismiss": "Schließen"
   }

@@ -28,6 +28,13 @@ import {
   type WalletSyncProgress,
 } from "@/lib/syncProgress";
 import {
+  bindRunBook,
+  isStaleBookError,
+  reportBookUnknown,
+  reportStaleBook,
+  type DaemonBookScope,
+} from "@/lib/activeBook";
+import {
   conditionKey,
   useNotificationStore,
   type NotificationScope,
@@ -40,6 +47,12 @@ const BOOK_REFRESH_JOB_ID = "book-refresh";
 type WalletSyncOptions = {
   onTrustedSuccess?: () => void;
   forceFull?: boolean;
+  /**
+   * The book a Retry belongs to. Sent as `expected_scope`, so the daemon
+   * refuses the run if another book is open by then. Omitted, the run binds
+   * the book open now.
+   */
+  expectedScope?: DaemonBookScope;
 };
 
 export function useWalletSyncAction() {
@@ -103,25 +116,11 @@ export function useWalletSyncAction() {
     },
   });
 
-  const syncAll = React.useCallback(
-    (options?: WalletSyncOptions) => {
-      // Honor in-flight refreshes from any surface. This hook is mounted in the
-      // transactions dashboard, overview dashboard, and AppShell, so one book
-      // refresh should block duplicates while connection-detail syncs are also
-      // running. The running job is already visible, so there is no notice.
-      const otherSyncInFlight =
-        queryClient.isMutating({
-          mutationKey: freshnessRunMutationKey,
-        }) > 0 ||
-        queryClient.isMutating({
-          mutationKey: walletSyncMutationKey,
-        }) > 0;
-      if (refreshBook.isPending || otherSyncInFlight) return;
+  const startRefresh = React.useCallback(
+    (scope: NotificationScope, options?: WalletSyncOptions) => {
       const forceFull = Boolean(options?.forceFull);
-      // The book this run belongs to, fixed at the start: a completion that
-      // lands after a book switch still reports against this book.
+      // The project's first-sync marker; the sync card is per project.
       const runBookKey = bookIdentityKey(useUiStore.getState().identity);
-      const scope: NotificationScope = { book: runBookKey };
       progressValueRef.current = STARTING_SYNC_PROGRESS_VALUE;
       lastProgressRef.current = null;
       jobProgressRef.current.clear();
@@ -165,6 +164,7 @@ export function useWalletSyncAction() {
           auto_pair: true,
           run: true,
           force_full: forceFull,
+          expected_scope: scope.expected,
         })
         .then(
           (envelope) => {
@@ -207,6 +207,12 @@ export function useWalletSyncAction() {
             }
           },
           (error: unknown) => {
+            if (isStaleBookError(error)) {
+              // Refused before it ran: nothing changed in either book.
+              clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
+              reportStaleBook();
+              return;
+            }
             recordBookRefreshFailure(error, scope, forceFull);
             const now = new Date().toISOString();
             setActiveMaintenanceProgress(
@@ -230,15 +236,49 @@ export function useWalletSyncAction() {
     },
     [
       clearActiveMaintenanceProgress,
-      freshnessRunMutationKey,
       markFirstSyncDone,
-      queryClient,
       refreshBook,
       setActiveMaintenanceProgress,
       t,
+    ],
+  );
+
+  const syncAll = React.useCallback(
+    (options?: WalletSyncOptions) => {
+      // Honor in-flight refreshes from any surface. This hook is mounted in the
+      // transactions dashboard, overview dashboard, and AppShell, so one book
+      // refresh should block duplicates while connection-detail syncs are also
+      // running. The running job is already visible, so there is no notice.
+      const inFlight = () =>
+        refreshBook.isPending ||
+        queryClient.isMutating({
+          mutationKey: freshnessRunMutationKey,
+        }) > 0 ||
+        queryClient.isMutating({
+          mutationKey: walletSyncMutationKey,
+        }) > 0;
+      if (inFlight()) return;
+      // The book this run belongs to, fixed at the start: a completion that
+      // lands after a book switch still reports against this book, and the
+      // daemon refuses the run outright if that book is no longer open.
+      bindRunBook(
+        queryClient,
+        options?.expectedScope,
+        (scope) => {
+          if (!inFlight()) startRefresh(scope, options);
+        },
+        reportBookUnknown,
+      );
+    },
+    [
+      freshnessRunMutationKey,
+      queryClient,
+      refreshBook.isPending,
+      startRefresh,
       walletSyncMutationKey,
     ],
   );
+
 
   return {
     syncAll,
@@ -345,7 +385,8 @@ export function recordBookRefreshFailure(
 ): void {
   useNotificationStore.getState().raiseCondition({
     code: "book-refresh.failed",
-    scope: { book: scope.book },
+    // With the daemon ids: its Retry sends them as `expected_scope`.
+    scope: { book: scope.book, expected: scope.expected },
     severity: "error",
     priority: "attention",
     params: { forceFull },

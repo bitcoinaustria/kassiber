@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ActiveBook } from "@/lib/activeBook";
 import {
   backgroundRunHasNewObservations,
   BURST_COOLDOWN_MS,
@@ -34,6 +35,14 @@ import { useUiStore } from "@/store/ui";
 
 const BOOK = '["Ws","Savings"]';
 const OTHER_BOOK = '["Ws","Other"]';
+const ACTIVE: ActiveBook = {
+  key: BOOK,
+  expected: { workspace_id: "Ws", profile_id: "Savings" },
+};
+const OTHER_ACTIVE: ActiveBook = {
+  key: OTHER_BOOK,
+  expected: { workspace_id: "Ws", profile_id: "Other" },
+};
 // Planted identifiers that must never cross the native boundary.
 const SECRET_LABEL = "Cold storage bc1qplantedaddress";
 const SECRET_ERROR =
@@ -380,7 +389,7 @@ describe("activation", () => {
     return h.tokens.at(-1)!;
   }
 
-  function routeFor(currentBook: string | null) {
+  function routeFor(currentBook: ActiveBook | null) {
     const pending = useOsNotificationActivation.getState().pending!;
     const { conditions, results } = useNotificationStore.getState();
     return resolveActivation(pending, {
@@ -395,18 +404,18 @@ describe("activation", () => {
     const h = harness();
     const token = await deliverFailure(h);
     recordOsNotificationActivation(token, h.clock.now + 1000);
-    expect(routeFor(BOOK)).toEqual({ kind: "navigate", to: "/connections" });
+    expect(routeFor(ACTIVE)).toEqual({ kind: "navigate", to: "/connections" });
   });
 
   it("opens the center for another book, a resolved entry, or a second use", async () => {
     const h = harness();
     const token = await deliverFailure(h);
     recordOsNotificationActivation(token, h.clock.now);
-    expect(routeFor(OTHER_BOOK)).toEqual({ kind: "center" });
-    expect(routeFor(BOOK)).toEqual({ kind: "navigate", to: "/connections" });
+    expect(routeFor(OTHER_ACTIVE)).toEqual({ kind: "center" });
+    expect(routeFor(ACTIVE)).toEqual({ kind: "navigate", to: "/connections" });
 
     useNotificationStore.getState().resolveCondition(conditionRef);
-    expect(routeFor(BOOK)).toEqual({ kind: "center" });
+    expect(routeFor(ACTIVE)).toEqual({ kind: "center" });
 
     // Consumed: the same token again is unknown.
     expect(destinationForActivation(token, h.clock.now)).toEqual({ kind: "center" });
@@ -433,7 +442,7 @@ describe("activation", () => {
           review: "/connections",
         },
       },
-      { currentBook: BOOK, developerToolsEnabled: false, conditions: {}, results: [] },
+      { currentBook: ACTIVE, developerToolsEnabled: false, conditions: {}, results: [] },
     );
     expect(route).toEqual({ kind: "navigate", to: "/connections" });
   });
@@ -445,7 +454,7 @@ describe("activation", () => {
         scope: { book: BOOK },
         action: { type: "navigate", to: "https://example.org" },
       },
-      { currentBook: BOOK, developerToolsEnabled: false, conditions: {}, results: [] },
+      { currentBook: ACTIVE, developerToolsEnabled: false, conditions: {}, results: [] },
     );
     expect(route).toEqual({ kind: "center" });
   });

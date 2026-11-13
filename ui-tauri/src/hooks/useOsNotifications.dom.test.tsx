@@ -36,6 +36,7 @@ import {
   useNotificationStore,
   type ConditionInput,
 } from "@/store/notifications";
+import type { ActiveBook } from "@/lib/activeBook";
 import { bookIdentityKey, useUiStore, type Identity } from "@/store/ui";
 
 import { useOsNotifications } from "./useOsNotifications";
@@ -57,9 +58,25 @@ const failure: ConditionInput = {
   },
 };
 
+/** The open book as the shell's profiles read would name it. */
+function activeBookFor(identity: Identity | null): ActiveBook | null {
+  if (!identity) return null;
+  const { workspace, profile } = identity as unknown as {
+    workspace: string;
+    profile: string;
+  };
+  return {
+    key: bookIdentityKey(identity)!,
+    expected: { workspace_id: workspace, profile_id: profile },
+  };
+}
+
 function Shell({ unlocked }: { unlocked: boolean }) {
-  useOsNotifications(unlocked);
-  return unlocked ? <NotificationCenter runOperation={runOperation} /> : null;
+  const activeBook = activeBookFor(useUiStore((s) => s.identity));
+  useOsNotifications(unlocked, activeBook);
+  return unlocked ? (
+    <NotificationCenter runOperation={runOperation} currentBook={activeBook} />
+  ) : null;
 }
 
 const runOperation = vi.fn();
