@@ -424,6 +424,33 @@ describe("book refresh cycle", () => {
       at: 7,
     });
   });
+
+  it("keeps refetching an unmounted overview when the revision moves", async () => {
+    const { client } = setup();
+    // A write lands after the first overview read: the retry must read the
+    // overview again, though its first refetch already cleared the flag.
+    let book = 2;
+    client.setQueryDefaults(OVERVIEW, {
+      queryFn: async () => overview(book, book / 10, []),
+    });
+    client.setQueryData(OVERVIEW, overview(1, 0.1, []));
+    const revisions = ["r1", "r2", "r2", "r2"];
+    await refreshBookQueries(
+      client,
+      { queryKey: ["daemon", "real"] },
+      {
+        readRevision: async () => {
+          const next = revisions.shift() ?? null;
+          if (next === "r2") book = 3;
+          return next;
+        },
+        overviewKey: () => OVERVIEW,
+        now: () => 9,
+      },
+    );
+    expect(client.getQueryData(OVERVIEW)).toEqual(overview(3, 0.3, []));
+    expect(useBookRefreshStore.getState().lastChange?.transactionDelta).toBe(2);
+  });
 });
 
 describe("book view comparison", () => {

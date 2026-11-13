@@ -181,6 +181,13 @@ async function runCycle(
   }, HOLD_LIMIT_MS);
   try {
     before = captureBookView(queryClient, overviewKey);
+    // The overview carries the balance and count the change summary names.
+    // When it is cached but not mounted and this request marked it stale,
+    // it takes part in every attempt: its first refetch clears the flag,
+    // and a retry must not keep the older copy.
+    const refreshOverview =
+      overviewKey !== null &&
+      queryClient.getQueryState(overviewKey)?.isInvalidated === true;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       const start = await deps.readRevision();
       await queryClient
@@ -189,9 +196,7 @@ async function runCycle(
           { cancelRefetch: true },
         )
         .catch(() => undefined);
-      // The overview carries the balance and count the change summary
-      // names; refetch it too when it is cached but not mounted.
-      if (overviewKey && queryClient.getQueryState(overviewKey)?.isInvalidated) {
+      if (refreshOverview && overviewKey) {
         await queryClient
           .refetchQueries({ queryKey: overviewKey, exact: true, type: "inactive" })
           .catch(() => undefined);
