@@ -792,6 +792,7 @@ impl BookStore for RealStore {
             backend_kinds,
             report_read_attempts: Default::default(),
             exchange_syncs: Default::default(),
+            opened: OPENED_BOOKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         }))
     }
     fn verify_passphrase(
@@ -1006,7 +1007,13 @@ impl kassiber_setup::Sources for SetupSources {
     }
 }
 
+/// Counts book opens in this process, so a revision token never repeats
+/// across a reopen (SQLite's change counters restart with each connection).
+static OPENED_BOOKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 struct RealBook {
+    /// This open's number from `OPENED_BOOKS`.
+    opened: u64,
     lightning_gate: kassiber_net::Gate,
     rates: kassiber_rates::Providers,
     backend_kinds: std::collections::BTreeMap<String, String>,
@@ -3151,6 +3158,20 @@ impl Book for RealBook {
             }
         }
         Ok(result)
+    }
+    fn revision(&self) -> Result<Option<String>, AppError> {
+        let conn = self.conn()?;
+        // `data_version` moves when another connection commits; this
+        // connection's own writes only show in `total_changes`.
+        let data_version: i64 = conn
+            .query_row("PRAGMA data_version", [], |row| row.get(0))
+            .map_err(map_sqlite_error)
+            .map_err(error)?;
+        Ok(Some(format!(
+            "{}:{data_version}:{}",
+            self.opened,
+            conn.total_changes()
+        )))
     }
     fn status_facts(&self) -> Result<StatusFacts, AppError> {
         // `resolve_runtime_paths` never requires the layout: a project the

@@ -1275,6 +1275,13 @@ impl Daemon {
                         kassiber_runtime::status::storage_payload(database.as_str()),
                     );
                 }
+                // Opt-in for the same reason: the desktop's refresh cycle
+                // compares this token before and after its reads.
+                if args.as_ref().and_then(|args| get(args, "revision")) == Some(&Value::Bool(true))
+                {
+                    let revision = self.book_mut()?.revision()?.map_or(Value::Null, s);
+                    kassiber_envelope::set(&mut payload, "revision", revision);
+                }
                 Ok((
                     Some(with_request_id(success("status", payload), &request_id)),
                     false,

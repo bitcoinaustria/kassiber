@@ -805,3 +805,41 @@ fn lightning_failures_report_ok_false_with_the_reference_message() {
         .all(|r| path(r, &["data", "ok"]) == Some(&Value::Bool(false))));
     desk.check();
 }
+
+/// `status` with `revision: true` returns a token the desktop compares before
+/// and after a refresh's reads. Reads leave it alone; a commit from another
+/// connection (a background sync worker's) or the daemon's own write moves it.
+#[test]
+fn status_revision_moves_with_every_committed_write() {
+    let desk = Desk::new("status_revision_moves_with_every_committed_write");
+    let mut daemon = support::Daemon::spawn(&desk, &[]);
+    let revision = |daemon: &mut support::Daemon, id: &str| -> String {
+        let record = daemon.step(id, "status", Some(r#"{"revision": true}"#));
+        assert_eq!(kind_of(&record), "status", "{record:?}");
+        path(&record, &["data", "revision"])
+            .and_then(text)
+            .expect("an open book has a revision")
+            .to_owned()
+    };
+    let first = revision(&mut daemon, "r1");
+    daemon.step("read", STATUS, None);
+    assert_eq!(revision(&mut daemon, "r2"), first, "a read is no write");
+
+    desk.connection()
+        .execute_batch("UPDATE profiles SET label = label || ' ' WHERE id = 'p'")
+        .unwrap();
+    let second = revision(&mut daemon, "r3");
+    assert_ne!(second, first, "another connection committed");
+
+    let written = daemon.step(
+        "write",
+        "ui.maintenance.configure",
+        Some(r#"{"require_coarse_review": true}"#),
+    );
+    assert_eq!(kind_of(&written), "ui.maintenance.configure", "{written:?}");
+    assert_ne!(revision(&mut daemon, "r4"), second, "the daemon wrote");
+
+    daemon.request("daemon.shutdown", "stop", None);
+    daemon.terminal("stop");
+    daemon.exit_cleanly();
+}
