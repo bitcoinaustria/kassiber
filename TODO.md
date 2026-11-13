@@ -1892,6 +1892,21 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Imports, source evidence, and wallet workflows
 
+- [ ] Other crypto assets per [plan 23](docs/plan/23-crypto-assets.md).
+  Done: the foundation (`asset_scope`, the skip tally, exact units, swap
+  pairing) and Bitpanda. Open: Kraken and Binance APIs, the Coinbase API,
+  CoinTracking and Blockpit exports, the desktop toggle (exchange card and
+  import result), per-asset overview, transactions and wallets views, and an
+  assistant tool that sets a wallet's asset scope under the usual consent
+  (AI tools must not see wallet configuration, so it needs its own narrow
+  tool). Then further sources from the Rotki survey: Bitvavo (API), Bison,
+  Trade Republic and Crypto.com App (CSV; need real samples), Bitstamp,
+  Revolut, Nexo, KuCoin, Bybit, OKX and Bitcoin.de.
+- [ ] Price crypto-to-crypto swaps outside Austria: Bitpanda states no fiat
+  value for a swap, so taxable swap legs wait in `missing_spot_price` review.
+  Needs per-asset rate sources (the rates crate is BTC-only) or a provider
+  value with a confirmed meaning (Bitpanda's `trade.to_eur_rate`).
+
 - [ ] Extend [exact exchange withdrawals](docs/reference/custody-resolution.md#exchange-withdrawals-that-name-their-txid)
   past Strike and River. Coinbase and Binance API rows name the txid, but the
   raw `network` field leaves them unscoped, Coinbase drops the withdrawal fee,
