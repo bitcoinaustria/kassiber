@@ -490,6 +490,7 @@ mod loopback {
 
 mod binance_api;
 mod bitpanda_api;
+mod coinbase_api;
 mod desktop_api;
 mod kraken_api;
 

@@ -1231,5 +1231,147 @@
       "binance_bitcoin_scope_reads_btc_as_before_and_counts_other_assets"
     ],
     "rule": "A wallet update reads stored rows as the import read them."
+  },
+  {
+    "id": "coinbase-bitcoin-scope-leaves-accounts-unread",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "if !tally.admit(client.scope, &canonical, class) {",
+    "replace": "if !tally.admit(Scope::Crypto, &canonical, class) {",
+    "expect_failing": [
+      "coinbase_bitcoin_scope_counts_other_accounts_without_reading_them"
+    ],
+    "rule": "The bitcoin scope counts other crypto accounts from the accounts list and never requests their history."
+  },
+  {
+    "id": "coinbase-fiat-accounts-unread",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "Some(kind) if kind == \"fiat\" => Class::Fiat,",
+    "replace": "Some(kind) if kind == \"fiat\" => Class::Crypto,",
+    "expect_failing": [
+      "coinbase_bitcoin_scope_counts_other_accounts_without_reading_them",
+      "coinbase_crypto_scope_maps_every_row_kind_and_pairs_swaps_once"
+    ],
+    "rule": "Coinbase's own fiat type keeps an account out of every scope, unread."
+  },
+  {
+    "id": "coinbase-excluded-from-provider-type",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "Some(_) => Class::Excluded,",
+    "replace": "Some(_) => Class::Crypto,",
+    "expect_failing": [
+      "coinbase_bitcoin_scope_counts_other_accounts_without_reading_them"
+    ],
+    "rule": "A currency type other than crypto or fiat is excluded and counted, never imported."
+  },
+  {
+    "id": "coinbase-crypto-scope-pairs-swaps",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "Scope::Crypto => swaps(&kept)?,",
+    "replace": "Scope::Crypto => BTreeMap::<usize, Leg>::new(),",
+    "expect_failing": [
+      "coinbase_crypto_scope_maps_every_row_kind_and_pairs_swaps_once",
+      "coinbase_crypto_scope_refuses_what_it_cannot_map_exactly"
+    ],
+    "rule": "In the crypto scope a crypto-to-crypto convert or fill is two paired swap legs, not a sell and a buy."
+  },
+  {
+    "id": "coinbase-single-leg-convert-stays-priced",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "if indexes.len() > 1 {",
+    "replace": "if !indexes.is_empty() {",
+    "expect_failing": [
+      "coinbase_crypto_scope_maps_every_row_kind_and_pairs_swaps_once"
+    ],
+    "rule": "A convert whose other leg is in a fiat account stays an exactly priced buy or sell."
+  },
+  {
+    "id": "coinbase-fills-pair-by-time-and-price",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "if indexes.len() == 2 {",
+    "replace": "if indexes.len() >= 2 {",
+    "expect_failing": [
+      "coinbase_crypto_scope_maps_every_row_kind_and_pairs_swaps_once"
+    ],
+    "rule": "An order with several crypto-quoted fills pairs each fill's legs by their shared time and fill price."
+  },
+  {
+    "id": "coinbase-fill-product-names-its-asset",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "!base.is_empty() && !quote.is_empty() && [base, quote].contains(&&row.currency)",
+    "replace": "true",
+    "expect_failing": [
+      "coinbase_crypto_scope_refuses_what_it_cannot_map_exactly"
+    ],
+    "rule": "A fill whose product does not name its row's asset is refused."
+  },
+  {
+    "id": "coinbase-swap-one-out-one-in",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "if first == second {",
+    "replace": "if false {",
+    "expect_failing": [
+      "coinbase_crypto_scope_refuses_what_it_cannot_map_exactly"
+    ],
+    "rule": "A swap needs one leg out and one leg in."
+  },
+  {
+    "id": "coinbase-swap-legs-differ",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "if rows[a].currency == rows[b].currency {",
+    "replace": "if false {",
+    "expect_failing": [
+      "coinbase_crypto_scope_refuses_what_it_cannot_map_exactly"
+    ],
+    "rule": "A swap's two legs are in two different assets."
+  },
+  {
+    "id": "coinbase-third-asset-fee-row",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "if let Some(fee) = third_asset_fee(row, leg, scope, &mut fees)? {",
+    "replace": "if let Some(fee) = third_asset_fee(row, leg, scope, &mut fees)?.filter(|_| false) {",
+    "expect_failing": [
+      "coinbase_crypto_scope_maps_every_row_kind_and_pairs_swaps_once"
+    ],
+    "rule": "A fee Coinbase states in a third crypto asset becomes its own outbound fee row in the crypto scope."
+  },
+  {
+    "id": "coinbase-third-asset-fee-once",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "Some(previous) if *previous == stated => return Ok(None),",
+    "replace": "Some(previous) if previous.is_empty() => return Ok(None),",
+    "expect_failing": [
+      "coinbase_crypto_scope_maps_every_row_kind_and_pairs_swaps_once"
+    ],
+    "rule": "Both legs of a convert carry its fee; it is booked once per trade."
+  },
+  {
+    "id": "coinbase-third-asset-fee-bitcoin-refusal",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "    if scope == Scope::Bitcoin {\n        return Err(",
+    "replace": "    if false {\n        return Err(",
+    "expect_failing": [
+      "coinbase_bitcoin_scope_refuses_a_btc_trade_fee_in_another_crypto_asset"
+    ],
+    "rule": "The bitcoin scope refuses a BTC trade whose fee is in another crypto asset rather than drop it."
+  },
+  {
+    "id": "coinbase-receive-comes-in",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "if token == \"receive\" && !inbound {",
+    "replace": "if false {",
+    "expect_failing": [
+      "coinbase_crypto_scope_refuses_what_it_cannot_map_exactly"
+    ],
+    "rule": "A receive with a negative amount is refused, not booked as a withdrawal."
+  },
+  {
+    "id": "coinbase-crypto-scope-names-each-account",
+    "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
+    "find": "                if client.scope == Scope::Crypto {\n                    return Err(",
+    "replace": "                if false {\n                    return Err(",
+    "expect_failing": [
+      "coinbase_crypto_scope_refuses_accounts_it_cannot_name"
+    ],
+    "rule": "The crypto scope refuses an account Coinbase lists without a currency rather than skip it."
   }
 ]

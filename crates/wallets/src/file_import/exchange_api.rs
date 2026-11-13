@@ -128,7 +128,7 @@ pub fn execute(
         reported,
     } = match kind.as_str() {
         "kraken" => kraken::fetch(&client)?,
-        "coinbase" => coinbase::fetch(&client)?.into(),
+        "coinbase" => coinbase::fetch(&client)?,
         "bitpanda" => bitpanda::fetch(&client)?,
         _ => binance::fetch(&client)?,
     };
