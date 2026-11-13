@@ -609,7 +609,7 @@ fn write(
                 .map_err(database_error)?;
             network::guard(conn, &profile_id, &config, has_history.then_some(&w.config))?;
             if has_history {
-                network::guard_history(conn, &profile_id, &w.id, &config)?;
+                network::guard_history(conn, &profile_id, &w.id, &w.kind, &config)?;
             }
             let label = label.unwrap_or_else(|| w.label.clone());
             conn.execute("UPDATE wallets SET label=?,account_id=?,config_json=? WHERE id=?",params![label,account,config::stored_json(&config),w.id]).map_err(|e|if matches!(e,kassiber_store::rusqlite::Error::SqliteFailure(ref e,_) if e.code==kassiber_store::rusqlite::ErrorCode::ConstraintViolation){conflict(conn,&profile_id,&label,true)}else{database_error(e)})?;
