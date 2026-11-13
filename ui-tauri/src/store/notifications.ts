@@ -50,6 +50,7 @@ export const CONDITION_CODES = [
   "backup.restore-failed",
   "backup.restore-warning",
   "source-funds.rescan-needed",
+  "pricing.rebuild-failed",
 ] as const;
 export type ConditionCode = (typeof CONDITION_CODES)[number];
 
@@ -61,6 +62,7 @@ export const RESULT_CODES = [
   "connection.synced",
   "backup.restored",
   "report.exported",
+  "pricing.rebuilt",
 ] as const;
 export type ResultCode = (typeof RESULT_CODES)[number];
 
@@ -69,6 +71,7 @@ export const JOB_CODES = [
   "journal-processing",
   "connection-sync",
   "report-export",
+  "pricing-rebuild",
 ] as const;
 export type JobCode = (typeof JOB_CODES)[number];
 
@@ -484,6 +487,7 @@ const CODE_ORDER: Record<ConditionCode, number> = {
   "unlock.credential-remains": 11,
   "touch-id.off": 12,
   "source-funds.rescan-needed": 13,
+  "pricing.rebuild-failed": 14,
 };
 
 function compareConditions(a: ConditionEntry, b: ConditionEntry): number {

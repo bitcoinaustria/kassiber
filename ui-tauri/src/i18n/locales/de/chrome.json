@@ -307,6 +307,10 @@
         "title": "Eine Wallet braucht einen vollständigen Rescan",
         "body_one": "{{count}} Transaktion wurde gesynct, bevor Kassiber festhielt, welche Inputs ihr gehören, deshalb lässt sich ihre Mittelherkunft nicht nachverfolgen. Scanne ihre Wallet neu.",
         "body_other": "{{count}} Transaktionen wurden gesynct, bevor Kassiber festhielt, welche Inputs ihnen gehören, deshalb lässt sich ihre Mittelherkunft nicht nachverfolgen. Scanne ihre Wallet neu."
+      },
+      "pricingRebuildFailed": {
+        "title": "Neuaufbau der Preise fehlgeschlagen",
+        "body": "Transaktionen behalten ihre bisherigen Preise, bis ein Neuaufbau gelingt."
       }
     },
     "result": {
@@ -351,6 +355,10 @@
         "notesTitle": "Bericht mit Hinweisen exportiert",
         "notesBody": "Unter Berichte stehen die Hinweise neben der gespeicherten Datei.",
         "action": "Berichte öffnen"
+      },
+      "pricingRebuilt": {
+        "title": "Preise neu aufgebaut",
+        "journalsBody": "Die Journale wurden nicht mit den neuen Preisen verarbeitet; unter „Braucht Aufmerksamkeit“ steht, warum."
       }
     },
     "job": {
@@ -359,12 +367,14 @@
       "journalProcessing": "Journale werden verarbeitet",
       "connectionSync": "Wallet-Sync läuft",
       "connectionRescan": "Wallet-Rescan läuft",
-      "reportExport": "Bericht wird exportiert"
+      "reportExport": "Bericht wird exportiert",
+      "pricingRebuild": "Preise werden neu aufgebaut"
     },
     "action": {
       "openWallet": "Wallet öffnen",
       "openTransaction": "Transaktion öffnen",
-      "openSecurity": "Sicherheit öffnen"
+      "openSecurity": "Sicherheit öffnen",
+      "openMarketData": "Marktdaten öffnen"
     },
     "feedback": {
       "reportSaveFailed": "Berichtsexport konnte nicht gespeichert werden",

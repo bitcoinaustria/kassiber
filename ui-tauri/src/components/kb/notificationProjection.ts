@@ -164,6 +164,12 @@ export function projectConditionGroup(
         body: t("notifications.condition.backupRestoreWarning.body"),
         details,
       };
+    case "pricing.rebuild-failed":
+      return {
+        title: t("notifications.condition.pricingRebuildFailed.title"),
+        body: t("notifications.condition.pricingRebuildFailed.body"),
+        details,
+      };
     case "source-funds.rescan-needed":
       return {
         title: t("notifications.condition.sourceFundsRescan.title"),
@@ -261,7 +267,16 @@ export function projectResult(
             body: t("notifications.result.reportExported.notesBody"),
             details,
           }
-        : { title: t("notifications.result.reportExported.title"), details };
+            : { title: t("notifications.result.reportExported.title"), details };
+case "pricing.rebuilt":
+  return {
+    title: t("notifications.result.pricingRebuilt.title"),
+    body:
+      entry.severity === "warning"
+        ? t("notifications.result.pricingRebuilt.journalsBody")
+        : undefined,
+    details,
+  };
   }
 }
 
@@ -291,6 +306,8 @@ function jobTitle(job: JobEntry, t: ChromeT): string {
         : t("notifications.job.connectionSync");
     case "report-export":
       return t("notifications.job.reportExport");
+    case "pricing-rebuild":
+      return t("notifications.job.pricingRebuild");
   }
 }
 

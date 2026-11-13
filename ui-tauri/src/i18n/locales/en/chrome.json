@@ -307,6 +307,10 @@
         "title": "A wallet needs a full rescan",
         "body_one": "{{count}} transaction was synced before Kassiber recorded which inputs were its own, so its source of funds cannot be traced. Rescan its wallet.",
         "body_other": "{{count}} transactions were synced before Kassiber recorded which inputs were their own, so their source of funds cannot be traced. Rescan their wallet."
+      },
+      "pricingRebuildFailed": {
+        "title": "Price rebuild failed",
+        "body": "Transactions keep their previous prices until a rebuild succeeds."
       }
     },
     "result": {
@@ -351,6 +355,10 @@
         "notesTitle": "Report exported with notes",
         "notesBody": "Reports lists the notes next to the saved file.",
         "action": "Open reports"
+      },
+      "pricingRebuilt": {
+        "title": "Prices rebuilt",
+        "journalsBody": "Journals were not processed with the new prices; Needs attention says why."
       }
     },
     "job": {
@@ -359,12 +367,14 @@
       "journalProcessing": "Processing journals",
       "connectionSync": "Syncing wallet",
       "connectionRescan": "Rescanning wallet",
-      "reportExport": "Exporting report"
+      "reportExport": "Exporting report",
+      "pricingRebuild": "Rebuilding prices"
     },
     "action": {
       "openWallet": "Open wallet",
       "openTransaction": "Open transaction",
-      "openSecurity": "Open security settings"
+      "openSecurity": "Open security settings",
+      "openMarketData": "Open market data"
     },
     "feedback": {
       "reportSaveFailed": "Could not save the report export",

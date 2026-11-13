@@ -2,6 +2,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { showFeedback } from "@/lib/feedback";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,12 @@ import { Switch } from "@/components/ui/switch";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { openExternalUrl } from "@/daemon/transport";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
-import { useUiStore } from "@/store/ui";
+import {
+  recordPricingRebuilt,
+  recordPricingRebuildFailed,
+  pricingRebuildJob,
+} from "@/lib/pricingNotifications";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 import {
   formatCount,
   formatKrakenRange,
@@ -47,9 +53,6 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const rebuildRates = useDaemonMutation<RateRebuildData>("ui.rates.rebuild");
   const configureMaintenance =
     useDaemonMutation<MaintenanceSettingsData>("ui.maintenance.configure");
-  const addNotification = useUiStore((state) => state.addNotification);
-  const updateNotification = useUiStore((state) => state.updateNotification);
-  const rebuildNoticeRef = React.useRef<string | null>(null);
   const [krakenArchivePath, setKrakenArchivePath] = React.useState("");
   const [krakenImportResult, setKrakenImportResult] =
     React.useState<KrakenRatesImportData | null>(null);
@@ -70,17 +73,18 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {
       event.preventDefault();
       void openExternalUrl(url).catch((error) => {
-        addNotification({
+        showFeedback({
           title: t("marketData.openLinkErrorTitle"),
-          body:
+          description:
             error instanceof Error
               ? error.message
               : t("marketData.openLinkErrorBody"),
+          descriptionPrivacy: "free-text",
           tone: "warning",
         });
       });
     },
-    [addNotification, t],
+    [t],
   );
 
   const chooseKrakenArchive = async () => {
@@ -205,18 +209,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     if (!liveMinuteRatesEnabled) return;
     setRateRebuildError(null);
     setRateRebuildResult(null);
-    rebuildNoticeRef.current = addNotification({
-      title: t("marketData.rebuildStartedTitle"),
-      body: t("marketData.rebuildStartedBody", {
-        provider: marketRateProviderLabelText,
-        pair: activeRatePair,
-      }),
-      tone: "warning",
-      progress: {
-        indeterminate: true,
-        label: t("marketData.rebuildingProgressLabel"),
-      },
-    });
+    // The book whose prices are rebuilt, fixed at the start; the rebuild
+    // runs on after Settings closes.
+    const job = pricingRebuildJob(bookIdentityKey(useUiStore.getState().identity));
+    job.start();
     try {
       const envelope = await rebuildRates.mutateAsync({
         source: marketRateProvider,
@@ -231,46 +227,28 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           (total, row) => total + Number(row.samples ?? 0),
           0,
         ) ?? 0;
-      const notification = {
-        title: journalBlocker
-          ? t("marketData.rebuiltBlockedTitle")
-          : t("marketData.rebuiltTitle"),
-        body: payload
+      recordPricingRebuilt(job.scope, {
+        summary: payload
           ? t("marketData.rebuiltBody", {
               cleared: formatCount(payload.deleted.transaction_prices),
               fetched: formatCount(fetchedRows),
-              blocker: journalBlocker ? ` ${journalBlocker}` : "",
+              blocker: "",
             })
           : t("marketData.rebuiltBodyFallback", {
               provider: marketRateProviderLabelText,
             }),
-        tone: journalBlocker ? "warning" : "success",
-        progress: undefined,
-      } as const;
-      if (rebuildNoticeRef.current) {
-        updateNotification(rebuildNoticeRef.current, notification);
-        rebuildNoticeRef.current = null;
-      } else {
-        addNotification(notification);
-      }
+        journalBlocker: journalBlocker || undefined,
+      });
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : t("marketData.rebuildFailedError");
+      // Shown in the rebuild panel too; the condition outlasts Settings.
       setRateRebuildError(message);
-      const notification = {
-        title: t("marketData.rebuildFailedTitle"),
-        body: message,
-        tone: "error",
-        progress: undefined,
-      } as const;
-      if (rebuildNoticeRef.current) {
-        updateNotification(rebuildNoticeRef.current, notification);
-        rebuildNoticeRef.current = null;
-      } else {
-        addNotification(notification);
-      }
+      recordPricingRebuildFailed(job.scope, message);
+    } finally {
+      job.end();
     }
   };
   const setLiveMinuteRates = async (enabled: boolean) => {
@@ -288,22 +266,24 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         background_enabled: backgroundEnabled,
         source_classes: sourceClasses,
       });
-      addNotification({
+      showFeedback({
         title: enabled
           ? t("marketData.autoEnabledTitle")
           : t("marketData.autoDisabledTitle"),
-        body: enabled
+        description: enabled
           ? t("marketData.autoEnabledBody")
           : t("marketData.autoDisabledBody"),
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
     } catch (error) {
-      addNotification({
+      showFeedback({
         title: t("marketData.autoFailedTitle"),
-        body:
+        description:
           error instanceof Error
             ? error.message
             : t("marketData.autoFailedBody"),
+        descriptionPrivacy: "free-text",
         tone: "error",
       });
     }
@@ -317,18 +297,20 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       const selectedProvider =
         envelope.data?.settings.market_rate_provider ?? provider;
       const selectedLabel = marketRateProviderLabel(selectedProvider);
-      addNotification({
+      showFeedback({
         title: t("marketData.providerUpdatedTitle"),
-        body: t("marketData.providerUpdatedBody", { provider: selectedLabel }),
+        description: t("marketData.providerUpdatedBody", { provider: selectedLabel }),
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
     } catch (error) {
-      addNotification({
+      showFeedback({
         title: t("marketData.providerFailedTitle"),
-        body:
+        description:
           error instanceof Error
             ? error.message
             : t("marketData.providerFailedBody"),
+        descriptionPrivacy: "free-text",
         tone: "error",
       });
     }
@@ -337,22 +319,24 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     if (enabled === requireCoarseReview) return;
     try {
       await configureMaintenance.mutateAsync({ require_coarse_review: enabled });
-      addNotification({
+      showFeedback({
         title: enabled
           ? t("marketData.coarse.heldTitle")
           : t("marketData.coarse.acceptedTitle"),
-        body: enabled
+        description: enabled
           ? t("marketData.coarse.heldBody")
           : t("marketData.coarse.acceptedBody"),
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
     } catch (error) {
-      addNotification({
+      showFeedback({
         title: t("marketData.coarse.errorTitle"),
-        body:
+        description:
           error instanceof Error
             ? error.message
             : t("marketData.coarse.errorBody"),
+        descriptionPrivacy: "free-text",
         tone: "error",
       });
     }
@@ -363,22 +347,24 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       await configureMaintenance.mutateAsync({
         bitcoin_rail_carrying_value: enabled,
       });
-      addNotification({
+      showFeedback({
         title: enabled
           ? t("marketData.bitcoinRails.enabledTitle")
           : t("marketData.bitcoinRails.disabledTitle"),
-        body: enabled
+        description: enabled
           ? t("marketData.bitcoinRails.enabledBody")
           : t("marketData.bitcoinRails.disabledBody"),
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
     } catch (error) {
-      addNotification({
+      showFeedback({
         title: t("marketData.bitcoinRails.errorTitle"),
-        body:
+        description:
           error instanceof Error
             ? error.message
             : t("marketData.bitcoinRails.errorBody"),
+        descriptionPrivacy: "free-text",
         tone: "error",
       });
     }

@@ -151,6 +151,8 @@ function conditionActionLabel(
       return t("notifications.condition.backupRestoreFailed.action");
     case "source-funds.rescan-needed":
       return t("notifications.action.openTransaction");
+    case "pricing.rebuild-failed":
+      return t("notifications.action.openMarketData");
   }
 }
 
@@ -173,6 +175,9 @@ function resultActionLabel(resolved: ResolvedEntryAction, t: ChromeT): string {
       }
       if (resolved.to === "/reports") {
         return t("notifications.result.reportExported.action");
+      }
+      if (resolved.to === "/settings/market") {
+        return t("notifications.action.openMarketData");
       }
       return t("notifications.staleAction");
   }
