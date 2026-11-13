@@ -20,6 +20,7 @@ import {
   type InfiniteData,
 } from "@tanstack/react-query";
 import { getTransport, type DaemonEnvelope } from "./transport";
+import { refreshBookQueries, useHeldQueryResult } from "./bookRefresh";
 import { useUiStore, type DataMode } from "@/store/ui";
 import { notifyJournalStepAfterImport } from "@/lib/journalStepNotice";
 
@@ -233,8 +234,9 @@ export function useDaemon<T = unknown>(
   const boundary = useContext(DaemonScopeContext);
   const dataMode = useUiStore((state) => state.dataMode);
   const daemonSession = useUiStore((state) => state.daemonSession);
-  return useQuery<DaemonEnvelope<T>>({
-    queryKey: daemonQueryKey(dataMode, daemonSession, kind, boundary ? { ...args, expected_scope: boundary.expectedScope } : args),
+  const queryKey = daemonQueryKey(dataMode, daemonSession, kind, boundary ? { ...args, expected_scope: boundary.expectedScope } : args);
+  const result = useQuery<DaemonEnvelope<T>>({
+    queryKey,
     queryFn: async () => {
       const envelope = await getTransport().invoke<T>({ kind, args: scopedDaemonArgs(args, boundary) });
       if (envelope.kind === "auth_required") {
@@ -249,6 +251,8 @@ export function useDaemon<T = unknown>(
     retry: retryDaemonQuery,
     ...options,
   });
+  // A book refresh cycle swaps every screen's data at once (bookRefresh.ts).
+  return useHeldQueryResult(queryKey, result);
 }
 
 export function useDaemonInfinite<T = unknown>(
@@ -269,14 +273,15 @@ export function useDaemonInfinite<T = unknown>(
   const boundary = useContext(DaemonScopeContext);
   const dataMode = useUiStore((state) => state.dataMode);
   const daemonSession = useUiStore((state) => state.daemonSession);
-  return useInfiniteQuery<
+  const queryKey = daemonQueryKey(dataMode, daemonSession, kind, boundary ? { ...args, expected_scope: boundary.expectedScope } : args);
+  const result = useInfiniteQuery<
     DaemonEnvelope<T>,
     Error,
     InfiniteData<DaemonEnvelope<T>>,
     readonly unknown[],
     unknown
   >({
-    queryKey: daemonQueryKey(dataMode, daemonSession, kind, boundary ? { ...args, expected_scope: boundary.expectedScope } : args),
+    queryKey,
     initialPageParam: null,
     queryFn: async ({ pageParam }) => {
       const envelope = await getTransport().invoke<T>({
@@ -301,6 +306,7 @@ export function useDaemonInfinite<T = unknown>(
     retry: retryDaemonQuery,
     ...options,
   });
+  return useHeldQueryResult(queryKey, result);
 }
 
 export function daemonMutationKey(dataMode: DataMode, kind: string) {
@@ -563,19 +569,61 @@ export function invalidateDaemonQueriesForMutation(
 ) {
   const queryKinds = invalidatedDaemonQueryKindsForMutation(kind);
   if (!queryKinds) {
-    void queryClient.invalidateQueries({
-      queryKey: ["daemon", dataMode],
-    });
+    void refreshDaemonQueries(queryClient, dataMode);
     return;
   }
-  const affectedKinds = new Set(queryKinds);
-  void queryClient.invalidateQueries({
-    queryKey: ["daemon", dataMode],
-    predicate: (query) =>
-      query.queryKey.some(
-        (part) => typeof part === "string" && affectedKinds.has(part),
-      ),
-  });
+  if (queryKinds.length === 0) return;
+  void refreshDaemonQueries(queryClient, dataMode, queryKinds);
+}
+
+/** The open book's revision token (`status` with `revision: true`). */
+async function readBookRevision(): Promise<string | null> {
+  try {
+    const envelope = await getTransport().invoke<{ revision?: unknown }>({
+      kind: "status",
+      args: { revision: true },
+    });
+    if (envelope.kind !== "status" || envelope.error) return null;
+    const revision = envelope.data?.revision;
+    return typeof revision === "string" ? revision : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Refresh mounted daemon reads as one book refresh cycle: screens keep what
+ * they show until every refetch has landed against one book revision, then
+ * swap together. `kinds` narrows it to queries of those kinds.
+ */
+export function refreshDaemonQueries(
+  queryClient: QueryClient,
+  /** `null` refreshes every data mode's reads. */
+  dataMode: DataMode | null,
+  kinds?: readonly string[],
+): Promise<void> {
+  const affectedKinds = kinds ? new Set(kinds) : null;
+  return refreshBookQueries(
+    queryClient,
+    {
+      queryKey: dataMode === null ? ["daemon"] : ["daemon", dataMode],
+      predicate: affectedKinds
+        ? (query) =>
+            query.queryKey.some(
+              (part) => typeof part === "string" && affectedKinds.has(part),
+            )
+        : undefined,
+    },
+    {
+      readRevision: readBookRevision,
+      overviewKey: () =>
+        daemonQueryKey(
+          dataMode ?? useUiStore.getState().dataMode,
+          useUiStore.getState().daemonSession,
+          "ui.overview.snapshot",
+        ),
+    },
+  );
 }
 
 export function mutationAdvancesDaemonSession(kind: string) {

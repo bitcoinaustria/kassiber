@@ -20,6 +20,11 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000,
+      // A screen opened earlier in this session reopens on what it showed,
+      // refetching behind the title bar's indicator instead of starting
+      // over on a skeleton. Lock, book switch, and profile switch still
+      // empty the cache, so this keeps no book data past those boundaries.
+      gcTime: 30 * 60 * 1000,
       // Neither focus nor reconnect may start a request the user did not
       // ask for. react-query defaults `refetchOnReconnect` to true, so every
       // mounted query that reaches a backend would refire on each network
