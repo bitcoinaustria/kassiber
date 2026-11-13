@@ -113,9 +113,12 @@ function rendererSees(scope: Scope) {
 }
 
 async function flush() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+  // A few macrotask turns: the mutation, its promise chain, and the store.
+  for (let turn = 0; turn < 3; turn += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
 }
 
 async function press(button: HTMLElement) {
