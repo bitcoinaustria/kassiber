@@ -75,6 +75,10 @@ import {
 import { cn } from "@/lib/utils";
 import type { FiatCompleteness, OverviewSnapshot } from "@/mocks/seed";
 import type { CapitalGainsReport } from "@/mocks/reports";
+import { recordReportExported, reportExportJob } from "@/lib/reportNotifications";
+import { activeBookScope } from "@/lib/notificationScope";
+import i18n from "@/i18n";
+import { showFeedback } from "@/lib/feedback";
 import { useUiStore } from "@/store/ui";
 import { TaxCountryPreviewNotice } from "@/components/kb/TaxCountryPreview";
 
@@ -306,8 +310,7 @@ function ReportsView({
   const [summarySnapshot, setSummarySnapshot] = useState(true);
   const [summaryWalletIds, setSummaryWalletIds] = useState<string[]>([]);
   const [audit, setAudit] = useState<AuditPackageOptions>(DEFAULT_AUDIT_OPTIONS);
-  const addNotification = useUiStore((s) => s.addNotification);
-  const exportCsv = useDaemonMutation<ReportExportResult>("ui.reports.export_csv");
+    const exportCsv = useDaemonMutation<ReportExportResult>("ui.reports.export_csv");
   const exportXlsx = useDaemonMutation<ReportExportResult>("ui.reports.export_xlsx");
   const exportPdf = useDaemonMutation<ReportExportResult>("ui.reports.export_pdf");
   const exportAuditPackage =
@@ -413,6 +416,10 @@ function ReportsView({
     setExportStatus(null);
     setSuccessfulExport(null);
     setActiveExport(format);
+    // The book the export belongs to, fixed at the start; it runs on after
+    // the user leaves Reports.
+    const job = reportExportJob(activeBookScope());
+    job.start();
     const mutation =
       format === "summary_pdf"
         ? exportSummaryPdf
@@ -496,9 +503,10 @@ function ReportsView({
               path: exportPath,
               openPath: exportPath,
             });
-            addNotification({
-              title: "Could not save report export",
-              body: message,
+            showFeedback({
+              title: i18n.t("chrome:notifications.feedback.reportSaveFailed"),
+              description: message,
+              descriptionPrivacy: "free-text",
               tone: "error",
             });
             return;
@@ -520,15 +528,11 @@ function ReportsView({
           });
         }
         setSuccessfulExport({ format, year: exportYear });
-        addNotification({
-          title: flagged ? "Report exported with notes" : "Report export finished",
-          body: [
-            savedPath === exportPath
-              ? detail
-              : `${detail} · saved to ${exportBasename(savedPath)}`,
-            ...warnings,
-          ].join("\n"),
-          tone: flagged ? "warning" : "success",
+        recordReportExported(job.scope, {
+          flagged,
+          warnings: warnings.length,
+          file: exportBasename(savedPath) || filename,
+          detail,
         });
       },
       (error: unknown) => {
@@ -543,33 +547,34 @@ function ReportsView({
           message,
           ...(quarantine ? { quarantine } : {}),
         });
-        addNotification({
+        // The files panel shows the error, and for a quarantine block the
+        // transactions in the way; the Review condition already counts them.
+        showFeedback({
           title: quarantine
-            ? "Report export blocked by quarantine"
-            : "Report export failed",
-          body: message,
+            ? i18n.t("chrome:notifications.feedback.reportExportBlocked")
+            : i18n.t("chrome:notifications.feedback.reportExportFailed"),
+          description: message,
+          descriptionPrivacy: "free-text",
           tone: "error",
         });
       },
-    ).finally(() => setActiveExport(null));
+    ).finally(() => {
+      job.end();
+      setActiveExport(null);
+    });
   };
 
   const handleOpenExport = (path: string) => {
     setOpeningExportPath(path);
+    // The app that opens is the confirmation; only a failure says so.
     void openExportedFile(path)
-      .then(() => {
-        addNotification({
-          title: "Report opened",
-          body: "Opened with the system default app.",
-          tone: "success",
-        });
-      })
       .catch((error) => {
         const message =
           error instanceof Error ? error.message : "Could not open report";
-        addNotification({
-          title: "Could not open report",
-          body: message,
+        showFeedback({
+          title: i18n.t("chrome:notifications.feedback.reportOpenFailed"),
+          description: message,
+          descriptionPrivacy: "free-text",
           tone: "error",
         });
       })

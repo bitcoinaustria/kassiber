@@ -15,10 +15,17 @@ import { formatShortDate } from "@/lib/date";
 import { formatSats } from "@/lib/localeFormat";
 import {
   describeWalletSyncResult,
-  journalStepNeedsAttention,
   type JournalStepSummary,
   type SyncResult,
 } from "@/lib/syncResults";
+import {
+  endConnectionSync,
+  recordConnectionSynced,
+  recordConnectionSyncFailed,
+  startConnectionSync,
+} from "@/lib/connectionNotifications";
+import { recordJournalStep } from "@/lib/journalStepNotice";
+import { activeBookScope } from "@/lib/notificationScope";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -147,8 +154,7 @@ export function QuarantineCausePanel({
   const { t } = useTranslation("journals");
   const askAssistantAbout = useAskAssistantAbout();
   const navigate = useNavigate();
-  const addNotification = useUiStore((s) => s.addNotification);
-  const [lockedGapNotice, setLockedGapNotice] = React.useState<string | null>(null);
+    const [lockedGapNotice, setLockedGapNotice] = React.useState<string | null>(null);
   const [allCauses, setAllCauses] = React.useState(false);
   const [ownFixing, setOwnFixing] = React.useState<QuarantineFixRequest | null>(null);
   // The book the approximate prices are accepted in, while that step is open.
@@ -180,39 +186,41 @@ export function QuarantineCausePanel({
 
   const runSync = (action: QuarantineAction) => {
     if (!action.wallet_id || syncWallet.isPending) return;
-    const wallet = action.wallet_label || action.wallet_id;
-    addNotification({
-      title: t("quarantine.panel.syncStartedTitle", { wallet }),
-      body: t("quarantine.panel.syncStartedBody"),
-      tone: "warning",
-      dedupeKey: `quarantine-sync-${action.wallet_id}`,
-    });
-    syncWallet.mutate(
-      { wallet: action.wallet_id },
-      {
-        onSuccess: (envelope) => {
-          const result = envelope.data?.results?.[0];
-          const journals = envelope.data?.journals;
-          const failed = result?.status === "error";
-          addNotification({
-            title: failed
-              ? t("quarantine.panel.syncFailedTitle", { wallet })
-              : t("quarantine.panel.syncFinishedTitle", { wallet }),
-            body: describeWalletSyncResult(result, wallet, journals),
-            tone: failed ? "error" : journalStepNeedsAttention(journals) ? "warning" : "success",
-            dedupeKey: `quarantine-sync-${action.wallet_id}`,
-          });
-        },
-        onError: (error) => {
-          addNotification({
-            title: t("quarantine.panel.syncFailedTitle", { wallet }),
-            body: error instanceof Error ? error.message : "",
-            tone: "error",
-            dedupeKey: `quarantine-sync-${action.wallet_id}`,
-          });
-        },
-      },
-    );
+    const walletId = action.wallet_id;
+    const wallet = action.wallet_label || walletId;
+    // The same job, result, and per-wallet condition as a sync from the
+    // wallet page; the remaining quarantine shows in the Review condition.
+    const ref = {
+      book: activeBookScope(),
+      connectionId: walletId,
+      label: wallet,
+    };
+    const runId = startConnectionSync(ref);
+    // Awaited rather than per-call callbacks: those stop once this panel
+    // unmounts, which would leave the job running and the outcome unfiled.
+    void (async () => {
+      try {
+        const envelope = await syncWallet.mutateAsync({ wallet: walletId });
+        const result = envelope.data?.results?.[0];
+        const journals = envelope.data?.journals;
+        if (result?.status === "error") {
+          recordConnectionSyncFailed(
+            ref,
+            describeWalletSyncResult(result, wallet, journals),
+          );
+          return;
+        }
+        recordConnectionSynced(ref, { imported: result?.imported });
+        recordJournalStep(journals, ref.book);
+      } catch (error) {
+        recordConnectionSyncFailed(
+          ref,
+          error instanceof Error ? error.message : undefined,
+        );
+      } finally {
+        endConnectionSync(runId);
+      }
+    })();
   };
 
   const openRoot = (group: QuarantineGroup, transactionId: string, tab?: QuarantineSheetTab) => {

@@ -105,7 +105,7 @@ import {
   useNotificationStore,
   type NotificationOperation,
 } from "@/store/notifications";
-import { clearFeedback } from "@/lib/feedback";
+import { clearFeedback, showFeedback } from "@/lib/feedback";
 import {
   readActiveBook,
   trackBookSwitch,
@@ -207,7 +207,7 @@ import { NetworkStatusIndicator } from "./NetworkStatusIndicator";
 import {
   daemonQueryUsesShellProgress,
   routeProgressFromActiveMaintenance,
-  routeProgressFromNotifications,
+  routeProgressFromJobs,
   type RouteProgressState,
 } from "./progressIndicator";
 import {
@@ -224,6 +224,9 @@ import { notificationProgressValue } from "./notificationDisplay";
 import { FeedbackToaster } from "./FeedbackToaster";
 import { useLiveNotificationConditions } from "./useLiveNotificationConditions";
 import { NotificationCenter } from "./NotificationCenter";
+import { projectJob } from "./notificationProjection";
+import { requestSettingsAnchor } from "./settings/settingsSearch";
+import { recordTouchIdOff, resolveTouchIdOff } from "@/lib/unlockNotifications";
 import { planHeaderRefresh } from "./headerRefresh";
 
 const BUG_REPORT_URL =
@@ -681,8 +684,9 @@ export function AppShell() {
   const setDeferredConnectionSetup = useUiStore(
     (s) => s.setDeferredConnectionSetup,
   );
-  const addNotification = useUiStore((s) => s.addNotification);
-  const appNotifications = useUiStore((s) => s.notifications);
+  const runningJobs = useNotificationStore((s) => s.jobs);
+  const privacyMode = useUiStore((s) => s.privacyMode);
+  const { t: tChrome } = useTranslation("chrome");
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
@@ -770,7 +774,9 @@ export function AppShell() {
   useAgentAccessMasterSync(aiFeaturesEnabled, daemonEnabled);
   const shellProgress =
     routeProgressFromActiveMaintenance(activeMaintenanceProgress) ??
-    routeProgressFromNotifications(appNotifications);
+    routeProgressFromJobs(Object.values(runningJobs), (job) =>
+      projectJob(job, privacyMode, tChrome),
+    );
   const shellBusy =
     routerBusy || foregroundDaemonFetchCount > 0 || Boolean(shellProgress);
   const firstSyncDone = useUiStore((s) => s.firstSyncDone);
@@ -999,28 +1005,24 @@ export function AppShell() {
                 setTouchIdStatus(status);
                 if (!status.configured) {
                   setAppLockPolicy({ touchIdUnlock: false });
-                  addNotification({
-                    title: t("lock.touchIdNotSavedTitle"),
-                    body: status.reason
+                  recordTouchIdOff(
+                    status.reason
                       ? t("lock.touchIdNotSavedReason", { reason: status.reason })
                       : t("lock.touchIdNotSavedKeychain"),
-                    tone: "warning",
-                  });
+                  );
                   return;
                 }
+                resolveTouchIdOff();
                 if (options?.rememberWithTouchId === true) {
                   setAppLockPolicy({ touchIdUnlock: true });
                 }
               })
               .catch((error: unknown) => {
-                addNotification({
-                  title: t("lock.touchIdNotSavedTitle"),
-                  body:
-                    error instanceof Error
-                      ? error.message
-                      : t("lock.touchIdNotAcceptedKeychain"),
-                  tone: "warning",
-                });
+                recordTouchIdOff(
+                  error instanceof Error
+                    ? error.message
+                    : t("lock.touchIdNotAcceptedKeychain"),
+                );
                 void refreshTouchIdStatus();
               });
           }
@@ -1056,7 +1058,6 @@ export function AppShell() {
       return { ok: unlocked, error: null };
     },
     [
-      addNotification,
       bumpDaemonSession,
       clearDaemonQueryCache,
       identity?.importedProject,
@@ -1198,21 +1199,22 @@ export function AppShell() {
           setLocked(true);
           return;
         }
-        addNotification({
+        showFeedback({
           title: t("projects.switchFailedTitle"),
-          body: formatDaemonEnvelopeError(envelope) ?? t("projects.switchFailedBody"),
+          description: formatDaemonEnvelopeError(envelope) ?? t("projects.switchFailedBody"),
+          descriptionPrivacy: "free-text",
           tone: "error",
         });
       } catch (error) {
-        addNotification({
+        showFeedback({
           title: t("projects.switchFailedTitle"),
-          body: error instanceof Error ? error.message : t("projects.switchFailedBody"),
+          description: error instanceof Error ? error.message : t("projects.switchFailedBody"),
+          descriptionPrivacy: "free-text",
           tone: "error",
         });
       }
     },
     [
-      addNotification,
       bumpDaemonSession,
       clearDaemonQueryCache,
       navigate,
@@ -1227,7 +1229,6 @@ export function AppShell() {
     clearDaemonQueryCache();
     // The session's notifications go with it; they are RAM only anyway.
     resetNotificationStore();
-    useUiStore.setState({ notifications: [] });
     setDaemonAuthRequired(false);
     setHideSensitive(false);
     void clearImportedProjectRoot()
@@ -1660,7 +1661,7 @@ export function AppShell() {
                 openAddWalletConnection(t("search.actionReason.fromNativeMenu")),
               runWalletSync: runMenuWalletSync,
               runJournalProcessing: runMenuJournalProcessing,
-              addNotification,
+              revealSettingAnchor: requestSettingsAnchor,
               emitSettingsSection: (section) => {
                 window.dispatchEvent(
                   new CustomEvent("kassiber:settings-section", {
@@ -1695,7 +1696,6 @@ export function AppShell() {
     runMenuJournalProcessing,
     runMenuWalletSync,
     aiFeaturesEnabled,
-    addNotification,
     t,
   ]);
 
@@ -1711,8 +1711,9 @@ export function AppShell() {
           if (disposed) return;
           const value = event.payload;
           if (value && typeof value === "object" && "event" in value && value.event === true && "kind" in value && value.kind === "ui.chain_analysis.watches.changed" && !("request_id" in value)) {
+            // The event may come from another book's work; the re-read of the
+            // open book's watch inbox decides whether a condition waits.
             void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-            addNotification({ title: t("chainAnalysis:watch.notificationTitle"), body: t("chainAnalysis:watch.notificationBody"), tone: "info", dedupeKey: "local-evidence-watches", target: "/chain-analysis" });
             return;
           }
           const freshness = parseDaemonFreshnessEvent(event.payload);
@@ -1740,7 +1741,7 @@ export function AppShell() {
       disposed = true;
       safeTauriUnlisten(unlisten);
     };
-  }, [addNotification, daemonEnabled, queryClient, t]);
+  }, [daemonEnabled, queryClient, t]);
 
   // Toasts never show over the lock screen, and nothing queued survives it.
   React.useEffect(() => {

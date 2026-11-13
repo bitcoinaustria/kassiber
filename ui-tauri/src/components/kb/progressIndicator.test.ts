@@ -1,27 +1,33 @@
 import { describe, expect, it } from "vitest";
 
-import type { AppNotification } from "@/store/ui";
+import type { JobEntry } from "@/store/notifications";
 
 import {
   daemonQueryUsesShellProgress,
   routeProgressFromActiveMaintenance,
-  routeProgressFromNotifications,
-  routeProgressLabelFromNotifications,
+  routeProgressFromJobs,
 } from "./progressIndicator";
 
-function notification(
-  title: string,
-  progress?: AppNotification["progress"],
-): AppNotification {
+function job(
+  id: string,
+  startedAt: string,
+  progress: JobEntry["progress"],
+): JobEntry {
   return {
-    id: title,
-    title,
-    body: "body",
-    tone: "warning",
+    id,
+    code: "connection-sync",
+    scope: { book: "book" },
+    startedAt,
+    updatedAt: startedAt,
+    params: {},
     progress,
-    createdAt: "2026-06-07T00:00:00Z",
   };
 }
+
+const describeJob = (entry: JobEntry) => ({
+  title: entry.id === "rebuild" ? "Rebuilding prices" : "Syncing wallet",
+  label: entry.progress.label,
+});
 
 describe("route progress indicator label", () => {
   it("only uses foreground daemon loads for shell progress", () => {
@@ -39,53 +45,33 @@ describe("route progress indicator label", () => {
     ).toBe(false);
   });
 
-  it("stays quiet when no daemon progress notification is active", () => {
-    expect(
-      routeProgressLabelFromNotifications([
-        notification("Route changed"),
-      ]),
-    ).toBeNull();
+  it("stays quiet when no job is running", () => {
+    expect(routeProgressFromJobs([], describeJob)).toBeNull();
   });
 
-  it("combines compact refresh titles with progress labels", () => {
+  it("combines the job title with its phase", () => {
     expect(
-      routeProgressLabelFromNotifications([
-        notification("Book refresh started", {
-          value: 40,
-          label: "Fetching source history",
-        }),
-      ]),
-    ).toBe("Book refresh: Fetching source history");
-  });
-
-  it("returns progress rail state for the active progress notification", () => {
-    expect(
-      routeProgressFromNotifications([
-        notification("Book refresh started", {
-          value: 40,
-          label: "Fetching source history",
-        }),
-      ]),
+      routeProgressFromJobs(
+        [job("sync", "2026-06-07T00:00:00Z", { value: 40, label: "Fetching source history" })],
+        describeJob,
+      ),
     ).toEqual({
       indeterminate: false,
-      label: "Book refresh: Fetching source history",
+      label: "Syncing wallet: Fetching source history",
       value: 40,
     });
   });
 
-  it("uses the newest active progress notification", () => {
+  it("shows the newest running job", () => {
     expect(
-      routeProgressLabelFromNotifications([
-        notification("BTC price refresh started", {
-          indeterminate: true,
-          label: "Refreshing",
-        }),
-        notification("Book refresh started", {
-          value: 40,
-          label: "Fetching source history",
-        }),
-      ]),
-    ).toBe("BTC price: Refreshing");
+      routeProgressFromJobs(
+        [
+          job("sync", "2026-06-07T00:00:00Z", { value: 40, label: "Fetching" }),
+          job("rebuild", "2026-06-07T00:05:00Z", { indeterminate: true }),
+        ],
+        describeJob,
+      ),
+    ).toEqual({ indeterminate: true, label: "Rebuilding prices", value: undefined });
   });
 
   it("maps active maintenance progress to the route progress rail", () => {

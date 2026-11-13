@@ -1,4 +1,5 @@
 import type { ActiveBook } from "@/lib/activeBook";
+import { newActivityFromRun, recordNewActivity } from "@/lib/newActivity";
 import type { DaemonFreshnessEvent } from "@/lib/daemonFreshnessEvent";
 import type { ReviewBadges } from "@/lib/reviewCount";
 import { reviewTotal } from "@/lib/reviewCount";
@@ -50,6 +51,8 @@ function sourceCondition(
   options: {
     label?: string;
     message?: string;
+    code?: string;
+    hint?: string;
     failed: boolean;
     blocking: boolean;
     phrase?: NotificationDetail["phraseKey"];
@@ -69,6 +72,8 @@ function sourceCondition(
       {
         label: options.label,
         message: safeMessage(options.message),
+        ...(options.code ? { code: options.code } : {}),
+        ...(options.hint ? { hint: safeMessage(options.hint) } : {}),
         phraseKey:
           options.phrase ?? (options.failed ? "failed" : "blocksReports"),
       },
@@ -139,9 +144,9 @@ export function sourceFailuresFromRun(
       identity,
       sourceCondition(book, identity, {
         label: job.source_label || undefined,
-        message: [job.error?.message || job.error?.code, job.error?.hint]
-          .filter(Boolean)
-          .join(" "),
+        message: job.error?.message || job.error?.code,
+        code: job.error?.code,
+        hint: job.error?.hint,
         failed: true,
         blocking: blockingSources.has(identity),
         phrase: job.status === "cancelled" ? "cancelled" : "failed",
@@ -305,6 +310,7 @@ export function applyFreshnessEvent(
   store.resolveCondition(conditionKey("freshness.worker-error", scope));
   store.resolveCondition(conditionKey("freshness.worker-error", UNSCOPED_WORKER));
   applyFreshnessRun(event.data, active.key);
+  recordNewActivity(newActivityFromRun(event.data), scope);
   return true;
 }
 

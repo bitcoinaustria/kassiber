@@ -109,7 +109,6 @@ describe("a graph handoff across a new book", () => {
     window.history.replaceState(null, "", "/chain-analysis");
     useUiStore.setState({
       assistantModelSelection: { provider: "copilot", model: "default" },
-      notifications: [],
     });
   });
   afterEach(cleanup);

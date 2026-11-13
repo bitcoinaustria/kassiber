@@ -65,8 +65,9 @@
       "body": "Hänge eine CSV-, TSV-, XLSX-, PDF- oder Bilddatei an."
     },
     "attachmentTooLarge": {
-      "title": "{{filename}} ist zu groß zum Einfügen",
-      "body": "Eingefügte Dateien dürfen bis zu 25 MB groß sein. Größere hängst du über die +-Schaltfläche an."
+      "title": "Diese Datei ist zu groß zum Einfügen",
+      "body": "Eingefügte Dateien dürfen bis zu 25 MB groß sein. Größere hängst du über die +-Schaltfläche an.",
+      "bodyNamed": "{{filename}} ist größer als 25 MB. Größere Dateien hängst du über die +-Schaltfläche an."
     },
     "attachmentFailed": "Die Datei konnte nicht angehängt werden",
     "modelContext": "Modell-Kontext",

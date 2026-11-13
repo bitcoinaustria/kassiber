@@ -613,16 +613,16 @@ export function useDaemonMutation<T = unknown>(
       }
       boundary?.onMutationSuccess?.(kind, envelope.data);
       resolveJournalFailureAfter(queryClient, daemonSession, envelope.data);
+      notifyJournalStepAfterImport(queryClient, daemonSession, kind, envelope.data);
       return envelope;
     },
-    onSuccess: (envelope) => {
+    onSuccess: () => {
       if (mutationAdvancesDaemonSession(kind)) {
         useUiStore.getState().bumpDaemonSession();
       }
       if (options?.invalidateQueries !== false) {
         invalidateDaemonQueriesForMutation(queryClient, dataMode, kind);
       }
-      notifyJournalStepAfterImport(kind, envelope.data);
     },
   });
 }

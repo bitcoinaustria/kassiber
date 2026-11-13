@@ -16,6 +16,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { showFeedback } from "@/lib/feedback";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
@@ -215,7 +216,6 @@ export function ToolCrossCheck({
   onOpenTransaction: (ref: string) => void;
 }) {
   const { t } = useTranslation(["review", "common"]);
-  const addNotification = useUiStore((s) => s.addNotification);
   const session = useUiStore((s) => `${s.dataMode}:${s.daemonSession}`);
   const [kept] = React.useState(() => keptCrossCheck(session));
   const [file, setFile] = React.useState<CrossCheckFile | null>(kept?.file ?? null);
@@ -321,17 +321,19 @@ export function ToolCrossCheck({
           defaultName: exportBasename(envelope?.data?.file ?? "kassiber-cross-check.xlsx"),
           filters: [exportFormat("xlsx").filter],
         });
-        addNotification({
+        showFeedback({
           title: t("reconcile.tools.saved"),
-          body: copied
+          description: copied
             ? t("reconcile.tools.savedTo", { name: exportBasename(savedPath) })
             : exportBasename(envelope?.data?.file ?? ""),
+          descriptionPrivacy: "free-text",
           tone: "success",
         });
       } catch (error) {
-        addNotification({
+        showFeedback({
           title: t("reconcile.tools.failedExport"),
-          body: error instanceof Error ? error.message : String(error),
+          description: error instanceof Error ? error.message : String(error),
+          descriptionPrivacy: "free-text",
           tone: "error",
         });
       }

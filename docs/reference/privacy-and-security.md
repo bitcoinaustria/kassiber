@@ -447,7 +447,11 @@ until that process stops. `kassiber status` reports the effective root.
   session; UI state version 5 deletes notifications earlier versions stored
   there, and none is ever restored, so a stored Retry cannot run against
   another book. Toasts keep no history and are not forwarded to the
-  operating system.
+  operating system. "Ask the assistant" on an opened failure hands the
+  assistant only what the center shows in the current privacy mode (title,
+  body, and the plain cause lines with wallet names); the raw server messages
+  under Technical details, which can name hosts and ports, are never part of
+  the prompt. The button is absent while AI features are off.
 - Main-window geometry (size, position, maximized) is kept outside the state
   root: in the app's AppKit preferences on macOS, and in
   `.window-state.json` under Tauri's config directory on Windows and Linux. It

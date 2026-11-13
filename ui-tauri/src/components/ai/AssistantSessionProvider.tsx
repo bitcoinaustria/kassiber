@@ -19,6 +19,8 @@ import {
   type AssistantScreenContext,
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
+import { publishAssistantSession } from "@/components/ai/assistantBridge";
+import { showFeedback } from "@/lib/feedback";
 import { pickChatAttachmentSource } from "@/lib/filePicker";
 import {
   MAX_CHAT_ATTACHMENTS,
@@ -104,17 +106,18 @@ function noticeBookSwitched(
   t: TFunction<"assistant">,
   { returned, cleared }: { returned: boolean; cleared: boolean },
 ) {
-  useUiStore.getState().addNotification({
+  showFeedback({
     title: t("queue.bookSwitched.title"),
-    body: t(
+    description: t(
       returned && cleared
         ? "queue.bookSwitched.bodyBoth"
         : cleared
           ? "queue.bookSwitched.bodyCleared"
           : "queue.bookSwitched.bodyReturned",
     ),
+    descriptionPrivacy: "safe",
     tone: "warning",
-    dedupeKey: "assistant-book-switched",
+    key: "assistant-book-switched",
   });
 }
 
@@ -165,11 +168,12 @@ function refuseInOtherBook(t: TFunction<"assistant">, prompt: string, generated:
  */
 function refuseBookLoading(t: TFunction<"assistant">, prompt?: string) {
   if (prompt) returnToDraft([prompt]);
-  useUiStore.getState().addNotification({
+  showFeedback({
     title: t("queue.bookLoading.title"),
-    body: t(prompt ? "queue.bookLoading.bodyReturned" : "queue.bookLoading.body"),
+    description: t(prompt ? "queue.bookLoading.bodyReturned" : "queue.bookLoading.body"),
+    descriptionPrivacy: "safe",
     tone: "warning",
-    dedupeKey: "assistant-book-loading",
+    key: "assistant-book-loading",
   });
 }
 
@@ -509,14 +513,17 @@ export function AssistantSessionProvider({
             .filter((file) => gone.has(file.token))
             .map((file) => file.filename);
           setAttachments(attachmentsRef.current.filter((file) => !gone.has(file.token)));
-          useUiStore.getState().addNotification({
+          // Feedback in the chat that just ran, which is also where to attach the
+          // files again; their names are user data.
+          showFeedback({
             title: tRef.current("composer.attachmentExpired.title", { count: expired.length }),
-            body: tRef.current("composer.attachmentExpired.body", {
+            description: tRef.current("composer.attachmentExpired.body", {
               count: expired.length,
               filenames: names.join(", "),
             }),
-            tone: "info",
-            dedupeKey: "assistant-attachment-expired",
+            descriptionPrivacy: "free-text",
+            tone: "warning",
+            key: "assistant-attachment-expired",
           });
         }
         // Refused because another book was open when it arrived: the same
@@ -583,11 +590,12 @@ export function AssistantSessionProvider({
     const hadFile = attachments.length > 0;
     startFreshConversation();
     if (hadFile) {
-      useUiStore.getState().addNotification({
+      showFeedback({
         title: tRef.current("queue.bookSwitched.title"),
-        body: tRef.current("queue.bookSwitched.bodyAttachment"),
+        description: tRef.current("queue.bookSwitched.bodyAttachment"),
+        descriptionPrivacy: "safe",
         tone: "warning",
-        dedupeKey: "assistant-book-switched-attachment",
+        key: "assistant-book-switched-attachment",
       });
     }
   }, [attachments.length, bookScope, daemonSession, startFreshConversation]);
@@ -673,11 +681,12 @@ export function AssistantSessionProvider({
     // limit only leaves it out of the chat; the review still continues.
     const kept = staged && stageAttachment(staged) ? staged : undefined;
     if (staged && !kept) {
-      useUiStore.getState().addNotification({
+      showFeedback({
         title: tRef.current("composer.attachmentLimit.title", { max: MAX_CHAT_ATTACHMENTS }),
-        body: tRef.current("evidence.attachedNotInChat"),
+        description: tRef.current("evidence.attachedNotInChat"),
+        descriptionPrivacy: "safe",
         tone: "info",
-        dedupeKey: "assistant-attachmentLimit",
+        key: "assistant-attachmentLimit",
       });
     }
     pending.outcome = staged && !kept ? "attachedNotInChat" : outcome;
@@ -858,11 +867,14 @@ export function AssistantSessionProvider({
       if (!latestRef.current.isStreaming) return;
       void changePermissionMode(mode).then((outcome) => {
         if (!outcome.error) return;
-        useUiStore.getState().addNotification({
+        // Only the running answer keeps its mode, and it ends with that answer:
+        // feedback on the switch, not a standing problem.
+        showFeedback({
           title: tRef.current("composer.permission.notApplied.title"),
-          body: tRef.current("composer.permission.notApplied.body"),
+          description: tRef.current("composer.permission.notApplied.body"),
+          descriptionPrivacy: "safe",
           tone: "warning",
-          dedupeKey: "assistant-permission-mode-not-applied",
+          key: "assistant-permission-mode-not-applied",
         });
       });
     },
@@ -895,11 +907,16 @@ export function AssistantSessionProvider({
 
   const notifyAttachment = React.useCallback(
     (key: "attachmentLimit" | "attachmentUnsupported" | "attachmentTooLarge", filename = "") => {
-      useUiStore.getState().addNotification({
-        title: tRef.current(`composer.${key}.title`, { filename, max: MAX_CHAT_ATTACHMENTS }),
-        body: tRef.current(`composer.${key}.body`, { filename, max: MAX_CHAT_ATTACHMENTS }),
+      // Which pasted file was too large is worth saying; its name is user data.
+      const named = key === "attachmentTooLarge" && filename;
+      showFeedback({
+        title: tRef.current(`composer.${key}.title`, { max: MAX_CHAT_ATTACHMENTS }),
+        description: named
+          ? tRef.current("composer.attachmentTooLarge.bodyNamed", { filename })
+          : tRef.current(`composer.${key}.body`, { max: MAX_CHAT_ATTACHMENTS }),
+        descriptionPrivacy: named ? "free-text" : "safe",
         tone: key === "attachmentLimit" ? "info" : "warning",
-        dedupeKey: `assistant-${key}`,
+        key: `assistant-${key}`,
       });
     },
     [],
@@ -910,11 +927,12 @@ export function AssistantSessionProvider({
       if (error.code === "chat_attachment_unsupported") return notifyAttachment("attachmentUnsupported");
       if (error.code === "chat_attachment_too_large") return notifyAttachment("attachmentTooLarge", error.message);
     }
-    useUiStore.getState().addNotification({
+    showFeedback({
       title: tRef.current("composer.attachmentFailed"),
-      body: error instanceof Error ? error.message : String(error),
+      description: error instanceof Error ? error.message : String(error),
+      descriptionPrivacy: "free-text",
       tone: "warning",
-      dedupeKey: "assistant-attachment-failed",
+      key: "assistant-attachment-failed",
     });
   }, [notifyAttachment]);
 
@@ -1327,6 +1345,13 @@ export function AssistantSessionProvider({
       typedSendConsent,
     ],
   );
+
+  // Chrome outside this provider (the notification bell) reaches the
+  // session through the bridge; gone again when AI features turn off.
+  React.useEffect(() => {
+    publishAssistantSession(value);
+  }, [value]);
+  React.useEffect(() => () => publishAssistantSession(null), []);
 
   return (
     <AssistantSessionContext.Provider value={value}>

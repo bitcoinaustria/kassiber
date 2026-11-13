@@ -13,6 +13,7 @@ import { WindowFrame } from "@/components/kb/WindowFrame";
 import i18n from "@/i18n";
 import { installLanguageBridge } from "@/i18n/languageBridge";
 import { installGlobalErrorCapture } from "@/lib/globalErrorCapture";
+import { registerNotificationQueryClient } from "@/lib/notificationScope";
 import { router } from "./routeTree";
 import "./styles/globals.css";
 
@@ -30,6 +31,9 @@ const queryClient = new QueryClient({
   },
 });
 
+// Senders bind their notifications to the open book from this client's
+// cached `ui.profiles.snapshot`.
+registerNotificationQueryClient(queryClient);
 installGlobalErrorCapture();
 // Apply the persisted language and keep i18next in sync with the UI store.
 installLanguageBridge();

@@ -3,9 +3,10 @@ import type {
   AssistantScreenContext,
   AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
-import type { BookStamp } from "@/components/ai/bookStamp";
+import { sameBookScope, type BookStamp } from "@/components/ai/bookStamp";
 import type { DaemonScopeBoundary } from "@/daemon/client";
 import i18n from "@/i18n";
+import { showFeedback } from "@/lib/feedback";
 import { useUiStore } from "@/store/ui";
 
 interface HandoffOrigin {
@@ -13,6 +14,11 @@ interface HandoffOrigin {
   context?: AssistantScreenContext;
   /** The page's scope boundary: its book is the one the page's content came from. */
   boundary?: DaemonScopeBoundary | null;
+  /**
+   * A stamp the caller already captured and checked at the user's action
+   * (the notification bell, outside any page boundary).
+   */
+  book?: BookStamp;
 }
 
 /**
@@ -32,15 +38,27 @@ export function beginAssistantHandoff(
   assistant: AssistantSessionContextValue,
   origin: HandoffOrigin = {},
 ): ((prompt: string) => void) | null {
-  const book: BookStamp | null = origin.boundary
+  const boundaryBook: BookStamp | null = origin.boundary
     ? { daemonSession: origin.boundary.daemonSession, scope: origin.boundary.expectedScope }
-    : (assistant.captureBook?.() ?? null);
+    : null;
+  // A given stamp and a page boundary must agree; otherwise nothing is sent.
+  if (
+    origin.book &&
+    boundaryBook &&
+    (origin.book.daemonSession !== boundaryBook.daemonSession ||
+      !sameBookScope(origin.book.scope, boundaryBook.scope))
+  ) {
+    return null;
+  }
+  const book: BookStamp | null =
+    origin.book ?? boundaryBook ?? assistant.captureBook?.() ?? null;
   if (!book) {
-    useUiStore.getState().addNotification({
+    showFeedback({
       title: i18n.t("queue.bookLoading.title", { ns: "assistant" }),
-      body: i18n.t("queue.bookLoading.body", { ns: "assistant" }),
+      description: i18n.t("queue.bookLoading.body", { ns: "assistant" }),
+      descriptionPrivacy: "safe",
       tone: "warning",
-      dedupeKey: "assistant-book-loading",
+      key: "assistant-book-loading",
     });
     return null;
   }

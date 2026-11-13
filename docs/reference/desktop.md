@@ -619,7 +619,9 @@ a guard that redirects to Overview (Settings -> Lightning stays shut, and falls
 back to the default category if the switch turns off while it is open), the
 native menu's Logs item is disabled, and
 a native-menu or `kassiber://` intent for any of them lands on Settings ->
-Developer tools with an explanatory notification instead of a silent bounce. The
+Developer tools with the early-stage switch highlighted instead of a silent
+bounce (an intent for the assistant with AI off highlights the AI switch the
+same way). The
 choice is stored in the desktop's local UI state, so it survives updates;
 `ui-tauri/src/components/kb/devMode.ts` holds the route lists.
 
@@ -634,20 +636,33 @@ The title bar's bell opens the notification list
   a failed book refresh, a failed journal run, a missing backend, and a
   stopped background worker each have their own. Background freshness
   events apply only to the book they name; the conditions' reads carry the
-  open book as `expected_scope`. Each row says what is wrong
-  and what it means for reports, offers one action, and keeps diagnostics
-  behind Show details. A condition clears only when a successful read or run
+  open book as `expected_scope`. A wallet, exchange,
+  or node sync that failed (per connection), BTCPay stores whose invoices did
+  not load, a price rebuild that failed, a source-of-funds case whose wallet
+  needs a full rescan, an all-books refresh that failed or left books
+  needing attention, unread evidence-watch changes, Touch ID unlock turned
+  off, a saved unlock method that could not be removed, and a backup restore
+  that failed or could not reset unlock methods (both outlast the lock the
+  restore triggers) are conditions too. Each row says what is wrong and
+  what it means, offers
+  one action that opens the exact place to fix it (that connection or
+  transaction, the settings row, the overview of all books) or repeats the
+  operation, and keeps diagnostics behind Show details. A condition clears
+  only when a successful read or run
   for the same book and source shows it resolved; a failed read, a lock, or a
   source still syncing leaves it in place. A failed journal run clears on any
 later run whose journal step reports success (journal processing, a book
 refresh, a background refresh, or a sync or import that processes
 journals), in the same book. Rows cannot be dismissed, and
   re-reading the same state does not count as a repeat.
-- **Running**: the book refresh and journal processing in progress, with
-  their progress. A running book refresh reopens the sync card.
+- **Running**: work in progress with its progress: book refresh, journal
+  processing, a connection sync, a price rebuild, a report export, and an
+  all-books refresh. A running book refresh reopens the sync card; the
+  newest running job also drives the shell's progress line.
 - **Recent**: up to 30 finished results from this session, newest first,
-  each dismissible; Clear recent empties this section only. Senders not yet
-  moved to the structured model also land here, without a badge.
+  each dismissible; Clear recent empties this section only. Results are the
+  outcomes of the jobs above, which can finish after the user has left the
+  page that started them; a restored backup lands here too.
 
 The badge counts Needs attention groups for the open book (a project's
 books are told apart by their workspace and profile ids). Conditions from
@@ -671,7 +686,10 @@ names that do; Hide all shows generic titles and no labels,
 file names, paths, or error text, while actions keep working. The list and
 the toasts are hidden while Kassiber is locked.
 
-Short confirmations ("Book refreshed", "Journals processed") show as toasts
+Feedback on what the user just did (saved settings, attachments, edits,
+setup receipts, refused or failed foreground actions) never enters the
+list: errors in a form stay beside the form, and the rest are toasts. Short
+confirmations ("Book refreshed", "Journals processed") show as toasts
 at the bottom right: at most three, about four seconds for a success,
 paused while the pointer or focus is on them, dismissed with Escape or ×, and
 announced to screen readers. Equivalent confirmations replace each other.

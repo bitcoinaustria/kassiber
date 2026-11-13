@@ -60,7 +60,7 @@ vi.mock("react-i18next", () => ({
 import { forgetCrossCheck } from "./crossCheckMemory";
 import { ToolCrossCheck } from "./ToolCrossCheck";
 import { saveDaemonExport } from "@/lib/exportFile";
-import { useUiStore } from "@/store/ui";
+import { useFeedbackStore } from "@/lib/feedback";
 
 const tx = (over: Record<string, unknown>) => ({
   occurred_at: "2025-06-01T10:00:00Z",
@@ -236,7 +236,7 @@ describe("ToolCrossCheck", () => {
     expect(saveDaemonExport).toHaveBeenCalledWith(expect.objectContaining({
       exportPath: "/data/exports/kassiber-cross-check.xlsx",
     }));
-    expect(useUiStore.getState().notifications[0]).toMatchObject({
+    expect(useFeedbackStore.getState().items.at(-1)).toMatchObject({
       title: "reconcile.tools.saved",
       tone: "success",
     });

@@ -43,6 +43,7 @@ import {
   useNotificationStore,
   type NotificationScope,
 } from "@/store/notifications";
+import { newActivityFromRun, recordNewActivity } from "@/lib/newActivity";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
 
 /** One book refresh at a time, so the running job has one id. */
@@ -325,6 +326,10 @@ export function recordBookRefreshOutcome(
       conditionKey("book-refresh.backend-required", backendScope),
     );
   }
+  if (freshnessRunNeedsAttention(data) || freshnessRunHasPendingJobs(data)) {
+    // What did arrive is worth knowing even when something else failed.
+    recordNewActivity(newActivityFromRun(data), scope);
+  }
   const journalsOnly =
     journalStepNeedsAttention(data?.journals) &&
     !freshnessRunNeedsAttention({ ...data, journals: null });
@@ -367,12 +372,19 @@ export function recordBookRefreshOutcome(
     });
     return;
   }
-  store.addResult({
-    code: "book-refresh.finished",
-    scope,
-    severity: "info",
-    params: { forceFull },
-  });
+  // New transactions say more than "finished": they replace that row (the
+  // toast still confirms the refresh).
+  const activity = newActivityFromRun(data);
+  if (activity) {
+    recordNewActivity(activity, scope);
+  } else {
+    store.addResult({
+      code: "book-refresh.finished",
+      scope,
+      severity: "info",
+      params: { forceFull },
+    });
+  }
   showFeedback({
     tone: "success",
     title: forceFull

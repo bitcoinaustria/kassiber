@@ -206,8 +206,6 @@
     "clearRecent": "Zuletzt leeren",
     "dismiss": "Benachrichtigung ausblenden: {{title}}",
     "dismissShort": "Ausblenden",
-    "showDetails": "Details anzeigen",
-    "hideDetails": "Details ausblenden",
     "details": "Details",
     "repeatBadge": "×{{count}}",
     "repeated_one": "{{count}}-mal eingegangen",
@@ -221,13 +219,6 @@
     "withheld": "Ausgeblendet, solange Beträge verborgen sind.",
     "empty": "Keine Benachrichtigungen.",
     "detailLine": "{{label}}: {{message}}",
-    "generic": {
-      "attentionTitle": "Etwas braucht deine Aufmerksamkeit",
-      "failedTitle": "Etwas ist schiefgelaufen",
-      "doneTitle": "Aufgabe abgeschlossen",
-      "noticeTitle": "Hinweis",
-      "body": "Details sind in diesem Privatsphäre-Modus ausgeblendet."
-    },
     "phrase": {
       "failed": "fehlgeschlagen",
       "cancelled": "abgebrochen",
@@ -277,6 +268,57 @@
         "title": "Journalverarbeitung fehlgeschlagen",
         "body": "Berichte behalten den bisherigen Journalstatus, bis die Verarbeitung gelingt.",
         "action": "Erneut versuchen"
+      },
+      "connectionSyncFailed": {
+        "title_one": "Sync einer Wallet fehlgeschlagen",
+        "title_other": "Sync von {{count}} Wallets fehlgeschlagen",
+        "body": "Guthaben und Transaktionen sind eventuell veraltet, bis ein Sync gelingt.",
+        "titleNamed": "Sync von {{name}} fehlgeschlagen"
+      },
+      "btcpayProvenance": {
+        "title": "Einige BTCPay-Rechnungen fehlen",
+        "body": "Zahlungen dieser Stores fehlen die Rechnungsdetails, bis ein Sync sie lädt."
+      },
+      "touchIdOff": {
+        "title": "Touch-ID-Entsperrung ist aus",
+        "body": "Kassiber fragt nach dem Datenbank-Passwort, bis Touch ID wieder aktiviert ist.",
+        "action": "Touch ID aktivieren"
+      },
+      "unlockCredentialRemains": {
+        "title": "Eine gespeicherte Entsperrmethode ist noch vorhanden",
+        "body": "Der OS-Zugangsspeicher hat das Entfernen nicht bestätigt; sie kann diese Bücher eventuell noch entsperren."
+      },
+      "backupRestoreFailed": {
+        "title": "Backup-Wiederherstellung nicht abgeschlossen",
+        "body": "Deine Bücher entsprechen eventuell nicht dem Backup. Die Details zeigen, was passiert ist und wo die Sicherungskopie von vor der Wiederherstellung liegt.",
+        "action": "Backups öffnen"
+      },
+      "backupRestoreWarning": {
+        "title": "Gespeicherte Entsperrmethoden prüfen",
+        "body": "Die Wiederherstellung ist abgeschlossen, aber gespeicherte Entsperrmethoden konnten nicht zurückgesetzt werden. Sie passen eventuell nicht zu den wiederhergestellten Büchern."
+      },
+      "sourceFundsRescan": {
+        "title": "Eine Wallet braucht einen vollständigen Rescan",
+        "body_one": "{{count}} Transaktion wurde gesynct, bevor Kassiber festhielt, welche Inputs ihr gehören, deshalb lässt sich ihre Mittelherkunft nicht nachverfolgen. Scanne ihre Wallet neu.",
+        "body_other": "{{count}} Transaktionen wurden gesynct, bevor Kassiber festhielt, welche Inputs ihnen gehören, deshalb lässt sich ihre Mittelherkunft nicht nachverfolgen. Scanne ihre Wallet neu."
+      },
+      "pricingRebuildFailed": {
+        "title": "Neuaufbau der Preise fehlgeschlagen",
+        "body": "Transaktionen behalten ihre bisherigen Preise, bis ein Neuaufbau gelingt."
+      },
+      "workspaceRefreshFailed": {
+        "title": "Aktualisierung aller Bücher fehlgeschlagen",
+        "body": "Ihre Berichte nutzen eventuell ältere Beobachtungen, bis eine Aktualisierung gelingt."
+      },
+      "workspaceBooks": {
+        "title": "Einige Bücher brauchen Aufmerksamkeit",
+        "body": "Einige Bücher wurden nicht aktualisiert. Die Übersicht aller Bücher zeigt, welche.",
+        "blockingBody": "In einigen Büchern bleiben die Berichte blockiert. Die Übersicht aller Bücher zeigt, welche und warum."
+      },
+      "watchChanged": {
+        "title": "Lokale Belege geändert",
+        "body": "Eine Beobachtungsbedingung ist eingetreten. Die Änderung wartet unter Beobachtungen in der Kettenanalyse.",
+        "action": "Beobachtungen öffnen"
       }
     },
     "result": {
@@ -306,13 +348,98 @@
         "warnings_one": "{{count}} Warnung",
         "warnings_other": "{{count}} Warnungen",
         "action": "Journale öffnen"
+      },
+      "connectionSynced": {
+        "title": "Wallet-Sync abgeschlossen",
+        "rescanTitle": "Wallet-Rescan abgeschlossen",
+        "imported_one": "{{count}} neue Transaktion",
+        "imported_other": "{{count}} neue Transaktionen"
+      },
+      "backupRestored": {
+        "title": "Backup wiederhergestellt"
+      },
+      "reportExported": {
+        "title": "Bericht exportiert",
+        "notesTitle": "Bericht mit Hinweisen exportiert",
+        "notesBody": "Unter Berichte stehen die Hinweise neben der gespeicherten Datei.",
+        "action": "Berichte öffnen"
+      },
+      "pricingRebuilt": {
+        "title": "Preise neu aufgebaut",
+        "journalsBody": "Die Journale wurden nicht mit den neuen Preisen verarbeitet; unter „Braucht Aufmerksamkeit“ steht, warum."
+      },
+      "workspaceRefreshed": {
+        "title": "Alle Bücher aktualisiert",
+        "body_one": "{{synced}} von {{count}} Buch gesynct.",
+        "body_other": "{{synced}} von {{count}} Büchern gesynct."
+      },
+      "newActivity": {
+        "title_one": "{{count}} neue Transaktion",
+        "title_other": "{{count}} neue Transaktionen",
+        "titleNamed_one": "{{count}} neue Transaktion in {{name}}",
+        "titleNamed_other": "{{count}} neue Transaktionen in {{name}}",
+        "incoming_one": "{{count}} eingehend",
+        "incoming_other": "{{count}} eingehend",
+        "outgoing_one": "{{count}} ausgehend",
+        "outgoing_other": "{{count}} ausgehend",
+        "walletCount_one": "{{count}} neu",
+        "walletCount_other": "{{count}} neu",
+        "moreWallets_one": "+{{count}} weitere Wallet",
+        "moreWallets_other": "+{{count}} weitere Wallets"
       }
     },
     "job": {
       "bookRefresh": "Buch wird aktualisiert",
       "bookRescan": "Buch wird neu gescannt",
-      "journalProcessing": "Journale werden verarbeitet"
-    }
+      "journalProcessing": "Journale werden verarbeitet",
+      "connectionSync": "Wallet-Sync läuft",
+      "connectionRescan": "Wallet-Rescan läuft",
+      "reportExport": "Bericht wird exportiert",
+      "pricingRebuild": "Preise werden neu aufgebaut",
+      "workspaceRefresh": "Alle Bücher werden aktualisiert"
+    },
+    "action": {
+      "openTransaction": "Transaktion öffnen",
+      "openSecurity": "Sicherheit öffnen",
+      "openMarketData": "Marktdaten öffnen",
+      "openAllBooks": "Alle Bücher öffnen",
+      "openTransactions": "Transaktionen öffnen",
+      "openConnection": "Verbindung öffnen"
+    },
+    "feedback": {
+      "reportSaveFailed": "Berichtsexport konnte nicht gespeichert werden",
+      "reportExportBlocked": "Berichtsexport durch Quarantäne blockiert",
+      "reportExportFailed": "Berichtsexport fehlgeschlagen",
+      "reportOpenFailed": "Bericht konnte nicht geöffnet werden",
+      "btcPriceRefreshed": "BTC-Preis aktualisiert",
+      "btcPriceUnchanged": "Kein neuerer BTC-Preis; der gespeicherte bleibt",
+      "btcPriceFailed": "BTC-Preis konnte nicht aktualisiert werden"
+    },
+    "causeCount": "{{cause}} ({{count}})",
+    "technicalRepeated": "{{message}} (×{{count}})",
+    "copyTechnical": "Fehlerdetails kopieren",
+    "copied": "Kopiert",
+    "labelNewActivity": "Benachrichtigungen: neue Transaktionen",
+    "cause": {
+      "offline": "Kassiber ist offline",
+      "rateLimited": "Server begrenzt Anfragen; neuer Versuch später",
+      "unavailable": "Server vorübergehend nicht verfügbar; neuer Versuch später",
+      "certificate": "Sichere Verbindung fehlgeschlagen (Zertifikat)",
+      "credentials": "Server hat die Zugangsdaten abgelehnt",
+      "noBackend": "Kein Server konfiguriert",
+      "connection": "Verbindung zum Server fehlgeschlagen",
+      "cancelled": "Abgebrochen"
+    },
+    "askAssistant": "Assistent fragen",
+    "assistantPrompt": "Hilf mir, dieses Problem in Kassiber zu beheben: {{title}}\n{{seen}}\nPrüfe, was du mit deinen Werkzeugen prüfen kannst, erkläre die wahrscheinliche Ursache einfach und nenne mir den nächsten Schritt.",
+    "assistantOtherError_one": "{{count}} weiterer Fehler (Text wird nicht geteilt)",
+    "assistantOtherError_other": "{{count}} weitere Fehler (Text wird nicht geteilt)",
+    "moreDetails_one": "+{{count}} weitere",
+    "moreDetails_other": "+{{count}} weitere",
+    "moreActions": "Weitere Aktionen: {{title}}",
+    "moreActionsShort": "Weitere Aktionen",
+    "assistantMoreSources_one": "{{line}} (+{{count}} weitere)",
+    "assistantMoreSources_other": "{{line}} (+{{count}} weitere)"
   },
   "currencyToggle": {
     "bitcoin": "Bitcoin",
@@ -342,7 +469,6 @@
     "dark": "Dunkel"
   },
   "lock": {
-    "touchIdNotSavedTitle": "Touch-ID-Entsperrung wurde nicht gespeichert",
     "touchIdNotSavedReason": "Touch-ID-Entsperrung ist nicht eingerichtet: {{reason}}",
     "touchIdNotSavedKeychain": "macOS Keychain hat die gespeicherte Passphrase nicht gemeldet.",
     "touchIdNotAcceptedKeychain": "macOS Keychain hat die gespeicherte Passphrase nicht akzeptiert.",

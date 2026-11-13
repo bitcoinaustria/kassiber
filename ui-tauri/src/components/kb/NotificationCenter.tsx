@@ -5,11 +5,13 @@ import {
   AlertTriangle,
   Bell,
   CheckCircle2,
-  ChevronDown,
+  Copy,
   ChevronRight,
   CircleAlert,
   Info,
   Loader2,
+  MoreHorizontal,
+  Sparkles,
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -21,7 +23,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { useAssistantBridge } from "@/components/ai/assistantBridge";
+import { handOffToAssistant } from "@/components/ai/assistantHandoff";
+import { copyTextWithPolicy } from "@/lib/clipboard";
+import { showFeedback } from "@/lib/feedback";
 import { formatDateTime, formatRelativeTime } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 import {
@@ -38,33 +50,29 @@ import {
   type NotificationScope,
   type ResultEntry,
 } from "@/store/notifications";
-import type { ActiveBook, DaemonBookScope } from "@/lib/activeBook";
+import {
+  reportStaleBook,
+  type ActiveBook,
+  type DaemonBookScope,
+} from "@/lib/activeBook";
 import {
   useUiStore,
-  type AppNotification,
   type NotificationTone,
 } from "@/store/ui";
 
+import { notificationProgressValue } from "./notificationDisplay";
+import { requestSettingsAnchor } from "./settings/settingsSearch";
 import {
-  notificationIsExpandable,
-  notificationProgressValue,
-  shouldHideNotificationProgressLabel,
-} from "./notificationDisplay";
-import { projectFreeText } from "./notificationPrivacy";
-import {
+  ASSISTANT_TROUBLESHOOT_CODES,
+  assistantTroubleshootPrompt,
   projectConditionGroup,
   projectJob,
-  projectLegacy,
   projectResult,
   type ProjectedEntry,
 } from "./notificationProjection";
 import {
-  notificationTarget,
   resolveEntryAction,
-  resolveNotificationAction,
-  type NotificationTarget,
   type ResolvedEntryAction,
-  type ResolvedNotificationAction,
 } from "./notificationRouting";
 
 type ChromeT = TFunction<"chrome">;
@@ -149,29 +157,64 @@ function conditionActionLabel(
       return t("notifications.condition.backendRequired.action");
     case "journals.process-failed":
       return t("notifications.condition.journalsFailed.action");
+    case "connection.sync-failed":
+    case "btcpay.provenance-incomplete":
+      return t("notifications.action.openConnection");
+    case "touch-id.off":
+      return t("notifications.condition.touchIdOff.action");
+    case "unlock.credential-remains":
+    case "backup.restore-warning":
+      return t("notifications.action.openSecurity");
+    case "backup.restore-failed":
+      return t("notifications.condition.backupRestoreFailed.action");
+    case "source-funds.rescan-needed":
+      return t("notifications.action.openTransaction");
+    case "pricing.rebuild-failed":
+      return t("notifications.action.openMarketData");
+    case "workspace.refresh-failed":
+    case "workspace.books-need-attention":
+      return t("notifications.action.openAllBooks");
+    case "watch.evidence-changed":
+      return t("notifications.condition.watchChanged.action");
   }
 }
 
 /** A result's button is named after where it leads. */
 function resultActionLabel(resolved: ResolvedEntryAction, t: ChromeT): string {
-  if (resolved.kind === "navigate" && !resolved.stale) {
-    if (resolved.to === "/journals") {
-      return t("notifications.result.journalsProcessed.action");
-    }
-    if (resolved.to === "/connections") {
-      return t("notifications.result.bookRefreshPending.action");
-    }
+  switch (resolved.kind) {
+    case "open-connection":
+      return t("notifications.action.openConnection");
+    case "open-transaction":
+      return t("notifications.action.openTransaction");
+    case "open-workspace":
+      return t("notifications.action.openAllBooks");
+    case "operation":
+      return t("notifications.condition.bookRefreshFailed.action");
+    case "navigate":
+      if (resolved.stale) return t("notifications.staleAction");
+      if (resolved.to === "/journals") {
+        return t("notifications.result.journalsProcessed.action");
+      }
+      if (resolved.to === "/connections") {
+        return t("notifications.result.bookRefreshPending.action");
+      }
+      if (resolved.to === "/reports") {
+        return t("notifications.result.reportExported.action");
+      }
+      if (resolved.to === "/settings/market") {
+        return t("notifications.action.openMarketData");
+      }
+      if (resolved.to === "/transactions") {
+        return t("notifications.action.openTransactions");
+      }
+      return t("notifications.staleAction");
   }
-  if (resolved.kind === "operation") {
-    return t("notifications.condition.bookRefreshFailed.action");
-  }
-  return t("notifications.staleAction");
 }
 
 /** A row's one button, resolved against the open book. */
 interface RowAction {
   label: string;
-  resolved: ResolvedEntryAction | ResolvedNotificationAction;
+  resolved: ResolvedEntryAction;
   pending: boolean;
 }
 
@@ -205,42 +248,37 @@ export function NotificationCenter({
   const dismissResult = useNotificationStore((s) => s.dismissResult);
   const clearResults = useNotificationStore((s) => s.clearResults);
   const markSeen = useNotificationStore((s) => s.markSeen);
-  const legacy = useUiStore((s) => s.notifications);
-  const clearNotification = useUiStore((s) => s.clearNotification);
-  const clearNotifications = useUiStore((s) => s.clearNotifications);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const privacyMode = useUiStore((s) => s.privacyMode);
+  const assistantAvailable = useAssistantBridge((s) => s.assistant !== null);
   const currentBook = currentActiveBook?.key ?? null;
 
   const groups = groupConditions(conditionsInScope(conditions, currentBook));
   const runningJobs = Object.values(jobs).sort((a, b) =>
     a.startedAt.localeCompare(b.startedAt),
   );
-  // Structured results and legacy senders share one Recent list, newest
-  // first, bounded to the same size as the results lane.
-  const recent: Array<
-    { kind: "result"; at: string; entry: ResultEntry }
-    | { kind: "legacy"; at: string; entry: AppNotification }
-  > = [
-    ...results.map((entry) => ({
-      kind: "result" as const,
-      at: entry.lastOccurredAt,
-      entry,
-    })),
-    ...legacy.map((entry) => ({
-      kind: "legacy" as const,
-      at: entry.createdAt,
-      entry,
-    })),
-  ]
-    .sort((a, b) => b.at.localeCompare(a.at))
+  // Newest first; the store already bounds Recent.
+  const recent: ResultEntry[] = [...results]
+    .sort((a, b) => b.lastOccurredAt.localeCompare(a.lastOccurredAt))
     .slice(0, MAX_RESULTS);
 
   const count = groups.length;
+  // New transactions are worth a glance but need nothing done: a dot, not
+  // a number, and only until the center has been opened.
+  const unseenActivity =
+    count === 0 &&
+    results.some(
+      (entry) =>
+        entry.code === "activity.new" &&
+        !entry.seenAt &&
+        entry.scope.book === currentBook,
+    );
   const label =
     count > 0
       ? t("notifications.labelActive", { count })
-      : t("notifications.label");
+      : unseenActivity
+        ? t("notifications.labelNewActivity")
+        : t("notifications.label");
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
@@ -262,16 +300,60 @@ export function NotificationCenter({
     );
     if (!resolved) return;
     setOpen(false);
-    if (resolved.kind === "operation") {
-      runOperation(resolved.operation, resolved.expectedScope);
-      return;
+    switch (resolved.kind) {
+      case "operation":
+        runOperation(resolved.operation, resolved.expectedScope);
+        return;
+      case "open-connection":
+        void navigate({
+          to: "/connections/$connectionId",
+          params: { connectionId: resolved.connectionId },
+        });
+        return;
+      case "open-transaction":
+        void navigate({
+          to: "/transactions",
+          search: { tx: resolved.transactionId },
+        });
+        return;
+      case "open-workspace":
+        void navigate({
+          to: "/books/$workspaceId/birds-eye",
+          params: { workspaceId: resolved.workspaceId },
+        });
+        return;
+      case "navigate":
+        if (resolved.anchor) requestSettingsAnchor(resolved.anchor);
+        void navigate({ to: resolved.to });
+        return;
     }
-    void navigate({ to: resolved.to });
   };
 
-  const runLegacyAction = (action: ResolvedNotificationAction) => {
+  // Bound at the click, not at render: the list may predate a book switch.
+  // The entry's book must be the one open now, the switch settled, and the
+  // assistant's own stamp the same book; the request then carries that stamp.
+  const askAssistantAbout = (group: ConditionGroup) => {
+    const assistant = useAssistantBridge.getState().assistant;
+    if (!assistant) return;
+    const origin = group.entries[0].scope;
+    const book = resolveCurrentBook ? resolveCurrentBook() : currentActiveBook;
+    const stamp = assistant.captureBook?.() ?? null;
+    if (
+      !book ||
+      (origin.book !== null && origin.book !== book.key) ||
+      !stamp ||
+      stamp.scope.workspace_id !== book.expected.workspace_id ||
+      stamp.scope.profile_id !== book.expected.profile_id
+    ) {
+      reportStaleBook();
+      return;
+    }
     setOpen(false);
-    void navigate({ to: action.to });
+    handOffToAssistant(
+      assistant,
+      assistantTroubleshootPrompt(group, useUiStore.getState().privacyMode, t),
+      { book: stamp },
+    );
   };
 
   const pendingFor = (resolved: ResolvedEntryAction | null) =>
@@ -296,11 +378,20 @@ export function NotificationCenter({
               {count}
             </span>
           )}
+          {unseenActivity ? (
+            <span
+              className="absolute top-1 right-1 size-2 rounded-full bg-primary"
+              aria-hidden="true"
+              data-testid="notification-activity-dot"
+            />
+          ) : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="flex max-h-[min(36rem,calc(100vh-4rem))] w-96 flex-col p-0"
+        // Wide enough that a cause and its wallets fit on one line, tall
+        // enough for attention, running work, and recent results together.
+        className="flex max-h-[min(44rem,calc(100vh-4rem))] w-[30rem] max-w-[calc(100vw-1rem)] flex-col p-0"
         aria-label={t("notifications.label")}
       >
         <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1.5">
@@ -310,10 +401,7 @@ export function NotificationCenter({
             variant="ghost"
             size="xs"
             disabled={recent.length === 0}
-            onClick={() => {
-              clearResults();
-              clearNotifications();
-            }}
+            onClick={clearResults}
           >
             {t("notifications.clearRecent")}
           </Button>
@@ -329,6 +417,15 @@ export function NotificationCenter({
               <Section title={t("notifications.sections.attention")} id="attention">
                 {groups.map((group) => {
                   const first = group.entries[0];
+                  const projected = projectConditionGroup(group, privacyMode, t);
+                  // Offered inside opened details only, for failures the
+                  // assistant can look into, of the open book (or app-wide).
+                  const askAssistant =
+                    assistantAvailable &&
+                    ASSISTANT_TROUBLESHOOT_CODES.includes(group.code) &&
+                    (first.scope.book === null || first.scope.book === currentBook)
+                      ? () => askAssistantAbout(group)
+                      : undefined;
                   const resolved = resolveEntryAction(
                     first.action,
                     first.scope,
@@ -339,7 +436,8 @@ export function NotificationCenter({
                     <EntryRow
                       key={group.key}
                       tone={severityTone(group.severity)}
-                      projected={projectConditionGroup(group, privacyMode, t)}
+                      projected={projected}
+                      onAskAssistant={askAssistant}
                       occurredAt={latestOccurrence(group)}
                       repeatCount={Math.max(
                         ...group.entries.map((entry) => entry.occurrenceCount),
@@ -385,70 +483,44 @@ export function NotificationCenter({
             ) : null}
             {recent.length > 0 ? (
               <Section title={t("notifications.sections.recent")} id="recent">
-                {recent.map((item) => {
-                  if (item.kind === "result") {
-                    const entry = item.entry;
-                    const resolved = resolveEntryAction(
-                      entry.action,
-                      entry.scope,
-                      currentActiveBook,
-                      developerToolsEnabled,
-                    );
-                    return (
-                      <EntryRow
-                        key={entry.id}
-                        tone={
-                          entry.severity === "info"
-                            ? "success"
-                            : severityTone(entry.severity)
-                        }
-                        projected={projectResult(entry, privacyMode, t)}
-                        occurredAt={entry.lastOccurredAt}
-                        otherBook={
-                          entry.scope.book !== null &&
-                          entry.scope.book !== currentBook
-                        }
-                        action={
-                          resolved
-                            ? {
-                                label: resultActionLabel(resolved, t),
-                                resolved,
-                                pending: pendingFor(resolved),
-                              }
-                            : undefined
-                        }
-                        onAction={() => runEntryAction(entry.action, entry.scope)}
-                        onDismiss={() => dismissResult(entry.id)}
-                        testId="notification-entry"
-                      />
-                    );
-                  }
-                  const entry = item.entry;
-                  const resolved =
-                    resolveNotificationAction(entry.action, developerToolsEnabled) ??
-                    undefined;
+                {recent.map((entry) => {
+                  const resolved = resolveEntryAction(
+                    entry.action,
+                    entry.scope,
+                    currentActiveBook,
+                    developerToolsEnabled,
+                  );
                   return (
-                    <LegacyRow
+                    <EntryRow
                       key={entry.id}
-                      item={entry}
-                      projected={projectLegacy(entry, privacyMode, t)}
-                      to={notificationTarget(
-                        entry.title,
-                        entry.tone,
-                        developerToolsEnabled,
-                        entry.target,
-                      )}
+                      tone={
+                        entry.severity === "info"
+                          ? "success"
+                          : severityTone(entry.severity)
+                      }
+                      projected={{
+                        ...projectResult(entry, privacyMode, t),
+                        technical: [],
+                      }}
+                      showDetails={false}
+                      occurredAt={entry.lastOccurredAt}
+                      // Workspace-wide results belong to no book.
+                      otherBook={
+                        entry.scope.book !== null &&
+                        entry.scope.book !== currentBook
+                      }
                       action={
                         resolved
-                          ? { label: resolved.label, resolved, pending: false }
+                          ? {
+                              label: resultActionLabel(resolved, t),
+                              resolved,
+                              pending: pendingFor(resolved),
+                            }
                           : undefined
                       }
-                      onNavigate={(to) => {
-                        setOpen(false);
-                        void navigate({ to });
-                      }}
-                      onAction={runLegacyAction}
-                      onDismiss={() => clearNotification(entry.id)}
+                      onAction={() => runEntryAction(entry.action, entry.scope)}
+                      onDismiss={() => dismissResult(entry.id)}
+                      testId="notification-entry"
                     />
                   );
                 })}
@@ -524,47 +596,88 @@ function RepeatBadge({ count }: { count: number }) {
   );
 }
 
-function DetailsToggle({
-  expanded,
-  controls,
-  onToggle,
-}: {
-  expanded: boolean;
-  controls: string;
-  onToggle: () => void;
-}) {
+/** Cause lines shown inline: this many, then how many more. */
+const DETAIL_LINES_SHOWN = 2;
+
+/**
+ * What went wrong, in one or two short lines under the body. Shown as is,
+ * with no toggle: grouped causes are short enough to read at a glance.
+ */
+function InlineDetails({ details }: { details: readonly string[] }) {
   const { t } = useTranslation("chrome");
+  if (details.length === 0) return null;
+  const shown = details.slice(0, DETAIL_LINES_SHOWN);
+  const more = details.length - shown.length;
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="xs"
-      className="text-muted-foreground"
-      aria-expanded={expanded}
-      aria-controls={controls}
-      onClick={onToggle}
+    <ul
+      className="mt-0.5 space-y-0.5 text-xs break-words text-muted-foreground"
+      aria-label={t("notifications.details")}
     >
-      {expanded ? t("notifications.hideDetails") : t("notifications.showDetails")}
-      <ChevronDown
-        className={cn("transition-transform", expanded && "rotate-180")}
-        aria-hidden="true"
-      />
-    </Button>
+      {shown.map((line, index) => (
+        <li key={index}>{line}</li>
+      ))}
+      {more > 0 ? <li>{t("notifications.moreDetails", { count: more })}</li> : null}
+    </ul>
   );
 }
 
-function DetailList({ id, details }: { id: string; details: readonly string[] }) {
+/**
+ * Secondary actions (ask the assistant, copy the error for a bug report)
+ * behind one quiet "more" button, so a row shows a single visible action.
+ */
+function MoreActions({
+  title,
+  onAskAssistant,
+  technical,
+}: {
+  title: string;
+  onAskAssistant?: () => void;
+  technical: readonly string[];
+}) {
   const { t } = useTranslation("chrome");
+  if (!onAskAssistant && technical.length === 0) return null;
+  // The raw daemon text, exactly as the privacy mode allows it; the
+  // clipboard-clearing setting applies.
+  const copy = () => {
+    void copyTextWithPolicy(technical.join("\n")).then(
+      () =>
+        showFeedback({
+          tone: "success",
+          title: t("notifications.copied"),
+          key: "notification-copied",
+        }),
+      () => undefined,
+    );
+  };
   return (
-    <ul
-      id={id}
-      className="mt-1 list-disc space-y-0.5 pl-4 text-xs break-words text-muted-foreground"
-      aria-label={t("notifications.details")}
-    >
-      {details.map((line, index) => (
-        <li key={index}>{line}</li>
-      ))}
-    </ul>
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="shrink-0 text-muted-foreground"
+          aria-label={t("notifications.moreActions", { title })}
+          title={t("notifications.moreActionsShort")}
+        >
+          <MoreHorizontal aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {onAskAssistant ? (
+          <DropdownMenuItem onSelect={onAskAssistant}>
+            <Sparkles aria-hidden="true" />
+            {t("notifications.askAssistant")}
+          </DropdownMenuItem>
+        ) : null}
+        {technical.length > 0 ? (
+          <DropdownMenuItem onSelect={copy}>
+            <Copy aria-hidden="true" />
+            {t("notifications.copyTechnical")}
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -605,9 +718,11 @@ function EntryRow({
   occurredAt,
   repeatCount = 1,
   otherBook = false,
+  showDetails = true,
   action,
   onAction,
   onDismiss,
+  onAskAssistant,
   testId,
 }: {
   tone: Severity;
@@ -615,16 +730,17 @@ function EntryRow({
   occurredAt: string;
   repeatCount?: number;
   otherBook?: boolean;
+  /** Conditions say what went wrong; results stop at their body. */
+  showDetails?: boolean;
   action?: RowAction;
   onAction: () => void;
   onDismiss?: () => void;
+  /** Troubleshoot with the assistant, from the row's "more" menu. */
+  onAskAssistant?: () => void;
   testId: string;
 }) {
   const { t } = useTranslation("chrome");
-  const [expanded, setExpanded] = React.useState(false);
-  const detailsId = React.useId();
   const ToneIcon = TONE_ICON[tone] ?? Info;
-  const hasControls = Boolean(action) || projected.details.length > 0;
 
   return (
     <li
@@ -653,22 +769,18 @@ function EntryRow({
             {projected.body}
           </p>
         ) : null}
-        {expanded && projected.details.length > 0 ? (
-          <DetailList id={detailsId} details={projected.details} />
-        ) : null}
-        {hasControls ? (
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            {action ? <ActionButton action={action} onClick={onAction} /> : null}
-            {projected.details.length > 0 ? (
-              <DetailsToggle
-                expanded={expanded}
-                controls={detailsId}
-                onToggle={() => setExpanded((value) => !value)}
-              />
-            ) : null}
+        {showDetails ? <InlineDetails details={projected.details} /> : null}
+        {action ? (
+          <div className="mt-1.5">
+            <ActionButton action={action} onClick={onAction} />
           </div>
         ) : null}
       </div>
+      <MoreActions
+        title={projected.title}
+        onAskAssistant={onAskAssistant}
+        technical={projected.technical}
+      />
       {onDismiss ? (
         <Button
           type="button"
@@ -755,133 +867,6 @@ function JobRow({ job, onOpen }: { job: JobEntry; onOpen?: () => void }) {
           ) : null}
         </div>
       </div>
-    </li>
-  );
-}
-
-/**
- * A sender still on `addNotification`. Temporary: PR 2 moves each sender to
- * the structured model and removes this row along with title routing.
- */
-function LegacyRow({
-  item,
-  projected,
-  to,
-  action,
-  onNavigate,
-  onAction,
-  onDismiss,
-}: {
-  item: AppNotification;
-  projected: ProjectedEntry;
-  to?: NotificationTarget;
-  action?: RowAction;
-  onNavigate: (to: NotificationTarget) => void;
-  onAction: (action: ResolvedNotificationAction) => void;
-  onDismiss: () => void;
-}) {
-  const { t } = useTranslation("chrome");
-  const [expanded, setExpanded] = React.useState(false);
-  const detailsId = React.useId();
-  const ToneIcon = TONE_ICON[item.tone] ?? Info;
-  const expandable = notificationIsExpandable({
-    body: projected.body ?? "",
-    details: projected.details,
-  });
-  const privacyMode = useUiStore((s) => s.privacyMode);
-  const progressLabel = projectFreeText(item.progress?.label, privacyMode, t);
-  const showProgressLabel =
-    progressLabel &&
-    !shouldHideNotificationProgressLabel(projected.body ?? "", progressLabel);
-
-  return (
-    <li
-      className="flex items-start gap-2 rounded-md px-2 py-2 hover:bg-accent/40"
-      data-testid="notification-entry"
-    >
-      <ToneIcon
-        className={cn("mt-0.5 size-4 shrink-0", TONE_ICON_CLASS[item.tone])}
-        aria-hidden="true"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {to ? (
-            <button
-              type="button"
-              className="flex min-w-0 items-center gap-1 rounded-sm text-left text-sm font-medium hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              onClick={() => onNavigate(to)}
-            >
-              <span className="min-w-0 break-words">{projected.title}</span>
-              <ChevronRight
-                className="size-3.5 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
-            </button>
-          ) : (
-            <span className="min-w-0 text-sm font-medium break-words">
-              {projected.title}
-            </span>
-          )}
-          <RepeatBadge count={item.repeatCount ?? 1} />
-        </div>
-        <OccurredAt at={item.createdAt} />
-        {projected.body ? (
-          <p
-            className={cn(
-              "mt-0.5 text-xs break-words whitespace-pre-line text-muted-foreground",
-              expandable && !expanded && "line-clamp-2",
-            )}
-          >
-            {projected.body}
-          </p>
-        ) : null}
-        {expanded && projected.details.length > 0 ? (
-          <DetailList id={detailsId} details={projected.details} />
-        ) : null}
-        {item.progress ? (
-          <div className="mt-1.5">
-            <ProgressBar
-              value={item.progress.value}
-              indeterminate={item.progress.indeterminate}
-            />
-            {showProgressLabel ? (
-              <div className="mt-1 text-xs text-muted-foreground">
-                {progressLabel}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {action || expandable ? (
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            {action ? (
-              <ActionButton
-                action={action}
-                onClick={() =>
-                  onAction(action.resolved as ResolvedNotificationAction)
-                }
-              />
-            ) : null}
-            {expandable ? (
-              <DetailsToggle
-                expanded={expanded}
-                controls={detailsId}
-                onToggle={() => setExpanded((value) => !value)}
-              />
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        className="shrink-0 text-muted-foreground"
-        aria-label={t("notifications.dismiss", { title: projected.title })}
-        title={t("notifications.dismissShort")}
-        onClick={onDismiss}
-      >
-        <X aria-hidden="true" />
-      </Button>
     </li>
   );
 }
