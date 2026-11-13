@@ -204,6 +204,32 @@ export function reviewConditionsFromBadges(
 }
 
 /**
+ * Explicit evidence that a run processed the book's journals: its journal
+ * step reports `processed` or `current`, or a `journal_refresh` job finished
+ * `done`. Anything else (a deferred, disabled, failed, or absent step)
+ * proves nothing about an earlier journal failure.
+ */
+export function journalStepSucceeded(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const run = data as {
+    journals?: { status?: unknown } | null;
+    completed?: unknown;
+  };
+  const status = run.journals?.status;
+  if (status === "processed" || status === "current") return true;
+  return (
+    Array.isArray(run.completed) &&
+    run.completed.some(
+      (job) =>
+        job &&
+        typeof job === "object" &&
+        (job as { job_type?: unknown }).job_type === "journal_refresh" &&
+        (job as { status?: unknown }).status === "done",
+    )
+  );
+}
+
+/**
  * Apply what a finished freshness run (foreground or background) proves for
  * `book`: failed attempts count as new occurrences, the snapshot it carries
  * reconciles the rest, and sources it reports fresh resolve. A run without a
@@ -214,6 +240,9 @@ export function applyFreshnessRun(
   book: string | null,
 ): void {
   const store = useNotificationStore.getState();
+  if (journalStepSucceeded(data)) {
+    store.resolveCondition(conditionKey("journals.process-failed", { book }));
+  }
   const failures = sourceFailuresFromRun(data, book);
   for (const failure of failures) store.raiseCondition(failure);
   if (!hasSourceSnapshot(data)) return;

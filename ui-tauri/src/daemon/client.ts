@@ -21,6 +21,7 @@ import {
 } from "@tanstack/react-query";
 import { getTransport, type DaemonEnvelope } from "./transport";
 import { useUiStore, type DataMode } from "@/store/ui";
+import { resolveJournalFailureAfter } from "@/lib/journalOutcome";
 import { notifyJournalStepAfterImport } from "@/lib/journalStepNotice";
 
 export interface ExpectedBookScope {
@@ -606,6 +607,7 @@ export function useDaemonMutation<T = unknown>(
         throw new DaemonRequestError(kind, envelope);
       }
       boundary?.onMutationSuccess?.(kind, envelope.data);
+      resolveJournalFailureAfter(queryClient, daemonSession, envelope.data);
       return envelope;
     },
     onSuccess: (envelope) => {
@@ -670,6 +672,7 @@ export function useDaemonStreamMutation<T = unknown, R = unknown>(
         throw new DaemonRequestError(kind, envelope);
       }
       boundary?.onMutationSuccess?.(kind, envelope.data);
+      resolveJournalFailureAfter(queryClient, daemonSession, envelope.data);
       return envelope;
     },
     onSuccess: () =>

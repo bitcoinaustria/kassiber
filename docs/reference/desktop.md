@@ -638,7 +638,10 @@ The title bar's bell opens the notification list
   and what it means for reports, offers one action, and keeps diagnostics
   behind Show details. A condition clears only when a successful read or run
   for the same book and source shows it resolved; a failed read, a lock, or a
-  source still syncing leaves it in place. Rows cannot be dismissed, and
+  source still syncing leaves it in place. A failed journal run clears on any
+later run whose journal step reports success (journal processing, a book
+refresh, a background refresh, or a sync or import that processes
+journals), in the same book. Rows cannot be dismissed, and
   re-reading the same state does not count as a repeat.
 - **Running**: the book refresh and journal processing in progress, with
   their progress. A running book refresh reopens the sync card.
