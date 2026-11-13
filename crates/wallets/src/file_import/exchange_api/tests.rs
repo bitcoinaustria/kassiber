@@ -472,6 +472,7 @@ mod loopback {
 }
 
 mod bitpanda_api;
+mod coinbase_api;
 mod desktop_api;
 
 use loopback::{backend, run, serve};
