@@ -5,10 +5,11 @@ import { useTranslation } from "react-i18next";
 
 import { formatBtc, formatFiatAmount, formatWholeFiatAmount, type Currency } from "@/lib/currency";
 import { fiatCompleteness } from "@/lib/fiatCompleteness";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
-import { activeMarketFiatCurrency, activityTxs, blurClass } from "./model";
+import { activeMarketFiatCurrency, blurClass, monthlyFlows, type MonthFlow } from "./model";
 
 const WidgetCard = ({
   title,
@@ -49,7 +50,9 @@ export const TaxYearWidget = ({
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const completeness = fiatCompleteness(snapshot.fiat);
   const basisKnown = completeness.costBasisComplete;
-  const year = new Date().getFullYear();
+  // The daemon counts "this year" from 1 January UTC; the label names the
+  // same year, or the turn of the year would put one year's figure under the next.
+  const year = new Date().getUTCFullYear();
   const money = (value: number) => formatFiatAmount(value, fiatCurrency);
   const signed = (value: number) => `${value >= 0 ? "+ " : "− "}${money(Math.abs(value))}`;
   const tone = (value: number) =>
@@ -98,7 +101,7 @@ export const TaxYearWidget = ({
           <div key={row.label} className="flex items-baseline justify-between gap-3">
             <dt className="text-muted-foreground">{row.label}</dt>
             <dd className={cn("font-medium tabular-nums", row.className, blurClass(hideSensitive))}>
-              {row.value}
+              {row.value === "—" ? row.value : maskSensitive(row.value, hideSensitive)}
             </dd>
           </div>
         ))}
@@ -110,12 +113,10 @@ export const TaxYearWidget = ({
   );
 };
 
-const MONTHS = 12;
-
 /**
- * Money in and out per month over the last year, from the same flow reading
- * as the chart's activity dots: received above the line, spent below, moves
- * between your own wallets left out. Totals and fees underneath.
+ * Money in and out per month over the last year: received above the line,
+ * spent below, totals and fees underneath. A year without any is left out
+ * rather than shown as a row of zeros.
  */
 export const FlowsWidget = ({
   snapshot,
@@ -127,35 +128,26 @@ export const FlowsWidget = ({
   currency: Currency;
 }) => {
   const { t, i18n } = useTranslation("overview");
+  // "Hide all": the bars' heights tell how money moved, so they go too.
+  const hideShares = useSensitive("share");
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
-  const now = new Date();
-  const months = Array.from({ length: MONTHS }, (_, index) => {
-    const date = new Date(now.getFullYear(), now.getMonth() - (MONTHS - 1 - index), 1);
-    return { key: `${date.getFullYear()}-${date.getMonth()}`, date, inBtc: 0, outBtc: 0, inValue: 0, outValue: 0 };
-  });
-  const byKey = new Map(months.map((month) => [month.key, month]));
-  let feeBtc = 0;
-  for (const event of activityTxs(snapshot)) {
-    const month = byKey.get(`${event.occurredAt.getFullYear()}-${event.occurredAt.getMonth()}`);
-    if (!month) continue;
-    feeBtc += event.feeBtc;
-    if (event.flow === "incoming") {
-      month.inBtc += event.btc;
-      month.inValue += event.valueEur;
-    } else if (event.flow === "outgoing") {
-      month.outBtc += event.btc;
-      month.outValue += event.valueEur;
-    }
-  }
+  const flows = monthlyFlows(snapshot);
+  if (!flows.hasActivity) return null;
+  const { months } = flows;
   const isBitcoinMode = currency === "btc";
-  const inBtc = months.reduce((sum, month) => sum + month.inBtc, 0);
-  const outBtc = months.reduce((sum, month) => sum + month.outBtc, 0);
-  const inValue = months.reduce((sum, month) => sum + month.inValue, 0);
-  const outValue = months.reduce((sum, month) => sum + month.outValue, 0);
   const peak = Math.max(...months.map((month) => Math.max(month.inBtc, month.outBtc)), 0) || 1;
   const amount = (btc: number, value: number) =>
-    isBitcoinMode ? formatBtc(btc, { precision: 4 }) : formatWholeFiatAmount(value, fiatCurrency);
+    maskSensitive(
+      isBitcoinMode ? formatBtc(btc, { precision: 4 }) : formatWholeFiatAmount(value, fiatCurrency),
+      hideSensitive,
+    );
   const monthLabel = (date: Date) => date.toLocaleDateString(i18n.language, { month: "narrow" });
+  const monthTitle = (month: MonthFlow) => {
+    const name = month.date.toLocaleDateString(i18n.language, { month: "long", year: "numeric" });
+    return hideSensitive
+      ? name
+      : `${name}: ${t("widgets.flows.received")} ${formatBtc(month.inBtc, { precision: 4 })} · ${t("widgets.flows.spent")} ${formatBtc(month.outBtc, { precision: 4 })}`;
+  };
   return (
     <WidgetCard title={t("widgets.flows.title")}>
       <div
@@ -164,23 +156,23 @@ export const FlowsWidget = ({
         aria-label={t("widgets.flows.chartAria")}
       >
         {months.map((month) => (
-          <div
-            key={month.key}
-            className="flex min-w-0 flex-col"
-            title={`${month.date.toLocaleDateString(i18n.language, { month: "long", year: "numeric" })}: ${t("widgets.flows.received")} ${formatBtc(month.inBtc, { precision: 4 })} · ${t("widgets.flows.spent")} ${formatBtc(month.outBtc, { precision: 4 })}`}
-          >
+          <div key={month.key} className="flex min-w-0 flex-col" title={monthTitle(month)}>
             <div className="flex flex-1 items-end">
-              <div
-                className="w-full rounded-t-sm bg-emerald-500/70"
-                style={{ height: `${(month.inBtc / peak) * 100}%`, minHeight: month.inBtc > 0 ? 2 : 0 }}
-              />
+              {hideShares ? null : (
+                <div
+                  className="w-full rounded-t-sm bg-emerald-500/70"
+                  style={{ height: `${(month.inBtc / peak) * 100}%`, minHeight: month.inBtc > 0 ? 2 : 0 }}
+                />
+              )}
             </div>
             <div className="h-px bg-border" />
             <div className="flex flex-1 items-start">
-              <div
-                className="w-full rounded-b-sm bg-red-500/60"
-                style={{ height: `${(month.outBtc / peak) * 100}%`, minHeight: month.outBtc > 0 ? 2 : 0 }}
-              />
+              {hideShares ? null : (
+                <div
+                  className="w-full rounded-b-sm bg-red-500/60"
+                  style={{ height: `${(month.outBtc / peak) * 100}%`, minHeight: month.outBtc > 0 ? 2 : 0 }}
+                />
+              )}
             </div>
             <span className="pt-0.5 text-center text-2xs text-muted-foreground">{monthLabel(month.date)}</span>
           </div>
@@ -190,19 +182,19 @@ export const FlowsWidget = ({
         <div>
           <dt className="text-muted-foreground">{t("widgets.flows.received")}</dt>
           <dd className={cn("font-medium tabular-nums text-emerald-600 dark:text-emerald-400", blurClass(hideSensitive))}>
-            {amount(inBtc, inValue)}
+            {amount(flows.inBtc, flows.inValue)}
           </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">{t("widgets.flows.spent")}</dt>
           <dd className={cn("font-medium tabular-nums text-red-600 dark:text-red-400", blurClass(hideSensitive))}>
-            {amount(outBtc, outValue)}
+            {amount(flows.outBtc, flows.outValue)}
           </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">{t("widgets.flows.fees")}</dt>
           <dd className={cn("font-medium tabular-nums", blurClass(hideSensitive))}>
-            {formatBtc(feeBtc, { precision: 5 })}
+            {maskSensitive(formatBtc(flows.feeBtc, { precision: 5 }), hideSensitive)}
           </dd>
         </div>
       </dl>

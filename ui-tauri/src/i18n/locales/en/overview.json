@@ -200,7 +200,7 @@
       "show": "List them",
       "hide": "Hide them"
     },
-    "railsLabel": "Show",
+    "railsLabel": "Networks",
     "rail": {
       "onchain": "On-chain",
       "liquid": "Liquid",

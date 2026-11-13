@@ -444,10 +444,11 @@ A row names its status only when it asks for something.
 Holdings by Source runs across the page below. Its settings menu, kept in the
 UI state and the same for every book, picks a layout (a list; tiles with each
 source's other unit, latest activity and transaction count; a table with exact
-bitcoin; or a list with each source's last twelve months), the order (balance,
-name, latest activity), which networks to show, what to do with emptied
-sources (fold into one expandable line, list, or hide) and how many sources
-precede Other sources. Every row opens its wallet and shows a dot while its
+bitcoin; or a list with each source's last twelve months) and the order
+(balance, name, latest activity). Submenus, each naming its current choice,
+hold the rarer ones: which networks to show, what to do with emptied sources
+(fold into one expandable line, list, or hide) and how many sources precede
+Other sources. The list layout also says when each source last synced. Every row opens its wallet and shows a dot while its
 sync runs or after it fails. Shares are of all the bitcoin held, so a filtered
 row keeps its share of the book; a source never funded is not an emptied one.
 The trend line covers the last twelve months of the wallet's own movements.
@@ -460,9 +461,12 @@ percentage while a network filter is on.
 Two widgets follow. Tax year shows the daemon's realized result this year,
 unrealized result and cost basis, plus the Austrian tax-free and taxable split
 when the book has one; with an incomplete basis it shows no gains and says
-why. Money in and out shows the last twelve months of bitcoin received and
+why. Its year is the UTC calendar year the daemon counts realized results
+in. Money in and out shows the last twelve months of bitcoin received and
 spent per month, classified as the chart's activity dots are, so moves between
-your own wallets stay out, with totals and fees.
+your own wallets stay out, with totals and fees; a year without any leaves the
+widget out. Both mask their amounts while amounts are hidden, and "Hide all"
+also drops the monthly bars, whose heights tell how money moved.
 
 Overview, Wallets, the book-set overview, and the Reports metric strip read the
 daemon's `fiat.completeness` block (see [the daemon reference](daemon.md)) instead of

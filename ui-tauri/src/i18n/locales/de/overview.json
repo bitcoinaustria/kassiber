@@ -200,7 +200,7 @@
       "show": "Auflisten",
       "hide": "Ausblenden"
     },
-    "railsLabel": "Anzeigen",
+    "railsLabel": "Netzwerke",
     "rail": {
       "onchain": "On-chain",
       "liquid": "Liquid",

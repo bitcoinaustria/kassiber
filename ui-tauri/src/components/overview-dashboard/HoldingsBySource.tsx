@@ -11,6 +11,9 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatBtc, formatWholeFiatAmount, type Currency } from "@/lib/currency";
@@ -203,7 +206,7 @@ const HoldingsSettingsMenu = ({
           <Settings className="size-3.5" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
+      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="text-2xs text-muted-foreground">{t("holdings.layoutLabel")}</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={view.layout}
@@ -228,53 +231,81 @@ const HoldingsSettingsMenu = ({
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-2xs text-muted-foreground">{t("holdings.railsLabel")}</DropdownMenuLabel>
-        {HOLDINGS_RAILS.map((rail) => {
-          const checked = view.rails.includes(rail);
-          return (
-            <DropdownMenuCheckboxItem
-              key={rail}
-              checked={checked}
-              // The last rail stays on: an empty filter would list nothing.
-              disabled={checked && view.rails.length === 1}
-              onCheckedChange={(next) =>
-                onChange({
-                  rails: next
-                    ? HOLDINGS_RAILS.filter((entry) => entry === rail || view.rails.includes(entry))
-                    : view.rails.filter((entry) => entry !== rail),
-                })
-              }
-              onSelect={keepOpen}
+        {/* Rarer choices sit one level down; each trigger names its current setting. */}
+        <DropdownMenuSub>
+          <SettingsSubTrigger
+            label={t("holdings.railsLabel")}
+            value={
+              view.rails.length === HOLDINGS_RAILS.length
+                ? t("holdings.limitAll")
+                : view.rails.map((rail) => t(`holdings.rail.${rail}`)).join(", ")
+            }
+          />
+          <DropdownMenuSubContent className="w-52">
+            {HOLDINGS_RAILS.map((rail) => {
+              const checked = view.rails.includes(rail);
+              return (
+                <DropdownMenuCheckboxItem
+                  key={rail}
+                  checked={checked}
+                  // The last rail stays on: an empty filter would list nothing.
+                  disabled={checked && view.rails.length === 1}
+                  onCheckedChange={(next) =>
+                    onChange({
+                      rails: next
+                        ? HOLDINGS_RAILS.filter((entry) => entry === rail || view.rails.includes(entry))
+                        : view.rails.filter((entry) => entry !== rail),
+                    })
+                  }
+                  onSelect={keepOpen}
+                >
+                  {t(`holdings.rail.${rail}`)}
+                </DropdownMenuCheckboxItem>
+              );
+            })}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <SettingsSubTrigger label={t("holdings.emptyLabel")} value={t(`holdings.emptyMode.${view.empty}`)} />
+          <DropdownMenuSubContent className="w-52">
+            <DropdownMenuRadioGroup
+              value={view.empty}
+              onValueChange={(empty) => onChange({ empty: empty as HoldingsEmpty })}
             >
-              {t(`holdings.rail.${rail}`)}
-            </DropdownMenuCheckboxItem>
-          );
-        })}
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-2xs text-muted-foreground">{t("holdings.emptyLabel")}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={view.empty}
-          onValueChange={(empty) => onChange({ empty: empty as HoldingsEmpty })}
-        >
-          {(["fold", "show", "hide"] as const).map((mode) => (
-            <DropdownMenuRadioItem key={mode} value={mode} onSelect={keepOpen}>
-              {t(`holdings.emptyMode.${mode}`)}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-2xs text-muted-foreground">{t("holdings.limitLabel")}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={String(view.limit)}
-          onValueChange={(limit) => onChange({ limit: Number(limit) as HoldingsView["limit"] })}
-        >
-          {HOLDINGS_LIMITS.map((limit) => (
-            <DropdownMenuRadioItem key={limit} value={String(limit)} onSelect={keepOpen}>
-              {limit === 0 ? t("holdings.limitAll") : String(limit)}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+              {(["fold", "show", "hide"] as const).map((mode) => (
+                <DropdownMenuRadioItem key={mode} value={mode} onSelect={keepOpen}>
+                  {t(`holdings.emptyMode.${mode}`)}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <SettingsSubTrigger
+            label={t("holdings.limitLabel")}
+            value={view.limit === 0 ? t("holdings.limitAll") : String(view.limit)}
+          />
+          <DropdownMenuSubContent className="w-32">
+            <DropdownMenuRadioGroup
+              value={String(view.limit)}
+              onValueChange={(limit) => onChange({ limit: Number(limit) as HoldingsView["limit"] })}
+            >
+              {HOLDINGS_LIMITS.map((limit) => (
+                <DropdownMenuRadioItem key={limit} value={String(limit)} onSelect={keepOpen}>
+                  {limit === 0 ? t("holdings.limitAll") : String(limit)}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 };
+
+const SettingsSubTrigger = ({ label, value }: { label: string; value: string }) => (
+  <DropdownMenuSubTrigger className="gap-3">
+    <span className="flex-1 whitespace-nowrap">{label}</span>
+    <span className="max-w-28 truncate text-xs text-muted-foreground">{value}</span>
+  </DropdownMenuSubTrigger>
+);

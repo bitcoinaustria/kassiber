@@ -2723,3 +2723,62 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot, reviewCount?:
   };
 }
 
+const FLOW_MONTHS = 12;
+
+export type MonthFlow = {
+  key: string;
+  date: Date;
+  inBtc: number;
+  outBtc: number;
+  inValue: number;
+  outValue: number;
+};
+
+export type MonthlyFlows = {
+  months: MonthFlow[];
+  inBtc: number;
+  outBtc: number;
+  inValue: number;
+  outValue: number;
+  feeBtc: number;
+  /** Anything received, spent or paid in fees inside the window. */
+  hasActivity: boolean;
+};
+
+/**
+ * Received and spent per calendar month over the last twelve, oldest first,
+ * from the same flow reading as the chart's activity dots. Moves between
+ * the book's own wallets count only their fees.
+ */
+export function monthlyFlows(snapshot: OverviewSnapshot, now: Date = new Date()): MonthlyFlows {
+  const months: MonthFlow[] = Array.from({ length: FLOW_MONTHS }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (FLOW_MONTHS - 1 - index), 1);
+    return { key: `${date.getFullYear()}-${date.getMonth()}`, date, inBtc: 0, outBtc: 0, inValue: 0, outValue: 0 };
+  });
+  const byKey = new Map(months.map((month) => [month.key, month]));
+  let feeBtc = 0;
+  for (const event of activityTxs(snapshot)) {
+    const month = byKey.get(`${event.occurredAt.getFullYear()}-${event.occurredAt.getMonth()}`);
+    if (!month) continue;
+    feeBtc += event.feeBtc;
+    if (event.flow === "incoming") {
+      month.inBtc += event.btc;
+      month.inValue += event.valueEur;
+    } else if (event.flow === "outgoing") {
+      month.outBtc += event.btc;
+      month.outValue += event.valueEur;
+    }
+  }
+  const sum = (pick: (month: MonthFlow) => number) => months.reduce((total, month) => total + pick(month), 0);
+  const inBtc = sum((month) => month.inBtc);
+  const outBtc = sum((month) => month.outBtc);
+  return {
+    months,
+    inBtc,
+    outBtc,
+    inValue: sum((month) => month.inValue),
+    outValue: sum((month) => month.outValue),
+    feeBtc,
+    hasActivity: inBtc > 0 || outBtc > 0 || feeBtc > 0,
+  };
+}

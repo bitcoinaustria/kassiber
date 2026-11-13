@@ -227,7 +227,7 @@ export const OverviewDashboard = ({
           currency={currency}
         />
         <div className="@container/overview-widgets">
-          <div className="grid grid-cols-1 gap-(--kb-page-gap) @min-[56rem]/overview-widgets:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-(--kb-page-gap) @min-[56rem]/overview-widgets:grid-cols-2">
             <TaxYearWidget snapshot={snapshot} hideSensitive={hideSensitive} />
             <FlowsWidget snapshot={snapshot} hideSensitive={hideSensitive} currency={currency} />
           </div>
