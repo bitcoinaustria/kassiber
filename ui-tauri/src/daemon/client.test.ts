@@ -202,6 +202,31 @@ describe("daemon mutation invalidation scope", () => {
     );
   });
 
+  it("re-reads source freshness after every run that changes it", () => {
+    for (const kind of [
+      "ui.freshness.run",
+      "ui.wallets.sync",
+      "ui.connections.exchange.sync",
+      "ui.journals.process",
+      "ui.wallets.document_import.import",
+    ]) {
+      expect(invalidatedDaemonQueryKindsForMutation(kind)).toContain(
+        "ui.freshness.status",
+      );
+    }
+    // Untargeted kinds, such as the freshness controls, invalidate every
+    // daemon read, this one included.
+    for (const kind of [
+      "ui.freshness.cancel",
+      "ui.freshness.pause",
+      "ui.freshness.resume",
+      "ui.freshness.configure",
+      "ui.workspace.freshness.run",
+    ]) {
+      expect(invalidatedDaemonQueryKindsForMutation(kind)).toBeNull();
+    }
+  });
+
   it("refreshes node and lightning reads after sync and maintenance refreshes", () => {
     for (const kind of ["ui.freshness.run", "ui.wallets.sync"]) {
       expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual(
