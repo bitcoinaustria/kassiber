@@ -9,6 +9,7 @@
 //! and its rows must stay Python's.
 use super::*;
 use kassiber_envelope::get;
+use kassiber_wallets::file_import::assets::Scope;
 use kassiber_wallets::file_import::exchange_api::{self, desktop};
 
 pub(super) const COMMANDS: &[&str] = &[
@@ -109,6 +110,24 @@ fn credentials(kind: &str, args: &Value) -> Result<Credentials, AppError> {
     Ok(Credentials { key, secret })
 }
 
+/// The `asset_scope` a wallet's config stores, if it stores one.
+fn stored_scope(conn: &Connection, wallet_id: &str) -> Result<Option<Scope>, AppError> {
+    let stored: Option<String> = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id=?",
+            [wallet_id],
+            |r| r.get(0),
+        )
+        .map_err(|e| error(map_sqlite_error(e)))?;
+    let config: serde_json::Value = stored
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(serde_json::Value::Null);
+    match config.get(Scope::KEY) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(_) => Scope::of_wallet(conn, wallet_id).map(Some),
+    }
+}
+
 fn url(kind: &str, args: &Value) -> Result<String, AppError> {
     Ok(text(args, "url")?.unwrap_or_else(|| desktop::default_api_url(kind).to_owned()))
 }
@@ -169,7 +188,8 @@ impl RealBook {
             };
             let has_key = present(&["token", "api_key", "username"]);
             let has_secret = present(&["auth_header", "api_secret", "password"]);
-            rows.push(dict([
+            let scope = stored_scope(conn, &target.id)?;
+            let mut row = vec![
                 ("wallet_id", s(target.id.as_str())),
                 ("wallet", s(target.label.as_str())),
                 ("exchange", s(target.kind.as_str())),
@@ -192,7 +212,13 @@ impl RealBook {
                         .cloned()
                         .unwrap_or(Value::Null),
                 ),
-            ]));
+            ];
+            // Only a wallet that stores a scope names it (absent means
+            // `bitcoin`), so books that never set one answer as before.
+            if let Some(scope) = scope {
+                row.push(("asset_scope", s(scope.as_str())));
+            }
+            rows.push(dict(row));
         }
         Ok(dict([("connections", Value::List(rows))]))
     }
@@ -372,6 +398,10 @@ impl RealBook {
                     "fetched",
                     "skipped",
                     "provider_balance",
+                    // docs/plan/23-crypto-assets.md: what the wallet's asset
+                    // scope left out, for the card's "also track" prompt.
+                    "assets",
+                    "swap_pairs",
                 ] {
                     if let Some(value) = get(payload, key) {
                         record.push((key, value.clone()));
