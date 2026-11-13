@@ -145,6 +145,8 @@ export function PrivacySettingsPanel({
   setHideAmountsOnUnlock,
   clearClipboard,
   setClearClipboard,
+  desktopNotifications,
+  setDesktopNotifications,
   automaticUpdateChecks,
   setAutomaticUpdateChecks,
   backends,
@@ -159,6 +161,8 @@ export function PrivacySettingsPanel({
   setHideAmountsOnUnlock: (value: boolean) => void;
   clearClipboard: boolean;
   setClearClipboard: (value: boolean) => void;
+  desktopNotifications: boolean;
+  setDesktopNotifications: (value: boolean) => void;
   automaticUpdateChecks: boolean;
   setAutomaticUpdateChecks: (value: boolean) => void;
   backends: Backend[];
@@ -271,6 +275,28 @@ export function PrivacySettingsPanel({
             id="settings-clipboard"
             checked={clearClipboard}
             onCheckedChange={setClearClipboard}
+          />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup
+        title={t("privacy.notificationsHeading")}
+        footer={t("privacy.notificationsDisclosure")}
+      >
+        <SettingsRow
+          anchorId="desktopNotifications"
+          label={t("privacy.notificationsLabel")}
+          description={
+            desktopNotifications
+              ? t("privacy.notificationsOn")
+              : t("privacy.notificationsOff")
+          }
+          htmlFor="settings-desktop-notifications"
+        >
+          <Switch
+            id="settings-desktop-notifications"
+            checked={desktopNotifications}
+            onCheckedChange={setDesktopNotifications}
           />
         </SettingsRow>
       </SettingsGroup>

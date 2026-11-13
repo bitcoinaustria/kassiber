@@ -185,6 +185,25 @@ describe("global error capture", () => {
     );
   });
 
+  it("ignores only the notification plugin's refused permission probe", () => {
+    installGlobalErrorCapture();
+    const probe = new Event("unhandledrejection", {
+      cancelable: true,
+    }) as Event & { reason?: unknown };
+    probe.reason =
+      "notification.is_permission_granted not allowed. Permissions associated with this command: notification:allow-is-permission-granted, notification:default";
+    window.dispatchEvent(probe);
+    expect(getAppLogRecords()).toHaveLength(0);
+    expect(probe.defaultPrevented).toBe(true);
+
+    const other = new Event("unhandledrejection") as Event & {
+      reason?: unknown;
+    };
+    other.reason = "notification.notify not allowed. Permissions associated";
+    window.dispatchEvent(other);
+    expect(getAppLogRecords()).toHaveLength(1);
+  });
+
   it("treats a second install as a no-op", () => {
     installGlobalErrorCapture();
     installGlobalErrorCapture();
