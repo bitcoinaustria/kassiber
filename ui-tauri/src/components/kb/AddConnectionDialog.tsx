@@ -1937,17 +1937,17 @@ function AddConnectionDialogContent({
   };
 
   // A receipt for what the dialog just saved; it closes right after. Labels
-// and file names are user data, so privacy modes treat the body as free
-// text.
-const notifyAdded = (title: string, description: string) =>
-  showFeedback({
-    title,
-    description,
-    descriptionPrivacy: "free-text",
-    tone: "success",
-  });
+  // and file names are user data, so privacy modes treat the body as free
+  // text.
+  const notifyAdded = (title: string, description: string) =>
+    showFeedback({
+      title,
+      description,
+      descriptionPrivacy: "free-text",
+      tone: "success",
+    });
 
-const onSetupSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const onSetupSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (historyImport && !isHistoryImportSource(selected)) {
       setSetupError(t("add.enrichment.errorNoFormat"));

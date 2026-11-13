@@ -116,11 +116,11 @@ export interface MenuIntentDeps {
   resetAppScale: () => void;
   runAppUpdateCheck: () => void;
   /**
- * Reveal one settings row once its section shows: a gated destination
- * explains itself by highlighting the switch that opens it, instead of a
- * notice.
- */
-revealSettingAnchor: (anchor: SettingsAnchorId) => void;
+   * Reveal one settings row once its section shows: a gated destination
+   * explains itself by highlighting the switch that opens it, instead of a
+   * notice.
+   */
+  revealSettingAnchor: (anchor: SettingsAnchorId) => void;
   emitSettingsSection: (section: string | null) => void;
 }
 

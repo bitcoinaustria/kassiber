@@ -54,11 +54,11 @@ export function TransactionSplitPayoutCard({
   );
   const [counterparty, setCounterparty] = React.useState("");
   const [notes, setNotes] = React.useState("");
-// The outcome shows beside the button that asked for it; the journal run
-// that follows reports itself.
-const [outcome, setOutcome] = React.useState<
-  { kind: "saved" } | { kind: "error"; message: string } | null
->(null);
+  // The outcome shows beside the button that asked for it; the journal run
+  // that follows reports itself.
+  const [outcome, setOutcome] = React.useState<
+    { kind: "saved" } | { kind: "error"; message: string } | null
+  >(null);
 
   const { outError, payoutError, ready } = splitPayoutValidation({
     outAmount,

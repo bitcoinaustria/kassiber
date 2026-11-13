@@ -287,28 +287,28 @@ export function projectResult(
             body: t("notifications.result.reportExported.notesBody"),
             details,
           }
-            : { title: t("notifications.result.reportExported.title"), details };
-case "workspace.refreshed":
-  return {
-    title: t("notifications.result.workspaceRefreshed.title"),
-    body:
-      entry.params.count !== undefined && entry.params.entries !== undefined
-        ? t("notifications.result.workspaceRefreshed.body", {
-            synced: entry.params.count,
-            count: entry.params.entries,
-          })
-        : undefined,
-    details,
-  };
-case "pricing.rebuilt":
-  return {
-    title: t("notifications.result.pricingRebuilt.title"),
-    body:
-      entry.severity === "warning"
-        ? t("notifications.result.pricingRebuilt.journalsBody")
-        : undefined,
-    details,
-  };
+        : { title: t("notifications.result.reportExported.title"), details };
+    case "workspace.refreshed":
+      return {
+        title: t("notifications.result.workspaceRefreshed.title"),
+        body:
+          entry.params.count !== undefined && entry.params.entries !== undefined
+            ? t("notifications.result.workspaceRefreshed.body", {
+                synced: entry.params.count,
+                count: entry.params.entries,
+              })
+            : undefined,
+        details,
+      };
+    case "pricing.rebuilt":
+      return {
+        title: t("notifications.result.pricingRebuilt.title"),
+        body:
+          entry.severity === "warning"
+            ? t("notifications.result.pricingRebuilt.journalsBody")
+            : undefined,
+        details,
+      };
   }
 }
 

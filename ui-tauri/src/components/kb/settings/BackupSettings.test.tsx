@@ -34,7 +34,7 @@ function input(id: string, value: string) { (find(render(), props => props.id ==
 beforeEach(() => {
   state.values = []; state.refs = []; state.session = 1;
   state.invoke.mockReset(); state.pick.mockReset(); state.save.mockReset();
-resetNotificationStore();
+  resetNotificationStore();
   vi.stubGlobal("window", { dispatchEvent: vi.fn() });
 });
 
@@ -97,12 +97,12 @@ it("returns to unlock with a condition that outlasts the lock after rollback clo
   await vi.waitFor(() => expect(state.session).toBe(2));
   expect(window.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({type: "kassiber:lock-app"}));
   // Waits in Needs attention for after unlock; its action opens Backups.
-const [condition] = Object.values(useNotificationStore.getState().conditions);
-expect(condition).toMatchObject({
-  code: "backup.restore-failed", scope: {book: null}, severity: "error",
-  action: {type: "navigate", to: "/settings/data", anchor: "backup"},
-  details: [{message: "backup.errors.rolledBack"}],
-});
+  const [condition] = Object.values(useNotificationStore.getState().conditions);
+  expect(condition).toMatchObject({
+    code: "backup.restore-failed", scope: {book: null}, severity: "error",
+    action: {type: "navigate", to: "/settings/data", anchor: "backup"},
+    details: [{message: "backup.errors.rolledBack"}],
+  });
   expect(button("backup.replace")).toBeUndefined();
   expect(JSON.stringify(render())).not.toContain("Raw English error");
 });
@@ -117,5 +117,5 @@ it("keeps pre-close validation errors in the localized preview flow", async () =
   expect(state.session).toBe(1);
   expect(window.dispatchEvent).not.toHaveBeenCalled();
   // Shown in the form; nothing waits in the center.
-expect(useNotificationStore.getState().conditions).toEqual({});
+  expect(useNotificationStore.getState().conditions).toEqual({});
 });
