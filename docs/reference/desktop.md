@@ -619,25 +619,86 @@ a guard that redirects to Overview (Settings -> Lightning stays shut, and falls
 back to the default category if the switch turns off while it is open), the
 native menu's Logs item is disabled, and
 a native-menu or `kassiber://` intent for any of them lands on Settings ->
-Developer tools with an explanatory notification instead of a silent bounce. The
+Developer tools with the early-stage switch highlighted instead of a silent
+bounce (an intent for the assistant with AI off highlights the AI switch the
+same way). The
 choice is stored in the desktop's local UI state, so it survives updates;
 `ui-tauri/src/components/kb/devMode.ts` holds the route lists.
 
 The title bar's bell opens the notification list
-(`ui-tauri/src/components/kb/NotificationCenter.tsx`): the last 12 notices,
-plus entries derived from the book (journals waiting to be processed, the
-Review count), filtered to All or Needs action. Each entry shows how long
-ago it arrived, with the full date on hover, and clips its text to two lines
-until Show more, which also reveals detail lines such as the sources a book
-refresh could not finish. Its title opens the screen that explains it; a
-button can open a specific place (Settings -> Bitcoin when a backend is
-missing, Review) or retry the book refresh or journal processing. A notice
-that arrives again word for word replaces the earlier one and shows a repeat
-count. The × dismisses one stored notice and Clear all removes them all;
-derived entries go away when their cause does. Notices are kept in the
-desktop's local UI state without their progress bars and detail lines,
-which quote backend error text, so after a restart an entry keeps its title
-and body only. Notification text carries no amounts.
+(`ui-tauri/src/components/kb/NotificationCenter.tsx`, model in
+`ui-tauri/src/store/notifications.ts`) in three sections:
+
+- **Needs attention**: unresolved conditions, blockers first. Journals waiting
+  to be processed and the Review count come from `ui.review.badges`; sources
+  that could not refresh come from `ui.freshness.status`, book refreshes, and
+  background freshness events, tracked per source and folded into one row;
+  a failed book refresh, a failed journal run, a missing backend, and a
+  stopped background worker each have their own. Background freshness
+  events apply only to the book they name; the conditions' reads carry the
+  open book as `expected_scope`. A wallet, exchange,
+  or node sync that failed (per connection), BTCPay stores whose invoices did
+  not load, a price rebuild that failed, a source-of-funds case whose wallet
+  needs a full rescan, an all-books refresh that failed or left books
+  needing attention, unread evidence-watch changes, Touch ID unlock turned
+  off, a saved unlock method that could not be removed, and a backup restore
+  that failed or could not reset unlock methods (both outlast the lock the
+  restore triggers) are conditions too. Each row says what is wrong and
+  what it means, offers
+  one action that opens the exact place to fix it (that connection or
+  transaction, the settings row, the overview of all books) or repeats the
+  operation, and keeps diagnostics behind Show details. A condition clears
+  only when a successful read or run
+  for the same book and source shows it resolved; a failed read, a lock, or a
+  source still syncing leaves it in place. A failed journal run clears on any
+later run whose journal step reports success (journal processing, a book
+refresh, a background refresh, or a sync or import that processes
+journals), in the same book. Rows cannot be dismissed, and
+  re-reading the same state does not count as a repeat.
+- **Running**: work in progress with its progress: book refresh, journal
+  processing, a connection sync, a price rebuild, a report export, and an
+  all-books refresh. A running book refresh reopens the sync card; the
+  newest running job also drives the shell's progress line.
+- **Recent**: up to 30 finished results from this session, newest first,
+  each dismissible; Clear recent empties this section only. Results are the
+  outcomes of the jobs above, which can finish after the user has left the
+  page that started them; a restored backup lands here too.
+
+The badge counts Needs attention groups for the open book (a project's
+books are told apart by their workspace and profile ids). Conditions from
+another book stay in memory and return when that book is open again. Every
+action carries the book it came from and is checked against the open book
+when clicked: Retry repeats the original operation with its options (a
+rescan stays a rescan, journal processing keeps its auto-pair setting) and
+sends that book's ids as `expected_scope`, so the daemon refuses it if
+another book opened in the meantime. An action from another book, or one
+clicked while a book switch is in flight, only opens its review page.
+Book refreshes and journal runs started anywhere carry the open book's ids
+the same way. Actions name typed
+routes or operations from a closed list; anything else shows no button.
+Asking for a book refresh or journal run while one is running shows no
+notice; the menu's refresh reopens the sync card.
+
+Rows render from stable codes in the current language and privacy mode, not
+from stored sentences. Hide amounts withholds any free text (such as a backend
+error or a progress caption) that contains digits and masks wallet or source
+names that do; Hide all shows generic titles and no labels,
+file names, paths, or error text, while actions keep working. The list and
+the toasts are hidden while Kassiber is locked.
+
+Feedback on what the user just did (saved settings, attachments, edits,
+setup receipts, refused or failed foreground actions) never enters the
+list: errors in a form stay beside the form, and the rest are toasts. Short
+confirmations ("Book refreshed", "Journals processed") show as toasts
+at the bottom right: at most three, about four seconds for a success,
+paused while the pointer or focus is on them, dismissed with Escape or ×, and
+announced to screen readers. Equivalent confirmations replace each other.
+Toasts keep no history and are never sent to the operating system.
+
+Notifications live in memory only. Nothing of them (text, details, scope,
+timestamps, or actions) is written to the desktop's local UI state; a
+restart starts with an empty list and rebuilds conditions from the book after
+unlock. UI state version 5 removes notifications that older versions stored.
 
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
 launcher without administrator privileges. It writes a small managed launcher

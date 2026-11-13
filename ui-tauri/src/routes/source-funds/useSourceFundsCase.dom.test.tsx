@@ -8,6 +8,8 @@ import { act, renderHook } from "@testing-library/react";
 import { createContext } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetNotificationStore, useNotificationStore } from "@/store/notifications";
+
 import { useSourceFundsCase } from "./useSourceFundsCase";
 
 type Envelope<T> = { kind: string; data: T };
@@ -23,6 +25,16 @@ vi.hoisted(() => {
     removeItem: (key: string) => void storage.delete(key),
   });
 });
+
+// The book open when the work starts, as the app reads it from
+// `ui.profiles.snapshot`.
+const openBook = vi.hoisted(() => ({
+  scope: { book: "book-a", expected: { workspace_id: "ws", profile_id: "pf-a" } } as {
+    book: string;
+    expected: { workspace_id: string; profile_id: string };
+  } | null,
+}));
+vi.mock("@/lib/notificationScope", () => ({ activeBookScope: () => openBook.scope }));
 
 const state = vi.hoisted(() => ({
   preview: { data: undefined as Envelope<unknown> | undefined, isFetching: false },
@@ -120,5 +132,34 @@ describe("chain evidence assembles itself, once, and never under a draft", () =>
     hook.rerender();
     await act(async () => {});
     expect(assemble()).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("an assembly that needs a rescan", () => {
+  it("waits in the center, opens the first unconnected transaction, and clears once connected", async () => {
+    resetNotificationStore();
+    assemble().mockResolvedValue({
+      kind: "ui.source_funds.assemble",
+      data: { auto_reviewed: 0, awaiting_manual_review: 0, chain_attestation_missing: ["tx-old-1", "tx-old-2"] },
+    });
+    state.preview = { data: packet("tx-rescan", 0), isFetching: false };
+    const hook = renderHook(() => useSourceFundsCase("profile:rescan", "tx-rescan"));
+    await act(async () => {});
+    const [condition] = Object.values(useNotificationStore.getState().conditions);
+    expect(condition).toMatchObject({
+      code: "source-funds.rescan-needed",
+      scope: { book: "book-a", expected: { profile_id: "pf-a" }, source: "source-funds:tx-rescan" },
+      params: { count: 2 },
+      action: { type: "open-transaction", transactionId: "tx-old-1" },
+    });
+
+    assemble().mockResolvedValue({
+      kind: "ui.source_funds.assemble",
+      data: { auto_reviewed: 2, awaiting_manual_review: 0, chain_attestation_missing: [] },
+    });
+    await act(async () => {
+      await hook.result.current.runAssembly();
+    });
+    expect(useNotificationStore.getState().conditions).toEqual({});
   });
 });

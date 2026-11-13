@@ -63,7 +63,7 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
   };
 });
 
-import { useUiStore } from "@/store/ui";
+import { useFeedbackStore } from "@/lib/feedback";
 
 import { AcceptCoarsePricesDialog } from "./QuarantineAcceptPrices";
 
@@ -109,7 +109,7 @@ describe("accepting approximate prices", () => {
     expect(typeof apply.args.idempotency_key).toBe("string");
     expect(onClose).toHaveBeenCalled();
     expect(
-      useUiStore.getState().notifications.some((entry) => entry.title === "3 approximate prices accepted"),
+      useFeedbackStore.getState().items.some((entry) => entry.title === "3 approximate prices accepted"),
     ).toBe(true);
   });
 

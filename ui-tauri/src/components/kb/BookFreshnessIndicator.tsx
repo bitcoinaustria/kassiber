@@ -25,9 +25,11 @@ const dotClassName: Record<BookFreshnessState["kind"], string> = {
 export function BookFreshnessIndicator({
   daemonEnabled,
   needsJournals,
+  refreshFailed,
 }: {
   daemonEnabled: boolean;
   needsJournals: boolean;
+  refreshFailed: boolean;
 }) {
   const dataMode = useUiStore((state) => state.dataMode);
   const syncs =
@@ -38,13 +40,6 @@ export function BookFreshnessIndicator({
   });
   const cycling = useBookRefreshStore((state) => state.cycling);
   const lastChange = useBookRefreshStore((state) => state.lastChange);
-  const refreshFailed = useUiStore(
-    (state) =>
-      state.activeMaintenanceProgress?.state === "failed" ||
-      state.notifications.some(
-        (item) => item.dedupeKey === "background-freshness" && item.tone !== "success",
-      ),
-  );
   const hideSensitive = useSensitive("amount");
   if (!daemonEnabled) return null;
   return (

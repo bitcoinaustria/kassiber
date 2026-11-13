@@ -59,10 +59,7 @@ export function ReviewSurface() {
     offset: 0,
     scope: "attention",
   });
-  const { runJournalProcessing, isProcessingJournals } = useJournalProcessingAction({
-    notifyStart: true,
-    notifyAlreadyRunning: true,
-  });
+  const { runJournalProcessing, isProcessingJournals } = useJournalProcessingAction();
 
   const snapshot = React.useMemo(
     () =>

@@ -15,6 +15,7 @@ import {
   type LogLevelFilter,
 } from "@/components/kb/LogsTableControls";
 import { Badge } from "@/components/ui/badge";
+import { showFeedback } from "@/lib/feedback";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -63,7 +64,6 @@ import {
 import { saveLogsExportAs } from "@/lib/saveText";
 import { cn } from "@/lib/utils";
 import { currentUiLocale } from "@/lib/localeFormat";
-import { useUiStore } from "@/store/ui";
 
 const LEVEL_CLASS: Record<AppLogLevel, string> = {
   trace: "border-muted-foreground/30 bg-muted text-muted-foreground",
@@ -80,7 +80,6 @@ const SEARCH_INPUT_ID = "kb-logs-search";
 
 export function Logs() {
   const { t } = useTranslation(["review", "nav", "common"]);
-  const addNotification = useUiStore((s) => s.addNotification);
   const records = useAppLogRecords();
   const [levelFilter, setLevelFilter] = React.useState<LogLevelFilter>("all");
   const [redacted, setRedacted] = React.useState(true);
@@ -239,9 +238,10 @@ export function Logs() {
       }
       triggerBrowserDownload(filename, contents, contentType(format));
     } catch (error) {
-      addNotification({
+      showFeedback({
         title: t("logs.exportFailedTitle"),
-        body: error instanceof Error ? error.message : String(error),
+        description: error instanceof Error ? error.message : String(error),
+        descriptionPrivacy: "free-text",
         tone: "error",
       });
     }
@@ -250,9 +250,10 @@ export function Logs() {
   const exportSupportBundle = async () => {
     const description = supportIssueDescription.trim();
     if (!description) {
-      addNotification({
+      showFeedback({
         title: t("logs.support.notExportedTitle"),
-        body: t("logs.support.notExportedBody"),
+        description: t("logs.support.notExportedBody"),
+        descriptionPrivacy: "safe",
         tone: "warning",
       });
       return;
@@ -284,9 +285,10 @@ export function Logs() {
       triggerBrowserDownload(filename, contents, "application/x-ndjson");
       setSupportBundleOpen(false);
     } catch (error) {
-      addNotification({
+      showFeedback({
         title: t("logs.support.exportFailedTitle"),
-        body: error instanceof Error ? error.message : String(error),
+        description: error instanceof Error ? error.message : String(error),
+        descriptionPrivacy: "free-text",
         tone: "error",
       });
     }
@@ -299,15 +301,17 @@ export function Logs() {
       .join("\n");
     try {
       await navigator.clipboard.writeText(text);
-      addNotification({
+      showFeedback({
         title: t("logs.copyExcerptTitle"),
-        body: t("logs.copyExcerptBody", { count: Math.min(filteredRecords.length, 200) }),
+        description: t("logs.copyExcerptBody", { count: Math.min(filteredRecords.length, 200) }),
+        descriptionPrivacy: "safe",
         tone: "success",
       });
     } catch (error) {
-      addNotification({
+      showFeedback({
         title: t("logs.copyFailedTitle"),
-        body: error instanceof Error ? error.message : String(error),
+        description: error instanceof Error ? error.message : String(error),
+        descriptionPrivacy: "free-text",
         tone: "error",
       });
     }

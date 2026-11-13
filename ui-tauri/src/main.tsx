@@ -15,6 +15,7 @@ import { installLanguageBridge } from "@/i18n/languageBridge";
 import { installGlobalErrorCapture } from "@/lib/globalErrorCapture";
 import { clearBookChange } from "@/daemon/bookRefresh";
 import { useUiStore } from "@/store/ui";
+import { registerNotificationQueryClient } from "@/lib/notificationScope";
 import { router } from "./routeTree";
 import "./styles/globals.css";
 
@@ -51,6 +52,9 @@ useUiStore.subscribe((state, previous) => {
   }
 });
 
+// Senders bind their notifications to the open book from this client's
+// cached `ui.profiles.snapshot`.
+registerNotificationQueryClient(queryClient);
 installGlobalErrorCapture();
 // Apply the persisted language and keep i18next in sync with the UI store.
 installLanguageBridge();

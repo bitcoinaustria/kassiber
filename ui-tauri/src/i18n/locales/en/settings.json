@@ -180,14 +180,11 @@
     "notifyBody": "A desktop-only passphrase was saved in macOS Keychain for Touch ID unlock."
   },
   "touchId": {
-    "removedTitle": "Touch ID passphrase was not removed",
-    "removedBody": "macOS Keychain did not remove the saved passphrase.",
-    "disabledTitle": "Touch ID unlock was disabled",
+    "removeFailedBody": "macOS Keychain did not remove the saved passphrase.",
     "disabledBody": "The database passphrase changed, but macOS Keychain did not accept the updated desktop Touch ID passphrase.",
     "forgetAllTitle": "Saved unlock methods removed",
     "forgetAllBody": "Desktop Touch ID and CLI remembered unlock were removed for these books.",
     "forgetAllConfirm": "Remove every saved unlock method for these books? You will need the database passphrase next time.",
-    "forgetAllPartialTitle": "Some saved unlock methods remain",
     "forgetAllCredentialWarning": "The OS credential store did not confirm that every saved entry was removed."
   },
   "resetWelcome": {
@@ -288,14 +285,8 @@
     "importError": "Kraken import failed.",
     "openLinkErrorTitle": "Could not open link",
     "openLinkErrorBody": "Could not open the link in the default browser.",
-    "rebuildStartedTitle": "Pricing cache rebuild started",
-    "rebuildStartedBody": "Kassiber is clearing provider-derived prices, fetching fresh {{provider}} market rates for {{pair}}, and reprocessing journals.",
-    "rebuildingProgressLabel": "Rebuilding",
-    "rebuiltBlockedTitle": "Pricing cache rebuilt with journal blocker",
-    "rebuiltTitle": "Pricing cache rebuilt",
     "rebuiltBody": "{{cleared}} cached transaction prices cleared; {{fetched}} rate rows fetched.{{blocker}}",
     "rebuiltBodyFallback": "{{provider}} pricing cache was rebuilt.",
-    "rebuildFailedTitle": "Pricing cache rebuild failed",
     "rebuildFailedError": "Could not rebuild pricing cache.",
     "autoEnabledTitle": "Live minute-rate lookups enabled",
     "autoDisabledTitle": "Live minute-rate lookups disabled",
@@ -1052,8 +1043,6 @@
     "replace": "Replace container and lock",
     "cancel": "Cancel",
     "secretWarning": "Some provider credentials cannot be restored. Re-enter them in Settings after unlocking.",
-    "restored": "Backup restored. Unlock with the database passphrase from the backup.",
-    "unlockWarning": "Restore completed, but unlock settings could not be reset. Use the backup database passphrase and review remembered unlock settings.",
     "failed": "Backup action failed",
     "desktopOnly": "Backup export requires the desktop app’s native save dialog."
   },

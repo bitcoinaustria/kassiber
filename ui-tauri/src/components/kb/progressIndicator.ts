@@ -1,4 +1,5 @@
-import type { ActiveMaintenanceProgress, AppNotification } from "@/store/ui";
+import type { JobEntry } from "@/store/notifications";
+import type { ActiveMaintenanceProgress } from "@/store/ui";
 
 export interface RouteProgressState {
   indeterminate: boolean;
@@ -21,24 +22,30 @@ function compactProgressTitle(title: string) {
     .trim();
 }
 
-export function routeProgressFromNotifications(
-  notifications: readonly AppNotification[],
+/**
+ * The shell's progress line for the newest running job in the notification
+ * center. `describe` gives the job's title and phase as the center shows
+ * them in the current language and privacy mode.
+ */
+export function routeProgressFromJobs(
+  jobs: readonly JobEntry[],
+  describe: (job: JobEntry) => { title: string; label?: string },
 ): RouteProgressState | null {
-  const notification = notifications.find((item) => item.progress);
-  if (!notification?.progress) return null;
-  const title = compactProgressTitle(notification.title);
-  const label = notification.progress.label?.trim();
+  const job = [...jobs].sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+  if (!job) return null;
+  const { title, label } = describe(job);
   const displayLabel = (() => {
-    if (!label) return title || "In progress";
-    if (!title) return label;
-    if (title.toLowerCase() === label.toLowerCase()) return title;
-    return `${title}: ${label}`;
+    const phase = label?.trim();
+    if (!phase) return title || "In progress";
+    if (!title) return phase;
+    if (title.toLowerCase() === phase.toLowerCase()) return title;
+    return `${title}: ${phase}`;
   })();
 
   return {
-    indeterminate: Boolean(notification.progress.indeterminate),
+    indeterminate: Boolean(job.progress.indeterminate),
     label: displayLabel,
-    value: notification.progress.value,
+    value: job.progress.value,
   };
 }
 
@@ -59,10 +66,4 @@ export function routeProgressFromActiveMaintenance(
     label: displayLabel,
     value: progress.progress.value,
   };
-}
-
-export function routeProgressLabelFromNotifications(
-  notifications: readonly AppNotification[],
-) {
-  return routeProgressFromNotifications(notifications)?.label ?? null;
 }

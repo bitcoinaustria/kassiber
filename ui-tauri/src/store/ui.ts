@@ -46,47 +46,6 @@ export interface NotificationProgress {
   label?: string;
 }
 
-/**
- * Shell commands a notification button may run. A closed list rather than a
- * callback: notifications are persisted, so an action has to be plain data
- * that the bell resolves when it renders.
- */
-export const NOTIFICATION_COMMANDS = ["process-journals", "refresh-book"] as const;
-export type NotificationCommand = (typeof NOTIFICATION_COMMANDS)[number];
-
-/**
- * One button on a notification: a route to open or a shell command to run.
- * `label` is localized by the producer, like the title and body.
- */
-export interface NotificationAction {
-  label: string;
-  target?: string;
-  command?: NotificationCommand;
-}
-
-export interface AppNotification {
-  id: string;
-  title: string;
-  body: string;
-  tone: NotificationTone;
-  dedupeKey?: string;
-  progress?: NotificationProgress;
-  /**
-   * Extra lines shown when the entry is expanded, such as which sources
-   * failed. Kept in memory only: they quote error text from backends, so
-   * `uiStatePartialForStorage` drops them before `kb.ui` reaches disk.
-   */
-  details?: string[];
-  action?: NotificationAction;
-  /** How many times the same notification arrived word for word (2 or more). */
-  repeatCount?: number;
-  createdAt: string;
-  // Optional language-independent click target (an app route path). When set,
-  // the header notification routes here instead of guessing from the (often
-  // localized) title, so a translated title still routes correctly.
-  target?: string;
-}
-
 export interface ActiveMaintenanceProgress {
   id: string;
   title: string;
@@ -412,7 +371,6 @@ export interface UiState {
    */
   settingsSection: SettingsSectionId | null;
   daemonSession: number;
-  notifications: AppNotification[];
   activeMaintenanceProgress: ActiveMaintenanceProgress | null;
   /**
    * Book keys (see `bookIdentityKey`) whose initial sync has completed at least
@@ -503,13 +461,6 @@ export interface UiState {
     profile: AiToolProfile | null,
   ) => void;
   bumpDaemonSession: () => void;
-  addNotification: (
-    notification: Omit<AppNotification, "id" | "createdAt">,
-  ) => string;
-  updateNotification: (
-    id: string,
-    patch: Partial<Omit<AppNotification, "id" | "createdAt">>,
-  ) => void;
   setActiveMaintenanceProgress: (
     progress: ActiveMaintenanceProgress | null,
   ) => void;
@@ -517,8 +468,6 @@ export interface UiState {
   markFirstSyncDone: (bookKey: string) => void;
   dismissFirstSyncCard: (bookKey: string) => void;
   reopenFirstSyncCard: (bookKey: string) => void;
-  clearNotification: (id: string) => void;
-  clearNotifications: () => void;
   setBookChartPeriod: (
     bookKey: string,
     period: BookChartPeriod,
@@ -589,51 +538,6 @@ export function bookIdentityKey(identity: Identity | null): string | null {
     .map((part) => part?.trim())
     .filter((part): part is string => Boolean(part));
   return scope.length > 0 ? `id:${scope.join("/")}` : null;
-}
-
-/**
- * What of a notification may reach `kb.ui` on disk. Progress is transient,
- * and detail lines quote backend error text (endpoints, server messages), so
- * both stay in memory; after a restart the entry keeps its title and body.
- */
-function stripNotificationProgress(
-  notifications: AppNotification[] | undefined,
-): AppNotification[] {
-  return (notifications ?? []).map((notification) => {
-    const clone = { ...notification };
-    delete clone.progress;
-    delete clone.details;
-    return clone;
-  });
-}
-
-const MAX_NOTIFICATIONS = 12;
-
-function sameNotificationText(
-  a: Pick<AppNotification, "title" | "body" | "tone">,
-  b: Pick<AppNotification, "title" | "body" | "tone">,
-): boolean {
-  return a.title === b.title && a.body === b.body && a.tone === b.tone;
-}
-
-/**
- * The stored entry a new notification replaces. A `dedupeKey` names it
- * outright. Without one, an entry that repeats word for word (and is not a
- * running job) folds into the earlier one, so a failure that keeps happening
- * stays one row with a repeat count instead of filling the list.
- */
-function replacedNotification(
-  notifications: readonly AppNotification[],
-  next: Omit<AppNotification, "id" | "createdAt">,
-): AppNotification | undefined {
-  if (next.dedupeKey) {
-    return notifications.find((item) => item.dedupeKey === next.dedupeKey);
-  }
-  if (next.progress) return undefined;
-  return notifications.find(
-    (item) =>
-      !item.dedupeKey && !item.progress && sameNotificationText(item, next),
-  );
 }
 
 // A range the picker no longer offers lands on the closest one it does,
@@ -727,7 +631,8 @@ export function uiStatePartialForStorage(state: UiState) {
     assistantChatPermissionModes: state.assistantChatPermissionModes,
     assistantProviderToolProfiles: state.assistantProviderToolProfiles,
     daemonSession: state.daemonSession,
-    notifications: stripNotificationProgress(state.notifications),
+    // Notifications are deliberately absent: their text, details, scope, and
+    // actions stay in RAM (see `store/notifications.ts`).
     firstSyncDone: state.firstSyncDone,
     bookChartPeriods: state.bookChartPeriods,
     tableSorts: state.tableSorts,
@@ -735,7 +640,7 @@ export function uiStatePartialForStorage(state: UiState) {
   };
 }
 
-export const UI_STATE_VERSION = 4;
+export const UI_STATE_VERSION = 5;
 
 /**
  * v1: `developerToolsEnabled` stopped meaning "show the Logs page" and became
@@ -764,6 +669,10 @@ export function migrateUiState(
     ...dock,
     ...(version >= 3 ? {} : migrateHideSensitiveToPrivacyMode(restored)),
     ...(version >= 4 ? {} : migrateClosedBarDefault({ ...restored, ...dock })),
+    // v5: notifications left `kb.ui`. Older blobs carry titles, bodies, and
+    // executable actions; drop them unread. Zustand rewrites the blob after a
+    // migration, so the payload leaves the disk too.
+    ...(version >= 5 ? {} : { notifications: undefined }),
   } as ReturnType<typeof uiStatePartialForStorage>;
 }
 
@@ -854,7 +763,6 @@ export const useUiStore = create<UiState>()(
       assistantPanelRevealRequest: 0,
       settingsSection: null,
       daemonSession: 0,
-      notifications: [],
       activeMaintenanceProgress: null,
       firstSyncDone: {},
       bookChartPeriods: {},
@@ -1052,59 +960,6 @@ export const useUiStore = create<UiState>()(
         })),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
-      addNotification: (notification) => {
-        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        let existingId: string | null = null;
-        set((state) => ({
-          notifications: (() => {
-            const createdAt = new Date().toISOString();
-            const existing = replacedNotification(
-              state.notifications,
-              notification,
-            );
-            if (existing) {
-              existingId = existing.id;
-              // A running job re-announcing itself is the same run, not a
-              // repeat of it, so it never counts up.
-              const repeated =
-                !notification.progress &&
-                sameNotificationText(existing, notification);
-              return [
-                {
-                  ...existing,
-                  ...notification,
-                  // Fields the new notification leaves out are cleared, not
-                  // inherited: a finished run must not keep the previous
-                  // run's progress bar, detail lines, or button.
-                  progress: notification.progress,
-                  details: notification.details,
-                  action: notification.action,
-                  repeatCount: repeated
-                    ? (existing.repeatCount ?? 1) + 1
-                    : undefined,
-                  createdAt,
-                },
-                ...state.notifications.filter((item) => item.id !== existing.id),
-              ].slice(0, MAX_NOTIFICATIONS);
-            }
-            return [
-              {
-                ...notification,
-                id,
-                createdAt,
-              },
-              ...state.notifications,
-            ].slice(0, MAX_NOTIFICATIONS);
-          })(),
-        }));
-        return existingId ?? id;
-      },
-      updateNotification: (id, patch) =>
-        set((state) => ({
-          notifications: state.notifications.map((notification) =>
-            notification.id === id ? { ...notification, ...patch } : notification,
-          ),
-        })),
       setActiveMaintenanceProgress: (activeMaintenanceProgress) =>
         set({ activeMaintenanceProgress }),
       clearActiveMaintenanceProgress: (id) =>
@@ -1138,13 +993,6 @@ export const useUiStore = create<UiState>()(
           delete next[bookKey];
           return { firstSyncCardDismissed: next };
         }),
-      clearNotification: (id) =>
-        set((state) => ({
-          notifications: state.notifications.filter(
-            (notification) => notification.id !== id,
-          ),
-        })),
-      clearNotifications: () => set({ notifications: [] }),
       setBookChartPeriod: (bookKey, period) =>
         set((state) =>
           state.bookChartPeriods[bookKey] === period
@@ -1271,9 +1119,6 @@ export const useUiStore = create<UiState>()(
           assistantPanelFocusRequest: 0,
           assistantColumnClaimed: false,
           assistantPanelRevealRequest: 0,
-          notifications: stripNotificationProgress(
-            restored.notifications ?? current.notifications,
-          ),
           firstSyncDone: restored.firstSyncDone ?? current.firstSyncDone,
           bookChartPeriods: normalizeBookChartPeriods(
             restored.bookChartPeriods ??

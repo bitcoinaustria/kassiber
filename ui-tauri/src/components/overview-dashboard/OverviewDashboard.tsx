@@ -6,7 +6,9 @@ import type { RateLatestData } from "@/components/kb/settings/SettingsModel";
 import { refreshDaemonQueries, useDaemonMutation } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
+import i18n from "@/i18n";
 import { useCurrency } from "@/lib/currency";
+import { showFeedback } from "@/lib/feedback";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
@@ -40,8 +42,6 @@ export const OverviewDashboard = ({
   const queryClient = useQueryClient();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
-  const addNotification = useUiStore((s) => s.addNotification);
-  const updateNotification = useUiStore((s) => s.updateNotification);
   const setActiveMaintenanceProgress = useUiStore(
     (s) => s.setActiveMaintenanceProgress,
   );
@@ -51,10 +51,9 @@ export const OverviewDashboard = ({
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
   const { runJournalProcessing, isProcessingJournals } =
-    useJournalProcessingAction({ notifyStart: true });
+    useJournalProcessingAction();
   const refreshMarketRate = useDaemonMutation<RateLatestData>("ui.rates.latest");
-  const marketRateNoticeRef = React.useRef<string | null>(null);
-  const marketRateRefreshInFlightRef = React.useRef(false);
+    const marketRateRefreshInFlightRef = React.useRef(false);
   const { detailSheet, openTransactionDetail } = useOverviewTransactionDetail({
     snapshot,
     hideSensitive,
@@ -87,15 +86,7 @@ export const OverviewDashboard = ({
       startedAt,
       updatedAt: startedAt,
     });
-    marketRateNoticeRef.current = addNotification({
-      title: "BTC price refresh started",
-      body: pair
-        ? `Fetching the latest ${pair} quote.`
-        : "Fetching the latest BTC quote.",
-      tone: "warning",
-      dedupeKey: "market-rate-refresh",
-      progress: { indeterminate: true, label: "Refreshing" },
-    });
+    // The shell's progress line shows it running; only the outcome is news.
     refreshMarketRate.mutate(
       {
         ...(pair ? { pair } : {}),
@@ -107,43 +98,24 @@ export const OverviewDashboard = ({
               (total, row) => total + Number(row.samples ?? 0),
               0,
             ) ?? 0;
-          const latestPair = envelope.data?.marketRate?.pair ?? pair;
-          const body = rows
-            ? `${latestPair ?? "BTC rate"} updated from the latest market sample.`
-            : "No new market sample was returned; cached rate kept.";
-          const notification = {
-            title: "BTC price refreshed",
-            body,
-            tone: "success",
-            dedupeKey: "market-rate-refresh",
-            progress: undefined,
-          } as const;
-          if (marketRateNoticeRef.current) {
-            updateNotification(marketRateNoticeRef.current, notification);
-            marketRateNoticeRef.current = null;
-            clearActiveMaintenanceProgress("market-rate-refresh");
-            return;
-          }
-          addNotification(notification);
+          showFeedback({
+            title: rows
+              ? i18n.t("chrome:notifications.feedback.btcPriceRefreshed")
+              : i18n.t("chrome:notifications.feedback.btcPriceUnchanged"),
+            tone: rows ? "success" : "info",
+            key: "market-rate-refresh",
+          });
           clearActiveMaintenanceProgress("market-rate-refresh");
         },
         onError: (error) => {
-          const body =
-            error instanceof Error ? error.message : "Could not refresh BTC price.";
-          const notification = {
-            title: "BTC price refresh failed",
-            body,
+          // The quote keeps its cached value; the error is free text.
+          showFeedback({
+            title: i18n.t("chrome:notifications.feedback.btcPriceFailed"),
+            description: error instanceof Error ? error.message : undefined,
+            descriptionPrivacy: "free-text",
             tone: "error",
-            dedupeKey: "market-rate-refresh",
-            progress: undefined,
-          } as const;
-          if (marketRateNoticeRef.current) {
-            updateNotification(marketRateNoticeRef.current, notification);
-            marketRateNoticeRef.current = null;
-            clearActiveMaintenanceProgress("market-rate-refresh");
-            return;
-          }
-          addNotification(notification);
+            key: "market-rate-refresh",
+          });
           clearActiveMaintenanceProgress("market-rate-refresh");
         },
         onSettled: () => {
@@ -153,13 +125,11 @@ export const OverviewDashboard = ({
       },
     );
   }, [
-    addNotification,
     clearActiveMaintenanceProgress,
     queryClient,
     refreshMarketRate,
     setActiveMaintenanceProgress,
     snapshot.marketRate?.pair,
-    updateNotification,
   ]);
   const isRefreshingOverview = isSyncing || isProcessingJournals;
   const overviewBusy =

@@ -21,12 +21,24 @@ function freshnessRunData(value: unknown): FreshnessRunData | null {
         id: typeof job.id === "string" ? job.id : undefined,
         job_type:
           typeof job.job_type === "string" ? job.job_type : undefined,
+        source_key:
+          typeof job.source_key === "string" ? job.source_key : undefined,
         source_label:
           typeof job.source_label === "string" ? job.source_label : undefined,
         source_type:
           typeof job.source_type === "string" ? job.source_type : undefined,
         status: typeof job.status === "string" ? job.status : undefined,
         result: isRecord(job.result) ? job.result : undefined,
+        error: isRecord(job.error)
+          ? {
+              code: typeof job.error.code === "string" ? job.error.code : undefined,
+              message:
+                typeof job.error.message === "string"
+                  ? job.error.message
+                  : undefined,
+              hint: typeof job.error.hint === "string" ? job.error.hint : undefined,
+            }
+          : undefined,
       }))
     : [];
   const sources = Array.isArray(value.sources)
@@ -39,8 +51,12 @@ function freshnessRunData(value: unknown): FreshnessRunData | null {
           typeof source.source_label === "string" ? source.source_label : "",
         status: typeof source.status === "string" ? source.status : "",
         blocking_reports: source.blocking_reports === true,
+        last_error_message:
+          typeof source.last_error_message === "string"
+            ? source.last_error_message
+            : null,
       }))
-    : [];
+    : undefined;
   const summary = isRecord(value.summary)
     ? {
         failed:
@@ -57,7 +73,56 @@ function freshnessRunData(value: unknown): FreshnessRunData | null {
             : undefined,
       }
     : undefined;
-  return { completed, sources, summary };
+  return { completed, ...(sources ? { sources } : {}), summary };
+}
+
+/**
+ * A daemon freshness event with what the notification center needs.
+ * `profileId` is the book the work ran for (`data.profile.id`); an event
+ * without one cannot be attributed to a book.
+ */
+export type DaemonFreshnessEvent =
+  | {
+      kind: "background";
+      data: FreshnessRunData;
+      needsAttention: boolean;
+      profileId?: string;
+    }
+  | { kind: "worker-error"; code?: string; message?: string; profileId?: string };
+
+function eventProfileId(data: unknown): string | undefined {
+  if (!isRecord(data) || !isRecord(data.profile)) return undefined;
+  const id = data.profile.id;
+  return typeof id === "string" && id ? id : undefined;
+}
+
+/**
+ * Parse an unsolicited freshness event. `background` carries the run and the
+ * snapshot it ended with; `worker-error` is a worker that could not run.
+ * Anything else (a request-bound record, an idle worker) is null.
+ */
+export function parseDaemonFreshnessEvent(
+  value: unknown,
+): DaemonFreshnessEvent | null {
+  const signal = classifyDaemonFreshnessEvent(value);
+  if (!signal || !isRecord(value)) return null;
+  if (signal === "worker-error") {
+    const data = isRecord(value.data) ? value.data : {};
+    return {
+      kind: "worker-error",
+      code: typeof data.code === "string" ? data.code : undefined,
+      message: typeof data.message === "string" ? data.message : undefined,
+      profileId: eventProfileId(data),
+    };
+  }
+  const data = freshnessRunData(value.data);
+  if (!data) return null;
+  return {
+    kind: "background",
+    data,
+    needsAttention: signal === "needs-attention",
+    profileId: eventProfileId(value.data),
+  };
 }
 
 export function classifyDaemonFreshnessEvent(

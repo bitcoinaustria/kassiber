@@ -39,7 +39,15 @@ import {
   type Currency,
   useCurrency,
 } from "@/lib/currency";
+import { showFeedback } from "@/lib/feedback";
 import { normalizeFiatCompleteness } from "@/lib/fiatCompleteness";
+import {
+  endWorkspaceRefresh,
+  recordWorkspaceRefreshed,
+  recordWorkspaceRefreshFailed,
+  startWorkspaceRefresh,
+  updateWorkspaceRefresh,
+} from "@/lib/workspaceNotifications";
 import {
   pageHeaderActionClassName,
   pageHeaderActionsClassName,
@@ -270,34 +278,30 @@ export function BirdsEyeView({
   const switchProfile = useDaemonMutation<{ activeProfileId: string }>(
     "ui.profiles.switch",
   );
-  const addNotification = useUiStore((state) => state.addNotification);
-  const updateNotification = useUiStore((state) => state.updateNotification);
   const hideSensitive = useUiStore((state) => state.hideSensitive);
   const currency = useCurrency();
   const [progress, setProgress] = React.useState<WorkspaceFreshnessProgress[]>([]);
   const [refreshSummary, setRefreshSummary] =
     React.useState<WorkspaceFreshnessRun["summary"] | null>(null);
-  const noticeRef = React.useRef<string | null>(null);
+  // This run's job in the center, for its progress and its end.
+  const refreshJobId = React.useRef<string | null>(null);
   const refreshWorkspace = useDaemonStreamMutation<
     WorkspaceFreshnessRun,
     WorkspaceFreshnessProgress
   >("ui.workspace.freshness.run", {
     onProgress: (record) => {
       setProgress((current) => [record, ...current].slice(0, 8));
-      if (!noticeRef.current) return;
       const book = record.profile?.label ?? to("birdsEye.refreshPanel.fallbackBook");
-      const phase = formatPhase(record.phase);
-      updateNotification(noticeRef.current, {
-        body: `${book}: ${phase}`,
-        progress: {
-          indeterminate: !hasProgressCounter(record),
+      if (!refreshJobId.current) return;
+      updateWorkspaceRefresh(refreshJobId.current, {
+        indeterminate: !hasProgressCounter(record),
+        // The label names the book; the center drops it under Hide all.
+        label: `${book}: ${formatWorkspaceProgressLabel(
+          record,
           // loose translator
-          label: formatWorkspaceProgressLabel(
-            record,
-            to as (key: string, options?: Record<string, unknown>) => string,
-          ),
-          value: workspaceProgressValue(record),
-        },
+          to as (key: string, options?: Record<string, unknown>) => string,
+        )}`,
+        value: workspaceProgressValue(record),
       });
     },
   });
@@ -336,81 +340,30 @@ export function BirdsEyeView({
     if (!workspaceId || refreshWorkspace.isPending) return;
     setProgress([]);
     setRefreshSummary(null);
-    noticeRef.current = addNotification({
-      title: to("birdsEye.toast.refreshStartedTitle"),
-      body: to("birdsEye.toast.refreshStartedBody"),
-      tone: "warning",
-      dedupeKey: `workspace-refresh-${workspaceId}`,
-      progress: { indeterminate: true, label: to("birdsEye.toast.starting") },
-      // Clear any target left on the deduped notification by a prior run.
-      target: undefined,
-    });
-    refreshWorkspace.mutate(
-      { workspace_id: workspaceId, journals: true, run: true },
-      {
-        onSuccess: (envelope) => {
-          setRefreshSummary(envelope.data?.summary ?? null);
-          const summary = envelope.data?.summary;
-          const needsAttention = Boolean(
-            summary && (summary.errors > 0 || summary.reports_blocked > 0),
-          );
-          const notification = {
-            title: needsAttention
-              ? to("birdsEye.toast.refreshNeedsAttentionTitle")
-              : to("birdsEye.toast.refreshFinishedTitle"),
-            body: summary
-              ? to("birdsEye.toast.refreshFinishedBody", {
-                  synced: summary.synced_books,
-                  total: summary.books,
-                  blocked: summary.reports_blocked,
-                })
-              : to("birdsEye.toast.refreshDoneBody"),
-            tone: needsAttention ? "warning" : "success",
-            dedupeKey: `workspace-refresh-${workspaceId}`,
-            progress: undefined,
-            // Route by an explicit, language-independent target: a warning-tone
-            // "needs attention" title isn't recognized by the English keyword
-            // router (and warning tone has no error fallback), so a localized
-            // title would otherwise be non-clickable.
-            target: needsAttention ? "/logs" : undefined,
-          } as const;
-          if (noticeRef.current) {
-            updateNotification(noticeRef.current, notification);
-            noticeRef.current = null;
-          } else {
-            addNotification(notification);
-          }
-        },
-        onError: (refreshError) => {
-          const notification = {
-            title: to("birdsEye.toast.refreshFailedTitle"),
-            body:
-              refreshError instanceof Error
-                ? refreshError.message
-                : to("birdsEye.toast.refreshFailedBody"),
-            tone: "error",
-            dedupeKey: `workspace-refresh-${workspaceId}`,
-            progress: undefined,
-            // Failures go to the logs (settings when dev tools are off); set it
-            // explicitly so a stale target from a prior run can't bypass that.
-            target: "/logs",
-          } as const;
-          if (noticeRef.current) {
-            updateNotification(noticeRef.current, notification);
-            noticeRef.current = null;
-          } else {
-            addNotification(notification);
-          }
-        },
-      },
-    );
-  }, [
-    addNotification,
-    refreshWorkspace,
-    to,
-    updateNotification,
-    workspaceId,
-  ]);
+    const jobId = startWorkspaceRefresh(workspaceId);
+    refreshJobId.current = jobId;
+    // Awaited rather than per-call callbacks: those stop once the overview
+    // unmounts, which would leave the job running and the outcome unfiled.
+    void (async () => {
+      try {
+        const envelope = await refreshWorkspace.mutateAsync({
+          workspace_id: workspaceId,
+          journals: true,
+          run: true,
+        });
+        setRefreshSummary(envelope.data?.summary ?? null);
+        recordWorkspaceRefreshed(workspaceId, envelope.data?.summary ?? null);
+      } catch (refreshError) {
+        recordWorkspaceRefreshFailed(
+          workspaceId,
+          refreshError instanceof Error ? refreshError.message : undefined,
+        );
+      } finally {
+        endWorkspaceRefresh(jobId);
+        if (refreshJobId.current === jobId) refreshJobId.current = null;
+      }
+    })();
+  }, [refreshWorkspace, workspaceId]);
 
   const openBookRoute = React.useCallback(
     (profileId: string, route: BookRoute) => {
@@ -422,30 +375,32 @@ export function BirdsEyeView({
       void switchProfile
         .mutateAsync({ profile_id: profileId })
         .then(() => {
-          addNotification({
+          showFeedback({
             title: t("openBook.title"),
-            body: t("openBook.body", {
+            description: t("openBook.body", {
               book: book?.profile.label ?? t("openBook.fallbackBook"),
               page,
             }),
+            descriptionPrivacy: "free-text",
             tone: "info",
-            dedupeKey: `birds-eye-active-book-${profileId}`,
+            key: "birds-eye-active-book",
           });
           return navigate({ to: route });
         })
         .catch((switchError: unknown) => {
-          addNotification({
+          showFeedback({
             title: to("birdsEye.toast.couldNotOpenBookTitle"),
-            body:
+            description:
               switchError instanceof Error
                 ? switchError.message
                 : to("birdsEye.toast.couldNotOpenBookBody"),
+            descriptionPrivacy: "free-text",
             tone: "error",
-            dedupeKey: `birds-eye-open-book-${profileId}`,
+            key: "birds-eye-open-book",
           });
         });
     },
-    [addNotification, books, navigate, switchProfile, t, to],
+    [books, navigate, switchProfile, t, to],
   );
 
   const openWorkspaceTransaction = React.useCallback(
@@ -454,13 +409,14 @@ export function BirdsEyeView({
       void switchProfile
         .mutateAsync({ profile_id: transaction.profileId })
         .then(() => {
-          addNotification({
+          showFeedback({
             title: to("birdsEye.toast.activeBookChangedTitle"),
-            body: to("birdsEye.toast.transactionBody", {
+            description: to("birdsEye.toast.transactionBody", {
               book: transaction.scopeLabel ?? to("birdsEye.toast.fallbackBook"),
             }),
+            descriptionPrivacy: "free-text",
             tone: "info",
-            dedupeKey: `birds-eye-active-transaction-${transaction.profileId}`,
+            key: "birds-eye-active-book",
           });
           return navigate({
             to: "/transactions",
@@ -468,18 +424,19 @@ export function BirdsEyeView({
           });
         })
         .catch((switchError: unknown) => {
-          addNotification({
+          showFeedback({
             title: to("birdsEye.toast.couldNotOpenTransactionTitle"),
-            body:
+            description:
               switchError instanceof Error
                 ? switchError.message
                 : to("birdsEye.toast.couldNotOpenTransactionBody"),
+            descriptionPrivacy: "free-text",
             tone: "error",
-            dedupeKey: `birds-eye-open-transaction-${transaction.id}`,
+            key: "birds-eye-open-transaction",
           });
         });
     },
-    [addNotification, navigate, switchProfile, to],
+    [navigate, switchProfile, to],
   );
 
   const openChartTransaction = React.useCallback(

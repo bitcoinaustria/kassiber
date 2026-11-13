@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { ReviewTaxDeltaView } from "@/components/ai/ReviewWorkflowCard";
+import { showFeedback } from "@/lib/feedback";
 import { reviewArtifact, type ReviewArtifact } from "@/components/ai/reviewWorkflow";
 import { Button } from "@/components/ui/button";
 import {
@@ -119,11 +120,12 @@ export function ReviewProposalDialog({
     setPhase({ kind: "applying", artifact, key });
     try {
       await apply.mutateAsync({ expected_scope: request.scope, artifact, idempotency_key: key });
-      useUiStore.getState().addNotification({
+      showFeedback({
         title: copy.done(artifact),
-        body: t("quarantine.fix.doneBody", { remaining: artifact.after.quarantine_count }),
+        description: t("quarantine.fix.doneBody", { remaining: artifact.after.quarantine_count }),
+        descriptionPrivacy: "safe",
         tone: "success",
-        dedupeKey: copy.dedupeKey,
+        key: copy.dedupeKey,
       });
       onApplied?.(artifact);
       onClose();

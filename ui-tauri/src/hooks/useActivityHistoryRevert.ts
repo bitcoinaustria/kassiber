@@ -2,9 +2,9 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { useDaemonMutation } from "@/daemon/client";
+import { showFeedback } from "@/lib/feedback";
 import { confirmAction } from "@/lib/confirmAction";
 import type { HistoryRevertTarget } from "@/lib/transactionHistory";
-import { useUiStore } from "@/store/ui";
 
 /**
  * Reverts an edit (or one field of it) from the book's edit history, as the
@@ -14,7 +14,6 @@ import { useUiStore } from "@/store/ui";
  */
 export function useActivityHistoryRevert() {
   const { t } = useTranslation("review");
-  const addNotification = useUiStore((state) => state.addNotification);
   const mutation = useDaemonMutation("ui.transactions.history.revert");
   const { mutateAsync } = mutation;
   const revert = React.useCallback(
@@ -30,22 +29,24 @@ export function useActivityHistoryRevert() {
             : t("activity.revert.reasonEvent"),
         });
       } catch (error) {
-        addNotification({
+        showFeedback({
           title: t("activity.revert.failedTitle"),
-          body: error instanceof Error && error.message ? error.message : t("activity.revert.failedBody"),
+          description: error instanceof Error && error.message ? error.message : t("activity.revert.failedBody"),
+          descriptionPrivacy: "free-text",
           tone: "error",
-          dedupeKey,
+          key: dedupeKey,
         });
         return;
       }
-      addNotification({
+      showFeedback({
         title: t("activity.revert.title"),
-        body: t("activity.revert.body"),
+        description: t("activity.revert.body"),
+        descriptionPrivacy: "safe",
         tone: "success",
-        dedupeKey,
+        key: dedupeKey,
       });
     },
-    [addNotification, mutateAsync, t],
+    [mutateAsync, t],
   );
   return { revert, isReverting: mutation.isPending };
 }

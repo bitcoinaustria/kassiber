@@ -239,6 +239,36 @@ fn expected_scope_guards_the_book() {
 }
 
 #[test]
+fn expected_scope_guards_refresh_and_journal_runs() {
+    // The desktop binds a notification's Retry to the book it came from; a
+    // book switch in between must refuse the run before any handler starts.
+    let mut input = String::new();
+    for kind in ["ui.freshness.run", "ui.wallets.sync", "ui.journals.process"] {
+        input.push_str(&format!(
+            "{{\"request_id\":\"{kind}\",\"kind\":\"{kind}\",\"args\":{{\"expected_scope\":{{\"workspace_id\":\"ws-1\",\"profile_id\":\"pf-other\"}}}}}}\n"
+        ));
+    }
+    let (_, lines, events) = run(FakeConfig::default(), &input);
+    for (line, kind) in
+        lines[1..]
+            .iter()
+            .zip(["ui.freshness.run", "ui.wallets.sync", "ui.journals.process"])
+    {
+        let record = parse(line);
+        assert_eq!(text(&record, "request_id"), kind, "{line}");
+        assert_eq!(text(&record, "kind"), "error", "{line}");
+        let error = get(&record, "error").unwrap();
+        assert_eq!(text(error, "code"), "stale_context", "{line}");
+    }
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.contains("freshness") || event.contains("journal")),
+        "{events:?}"
+    );
+}
+
+#[test]
 #[cfg(not(windows))]
 fn a_lone_carriage_return_does_not_end_a_request() {
     // CPython reads stdin with newline="\n" outside Windows.

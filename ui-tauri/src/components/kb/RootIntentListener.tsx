@@ -7,6 +7,7 @@ import {
   useAppUpdateScheduler,
 } from "@/lib/appUpdate";
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
+import { requestSettingsAnchor } from "./settings/settingsSearch";
 import {
   dispatchMenuIntent,
   type NativeMenuPayload,
@@ -62,7 +63,7 @@ export function RootIntentListener() {
               runAddWalletConnection: unexpectedWorkspaceAction,
               runWalletSync: unexpectedWorkspaceAction,
               runJournalProcessing: unexpectedWorkspaceAction,
-              addNotification: store.addNotification,
+              revealSettingAnchor: requestSettingsAnchor,
               emitSettingsSection: (section) => {
                 window.dispatchEvent(
                   new CustomEvent("kassiber:settings-section", {

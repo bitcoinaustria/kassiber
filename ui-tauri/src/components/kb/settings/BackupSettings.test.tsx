@@ -1,8 +1,9 @@
 import { isValidElement, type ReactNode } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
+import { resetNotificationStore, useNotificationStore } from "@/store/notifications";
 import { BackupSettings } from "./BackupSettings";
 
-const state = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0, refs: [] as {current: unknown}[], refCursor: 0, invoke: vi.fn(), pick: vi.fn(), save: vi.fn(), session: 1, notify: vi.fn() }));
+const state = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0, refs: [] as {current: unknown}[], refCursor: 0, invoke: vi.fn(), pick: vi.fn(), save: vi.fn(), session: 1 }));
 vi.mock("react", async original => ({
   ...await original<typeof import("react")>(),
   useEffect: () => {},
@@ -17,7 +18,7 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock("@/daemon/transport", () => ({ getTransport: () => ({ invoke: state.invoke }) }));
 vi.mock("@/daemon/client", () => ({ formatDaemonEnvelopeError: (result: {error?: {message: string}}) => result.error?.message }));
 vi.mock("@/lib/filePicker", () => ({ isFilePickerAvailable: true, isFileSaveAvailable: true, pickFile: state.pick, saveFile: state.save }));
-vi.mock("@/store/ui", () => ({ useUiStore: Object.assign(() => state.session, { getState: () => ({ daemonSession: state.session, bumpDaemonSession: () => { state.session++; }, addNotification: state.notify }) }) }));
+vi.mock("@/store/ui", () => ({ useUiStore: Object.assign(() => state.session, { getState: () => ({ daemonSession: state.session, bumpDaemonSession: () => { state.session++; } }) }) }));
 
 function find(node: ReactNode, match: (props: Record<string, unknown>) => boolean): Record<string, unknown> | undefined {
   if (Array.isArray(node)) return node.map(child => find(child, match)).find(Boolean);
@@ -32,7 +33,8 @@ function input(id: string, value: string) { (find(render(), props => props.id ==
 
 beforeEach(() => {
   state.values = []; state.refs = []; state.session = 1;
-  state.invoke.mockReset(); state.pick.mockReset(); state.save.mockReset(); state.notify.mockReset();
+  state.invoke.mockReset(); state.pick.mockReset(); state.save.mockReset();
+  resetNotificationStore();
   vi.stubGlobal("window", { dispatchEvent: vi.fn() });
 });
 
@@ -82,7 +84,7 @@ it("discards a late preview when the book switches during the request", async ()
   expect(button("backup.replace")).toBeUndefined();
 });
 
-it("returns to unlock with a localized notification after rollback closes the database", async () => {
+it("returns to unlock with a condition that outlasts the lock after rollback closes the database", async () => {
   click("backup.restore");
   input("backup-passphrase", "outer"); input("backup-second-passphrase", "inner");
   state.pick.mockResolvedValue("/tmp/example.kassiber");
@@ -94,7 +96,13 @@ it("returns to unlock with a localized notification after rollback closes the da
   click("backup.replace");
   await vi.waitFor(() => expect(state.session).toBe(2));
   expect(window.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({type: "kassiber:lock-app"}));
-  expect(state.notify).toHaveBeenCalledWith(expect.objectContaining({body: "backup.errors.rolledBack", tone: "error"}));
+  // Waits in Needs attention for after unlock; its action opens Backups.
+  const [condition] = Object.values(useNotificationStore.getState().conditions);
+  expect(condition).toMatchObject({
+    code: "backup.restore-failed", scope: {book: null}, severity: "error",
+    action: {type: "navigate", to: "/settings/data", anchor: "backup"},
+    details: [{message: "backup.errors.rolledBack"}],
+  });
   expect(button("backup.replace")).toBeUndefined();
   expect(JSON.stringify(render())).not.toContain("Raw English error");
 });
@@ -108,5 +116,6 @@ it("keeps pre-close validation errors in the localized preview flow", async () =
   await vi.waitFor(() => expect(JSON.stringify(render())).toContain("backup.errors.invalid"));
   expect(state.session).toBe(1);
   expect(window.dispatchEvent).not.toHaveBeenCalled();
-  expect(state.notify).not.toHaveBeenCalled();
+  // Shown in the form; nothing waits in the center.
+  expect(useNotificationStore.getState().conditions).toEqual({});
 });

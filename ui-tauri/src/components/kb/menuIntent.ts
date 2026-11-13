@@ -2,7 +2,7 @@
 //
 // Lives outside AppShell so the routing decisions are unit-testable without a
 // React/Router/Tauri harness. The component wires real `navigate`, `lockApp`,
-// and notification helpers; the test suite passes spies and asserts the
+// and settings-anchor helpers; the test suite passes spies and asserts the
 // resulting calls.
 //
 // Producer-side parsing (Rust) is covered by `lib.rs` tests — this file
@@ -10,17 +10,7 @@
 // fallback, and the settings-section side-effect event.
 
 import { isDevOnlyRoute, isDevOnlySettingsSlug } from "./devMode";
-
-// English like the other dispatcher notifications: these are produced outside
-// React, where no `t` instance is threaded through.
-const EARLY_STAGE_NOTIFICATION = {
-  title: "Early-stage feature",
-  body: "Turn on early-stage features in Settings to open this page.",
-  tone: "info",
-  // Every gated route shares one slot: the menu items carry accelerators
-  // (Cmd+6 among them), and a held key must not fill the notification list.
-  dedupeKey: "early-stage-feature",
-} as const;
+import type { SettingsAnchorId } from "./settings/settingsSearch";
 
 export type AppRoutePath =
   | "/overview"
@@ -110,13 +100,6 @@ export function isAppRoutePath(value: unknown): value is AppRoutePath {
   );
 }
 
-export interface MenuIntentNotification {
-  title: string;
-  body: string;
-  tone: "info" | "warning" | "success" | "error";
-  dedupeKey?: string;
-}
-
 export interface MenuIntentDeps {
   hasWorkspace: boolean;
   aiFeaturesEnabled: boolean;
@@ -132,7 +115,12 @@ export interface MenuIntentDeps {
   increaseAppScale: () => void;
   resetAppScale: () => void;
   runAppUpdateCheck: () => void;
-  addNotification: (notification: MenuIntentNotification) => void;
+  /**
+   * Reveal one settings row once its section shows: a gated destination
+   * explains itself by highlighting the switch that opens it, instead of a
+   * notice.
+   */
+  revealSettingAnchor: (anchor: SettingsAnchorId) => void;
   emitSettingsSection: (section: string | null) => void;
 }
 
@@ -226,7 +214,7 @@ export function dispatchMenuIntent(
         !deps.developerToolsEnabled &&
         isDevOnlySettingsSlug(payload.section)
       ) {
-        deps.addNotification(EARLY_STAGE_NOTIFICATION);
+        deps.revealSettingAnchor("earlyFeatures");
         deps.navigate({ to: "/settings", hash: "developer" });
         deps.emitSettingsSection("developer");
         return;
@@ -245,24 +233,20 @@ export function dispatchMenuIntent(
     case "navigate": {
       if (!isAppRoutePath(payload.route)) return;
       if (payload.route === "/assistant" && !deps.aiFeaturesEnabled) {
-        deps.addNotification({
-          title: "AI features are disabled",
-          body: "Enable AI features in Settings to use the assistant.",
-          tone: "info",
-        });
+        deps.revealSettingAnchor("assistantFeatures");
         deps.navigate({ to: "/settings", hash: "ai" });
         return;
       }
       // Welcome-screen users would be bounced straight back to `/` by the
       // identity-guard effect, flashing the wrong route mid-transition. This
       // stays above the early-stage branch below: with no book open there is
-      // nowhere to land, and a notification would surface after the unlock as
-      // a phantom complaint about something the user did before it.
+      // nowhere to land, and nothing should wait for after the unlock as a
+      // phantom reaction to something the user did before it.
       if (!deps.hasWorkspace) return;
       // Same shape as the AI branch: the router would send these to Overview,
       // which reads as a broken menu item. Point at the switch instead.
       if (!deps.developerToolsEnabled && isDevOnlyRoute(payload.route)) {
-        deps.addNotification(EARLY_STAGE_NOTIFICATION);
+        deps.revealSettingAnchor("earlyFeatures");
         deps.navigate({ to: "/settings", hash: "developer" });
         return;
       }
