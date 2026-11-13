@@ -206,8 +206,6 @@
     "clearRecent": "Clear recent",
     "dismiss": "Dismiss notification: {{title}}",
     "dismissShort": "Dismiss",
-    "showDetails": "Show details",
-    "hideDetails": "Hide details",
     "details": "Details",
     "repeatBadge": "×{{count}}",
     "repeated_one": "Arrived {{count}} time",
@@ -221,13 +219,6 @@
     "withheld": "Hidden while amounts are hidden.",
     "empty": "No notifications.",
     "detailLine": "{{label}}: {{message}}",
-    "generic": {
-      "attentionTitle": "Something needs attention",
-      "failedTitle": "Something went wrong",
-      "doneTitle": "Task finished",
-      "noticeTitle": "Notice",
-      "body": "Details are hidden in this privacy mode."
-    },
     "phrase": {
       "failed": "failed",
       "cancelled": "cancelled",
@@ -277,6 +268,57 @@
         "title": "Journal processing failed",
         "body": "Reports keep the previous journal state until processing succeeds.",
         "action": "Retry"
+      },
+      "connectionSyncFailed": {
+        "title_one": "A wallet could not sync",
+        "title_other": "{{count}} wallets could not sync",
+        "body": "Balances and transactions may be out of date until a sync succeeds.",
+        "titleNamed": "{{name}} could not sync"
+      },
+      "btcpayProvenance": {
+        "title": "Some BTCPay invoices are missing",
+        "body": "Payments from these stores lack their invoice details until a sync loads them."
+      },
+      "touchIdOff": {
+        "title": "Touch ID unlock is off",
+        "body": "Kassiber asks for the database passphrase until Touch ID is enabled again.",
+        "action": "Enable Touch ID"
+      },
+      "unlockCredentialRemains": {
+        "title": "A saved unlock method remains",
+        "body": "The OS credential store did not confirm the removal, so it may still unlock these books."
+      },
+      "backupRestoreFailed": {
+        "title": "Backup restore did not finish",
+        "body": "Your books may not match the backup. The details say what happened and where the recovery copy from before the restore is.",
+        "action": "Open backups"
+      },
+      "backupRestoreWarning": {
+        "title": "Review saved unlock methods",
+        "body": "The restore finished, but saved unlock methods could not be reset. They may not match the restored books."
+      },
+      "sourceFundsRescan": {
+        "title": "A wallet needs a full rescan",
+        "body_one": "{{count}} transaction was synced before Kassiber recorded which inputs were its own, so its source of funds cannot be traced. Rescan its wallet.",
+        "body_other": "{{count}} transactions were synced before Kassiber recorded which inputs were their own, so their source of funds cannot be traced. Rescan their wallet."
+      },
+      "pricingRebuildFailed": {
+        "title": "Price rebuild failed",
+        "body": "Transactions keep their previous prices until a rebuild succeeds."
+      },
+      "workspaceRefreshFailed": {
+        "title": "Refreshing all books failed",
+        "body": "Their reports may use older observations until a refresh succeeds."
+      },
+      "workspaceBooks": {
+        "title": "Some books need attention",
+        "body": "Some books did not refresh. The overview of all books shows which.",
+        "blockingBody": "Some books keep their reports blocked. The overview of all books shows which and why."
+      },
+      "watchChanged": {
+        "title": "Local evidence changed",
+        "body": "A watch condition was met. Its change waits under Watches in Chain Analysis.",
+        "action": "Open watches"
       }
     },
     "result": {
@@ -306,13 +348,98 @@
         "warnings_one": "{{count}} warning",
         "warnings_other": "{{count}} warnings",
         "action": "Open journals"
+      },
+      "connectionSynced": {
+        "title": "Wallet synced",
+        "rescanTitle": "Wallet rescanned",
+        "imported_one": "{{count}} new transaction",
+        "imported_other": "{{count}} new transactions"
+      },
+      "backupRestored": {
+        "title": "Backup restored"
+      },
+      "reportExported": {
+        "title": "Report exported",
+        "notesTitle": "Report exported with notes",
+        "notesBody": "Reports lists the notes next to the saved file.",
+        "action": "Open reports"
+      },
+      "pricingRebuilt": {
+        "title": "Prices rebuilt",
+        "journalsBody": "Journals were not processed with the new prices; Needs attention says why."
+      },
+      "workspaceRefreshed": {
+        "title": "All books refreshed",
+        "body_one": "{{synced}} of {{count}} book synced.",
+        "body_other": "{{synced}} of {{count}} books synced."
+      },
+      "newActivity": {
+        "title_one": "{{count}} new transaction",
+        "title_other": "{{count}} new transactions",
+        "titleNamed_one": "{{count}} new transaction in {{name}}",
+        "titleNamed_other": "{{count}} new transactions in {{name}}",
+        "incoming_one": "{{count}} incoming",
+        "incoming_other": "{{count}} incoming",
+        "outgoing_one": "{{count}} outgoing",
+        "outgoing_other": "{{count}} outgoing",
+        "walletCount_one": "{{count}} new",
+        "walletCount_other": "{{count}} new",
+        "moreWallets_one": "+{{count}} more wallet",
+        "moreWallets_other": "+{{count}} more wallets"
       }
     },
     "job": {
       "bookRefresh": "Refreshing book",
       "bookRescan": "Rescanning book",
-      "journalProcessing": "Processing journals"
-    }
+      "journalProcessing": "Processing journals",
+      "connectionSync": "Syncing wallet",
+      "connectionRescan": "Rescanning wallet",
+      "reportExport": "Exporting report",
+      "pricingRebuild": "Rebuilding prices",
+      "workspaceRefresh": "Refreshing all books"
+    },
+    "action": {
+      "openTransaction": "Open transaction",
+      "openSecurity": "Open security settings",
+      "openMarketData": "Open market data",
+      "openAllBooks": "Open all books",
+      "openTransactions": "Open transactions",
+      "openConnection": "Open connection"
+    },
+    "feedback": {
+      "reportSaveFailed": "Could not save the report export",
+      "reportExportBlocked": "Report export blocked by quarantine",
+      "reportExportFailed": "Report export failed",
+      "reportOpenFailed": "Could not open the report",
+      "btcPriceRefreshed": "BTC price refreshed",
+      "btcPriceUnchanged": "No newer BTC price; the cached one stays",
+      "btcPriceFailed": "Could not refresh the BTC price"
+    },
+    "causeCount": "{{cause}} ({{count}})",
+    "technicalRepeated": "{{message}} (×{{count}})",
+    "copyTechnical": "Copy error details",
+    "copied": "Copied",
+    "labelNewActivity": "Notifications: new transactions",
+    "cause": {
+      "offline": "Kassiber is offline",
+      "rateLimited": "Server is limiting requests; retries later",
+      "unavailable": "Server temporarily unavailable; retries later",
+      "certificate": "Secure connection failed (certificate)",
+      "credentials": "Server rejected the credentials",
+      "noBackend": "No server configured",
+      "connection": "Connection to the server failed",
+      "cancelled": "Cancelled"
+    },
+    "askAssistant": "Ask the assistant",
+    "assistantPrompt": "Help me troubleshoot this in Kassiber: {{title}}\n{{seen}}\nCheck what you can with your tools, explain the likely cause in plain words, and tell me the next step.",
+    "assistantOtherError_one": "{{count}} other error (its text is not shared)",
+    "assistantOtherError_other": "{{count}} other errors (their text is not shared)",
+    "moreDetails_one": "+{{count}} more",
+    "moreDetails_other": "+{{count}} more",
+    "moreActions": "More actions: {{title}}",
+    "moreActionsShort": "More actions",
+    "assistantMoreSources_one": "{{line}} (+{{count}} more)",
+    "assistantMoreSources_other": "{{line}} (+{{count}} more)"
   },
   "currencyToggle": {
     "bitcoin": "bitcoin",
@@ -342,7 +469,6 @@
     "dark": "Dark"
   },
   "lock": {
-    "touchIdNotSavedTitle": "Touch ID unlock was not saved",
     "touchIdNotSavedReason": "Touch ID unlock is not set up: {{reason}}",
     "touchIdNotSavedKeychain": "macOS Keychain did not report the saved passphrase.",
     "touchIdNotAcceptedKeychain": "macOS Keychain did not accept the saved passphrase.",

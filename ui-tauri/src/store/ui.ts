@@ -46,46 +46,6 @@ export interface NotificationProgress {
   label?: string;
 }
 
-/**
- * One button on a legacy notification: a route to open. `label` is
- * localized by the producer, like the title and body. Legacy entries carry
- * no book scope, so they cannot run anything; an operation with its
- * original options and book is a `NotificationOperation` on a structured
- * entry (`store/notifications.ts`).
- */
-export interface NotificationAction {
-  label: string;
-  target?: string;
-}
-
-/**
- * A notification from a sender not yet moved to the structured model in
- * `store/notifications.ts`. The center shows these under Recent: they carry
- * no badge and cannot displace a condition. RAM only, like every
- * notification: nothing here reaches `kb.ui`.
- */
-export interface AppNotification {
-  id: string;
-  title: string;
-  body: string;
-  tone: NotificationTone;
-  dedupeKey?: string;
-  progress?: NotificationProgress;
-  /**
-   * Extra lines shown when the entry is expanded, such as which sources
-   * failed. They can quote backend error text.
-   */
-  details?: string[];
-  action?: NotificationAction;
-  /** How many times the same notification arrived word for word (2 or more). */
-  repeatCount?: number;
-  createdAt: string;
-  // Optional language-independent click target (an app route path). When set,
-  // the header notification routes here instead of guessing from the (often
-  // localized) title, so a translated title still routes correctly.
-  target?: string;
-}
-
 export interface ActiveMaintenanceProgress {
   id: string;
   title: string;
@@ -416,7 +376,6 @@ export interface UiState {
    */
   settingsSection: SettingsSectionId | null;
   daemonSession: number;
-  notifications: AppNotification[];
   activeMaintenanceProgress: ActiveMaintenanceProgress | null;
   /**
    * Book keys (see `bookIdentityKey`) whose initial sync has completed at least
@@ -508,13 +467,6 @@ export interface UiState {
     profile: AiToolProfile | null,
   ) => void;
   bumpDaemonSession: () => void;
-  addNotification: (
-    notification: Omit<AppNotification, "id" | "createdAt">,
-  ) => string;
-  updateNotification: (
-    id: string,
-    patch: Partial<Omit<AppNotification, "id" | "createdAt">>,
-  ) => void;
   setActiveMaintenanceProgress: (
     progress: ActiveMaintenanceProgress | null,
   ) => void;
@@ -522,8 +474,6 @@ export interface UiState {
   markFirstSyncDone: (bookKey: string) => void;
   dismissFirstSyncCard: (bookKey: string) => void;
   reopenFirstSyncCard: (bookKey: string) => void;
-  clearNotification: (id: string) => void;
-  clearNotifications: () => void;
   setBookChartPeriod: (
     bookKey: string,
     period: BookChartPeriod,
@@ -594,39 +544,6 @@ export function bookIdentityKey(identity: Identity | null): string | null {
     .map((part) => part?.trim())
     .filter((part): part is string => Boolean(part));
   return scope.length > 0 ? `id:${scope.join("/")}` : null;
-}
-
-/**
- * Legacy notifications kept for the session. Their own bound, so they can
- * never crowd out a condition (see `store/notifications.ts`).
- */
-const MAX_NOTIFICATIONS = 30;
-
-function sameNotificationText(
-  a: Pick<AppNotification, "title" | "body" | "tone">,
-  b: Pick<AppNotification, "title" | "body" | "tone">,
-): boolean {
-  return a.title === b.title && a.body === b.body && a.tone === b.tone;
-}
-
-/**
- * The stored entry a new notification replaces. A `dedupeKey` names it
- * outright. Without one, an entry that repeats word for word (and is not a
- * running job) folds into the earlier one, so a failure that keeps happening
- * stays one row with a repeat count instead of filling the list.
- */
-function replacedNotification(
-  notifications: readonly AppNotification[],
-  next: Omit<AppNotification, "id" | "createdAt">,
-): AppNotification | undefined {
-  if (next.dedupeKey) {
-    return notifications.find((item) => item.dedupeKey === next.dedupeKey);
-  }
-  if (next.progress) return undefined;
-  return notifications.find(
-    (item) =>
-      !item.dedupeKey && !item.progress && sameNotificationText(item, next),
-  );
 }
 
 // A range the picker no longer offers lands on the closest one it does,
@@ -854,7 +771,6 @@ export const useUiStore = create<UiState>()(
       assistantPanelRevealRequest: 0,
       settingsSection: null,
       daemonSession: 0,
-      notifications: [],
       activeMaintenanceProgress: null,
       firstSyncDone: {},
       bookChartPeriods: {},
@@ -1054,59 +970,6 @@ export const useUiStore = create<UiState>()(
         })),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
-      addNotification: (notification) => {
-        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        let existingId: string | null = null;
-        set((state) => ({
-          notifications: (() => {
-            const createdAt = new Date().toISOString();
-            const existing = replacedNotification(
-              state.notifications,
-              notification,
-            );
-            if (existing) {
-              existingId = existing.id;
-              // A running job re-announcing itself is the same run, not a
-              // repeat of it, so it never counts up.
-              const repeated =
-                !notification.progress &&
-                sameNotificationText(existing, notification);
-              return [
-                {
-                  ...existing,
-                  ...notification,
-                  // Fields the new notification leaves out are cleared, not
-                  // inherited: a finished run must not keep the previous
-                  // run's progress bar, detail lines, or button.
-                  progress: notification.progress,
-                  details: notification.details,
-                  action: notification.action,
-                  repeatCount: repeated
-                    ? (existing.repeatCount ?? 1) + 1
-                    : undefined,
-                  createdAt,
-                },
-                ...state.notifications.filter((item) => item.id !== existing.id),
-              ].slice(0, MAX_NOTIFICATIONS);
-            }
-            return [
-              {
-                ...notification,
-                id,
-                createdAt,
-              },
-              ...state.notifications,
-            ].slice(0, MAX_NOTIFICATIONS);
-          })(),
-        }));
-        return existingId ?? id;
-      },
-      updateNotification: (id, patch) =>
-        set((state) => ({
-          notifications: state.notifications.map((notification) =>
-            notification.id === id ? { ...notification, ...patch } : notification,
-          ),
-        })),
       setActiveMaintenanceProgress: (activeMaintenanceProgress) =>
         set({ activeMaintenanceProgress }),
       clearActiveMaintenanceProgress: (id) =>
@@ -1140,13 +1003,6 @@ export const useUiStore = create<UiState>()(
           delete next[bookKey];
           return { firstSyncCardDismissed: next };
         }),
-      clearNotification: (id) =>
-        set((state) => ({
-          notifications: state.notifications.filter(
-            (notification) => notification.id !== id,
-          ),
-        })),
-      clearNotifications: () => set({ notifications: [] }),
       setBookChartPeriod: (bookKey, period) =>
         set((state) =>
           state.bookChartPeriods[bookKey] === period
@@ -1275,9 +1131,6 @@ export const useUiStore = create<UiState>()(
           assistantPanelFocusRequest: 0,
           assistantColumnClaimed: false,
           assistantPanelRevealRequest: 0,
-          // Never restored: a stored notification could replay an old action
-          // against whichever book is open now. The session's own stay.
-          notifications: current.notifications,
           firstSyncDone: restored.firstSyncDone ?? current.firstSyncDone,
           bookChartPeriods: normalizeBookChartPeriods(
             restored.bookChartPeriods ??

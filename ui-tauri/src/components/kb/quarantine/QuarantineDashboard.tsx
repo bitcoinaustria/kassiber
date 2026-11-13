@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
+import { showFeedback } from "@/lib/feedback";
 import {
   ExplorerOpenDialog,
   TransactionDetailSheet,
@@ -322,11 +323,12 @@ export function QuarantineDashboard({
       transactionQuery.error instanceof Error
         ? transactionQuery.error.message
         : t("quarantine.detail.resolveError");
-    useUiStore.getState().addNotification({
+    showFeedback({
       title: t("quarantine.detail.resolveError"),
-      body: message,
+      description: message,
+      descriptionPrivacy: "free-text",
       tone: "error",
-      dedupeKey: `quarantine-resolve-${detailTarget.transactionId}`,
+      key: `quarantine-resolve-${detailTarget.transactionId}`,
     });
     setDetailTarget({ transactionId: null, tab: "details" });
     setDetailQueue({ source: "none", ids: [] });
@@ -401,11 +403,12 @@ export function QuarantineDashboard({
             })
           : tTransactions("history.revertReasonEvent"),
       });
-      useUiStore.getState().addNotification({
+      showFeedback({
         title: tTransactions("notification.editReverted.title"),
-        body: tTransactions("notification.editReverted.body"),
+        description: tTransactions("notification.editReverted.body"),
+        descriptionPrivacy: "safe",
         tone: "success",
-        dedupeKey: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
+        key: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
       });
     },
     [detailTransaction, revertHistory, tTransactions],
@@ -479,11 +482,12 @@ export function QuarantineDashboard({
       )
     : undefined;
   const refuseSheetUnpair = (body: string, pairId: string) =>
-    useUiStore.getState().addNotification({
+    showFeedback({
       title: t("quarantine.pair.unpair"),
-      body,
+      description: body,
+      descriptionPrivacy: "free-text",
       tone: "warning",
-      dedupeKey: `quarantine-unpair-${pairId}`,
+      key: `quarantine-unpair-${pairId}`,
     });
   const unpairFromSheet = (relationId: string) => {
     const shownScope =
@@ -636,13 +640,14 @@ export function QuarantineDashboard({
               (attachments) => upsertAttachmentRecords(attachments, added),
             );
           }
-          useUiStore.getState().addNotification({
+          showFeedback({
             title: tTransactions("notification.filesAttached.title"),
-            body: tTransactions("notification.filesAttached.body", {
+            description: tTransactions("notification.filesAttached.body", {
               count: paths.length,
             }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-files-${detailTransaction.id}`,
+            key: `attachments-files-${detailTransaction.id}`,
           });
         }}
         onAddAttachmentLinks={async (urls) => {
@@ -666,13 +671,14 @@ export function QuarantineDashboard({
               (attachments) => upsertAttachmentRecords(attachments, added),
             );
           }
-          useUiStore.getState().addNotification({
+          showFeedback({
             title: tTransactions("notification.linksAttached.title"),
-            body: tTransactions("notification.linksAttached.body", {
+            description: tTransactions("notification.linksAttached.body", {
               count: urls.length,
             }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-links-${detailTransaction.id}`,
+            key: `attachments-links-${detailTransaction.id}`,
           });
         }}
         onOpenAttachment={async (item) => {
@@ -705,9 +711,10 @@ export function QuarantineDashboard({
               (attachments) => replaceAttachmentRecord(attachments, updated),
             );
           }
-          useUiStore.getState().addNotification({
+          showFeedback({
             title: tTransactions("notification.linkTextUpdated.title"),
-            body: tTransactions("notification.linkTextUpdated.body"),
+            description: tTransactions("notification.linkTextUpdated.body"),
+            descriptionPrivacy: "safe",
             tone: "success",
           });
         }}
@@ -721,14 +728,15 @@ export function QuarantineDashboard({
             detailTransaction.id,
             (attachments) => removeAttachmentRecord(attachments, item.id),
           );
-          useUiStore.getState().addNotification({
+          showFeedback({
             title: tTransactions("notification.attachmentRemoved.title"),
-            body:
+            description:
               item.kind === "file"
                 ? tTransactions("notification.attachmentRemoved.fileBody")
                 : tTransactions("notification.attachmentRemoved.linkBody"),
+            descriptionPrivacy: "free-text",
             tone: "success",
-            dedupeKey: `attachment-remove-${item.id}`,
+            key: `attachment-remove-${item.id}`,
           });
         }}
         onUnpair={sheetPairCase ? unpairFromSheet : undefined}

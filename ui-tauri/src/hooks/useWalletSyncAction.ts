@@ -5,7 +5,11 @@ import { useTranslation } from "react-i18next";
 import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
 import i18n from "@/i18n";
 import { showFeedback } from "@/lib/feedback";
-import { applyFreshnessRun, safeMessage } from "@/lib/notificationConditions";
+import {
+  applyFreshnessRun,
+  safeMessage,
+  UNSCOPED_WORKER,
+} from "@/lib/notificationConditions";
 import {
   describeJournalStep,
   freshnessRunNeedsAttention,
@@ -39,6 +43,7 @@ import {
   useNotificationStore,
   type NotificationScope,
 } from "@/store/notifications";
+import { newActivityFromRun, recordNewActivity } from "@/lib/newActivity";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
 
 /** One book refresh at a time, so the running job has one id. */
@@ -305,6 +310,7 @@ export function recordBookRefreshOutcome(
   store.resolveCondition(
     conditionKey("freshness.worker-error", { book: scope.book }),
   );
+  store.resolveCondition(conditionKey("freshness.worker-error", UNSCOPED_WORKER));
   applyFreshnessRun(data, scope.book);
   const backendScope = { book: scope.book };
   if (freshnessRunNeedsBackend(data)) {
@@ -319,6 +325,10 @@ export function recordBookRefreshOutcome(
     store.resolveCondition(
       conditionKey("book-refresh.backend-required", backendScope),
     );
+  }
+  if (freshnessRunNeedsAttention(data) || freshnessRunHasPendingJobs(data)) {
+    // What did arrive is worth knowing even when something else failed.
+    recordNewActivity(newActivityFromRun(data), scope);
   }
   const journalsOnly =
     journalStepNeedsAttention(data?.journals) &&
@@ -362,12 +372,19 @@ export function recordBookRefreshOutcome(
     });
     return;
   }
-  store.addResult({
-    code: "book-refresh.finished",
-    scope,
-    severity: "info",
-    params: { forceFull },
-  });
+  // New transactions say more than "finished": they replace that row (the
+  // toast still confirms the refresh).
+  const activity = newActivityFromRun(data);
+  if (activity) {
+    recordNewActivity(activity, scope);
+  } else {
+    store.addResult({
+      code: "book-refresh.finished",
+      scope,
+      severity: "info",
+      params: { forceFull },
+    });
+  }
   showFeedback({
     tone: "success",
     title: forceFull

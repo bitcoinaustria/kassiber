@@ -20,8 +20,8 @@ import type { DaemonBookScope } from "@/lib/activeBook";
  * mode (see `notificationProjection.ts`). Actions are typed data and carry
  * their originating book scope; the center revalidates it before acting.
  *
- * Senders still on the old `addNotification` path land in the legacy list in
- * `store/ui.ts`, which the center shows under Recent.
+ * Feedback on what the user just did is a toast (`lib/feedback.ts`), never an
+ * entry here.
  */
 
 export type NotificationSeverity = "info" | "warning" | "error";
@@ -52,18 +52,42 @@ export const CONDITION_CODES = [
   "book-refresh.failed",
   "book-refresh.backend-required",
   "journals.process-failed",
+  "connection.sync-failed",
+  "btcpay.provenance-incomplete",
+  "touch-id.off",
+  "unlock.credential-remains",
+  "backup.restore-failed",
+  "backup.restore-warning",
+  "source-funds.rescan-needed",
+  "pricing.rebuild-failed",
+  "workspace.refresh-failed",
+  "workspace.books-need-attention",
+  "watch.evidence-changed",
 ] as const;
 export type ConditionCode = (typeof CONDITION_CODES)[number];
 
 export const RESULT_CODES = [
+  "activity.new",
   "book-refresh.finished",
   "book-refresh.pending",
   "book-refresh.problems",
   "journals.processed",
+  "connection.synced",
+  "backup.restored",
+  "report.exported",
+  "pricing.rebuilt",
+  "workspace.refreshed",
 ] as const;
 export type ResultCode = (typeof RESULT_CODES)[number];
 
-export const JOB_CODES = ["book-refresh", "journal-processing"] as const;
+export const JOB_CODES = [
+  "book-refresh",
+  "journal-processing",
+  "connection-sync",
+  "report-export",
+  "pricing-rebuild",
+  "workspace-refresh",
+] as const;
 export type JobCode = (typeof JOB_CODES)[number];
 
 /**
@@ -81,11 +105,19 @@ export const NOTIFICATION_OPERATION_KINDS = [
 
 /**
  * One button. `navigate` opens a route from the allowlist in
- * `notificationRouting.ts`; `operation` repeats a closed-list operation and
- * names `review`, the route a stale action opens instead of mutating.
+ * `notificationRouting.ts`, optionally revealing one settings row (`anchor`,
+ * a `SettingsAnchorId` of that section). `open-connection` and
+ * `open-transaction` open one record of the originating book; from another
+ * book they open the list instead. `open-workspace` opens the overview of
+ * all books of one workspace. `operation` repeats a closed-list
+ * operation and names `review`, the route a stale action opens instead of
+ * mutating.
  */
 export type NotificationActionSpec =
-  | { type: "navigate"; to: string }
+  | { type: "navigate"; to: string; anchor?: string }
+  | { type: "open-connection"; connectionId: string }
+  | { type: "open-transaction"; transactionId: string }
+  | { type: "open-workspace"; workspaceId: string }
   | { type: "operation"; operation: NotificationOperation; review: string };
 
 /**
@@ -103,6 +135,21 @@ export interface NotificationParams {
   quarantined?: number;
   autoPaired?: number;
   warnings?: number;
+  /** New transactions by direction; counts, never amounts. */
+  incoming?: number;
+  outgoing?: number;
+  /**
+   * The new transactions' ids, so a later run can merge into an unseen
+   * entry without counting one twice, and one transaction can open itself.
+   * RAM only, never shown.
+   */
+  transactionIds?: string[];
+  /**
+   * New transactions per wallet label: the merge state of a "new
+   * transactions" entry, kept whole (unlike `details`, which the store caps)
+   * and only shortened for display.
+   */
+  walletCounts?: Array<{ label: string; count: number }>;
 }
 
 /**
@@ -116,6 +163,16 @@ export interface NotificationDetail {
   message?: string;
   /** A fixed, translated phrase from a closed set; safe in every mode. */
   phraseKey?: NotificationPhraseKey;
+  /**
+   * The daemon's error code (`network_error`, `rate_limited`, ...), which
+   * classifies the cause more reliably than its text. Never shown.
+   */
+  code?: string;
+  /**
+   * The daemon's remediation hint, kept apart from `message` so its advice
+   * ("check the tcp/ssl port") is not read as the cause. Technical text only.
+   */
+  hint?: string;
 }
 
 export const NOTIFICATION_PHRASE_KEYS = [
@@ -229,13 +286,6 @@ export interface NotificationState {
   clearResults: () => void;
   /** Opening the center marks what it shows as seen; it resolves nothing. */
   markSeen: () => void;
-  /**
-   * Set when something outside the bell (an OS notification's activation)
-   * asks for the center to open; the center opens and clears it.
-   */
-  centerOpenRequested: boolean;
-  requestOpenCenter: () => void;
-  clearOpenCenterRequest: () => void;
 }
 
 /** A condition's identity: scope + code + source. */
@@ -265,6 +315,10 @@ export function boundDetails(
       (NOTIFICATION_PHRASE_KEYS as readonly string[]).includes(detail.phraseKey)
         ? { phraseKey: detail.phraseKey }
         : {}),
+      ...(detail.code && /^[a-z0-9_.-]{1,64}$/.test(detail.code)
+        ? { code: detail.code }
+        : {}),
+      ...(detail.hint ? { hint: clip(detail.hint) } : {}),
     }))
     .filter((detail) => detail.label || detail.message || detail.phraseKey)
     .slice(0, MAX_DETAILS);
@@ -351,7 +405,6 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
   conditions: {},
   jobs: {},
   results: [],
-  centerOpenRequested: false,
   raiseCondition: (input) => {
     const key = conditionKey(input.code, input.scope);
     const previous = get().conditions[key];
@@ -440,11 +493,15 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
       details: boundDetails(input.details),
     };
     set((state) => {
-      // One result per job outcome and book: a repeat replaces the earlier
-      // row rather than filling Recent.
+      // One result per job outcome, book, and source: a repeat replaces the
+      // earlier row rather than filling Recent.
       const rest = state.results.filter(
         (item) =>
-          !(item.code === input.code && item.scope.book === input.scope.book),
+          !(
+            item.code === input.code &&
+            item.scope.book === input.scope.book &&
+            item.scope.source === input.scope.source
+          ),
       );
       return { results: [entry, ...rest].slice(0, MAX_RESULTS) };
     });
@@ -455,8 +512,6 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
       results: state.results.filter((item) => item.id !== id),
     })),
   clearResults: () => set({ results: [] }),
-  requestOpenCenter: () => set({ centerOpenRequested: true }),
-  clearOpenCenterRequest: () => set({ centerOpenRequested: false }),
   markSeen: () =>
     set((state) => {
       const now = new Date().toISOString();
@@ -507,6 +562,17 @@ const CODE_ORDER: Record<ConditionCode, number> = {
   "book-refresh.backend-required": 4,
   "source.refresh-failed": 5,
   "freshness.worker-error": 6,
+  "connection.sync-failed": 7,
+  "btcpay.provenance-incomplete": 8,
+  "backup.restore-failed": 9,
+  "backup.restore-warning": 10,
+  "unlock.credential-remains": 11,
+  "touch-id.off": 12,
+  "source-funds.rescan-needed": 13,
+  "pricing.rebuild-failed": 14,
+  "workspace.refresh-failed": 15,
+  "workspace.books-need-attention": 16,
+  "watch.evidence-changed": 17,
 };
 
 function compareConditions(a: ConditionEntry, b: ConditionEntry): number {
@@ -578,6 +644,5 @@ export function resetNotificationStore(): void {
     conditions: {},
     jobs: {},
     results: [],
-    centerOpenRequested: false,
-  });
+    });
 }

@@ -3617,11 +3617,6 @@ pub fn run() {
         .manage(ChatDropState::default())
         .manage(os_notifications::OsNotificationState::default())
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Focused(true) = event {
-                if window.label() == "main" {
-                    os_notifications::on_main_window_focused(window.app_handle());
-                }
-            }
             // Kept natively so the webview can stage a drop without naming
             // a path; see `stage_dropped_chat_attachment`.
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {

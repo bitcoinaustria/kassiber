@@ -51,6 +51,14 @@ import {
   screenPanelClassName,
 } from "@/lib/screen-layout";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
+import { showFeedback } from "@/lib/feedback";
+import {
+  recordTouchIdOff,
+  recordUnlockCredentialRemains,
+  resolveTouchIdOff,
+  resolveUnlockCredentialRemains,
+} from "@/lib/unlockNotifications";
+import { conditionKey, useNotificationStore } from "@/store/notifications";
 import { useUiStore } from "@/store/ui";
 import {
   DATABASE_PASSPHRASE_HINT_KEYS,
@@ -146,18 +154,18 @@ export function SettingsScreen({
   const automaticUpdateChecks = useUiStore((s) => s.automaticUpdateChecks);
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
-  const addNotification = useUiStore((s) => s.addNotification);
   const persistAutomaticUpdateChecks = React.useCallback(
     (enabled: boolean) => {
       void setAppUpdateChecksEnabled(enabled).catch(() => {
-        addNotification({
+        showFeedback({
           title: t("privacy.updatesSaveFailedTitle"),
-          body: t("privacy.updatesSaveFailedBody"),
+          description: t("privacy.updatesSaveFailedBody"),
+          descriptionPrivacy: "safe",
           tone: "error",
         });
       });
     },
-    [addNotification, t],
+    [t],
   );
   const dataMode = useUiStore((s) => s.dataMode);
   const deferredConnectionSetup = useUiStore(
@@ -323,18 +331,14 @@ export function SettingsScreen({
         const status = await forgetTouchIdPassphrase(touchIdDataRoot);
         setTouchIdStatus(status);
         setAppLockPolicy({ touchIdUnlock: false });
+        resolveUnlockCredentialRemains();
       } catch (error: unknown) {
-        addNotification({
-          title: t("touchId.removeFailedTitle"),
-          body:
-            error instanceof Error
-              ? error.message
-              : t("touchId.removeFailedBody"),
-          tone: "warning",
-        });
+        recordUnlockCredentialRemains([
+          error instanceof Error ? error.message : t("touchId.removeFailedBody"),
+        ]);
       }
     },
-    [addNotification, setAppLockPolicy, t, touchIdDataRoot],
+    [setAppLockPolicy, t, touchIdDataRoot],
   );
 
   const forgetAllSavedUnlockMethods = React.useCallback(async () => {
@@ -359,19 +363,24 @@ export function SettingsScreen({
 
     setAppLockPolicy({ touchIdUnlock: false });
     await refreshTouchIdStatus();
-    addNotification({
-      title:
-        errors.length === 0
-          ? t("touchId.forgetAllTitle")
-          : t("touchId.forgetAllPartialTitle"),
-      body:
-        errors.length === 0
-          ? t("touchId.forgetAllBody")
-          : errors.join(" "),
-      tone: errors.length === 0 ? "success" : "warning",
+    if (errors.length > 0) {
+      recordUnlockCredentialRemains(errors);
+      return;
+    }
+    // Nothing is saved any more, so neither a leftover nor a Touch ID that
+    // waits to be enabled again needs attention.
+    resolveUnlockCredentialRemains();
+    resolveTouchIdOff();
+    useNotificationStore
+      .getState()
+      .resolveCondition(conditionKey("backup.restore-warning", { book: null }));
+    showFeedback({
+      title: t("touchId.forgetAllTitle"),
+      description: t("touchId.forgetAllBody"),
+      descriptionPrivacy: "safe",
+      tone: "success",
     });
   }, [
-    addNotification,
     forgetCliUnlock,
     refreshTouchIdStatus,
     setAppLockPolicy,
@@ -557,16 +566,19 @@ export function SettingsScreen({
       setResetRegtestPending(true);
       try {
         await resetRegtestDemo();
-        addNotification({
+        showFeedback({
           tone: "success",
           title: t("data.resetRegtestDoneTitle"),
-          body: t("data.resetRegtestDoneBody"),
+          description: t("data.resetRegtestDoneBody"),
+          descriptionPrivacy: "safe",
         });
       } catch (error: unknown) {
-        addNotification({
+        showFeedback({
           tone: "error",
           title: t("data.resetRegtestErrorTitle"),
-          body: error instanceof Error ? error.message : t("data.resetRegtestErrorBody"),
+          description:
+            error instanceof Error ? error.message : t("data.resetRegtestErrorBody"),
+          descriptionPrivacy: "free-text",
         });
       } finally {
         setResetRegtestPending(false);
@@ -646,11 +658,13 @@ export function SettingsScreen({
   const onDeleteBackend = async (backend: Backend) => {
     const affectedWallets = backend.walletRefs ?? [];
     if (affectedWallets.length > 0) {
-      addNotification({
+      // Wallet labels are user data: privacy modes treat them as free text.
+      showFeedback({
         title: t("deleteBackend.blockedTitle"),
-        body: t("deleteBackend.walletWarning", {
+        description: t("deleteBackend.walletWarning", {
           wallets: affectedWallets.join("\n- "),
         }),
+        descriptionPrivacy: "free-text",
         tone: "error",
       });
       return;
@@ -680,13 +694,13 @@ export function SettingsScreen({
         setEditingBackendId(null);
         setInitialBackendTypeId(null);
       }
-      addNotification({
+      showFeedback({
         title: t(
           deleted
             ? "deleteBackend.refreshFailedTitle"
             : "deleteBackend.failedTitle",
         ),
-        body:
+        description:
           error instanceof Error
             ? error.message
             : t(
@@ -694,6 +708,7 @@ export function SettingsScreen({
                   ? "deleteBackend.refreshFailedBody"
                   : "deleteBackend.failedBody",
               ),
+        descriptionPrivacy: "free-text",
         tone: "error",
       });
     }
@@ -713,18 +728,20 @@ export function SettingsScreen({
           refreshed.data?.data?.summary.bootstrap_mode,
         ),
       );
-      addNotification({
+      showFeedback({
         title: t("defaultBackend.updatedTitle"),
-        body: t("defaultBackend.updatedBody", { name: backend.name }),
+        description: t("defaultBackend.updatedBody", { name: backend.name }),
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
     } catch (error) {
-      addNotification({
+      showFeedback({
         title: t("defaultBackend.failedTitle"),
-        body:
+        description:
           error instanceof Error
             ? error.message
             : t("defaultBackend.failedBody"),
+        descriptionPrivacy: "free-text",
         tone: "warning",
       });
     } finally {
@@ -739,13 +756,16 @@ export function SettingsScreen({
       const next = await installTerminalCommand();
       setTerminalStatus(next);
       setTerminalStatusError(null);
-      addNotification({
+      // Off PATH, the Terminal command panel shows the line to add; this
+      // only says what happened.
+      showFeedback({
         title: wasRepair
           ? t("terminal.repairedTitle")
           : t("terminal.installedTitle"),
-        body: next.pathOnPath
+        description: next.pathOnPath
           ? t("terminal.installedBodyOnPath")
           : t("terminal.installedBodyOffPath", { binDir: next.binDir }),
+        descriptionPrivacy: next.pathOnPath ? "safe" : "free-text",
         tone: next.pathOnPath ? "success" : "warning",
       });
     } catch (error) {
@@ -765,11 +785,12 @@ export function SettingsScreen({
       const next = await removeTerminalCommand();
       setTerminalStatus(next);
       setTerminalStatusError(null);
-      addNotification({
+      showFeedback({
         title: t("terminal.removedTitle"),
-        body: t("terminal.removedBody", {
+        description: t("terminal.removedBody", {
           command: next.commandPath || t("terminal.removedBodyFallback"),
         }),
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
     } catch (error) {
@@ -886,13 +907,14 @@ export function SettingsScreen({
         Number(removed.source_funds_snapshots ?? 0);
       const keptDecisions = envelope.data?.decisions?.kept;
       if (keptDecisions !== undefined) {
-        addNotification({
+        showFeedback({
           title: t("resetBook.notifyTitle"),
-          body: t("resetBook.notifyKeptBody", {
+          description: t("resetBook.notifyKeptBody", {
             transactions: formatCount(removed.transactions ?? 0),
             journalRows: formatCount(removed.journal_entries ?? 0),
             decisions: formatCount(keptDecisions),
           }),
+          descriptionPrivacy: "safe",
           tone: "success",
         });
         closeResetBookData();
@@ -934,9 +956,10 @@ export function SettingsScreen({
         );
       }
       summary.push(...optionalSummary);
-      addNotification({
+      showFeedback({
         title: t("resetBook.notifyTitle"),
-        body: t("resetBook.notifyBody", { summary: summary.join(", ") }),
+        description: t("resetBook.notifyBody", { summary: summary.join(", ") }),
+        descriptionPrivacy: "safe",
         tone: "success",
       });
       closeResetBookData();
@@ -995,14 +1018,9 @@ export function SettingsScreen({
           setAppLockPolicy({ touchIdUnlock: false });
           await forgetTouchIdPassphrase(touchIdDataRoot).catch(() => {});
           await refreshTouchIdStatus();
-          addNotification({
-            title: t("touchId.disabledTitle"),
-            body:
-              error instanceof Error
-                ? error.message
-                : t("touchId.disabledBody"),
-            tone: "warning",
-          });
+          recordTouchIdOff(
+            error instanceof Error ? error.message : t("touchId.disabledBody"),
+          );
         }
       }
       setPassphraseOpen(false);
@@ -1056,9 +1074,11 @@ export function SettingsScreen({
       setAppLockPolicy({ touchIdUnlock: true });
       setTouchIdEnrollOpen(false);
       setTouchIdEnrollPassphrase("");
-      addNotification({
+      resolveTouchIdOff();
+      showFeedback({
         title: t("touchIdEnroll.notifyTitle"),
-        body: t("touchIdEnroll.notifyBody"),
+        description: t("touchIdEnroll.notifyBody"),
+        descriptionPrivacy: "safe",
         tone: "success",
       });
     } catch (error) {

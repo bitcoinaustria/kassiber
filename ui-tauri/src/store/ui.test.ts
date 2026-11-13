@@ -81,78 +81,18 @@ describe("UI persistence", () => {
     expect(useUiStore.getState().appUpdate).toBeNull();
   });
 
-  it("coalesces notifications with the same dedupe key", () => {
-    useUiStore.setState({ notifications: [] });
-    const first = useUiStore.getState().addNotification({
-      title: "Connection refresh started",
-      body: "Scanning",
-      tone: "warning",
-      dedupeKey: "wallet-sync",
-      progress: { label: "Preparing wallet scan" },
-    });
-    const second = useUiStore.getState().addNotification({
-      title: "Connection refresh finished",
-      body: "2 sources current",
-      tone: "success",
-      dedupeKey: "wallet-sync",
-    });
-
-    expect(second).toBe(first);
-    expect(useUiStore.getState().notifications).toHaveLength(1);
-    expect(useUiStore.getState().notifications[0]).toMatchObject({
-      id: first,
-      title: "Connection refresh finished",
-      body: "2 sources current",
-      dedupeKey: "wallet-sync",
-    });
-    expect(useUiStore.getState().notifications[0].progress).toBeUndefined();
-  });
-
-  it("does not persist notification progress to localStorage", () => {
+  it("has no notification list to persist", () => {
+    // Notifications live in `store/notifications.ts`, in RAM only. A blob
+    // that still carries an old list stays out of what is written back.
     const state = {
       ...useUiStore.getState(),
       theme: "dark" as const,
-      clearClipboard: false,
-      notifications: [
-        {
-          id: "notification-1",
-          createdAt: "2026-05-13T00:00:00Z",
-          title: "Sync",
-          body: "Running",
-          tone: "info" as const,
-          progress: { label: "token=secret-progress" },
-        },
-      ],
-    };
-
+      notifications: [{ id: "old", title: "Book refresh failed", body: "token=secret-progress" }],
+    } as unknown as Parameters<typeof uiStatePartialForStorage>[0];
     const encoded = JSON.stringify(uiStatePartialForStorage(state));
     expect(encoded).not.toContain("secret-progress");
+    expect(encoded).not.toContain('"notifications"');
     expect(encoded).toContain('"theme":"dark"');
-    expect(encoded).toContain('"clearClipboard":false');
-  });
-
-  it("keeps notifications in memory but never in kb.ui", () => {
-    useUiStore.setState({ notifications: [] });
-    useUiStore.getState().addNotification({
-      title: "Book refresh needs attention",
-      body: "1 needs attention",
-      tone: "warning",
-      details: ["Cold wallet: HTTP 502 from https://node.example:3002/api"],
-      action: { label: "Open settings", target: "/settings/bitcoin" },
-    });
-
-    expect(useUiStore.getState().notifications[0].details).toEqual([
-      "Cold wallet: HTTP 502 from https://node.example:3002/api",
-    ]);
-    const encoded = JSON.stringify(
-      uiStatePartialForStorage(useUiStore.getState()),
-    );
-    expect(encoded).not.toContain("node.example");
-    expect(encoded).not.toContain('"details"');
-    // Nothing of a notification survives a restart, its action least of all:
-    // replayed later, it would run against whichever book is open then.
-    expect(encoded).not.toContain("/settings/bitcoin");
-    expect(encoded).not.toContain("Book refresh needs attention");
   });
 
   it("drops stored notifications when migrating to v5", () => {
@@ -171,86 +111,6 @@ describe("UI persistence", () => {
     );
     expect(migrated).toMatchObject({ theme: "light" });
     expect((migrated as { notifications?: unknown }).notifications).toBeUndefined();
-  });
-
-  it("clears the replaced entry's details and action on a dedupe update", () => {
-    useUiStore.setState({ notifications: [] });
-    const { addNotification } = useUiStore.getState();
-    addNotification({
-      title: "Book refresh failed",
-      body: "Electrum timeout",
-      tone: "error",
-      dedupeKey: "book-refresh",
-      details: ["Cold wallet: timeout"],
-      action: { label: "Open settings", target: "/settings/bitcoin" },
-    });
-    addNotification({
-      title: "Book refresh started",
-      body: "Refreshing",
-      tone: "warning",
-      dedupeKey: "book-refresh",
-    });
-
-    const [entry] = useUiStore.getState().notifications;
-    expect(entry.title).toBe("Book refresh started");
-    expect(entry.details).toBeUndefined();
-    expect(entry.action).toBeUndefined();
-    expect(entry.repeatCount).toBeUndefined();
-  });
-
-  it("counts word-for-word repeats instead of adding rows", () => {
-    useUiStore.setState({ notifications: [] });
-    const { addNotification } = useUiStore.getState();
-    const failure = {
-      title: "Export failed",
-      body: "Disk full",
-      tone: "error" as const,
-    };
-    const first = addNotification(failure);
-    expect(addNotification(failure)).toBe(first);
-    addNotification(failure);
-    addNotification({ ...failure, body: "Permission denied" });
-
-    const notifications = useUiStore.getState().notifications;
-    expect(notifications).toHaveLength(2);
-    expect(notifications[1]).toMatchObject({ id: first, repeatCount: 3 });
-    expect(notifications[0].repeatCount).toBeUndefined();
-
-    // A keyed notification counts only when its text is unchanged.
-    useUiStore.setState({ notifications: [] });
-    const keyed = { ...failure, dedupeKey: "background-freshness" };
-    addNotification(keyed);
-    addNotification(keyed);
-    expect(useUiStore.getState().notifications[0].repeatCount).toBe(2);
-    addNotification({ ...keyed, title: "Book refresh needs attention" });
-    expect(useUiStore.getState().notifications[0].repeatCount).toBeUndefined();
-  });
-
-  it("never counts a keyed running job as a repeat", () => {
-    useUiStore.setState({ notifications: [] });
-    const { addNotification } = useUiStore.getState();
-    const running = {
-      title: "Refreshing book",
-      body: "Syncing wallets",
-      tone: "info" as const,
-      dedupeKey: "book-refresh",
-      progress: { indeterminate: true },
-    };
-    addNotification(running);
-    addNotification(running);
-    addNotification(running);
-    const { notifications } = useUiStore.getState();
-    expect(notifications).toHaveLength(1);
-    expect(notifications[0].repeatCount).toBeUndefined();
-  });
-
-  it("does not fold a running job into an identical finished one", () => {
-    useUiStore.setState({ notifications: [] });
-    const { addNotification } = useUiStore.getState();
-    const notice = { title: "Import", body: "Working", tone: "info" as const };
-    addNotification(notice);
-    addNotification({ ...notice, progress: { indeterminate: true } });
-    expect(useUiStore.getState().notifications).toHaveLength(2);
   });
 
   it("persists overview chart periods per book", () => {

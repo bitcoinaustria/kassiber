@@ -29,6 +29,7 @@ import {
   type JournalEventsData,
 } from "@/components/transactions/dashboard/model";
 import { transactionDetailSaveArgs } from "@/components/transactions/dashboard/useTransactionDetailRecord";
+import { showFeedback } from "@/lib/feedback";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   openAttachmentFile,
@@ -43,7 +44,6 @@ import type {
   TransactionHistoryList,
 } from "@/lib/transactionHistory";
 import type { OverviewSnapshot, Tx } from "@/mocks/seed";
-import { useUiStore } from "@/store/ui";
 import { activeMarketFiatRate } from "./model";
 import { overviewDetailTransactions } from "./overviewTransactionDetailModel";
 
@@ -189,11 +189,12 @@ export function useOverviewTransactionDetail({
       const notifyResolutionFailure = () => {
         if (fromPendingLink) failedPendingDetailLinkRef.current = resolutionKey;
         resolvingPendingDetailLinkRef.current = null;
-        useUiStore.getState().addNotification({
+        showFeedback({
           title: t("route.resolveError.title"),
-          body: t("route.resolveError.body"),
+          description: t("route.resolveError.body"),
+          descriptionPrivacy: "safe",
           tone: "error",
-          dedupeKey: `transaction-resolve-${transaction.id}`,
+          key: `transaction-resolve-${transaction.id}`,
         });
       };
       if (!summaryOnlyTransactionIds.has(transaction.id)) {
@@ -337,14 +338,15 @@ export function useOverviewTransactionDetail({
           ? `Reverted ${target.field.label} from edit history`
           : "Reverted edit history event",
       });
-      useUiStore.getState().addNotification({
-        title: "Edit reverted",
-        body: "Kassiber wrote a new edit history entry with the reverted value.",
+      showFeedback({
+        title: t("notification.editReverted.title"),
+        description: t("notification.editReverted.body"),
+        descriptionPrivacy: "safe",
         tone: "success",
-        dedupeKey: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
+        key: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
       });
     },
-    [detailTransaction, revertHistory],
+    [detailTransaction, revertHistory, t],
   );
 
   React.useEffect(() => {
@@ -414,11 +416,12 @@ export function useOverviewTransactionDetail({
               (attachments) => upsertAttachmentRecords(attachments, added),
             );
           }
-          useUiStore.getState().addNotification({
-            title: "Files attached",
-            body: `${paths.length} file${paths.length === 1 ? "" : "s"} copied into Kassiber attachments.`,
+          showFeedback({
+            title: t("notification.filesAttached.title"),
+            description: t("notification.filesAttached.body", { count: paths.length }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-files-${detailTransaction.id}`,
+            key: `attachments-files-${detailTransaction.id}`,
           });
         }}
         onAddAttachmentLinks={async (urls) => {
@@ -442,11 +445,12 @@ export function useOverviewTransactionDetail({
               (attachments) => upsertAttachmentRecords(attachments, added),
             );
           }
-          useUiStore.getState().addNotification({
-            title: "Links attached",
-            body: `${urls.length} link${urls.length === 1 ? "" : "s"} stored as attachment references.`,
+          showFeedback({
+            title: t("notification.linksAttached.title"),
+            description: t("notification.linksAttached.body", { count: urls.length }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-links-${detailTransaction.id}`,
+            key: `attachments-links-${detailTransaction.id}`,
           });
         }}
         onReuseEvidence={
@@ -486,9 +490,10 @@ export function useOverviewTransactionDetail({
               (attachments) => replaceAttachmentRecord(attachments, updated),
             );
           }
-          useUiStore.getState().addNotification({
-            title: "Link text updated",
-            body: "Attachment link label saved.",
+          showFeedback({
+            title: t("notification.linkTextUpdated.title"),
+            description: t("notification.linkTextUpdated.body"),
+            descriptionPrivacy: "safe",
             tone: "success",
           });
         }}
@@ -502,14 +507,15 @@ export function useOverviewTransactionDetail({
             detailTransaction.id,
             (attachments) => removeAttachmentRecord(attachments, item.id),
           );
-          useUiStore.getState().addNotification({
-            title: "Attachment removed",
-            body:
+          showFeedback({
+            title: t("notification.attachmentRemoved.title"),
+            description:
               item.kind === "file"
-                ? "Attachment record and copied file removed."
-                : "Attachment link removed.",
+                ? t("notification.attachmentRemoved.fileBody")
+                : t("notification.attachmentRemoved.linkBody"),
+            descriptionPrivacy: "free-text",
             tone: "success",
-            dedupeKey: `attachment-remove-${item.id}`,
+            key: `attachment-remove-${item.id}`,
           });
         }}
         onOpenChange={(open) => {
@@ -563,11 +569,12 @@ export function useOverviewTransactionDetail({
             );
           }
           setReuseDialogOpen(false);
-          useUiStore.getState().addNotification({
-            title: "Evidence reused",
-            body: `${copied} evidence item${copied === 1 ? "" : "s"} copied to this transaction.`,
+          showFeedback({
+            title: t("notification.evidenceReused.title"),
+            description: t("notification.evidenceReused.body", { count: copied }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-copy-${detailTransaction.id}`,
+            key: `attachments-copy-${detailTransaction.id}`,
           });
         }}
       />

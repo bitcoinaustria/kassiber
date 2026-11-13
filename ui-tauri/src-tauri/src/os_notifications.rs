@@ -3,45 +3,33 @@
 //! The renderer decides *whether* an event qualifies (see
 //! `ui-tauri/src/lib/osNotifications.ts`); this module decides *what* the
 //! operating system is shown, and the renderer cannot influence that. The
-//! delivery command accepts only an allowlisted category and an opaque
-//! correlation token. The title is always "Kassiber" and the body one of two
-//! fixed sentences per language, so no amount, count, name, address, txid,
-//! server, file name, path, or error text can reach the OS notification store,
-//! in any privacy mode.
+//! delivery command accepts only an allowlisted category. The title is always
+//! "Kassiber" and the body one of three fixed sentences per language, so no
+//! amount, count, name, address, txid, server, file name, path, or error text
+//! can reach the OS notification store, in any privacy mode.
 //!
 //! The renderer gets no `notification:*` capability: the plugin's own
 //! commands (and the `window.Notification` polyfill its init script installs)
 //! are refused by the ACL, so this command is the only way to show one.
 //!
 //! Clicks: `tauri-plugin-notification` 2.4 (the newest release that runs on
-//! the Tauri 2.11 runtime this app locks) does not report desktop clicks.
-//! Clicking a notification activates the app on macOS and Windows; the next
-//! time the main window gains focus after a delivery, the token of the last
-//! delivered notification is handed back to the renderer once, which routes
-//! it after unlock. Nothing else is done on activation: no sync, no approval,
-//! no file access, no unlock.
+//! the Tauri 2.11 runtime this app locks) does not report desktop clicks, so
+//! a click only brings Kassiber to the front, as the operating system does;
+//! the bell shows what happened. Nothing is guessed from window focus, and a
+//! click never syncs, approves, opens a file, or unlocks.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_notification::NotificationExt;
-
-/// Renderer event carrying the token of an activated notification.
-pub const ACTIVATED_EVENT: &str = "os-notification://activated";
 
 /// The only title an OS notification from Kassiber ever has.
 pub const TITLE: &str = "Kassiber";
 
 /// Backstop against a renderer that skips its own cooldown.
 const MIN_INTERVAL: Duration = Duration::from_secs(10);
-
-/// How long after a delivery a focus gain still counts as its activation.
-const ACTIVATION_WINDOW: Duration = Duration::from_secs(30 * 60);
-
-const TOKEN_MIN_LEN: usize = 16;
-const TOKEN_MAX_LEN: usize = 64;
 
 /// The allowlisted background outcomes that may raise an OS notification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
@@ -61,7 +49,8 @@ impl Category {
     fn template(self) -> Template {
         match self {
             Category::NeedsAttention | Category::EvidenceChanged => Template::Attention,
-            Category::JobFinished | Category::NewActivity => Template::Finished,
+            Category::JobFinished => Template::Finished,
+            Category::NewActivity => Template::NewActivity,
         }
     }
 }
@@ -70,6 +59,7 @@ impl Category {
 enum Template {
     Attention,
     Finished,
+    NewActivity,
 }
 
 /// The app's UI language, the only input besides the category.
@@ -84,11 +74,13 @@ pub enum Language {
 }
 
 /// Every body Kassiber can put in an OS notification.
-pub const BODIES: [&str; 4] = [
+pub const BODIES: [&str; 6] = [
     "Background work needs your attention.",
     "Background work has finished.",
+    "New activity in Kassiber.",
     "Eine Hintergrundaufgabe braucht deine Aufmerksamkeit.",
     "Eine Hintergrundaufgabe ist abgeschlossen.",
+    "Neue Aktivität in Kassiber.",
 ];
 
 /// The fixed body for a category in a language.
@@ -96,18 +88,11 @@ pub fn body(category: Category, language: Language) -> &'static str {
     match (category.template(), language) {
         (Template::Attention, Language::En) => BODIES[0],
         (Template::Finished, Language::En) => BODIES[1],
-        (Template::Attention, Language::DeAt) => BODIES[2],
-        (Template::Finished, Language::DeAt) => BODIES[3],
+        (Template::NewActivity, Language::En) => BODIES[2],
+        (Template::Attention, Language::DeAt) => BODIES[3],
+        (Template::Finished, Language::DeAt) => BODIES[4],
+        (Template::NewActivity, Language::DeAt) => BODIES[5],
     }
-}
-
-/// An opaque correlation token: renderer-generated, never shown, and limited
-/// to a shape that cannot carry prose.
-pub fn valid_token(token: &str) -> bool {
-    (TOKEN_MIN_LEN..=TOKEN_MAX_LEN).contains(&token.len())
-        && token
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
 /// What a delivery request came to. Reported back to the renderer, which
@@ -126,12 +111,10 @@ struct Inner {
     enabled: bool,
     language: Language,
     last_delivered: Option<Instant>,
-    /// The token of the last delivered notification, until the next focus.
-    pending: Option<(String, Instant)>,
 }
 
-/// RAM-only state: the opt-in mirrored from the renderer, the backstop
-/// interval, and the activation token. Nothing here is written to disk.
+/// RAM-only state: the opt-in mirrored from the renderer and the backstop
+/// interval. Nothing here is written to disk.
 #[derive(Default)]
 pub struct OsNotificationState {
     inner: Mutex<Inner>,
@@ -151,9 +134,6 @@ impl OsNotificationState {
         let turned_on = enabled && !inner.enabled;
         inner.enabled = enabled;
         inner.language = language;
-        if !enabled {
-            inner.pending = None;
-        }
         turned_on
     }
 
@@ -162,42 +142,25 @@ impl OsNotificationState {
     pub fn admit(
         &self,
         category: Category,
-        token: &str,
         window_focused: bool,
         now: Instant,
-    ) -> Result<(Outcome, Option<&'static str>), String> {
-        if !valid_token(token) {
-            return Err("invalid notification token".into());
-        }
+    ) -> (Outcome, Option<&'static str>) {
         let mut inner = self.lock();
         if !inner.enabled {
-            return Ok((Outcome::Disabled, None));
+            return (Outcome::Disabled, None);
         }
         if window_focused {
-            return Ok((Outcome::Focused, None));
+            return (Outcome::Focused, None);
         }
         if inner
             .last_delivered
             .is_some_and(|last| now.saturating_duration_since(last) < MIN_INTERVAL)
         {
-            return Ok((Outcome::Cooldown, None));
+            return (Outcome::Cooldown, None);
         }
         inner.last_delivered = Some(now);
-        inner.pending = Some((token.to_owned(), now));
-        Ok((Outcome::Delivered, Some(body(category, inner.language))))
+        (Outcome::Delivered, Some(body(category, inner.language)))
     }
-
-    /// The token to hand back when the main window gains focus: the last
-    /// delivered notification's, once, and only within the activation window.
-    pub fn take_activation(&self, now: Instant) -> Option<String> {
-        let (token, delivered_at) = self.lock().pending.take()?;
-        (now.saturating_duration_since(delivered_at) <= ACTIVATION_WINDOW).then_some(token)
-    }
-}
-
-#[derive(Clone, Serialize)]
-struct ActivatedPayload {
-    token: String,
 }
 
 #[tauri::command]
@@ -221,7 +184,6 @@ pub fn deliver_os_notification(
     app: AppHandle,
     state: State<'_, OsNotificationState>,
     category: Category,
-    token: String,
 ) -> Result<Outcome, String> {
     // Visibility is not enough: a visible window behind another app is
     // unfocused and qualifies; an unknown window counts as focused.
@@ -229,7 +191,7 @@ pub fn deliver_os_notification(
         .get_webview_window("main")
         .map(|window| window.is_focused().unwrap_or(true))
         .unwrap_or(true);
-    let (outcome, body) = state.admit(category, &token, focused, Instant::now())?;
+    let (outcome, body) = state.admit(category, focused, Instant::now());
     if let Some(body) = body {
         app.notification()
             .builder()
@@ -241,23 +203,9 @@ pub fn deliver_os_notification(
     Ok(outcome)
 }
 
-/// Called when the main window gains focus, which is how a click shows up:
-/// the OS has already raised and focused the window by then.
-pub fn on_main_window_focused<R: Runtime>(app: &AppHandle<R>) {
-    let Some(token) = app
-        .try_state::<OsNotificationState>()
-        .and_then(|state| state.take_activation(Instant::now()))
-    else {
-        return;
-    };
-    let _ = app.emit_to("main", ACTIVATED_EVENT, ActivatedPayload { token });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const TOKEN: &str = "0123456789abcdef-token";
 
     fn enabled() -> OsNotificationState {
         let state = OsNotificationState::default();
@@ -329,8 +277,12 @@ mod tests {
             "Background work has finished."
         );
         assert_eq!(
+            body(Category::NewActivity, Language::En),
+            "New activity in Kassiber."
+        );
+        assert_eq!(
             body(Category::NewActivity, Language::DeAt),
-            "Eine Hintergrundaufgabe ist abgeschlossen."
+            "Neue Aktivität in Kassiber."
         );
         assert_eq!(TITLE, "Kassiber");
     }
@@ -339,9 +291,7 @@ mod tests {
     fn delivered_body_follows_the_language_preference() {
         let state = OsNotificationState::default();
         state.set_preferences(true, Language::DeAt);
-        let (outcome, text) = state
-            .admit(Category::NeedsAttention, TOKEN, false, Instant::now())
-            .unwrap();
+        let (outcome, text) = state.admit(Category::NeedsAttention, false, Instant::now());
         assert_eq!(outcome, Outcome::Delivered);
         assert_eq!(
             text,
@@ -350,34 +300,16 @@ mod tests {
     }
 
     #[test]
-    fn tokens_cannot_carry_prose() {
-        assert!(valid_token(TOKEN));
-        assert!(!valid_token("short"));
-        assert!(!valid_token("Wallet Savings received 0.5 BTC"));
-        assert!(!valid_token(&"a".repeat(TOKEN_MAX_LEN + 1)));
-        assert!(!valid_token("0123456789abcdef/../etc"));
-        let state = enabled();
-        assert!(state
-            .admit(Category::JobFinished, "bc1q address", false, Instant::now())
-            .is_err());
-    }
-
-    #[test]
     fn nothing_is_delivered_until_opted_in() {
         let state = OsNotificationState::default();
-        let (outcome, text) = state
-            .admit(Category::NeedsAttention, TOKEN, false, Instant::now())
-            .unwrap();
+        let (outcome, text) = state.admit(Category::NeedsAttention, false, Instant::now());
         assert_eq!((outcome, text), (Outcome::Disabled, None));
-        assert!(state.take_activation(Instant::now()).is_none());
     }
 
     #[test]
     fn a_focused_window_gets_no_notification() {
         let state = enabled();
-        let (outcome, text) = state
-            .admit(Category::JobFinished, TOKEN, true, Instant::now())
-            .unwrap();
+        let (outcome, text) = state.admit(Category::JobFinished, true, Instant::now());
         assert_eq!((outcome, text), (Outcome::Focused, None));
     }
 
@@ -386,74 +318,25 @@ mod tests {
         let state = enabled();
         let start = Instant::now();
         assert_eq!(
-            state
-                .admit(Category::JobFinished, TOKEN, false, start)
-                .unwrap()
-                .0,
+            state.admit(Category::JobFinished, false, start).0,
             Outcome::Delivered
         );
         assert_eq!(
             state
                 .admit(
                     Category::NeedsAttention,
-                    TOKEN,
                     false,
                     start + Duration::from_secs(1)
                 )
-                .unwrap()
                 .0,
             Outcome::Cooldown
         );
         assert_eq!(
             state
-                .admit(Category::NeedsAttention, TOKEN, false, start + MIN_INTERVAL)
-                .unwrap()
+                .admit(Category::NeedsAttention, false, start + MIN_INTERVAL)
                 .0,
             Outcome::Delivered
         );
-    }
-
-    #[test]
-    fn activation_hands_back_the_last_token_once() {
-        let state = enabled();
-        let start = Instant::now();
-        state
-            .admit(Category::JobFinished, TOKEN, false, start)
-            .unwrap();
-        assert_eq!(
-            state
-                .take_activation(start + Duration::from_secs(5))
-                .as_deref(),
-            Some(TOKEN)
-        );
-        assert!(state
-            .take_activation(start + Duration::from_secs(6))
-            .is_none());
-    }
-
-    #[test]
-    fn activation_expires_and_opting_out_forgets_it() {
-        let state = enabled();
-        let start = Instant::now();
-        state
-            .admit(Category::JobFinished, TOKEN, false, start)
-            .unwrap();
-        assert!(state
-            .take_activation(start + ACTIVATION_WINDOW + Duration::from_secs(1))
-            .is_none());
-
-        state
-            .admit(
-                Category::JobFinished,
-                TOKEN,
-                false,
-                start + ACTIVATION_WINDOW * 2,
-            )
-            .unwrap();
-        state.set_preferences(false, Language::En);
-        assert!(state
-            .take_activation(start + ACTIVATION_WINDOW * 2)
-            .is_none());
     }
 
     #[test]

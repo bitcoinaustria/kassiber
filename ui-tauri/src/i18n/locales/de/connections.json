@@ -230,7 +230,6 @@
       "copiedInline": "In die Zwischenablage kopiert.",
       "copiedTitle": "Wallet-Export kopiert",
       "copiedBody": "Wallet-Export-Material für {{label}} kopiert.",
-      "failedTitle": "Wallet-Export konnte nicht kopiert werden",
       "errorMissingDescriptor": "Diese Wallet hat kein Wallet-Export-Material gespeichert.",
       "errorPlaintextAck": "Tippe {{ack}}, um dieses lokale Secret zu kopieren.",
       "couldNotCopy": "Wallet-Export-Material konnte nicht kopiert werden."
@@ -321,15 +320,6 @@
       "enterPassphrase": "Gib die Datenbank-Passphrase ein."
     },
     "sync": {
-      "alreadyRunningTitle": "Verbindungs-Aktualisierung läuft bereits",
-      "alreadyRunningBody": "{{label}} scannt bereits. Kassiber aktualisiert diese Seite, sobald der Daemon fertig ist.",
-      "rescanStartedTitle": "Verbindungs-Rescan gestartet",
-      "refreshStartedTitle": "Verbindungs-Aktualisierung gestartet",
-      "rescanStartedBody": "{{label}} wird im Watch-only-Modus erneut gescannt.",
-      "refreshStartedBody": "{{label}} wird im Watch-only-Modus gescannt.",
-      "stillScanning": "{{label}} scannt noch. Große Descriptors oder langsame Backends können etwas dauern; Kassiber aktualisiert, sobald der Daemon antwortet.",
-      "failedTitle": "Verbindungs-Aktualisierung fehlgeschlagen",
-      "finishedTitle": "Verbindungs-Aktualisierung abgeschlossen",
       "failedFallback": "Verbindungs-Aktualisierung fehlgeschlagen.",
       "missingResult": "{{label}}: Es wurde kein Ergebnis zurückgegeben. Prüfe den Verbindungsstatus.",
       "backendRequiredTitle": "Offline — Wallet-Sync ist aus",
@@ -337,7 +327,6 @@
       "addBackend": "Backend hinzufügen",
       "rescanCoverageFailed": "Es konnte nicht geprüft werden, ob Bitcoin Core diese Wallet erneut scannen kann.",
       "rescanBirthdayRequired": "Gib das echte erste Nutzungsdatum der Wallet ein, bevor du mit dieser geprunten Node erneut scannst.",
-      "rescanUnavailableTitle": "Vollständiger Rescan nicht verfügbar",
       "rescanPrunedBlocked": "Diese Wallet beginnt am {{birthday}}, aber die Node bewahrt Blöcke nur ungefähr ab {{retained}} auf. Die normale Aktualisierung bleibt verfügbar; verwende für einen vollständigen Rescan eine ungeprunte Core-Node oder ein Archiv-Backend.",
       "retainedDateUnknown": "einem unbekannten Datum"
     },
@@ -597,14 +586,7 @@
       "offered": "In Bearbeitung"
     },
     "sync": {
-      "alreadyRunningTitle": "Node-Aktualisierung läuft bereits",
-      "alreadyRunningBody": "{{label}} ruft bereits Node-Daten ab. Kassiber aktualisiert diese Seite, sobald der Daemon fertig ist.",
-      "startedTitle": "Node-Aktualisierung gestartet",
-      "startedBody": "{{label}} ruft Channel- und Routing-Daten im Read-only-Modus ab.",
       "stillScanning": "{{label}} ruft noch Node-Daten ab. Große Channel-Historien können einen Moment dauern; Kassiber aktualisiert, sobald der Daemon antwortet.",
-      "failedTitle": "Node-Aktualisierung fehlgeschlagen",
-      "finishedTitle": "Node-Aktualisierung abgeschlossen",
-      "finishedBody": "Der Node-Snapshot von {{label}} ist aktuell.",
       "failedFallback": "Node-Aktualisierung fehlgeschlagen."
     }
   },
@@ -851,7 +833,6 @@
       "scanAfter": "Adressen nach dem Setup scannen",
       "errorNeedAddress": "Füge mindestens eine Mainnet-Bitcoin-Adresse ein oder lade sie.",
       "fileReadFailed": "Die ausgewählte Datei konnte nicht gelesen werden.",
-      "stillScanning": "{{label}} scannt die Adressliste. Große Listen dauern bei Esplora-Backends länger.",
       "addedBody_one": "{{label}} mit {{count}} Adresse erstellt.",
       "addedBody_other": "{{label}} mit {{count}} Adressen erstellt."
     },
@@ -871,7 +852,6 @@
       "fullHistoryAck": "Mir ist bewusst, dass ein Full-History-Scan lange dauern kann und Reports unvollständig bleiben, bis der Bereich fertig ist.",
       "serverAck": "Mir ist bewusst, dass dieses ausgewählte Backend genug erfahren kann, um diese Silent-Payments-Wallet zu korrelieren, und dass unvollständige oder ausgelassene Scan-Kandidaten Reports unvollständig machen können. Nicht auf ein anderes Backend ausweichen.",
       "scanAfter": "Silent Payments nach dem Setup scannen",
-      "stillScanning": "{{label}} scannt Silent Payments. Reports bleiben blockiert, wenn das ausgewählte Backend nur Teilhistorie liefert.",
       "addedBody": "{{label}} als watch-only Silent-Payments-Quelle erstellt.",
       "addedBodyScanning": "{{label}} als watch-only Silent-Payments-Quelle erstellt und Scan gestartet.",
       "errorMaterial": "Füge watch-only Silent-Payments-Material ein.",
@@ -932,7 +912,7 @@
       "saveTemplateTitle": "Journal-Vorlage speichern",
       "templateReadyTitle": "Vorlage bereit",
       "templateReadyBody": "Trag deine Transaktionen ein und importier die Datei hier.",
-      "templateFailedTitle": "Vorlage konnte nicht erstellt werden",
+      "templateFailedBody": "Vorlage konnte nicht erstellt werden: {{message}}",
       "preview": {
         "loading": "Datei wird gelesen…",
         "failed": "Diese Datei konnte nicht gelesen werden.",
@@ -969,8 +949,7 @@
       "errorNeedMaterial": "Füge mindestens einen Samourai-Descriptor oder xpub ein.",
       "importedTitle": "Samourai-Import hinzugefügt",
       "importedBody": "{{label}} hat {{value}} Watch-only-Quellen erstellt.",
-      "importedBodyScanning": "{{label}} hat {{value}} Watch-only-Quellen erstellt und den Scan gestartet.",
-      "stillScanning": "{{label}} scannt Samourai-Watch-only-Quellen. Die Postmix-Erkennung kann bei alten Wallets länger dauern."
+      "importedBodyScanning": "{{label}} hat {{value}} Watch-only-Quellen erstellt und den Scan gestartet."
     },
     "wasabi": {
       "importSource": "Importquelle",
@@ -986,15 +965,13 @@
       "walletInfoHelper": "Optionale sichere Wallet-Metadaten.",
       "additionalLabel": "Weitere Wasabi-Bereiche",
       "additionalHelper": "Optionales JSON-Objekt mit den Bereichen <code>{{listkeys}}</code>, <code>{{listpayments}}</code> oder <code>{{walletJson}}</code>. Führe diese Wasabi-RPC-Methoden auf die gleiche Weise aus und füge die Antworten unter den passenden Keys ein.",
-      "importAfter": "Nach dem Setup importieren",
-      "importingRpc": "{{label}} importiert eingefügte Wasabi-RPC-Ausgaben."
+      "importAfter": "Nach dem Setup importieren"
     },
     "fileWallet": {
       "fileFormat": "Dateiformat",
       "formatCsv": "CSV",
       "formatJson": "JSON",
-      "importAfter": "Nach dem Setup importieren",
-      "stillImporting": "{{label}} importiert noch aus der ausgewählten Datei. Große Exporte können etwas dauern; Kassiber aktualisiert, sobald der Daemon fertig ist."
+      "importAfter": "Nach dem Setup importieren"
     },
     "btcpayCsv": {
       "importBehavior": "Importverhalten",
@@ -1008,12 +985,8 @@
       "noWalletsYet": "Noch keine Nicht-BTCPay-Wallets",
       "errorChooseWallet": "Wähle die Wallet, die diesen BTCPay-CSV-Import erhalten soll.",
       "errorCreateWalletFirst": "Erstelle zuerst eine Settlement-Wallet oder wechsle zum Erstellen einer BTCPay-Wallet-Quelle.",
-      "importingExisting": "{{wallet}} importiert den BTCPay-CSV-Export.",
       "importedTitle": "BTCPay CSV importiert",
       "importedBody": "BTCPay-CSV-Zeilen in {{wallet}} importiert."
-    },
-    "descriptorWallet": {
-      "stillScanning": "{{label}} scannt noch im Watch-only-Modus. Große Descriptors oder langsame Backends können etwas dauern; Kassiber aktualisiert, sobald der Daemon fertig ist."
     },
     "bullWallet": {
       "importBehavior": "Importverhalten",
@@ -1036,8 +1009,6 @@
       "noWalletsYet": "Noch keine Wallets",
       "selectWallet": "Wallet auswählen",
       "refreshAfter": "Nach dem Setup aktualisieren",
-      "stillImportingExisting": "{{label}} aktualisiert die zugeordneten Wallets, damit die Bull-Export-Metadaten abgeglichen werden können.",
-      "stillImportingSources": "{{label}} importiert die ausgewählten Bull-Wallet-Netzwerke. Große Exporte können etwas dauern.",
       "mappingSavedTitle": "Bull-Wallet-Zuordnung gespeichert",
       "mappedBody_one": "{{count}} Wallet verwendet Bull-Export-Metadaten bei der Aktualisierung.",
       "mappedBody_other": "{{count}} Wallets verwenden Bull-Export-Metadaten bei der Aktualisierung.",
@@ -1063,9 +1034,6 @@
       "walletToEnrich": "Anzureichernde Wallet",
       "walletToEnrichHelper": "Es werden nur Zeilen übernommen, die zu Transaktionen passen, die bereits in dieser Wallet sind.",
       "chooseWallet": "Wallet wählen",
-      "matchingFull": "{{title}} importiert abgeschlossene Orders in dieses Buch und markiert Abgleichlücken.",
-      "matchingBook": "{{title}} gleicht den Export mit vorhandenen Transaktionen in diesem Buch ab.",
-      "matchingWallet": "{{title}} gleicht den Export mit vorhandenen {{wallet}}-Transaktionen ab.",
       "finishedTitle": "Import abgeschlossen",
       "finishedBody": "{{scope}} hat {{updated}} Zeilen aktualisiert und {{skipped}} übersprungen.",
       "bookScope": "Buch",
@@ -1283,8 +1251,6 @@
       "errorServerUrl": "Gib die Server-URL ein, beginnend mit https://.",
       "errorApiKey": "Der API-Key ist erforderlich.",
       "refreshAfter": "Nach dem Setup aktualisieren",
-      "stillRefreshing": "{{label}} wird noch von BTCPay aktualisiert. Große Stores brauchen einen Moment; Kassiber aktualisiert sich, sobald der Daemon fertig ist.",
-      "refreshingSettlement": "{{label}} aktualisiert die zugeordneten Wallets. Kassiber aktualisiert sich, sobald der Daemon fertig ist.",
       "accountSavedTitle": "BTCPay-Verbindung gespeichert",
       "accountSavedBody": "{{count}} Zahlungsmethode(n) eingerichtet; {{wallets}} Wallet(s) beziehen ihr Guthaben aus BTCPay. Rechnungen, Rückerstattungen und Auszahlungen wurden für die ausgewählten Stores geladen. Kassiber erhält keine Live-Updates; synchronisiere erneut, um neue Aktivität zu übernehmen.",
       "provenancePartial": "Für einige Stores konnten noch keine Rechnungen geladen werden: {{message}}",
@@ -1302,8 +1268,6 @@
       "selectLabelFileTitle": "BIP329-Label-Datei auswählen",
       "labelFileFilter": "BIP329 JSONL",
       "errorPickFile": "Wähle die BIP329-Label-Datei.",
-      "previewReadyTitle": "BIP329-Vorschau bereit",
-      "previewReadyBody": "{{count}} Datensätze geprüft: {{exact}} eindeutig, {{ambiguous}} mehrdeutig.",
       "labelsImportedTitle": "Labels importiert",
       "labelsImportedBody": "{{count}} Label-Datensätze verarbeitet. {{added}} Transaktions-Tags hinzugefügt; {{skipped}} mehrdeutige Tag-Projektionen übersprungen.",
       "exportModeLabel": "Exportmodus",
@@ -1351,11 +1315,9 @@
       "bodyRefreshed": "{{label}} ist konfiguriert und aktualisiert."
     },
     "planned": {
-      "title": "Verbindungspfad ist geplant",
       "body": "{{title}} ist im Katalog erfasst, aber noch nicht verdrahtet."
     },
     "setupFailed": {
-      "title": "Verbindungs-Setup fehlgeschlagen",
       "fallback": "Verbindungs-Setup fehlgeschlagen."
     },
     "summary": {
@@ -1476,13 +1438,7 @@
       "failed": "{{time}} · fehlgeschlagen",
       "skipped_one": "{{count}} Eintrag wurde übersprungen, weil er kein BTC ist oder nur Fiat bewegt.",
       "skipped_other": "{{count}} Einträge wurden übersprungen, weil sie kein BTC sind oder nur Fiat bewegen.",
-      "sessionNote": "Sync-Ergebnisse bleiben bis zum Neustart von Kassiber erhalten; das Buch speichert nur die importierten Transaktionen.",
-      "startedTitle": "{{label}} wird synchronisiert",
-      "startedBody": "{{provider}}-Verlauf wird gelesen.",
-      "finishedTitle": "{{label}} synced",
-      "finishedBody_one": "{{count}} neue Transaktion von {{fetched}} gelesenen.",
-      "finishedBody_other": "{{count}} neue Transaktionen von {{fetched}} gelesenen.",
-      "failedTitle": "Sync von {{label}} fehlgeschlagen"
+      "sessionNote": "Sync-Ergebnisse bleiben bis zum Neustart von Kassiber erhalten; das Buch speichert nur die importierten Transaktionen."
     }
   }
 }

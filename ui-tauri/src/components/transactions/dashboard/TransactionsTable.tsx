@@ -27,6 +27,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { Badge } from "@/components/ui/badge";
+import { showFeedback } from "@/lib/feedback";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -597,11 +598,12 @@ const TransactionsTable = ({
           ? t("history.revertReasonField", { label: target.field.label })
           : t("history.revertReasonEvent"),
       });
-      useUiStore.getState().addNotification({
+      showFeedback({
         title: t("notification.editReverted.title"),
-        body: t("notification.editReverted.body"),
+        description: t("notification.editReverted.body"),
+        descriptionPrivacy: "safe",
         tone: "success",
-        dedupeKey: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
+        key: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
       });
     },
     [detailTransaction, revertHistory, t],
@@ -611,21 +613,23 @@ const TransactionsTable = ({
     async (txn: Transaction, as: LoanMarkTarget) => {
       try {
         await markCollateral.mutateAsync({ txid: txn.id, as });
-        useUiStore.getState().addNotification({
+        showFeedback({
           title: t("notification.loanMarked.title"),
-          body: t("notification.loanMarked.body"),
+          description: t("notification.loanMarked.body"),
+          descriptionPrivacy: "safe",
           tone: "success",
-          dedupeKey: `loan-mark-${txn.id}`,
+          key: `loan-mark-${txn.id}`,
         });
       } catch (error) {
-        useUiStore.getState().addNotification({
+        showFeedback({
           title: t("notification.loanMarkFailed.title"),
-          body:
+          description:
             error instanceof Error
               ? error.message
               : t("notification.loanMarkFailed.body"),
+          descriptionPrivacy: "free-text",
           tone: "error",
-          dedupeKey: `loan-mark-failed-${txn.id}`,
+          key: `loan-mark-failed-${txn.id}`,
         });
       }
     },
@@ -635,21 +639,23 @@ const TransactionsTable = ({
     async (txn: Transaction) => {
       try {
         await unmarkCollateral.mutateAsync({ txid: txn.id });
-        useUiStore.getState().addNotification({
+        showFeedback({
           title: t("notification.loanUnmarked.title"),
-          body: t("notification.loanUnmarked.body"),
+          description: t("notification.loanUnmarked.body"),
+          descriptionPrivacy: "safe",
           tone: "success",
-          dedupeKey: `loan-unmark-${txn.id}`,
+          key: `loan-unmark-${txn.id}`,
         });
       } catch (error) {
-        useUiStore.getState().addNotification({
+        showFeedback({
           title: t("notification.loanMarkFailed.title"),
-          body:
+          description:
             error instanceof Error
               ? error.message
               : t("notification.loanMarkFailed.body"),
+          descriptionPrivacy: "free-text",
           tone: "error",
-          dedupeKey: `loan-unmark-failed-${txn.id}`,
+          key: `loan-unmark-failed-${txn.id}`,
         });
       }
     },
@@ -659,21 +665,23 @@ const TransactionsTable = ({
     async (txn: Transaction, targetTransactionId: string) => {
       try {
         await linkLoanMarks.mutateAsync({ txids: [txn.id, targetTransactionId] });
-        useUiStore.getState().addNotification({
+        showFeedback({
           title: t("notification.loanLinked.title"),
-          body: t("notification.loanLinked.body"),
+          description: t("notification.loanLinked.body"),
+          descriptionPrivacy: "safe",
           tone: "success",
-          dedupeKey: `loan-link-${txn.id}-${targetTransactionId}`,
+          key: `loan-link-${txn.id}-${targetTransactionId}`,
         });
       } catch (error) {
-        useUiStore.getState().addNotification({
+        showFeedback({
           title: t("notification.loanLinkFailed.title"),
-          body:
+          description:
             error instanceof Error
               ? error.message
               : t("notification.loanLinkFailed.body"),
+          descriptionPrivacy: "free-text",
           tone: "error",
-          dedupeKey: `loan-link-failed-${txn.id}-${targetTransactionId}`,
+          key: `loan-link-failed-${txn.id}-${targetTransactionId}`,
         });
       }
     },
@@ -2314,11 +2322,12 @@ const TransactionsTable = ({
                                   transaction: txn.id,
                                   excluded: true,
                                 });
-                                useUiStore.getState().addNotification({
+                                showFeedback({
                                   title: t("notification.transactionExcluded.title"),
-                                  body: t("notification.transactionExcluded.body"),
+                                  description: t("notification.transactionExcluded.body"),
+                                  descriptionPrivacy: "safe",
                                   tone: "info",
-                                  dedupeKey: `tx-exclude-${txn.id}`,
+                                  key: `tx-exclude-${txn.id}`,
                                 });
                               })();
                             }}
@@ -2432,11 +2441,12 @@ const TransactionsTable = ({
               (attachments) => upsertAttachmentRecords(attachments, added),
             );
           }
-          useUiStore.getState().addNotification({
+          showFeedback({
             title: t("notification.filesAttached.title"),
-            body: t("notification.filesAttached.body", { count: paths.length }),
+            description: t("notification.filesAttached.body", { count: paths.length }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-files-${detailTransaction.id}`,
+            key: `attachments-files-${detailTransaction.id}`,
           });
         }}
         onAddAttachmentLinks={async (urls) => {
@@ -2460,11 +2470,12 @@ const TransactionsTable = ({
               (attachments) => upsertAttachmentRecords(attachments, added),
             );
           }
-          useUiStore.getState().addNotification({
+          showFeedback({
             title: t("notification.linksAttached.title"),
-            body: t("notification.linksAttached.body", { count: urls.length }),
+            description: t("notification.linksAttached.body", { count: urls.length }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-links-${detailTransaction.id}`,
+            key: `attachments-links-${detailTransaction.id}`,
           });
         }}
         onReuseEvidence={
@@ -2504,9 +2515,10 @@ const TransactionsTable = ({
               (attachments) => replaceAttachmentRecord(attachments, updated),
             );
           }
-          useUiStore.getState().addNotification({
+          showFeedback({
             title: t("notification.linkTextUpdated.title"),
-            body: t("notification.linkTextUpdated.body"),
+            description: t("notification.linkTextUpdated.body"),
+            descriptionPrivacy: "safe",
             tone: "success",
           });
         }}
@@ -2520,14 +2532,15 @@ const TransactionsTable = ({
             detailTransaction.id,
             (attachments) => removeAttachmentRecord(attachments, item.id),
           );
-          useUiStore.getState().addNotification({
+          showFeedback({
             title: t("notification.attachmentRemoved.title"),
-            body:
+            description:
               item.kind === "file"
                 ? t("notification.attachmentRemoved.fileBody")
                 : t("notification.attachmentRemoved.linkBody"),
+            descriptionPrivacy: "free-text",
             tone: "success",
-            dedupeKey: `attachment-remove-${item.id}`,
+            key: `attachment-remove-${item.id}`,
           });
         }}
         onUnpair={async (pairId) => {
@@ -2535,11 +2548,12 @@ const TransactionsTable = ({
           setDetailTransaction((current) =>
             current?.pair?.id === pairId ? { ...current, pair: undefined } : current,
           );
-          useUiStore.getState().addNotification({
+          showFeedback({
             title: t("notification.pairRemoved.title"),
-            body: t("notification.pairRemoved.body"),
+            description: t("notification.pairRemoved.body"),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `transfer-unpair-${pairId}`,
+            key: `transfer-unpair-${pairId}`,
           });
         }}
         isUnpairing={unpairTransfer.isPending}
@@ -2646,11 +2660,12 @@ const TransactionsTable = ({
             );
           }
           setReuseDialogOpen(false);
-          useUiStore.getState().addNotification({
+          showFeedback({
             title: t("notification.evidenceReused.title"),
-            body: t("notification.evidenceReused.body", { count: copied }),
+            description: t("notification.evidenceReused.body", { count: copied }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-copy-${detailTransaction.id}`,
+            key: `attachments-copy-${detailTransaction.id}`,
           });
         }}
       />

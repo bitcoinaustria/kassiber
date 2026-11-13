@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { showFeedback } from "@/lib/feedback";
 import {
   openAttachmentFile,
   openExternalUrl,
@@ -11,7 +12,6 @@ import {
 } from "@/daemon/transport";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
-import { useUiStore } from "@/store/ui";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import type {
   HistoryRevertTarget,
@@ -293,14 +293,15 @@ export function TransactionDetailController({
           ? `Reverted ${target.field.label} from edit history`
           : "Reverted edit history event",
       });
-      useUiStore.getState().addNotification({
-        title: "Edit reverted",
-        body: "Kassiber wrote a new edit history entry with the reverted value.",
+      showFeedback({
+        title: t("notification.editReverted.title"),
+        description: t("notification.editReverted.body"),
+        descriptionPrivacy: "safe",
         tone: "success",
-        dedupeKey: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
+        key: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
       });
     },
-    [revertHistory, workingTransaction],
+    [revertHistory, t, workingTransaction],
   );
 
   const saveTransactionDraft = React.useCallback(
@@ -377,11 +378,12 @@ export function TransactionDetailController({
               (attachments) => upsertAttachmentRecords(attachments, added),
             );
           }
-          useUiStore.getState().addNotification({
-            title: "Files attached",
-            body: `${paths.length} file${paths.length === 1 ? "" : "s"} copied into Kassiber attachments.`,
+          showFeedback({
+            title: t("notification.filesAttached.title"),
+            description: t("notification.filesAttached.body", { count: paths.length }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-files-${workingTransaction.id}`,
+            key: `attachments-files-${workingTransaction.id}`,
           });
         }}
         onAddAttachmentLinks={async (urls) => {
@@ -405,11 +407,12 @@ export function TransactionDetailController({
               (attachments) => upsertAttachmentRecords(attachments, added),
             );
           }
-          useUiStore.getState().addNotification({
-            title: "Links attached",
-            body: `${urls.length} link${urls.length === 1 ? "" : "s"} stored as attachment references.`,
+          showFeedback({
+            title: t("notification.linksAttached.title"),
+            description: t("notification.linksAttached.body", { count: urls.length }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-links-${workingTransaction.id}`,
+            key: `attachments-links-${workingTransaction.id}`,
           });
         }}
         onReuseEvidence={
@@ -447,9 +450,10 @@ export function TransactionDetailController({
               (attachments) => replaceAttachmentRecord(attachments, updated),
             );
           }
-          useUiStore.getState().addNotification({
-            title: "Link text updated",
-            body: "Attachment link label saved.",
+          showFeedback({
+            title: t("notification.linkTextUpdated.title"),
+            description: t("notification.linkTextUpdated.body"),
+            descriptionPrivacy: "safe",
             tone: "success",
           });
         }}
@@ -463,14 +467,15 @@ export function TransactionDetailController({
             workingTransaction.id,
             (attachments) => removeAttachmentRecord(attachments, item.id),
           );
-          useUiStore.getState().addNotification({
-            title: "Attachment removed",
-            body:
+          showFeedback({
+            title: t("notification.attachmentRemoved.title"),
+            description:
               item.kind === "file"
-                ? "Attachment record and copied file removed."
-                : "Attachment link removed.",
+                ? t("notification.attachmentRemoved.fileBody")
+                : t("notification.attachmentRemoved.linkBody"),
+            descriptionPrivacy: "free-text",
             tone: "success",
-            dedupeKey: `attachment-remove-${item.id}`,
+            key: `attachment-remove-${item.id}`,
           });
         }}
         onUnpair={async (pairId) => {
@@ -480,11 +485,12 @@ export function TransactionDetailController({
               ? { ...current, pair: undefined }
               : current,
           );
-          useUiStore.getState().addNotification({
-            title: "Pair removed",
-            body: "This movement is no longer linked to the other leg.",
+          showFeedback({
+            title: t("notification.pairRemoved.title"),
+            description: t("notification.pairRemoved.body"),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `transfer-unpair-${pairId}`,
+            key: `transfer-unpair-${pairId}`,
           });
         }}
         isUnpairing={unpairTransfer.isPending}
@@ -583,11 +589,12 @@ export function TransactionDetailController({
             );
           }
           setReuseDialogOpen(false);
-          useUiStore.getState().addNotification({
-            title: "Evidence reused",
-            body: `${copied} evidence item${copied === 1 ? "" : "s"} copied to this transaction.`,
+          showFeedback({
+            title: t("notification.evidenceReused.title"),
+            description: t("notification.evidenceReused.body", { count: copied }),
+            descriptionPrivacy: "safe",
             tone: "success",
-            dedupeKey: `attachments-copy-${workingTransaction.id}`,
+            key: `attachments-copy-${workingTransaction.id}`,
           });
         }}
       />

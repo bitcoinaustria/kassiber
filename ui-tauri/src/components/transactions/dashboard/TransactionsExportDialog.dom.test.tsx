@@ -53,6 +53,22 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => daemon.navigate,
 }));
 
+// Every row rendered: happy-dom has no layout for the virtualizer to measure.
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, index) => ({
+        index,
+        key: index,
+        start: index * 28,
+        end: (index + 1) * 28,
+        size: 28,
+        lane: 0,
+      })),
+    getTotalSize: () => count * 28,
+  }),
+}));
+
 vi.mock("@/lib/exportFile", () => ({
   saveDaemonExport: vi.fn(async ({ exportPath }: { exportPath: string }) => ({
     savedPath: exportPath,
@@ -127,6 +143,31 @@ describe("TransactionsExportDialog", () => {
     expect(screen.getByText("dashboard.export.period.everything")).toBeTruthy();
     fireEvent.click(exportButton());
     expect(daemon.mutate["ui.transactions.export_xlsx"]).toHaveBeenCalledWith({}, expect.any(Object));
+  });
+
+  it("lists every row of the period and says nothing more when none are cut", () => {
+    const rows = Array.from({ length: 40 }, (_, index) => [
+      `2025-01-${String((index % 28) + 1).padStart(2, "0")}T10:00:00Z`,
+      "Hot",
+      `${index + 1}.00000000`,
+    ]);
+    daemon.preview = {
+      data: {
+        ...TRANSACTIONS_PREVIEW,
+        row_count: 40,
+        sheets: [{ ...TRANSACTIONS_PREVIEW.sheets[0], rows, total: 40 }],
+      },
+      error: null,
+    };
+    mount();
+    expect(screen.getByRole("cell", { name: "1.00000000" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "40.00000000" })).toBeTruthy();
+    expect(screen.queryByText("dashboard.export.preview.showing")).toBeNull();
+  });
+
+  it("says the file holds more rows than the preview lists", () => {
+    mount();
+    expect(screen.getByText("dashboard.export.preview.showing")).toBeTruthy();
   });
 
   it("narrows the file to a calendar period the core resolves", () => {

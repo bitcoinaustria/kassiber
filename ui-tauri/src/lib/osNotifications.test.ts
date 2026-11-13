@@ -1,30 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ActiveBook } from "@/lib/activeBook";
 import {
-  backgroundRunHasNewObservations,
   BURST_COOLDOWN_MS,
   candidateForOccurrence,
   configureOsNotifications,
   DEDUPE_WINDOW_MS,
-  destinationForActivation,
   evidenceWatchCandidate,
-  newActivityCandidate,
   offerOsNotification,
   osNotificationEligibility,
-  randomToken,
-  recordOsNotificationActivation,
   resetOsNotifications,
-  resolveActivation,
   syncOsNotificationPreferences,
-  TOKEN_TTL_MS,
-  useOsNotificationActivation,
   type OsNotificationCandidate,
   type OsNotificationContext,
   type OsNotificationDeps,
 } from "@/lib/osNotifications";
 import {
-  conditionKey,
   onNewOccurrence,
   resetNotificationStore,
   useNotificationStore,
@@ -34,15 +24,6 @@ import {
 import { useUiStore } from "@/store/ui";
 
 const BOOK = '["Ws","Savings"]';
-const OTHER_BOOK = '["Ws","Other"]';
-const ACTIVE: ActiveBook = {
-  key: BOOK,
-  expected: { workspace_id: "Ws", profile_id: "Savings" },
-};
-const OTHER_ACTIVE: ActiveBook = {
-  key: OTHER_BOOK,
-  expected: { workspace_id: "Ws", profile_id: "Other" },
-};
 // Planted identifiers that must never cross the native boundary.
 const SECRET_LABEL = "Cold storage bc1qplantedaddress";
 const SECRET_ERROR =
@@ -62,7 +43,6 @@ const candidate: OsNotificationCandidate = {
   category: "needs-attention",
   dedupeKey: "condition:x",
   isNew: true,
-  destination: { kind: "center" },
 };
 
 function context(overrides: Partial<OsNotificationContext> = {}): OsNotificationContext {
@@ -83,14 +63,12 @@ interface Harness {
   clock: { now: number };
   focus: { value: boolean | null };
   enabled: { value: boolean };
-  tokens: string[];
 }
 
 function harness(): Harness {
   const clock = { now: 1_000_000 };
   const focus: { value: boolean | null } = { value: false };
   const enabled = { value: true };
-  const tokens: string[] = [];
   const invoke = vi.fn(async (command: string) =>
     command === "deliver_os_notification" ? "delivered" : null,
   );
@@ -100,14 +78,9 @@ function harness(): Harness {
     windowFocused: async () => focus.value,
     invoke,
     now: () => clock.now,
-    token: () => {
-      const token = randomToken();
-      tokens.push(token);
-      return token;
-    },
   };
   configureOsNotifications(deps);
-  return { deps, invoke, clock, focus, enabled, tokens };
+  return { deps, invoke, clock, focus, enabled };
 }
 
 beforeEach(() => {
@@ -246,26 +219,25 @@ describe("new occurrences", () => {
     expect(candidateForOccurrence(seen[3])).toBeNull();
   });
 
-  it("count only committed imports as new observations", () => {
-    expect(backgroundRunHasNewObservations(null)).toBe(false);
-    expect(
-      backgroundRunHasNewObservations({
-        completed: [
-          { status: "done", result: { imported: 0, updated: 4 } },
-          { status: "error", result: { imported: 3 } },
-        ],
-      }),
-    ).toBe(false);
-    expect(
-      backgroundRunHasNewObservations({
-        completed: [{ status: "done", result: { imported: 2 } }],
-      }),
-    ).toBe(true);
+  it("announces new transactions as new activity, once per book until seen", () => {
+    const seen: NewOccurrence[] = [];
+    onNewOccurrence((occurrence) => seen.push(occurrence));
+    useNotificationStore.getState().addResult({
+      code: "activity.new",
+      scope: { book: BOOK },
+      severity: "info",
+      params: { transactions: 2, incoming: 2, outgoing: 0 },
+      action: { type: "navigate", to: "/transactions" },
+    });
+    expect(candidateForOccurrence(seen[0])).toMatchObject({
+      category: "new-activity",
+      dedupeKey: `new-activity:${JSON.stringify(BOOK)}`,
+    });
   });
 });
 
 describe("delivery", () => {
-  it("sends only the category and an opaque token", async () => {
+  it("sends only the category", async () => {
     const h = harness();
     const seen: NewOccurrence[] = [];
     onNewOccurrence((occurrence) => seen.push(occurrence));
@@ -278,9 +250,8 @@ describe("delivery", () => {
     expect(h.invoke).toHaveBeenCalledTimes(1);
     const [command, args] = h.invoke.mock.calls[0];
     expect(command).toBe("deliver_os_notification");
-    expect(Object.keys(args).sort()).toEqual(["category", "token"]);
+    expect(Object.keys(args)).toEqual(["category"]);
     expect(args.category).toBe("needs-attention");
-    expect(args.token).toMatch(/^[0-9a-f]{32}$/);
     const wire = JSON.stringify(h.invoke.mock.calls);
     for (const planted of [SECRET_LABEL, SECRET_ERROR, BOOK, "wallet:1", "/connections"]) {
       expect(wire).not.toContain(planted);
@@ -353,8 +324,9 @@ describe("delivery", () => {
       enabled: () => useUiStore.getState().desktopNotifications,
     });
     useUiStore.getState().setDesktopNotifications(true);
+    const offers: Promise<unknown>[] = [];
     const unsubscribe = onNewOccurrence((occurrence) => {
-      void offerOsNotification(candidateForOccurrence(occurrence));
+      offers.push(offerOsNotification(candidateForOccurrence(occurrence)));
     });
     try {
       const store = useNotificationStore.getState();
@@ -364,7 +336,8 @@ describe("delivery", () => {
       store.reconcileConditions({ present: [failure] });
       await offerOsNotification(evidenceWatchCandidate(BOOK));
       h.clock.now += BURST_COOLDOWN_MS;
-      await offerOsNotification(newActivityCandidate(BOOK));
+      store.addResult({ code: "activity.new", scope: { book: BOOK }, severity: "info" });
+      await Promise.all(offers);
     } finally {
       unsubscribe();
       useUiStore.getState().setDesktopNotifications(false);
@@ -374,88 +347,5 @@ describe("delivery", () => {
     const commands = new Set(h.invoke.mock.calls.map(([command]) => command));
     expect([...commands]).toEqual(["deliver_os_notification"]);
     expect(h.invoke).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("activation", () => {
-  const conditionRef = conditionKey(failure.code, failure.scope);
-
-  async function deliverFailure(h: Harness): Promise<string> {
-    const seen: NewOccurrence[] = [];
-    const unsubscribe = onNewOccurrence((occurrence) => seen.push(occurrence));
-    useNotificationStore.getState().raiseCondition(failure);
-    unsubscribe();
-    await offerOsNotification(candidateForOccurrence(seen[0]));
-    return h.tokens.at(-1)!;
-  }
-
-  function routeFor(currentBook: ActiveBook | null) {
-    const pending = useOsNotificationActivation.getState().pending!;
-    const { conditions, results } = useNotificationStore.getState();
-    return resolveActivation(pending, {
-      currentBook,
-      developerToolsEnabled: false,
-      conditions,
-      results,
-    });
-  }
-
-  it("opens the item when its token is fresh and its book is open", async () => {
-    const h = harness();
-    const token = await deliverFailure(h);
-    recordOsNotificationActivation(token, h.clock.now + 1000);
-    expect(routeFor(ACTIVE)).toEqual({ kind: "navigate", to: "/connections" });
-  });
-
-  it("opens the center for another book, a resolved entry, or a second use", async () => {
-    const h = harness();
-    const token = await deliverFailure(h);
-    recordOsNotificationActivation(token, h.clock.now);
-    expect(routeFor(OTHER_ACTIVE)).toEqual({ kind: "center" });
-    expect(routeFor(ACTIVE)).toEqual({ kind: "navigate", to: "/connections" });
-
-    useNotificationStore.getState().resolveCondition(conditionRef);
-    expect(routeFor(ACTIVE)).toEqual({ kind: "center" });
-
-    // Consumed: the same token again is unknown.
-    expect(destinationForActivation(token, h.clock.now)).toEqual({ kind: "center" });
-  });
-
-  it("falls back to the center when the token expired or the app restarted", async () => {
-    const h = harness();
-    const token = await deliverFailure(h);
-    expect(destinationForActivation(token, h.clock.now + TOKEN_TTL_MS + 1)).toEqual({
-      kind: "center",
-    });
-    expect(destinationForActivation(randomToken())).toEqual({ kind: "center" });
-    expect(destinationForActivation(42)).toEqual({ kind: "center" });
-  });
-
-  it("never repeats an operation; it opens the operation's review page", () => {
-    const route = resolveActivation(
-      {
-        kind: "entry",
-        scope: { book: BOOK },
-        action: {
-          type: "operation",
-          operation: { kind: "refresh-book", forceFull: true },
-          review: "/connections",
-        },
-      },
-      { currentBook: ACTIVE, developerToolsEnabled: false, conditions: {}, results: [] },
-    );
-    expect(route).toEqual({ kind: "navigate", to: "/connections" });
-  });
-
-  it("refuses routes outside the allowlist", () => {
-    const route = resolveActivation(
-      {
-        kind: "entry",
-        scope: { book: BOOK },
-        action: { type: "navigate", to: "https://example.org" },
-      },
-      { currentBook: ACTIVE, developerToolsEnabled: false, conditions: {}, results: [] },
-    );
-    expect(route).toEqual({ kind: "center" });
   });
 });
