@@ -537,6 +537,7 @@
     "refreshing": "Wird aktualisiert"
   },
   "feedback": {
+    "label": "Meldungen",
     "region": "Meldungen ({hotkey})",
     "dismiss": "Schließen"
   }

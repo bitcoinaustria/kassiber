@@ -537,6 +537,7 @@
     "refreshing": "Refreshing"
   },
   "feedback": {
+    "label": "Messages",
     "region": "Messages ({hotkey})",
     "dismiss": "Dismiss"
   }
