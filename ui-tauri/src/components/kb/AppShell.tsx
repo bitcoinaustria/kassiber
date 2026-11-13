@@ -1,4 +1,5 @@
 import { useLocalWatchNotifications } from "@/hooks/useLocalWatchNotifications";
+import { useOsNotifications } from "@/hooks/useOsNotifications";
 import {
   useIsFetching,
   useIsMutating,
@@ -114,6 +115,10 @@ import {
   type DaemonBookScope,
 } from "@/lib/activeBook";
 import { applyFreshnessEvent } from "@/lib/notificationConditions";
+import {
+  evidenceWatchCandidate,
+  offerOsNotification,
+} from "@/lib/osNotifications";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
@@ -1721,6 +1726,11 @@ export function AppShell() {
             // The event may come from another book's work; the re-read of the
             // open book's watch inbox decides whether a condition waits.
             void refreshDaemonQueries(queryClient, null);
+            // The push is the news; the inbox poll that recovers missed
+            // wake-ups after a lock or restart is not offered to the OS.
+            void offerOsNotification(
+              evidenceWatchCandidate(readActiveBook(queryClient)?.key ?? null),
+            );
             return;
           }
           const freshness = parseDaemonFreshnessEvent(event.payload);
@@ -1729,7 +1739,10 @@ export function AppShell() {
           void refreshDaemonQueries(queryClient, null);
           // Applied only when the event names the open book; anything else
           // (delayed past a switch, or naming no book) is left to the
-          // re-read the invalidation above starts.
+          // re-read the invalidation above starts. The OS hears only about
+          // runs that were applied to that book.
+          // New transactions it brought file a "new transactions" result,
+          // which is what the OS hears about (see `candidateForOccurrence`).
           applyFreshnessEvent(freshness, readActiveBook(queryClient));
         }),
       )
@@ -1794,6 +1807,7 @@ export function AppShell() {
   useClaimWindowTitlebar(identity !== null);
   const nav = useShellNavOpen();
   useSettingsModalNavigation(shellUnlocked);
+  useOsNotifications();
   // Locking hides the page; Settings does not wait over the lock screen.
   React.useEffect(() => {
     if (!shellUnlocked) closeSettings();

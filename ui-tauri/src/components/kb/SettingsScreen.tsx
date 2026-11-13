@@ -128,6 +128,8 @@ export function SettingsScreen({
   const { t: tOnboarding } = useTranslation("onboarding");
   const clearClipboard = useUiStore((s) => s.clearClipboard);
   const setClearClipboard = useUiStore((s) => s.setClearClipboard);
+  const desktopNotifications = useUiStore((s) => s.desktopNotifications);
+  const setDesktopNotifications = useUiStore((s) => s.setDesktopNotifications);
   const currency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
   const lang = useUiStore((s) => s.lang);
@@ -1155,6 +1157,8 @@ export function SettingsScreen({
             setHideAmountsOnUnlock={setHideAmountsOnUnlock}
             clearClipboard={clearClipboard}
             setClearClipboard={setClearClipboard}
+            desktopNotifications={desktopNotifications}
+            setDesktopNotifications={setDesktopNotifications}
             automaticUpdateChecks={automaticUpdateChecks}
             setAutomaticUpdateChecks={persistAutomaticUpdateChecks}
             backends={backends}

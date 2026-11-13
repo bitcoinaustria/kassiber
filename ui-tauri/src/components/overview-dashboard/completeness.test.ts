@@ -149,6 +149,18 @@ describe("overview readiness completeness signals", () => {
     expect(readiness.href).toBe("/review");
   });
 
+  it("does not call the book ready while the bell has sources blocking reports", () => {
+    const snapshot = {
+      ...snapshotWith(MOCK_OVERVIEW.fiat.completeness!),
+      status: { ...MOCK_OVERVIEW.status!, quarantines: 988, needsJournals: true },
+    };
+    const readiness = buildOverviewReadiness(snapshot, undefined, 12);
+    expect(readiness.title.key).toBe("readiness.sourcesBlocking.title");
+    expect(readiness.detail.params).toEqual({ count: 12 });
+    expect(readiness.href).toBe("/connections");
+    expect(readiness.tone).toBe("alert");
+  });
+
   it("counts open review the way the sidebar does when it has that count", () => {
     const snapshot = {
       ...snapshotWith(MOCK_OVERVIEW.fiat.completeness!),

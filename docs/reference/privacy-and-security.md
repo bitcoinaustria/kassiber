@@ -447,11 +447,28 @@ until that process stops. `kassiber status` reports the effective root.
   session; UI state version 5 deletes notifications earlier versions stored
   there, and none is ever restored, so a stored Retry cannot run against
   another book. Toasts keep no history and are not forwarded to the
-  operating system. "Ask the assistant" on an opened failure hands the
-  assistant only what the center shows in the current privacy mode (title,
-  body, and the plain cause lines with wallet names); the raw server messages
-  under Technical details, which can name hosts and ports, are never part of
-  the prompt. The button is absent while AI features are off.
+  operating system. The only notification preference stored there is the
+  **Desktop notifications** boolean. "Ask the assistant" (an entry's More
+  actions menu, shown only while AI features are on) hands the assistant the
+  entry's generic title and body, each cause in plain words, and plain wallet
+  names; raw server messages and hints, and any name that looks like a path,
+  URL, domain, address, or port, are never part of the prompt.
+- OS (desktop) notifications are opt-in under **Settings → Privacy → Desktop
+  notifications** and off by default. Once on, the operating system receives
+  the title "Kassiber" and one of three fixed sentences ("Background work
+  needs your attention.", "Background work has finished.", or "New activity in
+  Kassiber.", or their Austrian German equivalents), built in the native shell from an allowlisted category; the
+  webview can send nothing else and holds no `notification:*` permission. No
+  amounts, counts, book or wallet names, addresses, txids, server names, file
+  names, paths, or error text are ever included, in any privacy mode. The
+  operating system may still keep them in its notification history and show
+  them on the lock screen, which reveals that Kassiber is installed and was
+  working; the setting says so. Kassiber itself writes nothing to disk for
+  them: the delivery times used for deduplication and cooldown stay in RAM.
+  Clicking one only brings Kassiber to the front; nothing is guessed from
+  window focus and no entry is opened. Delivery
+  only reacts to work that was already authorized and adds no network request,
+  poll, or probe.
 - Main-window geometry (size, position, maximized) is kept outside the state
   root: in the app's AppKit preferences on macOS, and in
   `.window-state.json` under Tauri's config directory on Windows and Linux. It

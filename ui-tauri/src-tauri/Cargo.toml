@@ -27,6 +27,10 @@ tokio = { version = "1", features = ["io-util", "process", "time"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-deep-link = "2"
 tauri-plugin-dialog = "2"
+# Opt-in OS notifications with fixed text built in Rust (os_notifications.rs).
+# Held on 2.4 because 2.5 and later require a newer Tauri runtime than this
+# lockfile's 2.11.5. The renderer gets no `notification:*` permission.
+tauri-plugin-notification = "~2.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "1.0.0", features = ["keychain"] }

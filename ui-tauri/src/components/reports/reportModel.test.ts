@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { CapitalGainsReport, ReportBreakdownBucket } from "@/mocks/reports";
 
 import {
+  describeTaxYear,
+  formatReportPeriod,
   formatTaxRate,
   methodLabel,
   reportBreakdown,
@@ -223,5 +225,21 @@ describe("reportBreakdown", () => {
       ["Tax-free Altbestand", 900],
       ["Tax-neutral swaps", null],
     ]);
+  });
+});
+
+describe("tax year periods", () => {
+  it("labels what the report filters by: the calendar year", () => {
+    expect(formatReportPeriod(2025)).toBe("1 Jan – 31 Dec 2025");
+    expect(describeTaxYear("generic")).toBe("Calendar year, UTC");
+    expect(describeTaxYear("at")).toBe("Calendar year, Europe/Vienna");
+  });
+
+  it("says a later tax-year start is not applied, rather than borrowing its dates", () => {
+    // The UK tax year starts on 6 April; `ui.reports.capital_gains` still
+    // filters the calendar year.
+    expect(describeTaxYear("gb")).toBe(
+      "Calendar year, Europe/London · 6 Apr tax year not applied yet",
+    );
   });
 });

@@ -5,6 +5,7 @@
  * only picks and labels them, so the screen cannot compute a tax result.
  */
 
+import { taxCountryEntry } from "@/lib/taxCountries";
 import { formatFiatAmount } from "@/lib/currency";
 import type {
   CapitalGainsReport,
@@ -91,9 +92,43 @@ export function formatTaxRate(rate: string | undefined) {
   return `${Number((value * 100).toFixed(2))} %`;
 }
 
-/** `1 Jan – 31 Dec 2025`; the report copy stays English. */
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/**
+ * The first day (month, day) of the country's tax year, as the core's tax
+ * country registry has it (`tax_year_start`); the calendar year when the
+ * country is unknown.
+ */
+export function reportTaxYearStart(jurisdiction?: string | null): [number, number] {
+  const raw = taxCountryEntry(jurisdiction)?.tax_year_start ?? "01-01";
+  const [month, day] = raw.split("-").map(Number);
+  return Number.isInteger(month) && Number.isInteger(day) ? [month, day] : [1, 1];
+}
+
+/**
+ * The period a report year covers: the calendar year in the book's zone,
+ * which is what `ui.reports.capital_gains` filters by today, whatever the
+ * country's tax year (see `describeTaxYear`). The report copy stays English.
+ */
 export function formatReportPeriod(year: number) {
   return `1 Jan – 31 Dec ${year}`;
+}
+
+/**
+ * What the report applies: the calendar year in the country's zone. A
+ * country whose tax year starts later (the UK's on 6 April) says that start
+ * is not applied yet, rather than labelling calendar-year totals with it.
+ */
+export function describeTaxYear(jurisdiction?: string | null): string {
+  const entry = taxCountryEntry(jurisdiction);
+  const [month, day] = reportTaxYearStart(jurisdiction);
+  const zone = entry?.timezone ?? "UTC";
+  return month === 1 && day === 1
+    ? `Calendar year, ${zone}`
+    : `Calendar year, ${zone} · ${day} ${MONTHS[month - 1]} tax year not applied yet`;
 }
 
 /** `+ € 1.234,56` / `− € 12,00`, unsigned at zero. */
