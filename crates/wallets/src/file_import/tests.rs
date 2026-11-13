@@ -4575,3 +4575,5 @@ fn asset_scope_is_validated_and_defaults_to_bitcoin() {
         r#"{"scope": "bitcoin", "skipped": {"ETH": 2}, "excluded": {"AAPL": 1}, "next_step": "kassiber wallets update --wallet 'Tom'\\''s Ex' --config '{\"asset_scope\": \"crypto\"}', then sync or import again to keep ETH"}"#
     );
 }
+
+mod tax_platform_assets;

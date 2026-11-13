@@ -153,18 +153,25 @@ impl Tally {
             ("excluded", counts(&self.excluded)),
         ];
         if !self.skipped.is_empty() {
-            // POSIX single quotes; a quote inside becomes '\''.
-            let wallet = format!("'{}'", wallet.replace('\'', "'\\''"));
             fields.push((
                 "next_step",
                 s(format!(
-                    "kassiber wallets update --wallet {wallet} --config '{{\"asset_scope\": \"crypto\"}}', then sync or import again to keep {}",
+                    "{}, then sync or import again to keep {}",
+                    keep_command(wallet),
                     self.skipped.keys().cloned().collect::<Vec<_>>().join(", ")
                 )),
             ));
         }
         dict(fields)
     }
+}
+
+/// The command that sets a wallet's scope to `crypto`, for hints that tell
+/// the user how to keep the assets the `bitcoin` scope leaves out.
+pub(crate) fn keep_command(wallet: &str) -> String {
+    // POSIX single quotes; a quote inside becomes '\''.
+    let wallet = format!("'{}'", wallet.replace('\'', "'\\''"));
+    format!("kassiber wallets update --wallet {wallet} --config '{{\"asset_scope\": \"crypto\"}}'")
 }
 
 /// The stored integer of a non-Bitcoin quantity: exactly `amount * 10^11`.

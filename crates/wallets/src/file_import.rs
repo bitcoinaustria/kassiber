@@ -145,6 +145,26 @@ impl Format {
             Self::Ledger => ledger::load(file, None),
         }
     }
+    /// The rows a wallet import keeps under the wallet's asset scope, and,
+    /// for a format converted to docs/plan/23-crypto-assets.md, the rows the
+    /// scope left out. Other formats are still Bitcoin-only and return no
+    /// tally.
+    fn load_for(
+        self,
+        file: &str,
+        target: tax_platform::Target<'_>,
+    ) -> Result<(Vec<csv::Row>, Option<assets::Tally>), AppError> {
+        match self {
+            Self::CoinTracking | Self::Blockpit => {
+                tax_platform::load_for(file, self, target).map(|(rows, tally)| (rows, Some(tally)))
+            }
+            _ => self.load(file).map(|rows| (rows, None)),
+        }
+    }
+    /// Whether the format reads the wallet's asset scope (`load_for`).
+    fn scoped(self) -> bool {
+        matches!(self, Self::CoinTracking | Self::Blockpit)
+    }
     fn evidence(self) -> bool {
         matches!(
             self,
@@ -1462,12 +1482,25 @@ fn run(
         None if request.format == Format::Wasabi => Some(wasabi::load(&request.file)?),
         None => None,
     };
-    let rows = if let Some(bundle) = &bundle {
-        wasabi::rows(&bundle.records)?
+    // The wallet's asset scope, for formats that keep other crypto assets.
+    let scope = match &wallet {
+        Some(wallet) if request.format.scoped() => {
+            Some(assets::Scope::of_wallet(conn, &wallet.id)?)
+        }
+        _ => None,
+    };
+    let (rows, tally) = if let Some(bundle) = &bundle {
+        (wasabi::rows(&bundle.records)?, None)
     } else if request.format == Format::Ledger {
-        ledger::load(&request.file, column_map)?
+        (ledger::load(&request.file, column_map)?, None)
+    } else if let (Some(scope), Some(wallet)) = (scope, &wallet) {
+        let target = tax_platform::Target {
+            scope,
+            wallet: &wallet.label,
+        };
+        request.format.load_for(&request.file, target)?
     } else {
-        request.format.load(&request.file)?
+        (request.format.load(&request.file)?, None)
     };
     // A Bull Bitcoin wallet imports only the rows of its configured network.
     let (rows, bull_wallet) = if request.format == Format::BullWallet {
@@ -1503,9 +1536,15 @@ fn run(
         .and_then(|mut result| {
             // Both legs of each provider-reported swap are stored; pair them.
             let wallet = wallet.as_ref().expect("wallet import");
-            if let Some(pairs) =
-                swaps::pair(conn, &request.profile_id, &wallet.id, &rows, &records)?
-            {
+            let pairs = swaps::pair(conn, &request.profile_id, &wallet.id, &rows, &records)?;
+            // A converted format always reports its pairs and what its
+            // scope left out.
+            if let (Some(tally), Some(scope)) = (&tally, scope) {
+                let pairs = pairs.unwrap_or(0);
+                kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs));
+                let assets = tally.envelope(scope, &wallet.label);
+                kassiber_envelope::set(&mut result, "assets", assets);
+            } else if let Some(pairs) = pairs {
                 kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs));
             }
             Ok(result)
