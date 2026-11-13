@@ -1,5 +1,6 @@
 import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertTriangle, Download } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -61,17 +62,49 @@ function errorMessage(error: unknown): string {
 
 const NUMERIC_CELL = /^-?[\d.,\s']+$/;
 
+const PREVIEW_ROW_HEIGHT = 28;
+// Cells truncate at 16rem (`max-w-64`); a column never asks for more.
+const PREVIEW_COLUMN_MAX_CH = 40;
+
+/**
+ * Each column's width in characters, from its longest cell. Only the rows on
+ * screen are drawn, so without it the columns would resize while scrolling.
+ */
+function previewColumnWidths(sheet: PreviewSheet): number[] {
+  return sheet.columns.map((column, columnIndex) => {
+    let longest = column.length;
+    for (const row of sheet.rows) {
+      longest = Math.max(longest, row[columnIndex]?.length ?? 0);
+      if (longest >= PREVIEW_COLUMN_MAX_CH) return PREVIEW_COLUMN_MAX_CH;
+    }
+    return longest;
+  });
+}
+
 function PreviewTable({ sheet, emptyLabel }: { sheet: PreviewSheet; emptyLabel: string }) {
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const columnWidths = React.useMemo(() => previewColumnWidths(sheet), [sheet]);
+  const rowVirtualizer = useVirtualizer({
+    count: sheet.rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => PREVIEW_ROW_HEIGHT,
+    overscan: 12,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const paddingTop = virtualRows[0]?.start ?? 0;
+  const lastRow = virtualRows[virtualRows.length - 1];
+  const paddingBottom = lastRow ? Math.max(0, rowVirtualizer.getTotalSize() - lastRow.end) : 0;
   return (
-    <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-background/70">
+    <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto rounded-lg border bg-background/70">
       <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
         <thead>
           <tr>
             <th className="sticky top-0 left-0 z-20 w-9 border-r border-b bg-muted px-2 py-2" />
-            {sheet.columns.map((column) => (
+            {sheet.columns.map((column, columnIndex) => (
               <th
                 key={column}
                 scope="col"
+                style={{ minWidth: `calc(${columnWidths[columnIndex]}ch + 1.5rem)` }}
                 className="sticky top-0 z-10 border-b bg-muted px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground"
               >
                 {column}
@@ -81,25 +114,44 @@ function PreviewTable({ sheet, emptyLabel }: { sheet: PreviewSheet; emptyLabel: 
         </thead>
         <tbody>
           {sheet.rows.length ? (
-            sheet.rows.map((row, index) => (
-              <tr key={index} className="even:bg-muted/30">
-                <td className="sticky left-0 border-r bg-muted/60 px-2 py-1.5 text-right text-muted-foreground tabular-nums">
-                  {index + 1}
-                </td>
-                {row.map((cell, cellIndex) => (
-                  <td
-                    key={cellIndex}
-                    title={cell.length > 32 ? cell : undefined}
-                    className={cn(
-                      "max-w-64 truncate px-3 py-1.5 whitespace-nowrap",
-                      cell && NUMERIC_CELL.test(cell) ? "text-right tabular-nums" : undefined,
-                    )}
+            <>
+              {paddingTop > 0 ? (
+                <tr aria-hidden="true">
+                  <td colSpan={sheet.columns.length + 1} style={{ height: paddingTop, padding: 0 }} />
+                </tr>
+              ) : null}
+              {virtualRows.map((virtualRow) => {
+                const row = sheet.rows[virtualRow.index] ?? [];
+                return (
+                  <tr
+                    key={virtualRow.key}
+                    style={{ height: PREVIEW_ROW_HEIGHT }}
+                    className={virtualRow.index % 2 ? "bg-muted/30" : undefined}
                   >
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))
+                    <td className="sticky left-0 border-r bg-muted/60 px-2 py-1.5 text-right text-muted-foreground tabular-nums">
+                      {virtualRow.index + 1}
+                    </td>
+                    {row.map((cell, cellIndex) => (
+                      <td
+                        key={cellIndex}
+                        title={cell.length > 32 ? cell : undefined}
+                        className={cn(
+                          "max-w-64 truncate px-3 py-1.5 whitespace-nowrap",
+                          cell && NUMERIC_CELL.test(cell) ? "text-right tabular-nums" : undefined,
+                        )}
+                      >
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+              {paddingBottom > 0 ? (
+                <tr aria-hidden="true">
+                  <td colSpan={sheet.columns.length + 1} style={{ height: paddingBottom, padding: 0 }} />
+                </tr>
+              ) : null}
+            </>
           ) : (
             <tr>
               <td colSpan={sheet.columns.length + 1} className="px-3 py-10 text-center text-muted-foreground">
@@ -369,18 +421,20 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
             ) : (
               <>
                 <PreviewTable sheet={sheet} emptyLabel={t("dashboard.export.preview.empty")} />
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span>
-                    {sheet.total > sheet.rows.length
-                      ? t("dashboard.export.preview.showing", {
-                          shown: sheet.rows.length,
+                {sheet.total > sheet.rows.length || importHint ? (
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    {sheet.total > sheet.rows.length ? (
+                      <span>
+                        {t("dashboard.export.preview.showing", {
+                          shown: formatCount(sheet.rows.length),
                           count: sheet.total,
                           formatted: formatCount(sheet.total),
-                        })
-                      : t("dashboard.export.preview.complete")}
-                  </span>
-                  {importHint ? <span>{importHint}</span> : null}
-                </div>
+                        })}
+                      </span>
+                    ) : null}
+                    {importHint ? <span className="ml-auto">{importHint}</span> : null}
+                  </div>
+                ) : null}
                 {previewData.warnings.length ? (
                   <ul className="grid gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-5">
                     {previewData.warnings.map((warning) => (

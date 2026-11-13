@@ -6,7 +6,10 @@ use kassiber_pydecimal::Rounding;
 use kassiber_setup::Sources;
 
 const KIND: &str = "ui.exports.preview";
-const ROWS: usize = 8;
+/// The preview lists the rows the file will hold, so a period can be checked
+/// row by row. The ceiling only keeps one reply bounded for very large books;
+/// past it the dialog says how many rows the file has beyond those shown.
+const ROWS: usize = 5_000;
 const EXPORTS: &[&str] = &["transactions", "year_handoff", "labels"];
 const FORMATS: &[&str] = &["xlsx", "csv", "cointracking", "blockpit"];
 const INT_FIELDS: &[&str] = &[
@@ -458,4 +461,26 @@ pub fn preview(
     ];
     payload.extend(preview);
     Ok(dict(payload))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn listed(sheet: &Value) -> usize {
+        match value(sheet, "rows") {
+            Value::List(rows) => rows.len(),
+            other => panic!("rows is not a list: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_sheet_lists_every_row_up_to_the_ceiling() {
+        let rows = |n: usize| (0..n).map(|i| vec![s(i.to_string())]).collect::<Vec<_>>();
+        let period = sheet("Transactions", vec!["Row".into()], rows(240), 240);
+        assert_eq!(listed(&period), 240);
+        let huge = sheet("Transactions", vec!["Row".into()], rows(ROWS + 7), ROWS + 7);
+        assert_eq!(listed(&huge), ROWS);
+        assert!(matches!(value(&huge, "total"), Value::Int(total) if *total == (ROWS + 7).into()));
+    }
 }
