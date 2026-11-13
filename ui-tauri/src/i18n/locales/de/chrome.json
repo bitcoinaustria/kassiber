@@ -345,6 +345,12 @@
       },
       "backupRestored": {
         "title": "Backup wiederhergestellt"
+      },
+      "reportExported": {
+        "title": "Bericht exportiert",
+        "notesTitle": "Bericht mit Hinweisen exportiert",
+        "notesBody": "Unter Berichte stehen die Hinweise neben der gespeicherten Datei.",
+        "action": "Berichte öffnen"
       }
     },
     "job": {
@@ -352,12 +358,19 @@
       "bookRescan": "Buch wird neu gescannt",
       "journalProcessing": "Journale werden verarbeitet",
       "connectionSync": "Wallet-Sync läuft",
-      "connectionRescan": "Wallet-Rescan läuft"
+      "connectionRescan": "Wallet-Rescan läuft",
+      "reportExport": "Bericht wird exportiert"
     },
     "action": {
       "openWallet": "Wallet öffnen",
       "openTransaction": "Transaktion öffnen",
       "openSecurity": "Sicherheit öffnen"
+    },
+    "feedback": {
+      "reportSaveFailed": "Berichtsexport konnte nicht gespeichert werden",
+      "reportExportBlocked": "Berichtsexport durch Quarantäne blockiert",
+      "reportExportFailed": "Berichtsexport fehlgeschlagen",
+      "reportOpenFailed": "Bericht konnte nicht geöffnet werden"
     }
   },
   "currencyToggle": {

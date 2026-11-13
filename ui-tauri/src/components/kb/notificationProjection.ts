@@ -254,6 +254,14 @@ export function projectResult(
       };
     case "backup.restored":
       return { title: t("notifications.result.backupRestored.title"), details };
+    case "report.exported":
+      return entry.severity === "warning"
+        ? {
+            title: t("notifications.result.reportExported.notesTitle"),
+            body: t("notifications.result.reportExported.notesBody"),
+            details,
+          }
+        : { title: t("notifications.result.reportExported.title"), details };
   }
 }
 
@@ -281,6 +289,8 @@ function jobTitle(job: JobEntry, t: ChromeT): string {
       return job.params.forceFull
         ? t("notifications.job.connectionRescan")
         : t("notifications.job.connectionSync");
+    case "report-export":
+      return t("notifications.job.reportExport");
   }
 }
 

@@ -171,6 +171,9 @@ function resultActionLabel(resolved: ResolvedEntryAction, t: ChromeT): string {
       if (resolved.to === "/connections") {
         return t("notifications.result.bookRefreshPending.action");
       }
+      if (resolved.to === "/reports") {
+        return t("notifications.result.reportExported.action");
+      }
       return t("notifications.staleAction");
   }
 }

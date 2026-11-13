@@ -60,6 +60,7 @@ export const RESULT_CODES = [
   "journals.processed",
   "connection.synced",
   "backup.restored",
+  "report.exported",
 ] as const;
 export type ResultCode = (typeof RESULT_CODES)[number];
 
@@ -67,6 +68,7 @@ export const JOB_CODES = [
   "book-refresh",
   "journal-processing",
   "connection-sync",
+  "report-export",
 ] as const;
 export type JobCode = (typeof JOB_CODES)[number];
 

@@ -345,6 +345,12 @@
       },
       "backupRestored": {
         "title": "Backup restored"
+      },
+      "reportExported": {
+        "title": "Report exported",
+        "notesTitle": "Report exported with notes",
+        "notesBody": "Reports lists the notes next to the saved file.",
+        "action": "Open reports"
       }
     },
     "job": {
@@ -352,12 +358,19 @@
       "bookRescan": "Rescanning book",
       "journalProcessing": "Processing journals",
       "connectionSync": "Syncing wallet",
-      "connectionRescan": "Rescanning wallet"
+      "connectionRescan": "Rescanning wallet",
+      "reportExport": "Exporting report"
     },
     "action": {
       "openWallet": "Open wallet",
       "openTransaction": "Open transaction",
       "openSecurity": "Open security settings"
+    },
+    "feedback": {
+      "reportSaveFailed": "Could not save the report export",
+      "reportExportBlocked": "Report export blocked by quarantine",
+      "reportExportFailed": "Report export failed",
+      "reportOpenFailed": "Could not open the report"
     }
   },
   "currencyToggle": {
