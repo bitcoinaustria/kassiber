@@ -5165,7 +5165,7 @@
   {
     "id": "W-cointracking-both-sides",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "if inbound.is_some() && outbound.is_some() {",
+    "find": "if exchange::bitcoin(Some(into)).is_some() && exchange::bitcoin(Some(out)).is_some() {",
     "replace": "if false {",
     "expect_failing": [
       "python_cointracking_import_vectors"
@@ -5175,8 +5175,8 @@
   {
     "id": "W-cointracking-scope",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "if inbound.is_none() && outbound.is_none() {",
-    "replace": "if inbound.is_none() || outbound.is_none() {",
+    "find": "let Some(held) = inbound.clone().or(outbound.clone()) else {",
+    "replace": "let Some(held) = inbound.clone().and(outbound.clone()) else {",
     "expect_failing": [
       "python_cointracking_import_vectors"
     ],
@@ -5295,8 +5295,8 @@
   {
     "id": "W-cointracking-id-occurrence",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "*occurrence += 1;",
-    "replace": "*occurrence += 0;",
+    "find": "let occurrence = occurrences.entry(digest.clone()).or_default();\n                *occurrence += 1;",
+    "replace": "let occurrence = occurrences.entry(digest.clone()).or_default();\n                *occurrence += 0;",
     "expect_failing": [
       "python_cointracking_import_vectors"
     ],
@@ -5305,8 +5305,8 @@
   {
     "id": "W-cointracking-id-hash",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "Sha256::digest(encoded.as_bytes())",
-    "replace": "Sha256::digest(b\"wrong\")",
+    "find": "let digest = sha256(&encoded);",
+    "replace": "let digest = sha256(\"wrong\");",
     "expect_failing": [
       "python_cointracking_import_vectors"
     ],
@@ -5335,8 +5335,8 @@
   {
     "id": "W-cointracking-method",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "\"pricing_method\":format.name()",
-    "replace": "\"pricing_method\":\"generic_ledger\"",
+    "find": "\"pricing_method\":format.name(),\"pricing_external_ref\":txid,",
+    "replace": "\"pricing_method\":\"generic_ledger\",\"pricing_external_ref\":txid,",
     "expect_failing": [
       "python_cointracking_import_vectors"
     ],
@@ -5545,7 +5545,7 @@
   {
     "id": "W-blockpit-both-sides",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "if inbound.is_some() && outbound.is_some() {",
+    "find": "if exchange::bitcoin(Some(into)).is_some() && exchange::bitcoin(Some(out)).is_some() {",
     "replace": "if false {",
     "expect_failing": [
       "python_blockpit_import_vectors"
@@ -5555,8 +5555,8 @@
   {
     "id": "W-blockpit-scope",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "if inbound.is_none() && outbound.is_none() {",
-    "replace": "if inbound.is_none() || outbound.is_none() {",
+    "find": "let Some(held) = inbound.clone().or(outbound.clone()) else {",
+    "replace": "let Some(held) = inbound.clone().and(outbound.clone()) else {",
     "expect_failing": [
       "python_blockpit_import_vectors"
     ],
@@ -5675,8 +5675,8 @@
   {
     "id": "W-blockpit-id-occurrence",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "*occurrence += 1;",
-    "replace": "*occurrence += 0;",
+    "find": "let occurrence = occurrences.entry(digest.clone()).or_default();\n                *occurrence += 1;",
+    "replace": "let occurrence = occurrences.entry(digest.clone()).or_default();\n                *occurrence += 0;",
     "expect_failing": [
       "python_blockpit_import_vectors"
     ],
@@ -5685,8 +5685,8 @@
   {
     "id": "W-blockpit-id-hash",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "Sha256::digest(encoded.as_bytes())",
-    "replace": "Sha256::digest(b\"wrong\")",
+    "find": "let digest = sha256(&encoded);",
+    "replace": "let digest = sha256(\"wrong\");",
     "expect_failing": [
       "python_blockpit_import_vectors"
     ],
@@ -5715,8 +5715,8 @@
   {
     "id": "W-blockpit-method",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "\"pricing_method\":format.name()",
-    "replace": "\"pricing_method\":\"generic_ledger\"",
+    "find": "\"pricing_method\":format.name(),\"pricing_external_ref\":txid,",
+    "replace": "\"pricing_method\":\"generic_ledger\",\"pricing_external_ref\":txid,",
     "expect_failing": [
       "python_blockpit_import_vectors"
     ],
@@ -9471,5 +9471,148 @@
       "the_bark_import_savepoint_waits_for_another_writer"
     ],
     "rule": "The Bark import and a BTC-ARK ledger's switch reserve the writer before they read."
+  },
+  {
+    "id": "W-taxplatform-scope-tally",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "self.tally\n                        .admit(Scope::Bitcoin, code, assets::Class::Crypto);",
+    "replace": "let _ = code;",
+    "expect_failing": [
+      "tax_platform_assets::bitcoin_scope_keeps_bitcoin_and_counts_what_it_skips"
+    ],
+    "rule": "The bitcoin scope counts every crypto ticker it leaves out of a CoinTracking or Blockpit export."
+  },
+  {
+    "id": "W-taxplatform-scope-hint",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "Some(target) if target.scope == Scope::Bitcoin && ticker(code) == Ticker::Crypto =>",
+    "replace": "Some(target) if false && target.scope == Scope::Bitcoin && ticker(code) == Ticker::Crypto =>",
+    "expect_failing": [
+      "tax_platform_assets::bitcoin_scope_refusals_name_the_scope_that_imports_them"
+    ],
+    "rule": "A bitcoin-scope refusal that the crypto scope would import names the asset_scope command."
+  },
+  {
+    "id": "W-taxplatform-crypto-held",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "(self.crypto() && ticker(code) == Ticker::Crypto).then(|| code.to_owned())",
+    "replace": "(false && ticker(code) == Ticker::Crypto).then(|| code.to_owned())",
+    "expect_failing": [
+      "tax_platform_assets::crypto_scope_imports_every_row_kind_for_any_crypto_asset",
+      "tax_platform_assets::crypto_swaps_pair_once_and_reimports_add_nothing",
+      "tax_platform_assets::third_asset_fees_become_their_own_rows"
+    ],
+    "rule": "The crypto scope imports other crypto assets from tax-platform exports."
+  },
+  {
+    "id": "W-taxplatform-unsupported-ticker",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "Ticker::Unsupported if self.crypto() => {",
+    "replace": "Ticker::Unsupported if false => {",
+    "expect_failing": [
+      "tax_platform_assets::crypto_scope_refuses_what_it_cannot_map_and_names_the_row"
+    ],
+    "rule": "The crypto scope refuses Bitcoin units, unsupported fiat, metals and malformed tickers instead of holding them as crypto."
+  },
+  {
+    "id": "W-taxplatform-other-fiat",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "_ if !symbol || BITCOIN_UNITS.contains(&code) || OTHER_FIAT.contains(&code) => {",
+    "replace": "_ if !symbol || BITCOIN_UNITS.contains(&code) => {",
+    "expect_failing": [
+      "tax_platform_assets::crypto_scope_refuses_what_it_cannot_map_and_names_the_row"
+    ],
+    "rule": "An ISO 4217 code outside the supported fiat list is never guessed to be a crypto asset."
+  },
+  {
+    "id": "W-taxplatform-exact-units",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "assets::exact_units(code, field, amount)",
+    "replace": "Ok::<i64, AppError>(0)",
+    "expect_failing": [
+      "tax_platform_assets::crypto_scope_refuses_what_it_cannot_map_and_names_the_row"
+    ],
+    "rule": "A crypto quantity finer than 11 decimals is refused, naming the export row."
+  },
+  {
+    "id": "W-taxplatform-swap-trade-only",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "if key != \"trade\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "tax_platform_assets::crypto_scope_refuses_what_it_cannot_map_and_names_the_row"
+    ],
+    "rule": "Only a Trade row can become a crypto-to-crypto swap."
+  },
+  {
+    "id": "W-taxplatform-swap-occurrence",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "let reference = format!(\"{}-swap:{digest}:{occurrence}\", format.migration_kind());",
+    "replace": "let reference = format!(\"{}-swap:{digest}:1\", format.migration_kind());",
+    "expect_failing": [
+      "tax_platform_assets::crypto_swaps_pair_once_and_reimports_add_nothing"
+    ],
+    "rule": "Identical swaps in one export stay separate swaps with their own deterministic reference."
+  },
+  {
+    "id": "W-taxplatform-swap-ref",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "row.data[\"swap_ref\"] = json!(reference);",
+    "replace": "let _ = &reference;",
+    "expect_failing": [
+      "tax_platform_assets::crypto_swaps_pair_once_and_reimports_add_nothing"
+    ],
+    "rule": "Both legs of an exported swap share a swap_ref so the import pairs them."
+  },
+  {
+    "id": "W-taxplatform-swap-own-fee",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "            out_fee = amount;",
+    "replace": "            third = Some((code, amount));",
+    "expect_failing": [
+      "tax_platform_assets::crypto_swaps_pair_once_and_reimports_add_nothing"
+    ],
+    "rule": "A swap fee in the outgoing asset stays on the outgoing leg."
+  },
+  {
+    "id": "W-taxplatform-swap-third-fee",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "            third = Some((code, amount));\n        }",
+    "replace": "            third = None::<(String, PriceNumber)>;\n        }",
+    "expect_failing": [
+      "tax_platform_assets::third_asset_fees_become_their_own_rows"
+    ],
+    "rule": "A swap fee in a third asset becomes its own fee row."
+  },
+  {
+    "id": "W-taxplatform-trade-third-fee",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "Some(code) => third = Some((code, fee_raw.clone())),",
+    "replace": "Some(_) => third = None::<(String, Option<String>)>,",
+    "expect_failing": [
+      "tax_platform_assets::third_asset_fees_become_their_own_rows"
+    ],
+    "rule": "A fiat trade's fee in a third crypto asset becomes its own fee row."
+  },
+  {
+    "id": "W-taxplatform-envelope-assets",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "kassiber_envelope::set(&mut result, \"assets\", assets);",
+    "replace": "let _ = assets;",
+    "expect_failing": [
+      "tax_platform_assets::bitcoin_scope_keeps_bitcoin_and_counts_what_it_skips"
+    ],
+    "rule": "CoinTracking and Blockpit imports report what the wallet's asset scope left out."
+  },
+  {
+    "id": "W-taxplatform-wallet-scope",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "Some(assets::Scope::of_wallet(conn, &wallet.id)?)",
+    "replace": "Some(assets::Scope::Bitcoin)",
+    "expect_failing": [
+      "tax_platform_assets::crypto_scope_imports_every_row_kind_for_any_crypto_asset",
+      "tax_platform_assets::turning_the_scope_on_keeps_bitcoin_rows_and_adds_the_rest"
+    ],
+    "rule": "A provider export import reads the target wallet's asset scope."
   }
 ]
