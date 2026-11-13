@@ -385,7 +385,9 @@
         "outgoing_one": "{{count}} outgoing",
         "outgoing_other": "{{count}} outgoing",
         "walletCount_one": "{{count}} new",
-        "walletCount_other": "{{count}} new"
+        "walletCount_other": "{{count}} new",
+        "moreWallets_one": "+{{count}} more wallet",
+        "moreWallets_other": "+{{count}} more wallets"
       }
     },
     "job": {
@@ -399,12 +401,12 @@
       "workspaceRefresh": "Refreshing all books"
     },
     "action": {
-      "openWallet": "Open wallet",
       "openTransaction": "Open transaction",
       "openSecurity": "Open security settings",
       "openMarketData": "Open market data",
       "openAllBooks": "Open all books",
-      "openTransactions": "Open transactions"
+      "openTransactions": "Open transactions",
+      "openConnection": "Open connection"
     },
     "feedback": {
       "reportSaveFailed": "Could not save the report export",
@@ -415,24 +417,25 @@
       "btcPriceUnchanged": "No newer BTC price; the cached one stays",
       "btcPriceFailed": "Could not refresh the BTC price"
     },
-    "namesMore": "{{names}} +{{count}} more",
     "causeCount": "{{cause}} ({{count}})",
-    "technical": "Technical details",
     "technicalRepeated": "{{message}} (×{{count}})",
-    "copyTechnical": "Copy",
+    "copyTechnical": "Copy error details",
     "copied": "Copied",
     "labelNewActivity": "Notifications: new transactions",
     "cause": {
       "offline": "Kassiber is offline",
       "rateLimited": "Server is limiting requests; retries later",
+      "unavailable": "Server temporarily unavailable; retries later",
       "certificate": "Secure connection failed (certificate)",
       "credentials": "Server rejected the credentials",
       "noBackend": "No server configured",
-      "unreachable": "Can't reach the server",
+      "connection": "Connection to the server failed",
       "cancelled": "Cancelled"
     },
     "askAssistant": "Ask the assistant",
-    "assistantPrompt": "Help me troubleshoot this in Kassiber: {{title}}\n{{seen}}\nCheck what you can with your tools, explain the likely cause in plain words, and tell me the next step."
+    "assistantPrompt": "Help me troubleshoot this in Kassiber: {{title}}\n{{seen}}\nCheck what you can with your tools, explain the likely cause in plain words, and tell me the next step.",
+    "assistantOtherError_one": "{{count}} other error (its text is not shared)",
+    "assistantOtherError_other": "{{count}} other errors (their text is not shared)"
   },
   "currencyToggle": {
     "bitcoin": "bitcoin",

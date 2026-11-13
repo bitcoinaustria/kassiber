@@ -22,6 +22,28 @@ export interface NewActivity {
   unlisted: Array<{ wallet?: string; count: number }>;
 }
 
+/** Wallets a "new transactions" entry keeps counts for; a sane upper bound. */
+const MAX_WALLETS = 500;
+
+/**
+ * Transaction ids already announced this session, so a replayed event does
+ * not report them again once their entry has been seen. RAM only, bounded.
+ */
+const MAX_ANNOUNCED = 5_000;
+const announced = new Set<string>();
+function remember(id: string) {
+  announced.add(id);
+  if (announced.size > MAX_ANNOUNCED) {
+    const oldest = announced.values().next().value;
+    if (oldest !== undefined) announced.delete(oldest);
+  }
+}
+
+/** For tests: forget what this session announced. */
+export function resetAnnouncedActivity(): void {
+  announced.clear();
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -78,13 +100,21 @@ export function newActivityFromRun(
   if (!data) return null;
   const activity: NewActivity = { records: [], unlisted: [] };
   const seen = new Set<string>();
-  for (const result of data.results ?? []) {
-    if (!isRecord(result) || result.status !== "synced") continue;
-    collectOutcome(activity, seen, result, undefined);
-  }
-  for (const job of data.completed ?? []) {
-    if (job.status !== "done" || !isRecord(job.result)) continue;
-    collectOutcome(activity, seen, job.result, job.source_label || undefined);
+  // The daemon builds `results` from the jobs it completed, so a run that
+  // carries both reports each outcome twice: read the completed jobs, and
+  // `results` only when no job finished with a result.
+  const done = (data.completed ?? []).filter(
+    (job) => job.status === "done" && isRecord(job.result),
+  );
+  if (done.length > 0) {
+    for (const job of done) {
+      collectOutcome(activity, seen, job.result as Record<string, unknown>, job.source_label || undefined);
+    }
+  } else {
+    for (const result of data.results ?? []) {
+      if (!isRecord(result) || result.status !== "synced") continue;
+      collectOutcome(activity, seen, result, undefined);
+    }
   }
   return activity.records.length || activity.unlisted.length ? activity : null;
 }
@@ -108,15 +138,16 @@ export function recordNewActivity(
       !entry.seenAt,
   );
   const known = new Set(earlier?.params.transactionIds ?? []);
-  const fresh = activity.records.filter((record) => !known.has(record.id));
+  // Announced before, in an entry since seen and replaced: not new again.
+  const fresh = activity.records.filter(
+    (record) => !known.has(record.id) && !announced.has(record.id),
+  );
   const unlistedCount = activity.unlisted.reduce((sum, item) => sum + item.count, 0);
   if (fresh.length === 0 && unlistedCount === 0) return;
 
   const wallets = new Map<string, number>();
-  for (const detail of earlier?.details ?? []) {
-    if (detail.label && detail.newTransactions) {
-      wallets.set(detail.label, detail.newTransactions);
-    }
+  for (const wallet of earlier?.params.walletCounts ?? []) {
+    wallets.set(wallet.label, wallet.count);
   }
   const addWallet = (label: string | undefined, count: number) => {
     if (label) wallets.set(label, (wallets.get(label) ?? 0) + count);
@@ -125,6 +156,7 @@ export function recordNewActivity(
   for (const item of activity.unlisted) addWallet(item.wallet, item.count);
 
   const transactionIds = [...known, ...fresh.map((record) => record.id)];
+  for (const record of fresh) remember(record.id);
   const total = (earlier?.params.transactions ?? 0) + fresh.length + unlistedCount;
   const incoming =
     (earlier?.params.incoming ?? 0) +
@@ -148,10 +180,12 @@ export function recordNewActivity(
       outgoing,
       transactionIds,
       ...(walletList.length === 1 ? { sources: [walletList[0][0]] } : {}),
+      // Whole, even for one wallet, so a later run merges per wallet; the
+      // center shortens it for display.
+      walletCounts: walletList
+        .slice(0, MAX_WALLETS)
+        .map(([label, count]) => ({ label, count })),
     },
     action,
-    // Kept even for one wallet, so a later run can merge per wallet; the
-    // center lists them only when there are several.
-    details: walletList.map(([label, count]) => ({ label, newTransactions: count })),
   });
 }

@@ -8,6 +8,7 @@ import type {
   NotificationDetail,
   ResultEntry,
 } from "@/store/notifications";
+import { redactCredentials } from "@/lib/secretScanner";
 
 import { groupDetails, type DetailGroup } from "./notificationCauses";
 import {
@@ -45,29 +46,25 @@ export interface ProjectedEntry {
 
 type ChromeT = TFunction<"chrome">;
 
-/** Names in a line: the first few, then how many more. */
-const NAMES_SHOWN = 3;
+/**
+ * Names in a line, only when there are few: more than this becomes a
+ * count, and the entry's action opens the full list.
+ */
+const NAMES_SHOWN = 2;
 
-function nameList(labels: readonly string[], mode: PrivacyMode, t: ChromeT): string | undefined {
+function nameList(labels: readonly string[], mode: PrivacyMode): string | undefined {
+  if (labels.length === 0 || labels.length > NAMES_SHOWN) return undefined;
   const names = labels
     .map((label) => projectLabel(label, mode))
     .filter((name): name is string => Boolean(name));
-  if (names.length === 0) return undefined;
-  if (names.length <= NAMES_SHOWN) return names.join(", ");
-  return t("notifications.namesMore", {
-    names: names.slice(0, NAMES_SHOWN - 1).join(", "),
-    count: names.length - (NAMES_SHOWN - 1),
-  });
+  return names.length ? names.join(", ") : undefined;
 }
 
 function groupLine(group: DetailGroup, mode: PrivacyMode, t: ChromeT): string | null {
-  const names = nameList(group.labels, mode, t);
+  const names = nameList(group.labels, mode);
   let text: string | undefined;
   if (group.cause) {
     text = t(`notifications.cause.${group.cause}`);
-    if (!names && group.count > 1) {
-      return t("notifications.causeCount", { cause: text, count: group.count });
-    }
   } else {
     const phrase = group.phraseKey
       ? t(`notifications.phrase.${group.phraseKey}`)
@@ -81,9 +78,13 @@ function groupLine(group: DetailGroup, mode: PrivacyMode, t: ChromeT): string | 
       ? t("notifications.detailLine", { label: text, message: names })
       : t("notifications.detailLine", { label: names, message: text });
   }
+  if (text && group.count > 1) {
+    return t("notifications.causeCount", { cause: text, count: group.count });
+  }
   return text ?? names ?? null;
 }
 
+/** Every raw text behind the entry, for Copy error details. */
 function technicalLines(
   groups: readonly DetailGroup[],
   mode: PrivacyMode,
@@ -91,8 +92,6 @@ function technicalLines(
 ): string[] {
   const lines = new Map<string, number>();
   for (const group of groups) {
-    // An unclassified line already shows its message.
-    if (!group.cause) continue;
     for (const item of group.messages) {
       const text = projectFreeText(item.text, mode, t);
       if (!text) continue;
@@ -324,6 +323,9 @@ export function projectResult(
  * New transactions: how many, which way, and in which wallets. Counts are
  * typed and show in every mode; wallet names follow `projectLabel`.
  */
+/** Wallet lines a "new transactions" entry lists before "+N more". */
+const WALLETS_SHOWN = 4;
+
 function projectNewActivity(
   entry: ResultEntry,
   mode: PrivacyMode,
@@ -341,23 +343,29 @@ function projectNewActivity(
       ? t("notifications.result.newActivity.outgoing", { count: params.outgoing })
       : null,
   ].filter((part): part is string => Boolean(part));
-  const wallets = entry.details ?? [];
-  const details =
-    wallets.length > 1 && mode !== "hideAll"
-      ? wallets.flatMap((detail) => {
-          const label = projectLabel(detail.label, mode);
-          return label && detail.newTransactions
-            ? [
-                t("notifications.detailLine", {
-                  label,
-                  message: t("notifications.result.newActivity.walletCount", {
-                    count: detail.newTransactions,
-                  }),
-                }),
-              ]
-            : [];
-        })
-      : [];
+  const wallets = params.walletCounts ?? [];
+  const details: string[] = [];
+  if (wallets.length > 1 && mode !== "hideAll") {
+    for (const wallet of wallets.slice(0, WALLETS_SHOWN)) {
+      const label = projectLabel(wallet.label, mode);
+      if (!label) continue;
+      details.push(
+        t("notifications.detailLine", {
+          label,
+          message: t("notifications.result.newActivity.walletCount", {
+            count: wallet.count,
+          }),
+        }),
+      );
+    }
+    if (wallets.length > WALLETS_SHOWN) {
+      details.push(
+        t("notifications.result.newActivity.moreWallets", {
+          count: wallets.length - WALLETS_SHOWN,
+        }),
+      );
+    }
+  }
   return {
     title: name
       ? t("notifications.result.newActivity.titleNamed", { count, name })
@@ -500,21 +508,42 @@ export const ASSISTANT_TROUBLESHOOT_CODES: readonly ConditionCode[] = [
 ];
 
 /**
- * The question handed to the assistant: what the center shows in the
- * current privacy mode (title, body, and the plain cause lines), never the
- * technical lines, whose server messages can name hosts and ports, which
- * are wallet configuration the assistant does not get.
+ * The question handed to the assistant. Built from fixed, translated text
+ * only: the entry's title and body, each cause in plain words, and the
+ * wallet names (context the assistant's own tools already see, scrubbed of
+ * anything credential-shaped). Raw daemon messages and hints never go:
+ * they can carry paths, hosts, ports, or URLs, which are configuration the
+ * assistant does not get. An unclassified error is only counted.
  */
 export function assistantTroubleshootPrompt(
-  projected: ProjectedEntry,
+  group: ConditionGroup,
+  mode: PrivacyMode,
   t: ChromeT,
 ): string {
-  const seen = [projected.body, ...projected.details.map((line) => `- ${line}`)]
+  const projected = projectConditionGroup(group, mode, t);
+  const lines = groupDetails(group.entries.flatMap((entry) => entry.details ?? [])).map(
+    (detailGroup) => {
+      if (!detailGroup.cause) {
+        return t("notifications.assistantOtherError", { count: detailGroup.count });
+      }
+      const cause = t(`notifications.cause.${detailGroup.cause}`);
+      const names = detailGroup.labels
+        .map((label) => projectLabel(label, mode))
+        .filter((name): name is string => Boolean(name))
+        .map((name) => redactCredentials(name));
+      if (names.length) {
+        return t("notifications.detailLine", { label: cause, message: names.join(", ") });
+      }
+      return detailGroup.count > 1
+        ? t("notifications.causeCount", { cause, count: detailGroup.count })
+        : cause;
+    },
+  );
+  const seen = [projected.body, ...lines.map((line) => `- ${line}`)]
     .filter(Boolean)
     .join("\n");
   return t("notifications.assistantPrompt", {
-    title: projected.title,
+    title: redactCredentials(projected.title),
     seen,
   });
 }
-

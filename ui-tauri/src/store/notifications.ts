@@ -144,6 +144,12 @@ export interface NotificationParams {
    * RAM only, never shown.
    */
   transactionIds?: string[];
+  /**
+   * New transactions per wallet label: the merge state of a "new
+   * transactions" entry, kept whole (unlike `details`, which the store caps)
+   * and only shortened for display.
+   */
+  walletCounts?: Array<{ label: string; count: number }>;
 }
 
 /**
@@ -157,8 +163,16 @@ export interface NotificationDetail {
   message?: string;
   /** A fixed, translated phrase from a closed set; safe in every mode. */
   phraseKey?: NotificationPhraseKey;
-  /** New transactions for `label`; a typed count, safe in every mode. */
-  newTransactions?: number;
+  /**
+   * The daemon's error code (`network_error`, `rate_limited`, ...), which
+   * classifies the cause more reliably than its text. Never shown.
+   */
+  code?: string;
+  /**
+   * The daemon's remediation hint, kept apart from `message` so its advice
+   * ("check the tcp/ssl port") is not read as the cause. Technical text only.
+   */
+  hint?: string;
 }
 
 export const NOTIFICATION_PHRASE_KEYS = [
@@ -301,9 +315,10 @@ export function boundDetails(
       (NOTIFICATION_PHRASE_KEYS as readonly string[]).includes(detail.phraseKey)
         ? { phraseKey: detail.phraseKey }
         : {}),
-      ...(Number.isSafeInteger(detail.newTransactions) && detail.newTransactions! > 0
-        ? { newTransactions: detail.newTransactions }
+      ...(detail.code && /^[a-z0-9_.-]{1,64}$/.test(detail.code)
+        ? { code: detail.code }
         : {}),
+      ...(detail.hint ? { hint: clip(detail.hint) } : {}),
     }))
     .filter((detail) => detail.label || detail.message || detail.phraseKey)
     .slice(0, MAX_DETAILS);

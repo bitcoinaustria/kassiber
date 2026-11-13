@@ -1,43 +1,61 @@
 import type { NotificationDetail } from "@/store/notifications";
 
 /**
- * Why a source or run failed, in a closed set of plain causes. The daemon
- * reports a source's last error as text only, so the cause is read from the
- * message and the detail's fixed phrase. Anything that does not match stays
- * unclassified and keeps its own message.
+ * Why a source or run failed, in a closed set of plain causes. The daemon's
+ * error code decides where it is specific; otherwise the primary message
+ * does. The remediation hint never does: its advice ("check the tcp/ssl
+ * port") says nothing about what happened. Anything that does not match
+ * stays unclassified and keeps its own message.
+ *
+ * `connection` is deliberately neutral ("connection failed", not "server
+ * unreachable"): the network layer reports refused connections, timeouts,
+ * and TLS failures alike as `network I/O failed`.
  */
 export const NOTIFICATION_CAUSES = [
   "offline",
   "rateLimited",
+  "unavailable",
   "certificate",
   "credentials",
   "noBackend",
-  "unreachable",
+  "connection",
   "cancelled",
 ] as const;
 export type NotificationCause = (typeof NOTIFICATION_CAUSES)[number];
 
-const CAUSE_PATTERNS: ReadonlyArray<[NotificationCause, RegExp]> = [
+const CODE_CAUSES: Readonly<Record<string, NotificationCause>> = {
+  network_error: "connection",
+  backend_timeout: "connection",
+  backend_tls_config_invalid: "certificate",
+  backend_not_configured: "noBackend",
+  cancelled: "cancelled",
+};
+
+const MESSAGE_CAUSES: ReadonlyArray<[NotificationCause, RegExp]> = [
   ["offline", /offline mode|outbound requests are disabled/i],
-  ["rateLimited", /rate[ -]?limit|too many requests|\b429\b|\b503\b|cooling down/i],
-  ["certificate", /certificate|\btls\b|\bssl\b|handshake|\bca bundle/i],
-  ["credentials", /\b401\b|\b403\b|unauthori[sz]ed|forbidden|api key|credential|authenticat/i],
-  ["noBackend", /no sync backend|backend_not_configured/i],
+  ["rateLimited", /rate[ -]?limit|too many requests|\b429\b|cooling down/i],
+  ["unavailable", /temporarily unavailable|service unavailable|\b50[234]\b/i],
+  ["certificate", /certificate|\btls\b|handshake|\bca bundle/i],
+  ["credentials", /\b401\b|\b403\b|unauthori[sz]ed|forbidden|api key|authenticat/i],
+  ["noBackend", /no sync backend/i],
   [
-    "unreachable",
-    /network i\/o|connection (refused|reset|closed)|could not connect|unreachable|timed? ?out|timeout|dns|resolve host|budget exhausted|network_error|backend_timeout/i,
+    "connection",
+    /network i\/o|connection (refused|reset|closed)|could not connect|unreachable|timed? ?out|timeout|dns|budget exhausted/i,
   ],
   ["cancelled", /\bcancel+ed\b/i],
 ];
 
 export function classifyCause(
-  detail: Pick<NotificationDetail, "message" | "phraseKey">,
+  detail: Pick<NotificationDetail, "message" | "phraseKey" | "code">,
 ): NotificationCause | null {
   if (detail.phraseKey === "coolingDown") return "rateLimited";
   const message = detail.message ?? "";
-  for (const [cause, pattern] of CAUSE_PATTERNS) {
+  // The text tells offline and 429-vs-503 apart where one code covers both.
+  for (const [cause, pattern] of MESSAGE_CAUSES) {
     if (pattern.test(message)) return cause;
   }
+  const byCode = detail.code ? CODE_CAUSES[detail.code] : undefined;
+  if (byCode) return byCode;
   if (detail.phraseKey === "cancelled") return "cancelled";
   return null;
 }
@@ -55,7 +73,11 @@ export interface DetailGroup {
   labels: string[];
   /** Details in this group, with or without a label. */
   count: number;
-  /** Distinct raw messages behind the group, with how often each came. */
+  /**
+   * Distinct raw texts behind the group (message, then hint), with how
+   * often each came. Technical only: copied on request, never shown inline
+   * for a classified cause, never sent to the assistant.
+   */
   messages: Array<{ text: string; count: number }>;
 }
 
@@ -92,10 +114,11 @@ export function groupDetails(
     group.count += 1;
     const label = detail.label?.trim();
     if (label && !group.labels.includes(label)) group.labels.push(label);
-    if (message) {
-      const seen = group.messages.find((item) => item.text === message);
+    const raw = [message, detail.hint?.trim()].filter(Boolean).join(" — ");
+    if (raw) {
+      const seen = group.messages.find((item) => item.text === raw);
       if (seen) seen.count += 1;
-      else group.messages.push({ text: message, count: 1 });
+      else group.messages.push({ text: raw, count: 1 });
     }
   }
   // Biggest group first: the cause that explains most of the failures.

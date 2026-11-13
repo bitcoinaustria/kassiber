@@ -4,7 +4,9 @@ import type { TFunction } from "i18next";
 import {
   AlertTriangle,
   Bell,
+  Check,
   CheckCircle2,
+  Copy,
   ChevronDown,
   ChevronRight,
   CircleAlert,
@@ -42,7 +44,11 @@ import {
   type NotificationScope,
   type ResultEntry,
 } from "@/store/notifications";
-import type { ActiveBook, DaemonBookScope } from "@/lib/activeBook";
+import {
+  reportStaleBook,
+  type ActiveBook,
+  type DaemonBookScope,
+} from "@/lib/activeBook";
 import {
   useUiStore,
   type NotificationTone,
@@ -147,7 +153,7 @@ function conditionActionLabel(
       return t("notifications.condition.journalsFailed.action");
     case "connection.sync-failed":
     case "btcpay.provenance-incomplete":
-      return t("notifications.action.openWallet");
+      return t("notifications.action.openConnection");
     case "touch-id.off":
       return t("notifications.condition.touchIdOff.action");
     case "unlock.credential-remains":
@@ -171,7 +177,7 @@ function conditionActionLabel(
 function resultActionLabel(resolved: ResolvedEntryAction, t: ChromeT): string {
   switch (resolved.kind) {
     case "open-connection":
-      return t("notifications.action.openWallet");
+      return t("notifications.action.openConnection");
     case "open-transaction":
       return t("notifications.action.openTransaction");
     case "open-workspace":
@@ -317,6 +323,33 @@ export function NotificationCenter({
     }
   };
 
+  // Bound at the click, not at render: the list may predate a book switch.
+  // The entry's book must be the one open now, the switch settled, and the
+  // assistant's own stamp the same book; the request then carries that stamp.
+  const askAssistantAbout = (group: ConditionGroup) => {
+    const assistant = useAssistantBridge.getState().assistant;
+    if (!assistant) return;
+    const origin = group.entries[0].scope;
+    const book = resolveCurrentBook ? resolveCurrentBook() : currentActiveBook;
+    const stamp = assistant.captureBook?.() ?? null;
+    if (
+      !book ||
+      (origin.book !== null && origin.book !== book.key) ||
+      !stamp ||
+      stamp.scope.workspace_id !== book.expected.workspace_id ||
+      stamp.scope.profile_id !== book.expected.profile_id
+    ) {
+      reportStaleBook();
+      return;
+    }
+    setOpen(false);
+    handOffToAssistant(
+      assistant,
+      assistantTroubleshootPrompt(group, useUiStore.getState().privacyMode, t),
+      { book: stamp },
+    );
+  };
+
   const pendingFor = (resolved: ResolvedEntryAction | null) =>
     resolved?.kind === "operation" &&
     Boolean(pendingOperations[resolved.operation.kind]);
@@ -379,21 +412,13 @@ export function NotificationCenter({
                 {groups.map((group) => {
                   const first = group.entries[0];
                   const projected = projectConditionGroup(group, privacyMode, t);
-                  // Offered inside the opened details only, for failures of
-                  // the open book (or app-wide ones) the assistant can look into.
+                  // Offered inside opened details only, for failures the
+                  // assistant can look into, of the open book (or app-wide).
                   const askAssistant =
                     assistantAvailable &&
                     ASSISTANT_TROUBLESHOOT_CODES.includes(group.code) &&
                     (first.scope.book === null || first.scope.book === currentBook)
-                      ? () => {
-                          const assistant = useAssistantBridge.getState().assistant;
-                          if (!assistant) return;
-                          setOpen(false);
-                          handOffToAssistant(
-                            assistant,
-                            assistantTroubleshootPrompt(projected, t),
-                          );
-                        }
+                      ? () => askAssistantAbout(group)
                       : undefined;
                   const resolved = resolveEntryAction(
                     first.action,
@@ -607,34 +632,6 @@ function DetailList({ id, details }: { id: string; details: readonly string[] })
 
 const QUIET_BUTTON = "h-6 px-1.5 text-2xs text-muted-foreground";
 
-/**
- * The raw messages behind the grouped causes, for a bug report. Copy takes
- * exactly the lines shown (already privacy-projected) and follows the
- * clipboard-clearing setting.
- */
-function TechnicalPanel({ id, lines }: { id: string; lines: readonly string[] }) {
-  const { t } = useTranslation("chrome");
-  const [copied, setCopied] = React.useState(false);
-  const copy = () => {
-    void copyTextWithPolicy(lines.join("\n")).then(
-      () => setCopied(true),
-      () => undefined,
-    );
-  };
-  return (
-    <div id={id} className="mt-1 rounded-sm bg-muted/50 px-2 py-1">
-      <ul className="space-y-0.5 font-mono text-2xs break-words text-muted-foreground">
-        {lines.map((line, index) => (
-          <li key={index}>{line}</li>
-        ))}
-      </ul>
-      <Button type="button" variant="ghost" size="xs" className="mt-0.5 h-5 px-1 text-2xs" onClick={copy}>
-        {copied ? t("notifications.copied") : t("notifications.copyTechnical")}
-      </Button>
-    </div>
-  );
-}
-
 function ActionButton({
   action,
   onClick,
@@ -692,9 +689,17 @@ function EntryRow({
 }) {
   const { t } = useTranslation("chrome");
   const [expanded, setExpanded] = React.useState(false);
-  const [technicalOpen, setTechnicalOpen] = React.useState(false);
+  const [technicalCopied, setTechnicalCopied] = React.useState(false);
   const detailsId = React.useId();
-  const technicalId = React.useId();
+  // The raw daemon text, for a bug report: copied, never laid out inline.
+  // Exactly the lines the privacy mode allows; the clipboard-clearing
+  // setting applies.
+  const copyTechnical = () => {
+    void copyTextWithPolicy(projected.technical.join("\n")).then(
+      () => setTechnicalCopied(true),
+      () => undefined,
+    );
+  };
   const ToneIcon = TONE_ICON[tone] ?? Info;
   const hasControls = Boolean(action) || projected.details.length > 0;
 
@@ -755,23 +760,24 @@ function EntryRow({
               <Button
                 type="button"
                 variant="ghost"
-                size="xs"
-                className={QUIET_BUTTON}
-                aria-expanded={technicalOpen}
-                aria-controls={technicalId}
-                onClick={() => setTechnicalOpen((value) => !value)}
+                size="icon-xs"
+                className="text-muted-foreground"
+                aria-label={
+                  technicalCopied
+                    ? t("notifications.copied")
+                    : t("notifications.copyTechnical")
+                }
+                title={t("notifications.copyTechnical")}
+                onClick={copyTechnical}
               >
-                <ChevronRight
-                  className={cn("transition-transform", technicalOpen && "rotate-90")}
-                  aria-hidden="true"
-                />
-                {t("notifications.technical")}
+                {technicalCopied ? (
+                  <Check aria-hidden="true" />
+                ) : (
+                  <Copy aria-hidden="true" />
+                )}
               </Button>
             ) : null}
           </div>
-        ) : null}
-        {expanded && technicalOpen && projected.technical.length > 0 ? (
-          <TechnicalPanel id={technicalId} lines={projected.technical} />
         ) : null}
       </div>
       {onDismiss ? (

@@ -14,6 +14,11 @@ interface HandoffOrigin {
   context?: AssistantScreenContext;
   /** The page's scope boundary: its book is the one the page's content came from. */
   boundary?: DaemonScopeBoundary | null;
+  /**
+   * A stamp the caller already captured and checked at the user's action
+   * (the notification bell, outside any page boundary).
+   */
+  book?: BookStamp;
 }
 
 /**
@@ -33,9 +38,11 @@ export function beginAssistantHandoff(
   assistant: AssistantSessionContextValue,
   origin: HandoffOrigin = {},
 ): ((prompt: string) => void) | null {
-  const book: BookStamp | null = origin.boundary
-    ? { daemonSession: origin.boundary.daemonSession, scope: origin.boundary.expectedScope }
-    : (assistant.captureBook?.() ?? null);
+  const book: BookStamp | null = origin.book
+    ? origin.book
+    : origin.boundary
+      ? { daemonSession: origin.boundary.daemonSession, scope: origin.boundary.expectedScope }
+      : (assistant.captureBook?.() ?? null);
   if (!book) {
     showFeedback({
       title: i18n.t("queue.bookLoading.title", { ns: "assistant" }),

@@ -511,7 +511,7 @@ describe("NotificationCenter actions and scope", () => {
     }
     expect(screen.queryByRole("button", { name: "Open wallets" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Open journals" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Open wallet" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open connection" })).toBeNull();
     expect(
       resolveEntryAction(
         { type: "navigate", to: "/nope" },
@@ -591,8 +591,37 @@ describe("NotificationCenter entries", () => {
       expect(sendPrompt).toHaveBeenCalledTimes(1);
       const [prompt] = sendPrompt.mock.calls[0] as unknown as [string];
       expect(prompt).toContain("1 source could not refresh");
-      expect(prompt).toContain("Can't reach the server: Cold storage");
+      expect(prompt).toContain("Connection to the server failed: Cold storage");
       expect(prompt).not.toContain("10.0.0.5");
+    } finally {
+      useAssistantBridge.setState({ assistant: null });
+    }
+  });
+
+  it("refuses to ask the assistant once another book is open", () => {
+    const sendPrompt = vi.fn(() => true);
+    useAssistantBridge.setState({
+      assistant: {
+        sendPrompt,
+        captureBook: () => ({
+          daemonSession: 1,
+          scope: { workspace_id: "ws", profile_id: "pf-b" },
+        }),
+      } as never,
+    });
+    try {
+      useNotificationStore.getState().raiseCondition(
+        sourceFailure("s1", "Cold storage", "network I/O failed"),
+      );
+      openBell();
+      const row = entry("1 source could not refresh");
+      act(() => void fireEvent.click(within(row).getByRole("button", { name: /Show details/ })));
+      // The list was rendered for book A; B opens before the click.
+      currentBook = ACTIVE_B;
+      act(() => {
+        fireEvent.click(within(row).getByRole("button", { name: /Ask the assistant/ }));
+      });
+      expect(sendPrompt).not.toHaveBeenCalled();
     } finally {
       useAssistantBridge.setState({ assistant: null });
     }
@@ -618,13 +647,12 @@ describe("NotificationCenter entries", () => {
     const toggle = within(row).getByRole("button", { name: /Show details/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     act(() => void fireEvent.click(toggle));
-    // The cause in plain words; the raw message waits behind Technical details.
-    expect(within(row).getByText("Can't reach the server: Cold storage")).toBeTruthy();
+    // The cause in plain words; the raw message is only copied, never shown.
+    expect(
+      within(row).getByText("Connection to the server failed: Cold storage"),
+    ).toBeTruthy();
     expect(within(row).queryByText(/Electrum timeout/)).toBeNull();
-    act(() => {
-      fireEvent.click(within(row).getByRole("button", { name: /Technical details/ }));
-    });
-    expect(within(row).getByText("Electrum timeout")).toBeTruthy();
+    expect(within(row).getByRole("button", { name: /Copy error details/ })).toBeTruthy();
     act(() => {
       fireEvent.click(within(row).getByRole("button", { name: /Hide details/ }));
     });
@@ -679,7 +707,7 @@ describe("NotificationCenter entries", () => {
     });
     openBell();
     act(() => {
-      fireEvent.click(within(entry("A wallet could not sync")).getByRole("button", { name: "Open wallet" }));
+      fireEvent.click(within(entry("A wallet could not sync")).getByRole("button", { name: "Open connection" }));
     });
     expect(navigate).toHaveBeenLastCalledWith({
       to: "/connections/$connectionId",
@@ -727,7 +755,7 @@ describe("NotificationCenter entries", () => {
     useUiStore.setState({ lang: "de" });
     openBell();
     const row = entry("Sync einer Wallet fehlgeschlagen");
-    expect(within(row).getByRole("button", { name: "Wallet öffnen" })).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "Verbindung öffnen" })).toBeTruthy();
   });
 });
 
@@ -758,7 +786,7 @@ describe("NotificationCenter privacy modes", () => {
     expandAll();
     const text = renderedText();
     expect(text).toContain(SENTINEL_LABEL);
-    expect(text).toContain("Can't reach the server: Hot");
+    expect(text).toContain("Connection to the server failed: Hot");
   });
 
   it("Hide amounts withholds free text that may hold an amount", () => {
@@ -771,7 +799,7 @@ describe("NotificationCenter privacy modes", () => {
     expect(text).not.toContain("0.4242");
     // Labels stay; the digit-bearing message does not.
     expect(text).toContain(`${SENTINEL_LABEL}: Hidden while amounts are hidden.`);
-    expect(text).toContain("Can't reach the server: Hot");
+    expect(text).toContain("Connection to the server failed: Hot");
   });
 
   it("Hide amounts masks labels and progress text that carry an amount", () => {
@@ -800,7 +828,7 @@ describe("NotificationCenter privacy modes", () => {
     expandAll();
     const text = renderedText();
     expect(text).not.toContain("0.4242");
-    expect(text).toContain("Can't reach the server: ••••");
+    expect(text).toContain("Connection to the server failed: ••••");
     expect(within(entry("Refreshing book")).getByText("Hidden while amounts are hidden.")).toBeTruthy();
     expect(within(entry("Syncing wallet")).getByText("Hidden while amounts are hidden.")).toBeTruthy();
   });

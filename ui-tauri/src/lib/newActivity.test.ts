@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { projectResult } from "@/components/kb/notificationProjection";
 import i18n from "@/i18n";
 import { parseDaemonFreshnessEvent } from "@/lib/daemonFreshnessEvent";
-import { newActivityFromRun, recordNewActivity } from "@/lib/newActivity";
+import {
+  newActivityFromRun,
+  recordNewActivity,
+  resetAnnouncedActivity,
+} from "@/lib/newActivity";
 import { applyFreshnessEvent } from "@/lib/notificationConditions";
 import type { FreshnessRunData } from "@/lib/syncResults";
 import { resetNotificationStore, useNotificationStore } from "@/store/notifications";
@@ -39,22 +43,20 @@ function activity() {
     .results.filter((entry) => entry.code === "activity.new");
 }
 
-beforeEach(() => resetNotificationStore());
+beforeEach(() => {
+  resetNotificationStore();
+  resetAnnouncedActivity();
+});
 
 describe("new transactions from a run", () => {
   it("counts each listed transaction once, by direction and wallet", () => {
     const data: FreshnessRunData = {
-      results: [
-        {
-          wallet: "Treasury",
-          status: "synced",
-          inserted_records: [record("t1", "inbound"), record("t2", "outbound")],
-        } as never,
-      ],
       completed: [
-        job("Treasury", { inserted_records: [record("t2", "outbound")] }),
+        job("Treasury", {
+          inserted_records: [record("t1", "inbound"), record("t2", "outbound")],
+        }),
         job("Spending", {
-          inserted_records: [record("t3", "inbound", "Spending")],
+          inserted_records: [record("t2", "outbound"), record("t3", "inbound", "Spending")],
         }),
         job("Broken", { inserted_records: [record("t9", "inbound")] }, "error"),
       ],
@@ -65,6 +67,25 @@ describe("new transactions from a run", () => {
       ["t2", "outgoing", "Treasury"],
       ["t3", "incoming", "Spending"],
     ]);
+  });
+
+  it("reads one copy when a run mirrors its jobs into results", () => {
+    // The daemon builds `results` from the completed jobs' results.
+    const outcome = { wallet: "Exchange", status: "synced", imported: 4 };
+    const found = newActivityFromRun({
+      results: [outcome as never],
+      completed: [job("Exchange", outcome)],
+    });
+    expect(found).toEqual({ records: [], unlisted: [{ wallet: "Exchange", count: 4 }] });
+  });
+
+  it("reads results when no job completed with a result", () => {
+    const found = newActivityFromRun({
+      results: [
+        { wallet: "Treasury", status: "synced", inserted_records: [record("t1", "inbound")] } as never,
+      ],
+    });
+    expect(found?.records.map((item) => item.id)).toEqual(["t1"]);
   });
 
   it("falls back to the imported count when a source lists no records", () => {
@@ -134,6 +155,11 @@ describe("the new transactions entry", () => {
       "Treasury: 2 new",
       "Spending: 1 new",
     ]);
+    // Replayed after it was seen: nothing new to announce.
+    useNotificationStore.getState().markSeen();
+    recordNewActivity(run(["t1", "t2", "t3"], "Treasury"), SCOPE);
+    expect(activity()[0].params.transactions).toBe(3);
+    expect(activity()[0].seenAt).toBeDefined();
 
     useNotificationStore.getState().markSeen();
     recordNewActivity(run(["t4"], "Treasury"), SCOPE);
@@ -142,6 +168,34 @@ describe("the new transactions entry", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].params.transactions).toBe(1);
     expect(entries[0].seenAt).toBeUndefined();
+  });
+
+  it("keeps every wallet's count past the detail cap and shortens only the display", () => {
+    const wallets = Array.from({ length: 13 }, (_, index) => `W${index}`);
+    recordNewActivity(
+      newActivityFromRun({
+        completed: wallets.map((wallet, index) =>
+          job(wallet, { inserted_records: [record(`a${index}`, "inbound", wallet)] }),
+        ),
+      }),
+      SCOPE,
+    );
+    recordNewActivity(
+      newActivityFromRun({
+        completed: [job("W12", { inserted_records: [record("b12", "inbound", "W12")] })],
+      }),
+      SCOPE,
+    );
+    const [entry] = activity();
+    expect(entry.params.transactions).toBe(14);
+    expect(entry.params.walletCounts?.find((item) => item.label === "W12")?.count).toBe(2);
+    expect(projectResult(entry, "normal", t).details).toEqual([
+      "W0: 1 new",
+      "W1: 1 new",
+      "W2: 1 new",
+      "W3: 1 new",
+      "+9 more wallets",
+    ]);
   });
 
   it("is filed by a background event for the open book only", () => {
