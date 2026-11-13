@@ -420,3 +420,32 @@ fn status_reports_storage_only_when_asked() {
     assert_eq!(get(storage, "database_bytes"), Some(&Value::Null));
     assert_eq!(get(storage, "wal_bytes"), Some(&Value::Null));
 }
+
+#[test]
+fn status_reports_a_revision_only_when_asked() {
+    let store = FakeStore::new(FakeConfig::default());
+    let bootstrap = store.bootstrap(&Selection::default()).unwrap();
+    let out = Captured::default();
+    serve(
+        Arc::new(store),
+        DaemonConfig {
+            build: BUILD,
+            bootstrap,
+        },
+        Box::new(std::io::Cursor::new(
+            b"{\"request_id\":\"a\",\"kind\":\"status\"}\n{\"request_id\":\"b\",\"kind\":\"status\",\"args\":{\"revision\":true}}\n{\"request_id\":\"c\",\"kind\":\"status\",\"args\":{\"revision\":1}}\n".to_vec(),
+        )),
+        Box::new(out.clone()),
+    );
+    let text = String::from_utf8(out.0.lock().unwrap().clone()).unwrap();
+    let data = |line: usize| {
+        let envelope = parse(text.lines().nth(line).unwrap());
+        get(&envelope, "data").unwrap().clone()
+    };
+    // The default payload the recorded sessions pin is unchanged; only an
+    // explicit `true` adds the key.
+    assert_eq!(get(&data(1), "revision"), None);
+    assert_eq!(get(&data(3), "revision"), None);
+    // The fake store cannot tell revisions apart: null, never a made-up token.
+    assert_eq!(get(&data(2), "revision"), Some(&Value::Null));
+}

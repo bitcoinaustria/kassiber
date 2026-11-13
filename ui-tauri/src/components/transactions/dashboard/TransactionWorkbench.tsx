@@ -232,6 +232,7 @@ const TransactionWorkbench = ({
   swapCandidateTotal,
   dashboardSnapshot,
   dashboardSnapshotIsCurrent = false,
+  isLoading,
   isRefreshing,
 }: {
   period: ResolvedPeriodKey;
@@ -254,6 +255,9 @@ const TransactionWorkbench = ({
    * keep showing it, but the assistant must not receive it as this page's.
    */
   dashboardSnapshotIsCurrent?: boolean;
+  /** No dashboard figures yet: placeholders. */
+  isLoading?: boolean;
+  /** Figures on screen are being refreshed: dimmed, still usable. */
   isRefreshing?: boolean;
 }) => {
   const { t } = useTranslation("transactions");
@@ -662,8 +666,7 @@ const TransactionWorkbench = ({
         // Columns by the page's own width, not the window's: a docked panel
         // can leave the page half the window.
         className="kb-surface relative z-20 grid grid-cols-2 overflow-visible @2xl/page:grid-cols-3 @6xl/page:grid-cols-6"
-        role={isRefreshing ? "status" : undefined}
-        aria-live={isRefreshing ? "polite" : undefined}
+        aria-busy={isLoading || isRefreshing || undefined}
       >
         {metricCards.map((metric, index) => {
           const Icon = metric.icon;
@@ -673,10 +676,10 @@ const TransactionWorkbench = ({
             index % 3 === 0 ? "@2xl/page:border-l-0" : "@2xl/page:border-l",
             index > 0 ? "@6xl/page:border-l" : "@6xl/page:border-l-0",
             metric.onClick &&
-              !isRefreshing &&
+              !isLoading &&
               "relative isolate w-full cursor-pointer overflow-hidden transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:before:scale-x-100 [&>*]:relative [&>*]:z-10",
           );
-          const content = isRefreshing ? (
+          const content = isLoading ? (
             <>
               <div className="flex items-center gap-2">
                 <Skeleton className="size-4 rounded-md" />
@@ -691,7 +694,12 @@ const TransactionWorkbench = ({
                 <Icon className={cn("size-4", metric.tone)} aria-hidden="true" />
                 <span className="truncate">{metric.label}</span>
               </div>
-              <div className="truncate text-xl font-semibold tracking-tight">
+              <div
+                className={cn(
+                  "truncate text-xl font-semibold tracking-tight transition-opacity motion-reduce:transition-none",
+                  isRefreshing && "opacity-60",
+                )}
+              >
                 {metric.countOnly
                   ? `${metric.value.eur}`
                   : metric.onClick
@@ -716,7 +724,7 @@ const TransactionWorkbench = ({
               </div>
             </>
           );
-          return metric.onClick && !isRefreshing ? (
+          return metric.onClick && !isLoading ? (
             <button
               key={metric.label}
               type="button"
@@ -739,7 +747,7 @@ const TransactionWorkbench = ({
               <h2 className="text-sm font-semibold">
                 {t(`workbench.chart.title${bucketTitleSuffix}`)}
               </h2>
-              {isRefreshing ? (
+              {isLoading ? (
                 <Skeleton className="mt-1 h-3 w-36" />
               ) : (
                 <p className="text-xs text-muted-foreground">
@@ -832,7 +840,7 @@ const TransactionWorkbench = ({
             </div>
           </div>
           <div className="relative min-h-[280px] min-w-0 flex-1 overflow-visible">
-            {isRefreshing ? (
+            {isLoading ? (
               <div className="flex h-full min-h-[280px] items-end gap-3 border-b border-l border-border/60 px-3 pb-4">
                 {[42, 64, 36, 78, 52, 88, 48, 70].map((height, index) => (
                   <Skeleton
@@ -845,7 +853,11 @@ const TransactionWorkbench = ({
             ) : (
               <ChartContainer
                 config={flowChartConfig}
-                className="aspect-auto h-full w-full overflow-visible [&_.recharts-responsive-container]:!overflow-visible [&_.recharts-tooltip-wrapper]:!z-[80] [&_.recharts-wrapper]:!overflow-visible"
+                className={cn(
+                  "transition-opacity motion-reduce:transition-none",
+                  isRefreshing && "opacity-60",
+                  "aspect-auto h-full w-full overflow-visible [&_.recharts-responsive-container]:!overflow-visible [&_.recharts-tooltip-wrapper]:!z-[80] [&_.recharts-wrapper]:!overflow-visible",
+                )}
               >
                 <BarChart
                   data={visibleChartRows}

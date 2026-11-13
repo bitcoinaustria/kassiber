@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
 import type { RateLatestData } from "@/components/kb/settings/SettingsModel";
-import { useDaemonMutation } from "@/daemon/client";
+import { refreshDaemonQueries, useDaemonMutation } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import i18n from "@/i18n";
@@ -120,7 +120,7 @@ export const OverviewDashboard = ({
         },
         onSettled: () => {
           marketRateRefreshInFlightRef.current = false;
-          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+          void refreshDaemonQueries(queryClient, null);
         },
       },
     );

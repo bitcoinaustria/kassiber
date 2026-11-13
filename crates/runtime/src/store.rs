@@ -819,6 +819,14 @@ pub trait Book: Send {
     fn is_initialized(&self) -> Result<bool, AppError>;
     fn context(&self) -> Result<BookContext, AppError>;
     fn status_facts(&self) -> Result<StatusFacts, AppError>;
+    /// An opaque token that changes whenever a committed write reaches the
+    /// open book, through this connection or another (a background sync
+    /// worker's). The desktop reads it before and after a refresh's reads:
+    /// equal tokens mean every read in between saw one state of the book.
+    /// `None` when the store cannot tell.
+    fn revision(&self) -> Result<Option<String>, AppError> {
+        Ok(None)
+    }
     /// `resolve_scope(conn, workspace, profile)`: the ids a request's
     /// explicit `workspace`/`profile` selectors name.
     fn resolve_scope(

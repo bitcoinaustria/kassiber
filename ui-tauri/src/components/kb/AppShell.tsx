@@ -105,6 +105,7 @@ import {
   resetNotificationStore,
   useNotificationStore,
   type NotificationOperation,
+  type ConditionCode,
 } from "@/store/notifications";
 import { clearFeedback, showFeedback } from "@/lib/feedback";
 import {
@@ -123,6 +124,7 @@ import {
   DAEMON_AUTH_REQUIRED_EVENT,
   daemonMutationKey,
   formatDaemonEnvelopeError,
+  refreshDaemonQueries,
   shouldHandleDaemonAuthRequiredEvent,
   useDaemon,
 } from "@/daemon/client";
@@ -208,6 +210,7 @@ import { ExternalBrowserLink } from "./ExternalBrowserLink";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
+import { BookFreshnessIndicator } from "./BookFreshnessIndicator";
 import { NetworkStatusIndicator } from "./NetworkStatusIndicator";
 import {
   daemonQueryUsesShellProgress,
@@ -909,8 +912,11 @@ export function AppShell() {
       void getTransport().invoke({ kind: "daemon.lock" });
       return;
     }
+    // Every lock empties the read cache: no book data waits in memory behind
+    // the lock screen.
     if (!hasSessionUnlockPassphrase()) {
       clearSessionUnlockPassphrase();
+      clearDaemonQueryCache();
       void clearImportedProjectRoot()
         .catch(() => {})
         .finally(() => {
@@ -919,6 +925,7 @@ export function AppShell() {
         });
       return;
     }
+    clearDaemonQueryCache();
     setLocked(true);
   }, [
     clearDaemonQueryCache,
@@ -1718,7 +1725,7 @@ export function AppShell() {
           if (value && typeof value === "object" && "event" in value && value.event === true && "kind" in value && value.kind === "ui.chain_analysis.watches.changed" && !("request_id" in value)) {
             // The event may come from another book's work; the re-read of the
             // open book's watch inbox decides whether a condition waits.
-            void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+            void refreshDaemonQueries(queryClient, null);
             // The push is the news; the inbox poll that recovers missed
             // wake-ups after a lock or restart is not offered to the OS.
             void offerOsNotification(
@@ -1729,7 +1736,7 @@ export function AppShell() {
           const freshness = parseDaemonFreshnessEvent(event.payload);
           if (!freshness) return;
 
-          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+          void refreshDaemonQueries(queryClient, null);
           // Applied only when the event names the open book; anything else
           // (delayed past a switch, or naming no book) is left to the
           // re-read the invalidation above starts. The OS hears only about
@@ -3057,6 +3064,14 @@ function ShellTitlebar({
  * The breadcrumb and shell actions on the title bar's page side: the
  * book-refresh split button, notifications, and the view toggles.
  */
+// Conditions that mean the last refresh of the book did not complete.
+const REFRESH_FAILURE_CODES: ReadonlySet<ConditionCode> = new Set<ConditionCode>([
+  "book-refresh.failed",
+  "freshness.worker-error",
+  "source.refresh-failed",
+  "connection.sync-failed",
+]);
+
 function ShellTitlebarControls({
   meta,
   onLock,
@@ -3079,6 +3094,12 @@ function ShellTitlebarControls({
   const inScope = conditionsInScope(conditions, activeBookKey);
   const attentionCount = attentionGroupCount(conditions, activeBookKey);
   const blocksReports = inScope.some((entry) => entry.priority === "blocking");
+  // The title bar's book status names a failed refresh of the open book
+  // (or of a worker that names no book) until a later run settles it.
+  const refreshFailed = inScope.some((entry) =>
+    REFRESH_FAILURE_CODES.has(entry.code),
+  );
+  const needsJournals = inScope.some((entry) => entry.code === "journals.stale");
   const runNotificationOperation = (
     operation: NotificationOperation,
     expectedScope: DaemonBookScope,
@@ -3116,6 +3137,11 @@ function ShellTitlebarControls({
         {preAlphaBannerVisible ? <AlphaNotice /> : null}
       </div>
       <div className="flex shrink-0 items-center gap-0.5 pr-2 pl-2">
+        <BookFreshnessIndicator
+          daemonEnabled={daemonEnabled}
+          needsJournals={needsJournals}
+          refreshFailed={refreshFailed}
+        />
         {/* Split control: primary click runs an incremental book refresh; the
             caret opens the other "bring the book current" actions. The book
             refresh already chains source sync + auto-pair + journals, so this
