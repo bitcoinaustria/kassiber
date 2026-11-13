@@ -4,14 +4,13 @@ import type { TFunction } from "i18next";
 import {
   AlertTriangle,
   Bell,
-  Check,
   CheckCircle2,
   Copy,
-  ChevronDown,
   ChevronRight,
   CircleAlert,
   Info,
   Loader2,
+  MoreHorizontal,
   Sparkles,
   X,
 } from "lucide-react";
@@ -24,10 +23,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { useAssistantBridge } from "@/components/ai/assistantBridge";
 import { handOffToAssistant } from "@/components/ai/assistantHandoff";
 import { copyTextWithPolicy } from "@/lib/clipboard";
+import { showFeedback } from "@/lib/feedback";
 import { formatDateTime, formatRelativeTime } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 import {
@@ -492,7 +498,11 @@ export function NotificationCenter({
                           ? "success"
                           : severityTone(entry.severity)
                       }
-                      projected={projectResult(entry, privacyMode, t)}
+                      projected={{
+                        ...projectResult(entry, privacyMode, t),
+                        technical: [],
+                      }}
+                      showDetails={false}
                       occurredAt={entry.lastOccurredAt}
                       // Workspace-wide results belong to no book.
                       otherBook={
@@ -586,51 +596,90 @@ function RepeatBadge({ count }: { count: number }) {
   );
 }
 
-function DetailsToggle({
-  expanded,
-  controls,
-  onToggle,
-}: {
-  expanded: boolean;
-  controls: string;
-  onToggle: () => void;
-}) {
-  const { t } = useTranslation("chrome");
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="xs"
-      className="text-muted-foreground"
-      aria-expanded={expanded}
-      aria-controls={controls}
-      onClick={onToggle}
-    >
-      {expanded ? t("notifications.hideDetails") : t("notifications.showDetails")}
-      <ChevronDown
-        className={cn("transition-transform", expanded && "rotate-180")}
-        aria-hidden="true"
-      />
-    </Button>
-  );
-}
+/** Cause lines shown inline: this many, then how many more. */
+const DETAIL_LINES_SHOWN = 2;
 
-function DetailList({ id, details }: { id: string; details: readonly string[] }) {
+/**
+ * What went wrong, in one or two short lines under the body. Shown as is,
+ * with no toggle: grouped causes are short enough to read at a glance.
+ */
+function InlineDetails({ details }: { details: readonly string[] }) {
   const { t } = useTranslation("chrome");
+  if (details.length === 0) return null;
+  const shown = details.slice(0, DETAIL_LINES_SHOWN);
+  const more = details.length - shown.length;
   return (
     <ul
-      id={id}
-      className="mt-1 list-disc space-y-0.5 pl-4 text-xs break-words text-muted-foreground"
+      className="mt-0.5 space-y-0.5 text-xs break-words text-muted-foreground"
       aria-label={t("notifications.details")}
     >
-      {details.map((line, index) => (
+      {shown.map((line, index) => (
         <li key={index}>{line}</li>
       ))}
+      {more > 0 ? <li>{t("notifications.moreDetails", { count: more })}</li> : null}
     </ul>
   );
 }
 
-const QUIET_BUTTON = "h-6 px-1.5 text-2xs text-muted-foreground";
+/**
+ * Secondary actions (ask the assistant, copy the error for a bug report)
+ * behind one quiet "more" button, so a row shows a single visible action.
+ */
+function MoreActions({
+  title,
+  onAskAssistant,
+  technical,
+}: {
+  title: string;
+  onAskAssistant?: () => void;
+  technical: readonly string[];
+}) {
+  const { t } = useTranslation("chrome");
+  if (!onAskAssistant && technical.length === 0) return null;
+  // The raw daemon text, exactly as the privacy mode allows it; the
+  // clipboard-clearing setting applies.
+  const copy = () => {
+    void copyTextWithPolicy(technical.join("\n")).then(
+      () =>
+        showFeedback({
+          tone: "success",
+          title: t("notifications.copied"),
+          key: "notification-copied",
+        }),
+      () => undefined,
+    );
+  };
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="shrink-0 text-muted-foreground"
+          aria-label={t("notifications.moreActions", { title })}
+          title={t("notifications.moreActionsShort")}
+        >
+          <MoreHorizontal aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {onAskAssistant ? (
+          <DropdownMenuItem onSelect={onAskAssistant}>
+            <Sparkles aria-hidden="true" />
+            {t("notifications.askAssistant")}
+          </DropdownMenuItem>
+        ) : null}
+        {technical.length > 0 ? (
+          <DropdownMenuItem onSelect={copy}>
+            <Copy aria-hidden="true" />
+            {t("notifications.copyTechnical")}
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function ActionButton({
   action,
@@ -669,6 +718,7 @@ function EntryRow({
   occurredAt,
   repeatCount = 1,
   otherBook = false,
+  showDetails = true,
   action,
   onAction,
   onDismiss,
@@ -680,28 +730,17 @@ function EntryRow({
   occurredAt: string;
   repeatCount?: number;
   otherBook?: boolean;
+  /** Conditions say what went wrong; results stop at their body. */
+  showDetails?: boolean;
   action?: RowAction;
   onAction: () => void;
   onDismiss?: () => void;
-  /** Troubleshoot with the assistant; shown only once details are open. */
+  /** Troubleshoot with the assistant, from the row's "more" menu. */
   onAskAssistant?: () => void;
   testId: string;
 }) {
   const { t } = useTranslation("chrome");
-  const [expanded, setExpanded] = React.useState(false);
-  const [technicalCopied, setTechnicalCopied] = React.useState(false);
-  const detailsId = React.useId();
-  // The raw daemon text, for a bug report: copied, never laid out inline.
-  // Exactly the lines the privacy mode allows; the clipboard-clearing
-  // setting applies.
-  const copyTechnical = () => {
-    void copyTextWithPolicy(projected.technical.join("\n")).then(
-      () => setTechnicalCopied(true),
-      () => undefined,
-    );
-  };
   const ToneIcon = TONE_ICON[tone] ?? Info;
-  const hasControls = Boolean(action) || projected.details.length > 0;
 
   return (
     <li
@@ -730,56 +769,18 @@ function EntryRow({
             {projected.body}
           </p>
         ) : null}
-        {expanded && projected.details.length > 0 ? (
-          <DetailList id={detailsId} details={projected.details} />
-        ) : null}
-        {hasControls ? (
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            {action ? <ActionButton action={action} onClick={onAction} /> : null}
-            {projected.details.length > 0 ? (
-              <DetailsToggle
-                expanded={expanded}
-                controls={detailsId}
-                onToggle={() => setExpanded((value) => !value)}
-              />
-            ) : null}
-            {/* Quiet extras, only once the user asked for details. */}
-            {expanded && onAskAssistant ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                className={QUIET_BUTTON}
-                onClick={onAskAssistant}
-              >
-                <Sparkles aria-hidden="true" />
-                {t("notifications.askAssistant")}
-              </Button>
-            ) : null}
-            {expanded && projected.technical.length > 0 ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="text-muted-foreground"
-                aria-label={
-                  technicalCopied
-                    ? t("notifications.copied")
-                    : t("notifications.copyTechnical")
-                }
-                title={t("notifications.copyTechnical")}
-                onClick={copyTechnical}
-              >
-                {technicalCopied ? (
-                  <Check aria-hidden="true" />
-                ) : (
-                  <Copy aria-hidden="true" />
-                )}
-              </Button>
-            ) : null}
+        {showDetails ? <InlineDetails details={projected.details} /> : null}
+        {action ? (
+          <div className="mt-1.5">
+            <ActionButton action={action} onClick={onAction} />
           </div>
         ) : null}
       </div>
+      <MoreActions
+        title={projected.title}
+        onAskAssistant={onAskAssistant}
+        technical={projected.technical}
+      />
       {onDismiss ? (
         <Button
           type="button"

@@ -113,6 +113,16 @@ function openBell(props: Partial<React.ComponentProps<typeof NotificationCenter>
   return { runOperation };
 }
 
+function openMoreActions(row: HTMLElement) {
+  const trigger = within(row).getByRole("button", { name: /^More actions/ });
+  act(() => {
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+  });
+  if (trigger.getAttribute("aria-expanded") !== "true") {
+    act(() => void fireEvent.keyDown(trigger, { key: "Enter" }));
+  }
+}
+
 function reopen() {
   act(() => {
     fireEvent.click(
@@ -566,7 +576,7 @@ describe("NotificationCenter entries", () => {
     expect(screen.queryByTestId("notification-activity-dot")).toBeNull();
   });
 
-  it("offers the assistant inside opened details only, without raw server text", () => {
+  it("offers the assistant from More actions, without raw server text", () => {
     const sendPrompt = vi.fn(() => true);
     useAssistantBridge.setState({
       assistant: {
@@ -583,10 +593,10 @@ describe("NotificationCenter entries", () => {
       );
       openBell();
       const row = entry("1 source could not refresh");
-      expect(within(row).queryByRole("button", { name: /Ask the assistant/ })).toBeNull();
-      act(() => void fireEvent.click(within(row).getByRole("button", { name: /Show details/ })));
+      expect(within(row).queryByText(/Ask the assistant/)).toBeNull();
+      openMoreActions(row);
       act(() => {
-        fireEvent.click(within(row).getByRole("button", { name: /Ask the assistant/ }));
+        fireEvent.click(screen.getByRole("menuitem", { name: /Ask the assistant/ }));
       });
       expect(sendPrompt).toHaveBeenCalledTimes(1);
       const [prompt] = sendPrompt.mock.calls[0] as unknown as [string];
@@ -615,11 +625,11 @@ describe("NotificationCenter entries", () => {
       );
       openBell();
       const row = entry("1 source could not refresh");
-      act(() => void fireEvent.click(within(row).getByRole("button", { name: /Show details/ })));
+      openMoreActions(row);
       // The list was rendered for book A; B opens before the click.
       currentBook = ACTIVE_B;
       act(() => {
-        fireEvent.click(within(row).getByRole("button", { name: /Ask the assistant/ }));
+        fireEvent.click(screen.getByRole("menuitem", { name: /Ask the assistant/ }));
       });
       expect(sendPrompt).not.toHaveBeenCalled();
     } finally {
@@ -633,30 +643,28 @@ describe("NotificationCenter entries", () => {
     );
     openBell();
     const row = entry("1 source could not refresh");
-    act(() => void fireEvent.click(within(row).getByRole("button", { name: /Show details/ })));
-    expect(within(row).queryByRole("button", { name: /Ask the assistant/ })).toBeNull();
+    openMoreActions(row);
+    expect(screen.queryByRole("menuitem", { name: /Ask the assistant/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: /Copy error details/ })).toBeTruthy();
   });
 
-  it("puts detail lines behind Show details", () => {
+  it("shows the cause inline with one action, and extras behind More actions", () => {
     useNotificationStore.getState().raiseCondition(
       sourceFailure("s1", "Cold storage", "Electrum timeout"),
     );
     openBell();
     const row = entry("1 source could not refresh");
-    expect(within(row).queryByText(/Electrum timeout/)).toBeNull();
-    const toggle = within(row).getByRole("button", { name: /Show details/ });
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    act(() => void fireEvent.click(toggle));
-    // The cause in plain words; the raw message is only copied, never shown.
+    // The cause in plain words, no toggle; the raw message is never shown.
     expect(
       within(row).getByText("Connection to the server failed: Cold storage"),
     ).toBeTruthy();
     expect(within(row).queryByText(/Electrum timeout/)).toBeNull();
-    expect(within(row).getByRole("button", { name: /Copy error details/ })).toBeTruthy();
-    act(() => {
-      fireEvent.click(within(row).getByRole("button", { name: /Hide details/ }));
-    });
-    expect(within(row).queryByText(/Electrum timeout/)).toBeNull();
+    expect(within(row).queryByRole("button", { name: /Show details/ })).toBeNull();
+    // One visible action; copy waits in the menu.
+    expect(within(row).getByRole("button", { name: "Review sources" })).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: /Copy error details/ })).toBeNull();
+    openMoreActions(row);
+    expect(screen.getByRole("menuitem", { name: /Copy error details/ })).toBeTruthy();
   });
 
   it("dismisses one result and leaves the others", () => {

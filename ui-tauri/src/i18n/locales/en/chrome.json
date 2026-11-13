@@ -206,8 +206,6 @@
     "clearRecent": "Clear recent",
     "dismiss": "Dismiss notification: {{title}}",
     "dismissShort": "Dismiss",
-    "showDetails": "Show details",
-    "hideDetails": "Hide details",
     "details": "Details",
     "repeatBadge": "×{{count}}",
     "repeated_one": "Arrived {{count}} time",
@@ -435,7 +433,11 @@
     "askAssistant": "Ask the assistant",
     "assistantPrompt": "Help me troubleshoot this in Kassiber: {{title}}\n{{seen}}\nCheck what you can with your tools, explain the likely cause in plain words, and tell me the next step.",
     "assistantOtherError_one": "{{count}} other error (its text is not shared)",
-    "assistantOtherError_other": "{{count}} other errors (their text is not shared)"
+    "assistantOtherError_other": "{{count}} other errors (their text is not shared)",
+    "moreDetails_one": "+{{count}} more",
+    "moreDetails_other": "+{{count}} more",
+    "moreActions": "More actions: {{title}}",
+    "moreActionsShort": "More actions"
   },
   "currencyToggle": {
     "bitcoin": "bitcoin",

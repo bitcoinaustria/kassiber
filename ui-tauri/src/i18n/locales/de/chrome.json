@@ -206,8 +206,6 @@
     "clearRecent": "Zuletzt leeren",
     "dismiss": "Benachrichtigung ausblenden: {{title}}",
     "dismissShort": "Ausblenden",
-    "showDetails": "Details anzeigen",
-    "hideDetails": "Details ausblenden",
     "details": "Details",
     "repeatBadge": "×{{count}}",
     "repeated_one": "{{count}}-mal eingegangen",
@@ -435,7 +433,11 @@
     "askAssistant": "Assistent fragen",
     "assistantPrompt": "Hilf mir, dieses Problem in Kassiber zu beheben: {{title}}\n{{seen}}\nPrüfe, was du mit deinen Werkzeugen prüfen kannst, erkläre die wahrscheinliche Ursache einfach und nenne mir den nächsten Schritt.",
     "assistantOtherError_one": "{{count}} weiterer Fehler (Text wird nicht geteilt)",
-    "assistantOtherError_other": "{{count}} weitere Fehler (Text wird nicht geteilt)"
+    "assistantOtherError_other": "{{count}} weitere Fehler (Text wird nicht geteilt)",
+    "moreDetails_one": "+{{count}} weitere",
+    "moreDetails_other": "+{{count}} weitere",
+    "moreActions": "Weitere Aktionen: {{title}}",
+    "moreActionsShort": "Weitere Aktionen"
   },
   "currencyToggle": {
     "bitcoin": "Bitcoin",
