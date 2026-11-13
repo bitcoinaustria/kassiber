@@ -311,6 +311,15 @@
       "pricingRebuildFailed": {
         "title": "Neuaufbau der Preise fehlgeschlagen",
         "body": "Transaktionen behalten ihre bisherigen Preise, bis ein Neuaufbau gelingt."
+      },
+      "workspaceRefreshFailed": {
+        "title": "Aktualisierung aller Bücher fehlgeschlagen",
+        "body": "Ihre Berichte nutzen eventuell ältere Beobachtungen, bis eine Aktualisierung gelingt."
+      },
+      "workspaceBooks": {
+        "title": "Einige Bücher brauchen Aufmerksamkeit",
+        "body": "Einige Bücher wurden nicht aktualisiert. Die Übersicht aller Bücher zeigt, welche.",
+        "blockingBody": "In einigen Büchern bleiben die Berichte blockiert. Die Übersicht aller Bücher zeigt, welche und warum."
       }
     },
     "result": {
@@ -359,6 +368,11 @@
       "pricingRebuilt": {
         "title": "Preise neu aufgebaut",
         "journalsBody": "Die Journale wurden nicht mit den neuen Preisen verarbeitet; unter „Braucht Aufmerksamkeit“ steht, warum."
+      },
+      "workspaceRefreshed": {
+        "title": "Alle Bücher aktualisiert",
+        "body_one": "{{synced}} von {{count}} Buch gesynct.",
+        "body_other": "{{synced}} von {{count}} Büchern gesynct."
       }
     },
     "job": {
@@ -368,13 +382,15 @@
       "connectionSync": "Wallet-Sync läuft",
       "connectionRescan": "Wallet-Rescan läuft",
       "reportExport": "Bericht wird exportiert",
-      "pricingRebuild": "Preise werden neu aufgebaut"
+      "pricingRebuild": "Preise werden neu aufgebaut",
+      "workspaceRefresh": "Alle Bücher werden aktualisiert"
     },
     "action": {
       "openWallet": "Wallet öffnen",
       "openTransaction": "Transaktion öffnen",
       "openSecurity": "Sicherheit öffnen",
-      "openMarketData": "Marktdaten öffnen"
+      "openMarketData": "Marktdaten öffnen",
+      "openAllBooks": "Alle Bücher öffnen"
     },
     "feedback": {
       "reportSaveFailed": "Berichtsexport konnte nicht gespeichert werden",

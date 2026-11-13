@@ -153,6 +153,9 @@ function conditionActionLabel(
       return t("notifications.action.openTransaction");
     case "pricing.rebuild-failed":
       return t("notifications.action.openMarketData");
+    case "workspace.refresh-failed":
+    case "workspace.books-need-attention":
+      return t("notifications.action.openAllBooks");
   }
 }
 
@@ -163,6 +166,8 @@ function resultActionLabel(resolved: ResolvedEntryAction, t: ChromeT): string {
       return t("notifications.action.openWallet");
     case "open-transaction":
       return t("notifications.action.openTransaction");
+    case "open-workspace":
+      return t("notifications.action.openAllBooks");
     case "operation":
       return t("notifications.condition.bookRefreshFailed.action");
     case "navigate":
@@ -290,6 +295,12 @@ export function NotificationCenter({
         void navigate({
           to: "/transactions",
           search: { tx: resolved.transactionId },
+        });
+        return;
+      case "open-workspace":
+        void navigate({
+          to: "/books/$workspaceId/birds-eye",
+          params: { workspaceId: resolved.workspaceId },
         });
         return;
       case "navigate":

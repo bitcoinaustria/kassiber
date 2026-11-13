@@ -51,6 +51,8 @@ export const CONDITION_CODES = [
   "backup.restore-warning",
   "source-funds.rescan-needed",
   "pricing.rebuild-failed",
+  "workspace.refresh-failed",
+  "workspace.books-need-attention",
 ] as const;
 export type ConditionCode = (typeof CONDITION_CODES)[number];
 
@@ -63,6 +65,7 @@ export const RESULT_CODES = [
   "backup.restored",
   "report.exported",
   "pricing.rebuilt",
+  "workspace.refreshed",
 ] as const;
 export type ResultCode = (typeof RESULT_CODES)[number];
 
@@ -72,6 +75,7 @@ export const JOB_CODES = [
   "connection-sync",
   "report-export",
   "pricing-rebuild",
+  "workspace-refresh",
 ] as const;
 export type JobCode = (typeof JOB_CODES)[number];
 
@@ -93,7 +97,8 @@ export const NOTIFICATION_OPERATION_KINDS = [
  * `notificationRouting.ts`, optionally revealing one settings row (`anchor`,
  * a `SettingsAnchorId` of that section). `open-connection` and
  * `open-transaction` open one record of the originating book; from another
- * book they open the list instead. `operation` repeats a closed-list
+ * book they open the list instead. `open-workspace` opens the overview of
+ * all books of one workspace. `operation` repeats a closed-list
  * operation and names `review`, the route a stale action opens instead of
  * mutating.
  */
@@ -101,6 +106,7 @@ export type NotificationActionSpec =
   | { type: "navigate"; to: string; anchor?: string }
   | { type: "open-connection"; connectionId: string }
   | { type: "open-transaction"; transactionId: string }
+  | { type: "open-workspace"; workspaceId: string }
   | { type: "operation"; operation: NotificationOperation; review: string };
 
 /**
@@ -488,6 +494,8 @@ const CODE_ORDER: Record<ConditionCode, number> = {
   "touch-id.off": 12,
   "source-funds.rescan-needed": 13,
   "pricing.rebuild-failed": 14,
+  "workspace.refresh-failed": 15,
+  "workspace.books-need-attention": 16,
 };
 
 function compareConditions(a: ConditionEntry, b: ConditionEntry): number {

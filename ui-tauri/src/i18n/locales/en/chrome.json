@@ -311,6 +311,15 @@
       "pricingRebuildFailed": {
         "title": "Price rebuild failed",
         "body": "Transactions keep their previous prices until a rebuild succeeds."
+      },
+      "workspaceRefreshFailed": {
+        "title": "Refreshing all books failed",
+        "body": "Their reports may use older observations until a refresh succeeds."
+      },
+      "workspaceBooks": {
+        "title": "Some books need attention",
+        "body": "Some books did not refresh. The overview of all books shows which.",
+        "blockingBody": "Some books keep their reports blocked. The overview of all books shows which and why."
       }
     },
     "result": {
@@ -359,6 +368,11 @@
       "pricingRebuilt": {
         "title": "Prices rebuilt",
         "journalsBody": "Journals were not processed with the new prices; Needs attention says why."
+      },
+      "workspaceRefreshed": {
+        "title": "All books refreshed",
+        "body_one": "{{synced}} of {{count}} book synced.",
+        "body_other": "{{synced}} of {{count}} books synced."
       }
     },
     "job": {
@@ -368,13 +382,15 @@
       "connectionSync": "Syncing wallet",
       "connectionRescan": "Rescanning wallet",
       "reportExport": "Exporting report",
-      "pricingRebuild": "Rebuilding prices"
+      "pricingRebuild": "Rebuilding prices",
+      "workspaceRefresh": "Refreshing all books"
     },
     "action": {
       "openWallet": "Open wallet",
       "openTransaction": "Open transaction",
       "openSecurity": "Open security settings",
-      "openMarketData": "Open market data"
+      "openMarketData": "Open market data",
+      "openAllBooks": "Open all books"
     },
     "feedback": {
       "reportSaveFailed": "Could not save the report export",

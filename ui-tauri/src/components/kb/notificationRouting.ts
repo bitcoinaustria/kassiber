@@ -152,6 +152,7 @@ export type ResolvedEntryAction =
     }
   | { kind: "open-connection"; connectionId: string }
   | { kind: "open-transaction"; transactionId: string }
+  | { kind: "open-workspace"; workspaceId: string }
   | { kind: "operation"; operation: NotificationOperation };
 
 /** Record ids come from the daemon; anything odd shows no button. */
@@ -240,6 +241,11 @@ export function resolveEntryAction(
       return stale
         ? { kind: "navigate", to: "/transactions", stale }
         : { kind: "open-transaction", transactionId };
+    }
+    case "open-workspace": {
+      // A workspace overview spans its books, so no book can make it stale.
+      const workspaceId = validRecordId(action.workspaceId);
+      return workspaceId ? { kind: "open-workspace", workspaceId } : null;
     }
     case "operation": {
       const operation = validOperation(action.operation);

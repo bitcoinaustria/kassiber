@@ -170,6 +170,20 @@ export function projectConditionGroup(
         body: t("notifications.condition.pricingRebuildFailed.body"),
         details,
       };
+    case "workspace.refresh-failed":
+      return {
+        title: t("notifications.condition.workspaceRefreshFailed.title"),
+        body: t("notifications.condition.workspaceRefreshFailed.body"),
+        details,
+      };
+    case "workspace.books-need-attention":
+      return {
+        title: t("notifications.condition.workspaceBooks.title"),
+        body: first.params.blocking
+          ? t("notifications.condition.workspaceBooks.blockingBody")
+          : t("notifications.condition.workspaceBooks.body"),
+        details,
+      };
     case "source-funds.rescan-needed":
       return {
         title: t("notifications.condition.sourceFundsRescan.title"),
@@ -268,6 +282,18 @@ export function projectResult(
             details,
           }
             : { title: t("notifications.result.reportExported.title"), details };
+case "workspace.refreshed":
+  return {
+    title: t("notifications.result.workspaceRefreshed.title"),
+    body:
+      entry.params.count !== undefined && entry.params.entries !== undefined
+        ? t("notifications.result.workspaceRefreshed.body", {
+            synced: entry.params.count,
+            count: entry.params.entries,
+          })
+        : undefined,
+    details,
+  };
 case "pricing.rebuilt":
   return {
     title: t("notifications.result.pricingRebuilt.title"),
@@ -308,6 +334,8 @@ function jobTitle(job: JobEntry, t: ChromeT): string {
       return t("notifications.job.reportExport");
     case "pricing-rebuild":
       return t("notifications.job.pricingRebuild");
+    case "workspace-refresh":
+      return t("notifications.job.workspaceRefresh");
   }
 }
 
