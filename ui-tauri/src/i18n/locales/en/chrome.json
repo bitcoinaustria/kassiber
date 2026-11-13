@@ -215,6 +215,8 @@
     "processing": "Processing...",
     "refreshing": "Refreshing...",
     "otherBook": "Started in another book",
+    "bookUnknown": "Kassiber is still opening this book. Try again in a moment.",
+    "staleBook": "Another book is open now, so nothing ran. Return to that book to try again.",
     "staleAction": "Review",
     "withheld": "Hidden while amounts are hidden.",
     "empty": "No notifications.",
@@ -622,6 +624,7 @@
     "refreshing": "Refreshing"
   },
   "feedback": {
+    "label": "Messages",
     "region": "Messages ({hotkey})",
     "dismiss": "Dismiss"
   }

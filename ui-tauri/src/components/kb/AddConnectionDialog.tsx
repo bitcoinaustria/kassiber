@@ -27,14 +27,11 @@ import {
   useDaemonStreamMutation,
 } from "@/daemon/client";
 import { recordBtcpayProvenanceIncomplete } from "@/lib/connectionNotifications";
+import { activeBookScope } from "@/lib/notificationScope";
 import { showFeedback } from "@/lib/feedback";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import { formatCount } from "@/lib/localeFormat";
-import {
-  bookIdentityKey,
-  useUiStore,
-  type DeferredConnectionSetup,
-} from "@/store/ui";
+import { useUiStore, type DeferredConnectionSetup } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
   CONNECTION_CATEGORIES,
@@ -2288,6 +2285,8 @@ function AddConnectionDialogContent({
         if (!btcpayDraft?.instance || !btcpayDraft.plan) {
           throw new Error(t("add.btcpay.issue.discover_first"));
         }
+        // The book the connection is saved in, bound before the request.
+        const boundBook = activeBookScope();
         const envelope = await createBtcpay.mutateAsync(
           buildBtcpayCreateArgs({
             instance: btcpayDraft.instance,
@@ -2325,7 +2324,7 @@ function AddConnectionDialogContent({
           // this connection loads them: that waits in the center.
           recordBtcpayProvenanceIncomplete(
             {
-              book: bookIdentityKey(useUiStore.getState().identity),
+              book: boundBook,
               connectionId: savedWallet.id,
               label: savedWallet.label,
             },

@@ -33,12 +33,8 @@ import {
   type ConditionInput,
   type NotificationOperation,
 } from "@/store/notifications";
-import {
-  bookIdentityKey,
-  UI_STATE_VERSION,
-  useUiStore,
-  type Identity,
-} from "@/store/ui";
+import type { ActiveBook } from "@/lib/activeBook";
+import { UI_STATE_VERSION, useUiStore } from "@/store/ui";
 
 import { NotificationCenter } from "./NotificationCenter";
 import { resolveEntryAction } from "./notificationRouting";
@@ -51,17 +47,19 @@ vi.mock("./settings/settingsSearch", async (original) => ({
 
 const MINUTE = 60_000;
 
-const BOOK_A = {
-  name: "Book A",
-  workspace: "Ws",
-  profile: "A",
-} as unknown as Identity;
-const BOOK_B = {
-  name: "Book B",
-  workspace: "Ws",
-  profile: "B",
-} as unknown as Identity;
-const A = bookIdentityKey(BOOK_A);
+// Two books of one project: they share a database, so only the daemon ids
+// tell them apart.
+const ACTIVE_A: ActiveBook = {
+  key: '["db:/p.sqlite3","ws","pf-a"]',
+  expected: { workspace_id: "ws", profile_id: "pf-a" },
+};
+const ACTIVE_B: ActiveBook = {
+  key: '["db:/p.sqlite3","ws","pf-b"]',
+  expected: { workspace_id: "ws", profile_id: "pf-b" },
+};
+const A = ACTIVE_A.key;
+/** The book the shell reports open; tests switch it. */
+let currentBook: ActiveBook | null = ACTIVE_A;
 
 // Strings that must never surface outside Normal, or reach disk at all.
 const SENTINEL_LABEL = "Sentinel Cold Vault";
@@ -83,7 +81,7 @@ function sourceFailure(source: string, label: string, message: string): Conditio
 function refreshFailure(book: string | null, forceFull = false): ConditionInput {
   return {
     code: "book-refresh.failed",
-    scope: { book },
+    scope: { book, expected: book === A ? ACTIVE_A.expected : undefined },
     severity: "error",
     priority: "attention",
     params: { forceFull },
@@ -96,8 +94,16 @@ function refreshFailure(book: string | null, forceFull = false): ConditionInput 
 }
 
 function openBell(props: Partial<React.ComponentProps<typeof NotificationCenter>> = {}) {
-  const runOperation = vi.fn<(operation: NotificationOperation) => void>();
-  render(<NotificationCenter runOperation={runOperation} {...props} />);
+  const runOperation =
+    vi.fn<React.ComponentProps<typeof NotificationCenter>["runOperation"]>();
+  render(
+    <NotificationCenter
+      currentBook={currentBook}
+      resolveCurrentBook={() => currentBook}
+      runOperation={runOperation}
+      {...props}
+    />,
+  );
   act(() => {
     fireEvent.click(
       screen.getByRole("button", { name: /^(Notifications|Benachrichtigungen)/ }),
@@ -140,6 +146,7 @@ function renderedText(): string {
 
 beforeEach(async () => {
   navigate.mockReset();
+  currentBook = ACTIVE_A;
   storage.clear();
   resetNotificationStore();
   await i18n.changeLanguage("en");
@@ -147,7 +154,6 @@ beforeEach(async () => {
     lang: "en",
     developerToolsEnabled: false,
     privacyMode: "normal",
-    identity: BOOK_A,
   });
 });
 
@@ -228,7 +234,7 @@ describe("NotificationCenter lanes", () => {
         severity: "info",
       });
     }
-    render(<NotificationCenter runOperation={vi.fn()} />);
+    render(<NotificationCenter currentBook={currentBook} runOperation={vi.fn()} />);
     // Two sources fold into one group; results never count.
     expect(
       screen.getByRole("button", { name: "Notifications (2 active)" }),
@@ -327,7 +333,10 @@ describe("NotificationCenter actions and scope", () => {
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Retry rescan" }));
     });
-    expect(runOperation).toHaveBeenCalledWith({ kind: "refresh-book", forceFull: true });
+    expect(runOperation).toHaveBeenCalledWith(
+      { kind: "refresh-book", forceFull: true },
+      ACTIVE_A.expected,
+    );
     expect(navigate).not.toHaveBeenCalled();
   });
 
@@ -341,12 +350,13 @@ describe("NotificationCenter actions and scope", () => {
   });
 
   it("never replays a stale action on another book", () => {
-    // A late failure for book A lands while book B is open.
-    useUiStore.setState({ identity: BOOK_B });
+    // A late failure for book A lands while book B of the same project is
+    // open.
+    currentBook = ACTIVE_B;
     useNotificationStore.getState().raiseCondition(refreshFailure(A));
     useNotificationStore.getState().addResult({
       code: "book-refresh.pending",
-      scope: { book: A },
+      scope: { book: A, expected: ACTIVE_A.expected },
       severity: "info",
       action: {
         type: "operation",
@@ -368,23 +378,23 @@ describe("NotificationCenter actions and scope", () => {
 
     // Back on A, its condition is there again with a live Retry.
     cleanup();
-    useUiStore.setState({ identity: BOOK_A });
+    currentBook = ACTIVE_A;
     const second = openBell();
     act(() => {
       fireEvent.click(
         within(entry("Book refresh failed")).getByRole("button", { name: "Retry" }),
       );
     });
-    expect(second.runOperation).toHaveBeenCalledWith({
-      kind: "refresh-book",
-      forceFull: false,
-    });
+    expect(second.runOperation).toHaveBeenCalledWith(
+      { kind: "refresh-book", forceFull: false },
+      ACTIVE_A.expected,
+    );
   });
 
   it("revalidates scope at click time, not render time", () => {
     useNotificationStore.getState().addResult({
       code: "book-refresh.pending",
-      scope: { book: A },
+      scope: { book: A, expected: ACTIVE_A.expected },
       severity: "info",
       action: {
         type: "operation",
@@ -397,8 +407,36 @@ describe("NotificationCenter actions and scope", () => {
       name: "Retry",
     });
     // The book changes under an open list, before the click lands.
-    useUiStore.setState({ identity: BOOK_B }, false);
+    currentBook = ACTIVE_B;
     act(() => void fireEvent.click(button));
+    expect(runOperation).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith({ to: "/connections" });
+  });
+
+  it("refuses an operation while a book switch is in flight", () => {
+    useNotificationStore.getState().raiseCondition(refreshFailure(A));
+    const { runOperation } = openBell();
+    const button = within(entry("Book refresh failed")).getByRole("button", {
+      name: "Retry",
+    });
+    // A switch has started: the shell knows no open book until it lands.
+    currentBook = null;
+    act(() => void fireEvent.click(button));
+    expect(runOperation).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith({ to: "/connections" });
+  });
+
+  it("never replays an operation that carries no daemon ids", () => {
+    useNotificationStore.getState().raiseCondition({
+      ...refreshFailure(A),
+      scope: { book: A },
+    });
+    const { runOperation } = openBell();
+    act(() => {
+      fireEvent.click(
+        within(entry("Book refresh failed")).getByRole("button", { name: "Review" }),
+      );
+    });
     expect(runOperation).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith({ to: "/connections" });
   });
@@ -477,7 +515,7 @@ describe("NotificationCenter actions and scope", () => {
       resolveEntryAction(
         { type: "navigate", to: "/nope" },
         { book: A },
-        A,
+        ACTIVE_A,
         false,
       ),
     ).toBeNull();
@@ -663,6 +701,37 @@ describe("NotificationCenter privacy modes", () => {
     expect(text).toContain("Hot: failed — connection refused");
   });
 
+  it("Hide amounts masks labels and progress text that carry an amount", () => {
+    const store = useNotificationStore.getState();
+    store.raiseCondition(sourceFailure("s3", "Savings (0.4242 BTC)", "timeout"));
+    store.startJob({
+      id: "book-refresh",
+      code: "book-refresh",
+      scope: { book: A },
+      progress: { value: 40, label: "Syncing Savings (0.4242 BTC)" },
+    });
+    store.startJob({
+      id: "connection-sync:w-savings",
+      code: "connection-sync",
+      scope: { book: A, source: "connection:w-savings" },
+      progress: { value: 10, label: "Savings (0.4242 BTC): 3 of 9" },
+    });
+
+    openBell();
+    expandAll();
+    expect(renderedText()).toContain("Syncing Savings (0.4242 BTC)");
+    cleanup();
+
+    useUiStore.setState({ privacyMode: "hideAmounts" });
+    openBell();
+    expandAll();
+    const text = renderedText();
+    expect(text).not.toContain("0.4242");
+    expect(text).toContain("••••: failed — timeout");
+    expect(within(entry("Refreshing book")).getByText("Hidden while amounts are hidden.")).toBeTruthy();
+    expect(within(entry("Syncing wallet")).getByText("Hidden while amounts are hidden.")).toBeTruthy();
+  });
+
   it("Hide all shows generic text, keeps actions, and leaks nothing", () => {
     seed();
     useUiStore.setState({ privacyMode: "hideAll" });
@@ -705,7 +774,7 @@ describe("notification persistence", () => {
       SENTINEL_PATH,
       SENTINEL_AMOUNT,
       "10.0.0.7",
-      "refresh-book",
+      "/settings/bitcoin",
       "notifications",
     ]) {
       expect(stored).not.toContain(sentinel);

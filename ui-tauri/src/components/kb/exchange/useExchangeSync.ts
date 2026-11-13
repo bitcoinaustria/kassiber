@@ -8,7 +8,7 @@ import {
   recordConnectionSyncFailed,
   startConnectionSync,
 } from "@/lib/connectionNotifications";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { activeBookScope } from "@/lib/notificationScope";
 
 import {
   EXCHANGE_PROVIDER_NAMES,
@@ -52,7 +52,7 @@ export function useExchangeSync({
     setLastError(null);
     // The book this sync belongs to, fixed at the start.
     const ref = {
-      book: bookIdentityKey(useUiStore.getState().identity),
+      book: activeBookScope(),
       connectionId: walletId,
       label,
     };

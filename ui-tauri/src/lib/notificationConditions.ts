@@ -1,3 +1,5 @@
+import type { ActiveBook } from "@/lib/activeBook";
+import type { DaemonFreshnessEvent } from "@/lib/daemonFreshnessEvent";
 import type { ReviewBadges } from "@/lib/reviewCount";
 import { reviewTotal } from "@/lib/reviewCount";
 import { redactCredentials } from "@/lib/secretScanner";
@@ -202,6 +204,32 @@ export function reviewConditionsFromBadges(
 }
 
 /**
+ * Explicit evidence that a run processed the book's journals: its journal
+ * step reports `processed` or `current`, or a `journal_refresh` job finished
+ * `done`. Anything else (a deferred, disabled, failed, or absent step)
+ * proves nothing about an earlier journal failure.
+ */
+export function journalStepSucceeded(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const run = data as {
+    journals?: { status?: unknown } | null;
+    completed?: unknown;
+  };
+  const status = run.journals?.status;
+  if (status === "processed" || status === "current") return true;
+  return (
+    Array.isArray(run.completed) &&
+    run.completed.some(
+      (job) =>
+        job &&
+        typeof job === "object" &&
+        (job as { job_type?: unknown }).job_type === "journal_refresh" &&
+        (job as { status?: unknown }).status === "done",
+    )
+  );
+}
+
+/**
  * Apply what a finished freshness run (foreground or background) proves for
  * `book`: failed attempts count as new occurrences, the snapshot it carries
  * reconciles the rest, and sources it reports fresh resolve. A run without a
@@ -212,6 +240,9 @@ export function applyFreshnessRun(
   book: string | null,
 ): void {
   const store = useNotificationStore.getState();
+  if (journalStepSucceeded(data)) {
+    store.resolveCondition(conditionKey("journals.process-failed", { book }));
+  }
   const failures = sourceFailuresFromRun(data, book);
   for (const failure of failures) store.raiseCondition(failure);
   if (!hasSourceSnapshot(data)) return;
@@ -223,4 +254,39 @@ export function applyFreshnessRun(
       (key) => !failures.some((input) => conditionKey(input.code, input.scope) === key),
     ),
   });
+}
+
+/**
+ * Apply an unsolicited freshness event, but only to the book it ran for.
+ * The listener receives events for whichever book the daemon had open when
+ * the work ran; one delayed past a switch, or one that names no book, must
+ * not raise or clear anything in the book open now. Those events are left to
+ * the caller's re-read of the open book's state. Returns whether the event
+ * was applied.
+ */
+export function applyFreshnessEvent(
+  event: DaemonFreshnessEvent,
+  active: ActiveBook | null,
+): boolean {
+  if (!active || !event.profileId || event.profileId !== active.expected.profile_id) {
+    return false;
+  }
+  const scope = { book: active.key, expected: active.expected };
+  const store = useNotificationStore.getState();
+  if (event.kind === "worker-error") {
+    store.raiseCondition({
+      code: "freshness.worker-error",
+      scope,
+      severity: "error",
+      priority: "attention",
+      action: { type: "navigate", to: "/connections" },
+      details: [{ message: safeMessage(event.message ?? event.code) }],
+    });
+    return true;
+  }
+  // A background run that reported back means the worker runs again; each
+  // source is then settled by what this run proves for it.
+  store.resolveCondition(conditionKey("freshness.worker-error", scope));
+  applyFreshnessRun(event.data, active.key);
+  return true;
 }

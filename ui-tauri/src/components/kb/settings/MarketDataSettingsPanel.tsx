@@ -21,7 +21,7 @@ import {
   recordPricingRebuildFailed,
   pricingRebuildJob,
 } from "@/lib/pricingNotifications";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { activeBookScope } from "@/lib/notificationScope";
 import {
   formatCount,
   formatKrakenRange,
@@ -211,7 +211,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     setRateRebuildResult(null);
     // The book whose prices are rebuilt, fixed at the start; the rebuild
     // runs on after Settings closes.
-    const job = pricingRebuildJob(bookIdentityKey(useUiStore.getState().identity));
+    const job = pricingRebuildJob(activeBookScope());
     job.start();
     try {
       const envelope = await rebuildRates.mutateAsync({

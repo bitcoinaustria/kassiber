@@ -132,6 +132,7 @@ import {
 } from "@/lib/connectionNotifications";
 import { showFeedback } from "@/lib/feedback";
 import { recordJournalStep } from "@/lib/journalStepNotice";
+import { activeBookScope } from "@/lib/notificationScope";
 import { transactionBelongsToConnection } from "@/lib/connectionTransactions";
 import { buildBalanceReconciliation } from "@/lib/walletBalanceReconcile";
 import { formatBtc, formatFiatAmount } from "@/lib/currency";
@@ -149,7 +150,7 @@ import {
   detectWalletMaterial,
 } from "@/lib/walletMaterialFormat";
 import { useNotificationStore } from "@/store/notifications";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { useUiStore } from "@/store/ui";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
 import { ExchangeSyncCard } from "@/components/kb/exchange/ExchangeSyncCard";
 import { useExchangeSync } from "@/components/kb/exchange/useExchangeSync";
@@ -527,7 +528,7 @@ function NodeConnectionContainer({
     // A running refresh already shows on the page and under Running.
     if (nodeSnapshotQuery.isFetching) return;
     const ref = {
-      book: bookIdentityKey(useUiStore.getState().identity),
+      book: activeBookScope(),
       connectionId: connection.id,
       label: connection.label,
     };
@@ -906,14 +907,16 @@ function ConnectionDetailView({
       await exchangeSync.sync();
       return;
     }
-    const book = bookIdentityKey(useUiStore.getState().identity);
+    // The book this sync runs in, bound at the click.
+    const book = activeBookScope(queryClient);
     if (backendRequired) {
       setSyncErrorMessage(t("detail.sync.backendRequiredBody"));
+      if (!book) return;
       // The same condition a book refresh raises; the next refresh that
       // finds every wallet a backend resolves it.
       useNotificationStore.getState().raiseCondition({
         code: "book-refresh.backend-required",
-        scope: { book },
+        scope: { book: book.book, expected: book.expected },
         severity: "warning",
         priority: "attention",
         action: { type: "navigate", to: backendSettingsRoute },

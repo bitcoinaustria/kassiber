@@ -100,7 +100,6 @@ import { bookIdentityKey, useUiStore } from "@/store/ui";
 import type { Identity, ThemePreference } from "@/store/ui";
 import {
   attentionGroupCount,
-  conditionKey,
   conditionsInScope,
   resetNotificationStore,
   useNotificationStore,
@@ -108,12 +107,12 @@ import {
 } from "@/store/notifications";
 import { clearFeedback, showFeedback } from "@/lib/feedback";
 import {
-  applyFreshnessRun,
-  reviewConditionsFromBadges,
-  safeMessage,
-  sourceConditionsFromSnapshot,
-} from "@/lib/notificationConditions";
-import type { FreshnessSourceState } from "@/lib/syncResults";
+  readActiveBook,
+  trackBookSwitch,
+  useActiveBook,
+  type DaemonBookScope,
+} from "@/lib/activeBook";
+import { applyFreshnessEvent } from "@/lib/notificationConditions";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
@@ -223,10 +222,10 @@ import {
 } from "./devMode";
 import { notificationProgressValue } from "./notificationDisplay";
 import { FeedbackToaster } from "./FeedbackToaster";
+import { useLiveNotificationConditions } from "./useLiveNotificationConditions";
 import { NotificationCenter } from "./NotificationCenter";
 import { projectJob } from "./notificationProjection";
 import { requestSettingsAnchor } from "./settings/settingsSearch";
-import { watchCondition } from "@/hooks/useLocalWatchNotifications";
 import { recordTouchIdOff, resolveTouchIdOff } from "@/lib/unlockNotifications";
 import { planHeaderRefresh } from "./headerRefresh";
 
@@ -1163,10 +1162,14 @@ export function AppShell() {
   const switchProject = React.useCallback(
     async (project: ProjectCatalogEntry) => {
       try {
-        const envelope = await getTransport().invoke<ProjectSelectSnapshot>({
-          kind: "ui.projects.select",
-          args: { project_id: project.id },
-        });
+        // Until the new book is known, notification actions have no book
+        // to bind to and stay refused.
+        const envelope = await trackBookSwitch(
+          getTransport().invoke<ProjectSelectSnapshot>({
+            kind: "ui.projects.select",
+            args: { project_id: project.id },
+          }),
+        );
         if (envelope.kind === "ui.projects.select" && envelope.data?.project) {
           const nextIdentity = identityFromProject(
             envelope.data.project,
@@ -1336,7 +1339,7 @@ export function AppShell() {
   // background) and start the book refresh. `syncAll` no-ops while one is
   // already running, so a mid-refresh trigger just re-opens the card.
   const runHeaderRefresh = React.useCallback(
-    (options?: { forceFull?: boolean }) => {
+    (options?: { forceFull?: boolean; expectedScope?: DaemonBookScope }) => {
       const plan = planHeaderRefresh({
         hasWorkspace: ensureWorkspaceForMenuAction(),
         bookKey,
@@ -1345,7 +1348,10 @@ export function AppShell() {
         restoreSyncCardStore(plan.reopenSyncCardForBook);
       }
       if (plan.startRefresh) {
-        syncAll({ forceFull: Boolean(options?.forceFull) });
+        syncAll({
+          forceFull: Boolean(options?.forceFull),
+          expectedScope: options?.expectedScope,
+        });
       }
     },
     [bookKey, ensureWorkspaceForMenuAction, restoreSyncCardStore, syncAll],
@@ -1705,37 +1711,19 @@ export function AppShell() {
           if (disposed) return;
           const value = event.payload;
           if (value && typeof value === "object" && "event" in value && value.event === true && "kind" in value && value.kind === "ui.chain_analysis.watches.changed" && !("request_id" in value)) {
+            // The event may come from another book's work; the re-read of the
+            // open book's watch inbox decides whether a condition waits.
             void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-            // A new change is a new occurrence; the inbox read reconciles it.
-            useNotificationStore
-              .getState()
-              .raiseCondition(watchCondition(bookIdentityKey(useUiStore.getState().identity)));
             return;
           }
           const freshness = parseDaemonFreshnessEvent(event.payload);
           if (!freshness) return;
 
           void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-          // The daemon serves one open book; its events belong to that book.
-          const book = bookIdentityKey(useUiStore.getState().identity);
-          const notifications = useNotificationStore.getState();
-          if (freshness.kind === "worker-error") {
-            notifications.raiseCondition({
-              code: "freshness.worker-error",
-              scope: { book },
-              severity: "error",
-              priority: "attention",
-              action: { type: "navigate", to: "/connections" },
-              details: [{ message: safeMessage(freshness.message ?? freshness.code) }],
-            });
-            return;
-          }
-          // A background run that reported back means the worker runs again;
-          // each source is then settled by what this run proves for it.
-          notifications.resolveCondition(
-            conditionKey("freshness.worker-error", { book }),
-          );
-          applyFreshnessRun(freshness.data, book);
+          // Applied only when the event names the open book; anything else
+          // (delayed past a switch, or naming no book) is left to the
+          // re-read the invalidation above starts.
+          applyFreshnessEvent(freshness, readActiveBook(queryClient));
         }),
       )
       .then((nextUnlisten) => {
@@ -2916,7 +2904,10 @@ function AppVersion() {
 type ShellTitlebarControlsProps = {
   meta: RouteMeta;
   onLock: () => void;
-  onRefresh: (options?: { forceFull?: boolean }) => void;
+  onRefresh: (options?: {
+    forceFull?: boolean;
+    expectedScope?: DaemonBookScope;
+  }) => void;
   isRefreshing: boolean;
   daemonEnabled: boolean;
 };
@@ -3048,43 +3039,6 @@ function ShellTitlebar({
   );
 }
 
-interface FreshnessStatusSnapshot {
-  sources?: FreshnessSourceState[];
-}
-
-/**
- * Rebuild the center's live conditions from local book state whenever the
- * shell is unlocked: journals and Review from `ui.review.badges`, and
- * per-source refresh problems from `ui.freshness.status`. Both are local
- * reads with no egress. Only a successful read reconciles; a failed or
- * missing one resolves nothing, and reconciling never counts a repeat.
- */
-function useLiveNotificationConditions(enabled: boolean, book: string | null) {
-  // The same counts as the sidebar's Review badge, from the same read.
-  const badges = useDaemon<ReviewBadges>("ui.review.badges", undefined, {
-    enabled,
-  });
-  const freshness = useDaemon<FreshnessStatusSnapshot>(
-    "ui.freshness.status",
-    undefined,
-    { enabled },
-  );
-  const badgeData = badges.isSuccess ? badges.data?.data : undefined;
-  const sources = freshness.isSuccess ? freshness.data?.data?.sources : undefined;
-  React.useEffect(() => {
-    if (!enabled || !badgeData) return;
-    useNotificationStore
-      .getState()
-      .reconcileConditions(reviewConditionsFromBadges(badgeData, book));
-  }, [badgeData, book, enabled]);
-  React.useEffect(() => {
-    if (!enabled || !Array.isArray(sources)) return;
-    useNotificationStore
-      .getState()
-      .reconcileConditions(sourceConditionsFromSnapshot(sources, book));
-  }, [book, enabled, sources]);
-}
-
 /**
  * The breadcrumb and shell actions on the title bar's page side: the
  * book-refresh split button, notifications, and the view toggles.
@@ -3101,18 +3055,24 @@ function ShellTitlebarControls({
   const identity = useUiStore((s) => s.identity);
   const reopenFirstSyncCard = useUiStore((s) => s.reopenFirstSyncCard);
   const headerBookKey = bookIdentityKey(identity);
+  const queryClient = useQueryClient();
   const { runJournalProcessing, runJournalProcessingWith, isProcessingJournals } =
     useJournalProcessingAction();
-  useLiveNotificationConditions(daemonEnabled, headerBookKey);
+  const activeBook = useActiveBook(daemonEnabled);
+  const activeBookKey = activeBook?.key ?? null;
+  useLiveNotificationConditions(daemonEnabled, activeBook);
   const conditions = useNotificationStore((s) => s.conditions);
-  const inScope = conditionsInScope(conditions, headerBookKey);
-  const attentionCount = attentionGroupCount(conditions, headerBookKey);
+  const inScope = conditionsInScope(conditions, activeBookKey);
+  const attentionCount = attentionGroupCount(conditions, activeBookKey);
   const blocksReports = inScope.some((entry) => entry.priority === "blocking");
-  const runNotificationOperation = (operation: NotificationOperation) => {
+  const runNotificationOperation = (
+    operation: NotificationOperation,
+    expectedScope: DaemonBookScope,
+  ) => {
     if (operation.kind === "process-journals") {
-      runJournalProcessingWith({ autoPair: operation.autoPair });
+      runJournalProcessingWith({ autoPair: operation.autoPair, expectedScope });
     } else {
-      onRefresh({ forceFull: operation.forceFull });
+      onRefresh({ forceFull: operation.forceFull, expectedScope });
     }
   };
   const notificationAlertClassName =
@@ -3223,6 +3183,8 @@ function ShellTitlebarControls({
             shellIconButtonClassName,
             notificationAlertClassName,
           )}
+          currentBook={activeBook}
+          resolveCurrentBook={() => readActiveBook(queryClient)}
           runOperation={runNotificationOperation}
           pendingOperations={{
             "process-journals": isProcessingJournals,

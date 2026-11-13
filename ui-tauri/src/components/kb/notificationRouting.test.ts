@@ -1,16 +1,27 @@
 import { describe, it, expect } from "vitest";
 
+import type { ActiveBook } from "@/lib/activeBook";
+
 import { resolveEntryAction } from "./notificationRouting";
 
+const BOOK_A: ActiveBook = {
+  key: "book-a",
+  expected: { workspace_id: "ws", profile_id: "pf-a" },
+};
+const BOOK_B: ActiveBook = {
+  key: "book-b",
+  expected: { workspace_id: "ws", profile_id: "pf-b" },
+};
+
 describe("resolveEntryAction records and anchors", () => {
-  const here = { book: "book-a" };
+  const here = { book: "book-a", expected: BOOK_A.expected };
 
   it("opens a connection or transaction of the open book", () => {
     expect(
       resolveEntryAction(
         { type: "open-connection", connectionId: "wallet-1" },
         here,
-        "book-a",
+        BOOK_A,
         false,
       ),
     ).toEqual({ kind: "open-connection", connectionId: "wallet-1" });
@@ -18,7 +29,7 @@ describe("resolveEntryAction records and anchors", () => {
       resolveEntryAction(
         { type: "open-transaction", transactionId: "tx-1" },
         here,
-        "book-a",
+        BOOK_A,
         false,
       ),
     ).toEqual({ kind: "open-transaction", transactionId: "tx-1" });
@@ -29,7 +40,7 @@ describe("resolveEntryAction records and anchors", () => {
       resolveEntryAction(
         { type: "open-connection", connectionId: "wallet-1" },
         here,
-        "book-b",
+        BOOK_B,
         false,
       ),
     ).toEqual({ kind: "navigate", to: "/connections", stale: true });
@@ -37,7 +48,7 @@ describe("resolveEntryAction records and anchors", () => {
       resolveEntryAction(
         { type: "open-transaction", transactionId: "tx-1" },
         here,
-        "book-b",
+        BOOK_B,
         false,
       ),
     ).toEqual({ kind: "navigate", to: "/transactions", stale: true });
@@ -48,7 +59,7 @@ describe("resolveEntryAction records and anchors", () => {
       resolveEntryAction(
         { type: "open-connection", connectionId: " " },
         here,
-        "book-a",
+        BOOK_A,
         false,
       ),
     ).toBeNull();
@@ -56,7 +67,7 @@ describe("resolveEntryAction records and anchors", () => {
       resolveEntryAction(
         { type: "open-transaction", transactionId: "x".repeat(300) },
         here,
-        "book-a",
+        BOOK_A,
         false,
       ),
     ).toBeNull();
@@ -80,7 +91,7 @@ describe("resolveEntryAction records and anchors", () => {
       resolveEntryAction(
         { type: "navigate", to: "/settings/market", anchor: "biometricUnlock" },
         here,
-        "book-a",
+        BOOK_A,
         false,
       ),
     ).toEqual({ kind: "navigate", to: "/settings/market", stale: false });
@@ -88,7 +99,7 @@ describe("resolveEntryAction records and anchors", () => {
       resolveEntryAction(
         { type: "navigate", to: "/settings/market", anchor: "no-such-row" },
         here,
-        "book-a",
+        BOOK_A,
         false,
       ),
     ).toEqual({ kind: "navigate", to: "/settings/market", stale: false });
@@ -99,7 +110,7 @@ describe("resolveEntryAction records and anchors", () => {
       resolveEntryAction(
         { type: "run-shell", command: "ls" } as never,
         here,
-        "book-a",
+        BOOK_A,
         true,
       ),
     ).toBeNull();

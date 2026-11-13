@@ -76,9 +76,10 @@ import { cn } from "@/lib/utils";
 import type { FiatCompleteness, OverviewSnapshot } from "@/mocks/seed";
 import type { CapitalGainsReport } from "@/mocks/reports";
 import { recordReportExported, reportExportJob } from "@/lib/reportNotifications";
+import { activeBookScope } from "@/lib/notificationScope";
 import i18n from "@/i18n";
 import { showFeedback } from "@/lib/feedback";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { useUiStore } from "@/store/ui";
 import { TaxCountryPreviewNotice } from "@/components/kb/TaxCountryPreview";
 
 type ReportTone = "good" | "warning" | "alert" | "neutral";
@@ -417,7 +418,7 @@ function ReportsView({
     setActiveExport(format);
     // The book the export belongs to, fixed at the start; it runs on after
     // the user leaves Reports.
-    const job = reportExportJob(bookIdentityKey(useUiStore.getState().identity));
+    const job = reportExportJob(activeBookScope());
     job.start();
     const mutation =
       format === "summary_pdf"

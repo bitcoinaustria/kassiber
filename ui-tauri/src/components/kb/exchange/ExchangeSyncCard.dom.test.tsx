@@ -22,6 +22,16 @@ vi.hoisted(() => {
   });
 });
 
+// The book open when the work starts, as the app reads it from
+// `ui.profiles.snapshot`.
+const openBook = vi.hoisted(() => ({
+  scope: { book: "book-a", expected: { workspace_id: "ws", profile_id: "pf-a" } } as {
+    book: string;
+    expected: { workspace_id: string; profile_id: string };
+  } | null,
+}));
+vi.mock("@/lib/notificationScope", () => ({ activeBookScope: () => openBook.scope }));
+
 const mocks = vi.hoisted(() => ({
   status: { data: undefined as unknown, error: null as unknown },
   statusArgs: [] as unknown[],
@@ -121,7 +131,7 @@ describe("ExchangeSyncCard", () => {
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({
       code: "connection.synced",
-      scope: { book: null, source: "connection:w-1" },
+      scope: { book: "book-a", expected: { profile_id: "pf-a" }, source: "connection:w-1" },
       params: { transactions: 5 },
       action: { type: "open-connection", connectionId: "w-1" },
     });
@@ -143,7 +153,7 @@ describe("ExchangeSyncCard", () => {
     const [condition] = Object.values(useNotificationStore.getState().conditions);
     expect(condition).toMatchObject({
       code: "connection.sync-failed",
-      scope: { book: null, source: "connection:w-1" },
+      scope: { book: "book-a", expected: { profile_id: "pf-a" }, source: "connection:w-1" },
       action: { type: "open-connection", connectionId: "w-1" },
     });
     expect(condition.details?.[0]).toMatchObject({ label: "Bitpanda" });

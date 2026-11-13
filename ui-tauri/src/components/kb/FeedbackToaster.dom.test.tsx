@@ -49,6 +49,7 @@ describe("FeedbackToaster", () => {
     act(() => void vi.advanceTimersByTime(50));
     const announcement = document.querySelector('[role="status"][aria-live="polite"]');
     expect(announcement?.textContent).toContain("Book refreshed");
+    expect(announcement?.textContent).not.toContain("{hotkey}");
 
     act(() => void vi.advanceTimersByTime(SUCCESS_FEEDBACK_MS + 50));
     expect(useFeedbackStore.getState().items).toHaveLength(0);
@@ -137,5 +138,32 @@ describe("FeedbackToaster", () => {
     act(() => void useUiStore.setState({ privacyMode: "hideAll" }));
     expect(document.body.textContent).not.toContain("Cold Vault");
     expect(document.body.textContent).toContain("Imported");
+  });
+
+  it("drops an announcement made before privacy tightened", () => {
+    render(<FeedbackToaster />);
+    act(() => {
+      showFeedback({
+        tone: "success",
+        title: "Imported",
+        description: "Cold Vault: 0.4242 BTC",
+      });
+    });
+    act(() => void vi.advanceTimersByTime(50));
+    const announced = () =>
+      [...document.querySelectorAll('[role="status"]')]
+        .map((element) => element.textContent ?? "")
+        .join("\n");
+    expect(announced()).toContain("0.4242");
+
+    act(() => void useUiStore.setState({ privacyMode: "hideAll" }));
+    act(() => void vi.advanceTimersByTime(50));
+    expect(announced()).not.toContain("0.4242");
+    expect(announced()).not.toContain("Cold Vault");
+    expect(document.body.textContent).not.toContain("Cold Vault");
+    // The toast itself is still there, generic.
+    expect(toasts()).toHaveLength(1);
+    act(() => void vi.advanceTimersByTime(1_000));
+    expect(announced()).not.toContain("Cold Vault");
   });
 });

@@ -21,6 +21,7 @@ import {
 } from "@tanstack/react-query";
 import { getTransport, type DaemonEnvelope } from "./transport";
 import { useUiStore, type DataMode } from "@/store/ui";
+import { resolveJournalFailureAfter } from "@/lib/journalOutcome";
 import { notifyJournalStepAfterImport } from "@/lib/journalStepNotice";
 
 export interface ExpectedBookScope {
@@ -382,6 +383,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.workspace.health",
     "ui.source_funds.preview",
     "ui.source_funds.review_context",
+    "ui.freshness.status",
   ],
   "wallets.reveal_descriptor": [],
   "ui.chat.history.configure": [
@@ -421,6 +423,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.source_funds.coverage",
     "ui.source_funds.preview",
     "ui.source_funds.review_context",
+    "ui.freshness.status",
   ],
   "ui.wallets.sync": [
     "ui.activity.history",
@@ -454,6 +457,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.source_funds.coverage",
     "ui.source_funds.preview",
     "ui.source_funds.review_context",
+    "ui.freshness.status",
   ],
   "ui.connections.exchange.sync": [
     "ui.connections.exchange.status",
@@ -488,6 +492,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.source_funds.coverage",
     "ui.source_funds.preview",
     "ui.source_funds.review_context",
+    "ui.freshness.status",
   ],
   "ui.journals.process": [
     "ui.activity.history",
@@ -515,6 +520,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.source_funds.coverage",
     "ui.source_funds.preview",
     "ui.source_funds.review_context",
+    "ui.freshness.status",
   ],
   "ui.attachments.add": [
     "ui.attachments.list",
@@ -606,16 +612,17 @@ export function useDaemonMutation<T = unknown>(
         throw new DaemonRequestError(kind, envelope);
       }
       boundary?.onMutationSuccess?.(kind, envelope.data);
+      resolveJournalFailureAfter(queryClient, daemonSession, envelope.data);
+      notifyJournalStepAfterImport(queryClient, daemonSession, kind, envelope.data);
       return envelope;
     },
-    onSuccess: (envelope) => {
+    onSuccess: () => {
       if (mutationAdvancesDaemonSession(kind)) {
         useUiStore.getState().bumpDaemonSession();
       }
       if (options?.invalidateQueries !== false) {
         invalidateDaemonQueriesForMutation(queryClient, dataMode, kind);
       }
-      notifyJournalStepAfterImport(kind, envelope.data);
     },
   });
 }
@@ -670,6 +677,7 @@ export function useDaemonStreamMutation<T = unknown, R = unknown>(
         throw new DaemonRequestError(kind, envelope);
       }
       boundary?.onMutationSuccess?.(kind, envelope.data);
+      resolveJournalFailureAfter(queryClient, daemonSession, envelope.data);
       return envelope;
     },
     onSuccess: () =>

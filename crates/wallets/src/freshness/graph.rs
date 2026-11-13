@@ -181,6 +181,11 @@ impl Grant {
         self.cancel.clone()
     }
 
+    /// The profile (book) this grant was issued for.
+    pub fn profile(&self) -> &str {
+        &self.profile
+    }
+
     #[cfg(feature = "test-harness")]
     pub fn fixture(
         conn: &Connection,

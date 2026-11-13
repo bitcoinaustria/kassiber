@@ -21,15 +21,20 @@ const REBUILD_ACTION = {
   anchor: "rebuildPricing",
 } as const;
 
-export function pricingRebuildJob(book: string | null) {
-  const scope: NotificationScope = { book };
+/**
+ * `book` is the open book bound at the click (`activeBookScope`); null while
+ * it is unknown, in which case the job still shows but its outcome files
+ * nothing in the center.
+ */
+export function pricingRebuildJob(book: NotificationScope | null) {
+  const scope: NotificationScope | null = book;
   return {
     scope,
     start: () =>
       useNotificationStore.getState().startJob({
         id: JOB_ID,
         code: "pricing-rebuild",
-        scope,
+        scope: scope ?? { book: null },
         progress: { indeterminate: true },
       }),
     end: () => useNotificationStore.getState().endJob(JOB_ID),
@@ -37,12 +42,14 @@ export function pricingRebuildJob(book: string | null) {
 }
 
 export function recordPricingRebuilt(
-  scope: NotificationScope,
+  scope: NotificationScope | null,
   outcome: { summary: string; journalBlocker?: string },
 ): void {
   const store = useNotificationStore.getState();
-  store.resolveCondition(conditionKey("pricing.rebuild-failed", scope));
-  if (outcome.journalBlocker) {
+  if (scope) store.resolveCondition(conditionKey("pricing.rebuild-failed", scope));
+  // Its Retry processes journals with `expected_scope`, so it needs the
+  // book's daemon ids; without them nothing is filed that could run.
+  if (scope?.expected && outcome.journalBlocker) {
     store.raiseCondition({
       code: "journals.process-failed",
       scope,
@@ -56,7 +63,7 @@ export function recordPricingRebuilt(
       details: [{ message: safeMessage(outcome.journalBlocker) }],
     });
   }
-  store.addResult({
+  if (scope) store.addResult({
     code: "pricing.rebuilt",
     scope,
     severity: outcome.journalBlocker ? "warning" : "info",
@@ -74,10 +81,10 @@ export function recordPricingRebuilt(
 }
 
 export function recordPricingRebuildFailed(
-  scope: NotificationScope,
+  scope: NotificationScope | null,
   message: string,
 ): void {
-  useNotificationStore.getState().raiseCondition({
+  if (scope) useNotificationStore.getState().raiseCondition({
     code: "pricing.rebuild-failed",
     scope,
     severity: "error",

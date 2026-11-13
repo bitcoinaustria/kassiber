@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { resolveEntryAction } from "@/components/kb/notificationRouting";
+import type { ActiveBook } from "@/lib/activeBook";
 import { useFeedbackStore } from "@/lib/feedback";
 import { resetNotificationStore, useNotificationStore } from "@/store/notifications";
 
@@ -10,6 +11,11 @@ import {
   recordWorkspaceRefreshFailed,
   startWorkspaceRefresh,
 } from "./workspaceNotifications";
+
+const ANY_BOOK: ActiveBook = {
+  key: "any-book",
+  expected: { workspace_id: "ws", profile_id: "pf-any" },
+};
 
 beforeEach(() => {
   resetNotificationStore();
@@ -31,7 +37,7 @@ describe("refreshing all books", () => {
       priority: "blocking",
       scope: { book: null, source: "workspace:ws-1" },
     });
-    expect(resolveEntryAction(condition.action, condition.scope, "any-book", false)).toEqual({
+    expect(resolveEntryAction(condition.action, condition.scope, ANY_BOOK, false)).toEqual({
       kind: "open-workspace",
       workspaceId: "ws-1",
     });

@@ -26,6 +26,16 @@ vi.hoisted(() => {
   });
 });
 
+// The book open when the work starts, as the app reads it from
+// `ui.profiles.snapshot`.
+const openBook = vi.hoisted(() => ({
+  scope: { book: "book-a", expected: { workspace_id: "ws", profile_id: "pf-a" } } as {
+    book: string;
+    expected: { workspace_id: string; profile_id: string };
+  } | null,
+}));
+vi.mock("@/lib/notificationScope", () => ({ activeBookScope: () => openBook.scope }));
+
 const state = vi.hoisted(() => ({
   preview: { data: undefined as Envelope<unknown> | undefined, isFetching: false },
   mutations: new Map<string, { mutateAsync: ReturnType<typeof vi.fn>; isPending: boolean; reset: () => void }>(),
@@ -138,7 +148,7 @@ describe("an assembly that needs a rescan", () => {
     const [condition] = Object.values(useNotificationStore.getState().conditions);
     expect(condition).toMatchObject({
       code: "source-funds.rescan-needed",
-      scope: { source: "source-funds:tx-rescan" },
+      scope: { book: "book-a", expected: { profile_id: "pf-a" }, source: "source-funds:tx-rescan" },
       params: { count: 2 },
       action: { type: "open-transaction", transactionId: "tx-old-1" },
     });

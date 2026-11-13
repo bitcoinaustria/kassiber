@@ -346,7 +346,7 @@ export function useOverviewTransactionDetail({
         key: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
       });
     },
-    [detailTransaction, revertHistory],
+    [detailTransaction, revertHistory, t],
   );
 
   React.useEffect(() => {

@@ -1,3 +1,4 @@
+import type { ActiveBook, DaemonBookScope } from "@/lib/activeBook";
 import {
   NOTIFICATION_OPERATION_KINDS,
   type NotificationActionSpec,
@@ -51,7 +52,12 @@ export type ResolvedEntryAction =
   | { kind: "open-connection"; connectionId: string }
   | { kind: "open-transaction"; transactionId: string }
   | { kind: "open-workspace"; workspaceId: string }
-  | { kind: "operation"; operation: NotificationOperation };
+  | {
+      kind: "operation";
+      operation: NotificationOperation;
+      /** Sent as `expected_scope`: the daemon refuses it in another book. */
+      expectedScope: DaemonBookScope;
+    };
 
 /** Record ids come from the daemon; anything odd shows no button. */
 const MAX_RECORD_ID_CHARS = 256;
@@ -105,20 +111,24 @@ function settingsAnchorFor(
 }
 
 /**
- * Resolve a structured action against the book open right now. Unknown
- * routes, anchors, records, and operations fail closed (no button). A
- * record or operation whose book is no longer open never opens or replays:
- * it becomes navigation to its list or review route, marked stale, so the
- * user decides again in the right place.
+ * Resolve a structured action against the book open right now (`current`,
+ * null while unknown or while a switch is in flight). Unknown routes,
+ * anchors, records, and operations fail closed (no button). A record or
+ * operation from another book never opens or replays: it becomes navigation
+ * to its list or review route, marked stale, so the user decides again in
+ * the right place. An operation runs only with its own book's daemon ids to
+ * send as `expected_scope`.
  */
 export function resolveEntryAction(
   action: NotificationActionSpec | undefined,
   scope: NotificationScope,
-  currentBook: string | null,
+  current: ActiveBook | null,
   developerToolsEnabled: boolean,
 ): ResolvedEntryAction | null {
   if (!action || typeof action !== "object") return null;
-  const stale = scope.book !== currentBook;
+  const sameBook = current !== null && scope.book === current.key;
+  // App-wide entries (no book) belong to every book.
+  const stale = scope.book !== null && !sameBook;
   switch (action.type) {
     case "navigate": {
       const to = navigationTarget(action.to, developerToolsEnabled);
@@ -129,16 +139,16 @@ export function resolveEntryAction(
     case "open-connection": {
       const connectionId = validRecordId(action.connectionId);
       if (!connectionId) return null;
-      return stale
-        ? { kind: "navigate", to: "/connections", stale }
-        : { kind: "open-connection", connectionId };
+      return sameBook
+        ? { kind: "open-connection", connectionId }
+        : { kind: "navigate", to: "/connections", stale: true };
     }
     case "open-transaction": {
       const transactionId = validRecordId(action.transactionId);
       if (!transactionId) return null;
-      return stale
-        ? { kind: "navigate", to: "/transactions", stale }
-        : { kind: "open-transaction", transactionId };
+      return sameBook
+        ? { kind: "open-transaction", transactionId }
+        : { kind: "navigate", to: "/transactions", stale: true };
     }
     case "open-workspace": {
       // A workspace overview spans its books, so no book can make it stale.
@@ -149,8 +159,16 @@ export function resolveEntryAction(
       const operation = validOperation(action.operation);
       const review = navigationTarget(action.review, developerToolsEnabled);
       if (!operation || !review) return null;
-      if (stale) return { kind: "navigate", to: review, stale: true };
-      return { kind: "operation", operation };
+      if (
+        current === null ||
+        !sameBook ||
+        !scope.expected ||
+        scope.expected.workspace_id !== current.expected.workspace_id ||
+        scope.expected.profile_id !== current.expected.profile_id
+      ) {
+        return { kind: "navigate", to: review, stale: true };
+      }
+      return { kind: "operation", operation, expectedScope: scope.expected };
     }
     default:
       return null;

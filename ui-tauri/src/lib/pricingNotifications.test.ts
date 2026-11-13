@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { resolveEntryAction } from "@/components/kb/notificationRouting";
+import type { ActiveBook } from "@/lib/activeBook";
 import { useFeedbackStore } from "@/lib/feedback";
 import {
   conditionKey,
@@ -16,6 +17,11 @@ import {
 import { recordReportExported, reportExportJob } from "./reportNotifications";
 
 const BOOK = "book-a";
+const ACTIVE: ActiveBook = {
+  key: BOOK,
+  expected: { workspace_id: "ws", profile_id: "pf-a" },
+};
+const SCOPE = { book: BOOK, expected: ACTIVE.expected };
 
 beforeEach(() => {
   resetNotificationStore();
@@ -24,7 +30,7 @@ beforeEach(() => {
 
 describe("price rebuilds", () => {
   it("is a job, and a failure opens the rebuild row of Market data", () => {
-    const job = pricingRebuildJob(BOOK);
+    const job = pricingRebuildJob(SCOPE);
     job.start();
     expect(Object.values(useNotificationStore.getState().jobs)).toMatchObject([
       { code: "pricing-rebuild", scope: { book: BOOK } },
@@ -35,7 +41,7 @@ describe("price rebuilds", () => {
       useNotificationStore.getState().conditions[
         conditionKey("pricing.rebuild-failed", { book: BOOK })
       ];
-    expect(resolveEntryAction(condition.action, condition.scope, BOOK, false)).toEqual({
+    expect(resolveEntryAction(condition.action, condition.scope, ACTIVE, false)).toEqual({
       kind: "navigate",
       to: "/settings/market",
       stale: false,
@@ -45,7 +51,7 @@ describe("price rebuilds", () => {
   });
 
   it("resolves the failure on success and hands a journal blocker to journal processing", () => {
-    const { scope } = pricingRebuildJob(BOOK);
+    const { scope } = pricingRebuildJob(SCOPE);
     recordPricingRebuildFailed(scope, "boom");
     recordPricingRebuilt(scope, { summary: "Cleared 3 prices.", journalBlocker: "writer busy" });
     const { conditions, results } = useNotificationStore.getState();
@@ -63,7 +69,7 @@ describe("price rebuilds", () => {
 
 describe("report exports", () => {
   it("land in Recent opening Reports, with the file name kept as free text", () => {
-    const job = reportExportJob(BOOK);
+    const job = reportExportJob(SCOPE);
     job.start();
     recordReportExported(job.scope, {
       flagged: false,

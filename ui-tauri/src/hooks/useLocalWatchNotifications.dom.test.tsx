@@ -20,6 +20,15 @@ const inbox = vi.hoisted(() => ({
 
 vi.mock("@/daemon/client", () => ({ useDaemon: () => inbox.result }));
 
+// The open book, as `ui.profiles.snapshot` reports it; null while unknown.
+const openBook = vi.hoisted(() => ({
+  current: {
+    key: "book-a",
+    expected: { workspace_id: "ws", profile_id: "pf-a" },
+  } as { key: string; expected: { workspace_id: string; profile_id: string } } | null,
+}));
+vi.mock("@/lib/activeBook", () => ({ useActiveBook: () => openBook.current }));
+
 import { resolveEntryAction } from "@/components/kb/notificationRouting";
 import { resetNotificationStore, useNotificationStore } from "@/store/notifications";
 import { useUiStore } from "@/store/ui";
@@ -29,6 +38,7 @@ import { useLocalWatchNotifications } from "./useLocalWatchNotifications";
 beforeEach(() => {
   resetNotificationStore();
   useUiStore.setState({ identity: null });
+  openBook.current = { key: "book-a", expected: { workspace_id: "ws", profile_id: "pf-a" } };
 });
 
 describe("evidence-watch condition", () => {
@@ -38,7 +48,7 @@ describe("evidence-watch condition", () => {
     hook.rerender();
     const [condition] = Object.values(useNotificationStore.getState().conditions);
     expect(condition).toMatchObject({ code: "watch.evidence-changed", occurrenceCount: 1 });
-    expect(resolveEntryAction(condition.action, condition.scope, null, false)).toEqual({
+    expect(resolveEntryAction(condition.action, condition.scope, openBook.current, false)).toEqual({
       kind: "navigate",
       to: "/chain-analysis",
       stale: false,
@@ -51,6 +61,13 @@ describe("evidence-watch condition", () => {
 
     inbox.result = { isSuccess: true, data: { data: { unread_count: 0 } } };
     hook.rerender();
+    expect(useNotificationStore.getState().conditions).toEqual({});
+  });
+
+  it("decides nothing while the open book is unknown", () => {
+    openBook.current = null;
+    inbox.result = { isSuccess: true, data: { data: { unread_count: 3 } } };
+    renderHook(() => useLocalWatchNotifications(true));
     expect(useNotificationStore.getState().conditions).toEqual({});
   });
 });

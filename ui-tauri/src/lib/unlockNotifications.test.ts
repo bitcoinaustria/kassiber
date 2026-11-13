@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { resolveEntryAction } from "@/components/kb/notificationRouting";
+import type { ActiveBook } from "@/lib/activeBook";
 import { useFeedbackStore } from "@/lib/feedback";
 import { resetNotificationStore, useNotificationStore } from "@/store/notifications";
 
@@ -10,6 +11,11 @@ import {
   resolveTouchIdOff,
   resolveUnlockCredentialRemains,
 } from "./unlockNotifications";
+
+const ANY_BOOK: ActiveBook = {
+  key: "any-book",
+  expected: { workspace_id: "ws", profile_id: "pf-any" },
+};
 
 beforeEach(() => {
   resetNotificationStore();
@@ -26,11 +32,12 @@ describe("saved unlock conditions", () => {
       details: [{ message: "Keychain refused the item" }],
     });
     expect(
-      resolveEntryAction(condition.action, condition.scope, "any-book", false),
+      resolveEntryAction(condition.action, condition.scope, ANY_BOOK, false),
     ).toEqual({
       kind: "navigate",
       to: "/settings/security",
-      stale: true,
+      // App-wide: it belongs to every book.
+      stale: false,
       anchor: "biometricUnlock",
     });
     resolveTouchIdOff();

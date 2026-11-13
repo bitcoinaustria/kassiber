@@ -38,8 +38,8 @@ import {
   type NotificationScope,
   type ResultEntry,
 } from "@/store/notifications";
+import type { ActiveBook, DaemonBookScope } from "@/lib/activeBook";
 import {
-  bookIdentityKey,
   useUiStore,
   type NotificationTone,
 } from "@/store/ui";
@@ -63,11 +63,22 @@ type OperationKind = NotificationOperation["kind"];
 export interface NotificationCenterProps {
   /** Tint for the bell when something blocks or awaits review. */
   triggerClassName?: string;
+  /** The book open now; null while unknown or while a switch is in flight. */
+  currentBook: ActiveBook | null;
   /**
-   * Repeat an operation with its original options. Called only after the
-   * entry's book scope matched the open book.
+   * The open book at the moment of a click, read afresh: the list may have
+   * been drawn before a switch started. Defaults to `currentBook`.
    */
-  runOperation: (operation: NotificationOperation) => void;
+  resolveCurrentBook?: () => ActiveBook | null;
+  /**
+   * Repeat an operation with its original options, sending `expectedScope`
+   * so the daemon refuses it if another book is open by then. Called only
+   * after the entry's book matched the open book at click time.
+   */
+  runOperation: (
+    operation: NotificationOperation,
+    expectedScope: DaemonBookScope,
+  ) => void;
   /** Operations already running; their buttons are disabled. */
   pendingOperations?: Partial<Record<OperationKind, boolean>>;
   /**
@@ -201,6 +212,8 @@ function severityTone(severity: string): Severity {
  */
 export function NotificationCenter({
   triggerClassName,
+  currentBook: currentActiveBook,
+  resolveCurrentBook,
   runOperation,
   pendingOperations = {},
   onOpenRunningBookRefresh,
@@ -216,8 +229,7 @@ export function NotificationCenter({
   const markSeen = useNotificationStore((s) => s.markSeen);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const privacyMode = useUiStore((s) => s.privacyMode);
-  const identity = useUiStore((s) => s.identity);
-  const currentBook = bookIdentityKey(identity);
+  const currentBook = currentActiveBook?.key ?? null;
 
   const groups = groupConditions(conditionsInScope(conditions, currentBook));
   const runningJobs = Object.values(jobs).sort((a, b) =>
@@ -245,7 +257,7 @@ export function NotificationCenter({
     action: NotificationActionSpec | undefined,
     scope: NotificationScope,
   ) => {
-    const book = bookIdentityKey(useUiStore.getState().identity);
+    const book = resolveCurrentBook ? resolveCurrentBook() : currentActiveBook;
     const resolved = resolveEntryAction(
       action,
       scope,
@@ -256,7 +268,7 @@ export function NotificationCenter({
     setOpen(false);
     switch (resolved.kind) {
       case "operation":
-        runOperation(resolved.operation);
+        runOperation(resolved.operation, resolved.expectedScope);
         return;
       case "open-connection":
         void navigate({
@@ -338,7 +350,7 @@ export function NotificationCenter({
                   const resolved = resolveEntryAction(
                     first.action,
                     first.scope,
-                    currentBook,
+                    currentActiveBook,
                     developerToolsEnabled,
                   );
                   return (
@@ -353,11 +365,12 @@ export function NotificationCenter({
                       action={
                         resolved
                           ? {
-                              label: conditionActionLabel(
-                                group.code,
-                                first.params,
-                                t,
-                              ),
+                              // An operation that cannot run here only
+                              // opens its review page, and says so.
+                              label:
+                                resolved.kind === "navigate" && resolved.stale
+                                  ? t("notifications.staleAction")
+                                  : conditionActionLabel(group.code, first.params, t),
                               resolved,
                               pending: pendingFor(resolved),
                             }
@@ -394,7 +407,7 @@ export function NotificationCenter({
                   const resolved = resolveEntryAction(
                     entry.action,
                     entry.scope,
-                    currentBook,
+                    currentActiveBook,
                     developerToolsEnabled,
                   );
                   return (

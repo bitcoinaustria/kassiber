@@ -25,8 +25,9 @@ import {
   startConnectionSync,
 } from "@/lib/connectionNotifications";
 import { recordJournalStep } from "@/lib/journalStepNotice";
+import { activeBookScope } from "@/lib/notificationScope";
 import { cn } from "@/lib/utils";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { useUiStore } from "@/store/ui";
 
 import {
   actionLabel,
@@ -190,7 +191,7 @@ export function QuarantineCausePanel({
     // The same job, result, and per-wallet condition as a sync from the
     // wallet page; the remaining quarantine shows in the Review condition.
     const ref = {
-      book: bookIdentityKey(useUiStore.getState().identity),
+      book: activeBookScope(),
       connectionId: walletId,
       label: wallet,
     };

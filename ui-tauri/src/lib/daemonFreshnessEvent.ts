@@ -76,10 +76,25 @@ function freshnessRunData(value: unknown): FreshnessRunData | null {
   return { completed, ...(sources ? { sources } : {}), summary };
 }
 
-/** A daemon freshness event with what the notification center needs. */
+/**
+ * A daemon freshness event with what the notification center needs.
+ * `profileId` is the book the work ran for (`data.profile.id`); an event
+ * without one cannot be attributed to a book.
+ */
 export type DaemonFreshnessEvent =
-  | { kind: "background"; data: FreshnessRunData; needsAttention: boolean }
-  | { kind: "worker-error"; code?: string; message?: string };
+  | {
+      kind: "background";
+      data: FreshnessRunData;
+      needsAttention: boolean;
+      profileId?: string;
+    }
+  | { kind: "worker-error"; code?: string; message?: string; profileId?: string };
+
+function eventProfileId(data: unknown): string | undefined {
+  if (!isRecord(data) || !isRecord(data.profile)) return undefined;
+  const id = data.profile.id;
+  return typeof id === "string" && id ? id : undefined;
+}
 
 /**
  * Parse an unsolicited freshness event. `background` carries the run and the
@@ -97,6 +112,7 @@ export function parseDaemonFreshnessEvent(
       kind: "worker-error",
       code: typeof data.code === "string" ? data.code : undefined,
       message: typeof data.message === "string" ? data.message : undefined,
+      profileId: eventProfileId(data),
     };
   }
   const data = freshnessRunData(value.data);
@@ -105,6 +121,7 @@ export function parseDaemonFreshnessEvent(
     kind: "background",
     data,
     needsAttention: signal === "needs-attention",
+    profileId: eventProfileId(value.data),
   };
 }
 

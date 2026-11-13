@@ -11,15 +11,20 @@ import { useNotificationStore, type NotificationScope } from "@/store/notificati
  */
 const JOB_ID = "report-export";
 
-export function reportExportJob(book: string | null) {
-  const scope: NotificationScope = { book };
+/**
+ * `book` is the open book bound at the click (`activeBookScope`); null while
+ * it is unknown, in which case the job still shows but its outcome files
+ * nothing in the center.
+ */
+export function reportExportJob(book: NotificationScope | null) {
+  const scope: NotificationScope | null = book;
   return {
     scope,
     start: () =>
       useNotificationStore.getState().startJob({
         id: JOB_ID,
         code: "report-export",
-        scope,
+        scope: scope ?? { book: null },
         progress: { indeterminate: true },
       }),
     end: () => useNotificationStore.getState().endJob(JOB_ID),
@@ -27,7 +32,7 @@ export function reportExportJob(book: string | null) {
 }
 
 export function recordReportExported(
-  scope: NotificationScope,
+  scope: NotificationScope | null,
   outcome: {
     flagged: boolean;
     warnings: number;
@@ -37,7 +42,7 @@ export function recordReportExported(
     detail: string;
   },
 ): void {
-  useNotificationStore.getState().addResult({
+  if (scope) useNotificationStore.getState().addResult({
     code: "report.exported",
     scope,
     severity: outcome.flagged ? "warning" : "info",

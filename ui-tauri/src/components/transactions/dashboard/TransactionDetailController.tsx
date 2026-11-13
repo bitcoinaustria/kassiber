@@ -301,7 +301,7 @@ export function TransactionDetailController({
         key: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
       });
     },
-    [revertHistory, workingTransaction],
+    [revertHistory, t, workingTransaction],
   );
 
   const saveTransactionDraft = React.useCallback(

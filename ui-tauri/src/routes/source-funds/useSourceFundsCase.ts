@@ -14,7 +14,8 @@ import { type Tx } from "@/mocks/seed";
 import { BULK_REVIEW_ID_LIMIT } from "./model";
 import { exportCurrentCase } from "./caseExport";
 import { conditionKey, useNotificationStore } from "@/store/notifications";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { useUiStore } from "@/store/ui";
+import { activeBookScope } from "@/lib/notificationScope";
 import { targetQueryArgs, type SourceFundsReviewContext } from "./caseScope";
 
 import {
@@ -470,6 +471,8 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
 
   async function runAssembly(showNotification = true) {
     if (!selectedTarget) return;
+    // The book the case is assembled in, bound before the request.
+    const bound = activeBookScope();
     const envelope = await assembleLinks.mutateAsync({
       target_transaction: selectedTarget,
     });
@@ -478,15 +481,14 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     const manual = summary?.awaiting_manual_review ?? 0;
     const missing = summary?.chain_attestation_missing ?? [];
     const unattested = missing.length;
-    const rescanScope = {
-      book: bookIdentityKey(useUiStore.getState().identity),
-      source: `source-funds:${selectedTarget}`,
-    };
+    const rescanScope = bound
+      ? { ...bound, source: `source-funds:${selectedTarget}` }
+      : null;
     if (unattested > 0 && reviewed === 0) {
       // Not a gap in history: the observer never recorded which inputs were
       // its own. It stays in the center until an assembly connects them, and
       // opens the first such transaction, whose wallet needs the rescan.
-      useNotificationStore.getState().raiseCondition({
+      if (rescanScope) useNotificationStore.getState().raiseCondition({
         code: "source-funds.rescan-needed",
         scope: rescanScope,
         severity: "warning",
@@ -504,7 +506,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
       }
       return;
     }
-    if (unattested === 0) {
+    if (rescanScope && unattested === 0) {
       useNotificationStore
         .getState()
         .resolveCondition(conditionKey("source-funds.rescan-needed", rescanScope));

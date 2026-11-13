@@ -18,24 +18,27 @@ import {
  * sync of the same connection resolves them.
  */
 
-/** The scope of everything about one connection of `book`. */
-export function connectionScope(
-  book: string | null,
-  connectionId: string,
-): NotificationScope {
-  return { book, source: `connection:${connectionId}` };
+export interface ConnectionRef {
+  /**
+   * The book the sync runs in, bound when it started (`activeBookScope`).
+   * Null while the open book was unknown: the toast still shows, but
+   * nothing is filed in the center.
+   */
+  book: NotificationScope | null;
+  connectionId: string;
+  /** The user's label; only Normal and Hide amounts show it. */
+  label?: string;
+}
+
+/** The scope of everything about one connection of its book. */
+export function connectionScope(ref: ConnectionRef): NotificationScope | null {
+  return ref.book
+    ? { ...ref.book, source: `connection:${ref.connectionId}` }
+    : null;
 }
 
 function jobId(connectionId: string): string {
   return `connection-sync:${connectionId}`;
-}
-
-export interface ConnectionRef {
-  /** `bookIdentityKey` when the sync started. */
-  book: string | null;
-  connectionId: string;
-  /** The user's label; only Normal and Hide amounts show it. */
-  label?: string;
 }
 
 /** A sync of one connection is running; it shows under Running. */
@@ -46,7 +49,7 @@ export function startConnectionSync(
   useNotificationStore.getState().startJob({
     id: jobId(ref.connectionId),
     code: "connection-sync",
-    scope: connectionScope(ref.book, ref.connectionId),
+    scope: connectionScope(ref) ?? { book: null },
     params: { forceFull: Boolean(options.forceFull) },
     progress: { indeterminate: true, label: ref.label },
   });
@@ -71,21 +74,23 @@ export function recordConnectionSynced(
   ref: ConnectionRef,
   outcome: { forceFull?: boolean; imported?: number } = {},
 ): void {
-  const scope = connectionScope(ref.book, ref.connectionId);
-  const store = useNotificationStore.getState();
-  store.resolveCondition(conditionKey("connection.sync-failed", scope));
-  store.resolveCondition(conditionKey("btcpay.provenance-incomplete", scope));
-  store.addResult({
-    code: "connection.synced",
-    scope,
-    severity: "info",
-    params: {
-      forceFull: Boolean(outcome.forceFull),
-      ...(outcome.imported !== undefined ? { transactions: outcome.imported } : {}),
-    },
-    action: { type: "open-connection", connectionId: ref.connectionId },
-    details: ref.label ? [{ label: ref.label }] : undefined,
-  });
+  const scope = connectionScope(ref);
+  if (scope) {
+    const store = useNotificationStore.getState();
+    store.resolveCondition(conditionKey("connection.sync-failed", scope));
+    store.resolveCondition(conditionKey("btcpay.provenance-incomplete", scope));
+    store.addResult({
+      code: "connection.synced",
+      scope,
+      severity: "info",
+      params: {
+        forceFull: Boolean(outcome.forceFull),
+        ...(outcome.imported !== undefined ? { transactions: outcome.imported } : {}),
+      },
+      action: { type: "open-connection", connectionId: ref.connectionId },
+      details: ref.label ? [{ label: ref.label }] : undefined,
+    });
+  }
   const t = i18n.getFixedT(null, "chrome");
   showFeedback({
     tone: "success",
@@ -108,17 +113,20 @@ export function recordConnectionSyncFailed(
   message: string | undefined,
   extra: NotificationDetail[] = [],
 ): void {
-  useNotificationStore.getState().raiseCondition({
-    code: "connection.sync-failed",
-    scope: connectionScope(ref.book, ref.connectionId),
-    severity: "error",
-    priority: "attention",
-    action: { type: "open-connection", connectionId: ref.connectionId },
-    details: [
-      { label: ref.label, message: safeMessage(message), phraseKey: "failed" },
-      ...extra.map((detail) => ({ ...detail, message: safeMessage(detail.message) })),
-    ],
-  });
+  const scope = connectionScope(ref);
+  if (scope) {
+    useNotificationStore.getState().raiseCondition({
+      code: "connection.sync-failed",
+      scope,
+      severity: "error",
+      priority: "attention",
+      action: { type: "open-connection", connectionId: ref.connectionId },
+      details: [
+        { label: ref.label, message: safeMessage(message), phraseKey: "failed" },
+        ...extra.map((detail) => ({ ...detail, message: safeMessage(detail.message) })),
+      ],
+    });
+  }
   const t = i18n.getFixedT(null, "chrome");
   showFeedback({
     tone: "error",
@@ -138,9 +146,11 @@ export function recordBtcpayProvenanceIncomplete(
   ref: ConnectionRef,
   message: string | undefined,
 ): void {
+  const scope = connectionScope(ref);
+  if (!scope) return;
   useNotificationStore.getState().raiseCondition({
     code: "btcpay.provenance-incomplete",
-    scope: connectionScope(ref.book, ref.connectionId),
+    scope,
     severity: "warning",
     priority: "attention",
     action: { type: "open-connection", connectionId: ref.connectionId },

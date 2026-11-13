@@ -13,6 +13,16 @@ vi.hoisted(() => {
   });
 });
 
+// The book open when the work starts, as the app reads it from
+// `ui.profiles.snapshot`.
+const openBook = vi.hoisted(() => ({
+  scope: { book: "book-a", expected: { workspace_id: "ws", profile_id: "pf-a" } } as {
+    book: string;
+    expected: { workspace_id: string; profile_id: string };
+  } | null,
+}));
+vi.mock("@/lib/notificationScope", () => ({ activeBookScope: () => openBook.scope }));
+
 const daemon = vi.hoisted(() => ({
   cases: vi.fn(),
   plan: vi.fn(),
@@ -569,7 +579,7 @@ describe("a cause's wallet sync", () => {
     ];
     expect(args).toEqual({ wallet: "w-cold" });
     expect(Object.values(useNotificationStore.getState().jobs)).toMatchObject([
-      { code: "connection-sync", scope: { source: "connection:w-cold" } },
+      { code: "connection-sync", scope: { book: "book-a", source: "connection:w-cold" } },
     ]);
 
     options.onError(new Error("backend timed out"));
