@@ -724,7 +724,40 @@ export function NetworkStatusIndicator({
         align="end"
         className="w-[min(64rem,calc(100vw-1rem))]"
       >
-        <DropdownMenuLabel>{t("network.outboundConnections")}</DropdownMenuLabel>
+        {/* One switch: online lets Kassiber reach these servers, and once this
+            session has, it keeps checking the book's own. */}
+        <div className="flex items-center justify-between gap-4 pr-2">
+          <DropdownMenuLabel>{t("network.outboundConnections")}</DropdownMenuLabel>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Switch
+                checked={!offlineMode.offline}
+                disabled={!offlineMode.known || offlineMode.pending}
+                onCheckedChange={(online) => offlineMode.setOffline(!online)}
+                aria-label={t("network.offlineMode.label")}
+              />
+              {t("network.offlineMode.label")}
+            </label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              disabled={!canCheckConnections}
+              aria-label={t("network.checkConnections")}
+              title={t("network.checkConnections")}
+              onClick={(event) => {
+                event.preventDefault();
+                void runConnectionChecks();
+              }}
+            >
+              <RefreshCw
+                className={cn("size-3.5", checking && "animate-spin")}
+                aria-hidden="true"
+              />
+            </Button>
+          </div>
+        </div>
         <DropdownMenuSeparator />
         <div className="px-1 py-1">
           {backendSettingsQuery.isLoading ? (
@@ -847,56 +880,27 @@ export function NetworkStatusIndicator({
             </div>
           )}
         </div>
-        {/* One switch: online lets Kassiber reach these servers, and once this
-            session has, it keeps checking the book's own. */}
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-3 py-2">
-          <p
-            className={cn(
-              "m-0 min-w-0 flex-1 text-xs",
-              offlineMode.failed
-                ? "text-red-700 dark:text-red-300"
-                : "text-muted-foreground",
-            )}
-            role={offlineMode.failed ? "alert" : undefined}
-          >
-            {offlineMode.failed
-              ? t("network.offlineMode.failed")
-              : offlineMode.offline
-                ? t("network.offlineMode.on")
-                : offline
-                  ? t("network.offlineMode.environment")
-                  : null}
-          </p>
-          <div className="ml-auto flex items-center gap-3">
-            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <Switch
-                checked={!offlineMode.offline}
-                disabled={!offlineMode.known || offlineMode.pending}
-                onCheckedChange={(online) => offlineMode.setOffline(!online)}
-                aria-label={t("network.offlineMode.label")}
-              />
-              {t("network.offlineMode.label")}
-            </label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              disabled={!canCheckConnections}
-              aria-label={t("network.checkConnections")}
-              title={t("network.checkConnections")}
-              onClick={(event) => {
-                event.preventDefault();
-                void runConnectionChecks();
-              }}
+        {offlineMode.failed || offlineMode.offline || offline ? (
+          <div className="border-t px-3 py-2">
+            <p
+              className={cn(
+                "m-0 min-w-0 flex-1 text-xs",
+                offlineMode.failed
+                  ? "text-red-700 dark:text-red-300"
+                  : "text-muted-foreground",
+              )}
+              role={offlineMode.failed ? "alert" : undefined}
             >
-              <RefreshCw
-                className={cn("size-3.5", checking && "animate-spin")}
-                aria-hidden="true"
-              />
-            </Button>
+              {offlineMode.failed
+                ? t("network.offlineMode.failed")
+                : offlineMode.offline
+                  ? t("network.offlineMode.on")
+                  : offline
+                    ? t("network.offlineMode.environment")
+                    : null}
+            </p>
           </div>
-        </div>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
