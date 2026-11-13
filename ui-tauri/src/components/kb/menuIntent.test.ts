@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { useFeedbackStore } from "@/lib/feedback";
+import { useNotificationStore } from "@/store/notifications";
+
 import {
   dispatchMenuIntent,
   isAppRoutePath,
@@ -23,7 +26,7 @@ function makeDeps(overrides: Partial<MenuIntentDeps> = {}): MenuIntentDeps {
     runAddWalletConnection: vi.fn(),
     runWalletSync: vi.fn(),
     runJournalProcessing: vi.fn(),
-    addNotification: vi.fn(),
+    revealSettingAnchor: vi.fn(),
     emitSettingsSection: vi.fn(),
     ...overrides,
   };
@@ -93,17 +96,16 @@ describe("dispatchMenuIntent — workspace gating", () => {
 
 describe("dispatchMenuIntent — AI route fallback", () => {
   // When AI features are off, navigating to /assistant should redirect to
-  // Settings → AI section with an explanatory notification, NOT silently
-  // drop the action. Symmetric with the route guard at routeTree:assistant.
+  // Settings → AI section and highlight the switch that turns it on, NOT
+  // silently drop the action. Symmetric with the route guard at
+  // routeTree:assistant.
   it("redirects /assistant to Settings#ai when AI features are off", () => {
     const deps = makeDeps({ aiFeaturesEnabled: false });
     dispatchMenuIntent(
       { action: "navigate", route: "/assistant" },
       deps,
     );
-    expect(deps.addNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ tone: "info" }),
-    );
+    expect(deps.revealSettingAnchor).toHaveBeenCalledWith("assistantFeatures");
     expect(deps.navigate).toHaveBeenCalledWith({
       to: "/settings",
       hash: "ai",
@@ -117,7 +119,7 @@ describe("dispatchMenuIntent — AI route fallback", () => {
       deps,
     );
     expect(deps.navigate).toHaveBeenCalledWith({ to: "/assistant" });
-    expect(deps.addNotification).not.toHaveBeenCalled();
+    expect(deps.revealSettingAnchor).not.toHaveBeenCalled();
   });
 });
 
@@ -129,9 +131,11 @@ describe("dispatchMenuIntent — early-stage gate", () => {
     (route) => {
       const deps = makeDeps({ developerToolsEnabled: false });
       dispatchMenuIntent({ action: "navigate", route }, deps);
-      expect(deps.addNotification).toHaveBeenCalledWith(
-        expect.objectContaining({ tone: "info" }),
-      );
+      // The destination explains itself: the early-stage switch is
+      // highlighted. No notice reaches the center or a toast.
+      expect(deps.revealSettingAnchor).toHaveBeenCalledWith("earlyFeatures");
+      expect(useNotificationStore.getState().results).toEqual([]);
+      expect(useFeedbackStore.getState().items).toEqual([]);
       expect(deps.navigate).toHaveBeenCalledWith({
         to: "/settings",
         hash: "developer",
@@ -142,6 +146,7 @@ describe("dispatchMenuIntent — early-stage gate", () => {
   it("diverts the hidden Lightning settings section too", () => {
     const deps = makeDeps({ developerToolsEnabled: false });
     dispatchMenuIntent({ action: "open-settings", section: "lightning" }, deps);
+    expect(deps.revealSettingAnchor).toHaveBeenCalledWith("earlyFeatures");
     expect(deps.navigate).toHaveBeenCalledWith({
       to: "/settings",
       hash: "developer",
@@ -157,7 +162,7 @@ describe("dispatchMenuIntent — early-stage gate", () => {
       to: "/settings",
       hash: "bitcoin",
     });
-    expect(deps.addNotification).not.toHaveBeenCalled();
+    expect(deps.revealSettingAnchor).not.toHaveBeenCalled();
   });
 });
 

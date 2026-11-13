@@ -184,6 +184,12 @@ export function projectConditionGroup(
           : t("notifications.condition.workspaceBooks.body"),
         details,
       };
+    case "watch.evidence-changed":
+      return {
+        title: t("notifications.condition.watchChanged.title"),
+        body: t("notifications.condition.watchChanged.body"),
+        details: [],
+      };
     case "source-funds.rescan-needed":
       return {
         title: t("notifications.condition.sourceFundsRescan.title"),

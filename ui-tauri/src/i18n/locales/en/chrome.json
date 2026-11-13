@@ -320,6 +320,11 @@
         "title": "Some books need attention",
         "body": "Some books did not refresh. The overview of all books shows which.",
         "blockingBody": "Some books keep their reports blocked. The overview of all books shows which and why."
+      },
+      "watchChanged": {
+        "title": "Local evidence changed",
+        "body": "A watch condition was met. Its change waits under Watches in Chain Analysis.",
+        "action": "Open watches"
       }
     },
     "result": {
@@ -396,7 +401,10 @@
       "reportSaveFailed": "Could not save the report export",
       "reportExportBlocked": "Report export blocked by quarantine",
       "reportExportFailed": "Report export failed",
-      "reportOpenFailed": "Could not open the report"
+      "reportOpenFailed": "Could not open the report",
+      "btcPriceRefreshed": "BTC price refreshed",
+      "btcPriceUnchanged": "No newer BTC price; the cached one stays",
+      "btcPriceFailed": "Could not refresh the BTC price"
     }
   },
   "currencyToggle": {

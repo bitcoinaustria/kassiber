@@ -53,6 +53,7 @@ export const CONDITION_CODES = [
   "pricing.rebuild-failed",
   "workspace.refresh-failed",
   "workspace.books-need-attention",
+  "watch.evidence-changed",
 ] as const;
 export type ConditionCode = (typeof CONDITION_CODES)[number];
 
@@ -496,6 +497,7 @@ const CODE_ORDER: Record<ConditionCode, number> = {
   "pricing.rebuild-failed": 14,
   "workspace.refresh-failed": 15,
   "workspace.books-need-attention": 16,
+  "watch.evidence-changed": 17,
 };
 
 function compareConditions(a: ConditionEntry, b: ConditionEntry): number {

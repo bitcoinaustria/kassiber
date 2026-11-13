@@ -348,8 +348,6 @@
     "acknowledge": "Gelesen",
     "latest": "Neueste",
     "older": "Ältere",
-    "notificationTitle": "Lokale Belege geändert",
-    "notificationBody": "Öffne die Beobachtungen in der Kettenanalyse.",
     "rules": {
       "output_spent": "Ausgang ausgegeben",
       "confirmations": "Bestätigungsschwelle",

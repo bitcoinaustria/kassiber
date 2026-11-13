@@ -156,6 +156,8 @@ function conditionActionLabel(
     case "workspace.refresh-failed":
     case "workspace.books-need-attention":
       return t("notifications.action.openAllBooks");
+    case "watch.evidence-changed":
+      return t("notifications.condition.watchChanged.action");
   }
 }
 

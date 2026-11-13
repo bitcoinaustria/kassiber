@@ -348,8 +348,6 @@
     "acknowledge": "Mark read",
     "latest": "Latest",
     "older": "Older",
-    "notificationTitle": "Local evidence changed",
-    "notificationBody": "Open watches in Chain Analysis.",
     "rules": {
       "output_spent": "Output spent",
       "confirmations": "Confirmation threshold",

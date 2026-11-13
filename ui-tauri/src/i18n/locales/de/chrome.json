@@ -320,6 +320,11 @@
         "title": "Einige Bücher brauchen Aufmerksamkeit",
         "body": "Einige Bücher wurden nicht aktualisiert. Die Übersicht aller Bücher zeigt, welche.",
         "blockingBody": "In einigen Büchern bleiben die Berichte blockiert. Die Übersicht aller Bücher zeigt, welche und warum."
+      },
+      "watchChanged": {
+        "title": "Lokale Belege geändert",
+        "body": "Eine Beobachtungsbedingung ist eingetreten. Die Änderung wartet unter Beobachtungen in der Kettenanalyse.",
+        "action": "Beobachtungen öffnen"
       }
     },
     "result": {
@@ -396,7 +401,10 @@
       "reportSaveFailed": "Berichtsexport konnte nicht gespeichert werden",
       "reportExportBlocked": "Berichtsexport durch Quarantäne blockiert",
       "reportExportFailed": "Berichtsexport fehlgeschlagen",
-      "reportOpenFailed": "Bericht konnte nicht geöffnet werden"
+      "reportOpenFailed": "Bericht konnte nicht geöffnet werden",
+      "btcPriceRefreshed": "BTC-Preis aktualisiert",
+      "btcPriceUnchanged": "Kein neuerer BTC-Preis; der gespeicherte bleibt",
+      "btcPriceFailed": "BTC-Preis konnte nicht aktualisiert werden"
     }
   },
   "currencyToggle": {
