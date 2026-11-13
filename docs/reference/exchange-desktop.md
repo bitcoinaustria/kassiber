@@ -64,6 +64,30 @@ code, then the daemon's own message and hint:
 | `config_error` | the saved key is incomplete |
 | `backend_timeout`, `network_error`, `app_error` | unreachable, slow, or an HTTP error |
 
+### Other crypto assets
+
+A wallet's `asset_scope` ([plan 23](../plan/23-crypto-assets.md)) decides
+whether a sync keeps crypto assets other than Bitcoin. When the last sync
+reports `assets.skipped` and the wallet's scope is `bitcoin`, the card names
+them ("Also found ETH, SOL, BEST: 42 entries") with **Also track these
+assets**. That stores `asset_scope: crypto` through `ui.wallets.update`, then
+runs Sync now; rows already imported deduplicate by external id. A `crypto`
+wallet says so and offers **Track Bitcoin only**. Switching back only stops
+later syncs and imports from keeping other assets: the rows already imported
+stay in the book, and the confirmation says so (exclude them on the
+Transactions page to keep them out of reports). Both directions are a wallet
+change, so they ask for the database passphrase, or in a plaintext book for
+the typed `CHANGE LOCAL DATA`, like any other wallet edit; nothing is sent
+until Sync now runs. `assets.excluded` (stocks, ETFs, metals) is named as not
+imported, without a toggle, and `swap_pairs` above zero as the paired
+crypto-to-crypto swaps.
+
+The provider import result in the Add connection dialog shows the same
+prompt. Turning other assets on there imports the same file again with the
+arguments of the import the user just ran; when the dialog kept no path
+(a bundle import), it asks the user to choose the file again. Kassiber never
+re-reads a file the user did not choose for that import.
+
 The last sync result lives in the open book's memory only
 (`ui.connections.exchange.status`), so it resets when Kassiber restarts or the
 book closes. The CLI's sync stores no sync record, and the desktop's book
@@ -77,7 +101,7 @@ rest operator), and refuse unknown arguments before any work.
 
 | Kind | Arguments | Network | Answer |
 | --- | --- | --- | --- |
-| `ui.connections.exchange.status` | `wallet?` | none | `connections`: per exchange wallet of the active profile, `wallet_id`, `wallet`, `exchange`, `provider`, `backend`, `backend_configured`, `has_api_key`, `has_api_secret` (null for Bitpanda) and `last_sync` (`status`, `at`, `imported`, `fetched`, `skipped`, `provider_balance`, or the error envelope's `error`) |
+| `ui.connections.exchange.status` | `wallet?` | none | `connections`: per exchange wallet of the active profile, `wallet_id`, `wallet`, `exchange`, `provider`, `backend`, `backend_configured`, `has_api_key`, `has_api_secret` (null for Bitpanda), `asset_scope` (only once the wallet stores one; absent means `bitcoin`) and `last_sync` (`status`, `at`, `imported`, `fetched`, `skipped`, `provider_balance`, `assets`, `swap_pairs`, or the error envelope's `error`) |
 | `ui.connections.exchange.test` | `backend`, or `exchange`, `api_key`, `api_secret`, `url?` | the check above, once | `exchange`, `ok`, `read_only` (true when the exchange confirmed it, null when it does not say) |
 | `ui.connections.exchange.create` | `exchange`, `api_key`, `api_secret` (not for Bitpanda), `label?`, `url?` | none | `exchange`, `wallet` (`id`, `label`, `kind`), `backend` (the redacted backend row) |
 | `ui.connections.exchange.sync` | `wallet` | the CLI sync's reads | the CLI's `wallets.sync-<kind>` data |
@@ -113,6 +137,10 @@ proxies; the desktop never sends it.
   trading-key refusal), consent, offline and missing-key refusals before any
   request, echoed credentials withheld, and a new connection's wallet plus
   sync leaving exactly the CLI sync's rows.
+- `crates/kassiber/tests/desktop_asset_scope.rs`: `ui.wallets.update`
+  storing `asset_scope` behind the plaintext acknowledgement or the
+  passphrase, refusing other values, leaving imported rows unchanged when it
+  switches back, and the status naming the scope only once it is stored.
 - The recorded `test_rust_exchange_desktop` sessions
   (`scripts/replay-sessions.sh --only test_rust_exchange_desktop`): the
   daemon's create + sync against the CLI's `backends create` + `wallets
@@ -124,6 +152,9 @@ proxies; the desktop never sends it.
 - `ui-tauri/src/components/kb/exchange/*.dom.test.tsx`: the setup panel
   (guides, exact test arguments, retest after a change, explained errors,
   German), the dialog flow (no request before Test connection, create without
-  sync unless opted in) and the wallet card.
+  sync unless opted in) and the wallet card, including the asset scope prompt
+  (store then sync, re-auth, switching back without a sync, excluded
+  holdings). `ui-tauri/src/components/kb/assets/ImportAssetsSummary.dom.test.tsx`
+  covers the import result's prompt (same file again, or pick it again).
 - `crates/wallets/scripts/exchange_mutations.json`: the desktop entries, each
   killed by named tests.

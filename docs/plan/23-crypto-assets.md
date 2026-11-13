@@ -18,7 +18,17 @@ Bitcoin and Liquid only.
   many rows, with the command that turns the scope on (`kassiber wallets
   update --wallet W --config '{"asset_scope": "crypto"}'`); the desktop shows
   the same as a toggle. Turning it on and re-running is idempotent: rows
-  deduplicate by external id.
+  deduplicate by external id. Turning it off only stops later imports and
+  syncs from keeping other assets; rows already imported stay in the book.
+- **Desktop toggle.** The exchange card and the import result offer "Also
+  track these assets", which stores the scope through `ui.wallets.update`
+  (`asset_scope`, behind the usual passphrase or typed acknowledgement) and
+  then syncs, or imports the same file again (or asks for it again when the
+  path was not kept). No separate daemon kind: a new kind would change the
+  `supported_kinds` every recorded daemon session pins. Neither
+  `ui.wallets.update` nor the scope is an AI tool; giving the assistant the
+  toggle is a separate decision. See [exchanges in the
+  desktop](../reference/exchange-desktop.md#other-crypto-assets).
 - **Units.** Every crypto asset uses the same integer unit as BTC: 10^-11 of
   a whole unit (msat for BTC). Exchanges and exports report at most about 10
   decimals, so this is exact for them. For any asset other than BTC/LBTC, an
