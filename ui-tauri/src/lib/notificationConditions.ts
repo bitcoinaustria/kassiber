@@ -1,4 +1,5 @@
 import type { ActiveBook } from "@/lib/activeBook";
+import { newActivityFromRun, recordNewActivity } from "@/lib/newActivity";
 import type { DaemonFreshnessEvent } from "@/lib/daemonFreshnessEvent";
 import type { ReviewBadges } from "@/lib/reviewCount";
 import { reviewTotal } from "@/lib/reviewCount";
@@ -288,5 +289,6 @@ export function applyFreshnessEvent(
   // source is then settled by what this run proves for it.
   store.resolveCondition(conditionKey("freshness.worker-error", scope));
   applyFreshnessRun(event.data, active.key);
+  recordNewActivity(newActivityFromRun(event.data), scope);
   return true;
 }

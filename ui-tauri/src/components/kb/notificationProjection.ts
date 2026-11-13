@@ -2,12 +2,14 @@ import type { TFunction } from "i18next";
 
 import type { PrivacyMode } from "@/store/ui";
 import type {
+  ConditionCode,
   ConditionGroup,
   JobEntry,
   NotificationDetail,
   ResultEntry,
 } from "@/store/notifications";
 
+import { groupDetails, type DetailGroup } from "./notificationCauses";
 import {
   projectFreeText,
   projectLabel,
@@ -32,37 +34,89 @@ import {
 export interface ProjectedEntry {
   title: string;
   body?: string;
+  /** Detail lines, one per cause: what went wrong and where. */
   details: string[];
+  /**
+   * The raw messages behind classified causes, for a bug report. Shown only
+   * on request, under the same privacy rules as any free text.
+   */
+  technical: string[];
 }
 
 type ChromeT = TFunction<"chrome">;
 
-function projectDetail(
-  detail: NotificationDetail,
+/** Names in a line: the first few, then how many more. */
+const NAMES_SHOWN = 3;
+
+function nameList(labels: readonly string[], mode: PrivacyMode, t: ChromeT): string | undefined {
+  const names = labels
+    .map((label) => projectLabel(label, mode))
+    .filter((name): name is string => Boolean(name));
+  if (names.length === 0) return undefined;
+  if (names.length <= NAMES_SHOWN) return names.join(", ");
+  return t("notifications.namesMore", {
+    names: names.slice(0, NAMES_SHOWN - 1).join(", "),
+    count: names.length - (NAMES_SHOWN - 1),
+  });
+}
+
+function groupLine(group: DetailGroup, mode: PrivacyMode, t: ChromeT): string | null {
+  const names = nameList(group.labels, mode, t);
+  let text: string | undefined;
+  if (group.cause) {
+    text = t(`notifications.cause.${group.cause}`);
+    if (!names && group.count > 1) {
+      return t("notifications.causeCount", { cause: text, count: group.count });
+    }
+  } else {
+    const phrase = group.phraseKey
+      ? t(`notifications.phrase.${group.phraseKey}`)
+      : undefined;
+    const message = projectFreeText(group.message, mode, t);
+    text = [phrase, message].filter(Boolean).join(" — ") || undefined;
+  }
+  if (text && names) {
+    // "Cause: wallets" for a known cause; "wallets: message" otherwise.
+    return group.cause
+      ? t("notifications.detailLine", { label: text, message: names })
+      : t("notifications.detailLine", { label: names, message: text });
+  }
+  return text ?? names ?? null;
+}
+
+function technicalLines(
+  groups: readonly DetailGroup[],
   mode: PrivacyMode,
   t: ChromeT,
-): string | null {
-  if (mode === "hideAll") return null;
-  const phrase = detail.phraseKey
-    ? t(`notifications.phrase.${detail.phraseKey}`)
-    : undefined;
-  const message = projectFreeText(detail.message, mode, t);
-  const text = [phrase, message].filter(Boolean).join(" — ");
-  const label = projectLabel(detail.label, mode);
-  if (label && text) {
-    return t("notifications.detailLine", { label, message: text });
+): string[] {
+  const lines = new Map<string, number>();
+  for (const group of groups) {
+    // An unclassified line already shows its message.
+    if (!group.cause) continue;
+    for (const item of group.messages) {
+      const text = projectFreeText(item.text, mode, t);
+      if (!text) continue;
+      lines.set(text, (lines.get(text) ?? 0) + item.count);
+    }
   }
-  return label ?? (text || null);
+  return [...lines].map(([text, count]) =>
+    count > 1 ? t("notifications.technicalRepeated", { message: text, count }) : text,
+  );
 }
 
 function projectDetails(
   details: readonly NotificationDetail[] | undefined,
   mode: PrivacyMode,
   t: ChromeT,
-): string[] {
-  return (details ?? [])
-    .map((detail) => projectDetail(detail, mode, t))
-    .filter((line): line is string => Boolean(line));
+): { details: string[]; technical: string[] } {
+  if (mode === "hideAll" || !details?.length) return { details: [], technical: [] };
+  const groups = groupDetails(details);
+  return {
+    details: groups
+      .map((group) => groupLine(group, mode, t))
+      .filter((line): line is string => Boolean(line)),
+    technical: technicalLines(groups, mode, t),
+  };
 }
 
 /** One attention row: what is wrong and what it means for reports. */
@@ -72,9 +126,21 @@ export function projectConditionGroup(
   t: ChromeT,
 ): ProjectedEntry {
   const first = group.entries[0];
-  const details = group.entries.flatMap((entry) =>
-    projectDetails(entry.details, mode, t),
+  const { details, technical } = projectDetails(
+    group.entries.flatMap((entry) => entry.details ?? []),
+    mode,
+    t,
   );
+  return { technical, ...projectConditionText(group, first, details, mode, t) };
+}
+
+function projectConditionText(
+  group: ConditionGroup,
+  first: ConditionGroup["entries"][number],
+  details: string[],
+  mode: PrivacyMode,
+  t: ChromeT,
+): Omit<ProjectedEntry, "technical"> {
   switch (group.code) {
     case "journals.stale":
       return {
@@ -129,14 +195,22 @@ export function projectConditionGroup(
         body: t("notifications.condition.journalsFailed.body"),
         details,
       };
-    case "connection.sync-failed":
+    case "connection.sync-failed": {
+      // One wallet names itself in the title, where the privacy mode allows.
+      const name =
+        group.entries.length === 1
+          ? projectLabel(first.params.sources?.[0], mode)
+          : undefined;
       return {
-        title: t("notifications.condition.connectionSyncFailed.title", {
-          count: group.entries.length,
-        }),
+        title: name
+          ? t("notifications.condition.connectionSyncFailed.titleNamed", { name })
+          : t("notifications.condition.connectionSyncFailed.title", {
+              count: group.entries.length,
+            }),
         body: t("notifications.condition.connectionSyncFailed.body"),
         details,
       };
+    }
     case "btcpay.provenance-incomplete":
       return {
         title: t("notifications.condition.btcpayProvenance.title"),
@@ -241,8 +315,68 @@ export function projectResult(
   mode: PrivacyMode,
   t: ChromeT,
 ): ProjectedEntry {
-  const details = projectDetails(entry.details, mode, t);
+  if (entry.code === "activity.new") return projectNewActivity(entry, mode, t);
+  const { details, technical } = projectDetails(entry.details, mode, t);
+  return { technical, ...projectResultText(entry, details, mode, t) };
+}
+
+/**
+ * New transactions: how many, which way, and in which wallets. Counts are
+ * typed and show in every mode; wallet names follow `projectLabel`.
+ */
+function projectNewActivity(
+  entry: ResultEntry,
+  mode: PrivacyMode,
+  t: ChromeT,
+): ProjectedEntry {
+  const { params } = entry;
+  const count = params.transactions ?? 0;
+  const name =
+    params.sources?.length === 1 ? projectLabel(params.sources[0], mode) : undefined;
+  const directions = [
+    params.incoming
+      ? t("notifications.result.newActivity.incoming", { count: params.incoming })
+      : null,
+    params.outgoing
+      ? t("notifications.result.newActivity.outgoing", { count: params.outgoing })
+      : null,
+  ].filter((part): part is string => Boolean(part));
+  const wallets = entry.details ?? [];
+  const details =
+    wallets.length > 1 && mode !== "hideAll"
+      ? wallets.flatMap((detail) => {
+          const label = projectLabel(detail.label, mode);
+          return label && detail.newTransactions
+            ? [
+                t("notifications.detailLine", {
+                  label,
+                  message: t("notifications.result.newActivity.walletCount", {
+                    count: detail.newTransactions,
+                  }),
+                }),
+              ]
+            : [];
+        })
+      : [];
+  return {
+    title: name
+      ? t("notifications.result.newActivity.titleNamed", { count, name })
+      : t("notifications.result.newActivity.title", { count }),
+    body: directions.length ? directions.join(", ") : undefined,
+    details,
+    technical: [],
+  };
+}
+
+function projectResultText(
+  entry: ResultEntry,
+  details: string[],
+  mode: PrivacyMode,
+  t: ChromeT,
+): Omit<ProjectedEntry, "technical"> {
   switch (entry.code) {
+    case "activity.new":
+      return projectNewActivity(entry, mode, t);
     case "book-refresh.finished":
       return {
         title: entry.params.forceFull
@@ -347,3 +481,40 @@ function jobTitle(job: JobEntry, t: ChromeT): string {
       return t("notifications.job.workspaceRefresh");
   }
 }
+
+/**
+ * Problems the assistant can help troubleshoot: failures with a cause it
+ * can look into. Not states with their own one-click fix or dedicated flow
+ * (review, stale journals, Touch ID) and not results.
+ */
+export const ASSISTANT_TROUBLESHOOT_CODES: readonly ConditionCode[] = [
+  "source.refresh-failed",
+  "freshness.worker-error",
+  "book-refresh.failed",
+  "journals.process-failed",
+  "connection.sync-failed",
+  "btcpay.provenance-incomplete",
+  "backup.restore-failed",
+  "pricing.rebuild-failed",
+  "workspace.refresh-failed",
+];
+
+/**
+ * The question handed to the assistant: what the center shows in the
+ * current privacy mode (title, body, and the plain cause lines), never the
+ * technical lines, whose server messages can name hosts and ports, which
+ * are wallet configuration the assistant does not get.
+ */
+export function assistantTroubleshootPrompt(
+  projected: ProjectedEntry,
+  t: ChromeT,
+): string {
+  const seen = [projected.body, ...projected.details.map((line) => `- ${line}`)]
+    .filter(Boolean)
+    .join("\n");
+  return t("notifications.assistantPrompt", {
+    title: projected.title,
+    seen,
+  });
+}
+

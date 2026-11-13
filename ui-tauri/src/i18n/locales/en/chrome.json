@@ -274,7 +274,8 @@
       "connectionSyncFailed": {
         "title_one": "A wallet could not sync",
         "title_other": "{{count}} wallets could not sync",
-        "body": "Balances and transactions may be out of date until a sync succeeds."
+        "body": "Balances and transactions may be out of date until a sync succeeds.",
+        "titleNamed": "{{name}} could not sync"
       },
       "btcpayProvenance": {
         "title": "Some BTCPay invoices are missing",
@@ -373,6 +374,18 @@
         "title": "All books refreshed",
         "body_one": "{{synced}} of {{count}} book synced.",
         "body_other": "{{synced}} of {{count}} books synced."
+      },
+      "newActivity": {
+        "title_one": "{{count}} new transaction",
+        "title_other": "{{count}} new transactions",
+        "titleNamed_one": "{{count}} new transaction in {{name}}",
+        "titleNamed_other": "{{count}} new transactions in {{name}}",
+        "incoming_one": "{{count}} incoming",
+        "incoming_other": "{{count}} incoming",
+        "outgoing_one": "{{count}} outgoing",
+        "outgoing_other": "{{count}} outgoing",
+        "walletCount_one": "{{count}} new",
+        "walletCount_other": "{{count}} new"
       }
     },
     "job": {
@@ -390,7 +403,8 @@
       "openTransaction": "Open transaction",
       "openSecurity": "Open security settings",
       "openMarketData": "Open market data",
-      "openAllBooks": "Open all books"
+      "openAllBooks": "Open all books",
+      "openTransactions": "Open transactions"
     },
     "feedback": {
       "reportSaveFailed": "Could not save the report export",
@@ -400,7 +414,25 @@
       "btcPriceRefreshed": "BTC price refreshed",
       "btcPriceUnchanged": "No newer BTC price; the cached one stays",
       "btcPriceFailed": "Could not refresh the BTC price"
-    }
+    },
+    "namesMore": "{{names}} +{{count}} more",
+    "causeCount": "{{cause}} ({{count}})",
+    "technical": "Technical details",
+    "technicalRepeated": "{{message}} (×{{count}})",
+    "copyTechnical": "Copy",
+    "copied": "Copied",
+    "labelNewActivity": "Notifications: new transactions",
+    "cause": {
+      "offline": "Kassiber is offline",
+      "rateLimited": "Server is limiting requests; retries later",
+      "certificate": "Secure connection failed (certificate)",
+      "credentials": "Server rejected the credentials",
+      "noBackend": "No server configured",
+      "unreachable": "Can't reach the server",
+      "cancelled": "Cancelled"
+    },
+    "askAssistant": "Ask the assistant",
+    "assistantPrompt": "Help me troubleshoot this in Kassiber: {{title}}\n{{seen}}\nCheck what you can with your tools, explain the likely cause in plain words, and tell me the next step."
   },
   "currencyToggle": {
     "bitcoin": "bitcoin",

@@ -67,6 +67,7 @@ export const CONDITION_CODES = [
 export type ConditionCode = (typeof CONDITION_CODES)[number];
 
 export const RESULT_CODES = [
+  "activity.new",
   "book-refresh.finished",
   "book-refresh.pending",
   "book-refresh.problems",
@@ -134,6 +135,15 @@ export interface NotificationParams {
   quarantined?: number;
   autoPaired?: number;
   warnings?: number;
+  /** New transactions by direction; counts, never amounts. */
+  incoming?: number;
+  outgoing?: number;
+  /**
+   * The new transactions' ids, so a later run can merge into an unseen
+   * entry without counting one twice, and one transaction can open itself.
+   * RAM only, never shown.
+   */
+  transactionIds?: string[];
 }
 
 /**
@@ -147,6 +157,8 @@ export interface NotificationDetail {
   message?: string;
   /** A fixed, translated phrase from a closed set; safe in every mode. */
   phraseKey?: NotificationPhraseKey;
+  /** New transactions for `label`; a typed count, safe in every mode. */
+  newTransactions?: number;
 }
 
 export const NOTIFICATION_PHRASE_KEYS = [
@@ -288,6 +300,9 @@ export function boundDetails(
       ...(detail.phraseKey &&
       (NOTIFICATION_PHRASE_KEYS as readonly string[]).includes(detail.phraseKey)
         ? { phraseKey: detail.phraseKey }
+        : {}),
+      ...(Number.isSafeInteger(detail.newTransactions) && detail.newTransactions! > 0
+        ? { newTransactions: detail.newTransactions }
         : {}),
     }))
     .filter((detail) => detail.label || detail.message || detail.phraseKey)

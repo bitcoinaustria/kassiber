@@ -10,6 +10,7 @@ import {
   CircleAlert,
   Info,
   Loader2,
+  Sparkles,
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -22,6 +23,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { useAssistantBridge } from "@/components/ai/assistantBridge";
+import { handOffToAssistant } from "@/components/ai/assistantHandoff";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import { formatDateTime, formatRelativeTime } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 import {
@@ -47,6 +51,8 @@ import {
 import { notificationProgressValue } from "./notificationDisplay";
 import { requestSettingsAnchor } from "./settings/settingsSearch";
 import {
+  ASSISTANT_TROUBLESHOOT_CODES,
+  assistantTroubleshootPrompt,
   projectConditionGroup,
   projectJob,
   projectResult,
@@ -186,6 +192,9 @@ function resultActionLabel(resolved: ResolvedEntryAction, t: ChromeT): string {
       if (resolved.to === "/settings/market") {
         return t("notifications.action.openMarketData");
       }
+      if (resolved.to === "/transactions") {
+        return t("notifications.action.openTransactions");
+      }
       return t("notifications.staleAction");
   }
 }
@@ -229,6 +238,7 @@ export function NotificationCenter({
   const markSeen = useNotificationStore((s) => s.markSeen);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const privacyMode = useUiStore((s) => s.privacyMode);
+  const assistantAvailable = useAssistantBridge((s) => s.assistant !== null);
   const currentBook = currentActiveBook?.key ?? null;
 
   const groups = groupConditions(conditionsInScope(conditions, currentBook));
@@ -241,10 +251,22 @@ export function NotificationCenter({
     .slice(0, MAX_RESULTS);
 
   const count = groups.length;
+  // New transactions are worth a glance but need nothing done: a dot, not
+  // a number, and only until the center has been opened.
+  const unseenActivity =
+    count === 0 &&
+    results.some(
+      (entry) =>
+        entry.code === "activity.new" &&
+        !entry.seenAt &&
+        entry.scope.book === currentBook,
+    );
   const label =
     count > 0
       ? t("notifications.labelActive", { count })
-      : t("notifications.label");
+      : unseenActivity
+        ? t("notifications.labelNewActivity")
+        : t("notifications.label");
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
@@ -317,11 +339,20 @@ export function NotificationCenter({
               {count}
             </span>
           )}
+          {unseenActivity ? (
+            <span
+              className="absolute top-1 right-1 size-2 rounded-full bg-primary"
+              aria-hidden="true"
+              data-testid="notification-activity-dot"
+            />
+          ) : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="flex max-h-[min(36rem,calc(100vh-4rem))] w-96 flex-col p-0"
+        // Wide enough that a cause and its wallets fit on one line, tall
+        // enough for attention, running work, and recent results together.
+        className="flex max-h-[min(44rem,calc(100vh-4rem))] w-[30rem] max-w-[calc(100vw-1rem)] flex-col p-0"
         aria-label={t("notifications.label")}
       >
         <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1.5">
@@ -347,6 +378,23 @@ export function NotificationCenter({
               <Section title={t("notifications.sections.attention")} id="attention">
                 {groups.map((group) => {
                   const first = group.entries[0];
+                  const projected = projectConditionGroup(group, privacyMode, t);
+                  // Offered inside the opened details only, for failures of
+                  // the open book (or app-wide ones) the assistant can look into.
+                  const askAssistant =
+                    assistantAvailable &&
+                    ASSISTANT_TROUBLESHOOT_CODES.includes(group.code) &&
+                    (first.scope.book === null || first.scope.book === currentBook)
+                      ? () => {
+                          const assistant = useAssistantBridge.getState().assistant;
+                          if (!assistant) return;
+                          setOpen(false);
+                          handOffToAssistant(
+                            assistant,
+                            assistantTroubleshootPrompt(projected, t),
+                          );
+                        }
+                      : undefined;
                   const resolved = resolveEntryAction(
                     first.action,
                     first.scope,
@@ -357,7 +405,8 @@ export function NotificationCenter({
                     <EntryRow
                       key={group.key}
                       tone={severityTone(group.severity)}
-                      projected={projectConditionGroup(group, privacyMode, t)}
+                      projected={projected}
+                      onAskAssistant={askAssistant}
                       occurredAt={latestOccurrence(group)}
                       repeatCount={Math.max(
                         ...group.entries.map((entry) => entry.occurrenceCount),
@@ -556,6 +605,36 @@ function DetailList({ id, details }: { id: string; details: readonly string[] })
   );
 }
 
+const QUIET_BUTTON = "h-6 px-1.5 text-2xs text-muted-foreground";
+
+/**
+ * The raw messages behind the grouped causes, for a bug report. Copy takes
+ * exactly the lines shown (already privacy-projected) and follows the
+ * clipboard-clearing setting.
+ */
+function TechnicalPanel({ id, lines }: { id: string; lines: readonly string[] }) {
+  const { t } = useTranslation("chrome");
+  const [copied, setCopied] = React.useState(false);
+  const copy = () => {
+    void copyTextWithPolicy(lines.join("\n")).then(
+      () => setCopied(true),
+      () => undefined,
+    );
+  };
+  return (
+    <div id={id} className="mt-1 rounded-sm bg-muted/50 px-2 py-1">
+      <ul className="space-y-0.5 font-mono text-2xs break-words text-muted-foreground">
+        {lines.map((line, index) => (
+          <li key={index}>{line}</li>
+        ))}
+      </ul>
+      <Button type="button" variant="ghost" size="xs" className="mt-0.5 h-5 px-1 text-2xs" onClick={copy}>
+        {copied ? t("notifications.copied") : t("notifications.copyTechnical")}
+      </Button>
+    </div>
+  );
+}
+
 function ActionButton({
   action,
   onClick,
@@ -596,6 +675,7 @@ function EntryRow({
   action,
   onAction,
   onDismiss,
+  onAskAssistant,
   testId,
 }: {
   tone: Severity;
@@ -606,11 +686,15 @@ function EntryRow({
   action?: RowAction;
   onAction: () => void;
   onDismiss?: () => void;
+  /** Troubleshoot with the assistant; shown only once details are open. */
+  onAskAssistant?: () => void;
   testId: string;
 }) {
   const { t } = useTranslation("chrome");
   const [expanded, setExpanded] = React.useState(false);
+  const [technicalOpen, setTechnicalOpen] = React.useState(false);
   const detailsId = React.useId();
+  const technicalId = React.useId();
   const ToneIcon = TONE_ICON[tone] ?? Info;
   const hasControls = Boolean(action) || projected.details.length > 0;
 
@@ -654,7 +738,40 @@ function EntryRow({
                 onToggle={() => setExpanded((value) => !value)}
               />
             ) : null}
+            {/* Quiet extras, only once the user asked for details. */}
+            {expanded && onAskAssistant ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className={QUIET_BUTTON}
+                onClick={onAskAssistant}
+              >
+                <Sparkles aria-hidden="true" />
+                {t("notifications.askAssistant")}
+              </Button>
+            ) : null}
+            {expanded && projected.technical.length > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className={QUIET_BUTTON}
+                aria-expanded={technicalOpen}
+                aria-controls={technicalId}
+                onClick={() => setTechnicalOpen((value) => !value)}
+              >
+                <ChevronRight
+                  className={cn("transition-transform", technicalOpen && "rotate-90")}
+                  aria-hidden="true"
+                />
+                {t("notifications.technical")}
+              </Button>
+            ) : null}
           </div>
+        ) : null}
+        {expanded && technicalOpen && projected.technical.length > 0 ? (
+          <TechnicalPanel id={technicalId} lines={projected.technical} />
         ) : null}
       </div>
       {onDismiss ? (

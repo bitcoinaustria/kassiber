@@ -274,7 +274,8 @@
       "connectionSyncFailed": {
         "title_one": "Sync einer Wallet fehlgeschlagen",
         "title_other": "Sync von {{count}} Wallets fehlgeschlagen",
-        "body": "Guthaben und Transaktionen sind eventuell veraltet, bis ein Sync gelingt."
+        "body": "Guthaben und Transaktionen sind eventuell veraltet, bis ein Sync gelingt.",
+        "titleNamed": "Sync von {{name}} fehlgeschlagen"
       },
       "btcpayProvenance": {
         "title": "Einige BTCPay-Rechnungen fehlen",
@@ -373,6 +374,18 @@
         "title": "Alle Bücher aktualisiert",
         "body_one": "{{synced}} von {{count}} Buch gesynct.",
         "body_other": "{{synced}} von {{count}} Büchern gesynct."
+      },
+      "newActivity": {
+        "title_one": "{{count}} neue Transaktion",
+        "title_other": "{{count}} neue Transaktionen",
+        "titleNamed_one": "{{count}} neue Transaktion in {{name}}",
+        "titleNamed_other": "{{count}} neue Transaktionen in {{name}}",
+        "incoming_one": "{{count}} eingehend",
+        "incoming_other": "{{count}} eingehend",
+        "outgoing_one": "{{count}} ausgehend",
+        "outgoing_other": "{{count}} ausgehend",
+        "walletCount_one": "{{count}} neu",
+        "walletCount_other": "{{count}} neu"
       }
     },
     "job": {
@@ -390,7 +403,8 @@
       "openTransaction": "Transaktion öffnen",
       "openSecurity": "Sicherheit öffnen",
       "openMarketData": "Marktdaten öffnen",
-      "openAllBooks": "Alle Bücher öffnen"
+      "openAllBooks": "Alle Bücher öffnen",
+      "openTransactions": "Transaktionen öffnen"
     },
     "feedback": {
       "reportSaveFailed": "Berichtsexport konnte nicht gespeichert werden",
@@ -400,7 +414,25 @@
       "btcPriceRefreshed": "BTC-Preis aktualisiert",
       "btcPriceUnchanged": "Kein neuerer BTC-Preis; der gespeicherte bleibt",
       "btcPriceFailed": "BTC-Preis konnte nicht aktualisiert werden"
-    }
+    },
+    "namesMore": "{{names}} +{{count}} weitere",
+    "causeCount": "{{cause}} ({{count}})",
+    "technical": "Technische Details",
+    "technicalRepeated": "{{message}} (×{{count}})",
+    "copyTechnical": "Kopieren",
+    "copied": "Kopiert",
+    "labelNewActivity": "Benachrichtigungen: neue Transaktionen",
+    "cause": {
+      "offline": "Kassiber ist offline",
+      "rateLimited": "Server begrenzt Anfragen; neuer Versuch später",
+      "certificate": "Sichere Verbindung fehlgeschlagen (Zertifikat)",
+      "credentials": "Server hat die Zugangsdaten abgelehnt",
+      "noBackend": "Kein Server konfiguriert",
+      "unreachable": "Server nicht erreichbar",
+      "cancelled": "Abgebrochen"
+    },
+    "askAssistant": "Assistent fragen",
+    "assistantPrompt": "Hilf mir, dieses Problem in Kassiber zu beheben: {{title}}\n{{seen}}\nPrüfe, was du mit deinen Werkzeugen prüfen kannst, erkläre die wahrscheinliche Ursache einfach und nenne mir den nächsten Schritt."
   },
   "currencyToggle": {
     "bitcoin": "Bitcoin",

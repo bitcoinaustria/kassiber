@@ -120,6 +120,8 @@ export function recordConnectionSyncFailed(
       scope,
       severity: "error",
       priority: "attention",
+      // The label names the wallet in the title (Normal and Hide amounts).
+      params: ref.label ? { sources: [ref.label] } : undefined,
       action: { type: "open-connection", connectionId: ref.connectionId },
       details: [
         { label: ref.label, message: safeMessage(message), phraseKey: "failed" },

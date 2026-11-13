@@ -19,6 +19,7 @@ import {
   type AssistantScreenContext,
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
+import { publishAssistantSession } from "@/components/ai/assistantBridge";
 import { showFeedback } from "@/lib/feedback";
 import { pickChatAttachmentSource } from "@/lib/filePicker";
 import {
@@ -1344,6 +1345,13 @@ export function AssistantSessionProvider({
       typedSendConsent,
     ],
   );
+
+  // Chrome outside this provider (the notification bell) reaches the
+  // session through the bridge; gone again when AI features turn off.
+  React.useEffect(() => {
+    publishAssistantSession(value);
+  }, [value]);
+  React.useEffect(() => () => publishAssistantSession(null), []);
 
   return (
     <AssistantSessionContext.Provider value={value}>

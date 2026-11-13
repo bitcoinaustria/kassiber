@@ -36,6 +36,7 @@ import {
 import type { ActiveBook } from "@/lib/activeBook";
 import { UI_STATE_VERSION, useUiStore } from "@/store/ui";
 
+import { useAssistantBridge } from "@/components/ai/assistantBridge";
 import { NotificationCenter } from "./NotificationCenter";
 import { resolveEntryAction } from "./notificationRouting";
 import { requestSettingsAnchor } from "./settings/settingsSearch";
@@ -541,6 +542,72 @@ describe("NotificationCenter entries", () => {
     expect(time.getAttribute("title")).toMatch(/\d{4}/);
   });
 
+  it("marks unseen new transactions with a dot until the center opens", () => {
+    useNotificationStore.getState().addResult({
+      code: "activity.new",
+      scope: { book: A, expected: ACTIVE_A.expected },
+      severity: "info",
+      params: { transactions: 2, incoming: 2, outgoing: 0, transactionIds: ["t1", "t2"] },
+      action: { type: "navigate", to: "/transactions" },
+    });
+    render(
+      <NotificationCenter
+        currentBook={currentBook}
+        resolveCurrentBook={() => currentBook}
+        runOperation={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("notification-activity-dot")).toBeTruthy();
+    const bell = screen.getByRole("button", { name: "Notifications: new transactions" });
+    act(() => void fireEvent.click(bell));
+    const row = entry("2 new transactions");
+    expect(within(row).getByText("2 incoming")).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "Open transactions" })).toBeTruthy();
+    expect(screen.queryByTestId("notification-activity-dot")).toBeNull();
+  });
+
+  it("offers the assistant inside opened details only, without raw server text", () => {
+    const sendPrompt = vi.fn(() => true);
+    useAssistantBridge.setState({
+      assistant: {
+        sendPrompt,
+        captureBook: () => ({
+          daemonSession: 1,
+          scope: { workspace_id: "ws", profile_id: "pf-a" },
+        }),
+      } as never,
+    });
+    try {
+      useNotificationStore.getState().raiseCondition(
+        sourceFailure("s1", "Cold storage", "connection refused (10.0.0.5:50002)"),
+      );
+      openBell();
+      const row = entry("1 source could not refresh");
+      expect(within(row).queryByRole("button", { name: /Ask the assistant/ })).toBeNull();
+      act(() => void fireEvent.click(within(row).getByRole("button", { name: /Show details/ })));
+      act(() => {
+        fireEvent.click(within(row).getByRole("button", { name: /Ask the assistant/ }));
+      });
+      expect(sendPrompt).toHaveBeenCalledTimes(1);
+      const [prompt] = sendPrompt.mock.calls[0] as unknown as [string];
+      expect(prompt).toContain("1 source could not refresh");
+      expect(prompt).toContain("Can't reach the server: Cold storage");
+      expect(prompt).not.toContain("10.0.0.5");
+    } finally {
+      useAssistantBridge.setState({ assistant: null });
+    }
+  });
+
+  it("offers no assistant when AI features are off", () => {
+    useNotificationStore.getState().raiseCondition(
+      sourceFailure("s1", "Cold storage", "Electrum timeout"),
+    );
+    openBell();
+    const row = entry("1 source could not refresh");
+    act(() => void fireEvent.click(within(row).getByRole("button", { name: /Show details/ })));
+    expect(within(row).queryByRole("button", { name: /Ask the assistant/ })).toBeNull();
+  });
+
   it("puts detail lines behind Show details", () => {
     useNotificationStore.getState().raiseCondition(
       sourceFailure("s1", "Cold storage", "Electrum timeout"),
@@ -551,7 +618,13 @@ describe("NotificationCenter entries", () => {
     const toggle = within(row).getByRole("button", { name: /Show details/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     act(() => void fireEvent.click(toggle));
-    expect(within(row).getByText("Cold storage: failed — Electrum timeout")).toBeTruthy();
+    // The cause in plain words; the raw message waits behind Technical details.
+    expect(within(row).getByText("Can't reach the server: Cold storage")).toBeTruthy();
+    expect(within(row).queryByText(/Electrum timeout/)).toBeNull();
+    act(() => {
+      fireEvent.click(within(row).getByRole("button", { name: /Technical details/ }));
+    });
+    expect(within(row).getByText("Electrum timeout")).toBeTruthy();
     act(() => {
       fireEvent.click(within(row).getByRole("button", { name: /Hide details/ }));
     });
@@ -685,7 +758,7 @@ describe("NotificationCenter privacy modes", () => {
     expandAll();
     const text = renderedText();
     expect(text).toContain(SENTINEL_LABEL);
-    expect(text).toContain("Hot: failed — connection refused");
+    expect(text).toContain("Can't reach the server: Hot");
   });
 
   it("Hide amounts withholds free text that may hold an amount", () => {
@@ -697,8 +770,8 @@ describe("NotificationCenter privacy modes", () => {
     expect(text).not.toContain(SENTINEL_AMOUNT);
     expect(text).not.toContain("0.4242");
     // Labels stay; the digit-bearing message does not.
-    expect(text).toContain(`${SENTINEL_LABEL}: failed — Hidden while amounts are hidden.`);
-    expect(text).toContain("Hot: failed — connection refused");
+    expect(text).toContain(`${SENTINEL_LABEL}: Hidden while amounts are hidden.`);
+    expect(text).toContain("Can't reach the server: Hot");
   });
 
   it("Hide amounts masks labels and progress text that carry an amount", () => {
@@ -727,7 +800,7 @@ describe("NotificationCenter privacy modes", () => {
     expandAll();
     const text = renderedText();
     expect(text).not.toContain("0.4242");
-    expect(text).toContain("••••: failed — timeout");
+    expect(text).toContain("Can't reach the server: ••••");
     expect(within(entry("Refreshing book")).getByText("Hidden while amounts are hidden.")).toBeTruthy();
     expect(within(entry("Syncing wallet")).getByText("Hidden while amounts are hidden.")).toBeTruthy();
   });
