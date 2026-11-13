@@ -266,19 +266,34 @@ export function applyFreshnessRun(
  * The listener receives events for whichever book the daemon had open when
  * the work ran; one delayed past a switch, or one that names no book, must
  * not raise or clear anything in the book open now. Those events are left to
- * the caller's re-read of the open book's state. The graph worker's error
- * events name no book, so they are never filed here; the re-read still
- * shows any source they left stale. Returns whether the event was applied.
+ * the caller's re-read of the open book's state. A worker error that names
+ * no book (the graph worker's) is raised app-wide instead, as a warning
+ * that only navigates. Returns whether the event was applied to the open
+ * book.
  */
 export function applyFreshnessEvent(
   event: DaemonFreshnessEvent,
   active: ActiveBook | null,
 ): boolean {
+  const store = useNotificationStore.getState();
+  // A worker failure that names no book (the graph worker's) must still be
+  // visible: an app-wide warning that only opens Connections and changes
+  // nothing. The next run that reports back, or a manual refresh, clears it.
+  if (event.kind === "worker-error" && !event.profileId) {
+    store.raiseCondition({
+      code: "freshness.worker-error",
+      scope: UNSCOPED_WORKER,
+      severity: "warning",
+      priority: "attention",
+      action: { type: "navigate", to: "/connections" },
+      details: [{ message: safeMessage(event.message ?? event.code) }],
+    });
+    return false;
+  }
   if (!active || !event.profileId || event.profileId !== active.expected.profile_id) {
     return false;
   }
   const scope = { book: active.key, expected: active.expected };
-  const store = useNotificationStore.getState();
   if (event.kind === "worker-error") {
     store.raiseCondition({
       code: "freshness.worker-error",
@@ -293,7 +308,11 @@ export function applyFreshnessEvent(
   // A background run that reported back means the worker runs again; each
   // source is then settled by what this run proves for it.
   store.resolveCondition(conditionKey("freshness.worker-error", scope));
+  store.resolveCondition(conditionKey("freshness.worker-error", UNSCOPED_WORKER));
   applyFreshnessRun(event.data, active.key);
   recordNewActivity(newActivityFromRun(event.data), scope);
   return true;
 }
+
+/** The scope of a worker failure that names no book: app-wide. */
+export const UNSCOPED_WORKER = { book: null } as const;
