@@ -6,7 +6,6 @@ import {
   describeTaxYear,
   formatReportPeriod,
   formatTaxRate,
-  reportTaxYearLabel,
   methodLabel,
   reportBreakdown,
   reportRegion,
@@ -230,15 +229,17 @@ describe("reportBreakdown", () => {
 });
 
 describe("tax year periods", () => {
-  it("follows the book's country: a calendar year, or one that starts later", () => {
-    expect(formatReportPeriod(2025, "at")).toBe("1 Jan – 31 Dec 2025");
+  it("labels what the report filters by: the calendar year", () => {
     expect(formatReportPeriod(2025)).toBe("1 Jan – 31 Dec 2025");
-    // The UK tax year 2025 runs from 6 April 2025 to 5 April 2026.
-    expect(formatReportPeriod(2025, "gb")).toBe("6 Apr 2025 – 5 Apr 2026");
-    expect(reportTaxYearLabel(2025, "gb")).toBe("2025-26");
-    expect(reportTaxYearLabel(2099, "gb")).toBe("2099-00");
-    expect(reportTaxYearLabel(2025, "at")).toBe("2025");
-    expect(describeTaxYear("gb")).toBe("From 6 Apr, Europe/London");
     expect(describeTaxYear("generic")).toBe("Calendar year, UTC");
+    expect(describeTaxYear("at")).toBe("Calendar year, Europe/Vienna");
+  });
+
+  it("says a later tax-year start is not applied, rather than borrowing its dates", () => {
+    // The UK tax year starts on 6 April; `ui.reports.capital_gains` still
+    // filters the calendar year.
+    expect(describeTaxYear("gb")).toBe(
+      "Calendar year, Europe/London · 6 Apr tax year not applied yet",
+    );
   });
 });

@@ -28,7 +28,6 @@ import { ReportFilesPanel } from "@/components/reports/ReportFilesPanel";
 import { ReportRules } from "@/components/reports/ReportRules";
 import {
   formatReportPeriod,
-  reportTaxYearLabel,
   formatTaxRate,
   E1KV_FIRST_TAX_YEAR,
   reportBreakdown,
@@ -594,7 +593,6 @@ function ReportsView({
         // export would lose its save dialog and notification.
         yearLocked={activeExport !== null}
         readiness={readiness}
-        jurisdiction={report.jurisdictionCode}
       />
 
       <TaxCountryPreviewNotice country={report.jurisdictionCode} />
@@ -684,15 +682,12 @@ function ReportHeader({
   onYearChange,
   yearLocked = false,
   readiness,
-  jurisdiction,
 }: {
   selectedYear: number;
   availableYears: number[];
   onYearChange: (year: number) => void;
   yearLocked?: boolean;
   readiness: ReportReadiness;
-  /** The book's tax country: its tax year may not be the calendar year. */
-  jurisdiction?: string | null;
 }) {
   const handleYearChange = (value: string) => {
     const nextYear = Number(value);
@@ -734,7 +729,7 @@ function ReportHeader({
           >
             {/* The button shows the selected year as its dates; the list,
                 only the years. */}
-            <SelectValue>{formatReportPeriod(selectedYear, jurisdiction)}</SelectValue>
+            <SelectValue>{formatReportPeriod(selectedYear)}</SelectValue>
           </SelectTrigger>
           <SelectContent align="end">
             {availableYears.map((availableYear) => (
@@ -743,7 +738,7 @@ function ReportHeader({
                 value={String(availableYear)}
                 className="tabular-nums"
               >
-                {reportTaxYearLabel(availableYear, jurisdiction)}
+                {availableYear}
               </SelectItem>
             ))}
           </SelectContent>
