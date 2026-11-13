@@ -5,7 +5,11 @@ import { useTranslation } from "react-i18next";
 import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
 import i18n from "@/i18n";
 import { showFeedback } from "@/lib/feedback";
-import { applyFreshnessRun, safeMessage } from "@/lib/notificationConditions";
+import {
+  applyFreshnessRun,
+  safeMessage,
+  UNSCOPED_WORKER,
+} from "@/lib/notificationConditions";
 import {
   describeJournalStep,
   freshnessRunNeedsAttention,
@@ -305,6 +309,7 @@ export function recordBookRefreshOutcome(
   store.resolveCondition(
     conditionKey("freshness.worker-error", { book: scope.book }),
   );
+  store.resolveCondition(conditionKey("freshness.worker-error", UNSCOPED_WORKER));
   applyFreshnessRun(data, scope.book);
   const backendScope = { book: scope.book };
   if (freshnessRunNeedsBackend(data)) {

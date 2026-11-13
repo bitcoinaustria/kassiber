@@ -246,6 +246,42 @@ describe("background events", () => {
   });
 });
 
+describe("a worker failure that names no book", () => {
+  const unscoped = parseDaemonFreshnessEvent({
+    event: true,
+    kind: "ui.freshness.worker",
+    schema_version: 1,
+    data: { status: "error", code: "freshness_background_open_failed", message: "Graph worker could not open its book" },
+  })!;
+  const key = conditionKey("freshness.worker-error", { book: null });
+
+  it("stays visible app-wide, as a warning that only navigates", () => {
+    expect(unscoped.profileId).toBeUndefined();
+    expect(applyFreshnessEvent(unscoped, null)).toBe(false);
+    const condition = useNotificationStore.getState().conditions[key];
+    expect(condition).toMatchObject({
+      severity: "warning",
+      scope: { book: null },
+      action: { type: "navigate", to: "/connections" },
+    });
+    expect(attentionGroupCount(useNotificationStore.getState().conditions, OTHER)).toBe(1);
+  });
+
+  it("clears once a background run reports back for the open book", () => {
+    applyFreshnessEvent(unscoped, null);
+    applyFreshnessEvent(
+      parseDaemonFreshnessEvent({
+        event: true,
+        kind: "ui.freshness.background",
+        schema_version: 1,
+        data: { profile: { id: "pf-a" }, completed: [], sources: [] },
+      })!,
+      { key: BOOK, expected: { workspace_id: "ws", profile_id: "pf-a" } },
+    );
+    expect(useNotificationStore.getState().conditions[key]).toBeUndefined();
+  });
+});
+
 describe("live review conditions", () => {
   it("raises and resolves journals and review from badges", () => {
     const store = useNotificationStore.getState();
