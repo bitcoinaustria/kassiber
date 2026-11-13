@@ -307,10 +307,15 @@ them) and its `swap_pairs` count.
     value.
   - Deposits, withdrawals, income, staking, mining, airdrops, forks, gifts
     and losses import as for BTC, unpriced until priced in review.
-  - A crypto-to-crypto `Trade` becomes two `swap` legs (outbound and inbound)
-    that the import pairs with the policy the profile's country recommends.
-    In Austria the swap is tax-neutral and carries the basis. Elsewhere it is
-    taxable, and the legs land in `missing_price` review until priced.
+  - A crypto-to-crypto `Trade` becomes two unpriced `swap` legs (outbound
+    and inbound) that the import pairs with the policy the profile's country
+    recommends. Elsewhere the swap is taxable, and its legs wait in missing
+    price review. In Austria it is tax-neutral and carries the basis, but the
+    engine still needs both legs' prices. Until they are priced
+    (`journals quarantine resolve price-override`, or the desktop's price
+    review), `journals process` holds the pair as
+    `at_swap_basis_carry_unresolved` with `missing_spot_price`. The rate cache
+    prices only BTC.
   - A fee in either leg's own asset stays on that leg, as a BTC fee does on a
     BTC row. A fee in a third crypto asset becomes its own outbound `fee` row.
   - A fiat fee on a crypto-to-crypto trade is refused, because there is no
