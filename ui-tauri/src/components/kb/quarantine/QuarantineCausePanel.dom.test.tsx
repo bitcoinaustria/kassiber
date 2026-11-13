@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
 // Mounted: a pair-made suspense is unpaired as the owner picks, previewed by the daemon.
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -46,7 +46,7 @@ vi.mock("@/daemon/client", () => {
   };
   return {
     DaemonRequestError,
-    useDaemonStreamMutation: () => ({ mutate: daemon.sync, isPending: false }),
+    useDaemonStreamMutation: () => ({ mutateAsync: daemon.sync, isPending: false }),
     useDaemonMutation: (kind: string) => ({ mutateAsync: byKind[kind] }),
   };
 });
@@ -567,23 +567,25 @@ describe("entering prices on a cause's rows", () => {
 });
 
 describe("a cause's wallet sync", () => {
-  it("runs as a job and leaves a failure that opens that wallet", () => {
+  it("runs as a job and leaves a failure that opens that wallet", async () => {
+    let fail: (error: Error) => void = () => undefined;
+    daemon.sync.mockImplementation(
+      () => new Promise((_resolve, reject) => (fail = reject)),
+    );
     const item = root("tx-sync", "pair-sync");
     item.actions = [{ kind: "sync_wallet", wallet_id: "w-cold", wallet_label: "Cold storage" }];
     mount(snapshotOf([item]));
     fireEvent.click(screen.getByRole("button", { name: "Sync Cold storage" }));
 
-    const [args, options] = daemon.sync.mock.calls[0] as [
-      unknown,
-      { onError: (error: Error) => void; onSettled: () => void },
-    ];
-    expect(args).toEqual({ wallet: "w-cold" });
+    expect(daemon.sync.mock.calls[0][0]).toEqual({ wallet: "w-cold" });
     expect(Object.values(useNotificationStore.getState().jobs)).toMatchObject([
       { code: "connection-sync", scope: { book: "book-a", source: "connection:w-cold" } },
     ]);
 
-    options.onError(new Error("backend timed out"));
-    options.onSettled();
+    // Settles even after the panel is gone: the outcome does not depend on
+    // per-call callbacks of an unmounted observer.
+    cleanup();
+    await act(async () => fail(new Error("backend timed out")));
     expect(useNotificationStore.getState().jobs).toEqual({});
     const [condition] = Object.values(useNotificationStore.getState().conditions);
     expect(condition).toMatchObject({

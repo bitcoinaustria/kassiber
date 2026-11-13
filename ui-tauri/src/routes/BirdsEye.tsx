@@ -342,25 +342,27 @@ export function BirdsEyeView({
     setRefreshSummary(null);
     const jobId = startWorkspaceRefresh(workspaceId);
     refreshJobId.current = jobId;
-    refreshWorkspace.mutate(
-      { workspace_id: workspaceId, journals: true, run: true },
-      {
-        onSuccess: (envelope) => {
-          setRefreshSummary(envelope.data?.summary ?? null);
-          recordWorkspaceRefreshed(workspaceId, envelope.data?.summary ?? null);
-        },
-        onError: (refreshError) => {
-          recordWorkspaceRefreshFailed(
-            workspaceId,
-            refreshError instanceof Error ? refreshError.message : undefined,
-          );
-        },
-        onSettled: () => {
-          endWorkspaceRefresh(jobId);
-          if (refreshJobId.current === jobId) refreshJobId.current = null;
-        },
-      },
-    );
+    // Awaited rather than per-call callbacks: those stop once the overview
+    // unmounts, which would leave the job running and the outcome unfiled.
+    void (async () => {
+      try {
+        const envelope = await refreshWorkspace.mutateAsync({
+          workspace_id: workspaceId,
+          journals: true,
+          run: true,
+        });
+        setRefreshSummary(envelope.data?.summary ?? null);
+        recordWorkspaceRefreshed(workspaceId, envelope.data?.summary ?? null);
+      } catch (refreshError) {
+        recordWorkspaceRefreshFailed(
+          workspaceId,
+          refreshError instanceof Error ? refreshError.message : undefined,
+        );
+      } finally {
+        endWorkspaceRefresh(jobId);
+        if (refreshJobId.current === jobId) refreshJobId.current = null;
+      }
+    })();
   }, [refreshWorkspace, workspaceId]);
 
   const openBookRoute = React.useCallback(

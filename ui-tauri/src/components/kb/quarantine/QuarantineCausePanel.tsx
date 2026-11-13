@@ -195,32 +195,32 @@ export function QuarantineCausePanel({
       connectionId: walletId,
       label: wallet,
     };
-    startConnectionSync(ref);
-    syncWallet.mutate(
-      { wallet: walletId },
-      {
-        onSuccess: (envelope) => {
-          const result = envelope.data?.results?.[0];
-          const journals = envelope.data?.journals;
-          if (result?.status === "error") {
-            recordConnectionSyncFailed(
-              ref,
-              describeWalletSyncResult(result, wallet, journals),
-            );
-            return;
-          }
-          recordConnectionSynced(ref, { imported: result?.imported });
-          recordJournalStep(journals, ref.book);
-        },
-        onError: (error) => {
+    const runId = startConnectionSync(ref);
+    // Awaited rather than per-call callbacks: those stop once this panel
+    // unmounts, which would leave the job running and the outcome unfiled.
+    void (async () => {
+      try {
+        const envelope = await syncWallet.mutateAsync({ wallet: walletId });
+        const result = envelope.data?.results?.[0];
+        const journals = envelope.data?.journals;
+        if (result?.status === "error") {
           recordConnectionSyncFailed(
             ref,
-            error instanceof Error ? error.message : undefined,
+            describeWalletSyncResult(result, wallet, journals),
           );
-        },
-        onSettled: () => endConnectionSync(walletId),
-      },
-    );
+          return;
+        }
+        recordConnectionSynced(ref, { imported: result?.imported });
+        recordJournalStep(journals, ref.book);
+      } catch (error) {
+        recordConnectionSyncFailed(
+          ref,
+          error instanceof Error ? error.message : undefined,
+        );
+      } finally {
+        endConnectionSync(runId);
+      }
+    })();
   };
 
   const openRoot = (group: QuarantineGroup, transactionId: string, tab?: QuarantineSheetTab) => {

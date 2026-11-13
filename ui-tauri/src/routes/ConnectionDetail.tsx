@@ -532,9 +532,9 @@ function NodeConnectionContainer({
       connectionId: connection.id,
       label: connection.label,
     };
-    startConnectionSync(ref);
+    const runId = startConnectionSync(ref);
     void nodeSnapshotQuery.refetch().then((result) => {
-      endConnectionSync(connection.id);
+      endConnectionSync(runId);
       if (result.error) {
         recordConnectionSyncFailed(
           ref,
@@ -586,6 +586,8 @@ function ConnectionDetailView({
     const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
   const connectionRefreshing = useConnectionRefreshState(connection);
   const progressValueRef = useRef(startingSyncProgress().value ?? 5);
+  // The running sync's job in the center, for its progress.
+  const syncRunIdRef = useRef<string | null>(null);
   const syncWallet = useDaemonStreamMutation<
     { results: SyncResult[]; journals?: JournalStepSummary | null },
     WalletSyncProgress
@@ -597,7 +599,9 @@ function ConnectionDetailView({
         progressValueRef.current,
       );
       progressValueRef.current = nextProgress.value;
-      updateConnectionSync(connection.id, nextProgress.progress);
+      if (syncRunIdRef.current) {
+        updateConnectionSync(syncRunIdRef.current, nextProgress.progress);
+      }
     },
   });
   const updateWallet =
@@ -986,43 +990,46 @@ function ConnectionDetailView({
     progressValueRef.current = startingSyncProgress().value ?? 5;
     const forceFull = Boolean(options?.forceFull);
     const ref = { book, connectionId: connection.id, label: connection.label };
-    startConnectionSync(ref, { forceFull });
-    syncWallet.mutate(
-      { wallet: connection.label, force_full: Boolean(options?.forceFull) },
-      {
-        onSuccess: (envelope) => {
-          const result = envelope.data?.results?.find(
-            (item) => item.wallet === connection.label,
-          );
-          const status = result?.status ?? "error";
-          const journals = envelope.data?.journals;
-          const message = describeWalletSyncResult(
-            result,
-            connection.label,
-            journals,
-          );
-          if (status === "error") {
-            setSyncErrorMessage(message);
-            recordConnectionSyncFailed(ref, message);
-            return;
-          }
-          recordConnectionSynced(ref, { forceFull, imported: result?.imported });
-          // Quarantine counts show in the live Review condition; a journal
-          // step that did not finish gets its own.
-          recordJournalStep(journals, ref.book);
-        },
-        onError: (error) => {
-          const message =
-            error instanceof Error ? error.message : t("detail.sync.failedFallback");
+    const runId = startConnectionSync(ref, { forceFull });
+    syncRunIdRef.current = runId;
+    // Awaited rather than per-call callbacks: those stop once this page
+    // unmounts, which would leave the job running and the outcome unfiled.
+    void (async () => {
+      try {
+        const envelope = await syncWallet.mutateAsync({
+          wallet: connection.label,
+          force_full: forceFull,
+        });
+        const result = envelope.data?.results?.find(
+          (item) => item.wallet === connection.label,
+        );
+        const status = result?.status ?? "error";
+        const journals = envelope.data?.journals;
+        const message = describeWalletSyncResult(
+          result,
+          connection.label,
+          journals,
+        );
+        if (status === "error") {
           setSyncErrorMessage(message);
           recordConnectionSyncFailed(ref, message);
-        },
-        onSettled: () => {
-          endConnectionSync(connection.id);
-          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-        },
-      },
-    );
+          return;
+        }
+        recordConnectionSynced(ref, { forceFull, imported: result?.imported });
+        // Quarantine counts show in the live Review condition; a journal
+        // step that did not finish gets its own.
+        recordJournalStep(journals, ref.book);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : t("detail.sync.failedFallback");
+        setSyncErrorMessage(message);
+        recordConnectionSyncFailed(ref, message);
+      } finally {
+        endConnectionSync(runId);
+        if (syncRunIdRef.current === runId) syncRunIdRef.current = null;
+        void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+      }
+    })();
   };
 
   const openEditDialog = () => {

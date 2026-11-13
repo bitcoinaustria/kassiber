@@ -56,7 +56,7 @@ export function useExchangeSync({
       connectionId: walletId,
       label,
     };
-    startConnectionSync(ref);
+    const runId = startConnectionSync(ref);
     try {
       const envelope = await mutation.mutateAsync({ wallet: walletId });
       recordConnectionSynced(ref, { imported: envelope.data?.imported ?? 0 });
@@ -81,7 +81,7 @@ export function useExchangeSync({
         ].filter((detail): detail is { message: string } => detail !== null),
       );
     } finally {
-      endConnectionSync(walletId);
+      endConnectionSync(runId);
       void status.refetch();
     }
   }, [exchange, label, mutation, provider, status, t, walletId]);

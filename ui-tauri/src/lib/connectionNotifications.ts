@@ -37,33 +37,45 @@ export function connectionScope(ref: ConnectionRef): NotificationScope | null {
     : null;
 }
 
-function jobId(connectionId: string): string {
+/** Toasts about one connection's syncs replace one another. */
+function feedbackKey(connectionId: string): string {
   return `connection-sync:${connectionId}`;
 }
 
-/** A sync of one connection is running; it shows under Running. */
+/**
+ * Each sync is its own job: one started after leaving and re-entering a
+ * page while another still runs must not replace or end that one.
+ */
+let syncSequence = 0;
+
+/**
+ * A sync of one connection is running; it shows under Running. Returns the
+ * run's job id, for its progress and its end.
+ */
 export function startConnectionSync(
   ref: ConnectionRef,
   options: { forceFull?: boolean } = {},
-): void {
+): string {
+  const id = `connection-sync:${ref.connectionId}:${++syncSequence}`;
   useNotificationStore.getState().startJob({
-    id: jobId(ref.connectionId),
+    id,
     code: "connection-sync",
     scope: connectionScope(ref) ?? { book: null },
     params: { forceFull: Boolean(options.forceFull) },
     progress: { indeterminate: true, label: ref.label },
   });
+  return id;
 }
 
 export function updateConnectionSync(
-  connectionId: string,
+  runId: string,
   progress: { value?: number; indeterminate?: boolean; label?: string },
 ): void {
-  useNotificationStore.getState().updateJob(jobId(connectionId), progress);
+  useNotificationStore.getState().updateJob(runId, progress);
 }
 
-export function endConnectionSync(connectionId: string): void {
-  useNotificationStore.getState().endJob(jobId(connectionId));
+export function endConnectionSync(runId: string): void {
+  useNotificationStore.getState().endJob(runId);
 }
 
 /**
@@ -99,7 +111,7 @@ export function recordConnectionSynced(
       : t("notifications.result.connectionSynced.title"),
     description: ref.label,
     descriptionPrivacy: "free-text",
-    key: jobId(ref.connectionId),
+    key: feedbackKey(ref.connectionId),
   });
 }
 
@@ -135,7 +147,7 @@ export function recordConnectionSyncFailed(
     title: t("notifications.condition.connectionSyncFailed.title", { count: 1 }),
     description: ref.label,
     descriptionPrivacy: "free-text",
-    key: jobId(ref.connectionId),
+    key: feedbackKey(ref.connectionId),
   });
 }
 
