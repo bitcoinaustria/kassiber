@@ -1759,6 +1759,51 @@ quote fail safe. A trade row without `price` takes its cost / volume, which is
 what Kraken's price is; one without a cost stays unpriced, and `journals
 process` holds it as `missing_spot_price`.
 
+**Other crypto assets** follow the wallet's `asset_scope`
+([plan 23](../plan/23-crypto-assets.md)). In the default `bitcoin` scope the
+mapping above is unchanged, and the result's `assets.skipped` counts every
+other non-fiat ledger row by ticker, with the `next_step` command that turns
+the scope on. Kraken BTC held in an earn or staking balance (`XBT.M`,
+`XBT.S`) is counted there as `BTC`: the bitcoin scope leaves those balances
+out as it always has. With `kassiber wallets update --wallet Kraken --config
+'{"asset_scope": "crypto"}'`, a sync reads the same two histories and maps
+every ledger row of every crypto asset, BTC included:
+
+| Ledger rows | Imported as |
+| --- | --- |
+| `deposit`, `withdrawal` | wallet movement, unpriced, fee in the row's asset |
+| `trade` rows sharing a `refid`, one crypto leg | buy or sell priced from `TradesHistory`, exactly as for BTC; a crypto leg whose pair is not fiat-quoted is refused |
+| `trade` rows sharing a `refid`, two crypto legs (one out, one in) | two `swap` rows with `swap_ref` `kraken:<refid>`, paired by the import; unpriced, each with its own fee |
+| `spend` + `receive` (Buy Crypto) sharing a `refid` | a buy valued at the fiat spent, or a sell valued at the fiat received net of its fee; two crypto legs are a swap |
+| a trade row with no amount and a fee in a third asset (`KFEE` fee credits) | its own outbound `fee` row in that asset |
+| `staking`, `earn` with subtype `reward` | `income`, unpriced until reviewed |
+| `transfer` (`spottostaking`, `stakingfromspot`, `stakingtospot`, `spotfromstaking`), `earn` (`allocation`, `deallocation`, `autoallocation`, `migration`) | skipped: moves between the user's own Kraken balances, counted in `skipped.internal_moves`; one that charges a fee is refused |
+| fiat rows outside a trade | skipped: fiat is not a holding |
+| `aclass` `tokenized_asset` (xStocks) | never imported, counted in `assets.excluded`; paid for with crypto, the trade is refused |
+
+The ledger grouped by `refid` is the base because it is Kraken's complete
+account history: every balance change, including staking, earn, Buy Crypto
+and fee credits, has a ledger row, while `TradesHistory` only covers order
+book trades. `TradesHistory` still prices a fiat-quoted trade, so a BTC trade
+gets the same row in both scopes and turning the scope on re-imports nothing
+that was already stored.
+
+Kraken's asset codes are mapped exactly: the legacy codes `XXBT`/`XBT`
+(BTC), `XXDG`/`XDG` (DOGE), `XETH`, `XETC`, `XLTC`, `XXLM`, `XXMR`, `XXRP`,
+`XZEC`, `XREP`, `XMLN`, `XICN`, `XNMC`, `XXVN`, `XDAO`, and the fiat codes
+`ZEUR`, `ZUSD`, `ZGBP`, `ZCAD`, `ZJPY`, `ZAUD`, `ZCHF`; any other code is its
+own ticker (`ZEUS` stays `ZEUS`). The balance suffixes `.S`, `.M`, `.F`,
+`.B`, `.P` and `.HOLD` name the same asset (`DOT.S` is DOT), and the bonded
+codes `ATOM21`, `DOT28`, `FLOW14`, `KAVA21`, `KSM07`, `SCRT21` and `SOL03`
+drop their bonding days. `ETH2` stays its own asset. A suffixed code whose
+last two characters are digits but is not in that list (bonding days or part
+of the ticker?), any other suffix, an asset class other than `currency` or
+`tokenized_asset`, a ledger type or subtype not listed above, a trade with
+more than two crypto legs, a swap that also moves fiat, a separate fee row
+in a traded asset, a reward that is not a positive credit, and an amount
+finer than 11 decimals are refused, naming the ledger row, and nothing is
+imported.
+
 ### Coinbase API
 
 Create a backend with `kind=coinbase`; store the API key in `token` and the
@@ -1829,6 +1874,49 @@ withdrawals, and BTC income/dividend rows. Binance spot pair crawling,
 altcoin/BNB dust conversions, staking-lock principal bookkeeping, and mining
 subaccounts that require an extra username are intentionally deferred because
 they are either altcoin-heavy or need additional provider-specific controls.
+
+**Other crypto assets** follow the wallet's `asset_scope`
+([plan 23](../plan/23-crypto-assets.md)). The default `bitcoin` scope sends
+the same four requests as before, each naming BTC, and keeps the same rows;
+`assets.skipped` counts any other coin's row a reply contains, which in
+practice means card buys of other coins. With `kassiber wallets update
+--wallet Binance --config '{"asset_scope": "crypto"}'`, a sync reads every
+coin. All reads are signed `GET`s, bounded by the shared page, row and
+one-hour limits:
+
+| Read | Window and paging | Imported as |
+| --- | --- | --- |
+| `/sapi/v1/fiat/payments` (`transactionType=0`), as before | one request from July 2017 to now | completed card buys of any coin, priced at the fiat paid |
+| `/sapi/v1/capital/deposit/hisrec` | 89-day windows (Binance allows less than 90) from July 2017, each paged by `offset` with `limit=1000` | deposits |
+| `/sapi/v1/capital/withdraw/history` | as deposits, at most about eight reads a second | withdrawals, fee in the coin |
+| `/sapi/v1/asset/assetDividend` | 179-day windows, `limit=500`; Binance has no cursor, so a full window is read again as two halves, down to one minute | `income` (or `mining` when Binance says so), unpriced |
+| `/sapi/v1/convert/tradeFlow` | 29-day windows, `limit=1000`, halved while `moreData` is true; one read a little over a second apart (3,000 of the account's 180,000 weight a minute) | `SUCCESS` orders: against fiat a buy or sell priced at the fiat side; between two coins two `swap` rows with `swap_ref` `binance:convert:<orderId>`, paired by the import, unpriced. Convert has no separate fee |
+
+A crypto-scope sync therefore makes about 220 requests and takes a little
+over two minutes, mostly pacing the Convert reads. A window that is still
+full at one minute fails closed (`protocol_error`) rather than drop rows.
+
+BTC rows keep their identity and the reference's status filter, so turning
+the scope on re-imports nothing already stored. Another coin's deposit or
+withdrawal keys on Binance's own record id (`binance:deposit:<id>`), since
+one chain transaction can carry several coins, and is imported only when
+Binance's documented status says it is final (deposit 1 or 6, withdrawal 6);
+an open, cancelled or failed one is skipped and an unknown status is
+refused. Its `network` is that coin's own rail (`ETH`, `TRX`) and says
+nothing about the book's Bitcoin network. Another coin's dividend needs its
+`id` or `tranId`. Coins are canonical tickers with Binance's renames (`BCC`
+is BCH, `HSR` is HC, `RPX` is PHX); anything that is not a ticker, a convert
+without an order id or a positive amount, and an amount finer than 11
+decimals are refused, naming the row.
+
+**Spot trades are not read in either scope.** Binance only serves spot
+trade history per market (`/api/v3/myTrades?symbol=ETHBTC`) and has no
+read that lists the markets an account traded; deriving them from current
+balances would miss every market the user has left. A crypto-scope Binance
+wallet is therefore complete only for accounts that buy by card or Convert;
+spot trades still need the [generic ledger import](#generic-ledger-import).
+Fees paid in BNB come from spot trades, so no third-asset fee rows arise
+from these reads.
 
 Binance deposit and withdraw history rows name the coin's transfer rail in
 `network`. On a BTC row in a Binance wallet, `"BTC"` (exact case) is Bitcoin on

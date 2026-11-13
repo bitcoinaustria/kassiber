@@ -193,6 +193,12 @@ pub fn guard_import(
     raw: &Value,
     asset: &str,
 ) -> Result<(), AppError> {
+    let raw = provider_raw(kind, raw, asset);
+    guard_evidence(conn, profile, evidence(config, &raw, asset), "import")
+}
+/// A provider row's network fields as network evidence: what an exchange
+/// means by `network` where it is not a Bitcoin network declaration.
+fn provider_raw(kind: &str, raw: &Value, asset: &str) -> Value {
     let mut raw = raw.clone();
     if kind == "coinbase" && raw.get("network").is_some_and(Value::is_object) {
         // Coinbase's transaction network object holds hash/fee/status data,
@@ -206,12 +212,23 @@ pub fn guard_import(
         // and Binance runs on mainnet only. Other rails stay unsupported.
         raw["network"] = json!("main");
     }
-    guard_evidence(conn, profile, evidence(config, &raw, asset), "import")
+    if kind == "binance"
+        && !["BTC", "LBTC"].contains(&asset)
+        && raw.get("network").is_some_and(Value::is_string)
+    {
+        // Another coin's rail (ETH, BSC, SOL) is that coin's chain, which
+        // says nothing about the book's Bitcoin network.
+        raw.as_object_mut()
+            .expect("network implies object")
+            .remove("network");
+    }
+    raw
 }
 pub fn guard_history(
     conn: &Connection,
     profile: &str,
     wallet: &str,
+    kind: &str,
     config: &Value,
 ) -> Result<(), AppError> {
     let mut stmt = conn
@@ -227,6 +244,8 @@ pub fn guard_history(
         let raw = raw
             .and_then(|r| serde_json::from_str(&r).ok())
             .unwrap_or(Value::Null);
+        // Stored rows read as the import read them.
+        let raw = provider_raw(kind, &raw, &asset);
         guard_evidence(
             conn,
             profile,

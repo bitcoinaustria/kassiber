@@ -127,10 +127,10 @@ pub fn execute(
         tally,
         reported,
     } = match kind.as_str() {
-        "kraken" => kraken::fetch(&client)?.into(),
+        "kraken" => kraken::fetch(&client)?,
         "coinbase" => coinbase::fetch(&client)?.into(),
         "bitpanda" => bitpanda::fetch(&client)?,
-        _ => binance::fetch(&client)?.into(),
+        _ => binance::fetch(&client)?,
     };
     let fetched = records.len();
     let rows: Vec<csv::Row> = records
@@ -599,28 +599,7 @@ fn timeout(backend: &Py) -> Result<u64, AppError> {
 
 /// `_asset(value)`: `normalize_asset_code`, then exchange aliases.
 fn asset(value: &Py) -> String {
-    let raw = if truthy(value) {
-        lossy(&text(value))
-    } else {
-        String::new()
-    };
-    let raw = kassiber_pytext::strip(&raw);
-    let code = if raw.is_empty() {
-        String::new()
-    } else {
-        let lowered = kassiber_pytext::lower(raw);
-        if lowered.chars().count() == 64
-            && lowered
-                .chars()
-                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
-        {
-            lowered
-        } else if lowered == "l-btc" || lowered == "lbtc" {
-            "LBTC".into()
-        } else {
-            kassiber_pytext::upper(raw)
-        }
-    };
+    let code = normalized(value);
     match code.as_str() {
         "BTC" | "XBT" | "XXBT" => "BTC".into(),
         "LBTC" | "L-BTC" => "LBTC".into(),
@@ -628,6 +607,59 @@ fn asset(value: &Py) -> String {
         "XETH" => "ETH".into(),
         _ => code,
     }
+}
+/// `normalize_asset_code(value)`: stripped and upper-cased, `l-btc` as
+/// `LBTC`, a 64-hex Liquid asset id lower-cased. Each exchange applies its
+/// own aliases on top.
+fn normalized(value: &Py) -> String {
+    let raw = if truthy(value) {
+        lossy(&text(value))
+    } else {
+        String::new()
+    };
+    let raw = kassiber_pytext::strip(&raw);
+    if raw.is_empty() {
+        return String::new();
+    }
+    let lowered = kassiber_pytext::lower(raw);
+    if lowered.chars().count() == 64
+        && lowered
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+    {
+        lowered
+    } else if lowered == "l-btc" || lowered == "lbtc" {
+        "LBTC".into()
+    } else {
+        kassiber_pytext::upper(raw)
+    }
+}
+/// Whether a canonical code is a plain exchange ticker (`ETH`, `1INCH`):
+/// ASCII capitals and digits, at most 20 characters. Anything else is not
+/// mapped to an asset by guesswork.
+fn ticker(code: &str) -> bool {
+    (1..=20).contains(&code.len())
+        && code
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+}
+/// Refuses, naming the provider's row, a non-Bitcoin amount or fee finer
+/// than the 11 decimals the book stores (docs/plan/23-crypto-assets.md),
+/// before the coordinator would refuse it without the row's id.
+fn exact(entry: &Entry, row: &str) -> Result<(), AppError> {
+    if assets::class(&entry.asset) == assets::Class::Bitcoin {
+        return Ok(());
+    }
+    for (field, value) in [("amount", &entry.amount), ("fee", &entry.fee)] {
+        // Non-finite values keep the coordinator's own error.
+        if let PriceNumber::Finite(value) = abs(value.clone())? {
+            assets::exact_units(&entry.asset, field, &value).map_err(|mut error| {
+                error.message = format!("{} {row}: {}", entry.provider, error.message);
+                error
+            })?;
+        }
+    }
+    Ok(())
 }
 fn is_bitcoin(code: &str) -> bool {
     matches!(code, "BTC" | "LBTC")

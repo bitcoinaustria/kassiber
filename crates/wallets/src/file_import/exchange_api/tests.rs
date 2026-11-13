@@ -207,7 +207,12 @@ fn normalizers_match_python_reference_vectors() {
         let name = kassiber_envelope::py_str(at(vector, "name"));
         let payload = at(vector, "payload");
         let result = match exchange.as_str() {
-            "kraken" => kraken::normalize(at(payload, "ledgers"), at(payload, "trades")),
+            "kraken" => kraken::normalize(
+                at(payload, "ledgers"),
+                at(payload, "trades"),
+                assets::Scope::Bitcoin,
+            )
+            .map(|fetched| fetched.records),
             "coinbase" => {
                 let Py::List(accounts) = payload else {
                     panic!("accounts")
@@ -445,6 +450,19 @@ mod loopback {
         conn.execute_batch("UPDATE profiles SET fiat_currency='EUR';
             INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,asset,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','BTC','fixed');").unwrap();
         prepare(&conn);
+        let result = sync(&conn, backend, expected, wallet, consent, offline);
+        Run { result, conn }
+    }
+
+    /// One `execute` on an existing book, as a re-sync.
+    pub fn sync(
+        conn: &Connection,
+        backend: &Json,
+        expected: &str,
+        wallet: &str,
+        consent: bool,
+        offline: Arc<AtomicBool>,
+    ) -> Result<Py, AppError> {
         let flag = offline.clone();
         let gate = Gate::new(
             move || {
@@ -456,8 +474,8 @@ mod loopback {
             },
             Ledger::default(),
         );
-        let result = execute(
-            &conn,
+        execute(
+            conn,
             "p",
             wallet,
             backend,
@@ -466,13 +484,14 @@ mod loopback {
             "test",
             &mut |route| consent.then(|| Consent::explicit_trigger(route.request())),
             None,
-        );
-        Run { result, conn }
+        )
     }
 }
 
+mod binance_api;
 mod bitpanda_api;
 mod desktop_api;
+mod kraken_api;
 
 use loopback::{backend, run, serve};
 use std::sync::atomic::{AtomicBool, Ordering};
