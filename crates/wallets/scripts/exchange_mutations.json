@@ -873,7 +873,7 @@
     "id": "kraken-third-asset-fee",
     "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
     "find": "        } else if !is_zero(&leg.parsed.fee)? {\n            fees.push(*leg);",
-    "replace": "        } else if !is_zero(&leg.parsed.fee)? {\n            let _ = leg;",
+    "replace": "        } else if !is_zero(&leg.parsed.fee)? {\n            fees.push(*leg);\n            fees.pop();",
     "expect_failing": [
       "kraken_crypto_scope_maps_trades_swaps_rewards_fees_and_internal_moves"
     ],
@@ -1125,8 +1125,7 @@
     "find": "Ok(tally.admit(scope, &code, class).then_some(code))",
     "replace": "Ok((scope == Scope::Crypto && class != assets::Class::Fiat).then_some(code))",
     "expect_failing": [
-      "binance_bitcoin_scope_reads_btc_as_before_and_counts_other_assets",
-      "binance_converts_follow_the_scope"
+      "binance_bitcoin_scope_reads_btc_as_before_and_counts_other_assets"
     ],
     "rule": "The bitcoin scope counts every coin it leaves out."
   },
