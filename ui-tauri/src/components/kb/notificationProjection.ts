@@ -164,6 +164,14 @@ export function projectConditionGroup(
         body: t("notifications.condition.backupRestoreWarning.body"),
         details,
       };
+    case "source-funds.rescan-needed":
+      return {
+        title: t("notifications.condition.sourceFundsRescan.title"),
+        body: t("notifications.condition.sourceFundsRescan.body", {
+          count: first.params.count ?? 1,
+        }),
+        details,
+      };
   }
 }
 

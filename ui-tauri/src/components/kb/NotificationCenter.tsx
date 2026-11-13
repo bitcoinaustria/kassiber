@@ -149,6 +149,8 @@ function conditionActionLabel(
       return t("notifications.action.openSecurity");
     case "backup.restore-failed":
       return t("notifications.condition.backupRestoreFailed.action");
+    case "source-funds.rescan-needed":
+      return t("notifications.action.openTransaction");
   }
 }
 

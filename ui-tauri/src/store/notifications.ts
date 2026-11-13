@@ -49,6 +49,7 @@ export const CONDITION_CODES = [
   "unlock.credential-remains",
   "backup.restore-failed",
   "backup.restore-warning",
+  "source-funds.rescan-needed",
 ] as const;
 export type ConditionCode = (typeof CONDITION_CODES)[number];
 
@@ -480,6 +481,7 @@ const CODE_ORDER: Record<ConditionCode, number> = {
   "backup.restore-warning": 10,
   "unlock.credential-remains": 11,
   "touch-id.off": 12,
+  "source-funds.rescan-needed": 13,
 };
 
 function compareConditions(a: ConditionEntry, b: ConditionEntry): number {

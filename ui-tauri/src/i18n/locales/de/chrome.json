@@ -302,6 +302,11 @@
       "backupRestoreWarning": {
         "title": "Gespeicherte Entsperrmethoden prüfen",
         "body": "Die Wiederherstellung ist abgeschlossen, aber gespeicherte Entsperrmethoden konnten nicht zurückgesetzt werden. Sie passen eventuell nicht zu den wiederhergestellten Büchern."
+      },
+      "sourceFundsRescan": {
+        "title": "Eine Wallet braucht einen vollständigen Rescan",
+        "body_one": "{{count}} Transaktion wurde gesynct, bevor Kassiber festhielt, welche Inputs ihr gehören, deshalb lässt sich ihre Mittelherkunft nicht nachverfolgen. Scanne ihre Wallet neu.",
+        "body_other": "{{count}} Transaktionen wurden gesynct, bevor Kassiber festhielt, welche Inputs ihnen gehören, deshalb lässt sich ihre Mittelherkunft nicht nachverfolgen. Scanne ihre Wallet neu."
       }
     },
     "result": {

@@ -6,13 +6,15 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { type Transaction } from "@/components/transactions";
+import { showFeedback } from "@/lib/feedback";
 import { toDashboardTransaction } from "@/components/transactions/dashboard/model";
 import { DaemonScopeContext, useDaemon, useDaemonInfinite, useDaemonMutation } from "@/daemon/client";
 import { useCurrency } from "@/lib/currency";
 import { type Tx } from "@/mocks/seed";
 import { BULK_REVIEW_ID_LIMIT } from "./model";
 import { exportCurrentCase } from "./caseExport";
-import { useUiStore } from "@/store/ui";
+import { conditionKey, useNotificationStore } from "@/store/notifications";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 import { targetQueryArgs, type SourceFundsReviewContext } from "./caseScope";
 
 import {
@@ -71,7 +73,6 @@ function migrateStage(value: string | undefined): CaseStage {
 export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   const { t } = useTranslation("sourceFunds");
   const scope = useContext(DaemonScopeContext);
-  const addNotification = useUiStore((state) => state.addNotification);
   const storedDraft = useUiStore(
     (state) => state.sourceFundsDrafts[profileKey] ?? null,
   );
@@ -255,7 +256,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
       if (scope?.isCurrent?.() === false) return;
       if (envelope.data?.transaction) setDetailTransaction(toDashboardTransaction(envelope.data.transaction, 0));
     } catch {
-      if (scope?.isCurrent?.() !== false) addNotification({ title: t("header.title"), body: t("case.targetUnavailable"), tone: "info" });
+      if (scope?.isCurrent?.() !== false) showFeedback({ title: t("header.title"), description: t("case.targetUnavailable"), descriptionPrivacy: "safe", tone: "info" });
     }
   };
 
@@ -458,9 +459,10 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     });
     const inserted = envelope.data?.inserted ?? 0;
     if (showNotification || inserted > 0) {
-      addNotification({
+      showFeedback({
         title: t(showNotification ? "toast.suggestionsUpdated" : "toast.evidenceMatched"),
-        body: t("toast.linksFound", { count: inserted }),
+        description: t("toast.linksFound", { count: inserted }),
+        descriptionPrivacy: "safe",
         tone: inserted > 0 ? "success" : "info",
       });
     }
@@ -474,26 +476,49 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     const summary = envelope.data;
     const reviewed = summary?.auto_reviewed ?? 0;
     const manual = summary?.awaiting_manual_review ?? 0;
-    const unattested = summary?.chain_attestation_missing?.length ?? 0;
+    const missing = summary?.chain_attestation_missing ?? [];
+    const unattested = missing.length;
+    const rescanScope = {
+      book: bookIdentityKey(useUiStore.getState().identity),
+      source: `source-funds:${selectedTarget}`,
+    };
     if (unattested > 0 && reviewed === 0) {
       // Not a gap in history: the observer never recorded which inputs were
-      // its own. Say the one action that fixes it.
-      addNotification({
-        title: t("toast.rescanNeeded"),
-        body: t("toast.rescanNeededBody", { count: unattested }),
-        tone: "info",
+      // its own. It stays in the center until an assembly connects them, and
+      // opens the first such transaction, whose wallet needs the rescan.
+      useNotificationStore.getState().raiseCondition({
+        code: "source-funds.rescan-needed",
+        scope: rescanScope,
+        severity: "warning",
+        priority: "attention",
+        params: { count: unattested },
+        action: { type: "open-transaction", transactionId: missing[0] },
       });
+      if (showNotification) {
+        showFeedback({
+          title: t("toast.rescanNeeded"),
+          description: t("toast.rescanNeededBody", { count: unattested }),
+          descriptionPrivacy: "safe",
+          tone: "warning",
+        });
+      }
       return;
+    }
+    if (unattested === 0) {
+      useNotificationStore
+        .getState()
+        .resolveCondition(conditionKey("source-funds.rescan-needed", rescanScope));
     }
     // Say what happened and what is left, once. A zero-result run on an
     // automatic pass is not news, so it stays quiet unless asked for.
     if (showNotification || reviewed > 0) {
-      addNotification({
+      showFeedback({
         title: t(reviewed > 0 ? "case.historyAssembled" : "actionsBar.assembleResultEmpty"),
-        body: t(
+        description: t(
           reviewed > 0 ? "toast.assembledBody" : "toast.deterministicBody",
           { count: reviewed, reviewed, skipped: manual },
         ),
+        descriptionPrivacy: "free-text",
         tone: reviewed > 0 ? "success" : "info",
       });
     }
@@ -543,9 +568,10 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
         await runAssembly(false);
       } catch {
         if (scope?.isCurrent?.() !== false) {
-          addNotification({
+          showFeedback({
             title: t("toast.assemblyFailed"),
-            body: t("toast.assemblyFailedBody"),
+            description: t("toast.assemblyFailedBody"),
+            descriptionPrivacy: "safe",
             tone: "warning",
           });
         }
@@ -571,9 +597,10 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
       });
     } catch {
       if (scope?.isCurrent?.() !== false) {
-        addNotification({
+        showFeedback({
           title: t("toast.linkReviewFailed"),
-          body: t("toast.linkReviewFailedBody"),
+          description: t("toast.linkReviewFailedBody"),
+          descriptionPrivacy: "safe",
           tone: "warning",
         });
       }
@@ -581,9 +608,10 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     }
     const reviewed = envelope.data?.reviewed ?? 0;
     const skipped = envelope.data?.skipped ?? 0;
-    addNotification({
+    showFeedback({
       title: t("toast.deterministicReviewed"),
-      body: t("toast.deterministicBody", { reviewed, skipped }),
+      description: t("toast.deterministicBody", { reviewed, skipped }),
+      descriptionPrivacy: "free-text",
       tone: reviewed > 0 ? "success" : "info",
     });
   };
@@ -600,9 +628,10 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
       const stale = isStaleLinkReviewError(error);
       if (stale) void preview.refetch();
       if (scope?.isCurrent?.() !== false) {
-        addNotification({
+        showFeedback({
           title: t("toast.linkReviewFailed"),
-          body: t(stale ? "toast.linkReviewStaleBody" : "toast.linkReviewFailedBody"),
+          description: t(stale ? "toast.linkReviewStaleBody" : "toast.linkReviewFailedBody"),
+          descriptionPrivacy: "free-text",
           tone: "warning",
         });
       }
@@ -614,9 +643,10 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
         attachment_id: linkForm.attachment_id,
       });
     }
-    addNotification({
+    showFeedback({
       title: t(state === "reviewed" ? "toast.linkAccepted" : "toast.linkRejected"),
-      body: t(state === "reviewed" ? "toast.linkReviewedBody" : "toast.linkRejectedBody", { type: t(`linkType.${linkForm.link_type}`, { defaultValue: pretty(linkForm.link_type) }) }),
+      description: t(state === "reviewed" ? "toast.linkReviewedBody" : "toast.linkRejectedBody", { type: t(`linkType.${linkForm.link_type}`, { defaultValue: pretty(linkForm.link_type) }) }),
+      descriptionPrivacy: "free-text",
       tone: state === "reviewed" ? "success" : "info",
     });
   };
@@ -646,9 +676,10 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
       explanation: "",
       attachment_id: NO_ATTACHMENT,
     }));
-    addNotification({
+    showFeedback({
       title: t("toast.manualLinkAdded"),
-      body: t("toast.manualLinkBody"),
+      description: t("toast.manualLinkBody"),
+      descriptionPrivacy: "safe",
       tone: "success",
     });
   };
@@ -689,12 +720,13 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
       description: "",
       attachment_id: NO_ATTACHMENT,
     }));
-    addNotification({
+    showFeedback({
       title:
         sourceForm.source_type === "missing_history"
           ? t("toast.gapMarked")
           : t("toast.sourceLinked"),
-      body: t("toast.sourcePathBody"),
+      description: t("toast.sourcePathBody"),
+      descriptionPrivacy: "safe",
       tone: "success",
     });
   };
@@ -753,7 +785,6 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
 
   return {
     // identity / app context
-    addNotification,
     currency,
     hideSensitive,
     explorerSettings,
