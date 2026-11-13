@@ -363,21 +363,60 @@ function sameCondition(a: ConditionEntry, b: ConditionEntry): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-export const useNotificationStore = create<NotificationState>()((set) => ({
+/**
+ * A genuinely new occurrence: a raised condition or an added result. Never a
+ * reconcile, a status read, or a rebuild after unlock, so listeners (the OS
+ * notification bridge) see only news. `previous` is the condition as it was
+ * before this occurrence, if it existed.
+ */
+export type NewOccurrence =
+  | {
+      lane: "condition";
+      key: string;
+      entry: ConditionEntry;
+      previous?: ConditionEntry;
+    }
+  | {
+      lane: "result";
+      entry: ResultEntry;
+      /** The row this result replaced (same code, book, and source). */
+      previous?: ResultEntry;
+    };
+
+const occurrenceListeners = new Set<(occurrence: NewOccurrence) => void>();
+
+/** Listen for new occurrences; returns the unsubscribe function. */
+export function onNewOccurrence(
+  listener: (occurrence: NewOccurrence) => void,
+): () => void {
+  occurrenceListeners.add(listener);
+  return () => {
+    occurrenceListeners.delete(listener);
+  };
+}
+
+function emitOccurrence(occurrence: NewOccurrence): void {
+  for (const listener of occurrenceListeners) {
+    try {
+      listener(occurrence);
+    } catch (error) {
+      // A listener never breaks the center.
+      console.warn("Notification listener failed", error);
+    }
+  }
+}
+
+export const useNotificationStore = create<NotificationState>()((set, get) => ({
   conditions: {},
   jobs: {},
   results: [],
-  raiseCondition: (input) =>
-    set((state) => {
-      const key = conditionKey(input.code, input.scope);
-      const now = new Date().toISOString();
-      return {
-        conditions: {
-          ...state.conditions,
-          [key]: conditionFrom(input, state.conditions[key], now, true),
-        },
-      };
-    }),
+  raiseCondition: (input) => {
+    const key = conditionKey(input.code, input.scope);
+    const previous = get().conditions[key];
+    const entry = conditionFrom(input, previous, new Date().toISOString(), true);
+    set((state) => ({ conditions: { ...state.conditions, [key]: entry } }));
+    emitOccurrence({ lane: "condition", key, entry, previous });
+  },
   reconcileConditions: ({ present = [], resolved = [] }) =>
     set((state) => {
       const now = new Date().toISOString();
@@ -442,35 +481,36 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
       delete next[id];
       return { jobs: next };
     }),
-  addResult: (input) =>
+  addResult: (input) => {
+    const now = new Date().toISOString();
+    const entry: ResultEntry = {
+      id: nextId("result"),
+      kind: "job-result",
+      code: input.code,
+      scope: { ...input.scope },
+      severity: input.severity,
+      priority: "result",
+      firstOccurredAt: now,
+      lastOccurredAt: now,
+      occurrenceCount: 1,
+      params: { ...(input.params ?? {}) },
+      action: input.action,
+      details: boundDetails(input.details),
+    };
+    let previous: ResultEntry | undefined;
     set((state) => {
-      const now = new Date().toISOString();
-      const entry: ResultEntry = {
-        id: nextId("result"),
-        kind: "job-result",
-        code: input.code,
-        scope: { ...input.scope },
-        severity: input.severity,
-        priority: "result",
-        firstOccurredAt: now,
-        lastOccurredAt: now,
-        occurrenceCount: 1,
-        params: { ...(input.params ?? {}) },
-        action: input.action,
-        details: boundDetails(input.details),
-      };
       // One result per job outcome, book, and source: a repeat replaces the
       // earlier row rather than filling Recent.
-      const rest = state.results.filter(
-        (item) =>
-          !(
-            item.code === input.code &&
-            item.scope.book === input.scope.book &&
-            item.scope.source === input.scope.source
-          ),
-      );
+      const same = (item: ResultEntry) =>
+        item.code === input.code &&
+        item.scope.book === input.scope.book &&
+        item.scope.source === input.scope.source;
+      previous = state.results.find(same);
+      const rest = state.results.filter((item) => !same(item));
       return { results: [entry, ...rest].slice(0, MAX_RESULTS) };
-    }),
+    });
+    emitOccurrence({ lane: "result", entry, ...(previous ? { previous } : {}) });
+  },
   dismissResult: (id) =>
     set((state) => ({
       results: state.results.filter((item) => item.id !== id),
@@ -604,5 +644,9 @@ export function attentionGroupCount(
 
 /** Empties the center: when the local session resets, and in tests. */
 export function resetNotificationStore(): void {
-  useNotificationStore.setState({ conditions: {}, jobs: {}, results: [] });
+  useNotificationStore.setState({
+    conditions: {},
+    jobs: {},
+    results: [],
+    });
 }
