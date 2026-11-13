@@ -644,12 +644,17 @@ The title bar's bell opens the notification list
   each dismissible; Clear recent empties this section only. Senders not yet
   moved to the structured model also land here, without a badge.
 
-The badge counts Needs attention groups for the open book. Conditions from
+The badge counts Needs attention groups for the open book (a project's
+books are told apart by their workspace and profile ids). Conditions from
 another book stay in memory and return when that book is open again. Every
 action carries the book it came from and is checked against the open book
 when clicked: Retry repeats the original operation with its options (a
-rescan stays a rescan, journal processing keeps its auto-pair setting), while
-an action from another book only opens its review page. Actions name typed
+rescan stays a rescan, journal processing keeps its auto-pair setting) and
+sends that book's ids as `expected_scope`, so the daemon refuses it if
+another book opened in the meantime. An action from another book, or one
+clicked while a book switch is in flight, only opens its review page.
+Book refreshes and journal runs started anywhere carry the open book's ids
+the same way. Actions name typed
 routes or operations from a closed list; anything else shows no button.
 Asking for a book refresh or journal run while one is running shows no
 notice; the menu's refresh reopens the sync card.

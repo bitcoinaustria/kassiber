@@ -1,10 +1,17 @@
 import * as React from "react";
-import { useIsMutating } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
 import i18n from "@/i18n";
 import { showFeedback } from "@/lib/feedback";
+import {
+  bindRunBook,
+  isStaleBookError,
+  reportBookUnknown,
+  reportStaleBook,
+  type DaemonBookScope,
+} from "@/lib/activeBook";
 import { safeMessage } from "@/lib/notificationConditions";
 import {
   conditionKey,
@@ -13,7 +20,7 @@ import {
   type NotificationParams,
   type NotificationScope,
 } from "@/store/notifications";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { useUiStore } from "@/store/ui";
 
 const JOURNAL_PROCESSING_PROGRESS_ID = "journal-processing";
 
@@ -180,19 +187,17 @@ export function useJournalProcessingAction(
       });
     },
   });
-  const mutationKey = daemonMutationKey(dataMode, "ui.journals.process");
+  const queryClient = useQueryClient();
+  const mutationKey = React.useMemo(
+    () => daemonMutationKey(dataMode, "ui.journals.process"),
+    [dataMode],
+  );
   const activeJournalRuns = useIsMutating({ mutationKey });
   const isProcessingJournals =
     processJournals.isPending || activeJournalRuns > 0;
 
-  /** Run with explicit options, e.g. a Retry repeating the original run. */
-  const runJournalProcessingWith = React.useCallback(
-    ({ autoPair: runAutoPair }: { autoPair: boolean }) => {
-      if (beforeRun && !beforeRun()) return;
-      if (processJournals.isPending || activeJournalRuns > 0) return;
-      const scope: NotificationScope = {
-        book: bookIdentityKey(useUiStore.getState().identity),
-      };
+  const startJournalRun = React.useCallback(
+    (scope: NotificationScope, runAutoPair: boolean) => {
       const notifications = useNotificationStore.getState();
       notifications.startJob({
         id: JOURNAL_JOB_ID,
@@ -219,24 +224,55 @@ export function useJournalProcessingAction(
         updatedAt: startedAt,
       });
       processJournals
-        .mutateAsync(runAutoPair ? undefined : { auto_pair: false })
+        .mutateAsync({
+          ...(runAutoPair ? {} : { auto_pair: false }),
+          expected_scope: scope.expected,
+        })
         .then(
           (envelope) => recordJournalSuccess(envelope.data, scope),
-          (error: unknown) => recordJournalFailure(error, scope, runAutoPair),
+          (error: unknown) => {
+            // Refused before it ran: nothing changed in either book.
+            if (isStaleBookError(error)) reportStaleBook();
+            else recordJournalFailure(error, scope, runAutoPair);
+          },
         )
         .finally(() => {
           useNotificationStore.getState().endJob(JOURNAL_JOB_ID);
           clearActiveMaintenanceProgress(JOURNAL_PROCESSING_PROGRESS_ID);
         });
     },
-    [
-      activeJournalRuns,
-      beforeRun,
-      clearActiveMaintenanceProgress,
-      processJournals,
-      setActiveMaintenanceProgress,
-      t,
-    ],
+    [clearActiveMaintenanceProgress, processJournals, setActiveMaintenanceProgress, t],
+  );
+
+  /**
+   * Run with explicit options, e.g. a Retry repeating the original run.
+   * `expectedScope` is the book that run belonged to; the daemon refuses
+   * the request if another book is open by then. Omitted, the run binds the
+   * book open now.
+   */
+  const runJournalProcessingWith = React.useCallback(
+    ({
+      autoPair: runAutoPair,
+      expectedScope,
+    }: {
+      autoPair: boolean;
+      expectedScope?: DaemonBookScope;
+    }) => {
+      if (beforeRun && !beforeRun()) return;
+      const inFlight = () =>
+        processJournals.isPending ||
+        queryClient.isMutating({ mutationKey }) > 0;
+      if (inFlight()) return;
+      bindRunBook(
+        queryClient,
+        expectedScope,
+        (scope) => {
+          if (!inFlight()) startJournalRun(scope, runAutoPair);
+        },
+        reportBookUnknown,
+      );
+    },
+    [beforeRun, mutationKey, processJournals.isPending, queryClient, startJournalRun],
   );
   const runJournalProcessing = React.useCallback(
     () => runJournalProcessingWith({ autoPair }),

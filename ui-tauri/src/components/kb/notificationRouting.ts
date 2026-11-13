@@ -1,3 +1,4 @@
+import type { ActiveBook, DaemonBookScope } from "@/lib/activeBook";
 import {
   NOTIFICATION_OPERATION_KINDS,
   type NotificationActionSpec,
@@ -134,7 +135,12 @@ export function resolveNotificationAction(
 /** A structured entry's button, checked and bound to the open book. */
 export type ResolvedEntryAction =
   | { kind: "navigate"; to: NotificationTarget; stale: boolean }
-  | { kind: "operation"; operation: NotificationOperation };
+  | {
+      kind: "operation";
+      operation: NotificationOperation;
+      /** Sent as `expected_scope`: the daemon refuses it in another book. */
+      expectedScope: DaemonBookScope;
+    };
 
 function validOperation(
   operation: NotificationOperation | undefined,
@@ -168,30 +174,41 @@ function navigationTarget(
 }
 
 /**
- * Resolve a structured action against the book open right now. Unknown
- * routes and operations fail closed (no button). An operation whose book is
- * no longer open never replays: it becomes navigation to its review route,
+ * Resolve a structured action against the book open right now (`current`,
+ * null while unknown or while a switch is in flight). Unknown routes and
+ * operations fail closed (no button). An operation runs only for the book it
+ * came from, and only with that book's daemon ids to send as
+ * `expected_scope`; otherwise it becomes navigation to its review route,
  * marked stale, so the user decides again in the right place.
  */
 export function resolveEntryAction(
   action: NotificationActionSpec | undefined,
   scope: NotificationScope,
-  currentBook: string | null,
+  current: ActiveBook | null,
   developerToolsEnabled: boolean,
 ): ResolvedEntryAction | null {
   if (!action || typeof action !== "object") return null;
+  const sameBook = current !== null && scope.book === current.key;
   if (action.type === "navigate") {
     const to = navigationTarget(action.to, developerToolsEnabled);
-    return to ? { kind: "navigate", to, stale: scope.book !== currentBook } : null;
+    return to
+      ? { kind: "navigate", to, stale: scope.book !== null && !sameBook }
+      : null;
   }
   if (action.type === "operation") {
     const operation = validOperation(action.operation);
     const review = navigationTarget(action.review, developerToolsEnabled);
     if (!operation || !review) return null;
-    if (scope.book !== currentBook) {
+    if (
+      current === null ||
+      !sameBook ||
+      !scope.expected ||
+      scope.expected.workspace_id !== current.expected.workspace_id ||
+      scope.expected.profile_id !== current.expected.profile_id
+    ) {
       return { kind: "navigate", to: review, stale: true };
     }
-    return { kind: "operation", operation };
+    return { kind: "operation", operation, expectedScope: scope.expected };
   }
   return null;
 }

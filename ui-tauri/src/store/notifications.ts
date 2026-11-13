@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import type { DaemonBookScope } from "@/lib/activeBook";
+
 /**
  * The notification center's model, kept in RAM only (never in `kb.ui`).
  *
@@ -26,13 +28,20 @@ export type NotificationSeverity = "info" | "warning" | "error";
 export type NotificationPriority = "blocking" | "attention" | "result";
 
 /**
- * Where an entry came from. `book` is `bookIdentityKey(identity)` at the
- * moment the work started or the event arrived (null for app-wide entries);
- * `source` names a freshness source within that book. RAM only, never shown.
+ * Where an entry came from. `book` is the open book's key (`ActiveBook.key`:
+ * project, workspace, and profile) at the moment the work started or the
+ * event arrived, null for app-wide entries; `source` names a freshness source
+ * within that book. RAM only, never shown.
  */
 export interface NotificationScope {
   book: string | null;
   source?: string;
+  /**
+   * The daemon ids of `book`, when known at the moment the work started.
+   * An operation sends them as `expected_scope`; one without them is never
+   * replayed.
+   */
+  expected?: DaemonBookScope;
 }
 
 export const CONDITION_CODES = [

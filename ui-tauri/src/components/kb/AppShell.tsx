@@ -108,6 +108,12 @@ import {
 } from "@/store/notifications";
 import { clearFeedback } from "@/lib/feedback";
 import {
+  readActiveBook,
+  trackBookSwitch,
+  useActiveBook,
+  type DaemonBookScope,
+} from "@/lib/activeBook";
+import {
   applyFreshnessRun,
   reviewConditionsFromBadges,
   safeMessage,
@@ -1161,10 +1167,14 @@ export function AppShell() {
   const switchProject = React.useCallback(
     async (project: ProjectCatalogEntry) => {
       try {
-        const envelope = await getTransport().invoke<ProjectSelectSnapshot>({
-          kind: "ui.projects.select",
-          args: { project_id: project.id },
-        });
+        // Until the new book is known, notification actions have no book
+        // to bind to and stay refused.
+        const envelope = await trackBookSwitch(
+          getTransport().invoke<ProjectSelectSnapshot>({
+            kind: "ui.projects.select",
+            args: { project_id: project.id },
+          }),
+        );
         if (envelope.kind === "ui.projects.select" && envelope.data?.project) {
           const nextIdentity = identityFromProject(
             envelope.data.project,
@@ -1334,7 +1344,7 @@ export function AppShell() {
   // background) and start the book refresh. `syncAll` no-ops while one is
   // already running, so a mid-refresh trigger just re-opens the card.
   const runHeaderRefresh = React.useCallback(
-    (options?: { forceFull?: boolean }) => {
+    (options?: { forceFull?: boolean; expectedScope?: DaemonBookScope }) => {
       const plan = planHeaderRefresh({
         hasWorkspace: ensureWorkspaceForMenuAction(),
         bookKey,
@@ -1343,7 +1353,10 @@ export function AppShell() {
         restoreSyncCardStore(plan.reopenSyncCardForBook);
       }
       if (plan.startRefresh) {
-        syncAll({ forceFull: Boolean(options?.forceFull) });
+        syncAll({
+          forceFull: Boolean(options?.forceFull),
+          expectedScope: options?.expectedScope,
+        });
       }
     },
     [bookKey, ensureWorkspaceForMenuAction, restoreSyncCardStore, syncAll],
@@ -1712,8 +1725,11 @@ export function AppShell() {
           if (!freshness) return;
 
           void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-          // The daemon serves one open book; its events belong to that book.
-          const book = bookIdentityKey(useUiStore.getState().identity);
+          // Attribute the event to the open book only while that book is
+          // known; otherwise the invalidation above re-reads its state.
+          const active = readActiveBook(queryClient);
+          if (!active) return;
+          const book = active.key;
           const notifications = useNotificationStore.getState();
           if (freshness.kind === "worker-error") {
             notifications.raiseCondition({
@@ -2912,7 +2928,10 @@ function AppVersion() {
 type ShellTitlebarControlsProps = {
   meta: RouteMeta;
   onLock: () => void;
-  onRefresh: (options?: { forceFull?: boolean }) => void;
+  onRefresh: (options?: {
+    forceFull?: boolean;
+    expectedScope?: DaemonBookScope;
+  }) => void;
   isRefreshing: boolean;
   daemonEnabled: boolean;
 };
@@ -3068,13 +3087,14 @@ function useLiveNotificationConditions(enabled: boolean, book: string | null) {
   const badgeData = badges.isSuccess ? badges.data?.data : undefined;
   const sources = freshness.isSuccess ? freshness.data?.data?.sources : undefined;
   React.useEffect(() => {
-    if (!enabled || !badgeData) return;
+    // No book known, nothing to attribute the read to.
+    if (!enabled || !badgeData || book === null) return;
     useNotificationStore
       .getState()
       .reconcileConditions(reviewConditionsFromBadges(badgeData, book));
   }, [badgeData, book, enabled]);
   React.useEffect(() => {
-    if (!enabled || !Array.isArray(sources)) return;
+    if (!enabled || !Array.isArray(sources) || book === null) return;
     useNotificationStore
       .getState()
       .reconcileConditions(sourceConditionsFromSnapshot(sources, book));
@@ -3097,18 +3117,24 @@ function ShellTitlebarControls({
   const identity = useUiStore((s) => s.identity);
   const reopenFirstSyncCard = useUiStore((s) => s.reopenFirstSyncCard);
   const headerBookKey = bookIdentityKey(identity);
+  const queryClient = useQueryClient();
   const { runJournalProcessing, runJournalProcessingWith, isProcessingJournals } =
     useJournalProcessingAction();
-  useLiveNotificationConditions(daemonEnabled, headerBookKey);
+  const activeBook = useActiveBook(daemonEnabled);
+  const activeBookKey = activeBook?.key ?? null;
+  useLiveNotificationConditions(daemonEnabled, activeBookKey);
   const conditions = useNotificationStore((s) => s.conditions);
-  const inScope = conditionsInScope(conditions, headerBookKey);
-  const attentionCount = attentionGroupCount(conditions, headerBookKey);
+  const inScope = conditionsInScope(conditions, activeBookKey);
+  const attentionCount = attentionGroupCount(conditions, activeBookKey);
   const blocksReports = inScope.some((entry) => entry.priority === "blocking");
-  const runNotificationOperation = (operation: NotificationOperation) => {
+  const runNotificationOperation = (
+    operation: NotificationOperation,
+    expectedScope: DaemonBookScope,
+  ) => {
     if (operation.kind === "process-journals") {
-      runJournalProcessingWith({ autoPair: operation.autoPair });
+      runJournalProcessingWith({ autoPair: operation.autoPair, expectedScope });
     } else {
-      onRefresh({ forceFull: operation.forceFull });
+      onRefresh({ forceFull: operation.forceFull, expectedScope });
     }
   };
   const notificationAlertClassName =
@@ -3219,6 +3245,8 @@ function ShellTitlebarControls({
             shellIconButtonClassName,
             notificationAlertClassName,
           )}
+          currentBook={activeBook}
+          resolveCurrentBook={() => readActiveBook(queryClient)}
           runOperation={runNotificationOperation}
           pendingOperations={{
             "process-journals": isProcessingJournals,
