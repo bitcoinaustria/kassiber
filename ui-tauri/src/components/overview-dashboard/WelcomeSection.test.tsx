@@ -4,6 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import "@/i18n";
 
+// Source blockers come from the bell's conditions for the open book; these
+// tests cover the page's own readiness rules.
+vi.mock("@/lib/reportBlockers", () => ({ useBlockingSourceCount: () => 0 }));
+
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, to }: ComponentProps<"a"> & { to?: string }) => <a href={to}>{children}</a>,
 }));

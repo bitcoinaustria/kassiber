@@ -2333,15 +2333,6 @@ export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): Ho
   }));
 }
 
-export const readinessToneStyles: Record<OverviewHealthTone, string> = {
-  good:
-    "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  warning:
-    "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  alert: "border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300",
-  neutral: "border-border bg-muted/45 text-foreground",
-};
-
 export const statusStyles: Record<TransactionStatus, string> = {
   confirmed:
     "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
@@ -2502,7 +2493,12 @@ export function transactionSetHref(transactionIds: string[]) {
  * Review count (`ui.review.badges`), so the pill says the number the sidebar
  * and the bell say; without it the quarantined rows are counted.
  */
-export function buildOverviewReadiness(snapshot: OverviewSnapshot, reviewCount?: number): OverviewReadiness {
+export function buildOverviewReadiness(
+  snapshot: OverviewSnapshot,
+  reviewCount?: number,
+  /** Sources whose failed refresh blocks reports (`useBlockingSourceCount`). */
+  blockingSources = 0,
+): OverviewReadiness {
   const status = snapshot.status;
   const needsJournals = Boolean(status?.needsJournals);
   const quarantines = status?.quarantines ?? 0;
@@ -2543,6 +2539,20 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot, reviewCount?:
       detail: {
         key: "readiness.sourceAttention.detail",
         params: { count: erroredConnections },
+      },
+      icon: WalletCards,
+      tone: "alert",
+    };
+  }
+
+  // The bell's blocking source failures: reports wait for these sources.
+  if (blockingSources > 0) {
+    return {
+      title: { key: "readiness.sourcesBlocking.title" },
+      href: "/connections",
+      detail: {
+        key: "readiness.sourcesBlocking.detail",
+        params: { count: blockingSources },
       },
       icon: WalletCards,
       tone: "alert",

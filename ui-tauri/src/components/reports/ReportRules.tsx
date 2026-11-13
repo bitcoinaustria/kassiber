@@ -12,6 +12,7 @@ import { formatCount } from "@/lib/localeFormat";
 
 import {
   formatTaxRate,
+  describeTaxYear,
   methodLabel,
   type ReportRegion,
 } from "./reportModel";
@@ -22,8 +23,11 @@ export function ReportRules({
   longTermDays,
   taxRate,
   e1kv = true,
+  jurisdiction,
 }: {
   region: ReportRegion;
+  /** The book's tax country, for when its tax year runs. */
+  jurisdiction?: string | null;
   method: string;
   /** Generic books' holding period; `null` from an older daemon. */
   longTermDays: number | null;
@@ -60,7 +64,7 @@ export function ReportRules({
                 ],
               ] as Array<[string, string]>)),
           ["Tax", "No rate applied"],
-          ["Tax year", "Calendar year, UTC"],
+          ["Tax year", describeTaxYear(jurisdiction)],
         ];
 
   return (

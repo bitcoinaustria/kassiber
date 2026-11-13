@@ -167,6 +167,11 @@
       "title": "Kurse fehlen",
       "detail_one": "{{count}} Transaktion ohne Kurs",
       "detail_other": "{{count}} Transaktionen ohne Kurs"
+    },
+    "sourcesBlocking": {
+      "title": "Quellen blockieren Berichte",
+      "detail_one": "{{count}} Quelle konnte nicht aktualisiert werden",
+      "detail_other": "{{count}} Quellen konnten nicht aktualisiert werden"
     }
   },
   "holdings": {

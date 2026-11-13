@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -10,10 +9,12 @@ import {
   pageHeaderActionsClassName,
   pageHeaderClassName,
 } from "@/lib/screen-layout";
-import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
-import { buildOverviewReadiness, readinessToneStyles } from "./model";
+import { ReadinessPill } from "@/components/kb/ReadinessPill";
+import { useBlockingSourceCount } from "@/lib/reportBlockers";
+
+import { buildOverviewReadiness } from "./model";
 
 export const WelcomeSection = ({
   onAddConnection,
@@ -29,58 +30,34 @@ export const WelcomeSection = ({
   const { t } = useTranslation("overview");
   // The same number as the sidebar's Review badge, from the same read.
   const badges = useDaemon<ReviewBadges>("ui.review.badges").data?.data;
-  const readiness = buildOverviewReadiness(snapshot, badges ? reviewTotal(badges) : undefined);
-  const ReadinessIcon = readiness.icon;
+  const blockingSources = useBlockingSourceCount();
+  const readiness = buildOverviewReadiness(
+    snapshot,
+    badges ? reviewTotal(badges) : undefined,
+    blockingSources,
+  );
   // dynamic key
   const readinessTitle = t(readiness.title.key as never, readiness.title.params);
   // Stale journals are fixed in place: the pill reprocesses them. Branch on
   // what the pill says, so a source error ahead of them still opens Wallets.
   const reprocesses = readiness.title.key === "readiness.reprocessJournals.title";
   const hideReadinessPill = readiness.title.key === "readiness.connectSource.title";
-  const readinessClassName = cn(
-    "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
-    readinessToneStyles[readiness.tone],
-  );
 
   return (
     <div className={pageHeaderClassName}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-        {hideReadinessPill ? null : reprocesses ? (
-          <button
-            type="button"
-            className={cn(
-              readinessClassName,
-              "transition-colors hover:bg-amber-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
-            )}
-            onClick={onProcessJournals}
-            disabled={isProcessingJournals}
-          >
-            <ReadinessIcon
-              className={cn("size-4", isProcessingJournals && "animate-spin")}
-              aria-hidden="true"
-            />
-            {isProcessingJournals
-              ? t("welcome.reprocessingJournals")
-              : readinessTitle}
-          </button>
-        ) : readiness.href ? (
-          // The one place the overview names what holds the book back, so it
-          // opens where that is dealt with.
-          <Link
-            to={readiness.href}
-            className={cn(
-              readinessClassName,
-              "transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            )}
-          >
-            <ReadinessIcon className="size-4" aria-hidden="true" />
-            {readinessTitle}
-          </Link>
-        ) : (
-          <span className={readinessClassName}>
-            <ReadinessIcon className="size-4" aria-hidden="true" />
-            {readinessTitle}
-          </span>
+        {hideReadinessPill ? null : (
+          <ReadinessPill
+            tone={readiness.tone}
+            icon={readiness.icon}
+            title={readinessTitle}
+            busy={reprocesses && isProcessingJournals}
+            busyTitle={t("welcome.reprocessingJournals")}
+            onClick={reprocesses ? onProcessJournals : undefined}
+            // The one place the overview names what holds the book back, so
+            // it opens where that is dealt with.
+            href={reprocesses ? undefined : readiness.href}
+          />
         )}
         <span className="min-w-0 truncate text-xs text-muted-foreground sm:text-sm">
           {/* dynamic key */}
