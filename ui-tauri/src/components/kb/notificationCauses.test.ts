@@ -76,6 +76,13 @@ describe("notification causes", () => {
         message: "Backend 'Bob's timeout' did not respond with Electrum-format JSON",
       }),
     ).toBeNull();
+    // Text between two quoted names is the message, not a name.
+    expect(
+      classifyCause({ message: "Backend 'primary' timed out contacting 'secondary'" }),
+    ).toBe("connection");
+    expect(
+      classifyCause({ message: "'a' is temporarily unavailable for 'b'" }),
+    ).toBe("unavailable");
     // The status outranks the server's own wording.
     expect(
       classifyCause({ message: "HTTP 401 from backend for host: service unavailable" }),

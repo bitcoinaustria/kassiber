@@ -57,9 +57,14 @@ function escapeRegExp(text: string): string {
 
 /** The message with interpolated names removed: quoted text and the label. */
 function templateText(message: string, label: string | undefined): string {
-  // Greedy, from the first quote to the last: a quoted name can itself hold
-  // an apostrophe ("Bob's node").
-  let text = message.replace(/'.*'|".*"|`.*`/g, "''");
+  // A quoted name ends at the quote that closes a word (followed by a
+  // space, punctuation, or the end), so an apostrophe inside it ("Bob's
+  // node") stays in the name while text between two names ("'a' timed out
+  // contacting 'b'") stays in the message.
+  let text = message.replace(
+    /(^|[\s(:,=[])(['"`])(.*?)\2(?=$|[\s).,:;!?\]])/g,
+    "$1''",
+  );
   const trimmed = label?.trim();
   if (trimmed) text = text.replace(new RegExp(escapeRegExp(trimmed), "gi"), "''");
   return text;
