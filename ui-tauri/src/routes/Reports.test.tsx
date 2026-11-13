@@ -11,6 +11,10 @@ const state = vi.hoisted(() => ({
   overviewLoading: false,
 }));
 
+// Source blockers come from the bell's conditions for the open book; these
+// tests cover the page's own readiness rules.
+vi.mock("@/lib/reportBlockers", () => ({ useBlockingSourceCount: () => 0 }));
+
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, to }: ComponentProps<"a"> & { to: string }) => (
     <a href={to}>{children}</a>
@@ -267,8 +271,11 @@ describe("Reports", () => {
     expect(html).toContain("3 quarantined items should be resolved before filing.");
     expect(html).toContain('href="/review"');
     expect(html.match(/>Provisional</g)).toHaveLength(2);
-    // The notice states it, so the header pill does not repeat it.
-    expect(html).not.toContain("Review queue open");
+    // The pill leads the header with the short state, linking where it is
+    // fixed, as on Overview; the notice below explains it.
+    expect(html).toContain('href="/review"><svg');
+    expect(html).toContain("Review queue open");
+    expect(html).toContain("3 quarantined items should be resolved before filing.");
   });
 
   it("waits for the completeness read before calling the figures provisional", () => {

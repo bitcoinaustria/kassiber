@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { CapitalGainsReport, ReportBreakdownBucket } from "@/mocks/reports";
 
 import {
+  describeTaxYear,
+  formatReportPeriod,
   formatTaxRate,
+  reportTaxYearLabel,
   methodLabel,
   reportBreakdown,
   reportRegion,
@@ -223,5 +226,19 @@ describe("reportBreakdown", () => {
       ["Tax-free Altbestand", 900],
       ["Tax-neutral swaps", null],
     ]);
+  });
+});
+
+describe("tax year periods", () => {
+  it("follows the book's country: a calendar year, or one that starts later", () => {
+    expect(formatReportPeriod(2025, "at")).toBe("1 Jan – 31 Dec 2025");
+    expect(formatReportPeriod(2025)).toBe("1 Jan – 31 Dec 2025");
+    // The UK tax year 2025 runs from 6 April 2025 to 5 April 2026.
+    expect(formatReportPeriod(2025, "gb")).toBe("6 Apr 2025 – 5 Apr 2026");
+    expect(reportTaxYearLabel(2025, "gb")).toBe("2025-26");
+    expect(reportTaxYearLabel(2099, "gb")).toBe("2099-00");
+    expect(reportTaxYearLabel(2025, "at")).toBe("2025");
+    expect(describeTaxYear("gb")).toBe("From 6 Apr, Europe/London");
+    expect(describeTaxYear("generic")).toBe("Calendar year, UTC");
   });
 });

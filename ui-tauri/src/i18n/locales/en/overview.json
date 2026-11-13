@@ -167,6 +167,11 @@
       "title": "Prices missing",
       "detail_one": "{{count}} transaction without a price",
       "detail_other": "{{count}} transactions without a price"
+    },
+    "sourcesBlocking": {
+      "title": "Sources block reports",
+      "detail_one": "{{count}} source could not refresh",
+      "detail_other": "{{count}} sources could not refresh"
     }
   },
   "holdings": {

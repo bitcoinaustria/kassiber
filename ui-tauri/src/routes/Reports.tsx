@@ -8,7 +8,7 @@
  * the indicative tax, so this page computes no tax of its own.
  */
 
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
@@ -16,6 +16,7 @@ import {
   Loader2,
   RefreshCw,
   ShieldAlert,
+  WalletCards,
 } from "lucide-react";
 
 import { LightningProfitabilityPanel } from "@/components/lightning/LightningProfitabilityPanel";
@@ -27,6 +28,7 @@ import { ReportFilesPanel } from "@/components/reports/ReportFilesPanel";
 import { ReportRules } from "@/components/reports/ReportRules";
 import {
   formatReportPeriod,
+  reportTaxYearLabel,
   formatTaxRate,
   E1KV_FIRST_TAX_YEAR,
   reportBreakdown,
@@ -41,7 +43,6 @@ import {
   type ReportTaxEstimate,
   type ReportTotals,
 } from "@/components/reports/reportModel";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -81,9 +82,11 @@ import i18n from "@/i18n";
 import { showFeedback } from "@/lib/feedback";
 import { useUiStore } from "@/store/ui";
 import { TaxCountryPreviewNotice } from "@/components/kb/TaxCountryPreview";
+import { ReadinessPill, type ReadinessTone } from "@/components/kb/ReadinessPill";
+import { useBlockingSourceCount } from "@/lib/reportBlockers";
 
-type ReportTone = "good" | "warning" | "alert" | "neutral";
-type ReportHref = "/journals" | "/review";
+type ReportTone = ReadinessTone;
+type ReportHref = "/journals" | "/review" | "/connections";
 
 interface ReportExportResult {
   reconciled?: boolean;
@@ -283,6 +286,8 @@ function ReportsView({
   completenessPending = false,
 }: ReportsViewProps) {
   const navigate = useNavigate();
+  // The bell's blocking source failures, so the pill agrees with it.
+  const blockingSources = useBlockingSourceCount();
   const year = report.year;
   const effectiveYear = selectedYear ?? year;
   const availableYears = Array.from(
@@ -376,15 +381,13 @@ function ReportsView({
     effectiveYear,
     completeness,
     completenessPending,
+    blockingSources,
   );
   const provisional = reportFiguresProvisional(
     report,
     completeness,
     completenessPending,
   );
-  // The notice names what blocks the figures, so the header does not repeat it.
-  const showReadinessNotice =
-    readiness.tone === "warning" || readiness.tone === "alert";
   const currentExportStatus = reportExportStatusForYear(
     exportStatus,
     effectiveYear,
@@ -590,7 +593,8 @@ function ReportsView({
         // A new year reloads the report and unmounts this view, so a running
         // export would lose its save dialog and notification.
         yearLocked={activeExport !== null}
-        readiness={showReadinessNotice ? null : readiness}
+        readiness={readiness}
+        jurisdiction={report.jurisdictionCode}
       />
 
       <TaxCountryPreviewNotice country={report.jurisdictionCode} />
@@ -604,7 +608,6 @@ function ReportsView({
         provisional={provisional}
       />
 
-      {showReadinessNotice ? <ReadinessNotice readiness={readiness} /> : null}
 
       <div className="grid items-start gap-(--kb-page-gap) @5xl/reports:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex min-w-0 flex-col gap-(--kb-page-gap)">
@@ -621,6 +624,7 @@ function ReportsView({
             longTermDays={report.longTermDays ?? null}
             taxRate={report.indicativeTax?.rate}
             e1kv={e1kv}
+            jurisdiction={report.jurisdictionCode}
           />
         </div>
         <div className="min-w-0">
@@ -680,15 +684,16 @@ function ReportHeader({
   onYearChange,
   yearLocked = false,
   readiness,
+  jurisdiction,
 }: {
   selectedYear: number;
   availableYears: number[];
   onYearChange: (year: number) => void;
   yearLocked?: boolean;
-  /** `null` while the readiness notice below states it. */
-  readiness: ReportReadiness | null;
+  readiness: ReportReadiness;
+  /** The book's tax country: its tax year may not be the calendar year. */
+  jurisdiction?: string | null;
 }) {
-  const ReadinessIcon = readiness?.icon;
   const handleYearChange = (value: string) => {
     const nextYear = Number(value);
     if (!Number.isInteger(nextYear)) return;
@@ -705,64 +710,45 @@ function ReportHeader({
     onYearChange(nextYear);
   };
   return (
+    // The readiness pill leads, as on Overview; the page's own control (the
+    // tax year, shown as its period) sits on the right.
     <div className={pageHeaderClassName}>
-      <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-        <span className="text-sm text-muted-foreground">Tax year</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+        <ReadinessPill
+          tone={readiness.tone}
+          icon={readiness.icon}
+          title={readiness.title}
+          href={readiness.action?.href}
+        />
+        {/* What the pill means, beside it, as on Overview. */}
+        <span className="min-w-0 text-xs text-muted-foreground sm:text-sm">
+          {readiness.detail}
+        </span>
+      </div>
+      <div className={pageHeaderActionsClassName}>
         <Select value={String(selectedYear)} onValueChange={handleYearChange} disabled={yearLocked}>
-          <SelectTrigger className="h-8 w-[88px] rounded-md text-xs" aria-label="Tax year">
-            <SelectValue />
+          <SelectTrigger
+            className="h-8 w-auto gap-2 rounded-md text-xs tabular-nums"
+            aria-label="Tax year"
+            title="Tax year"
+          >
+            {/* The button shows the selected year as its dates; the list,
+                only the years. */}
+            <SelectValue>{formatReportPeriod(selectedYear, jurisdiction)}</SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent align="end">
             {availableYears.map((availableYear) => (
-              <SelectItem key={availableYear} value={String(availableYear)}>
-                {availableYear}
+              <SelectItem
+                key={availableYear}
+                value={String(availableYear)}
+                className="tabular-nums"
+              >
+                {reportTaxYearLabel(availableYear, jurisdiction)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <span className="text-sm text-muted-foreground tabular-nums">
-          {formatReportPeriod(selectedYear)}
-        </span>
       </div>
-      {readiness && ReadinessIcon ? (
-        <div className={pageHeaderActionsClassName}>
-          <span
-            className={cn(
-              "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
-              readinessToneStyles[readiness.tone],
-            )}
-            title={readiness.detail}
-          >
-            <ReadinessIcon className="size-4" aria-hidden="true" />
-            {readiness.title}
-          </span>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ReadinessNotice({ readiness }: { readiness: ReportReadiness }) {
-  const Icon = readiness.icon;
-  return (
-    <div
-      role="status"
-      className={cn(
-        "flex flex-col gap-3 rounded-lg border px-4 py-2.5 text-sm sm:flex-row sm:items-center",
-        readiness.tone === "alert"
-          ? "border-red-300 bg-red-50 text-red-900 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
-          : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200",
-      )}
-    >
-      <div className="flex flex-1 items-center gap-3">
-        <Icon className="size-4 shrink-0" aria-hidden="true" />
-        <p className="m-0">{readiness.detail}</p>
-      </div>
-      {readiness.action ? (
-        <Button asChild size="sm" variant="outline" className="h-7 shrink-0">
-          <Link to={readiness.action.href}>{readiness.action.label}</Link>
-        </Button>
-      ) : null}
     </div>
   );
 }
@@ -925,8 +911,23 @@ function buildReportReadiness(
   year: number,
   completeness: FiatCompleteness | null = null,
   completenessPending = false,
+  /** Sources whose failed refresh blocks reports (`useBlockingSourceCount`). */
+  blockingSources = 0,
 ): ReportReadiness {
   const needsJournals = Boolean(report.status?.needsJournals);
+
+  // The bell's blocking source failures: the same check as Overview's pill.
+  if (blockingSources > 0) {
+    return {
+      title: "Sources block reports",
+      detail: `${formatCount(blockingSources)} source${
+        blockingSources === 1 ? "" : "s"
+      } could not refresh; reports wait until ${blockingSources === 1 ? "it does" : "they do"}.`,
+      tone: "alert",
+      icon: WalletCards,
+      action: { label: "Open wallets", href: "/connections" },
+    };
+  }
   const quarantines = report.status?.quarantines ?? 0;
   const hasFilingRows = Boolean(
     report.kennzahlRows?.some(
@@ -1041,7 +1042,7 @@ function buildReportReadiness(
   }
 
   return {
-    title: "Ready for export",
+    title: "Ready for reports",
     detail: "The ledger is current and the review queue is clear.",
     tone: "good",
     icon: CheckCircle2,
@@ -1052,11 +1053,3 @@ function canOpenExportPath(path?: string) {
   return Boolean(path && (path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)));
 }
 
-const readinessToneStyles: Record<ReportTone, string> = {
-  good:
-    "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  warning:
-    "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  alert: "border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300",
-  neutral: "border-border bg-muted/45 text-foreground",
-};

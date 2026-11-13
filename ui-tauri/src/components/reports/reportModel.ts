@@ -5,6 +5,7 @@
  * only picks and labels them, so the screen cannot compute a tax result.
  */
 
+import { taxCountryEntry } from "@/lib/taxCountries";
 import { formatFiatAmount } from "@/lib/currency";
 import type {
   CapitalGainsReport,
@@ -91,9 +92,59 @@ export function formatTaxRate(rate: string | undefined) {
   return `${Number((value * 100).toFixed(2))} %`;
 }
 
-/** `1 Jan – 31 Dec 2025`; the report copy stays English. */
-export function formatReportPeriod(year: number) {
-  return `1 Jan – 31 Dec ${year}`;
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/**
+ * The first day (month, day) of the country's tax year, as the core's tax
+ * country registry has it (`tax_year_start`); the calendar year when the
+ * country is unknown.
+ */
+export function reportTaxYearStart(jurisdiction?: string | null): [number, number] {
+  const raw = taxCountryEntry(jurisdiction)?.tax_year_start ?? "01-01";
+  const [month, day] = raw.split("-").map(Number);
+  return Number.isInteger(month) && Number.isInteger(day) ? [month, day] : [1, 1];
+}
+
+function formatDay(year: number, month: number, day: number): string {
+  return `${day} ${MONTHS[month - 1]} ${year}`;
+}
+
+/**
+ * Tax year `year` as dates, the core's convention: named by the calendar
+ * year of its first day, so a 6 April start makes 2025 run from 6 Apr 2025
+ * to 5 Apr 2026. `1 Jan – 31 Dec 2025` for a calendar year; the report copy
+ * stays English.
+ */
+export function formatReportPeriod(year: number, jurisdiction?: string | null) {
+  const [month, day] = reportTaxYearStart(jurisdiction);
+  if (month === 1 && day === 1) return `1 Jan – 31 Dec ${year}`;
+  const last = new Date(Date.UTC(year + 1, month - 1, day - 1));
+  return `${formatDay(year, month, day)} – ${formatDay(
+    last.getUTCFullYear(),
+    last.getUTCMonth() + 1,
+    last.getUTCDate(),
+  )}`;
+}
+
+/** The core's tax-year label: `2025`, or `2025-26` when it starts later. */
+export function reportTaxYearLabel(year: number, jurisdiction?: string | null): string {
+  const [month, day] = reportTaxYearStart(jurisdiction);
+  return month === 1 && day === 1
+    ? String(year)
+    : `${year}-${String((year + 1) % 100).padStart(2, "0")}`;
+}
+
+/** How the country's tax year runs: `Calendar year, UTC`, or its start and zone. */
+export function describeTaxYear(jurisdiction?: string | null): string {
+  const entry = taxCountryEntry(jurisdiction);
+  const [month, day] = reportTaxYearStart(jurisdiction);
+  const zone = entry?.timezone ?? "UTC";
+  return month === 1 && day === 1
+    ? `Calendar year, ${zone}`
+    : `From ${day} ${MONTHS[month - 1]}, ${zone}`;
 }
 
 /** `+ € 1.234,56` / `− € 12,00`, unsigned at zero. */
