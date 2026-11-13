@@ -257,6 +257,15 @@ fn build_config(args: &Value, update: bool) -> Result<Json, AppError> {
         }
         c["deprecated"] = raw["deprecated"].clone();
     }
+    if update {
+        // docs/plan/23-crypto-assets.md: the desktop's "also track other
+        // crypto assets" toggle. Refused before the re-auth round trip when it
+        // is not a scope; the lifecycle stores it normalized.
+        if let Some(value) = crate::imports::optional_string(args, "asset_scope")? {
+            let scope = kassiber_wallets::file_import::assets::Scope::parse(&value)?;
+            c["asset_scope"] = json!(scope.as_str());
+        }
+    }
     if let Some(format) = c.get("source_format").and_then(Json::as_str) {
         if !SOURCE_FORMATS.contains(&format) {
             return Err(AppError::new(
@@ -649,6 +658,21 @@ mod tests {
             assert!(auth(&mut plain, &response, &request_id, scope, "prompt")
                 .unwrap()
                 .is_none());
+        }
+    }
+
+    #[test]
+    fn wallet_update_carries_a_normalized_asset_scope_and_create_ignores_it() {
+        // docs/plan/23-crypto-assets.md: the desktop's scope toggle.
+        let args = dict([("wallet", s("w")), ("asset_scope", s(" Crypto "))]);
+        assert_eq!(
+            build_config(&args, true).unwrap(),
+            json!({"asset_scope": "crypto"})
+        );
+        assert_eq!(build_config(&args, false).unwrap(), json!({}));
+        for bad in [s("eth"), Value::Int(1.into())] {
+            let args = dict([("wallet", s("w")), ("asset_scope", bad)]);
+            assert_eq!(build_config(&args, true).unwrap_err().code, "validation");
         }
     }
 }

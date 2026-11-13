@@ -6,6 +6,8 @@ import { currentUiLocale, formatCount } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
+import { AssetScopeNotice } from "../assets/AssetScopeNotice";
+import { isAssetScope, readImportAssets } from "../assets/importAssets";
 import { ExchangeErrorNotice } from "./ExchangeErrorNotice";
 import {
   EXCHANGE_PROVIDER_NAMES,
@@ -42,6 +44,8 @@ export function ExchangeSyncCard({
   const keyStored = row ? row.backend_configured && row.has_api_key : null;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const balance = lastSync?.status === "ok" ? lastSync.provider_balance ?? null : null;
+  const assets = lastSync?.status === "ok" ? readImportAssets(lastSync.assets) : null;
+  const scope = isAssetScope(row?.asset_scope) ? row.asset_scope : "bitcoin";
   const skipped = lastSync?.skipped
     ? Object.values(lastSync.skipped).reduce((total, value) => total + (value ?? 0), 0)
     : 0;
@@ -141,6 +145,21 @@ export function ExchangeSyncCard({
         <p className="m-0 text-xs text-muted-foreground">
           {t("exchange.sync.skipped", { count: skipped })}
         </p>
+      ) : null}
+      {row && !needsRust ? (
+        <AssetScopeNotice
+          wallet={row.wallet_id}
+          scope={scope}
+          assets={assets}
+          swapPairs={lastSync?.status === "ok" ? lastSync.swap_pairs : null}
+          rerun="sync"
+          disabled={disabled || state.isPending}
+          onScopeChanged={async (next) => {
+            // Turning other assets on syncs again so the skipped rows arrive;
+            // turning them off only affects later syncs.
+            if (next === "crypto") await state.sync();
+          }}
+        />
       ) : null}
       {error && !needsRust ? <ExchangeErrorNotice provider={provider} error={error} /> : null}
       <p className="m-0 text-2xs text-muted-foreground">{t("exchange.sync.sessionNote")}</p>

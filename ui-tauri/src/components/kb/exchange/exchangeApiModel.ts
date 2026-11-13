@@ -1,5 +1,7 @@
 import { DaemonRequestError } from "@/daemon/client";
 
+import type { AssetScope, ImportAssets } from "../assets/importAssets";
+
 /** Exchanges whose history Kassiber reads through a read-only API key. */
 export const EXCHANGE_KINDS = ["kraken", "coinbase", "binance", "bitpanda"] as const;
 export type ExchangeKind = (typeof EXCHANGE_KINDS)[number];
@@ -155,6 +157,10 @@ export interface ExchangeSyncResult {
   fetched?: number;
   skipped?: Record<string, number>;
   provider_balance?: ExchangeProviderBalance;
+  /** What the wallet's asset scope left out (docs/plan/23-crypto-assets.md). */
+  assets?: ImportAssets;
+  /** Crypto-to-crypto swaps the sync paired. */
+  swap_pairs?: number;
   wallet?: string;
 }
 
@@ -174,6 +180,8 @@ export interface ExchangeLastSync {
   fetched?: number;
   skipped?: Record<string, number>;
   provider_balance?: ExchangeProviderBalance;
+  assets?: ImportAssets;
+  swap_pairs?: number;
   error?: ExchangeErrorInfo | null;
 }
 
@@ -187,6 +195,8 @@ export interface ExchangeConnectionStatus {
   has_api_key: boolean;
   has_api_secret: boolean | null;
   last_sync: ExchangeLastSync | null;
+  /** Present once the wallet stores a scope; absent means `bitcoin`. */
+  asset_scope?: AssetScope;
 }
 
 /** Error explanations by daemon error code; each is a key under
