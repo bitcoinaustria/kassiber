@@ -25,10 +25,19 @@ beforeEach(() => {
 const clean = { books: 3, synced_books: 3, errors: 0, reports_blocked: 0 };
 
 describe("refreshing all books", () => {
+  it("keeps overlapping refreshes apart", () => {
+    const first = startWorkspaceRefresh("ws-1");
+    const second = startWorkspaceRefresh("ws-1");
+    expect(Object.keys(useNotificationStore.getState().jobs)).toHaveLength(2);
+    endWorkspaceRefresh(first);
+    expect(Object.keys(useNotificationStore.getState().jobs)).toEqual([second]);
+    endWorkspaceRefresh(second);
+  });
+
   it("opens that workspace's overview of all books from any open book", () => {
-    startWorkspaceRefresh("ws-1");
+    const job = startWorkspaceRefresh("ws-1");
     recordWorkspaceRefreshed("ws-1", { ...clean, synced_books: 2, reports_blocked: 1 });
-    endWorkspaceRefresh();
+    endWorkspaceRefresh(job);
     const { conditions, jobs } = useNotificationStore.getState();
     expect(jobs).toEqual({});
     const [condition] = Object.values(conditions);

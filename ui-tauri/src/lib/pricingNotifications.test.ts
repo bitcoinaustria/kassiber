@@ -29,6 +29,17 @@ beforeEach(() => {
 });
 
 describe("price rebuilds", () => {
+  it("keeps overlapping rebuilds apart", () => {
+    const first = pricingRebuildJob(SCOPE);
+    const second = pricingRebuildJob(SCOPE);
+    first.start();
+    second.start();
+    expect(Object.keys(useNotificationStore.getState().jobs)).toHaveLength(2);
+    first.end();
+    expect(Object.keys(useNotificationStore.getState().jobs)).toHaveLength(1);
+    second.end();
+  });
+
   it("is a job, and a failure opens the rebuild row of Market data", () => {
     const job = pricingRebuildJob(SCOPE);
     job.start();

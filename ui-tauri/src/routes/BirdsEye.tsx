@@ -283,14 +283,17 @@ export function BirdsEyeView({
   const [progress, setProgress] = React.useState<WorkspaceFreshnessProgress[]>([]);
   const [refreshSummary, setRefreshSummary] =
     React.useState<WorkspaceFreshnessRun["summary"] | null>(null);
-    const refreshWorkspace = useDaemonStreamMutation<
+  // This run's job in the center, for its progress and its end.
+  const refreshJobId = React.useRef<string | null>(null);
+  const refreshWorkspace = useDaemonStreamMutation<
     WorkspaceFreshnessRun,
     WorkspaceFreshnessProgress
   >("ui.workspace.freshness.run", {
     onProgress: (record) => {
       setProgress((current) => [record, ...current].slice(0, 8));
       const book = record.profile?.label ?? to("birdsEye.refreshPanel.fallbackBook");
-      updateWorkspaceRefresh({
+      if (!refreshJobId.current) return;
+      updateWorkspaceRefresh(refreshJobId.current, {
         indeterminate: !hasProgressCounter(record),
         // The label names the book; the center drops it under Hide all.
         label: `${book}: ${formatWorkspaceProgressLabel(
@@ -337,7 +340,8 @@ export function BirdsEyeView({
     if (!workspaceId || refreshWorkspace.isPending) return;
     setProgress([]);
     setRefreshSummary(null);
-    startWorkspaceRefresh(workspaceId);
+    const jobId = startWorkspaceRefresh(workspaceId);
+    refreshJobId.current = jobId;
     refreshWorkspace.mutate(
       { workspace_id: workspaceId, journals: true, run: true },
       {
@@ -351,7 +355,10 @@ export function BirdsEyeView({
             refreshError instanceof Error ? refreshError.message : undefined,
           );
         },
-        onSettled: () => endWorkspaceRefresh(),
+        onSettled: () => {
+          endWorkspaceRefresh(jobId);
+          if (refreshJobId.current === jobId) refreshJobId.current = null;
+        },
       },
     );
   }, [refreshWorkspace, workspaceId]);

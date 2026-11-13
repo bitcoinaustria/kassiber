@@ -14,7 +14,13 @@ import {
  * one whose journal step failed raises the journal-processing condition,
  * since reprocessing journals is what applies the new prices.
  */
-const JOB_ID = "pricing-rebuild";
+/** Toasts about rebuilds replace one another. */
+const FEEDBACK_KEY = "pricing-rebuild";
+/**
+ * Each rebuild is its own job: one started after leaving and re-entering
+ * Market data while another still runs must not replace or end that one.
+ */
+let rebuildSequence = 0;
 const REBUILD_ACTION = {
   type: "navigate",
   to: "/settings/market",
@@ -28,16 +34,17 @@ const REBUILD_ACTION = {
  */
 export function pricingRebuildJob(book: NotificationScope | null) {
   const scope: NotificationScope | null = book;
+  const id = `pricing-rebuild:${++rebuildSequence}`;
   return {
     scope,
     start: () =>
       useNotificationStore.getState().startJob({
-        id: JOB_ID,
+        id,
         code: "pricing-rebuild",
         scope: scope ?? { book: null },
         progress: { indeterminate: true },
       }),
-    end: () => useNotificationStore.getState().endJob(JOB_ID),
+    end: () => useNotificationStore.getState().endJob(id),
   };
 }
 
@@ -76,7 +83,7 @@ export function recordPricingRebuilt(
     title: t("notifications.result.pricingRebuilt.title"),
     description: outcome.summary,
     descriptionPrivacy: "free-text",
-    key: JOB_ID,
+    key: FEEDBACK_KEY,
   });
 }
 
@@ -96,6 +103,6 @@ export function recordPricingRebuildFailed(
   showFeedback({
     tone: "error",
     title: t("notifications.condition.pricingRebuildFailed.title"),
-    key: JOB_ID,
+    key: FEEDBACK_KEY,
   });
 }

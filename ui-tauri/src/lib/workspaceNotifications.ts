@@ -14,7 +14,11 @@ import {
  * book (it shows whichever is open) and is keyed by the workspace. Its
  * action opens that overview, where each book's state is listed.
  */
-const JOB_ID = "workspace-refresh";
+/**
+ * Each refresh is its own job: one started after leaving and re-entering
+ * the overview while another still runs must not replace or end that one.
+ */
+let refreshSequence = 0;
 
 function scopeFor(workspaceId: string): NotificationScope {
   return { book: null, source: `workspace:${workspaceId}` };
@@ -27,21 +31,24 @@ export interface WorkspaceRefreshSummary {
   reports_blocked: number;
 }
 
-export function startWorkspaceRefresh(workspaceId: string): void {
+/** Starts the job; pass the returned id to update and end that run. */
+export function startWorkspaceRefresh(workspaceId: string): string {
+  const id = `workspace-refresh:${++refreshSequence}`;
   useNotificationStore.getState().startJob({
-    id: JOB_ID,
+    id,
     code: "workspace-refresh",
     scope: scopeFor(workspaceId),
     progress: { indeterminate: true },
   });
+  return id;
 }
 
-export function updateWorkspaceRefresh(progress: JobProgress): void {
-  useNotificationStore.getState().updateJob(JOB_ID, progress);
+export function updateWorkspaceRefresh(id: string, progress: JobProgress): void {
+  useNotificationStore.getState().updateJob(id, progress);
 }
 
-export function endWorkspaceRefresh(): void {
-  useNotificationStore.getState().endJob(JOB_ID);
+export function endWorkspaceRefresh(id: string): void {
+  useNotificationStore.getState().endJob(id);
 }
 
 export function recordWorkspaceRefreshed(
@@ -82,7 +89,7 @@ export function recordWorkspaceRefreshed(
     title: problems
       ? t("notifications.condition.workspaceBooks.title")
       : t("notifications.result.workspaceRefreshed.title"),
-    key: JOB_ID,
+    key: "workspace-refresh",
   });
 }
 
@@ -102,6 +109,6 @@ export function recordWorkspaceRefreshFailed(
   showFeedback({
     tone: "error",
     title: t("notifications.condition.workspaceRefreshFailed.title"),
-    key: JOB_ID,
+    key: "workspace-refresh",
   });
 }
