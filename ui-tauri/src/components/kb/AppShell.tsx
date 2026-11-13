@@ -100,7 +100,6 @@ import { bookIdentityKey, useUiStore } from "@/store/ui";
 import type { Identity, ThemePreference } from "@/store/ui";
 import {
   attentionGroupCount,
-  conditionKey,
   conditionsInScope,
   resetNotificationStore,
   useNotificationStore,
@@ -111,12 +110,12 @@ import {
   readActiveBook,
   trackBookSwitch,
   useActiveBook,
+  type ActiveBook,
   type DaemonBookScope,
 } from "@/lib/activeBook";
 import {
-  applyFreshnessRun,
+  applyFreshnessEvent,
   reviewConditionsFromBadges,
-  safeMessage,
   sourceConditionsFromSnapshot,
 } from "@/lib/notificationConditions";
 import type { FreshnessSourceState } from "@/lib/syncResults";
@@ -1725,29 +1724,10 @@ export function AppShell() {
           if (!freshness) return;
 
           void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-          // Attribute the event to the open book only while that book is
-          // known; otherwise the invalidation above re-reads its state.
-          const active = readActiveBook(queryClient);
-          if (!active) return;
-          const book = active.key;
-          const notifications = useNotificationStore.getState();
-          if (freshness.kind === "worker-error") {
-            notifications.raiseCondition({
-              code: "freshness.worker-error",
-              scope: { book },
-              severity: "error",
-              priority: "attention",
-              action: { type: "navigate", to: "/connections" },
-              details: [{ message: safeMessage(freshness.message ?? freshness.code) }],
-            });
-            return;
-          }
-          // A background run that reported back means the worker runs again;
-          // each source is then settled by what this run proves for it.
-          notifications.resolveCondition(
-            conditionKey("freshness.worker-error", { book }),
-          );
-          applyFreshnessRun(freshness.data, book);
+          // Applied only when the event names the open book; anything else
+          // (delayed past a switch, or naming no book) is left to the
+          // re-read the invalidation above starts.
+          applyFreshnessEvent(freshness, readActiveBook(queryClient));
         }),
       )
       .then((nextUnlisten) => {
@@ -3071,34 +3051,40 @@ interface FreshnessStatusSnapshot {
  * Rebuild the center's live conditions from local book state whenever the
  * shell is unlocked: journals and Review from `ui.review.badges`, and
  * per-source refresh problems from `ui.freshness.status`. Both are local
- * reads with no egress. Only a successful read reconciles; a failed or
+ * reads with no egress, bound to the open book with `expected_scope`, so a
+ * read the daemon answered for another book is refused rather than
+ * attributed to this one. Only a successful read reconciles; a failed or
  * missing one resolves nothing, and reconciling never counts a repeat.
  */
-function useLiveNotificationConditions(enabled: boolean, book: string | null) {
-  // The same counts as the sidebar's Review badge, from the same read.
-  const badges = useDaemon<ReviewBadges>("ui.review.badges", undefined, {
-    enabled,
+function useLiveNotificationConditions(
+  enabled: boolean,
+  book: ActiveBook | null,
+) {
+  const bound = enabled && book !== null;
+  const args = book ? { expected_scope: book.expected } : undefined;
+  const badges = useDaemon<ReviewBadges>("ui.review.badges", args, {
+    enabled: bound,
   });
   const freshness = useDaemon<FreshnessStatusSnapshot>(
     "ui.freshness.status",
-    undefined,
-    { enabled },
+    args,
+    { enabled: bound },
   );
   const badgeData = badges.isSuccess ? badges.data?.data : undefined;
   const sources = freshness.isSuccess ? freshness.data?.data?.sources : undefined;
+  const key = book?.key ?? null;
   React.useEffect(() => {
-    // No book known, nothing to attribute the read to.
-    if (!enabled || !badgeData || book === null) return;
+    if (!bound || !badgeData || key === null) return;
     useNotificationStore
       .getState()
-      .reconcileConditions(reviewConditionsFromBadges(badgeData, book));
-  }, [badgeData, book, enabled]);
+      .reconcileConditions(reviewConditionsFromBadges(badgeData, key));
+  }, [badgeData, bound, key]);
   React.useEffect(() => {
-    if (!enabled || !Array.isArray(sources) || book === null) return;
+    if (!bound || !Array.isArray(sources) || key === null) return;
     useNotificationStore
       .getState()
-      .reconcileConditions(sourceConditionsFromSnapshot(sources, book));
-  }, [book, enabled, sources]);
+      .reconcileConditions(sourceConditionsFromSnapshot(sources, key));
+  }, [bound, key, sources]);
 }
 
 /**
@@ -3122,7 +3108,7 @@ function ShellTitlebarControls({
     useJournalProcessingAction();
   const activeBook = useActiveBook(daemonEnabled);
   const activeBookKey = activeBook?.key ?? null;
-  useLiveNotificationConditions(daemonEnabled, activeBookKey);
+  useLiveNotificationConditions(daemonEnabled, activeBook);
   const conditions = useNotificationStore((s) => s.conditions);
   const inScope = conditionsInScope(conditions, activeBookKey);
   const attentionCount = attentionGroupCount(conditions, activeBookKey);

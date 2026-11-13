@@ -632,7 +632,9 @@ The title bar's bell opens the notification list
   that could not refresh come from `ui.freshness.status`, book refreshes, and
   background freshness events, tracked per source and folded into one row;
   a failed book refresh, a failed journal run, a missing backend, and a
-  stopped background worker each have their own. Each row says what is wrong
+  stopped background worker each have their own. Background freshness
+  events apply only to the book they name; the conditions' reads carry the
+  open book as `expected_scope`. Each row says what is wrong
   and what it means for reports, offers one action, and keeps diagnostics
   behind Show details. A condition clears only when a successful read or run
   for the same book and source shows it resolved; a failed read, a lock, or a

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { parseDaemonFreshnessEvent } from "@/lib/daemonFreshnessEvent";
 import {
+  applyFreshnessEvent,
   applyFreshnessRun,
   reviewConditionsFromBadges,
   sourceConditionsFromSnapshot,
@@ -182,6 +183,66 @@ describe("per-source freshness conditions", () => {
       code: "freshness_background_error",
       message: "failed",
     });
+  });
+});
+
+describe("background events", () => {
+  const ACTIVE_A = {
+    key: BOOK,
+    expected: { workspace_id: "ws", profile_id: "pf-a" },
+  };
+  const ACTIVE_B = {
+    key: OTHER,
+    expected: { workspace_id: "ws", profile_id: "pf-b" },
+  };
+  const failureFromA = parseDaemonFreshnessEvent({
+    event: true,
+    kind: "ui.freshness.background",
+    schema_version: 1,
+    data: {
+      profile: { id: "pf-a" },
+      completed: [failedJob("a")],
+      sources: [source("a", "failed")],
+    },
+  })!;
+  const workerErrorFromA = parseDaemonFreshnessEvent({
+    event: true,
+    kind: "ui.freshness.worker",
+    schema_version: 1,
+    data: { status: "error", code: "freshness_background_error", profile: { id: "pf-a" } },
+  })!;
+
+  it("names the book each event ran for", () => {
+    expect(failureFromA.profileId).toBe("pf-a");
+    expect(workerErrorFromA.profileId).toBe("pf-a");
+  });
+
+  it("applies an event to the book it ran for", () => {
+    expect(applyFreshnessEvent(failureFromA, ACTIVE_A)).toBe(true);
+    expect(sourceCondition("a", BOOK)).toBeDefined();
+  });
+
+  it("files nothing under B for an event from A delivered after the switch", () => {
+    expect(applyFreshnessEvent(failureFromA, ACTIVE_B)).toBe(false);
+    expect(applyFreshnessEvent(workerErrorFromA, ACTIVE_B)).toBe(false);
+    expect(useNotificationStore.getState().conditions).toEqual({});
+  });
+
+  it("does not clear B's worker error with A's background run", () => {
+    const workerErrorFromB = { ...workerErrorFromA, profileId: "pf-b" };
+    applyFreshnessEvent(workerErrorFromB, ACTIVE_B);
+    const key = conditionKey("freshness.worker-error", { book: OTHER });
+    expect(useNotificationStore.getState().conditions[key]).toBeDefined();
+    applyFreshnessEvent(failureFromA, ACTIVE_B);
+    expect(useNotificationStore.getState().conditions[key]).toBeDefined();
+  });
+
+  it("applies nothing from an event that names no book, or while no book is known", () => {
+    expect(applyFreshnessEvent({ ...failureFromA, profileId: undefined }, ACTIVE_A)).toBe(
+      false,
+    );
+    expect(applyFreshnessEvent(failureFromA, null)).toBe(false);
+    expect(useNotificationStore.getState().conditions).toEqual({});
   });
 });
 
