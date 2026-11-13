@@ -77,10 +77,34 @@ All three share these rules:
 Kraken API errors (`error` truthy) fail as `auth_error` when any entry mentions
 `permission`, otherwise `protocol_error`, with `details.kraken_errors`.
 
+The table is the `bitcoin` asset scope, the default and Python's behaviour.
+A wallet whose `asset_scope` is `crypto` ([plan 23](../plan/23-crypto-assets.md))
+changes the following, which Python never had:
+
+- **Kraken** sends the same requests and maps the ledger grouped by `refid`
+  for every crypto asset ([mapping](imports.md#kraken-api)).
+- **Binance** sends the same fiat-payments request, then reads every coin
+  without `coin`/`asset`: deposit and withdrawal history in 89-day windows
+  paged by `offset` (`limit=1000`), dividends in 179-day windows
+  (`limit=500`), and `GET /sapi/v1/convert/tradeFlow` in 29-day windows
+  (`limit=1000`), all from `1498867200000` to now. Dividend and Convert
+  reads have no cursor: a full window, or one with `moreData`, is read again
+  as two halves down to one minute, and a minute that is still full is a
+  `protocol_error`. Convert reads are spaced 1.1 s apart and withdrawal reads
+  120 ms apart, inside Binance's weight limits. Every read is a signed `GET`
+  under the same consent and the shared page, row and time bounds
+  ([mapping](imports.md#binance-api-and-supplemental-csv)).
+
+In both scopes the mapper returns its asset tally, so the envelope gains
+`assets` (`scope`, `skipped` and `excluded` by ticker, and `next_step`) and
+`swap_pairs`. A Kraken crypto-scope sync that skipped moves between Kraken
+balances sets `skipped` to `{"internal_moves": n}`.
+
 ## Stored rows
 
 Each exchange record is a Python import dict: `txid`, `occurred_at`,
-`direction`, `asset` (BTC or LBTC only), absolute `amount` and `fee`, the ten
+`direction`, `asset` (BTC or LBTC only in `bitcoin` scope; any crypto asset,
+stored exactly to 11 decimals, in `crypto` scope), absolute `amount` and `fee`, the ten
 pricing fields (exact `exchange_execution` pricing for fiat-quoted trades and
 Binance fiat buys, otherwise null), `kind`, `description`, `counterparty` and
 `raw_json` (the provider row, sorted keys). The coordinator writes the same
