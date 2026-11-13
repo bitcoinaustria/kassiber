@@ -219,13 +219,6 @@
     "withheld": "Hidden while amounts are hidden.",
     "empty": "No notifications.",
     "detailLine": "{{label}}: {{message}}",
-    "generic": {
-      "attentionTitle": "Something needs attention",
-      "failedTitle": "Something went wrong",
-      "doneTitle": "Task finished",
-      "noticeTitle": "Notice",
-      "body": "Details are hidden in this privacy mode."
-    },
     "phrase": {
       "failed": "failed",
       "cancelled": "cancelled",

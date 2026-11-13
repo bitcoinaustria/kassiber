@@ -1,15 +1,14 @@
 import type { TFunction } from "i18next";
 
-import type { AppNotification, NotificationTone, PrivacyMode } from "@/store/ui";
+import type { PrivacyMode } from "@/store/ui";
 import type {
   ConditionGroup,
   JobEntry,
   NotificationDetail,
-  NotificationSeverity,
   ResultEntry,
 } from "@/store/notifications";
 
-import { mayHoldAmount, projectFreeText } from "./notificationPrivacy";
+import { projectFreeText } from "./notificationPrivacy";
 
 /**
  * What the center and the toasts may show of an entry in the current privacy
@@ -343,47 +342,4 @@ function jobTitle(job: JobEntry, t: ChromeT): string {
     case "workspace-refresh":
       return t("notifications.job.workspaceRefresh");
   }
-}
-
-function genericTitle(tone: NotificationTone | NotificationSeverity, t: ChromeT) {
-  switch (tone) {
-    case "error":
-      return t("notifications.generic.failedTitle");
-    case "warning":
-      return t("notifications.generic.attentionTitle");
-    case "success":
-      return t("notifications.generic.doneTitle");
-    default:
-      return t("notifications.generic.noticeTitle");
-  }
-}
-
-/**
- * A sender that has not moved to the structured model yet. Its title and
- * body are finished text of unknown content, so Hide all replaces them with
- * generic wording and Hide amounts withholds any that contain digits.
- */
-export function projectLegacy(
-  item: Pick<AppNotification, "title" | "body" | "tone" | "details">,
-  mode: PrivacyMode,
-  t: ChromeT,
-): ProjectedEntry {
-  if (mode === "hideAll") {
-    return {
-      title: genericTitle(item.tone, t),
-      body: t("notifications.generic.body"),
-      details: [],
-    };
-  }
-  const title =
-    mode === "hideAmounts" && mayHoldAmount(item.title)
-      ? genericTitle(item.tone, t)
-      : item.title;
-  return {
-    title,
-    body: projectFreeText(item.body, mode, t),
-    details: (item.details ?? [])
-      .map((line) => projectFreeText(line, mode, t))
-      .filter((line): line is string => Boolean(line)),
-  };
 }

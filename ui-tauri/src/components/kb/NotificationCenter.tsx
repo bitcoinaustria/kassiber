@@ -41,31 +41,20 @@ import {
 import {
   bookIdentityKey,
   useUiStore,
-  type AppNotification,
   type NotificationTone,
 } from "@/store/ui";
 
-import {
-  notificationIsExpandable,
-  notificationProgressValue,
-  shouldHideNotificationProgressLabel,
-} from "./notificationDisplay";
-import { projectFreeText } from "./notificationPrivacy";
+import { notificationProgressValue } from "./notificationDisplay";
 import { requestSettingsAnchor } from "./settings/settingsSearch";
 import {
   projectConditionGroup,
   projectJob,
-  projectLegacy,
   projectResult,
   type ProjectedEntry,
 } from "./notificationProjection";
 import {
-  notificationTarget,
   resolveEntryAction,
-  resolveNotificationAction,
-  type NotificationTarget,
   type ResolvedEntryAction,
-  type ResolvedNotificationAction,
 } from "./notificationRouting";
 
 type ChromeT = TFunction<"chrome">;
@@ -193,7 +182,7 @@ function resultActionLabel(resolved: ResolvedEntryAction, t: ChromeT): string {
 /** A row's one button, resolved against the open book. */
 interface RowAction {
   label: string;
-  resolved: ResolvedEntryAction | ResolvedNotificationAction;
+  resolved: ResolvedEntryAction;
   pending: boolean;
 }
 
@@ -225,9 +214,6 @@ export function NotificationCenter({
   const dismissResult = useNotificationStore((s) => s.dismissResult);
   const clearResults = useNotificationStore((s) => s.clearResults);
   const markSeen = useNotificationStore((s) => s.markSeen);
-  const legacy = useUiStore((s) => s.notifications);
-  const clearNotification = useUiStore((s) => s.clearNotification);
-  const clearNotifications = useUiStore((s) => s.clearNotifications);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const privacyMode = useUiStore((s) => s.privacyMode);
   const identity = useUiStore((s) => s.identity);
@@ -237,24 +223,9 @@ export function NotificationCenter({
   const runningJobs = Object.values(jobs).sort((a, b) =>
     a.startedAt.localeCompare(b.startedAt),
   );
-  // Structured results and legacy senders share one Recent list, newest
-  // first, bounded to the same size as the results lane.
-  const recent: Array<
-    { kind: "result"; at: string; entry: ResultEntry }
-    | { kind: "legacy"; at: string; entry: AppNotification }
-  > = [
-    ...results.map((entry) => ({
-      kind: "result" as const,
-      at: entry.lastOccurredAt,
-      entry,
-    })),
-    ...legacy.map((entry) => ({
-      kind: "legacy" as const,
-      at: entry.createdAt,
-      entry,
-    })),
-  ]
-    .sort((a, b) => b.at.localeCompare(a.at))
+  // Newest first; the store already bounds Recent.
+  const recent: ResultEntry[] = [...results]
+    .sort((a, b) => b.lastOccurredAt.localeCompare(a.lastOccurredAt))
     .slice(0, MAX_RESULTS);
 
   const count = groups.length;
@@ -312,19 +283,6 @@ export function NotificationCenter({
     }
   };
 
-  const runLegacyAction = (action: ResolvedNotificationAction) => {
-    setOpen(false);
-    if (action.kind === "command") {
-      runOperation(
-        action.command === "process-journals"
-          ? { kind: "process-journals", autoPair: true }
-          : { kind: "refresh-book", forceFull: false },
-      );
-      return;
-    }
-    void navigate({ to: action.to });
-  };
-
   const pendingFor = (resolved: ResolvedEntryAction | null) =>
     resolved?.kind === "operation" &&
     Boolean(pendingOperations[resolved.operation.kind]);
@@ -361,10 +319,7 @@ export function NotificationCenter({
             variant="ghost"
             size="xs"
             disabled={recent.length === 0}
-            onClick={() => {
-              clearResults();
-              clearNotifications();
-            }}
+            onClick={clearResults}
           >
             {t("notifications.clearRecent")}
           </Button>
@@ -435,75 +390,40 @@ export function NotificationCenter({
             ) : null}
             {recent.length > 0 ? (
               <Section title={t("notifications.sections.recent")} id="recent">
-                {recent.map((item) => {
-                  if (item.kind === "result") {
-                    const entry = item.entry;
-                    const resolved = resolveEntryAction(
-                      entry.action,
-                      entry.scope,
-                      currentBook,
-                      developerToolsEnabled,
-                    );
-                    return (
-                      <EntryRow
-                        key={entry.id}
-                        tone={
-                          entry.severity === "info"
-                            ? "success"
-                            : severityTone(entry.severity)
-                        }
-                        projected={projectResult(entry, privacyMode, t)}
-                        occurredAt={entry.lastOccurredAt}
-                        otherBook={entry.scope.book !== currentBook}
-                        action={
-                          resolved
-                            ? {
-                                label: resultActionLabel(resolved, t),
-                                resolved,
-                                pending: pendingFor(resolved),
-                              }
-                            : undefined
-                        }
-                        onAction={() => runEntryAction(entry.action, entry.scope)}
-                        onDismiss={() => dismissResult(entry.id)}
-                        testId="notification-entry"
-                      />
-                    );
-                  }
-                  const entry = item.entry;
-                  const resolved =
-                    resolveNotificationAction(entry.action, developerToolsEnabled) ??
-                    undefined;
+                {recent.map((entry) => {
+                  const resolved = resolveEntryAction(
+                    entry.action,
+                    entry.scope,
+                    currentBook,
+                    developerToolsEnabled,
+                  );
                   return (
-                    <LegacyRow
+                    <EntryRow
                       key={entry.id}
-                      item={entry}
-                      projected={projectLegacy(entry, privacyMode, t)}
-                      to={notificationTarget(
-                        entry.title,
-                        entry.tone,
-                        developerToolsEnabled,
-                        entry.target,
-                      )}
+                      tone={
+                        entry.severity === "info"
+                          ? "success"
+                          : severityTone(entry.severity)
+                      }
+                      projected={projectResult(entry, privacyMode, t)}
+                      occurredAt={entry.lastOccurredAt}
+                      // Workspace-wide results belong to no book.
+                      otherBook={
+                        entry.scope.book !== null &&
+                        entry.scope.book !== currentBook
+                      }
                       action={
                         resolved
                           ? {
-                              label: resolved.label,
+                              label: resultActionLabel(resolved, t),
                               resolved,
-                              pending:
-                                resolved.kind === "command" &&
-                                Boolean(
-                                  pendingOperations[resolved.command],
-                                ),
+                              pending: pendingFor(resolved),
                             }
                           : undefined
                       }
-                      onNavigate={(to) => {
-                        setOpen(false);
-                        void navigate({ to });
-                      }}
-                      onAction={runLegacyAction}
-                      onDismiss={() => clearNotification(entry.id)}
+                      onAction={() => runEntryAction(entry.action, entry.scope)}
+                      onDismiss={() => dismissResult(entry.id)}
+                      testId="notification-entry"
                     />
                   );
                 })}
@@ -634,9 +554,7 @@ function ActionButton({
   const operation =
     action.resolved.kind === "operation"
       ? action.resolved.operation.kind
-      : action.resolved.kind === "command"
-        ? action.resolved.command
-        : null;
+      : null;
   const pendingLabel =
     operation === "process-journals"
       ? t("notifications.processing")
@@ -812,133 +730,6 @@ function JobRow({ job, onOpen }: { job: JobEntry; onOpen?: () => void }) {
           ) : null}
         </div>
       </div>
-    </li>
-  );
-}
-
-/**
- * A sender still on `addNotification`. Temporary: PR 2 moves each sender to
- * the structured model and removes this row along with title routing.
- */
-function LegacyRow({
-  item,
-  projected,
-  to,
-  action,
-  onNavigate,
-  onAction,
-  onDismiss,
-}: {
-  item: AppNotification;
-  projected: ProjectedEntry;
-  to?: NotificationTarget;
-  action?: RowAction;
-  onNavigate: (to: NotificationTarget) => void;
-  onAction: (action: ResolvedNotificationAction) => void;
-  onDismiss: () => void;
-}) {
-  const { t } = useTranslation("chrome");
-  const [expanded, setExpanded] = React.useState(false);
-  const detailsId = React.useId();
-  const ToneIcon = TONE_ICON[item.tone] ?? Info;
-  const expandable = notificationIsExpandable({
-    body: projected.body ?? "",
-    details: projected.details,
-  });
-  const privacyMode = useUiStore((s) => s.privacyMode);
-  const progressLabel = projectFreeText(item.progress?.label, privacyMode, t);
-  const showProgressLabel =
-    progressLabel &&
-    !shouldHideNotificationProgressLabel(projected.body ?? "", progressLabel);
-
-  return (
-    <li
-      className="flex items-start gap-2 rounded-md px-2 py-2 hover:bg-accent/40"
-      data-testid="notification-entry"
-    >
-      <ToneIcon
-        className={cn("mt-0.5 size-4 shrink-0", TONE_ICON_CLASS[item.tone])}
-        aria-hidden="true"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {to ? (
-            <button
-              type="button"
-              className="flex min-w-0 items-center gap-1 rounded-sm text-left text-sm font-medium hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              onClick={() => onNavigate(to)}
-            >
-              <span className="min-w-0 break-words">{projected.title}</span>
-              <ChevronRight
-                className="size-3.5 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
-            </button>
-          ) : (
-            <span className="min-w-0 text-sm font-medium break-words">
-              {projected.title}
-            </span>
-          )}
-          <RepeatBadge count={item.repeatCount ?? 1} />
-        </div>
-        <OccurredAt at={item.createdAt} />
-        {projected.body ? (
-          <p
-            className={cn(
-              "mt-0.5 text-xs break-words whitespace-pre-line text-muted-foreground",
-              expandable && !expanded && "line-clamp-2",
-            )}
-          >
-            {projected.body}
-          </p>
-        ) : null}
-        {expanded && projected.details.length > 0 ? (
-          <DetailList id={detailsId} details={projected.details} />
-        ) : null}
-        {item.progress ? (
-          <div className="mt-1.5">
-            <ProgressBar
-              value={item.progress.value}
-              indeterminate={item.progress.indeterminate}
-            />
-            {showProgressLabel ? (
-              <div className="mt-1 text-xs text-muted-foreground">
-                {progressLabel}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {action || expandable ? (
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            {action ? (
-              <ActionButton
-                action={action}
-                onClick={() =>
-                  onAction(action.resolved as ResolvedNotificationAction)
-                }
-              />
-            ) : null}
-            {expandable ? (
-              <DetailsToggle
-                expanded={expanded}
-                controls={detailsId}
-                onToggle={() => setExpanded((value) => !value)}
-              />
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        className="shrink-0 text-muted-foreground"
-        aria-label={t("notifications.dismiss", { title: projected.title })}
-        title={t("notifications.dismissShort")}
-        onClick={onDismiss}
-      >
-        <X aria-hidden="true" />
-      </Button>
     </li>
   );
 }

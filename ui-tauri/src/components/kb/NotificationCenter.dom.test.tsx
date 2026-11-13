@@ -37,12 +37,17 @@ import {
   bookIdentityKey,
   UI_STATE_VERSION,
   useUiStore,
-  type AppNotification,
   type Identity,
 } from "@/store/ui";
 
 import { NotificationCenter } from "./NotificationCenter";
 import { resolveEntryAction } from "./notificationRouting";
+import { requestSettingsAnchor } from "./settings/settingsSearch";
+
+vi.mock("./settings/settingsSearch", async (original) => ({
+  ...(await original<typeof import("./settings/settingsSearch")>()),
+  requestSettingsAnchor: vi.fn(),
+}));
 
 const MINUTE = 60_000;
 
@@ -62,17 +67,6 @@ const A = bookIdentityKey(BOOK_A);
 const SENTINEL_LABEL = "Sentinel Cold Vault";
 const SENTINEL_PATH = "/Users/sentinel/secret-wallet.json";
 const SENTINEL_AMOUNT = "0.4242 BTC";
-
-function legacy(
-  overrides: Partial<AppNotification> & Pick<AppNotification, "id" | "title">,
-): AppNotification {
-  return {
-    body: "Body text.",
-    tone: "info",
-    createdAt: new Date(Date.now() - 2 * MINUTE - 5_000).toISOString(),
-    ...overrides,
-  };
-}
 
 function sourceFailure(source: string, label: string, message: string): ConditionInput {
   return {
@@ -154,7 +148,6 @@ beforeEach(async () => {
     developerToolsEnabled: false,
     privacyMode: "normal",
     identity: BOOK_A,
-    notifications: [],
   });
 });
 
@@ -199,8 +192,11 @@ describe("NotificationCenter lanes", () => {
       severity: "info",
       params: { transactions: 3, entries: 5 },
     });
-    useUiStore.setState({
-      notifications: [legacy({ id: "l", title: "Export finished" })],
+    store.addResult({
+      code: "report.exported",
+      scope: { book: A },
+      severity: "info",
+      action: { type: "navigate", to: "/reports" },
     });
     openBell();
 
@@ -217,7 +213,7 @@ describe("NotificationCenter lanes", () => {
     expect(attention[2].textContent).toContain("1 source could not refresh");
     expect(within(section("running")!).getByText("Refreshing book")).toBeTruthy();
     expect(within(section("recent")!).getByText("Journals processed")).toBeTruthy();
-    expect(within(section("recent")!).getByText("Export finished")).toBeTruthy();
+    expect(within(section("recent")!).getByText("Report exported")).toBeTruthy();
   });
 
   it("badges unresolved attention groups only", () => {
@@ -232,14 +228,8 @@ describe("NotificationCenter lanes", () => {
         severity: "info",
       });
     }
-    useUiStore.setState({
-      notifications: [
-        legacy({ id: "ok", title: "Saved", tone: "success" }),
-        legacy({ id: "err", title: "Export failed", tone: "error" }),
-      ],
-    });
     render(<NotificationCenter runOperation={vi.fn()} />);
-    // Two sources fold into one group; results and legacy entries never count.
+    // Two sources fold into one group; results never count.
     expect(
       screen.getByRole("button", { name: "Notifications (2 active)" }),
     ).toBeTruthy();
@@ -255,14 +245,8 @@ describe("NotificationCenter lanes", () => {
         severity: "info",
         params: { transactions: index },
       });
-      useUiStore.getState().addNotification({
-        title: `Receipt ${index}`,
-        body: "Done.",
-        tone: "success",
-      });
     }
     expect(useNotificationStore.getState().results).toHaveLength(MAX_RESULTS);
-    expect(useUiStore.getState().notifications).toHaveLength(MAX_RESULTS);
     expect(
       useNotificationStore.getState().conditions[
         conditionKey("book-refresh.failed", { book: A })
@@ -276,7 +260,7 @@ describe("NotificationCenter lanes", () => {
     ).toHaveLength(MAX_RESULTS);
   });
 
-  it("Clear recent removes results and legacy entries, never conditions or jobs", () => {
+  it("Clear recent removes results, never conditions or jobs", () => {
     const store = useNotificationStore.getState();
     store.raiseCondition(refreshFailure(A));
     store.startJob({
@@ -286,14 +270,12 @@ describe("NotificationCenter lanes", () => {
       progress: { indeterminate: true },
     });
     store.addResult({ code: "book-refresh.finished", scope: { book: A }, severity: "info" });
-    useUiStore.setState({ notifications: [legacy({ id: "l", title: "Copied" })] });
     openBell();
 
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Clear recent" }));
     });
     expect(useNotificationStore.getState().results).toEqual([]);
-    expect(useUiStore.getState().notifications).toEqual([]);
     expect(section("recent")).toBeNull();
     expect(entry("Book refresh failed")).toBeTruthy();
     expect(entry("Processing journals")).toBeTruthy();
@@ -474,33 +456,23 @@ describe("NotificationCenter actions and scope", () => {
         review: "/journals",
       },
     });
-    useUiStore.setState({
-      notifications: [
-        legacy({
-          id: "l",
-          title: "Tampered",
-          action: { label: "Go", target: "https://example.com" },
-        }),
-        legacy({
-          id: "c",
-          title: "Tampered command",
-          action: { label: "Run", command: "rm" as never },
-        }),
-      ],
+    store.addResult({
+      code: "connection.synced",
+      scope: { book: A, source: "connection:x" },
+      severity: "info",
+      action: { type: "open-connection", connectionId: "" },
     });
     openBell();
     for (const title of [
       "Some sources are still queued",
       "Journals processed",
-      "Tampered",
-      "Tampered command",
+      "Wallet synced",
     ]) {
       expect(entry(title)).toBeTruthy();
     }
     expect(screen.queryByRole("button", { name: "Open wallets" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Go" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Run" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Open journals" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open wallet" })).toBeNull();
     expect(
       resolveEntryAction(
         { type: "navigate", to: "/nope" },
@@ -512,102 +484,139 @@ describe("NotificationCenter actions and scope", () => {
   });
 });
 
-describe("NotificationCenter legacy entries", () => {
+describe("NotificationCenter entries", () => {
   it("shows when each entry arrived, relative and in full", () => {
-    useUiStore.setState({
-      notifications: [legacy({ id: "a", title: "Export finished" })],
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() - 2 * MINUTE - 5_000);
+    useNotificationStore.getState().addResult({
+      code: "report.exported",
+      scope: { book: A },
+      severity: "info",
     });
+    vi.useRealTimers();
     openBell();
-    const time = within(entry("Export finished")).getByText("2 min. ago");
+    const time = within(entry("Report exported")).getByText("2 min. ago");
     expect(time.tagName).toBe("TIME");
     expect(time.getAttribute("dateTime")).toBe(
-      useUiStore.getState().notifications[0].createdAt,
+      useNotificationStore.getState().results[0].lastOccurredAt,
     );
     expect(time.getAttribute("title")).toMatch(/\d{4}/);
   });
 
   it("puts detail lines behind Show details", () => {
-    useUiStore.setState({
-      notifications: [
-        legacy({
-          id: "a",
-          title: "Export needs attention",
-          tone: "warning",
-          body: "One file was skipped",
-          details: ["Cold storage: Electrum timeout"],
-        }),
-      ],
-    });
+    useNotificationStore.getState().raiseCondition(
+      sourceFailure("s1", "Cold storage", "Electrum timeout"),
+    );
     openBell();
-    const row = entry("Export needs attention");
-    expect(within(row).queryByText("Cold storage: Electrum timeout")).toBeNull();
+    const row = entry("1 source could not refresh");
+    expect(within(row).queryByText(/Electrum timeout/)).toBeNull();
     const toggle = within(row).getByRole("button", { name: /Show details/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     act(() => void fireEvent.click(toggle));
-    expect(within(row).getByText("Cold storage: Electrum timeout")).toBeTruthy();
+    expect(within(row).getByText("Cold storage: failed — Electrum timeout")).toBeTruthy();
     act(() => {
       fireEvent.click(within(row).getByRole("button", { name: /Hide details/ }));
     });
-    expect(within(row).queryByText("Cold storage: Electrum timeout")).toBeNull();
+    expect(within(row).queryByText(/Electrum timeout/)).toBeNull();
   });
 
-  it("dismisses one entry and leaves the others", () => {
-    useUiStore.setState({
-      notifications: [
-        legacy({ id: "a", title: "Export finished" }),
-        legacy({ id: "b", title: "Import rolled back" }),
-      ],
-    });
+  it("dismisses one result and leaves the others", () => {
+    const store = useNotificationStore.getState();
+    store.addResult({ code: "report.exported", scope: { book: A }, severity: "info" });
+    store.addResult({ code: "pricing.rebuilt", scope: { book: A }, severity: "info" });
     openBell();
     act(() => {
       fireEvent.click(
-        screen.getByRole("button", { name: "Dismiss notification: Export finished" }),
+        screen.getByRole("button", { name: "Dismiss notification: Report exported" }),
       );
     });
-    expect(useUiStore.getState().notifications.map((item) => item.id)).toEqual(["b"]);
+    expect(useNotificationStore.getState().results.map((item) => item.code)).toEqual([
+      "pricing.rebuilt",
+    ]);
   });
 
-  it("navigates from an action button and from the title", () => {
-    useUiStore.setState({
-      notifications: [
-        legacy({
-          id: "a",
-          title: "Backend required",
-          tone: "warning",
-          target: "/settings/bitcoin",
-          action: { label: "Open settings", target: "/settings/bitcoin" },
-        }),
-        legacy({ id: "b", title: "Quarantine", target: "/review" }),
-      ],
+  it("opens the exact connection, transaction, setting, and workspace", () => {
+    const store = useNotificationStore.getState();
+    store.raiseCondition({
+      code: "connection.sync-failed",
+      scope: { book: A, source: "connection:w-cold" },
+      severity: "error",
+      priority: "attention",
+      action: { type: "open-connection", connectionId: "w-cold" },
+    });
+    store.raiseCondition({
+      code: "source-funds.rescan-needed",
+      scope: { book: A, source: "source-funds:tx-target" },
+      severity: "warning",
+      priority: "attention",
+      params: { count: 1 },
+      action: { type: "open-transaction", transactionId: "tx-old" },
+    });
+    store.raiseCondition({
+      code: "touch-id.off",
+      scope: { book: null },
+      severity: "warning",
+      priority: "attention",
+      action: { type: "navigate", to: "/settings/security", anchor: "biometricUnlock" },
+    });
+    store.raiseCondition({
+      code: "workspace.refresh-failed",
+      scope: { book: null, source: "workspace:ws-1" },
+      severity: "error",
+      priority: "attention",
+      action: { type: "open-workspace", workspaceId: "ws-1" },
     });
     openBell();
     act(() => {
-      fireEvent.click(
-        within(entry("Backend required")).getByRole("button", { name: "Open settings" }),
-      );
+      fireEvent.click(within(entry("A wallet could not sync")).getByRole("button", { name: "Open wallet" }));
     });
-    expect(navigate).toHaveBeenCalledWith({ to: "/settings/bitcoin" });
+    expect(navigate).toHaveBeenLastCalledWith({
+      to: "/connections/$connectionId",
+      params: { connectionId: "w-cold" },
+    });
     reopen();
     act(() => {
-      fireEvent.click(within(entry("Quarantine")).getByRole("button", { name: "Quarantine" }));
+      fireEvent.click(
+        within(entry("A wallet needs a full rescan")).getByRole("button", { name: "Open transaction" }),
+      );
     });
-    expect(navigate).toHaveBeenLastCalledWith({ to: "/review" });
+    expect(navigate).toHaveBeenLastCalledWith({
+      to: "/transactions",
+      search: { tx: "tx-old" },
+    });
+    reopen();
+    act(() => {
+      fireEvent.click(
+        within(entry("Touch ID unlock is off")).getByRole("button", { name: "Enable Touch ID" }),
+      );
+    });
+    expect(requestSettingsAnchor).toHaveBeenLastCalledWith("biometricUnlock");
+    expect(navigate).toHaveBeenLastCalledWith({ to: "/settings/security" });
+    reopen();
+    act(() => {
+      fireEvent.click(
+        within(entry("Refreshing all books failed")).getByRole("button", { name: "Open all books" }),
+      );
+    });
+    expect(navigate).toHaveBeenLastCalledWith({
+      to: "/books/$workspaceId/birds-eye",
+      params: { workspaceId: "ws-1" },
+    });
   });
 
-  it("maps a legacy command onto the default operation", () => {
-    useUiStore.setState({
-      notifications: [
-        legacy({
-          id: "a",
-          title: "Old failure",
-          tone: "error",
-          action: { label: "Retry", command: "refresh-book" },
-        }),
-      ],
+  it("speaks Austrian German for the moved senders", async () => {
+    useNotificationStore.getState().raiseCondition({
+      code: "connection.sync-failed",
+      scope: { book: A, source: "connection:w-cold" },
+      severity: "error",
+      priority: "attention",
+      action: { type: "open-connection", connectionId: "w-cold" },
     });
-    const { runOperation } = openBell();
-    act(() => void fireEvent.click(screen.getByRole("button", { name: "Retry" })));
-    expect(runOperation).toHaveBeenCalledWith({ kind: "refresh-book", forceFull: false });
+    await i18n.changeLanguage("de");
+    useUiStore.setState({ lang: "de" });
+    openBell();
+    const row = entry("Sync einer Wallet fehlgeschlagen");
+    expect(within(row).getByRole("button", { name: "Wallet öffnen" })).toBeTruthy();
   });
 });
 
@@ -618,16 +627,11 @@ describe("NotificationCenter privacy modes", () => {
       sourceFailure("s1", SENTINEL_LABEL, `rejected ${SENTINEL_AMOUNT} at ${SENTINEL_PATH}`),
     );
     store.raiseCondition(sourceFailure("s2", "Hot", "connection refused"));
-    useUiStore.setState({
-      notifications: [
-        legacy({
-          id: "l",
-          title: `Imported ${SENTINEL_LABEL}`,
-          body: `Saved ${SENTINEL_PATH} with ${SENTINEL_AMOUNT}`,
-          tone: "success",
-          details: [`${SENTINEL_LABEL}: 3 rows`],
-        }),
-      ],
+    store.addResult({
+      code: "report.exported",
+      scope: { book: A },
+      severity: "info",
+      details: [{ label: SENTINEL_PATH, message: `${SENTINEL_AMOUNT} in 3 rows` }],
     });
   }
 
@@ -669,7 +673,7 @@ describe("NotificationCenter privacy modes", () => {
       expect(text).not.toContain(sentinel);
     }
     expect(text).toContain("2 sources could not refresh");
-    expect(text).toContain("Task finished");
+    expect(text).toContain("Report exported");
     expect(screen.queryAllByRole("button", { name: /Show details/ })).toHaveLength(0);
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Review sources" }));
@@ -681,13 +685,14 @@ describe("NotificationCenter privacy modes", () => {
 
 describe("notification persistence", () => {
   it("writes no notification payload to kb.ui", () => {
-    useUiStore.getState().addNotification({
-      title: `Imported ${SENTINEL_LABEL}`,
-      body: `Saved ${SENTINEL_PATH} (${SENTINEL_AMOUNT})`,
-      tone: "error",
-      details: ["Cold storage: tcp://10.0.0.7:50001 refused"],
-      action: { label: "Retry", command: "refresh-book" },
+    useNotificationStore.getState().addResult({
+      code: "report.exported",
+      scope: { book: A },
+      severity: "info",
+      details: [{ label: SENTINEL_PATH, message: `${SENTINEL_AMOUNT} via tcp://10.0.0.7:50001` }],
+      action: { type: "navigate", to: "/reports" },
     });
+    useNotificationStore.getState().raiseCondition(refreshFailure(A));
     useNotificationStore.getState().raiseCondition(
       sourceFailure("s1", SENTINEL_LABEL, SENTINEL_PATH),
     );
@@ -734,7 +739,7 @@ describe("notification persistence", () => {
     });
 
     const state = useUiStore.getState();
-    expect(state.notifications).toEqual([]);
+    expect((state as { notifications?: unknown }).notifications).toBeUndefined();
     expect(state.theme).toBe("light");
     expect(state.developerToolsEnabled).toBe(true);
     const stored = storage.get("kb.ui") ?? "";

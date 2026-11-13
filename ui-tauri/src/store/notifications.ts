@@ -18,8 +18,8 @@ import { create } from "zustand";
  * mode (see `notificationProjection.ts`). Actions are typed data and carry
  * their originating book scope; the center revalidates it before acting.
  *
- * Senders still on the old `addNotification` path land in the legacy list in
- * `store/ui.ts`, which the center shows under Recent.
+ * Feedback on what the user just did is a toast (`lib/feedback.ts`), never an
+ * entry here.
  */
 
 export type NotificationSeverity = "info" | "warning" | "error";

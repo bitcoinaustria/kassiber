@@ -208,7 +208,7 @@ import { NetworkStatusIndicator } from "./NetworkStatusIndicator";
 import {
   daemonQueryUsesShellProgress,
   routeProgressFromActiveMaintenance,
-  routeProgressFromNotifications,
+  routeProgressFromJobs,
   type RouteProgressState,
 } from "./progressIndicator";
 import {
@@ -224,6 +224,7 @@ import {
 import { notificationProgressValue } from "./notificationDisplay";
 import { FeedbackToaster } from "./FeedbackToaster";
 import { NotificationCenter } from "./NotificationCenter";
+import { projectJob } from "./notificationProjection";
 import { requestSettingsAnchor } from "./settings/settingsSearch";
 import { watchCondition } from "@/hooks/useLocalWatchNotifications";
 import { recordTouchIdOff, resolveTouchIdOff } from "@/lib/unlockNotifications";
@@ -684,7 +685,9 @@ export function AppShell() {
   const setDeferredConnectionSetup = useUiStore(
     (s) => s.setDeferredConnectionSetup,
   );
-  const appNotifications = useUiStore((s) => s.notifications);
+  const runningJobs = useNotificationStore((s) => s.jobs);
+  const privacyMode = useUiStore((s) => s.privacyMode);
+  const { t: tChrome } = useTranslation("chrome");
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
@@ -772,7 +775,9 @@ export function AppShell() {
   useAgentAccessMasterSync(aiFeaturesEnabled, daemonEnabled);
   const shellProgress =
     routeProgressFromActiveMaintenance(activeMaintenanceProgress) ??
-    routeProgressFromNotifications(appNotifications);
+    routeProgressFromJobs(Object.values(runningJobs), (job) =>
+      projectJob(job, privacyMode, tChrome),
+    );
   const shellBusy =
     routerBusy || foregroundDaemonFetchCount > 0 || Boolean(shellProgress);
   const firstSyncDone = useUiStore((s) => s.firstSyncDone);
@@ -1221,7 +1226,6 @@ export function AppShell() {
     clearDaemonQueryCache();
     // The session's notifications go with it; they are RAM only anyway.
     resetNotificationStore();
-    useUiStore.setState({ notifications: [] });
     setDaemonAuthRequired(false);
     setHideSensitive(false);
     void clearImportedProjectRoot()

@@ -219,13 +219,6 @@
     "withheld": "Ausgeblendet, solange Beträge verborgen sind.",
     "empty": "Keine Benachrichtigungen.",
     "detailLine": "{{label}}: {{message}}",
-    "generic": {
-      "attentionTitle": "Etwas braucht deine Aufmerksamkeit",
-      "failedTitle": "Etwas ist schiefgelaufen",
-      "doneTitle": "Aufgabe abgeschlossen",
-      "noticeTitle": "Hinweis",
-      "body": "Details sind in diesem Privatsphäre-Modus ausgeblendet."
-    },
     "phrase": {
       "failed": "fehlgeschlagen",
       "cancelled": "abgebrochen",
