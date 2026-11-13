@@ -9,7 +9,12 @@ import { useNotificationStore, type NotificationScope } from "@/store/notificati
  * files panel keeps the error, and a quarantine block is already the Review
  * condition.
  */
-const JOB_ID = "report-export";
+/**
+ * Each export is its own job: one started after leaving and re-entering
+ * Reports while another still runs must not replace that one's row, nor be
+ * ended by it.
+ */
+let exportSequence = 0;
 
 /**
  * `book` is the open book bound at the click (`activeBookScope`); null while
@@ -18,16 +23,17 @@ const JOB_ID = "report-export";
  */
 export function reportExportJob(book: NotificationScope | null) {
   const scope: NotificationScope | null = book;
+  const id = `report-export:${++exportSequence}`;
   return {
     scope,
     start: () =>
       useNotificationStore.getState().startJob({
-        id: JOB_ID,
+        id,
         code: "report-export",
         scope: scope ?? { book: null },
         progress: { indeterminate: true },
       }),
-    end: () => useNotificationStore.getState().endJob(JOB_ID),
+    end: () => useNotificationStore.getState().endJob(id),
   };
 }
 

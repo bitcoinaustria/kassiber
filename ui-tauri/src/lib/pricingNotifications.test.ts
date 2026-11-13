@@ -68,6 +68,18 @@ describe("price rebuilds", () => {
 });
 
 describe("report exports", () => {
+  it("keeps overlapping exports apart", () => {
+    const first = reportExportJob(SCOPE);
+    const second = reportExportJob(SCOPE);
+    first.start();
+    second.start();
+    expect(Object.keys(useNotificationStore.getState().jobs)).toHaveLength(2);
+    first.end();
+    expect(Object.keys(useNotificationStore.getState().jobs)).toHaveLength(1);
+    second.end();
+    expect(useNotificationStore.getState().jobs).toEqual({});
+  });
+
   it("land in Recent opening Reports, with the file name kept as free text", () => {
     const job = reportExportJob(SCOPE);
     job.start();
