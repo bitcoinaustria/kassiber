@@ -48,7 +48,11 @@ Bitcoin and Liquid only.
   the policy the profile's country recommends: carrying value where the
   country carries basis across assets (Austria: crypto-to-crypto is
   tax-neutral), taxable elsewhere. The tax engine already handles both,
-  including Austrian Alt/Neu lots. A cross-asset pair is sized by its own
+  including Austrian Alt/Neu lots, but both need each leg's price: until
+  then journals hold the pair in review (`at_swap_link` in Austria,
+  `missing_spot_price` elsewhere), and the user prices the legs (`journals
+  quarantine resolve price-override`). Coinbase converts carry a fiat value;
+  Bitpanda, Kraken, CoinTracking and Blockpit swaps do not. A cross-asset pair is sized by its own
   conversion relation, so the raw units of the two assets are never compared.
   Its stored `swap_fee_msat` is still the difference of those raw units and is
   meaningless; views must not show it as a fee when the assets differ.

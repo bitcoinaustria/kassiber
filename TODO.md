@@ -1910,10 +1910,14 @@ See [tax countries](docs/reference/tax-countries.md) and
   cannot authenticate against real Coinbase today, BTC-only included. Add CDP
   key auth (likely a signing dependency, with a license review) and update
   the desktop key guide. See [Coinbase](docs/exchanges/coinbase.md).
-- [ ] Price crypto-to-crypto swaps outside Austria: Bitpanda states no fiat
-  value for a swap, so taxable swap legs wait in `missing_spot_price` review.
-  Needs per-asset rate sources (the rates crate is BTC-only) or a provider
-  value with a confirmed meaning (Bitpanda's `trade.to_eur_rate`).
+- [ ] Price provider-reported crypto-to-crypto swaps. Bitpanda, Kraken,
+  CoinTracking and Blockpit state no fiat value for a swap, and journals hold
+  every unpriced swap pair in review (`at_swap_link` in Austria,
+  `missing_spot_price` elsewhere) until the user prices both legs. Options:
+  per-asset rate sources (the rates crate is BTC-only), a provider value with
+  a confirmed meaning (Bitpanda's `trade.to_eur_rate`), or valuing one leg
+  from the other's price (same trade, equal value), which is an accounting
+  decision for the owner.
 
 - [ ] Extend [exact exchange withdrawals](docs/reference/custody-resolution.md#exchange-withdrawals-that-name-their-txid)
   past Strike and River. Coinbase and Binance API rows name the txid, but the
