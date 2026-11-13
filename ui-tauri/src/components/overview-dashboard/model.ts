@@ -2741,6 +2741,11 @@ export type MonthlyFlows = {
   inValue: number;
   outValue: number;
   feeBtc: number;
+  /**
+   * Every flow counted carries a value in the book's currency. A flow priced
+   * in another fiat, or not priced, leaves the fiat totals unusable.
+   */
+  fiatComplete: boolean;
   /** Anything received, spent or paid in fees inside the window. */
   hasActivity: boolean;
 };
@@ -2756,11 +2761,19 @@ export function monthlyFlows(snapshot: OverviewSnapshot, now: Date = new Date())
     return { key: `${date.getFullYear()}-${date.getMonth()}`, date, inBtc: 0, outBtc: 0, inValue: 0, outValue: 0 };
   });
   const byKey = new Map(months.map((month) => [month.key, month]));
+  const bookCurrency = activeMarketFiatCurrency(snapshot).toUpperCase();
   let feeBtc = 0;
+  let fiatComplete = true;
   for (const event of activityTxs(snapshot)) {
     const month = byKey.get(`${event.occurredAt.getFullYear()}-${event.occurredAt.getMonth()}`);
     if (!month) continue;
-    feeBtc += event.feeBtc;
+    // A fee row may carry its fee as the amount rather than as feeSat; its
+    // volume is the larger of the two, so neither is counted twice.
+    feeBtc += event.flow === "fee" ? event.volumeBtc : event.feeBtc;
+    if (event.flow === "incoming" || event.flow === "outgoing") {
+      const currency = event.tx.fiatCurrency?.toUpperCase();
+      if (event.tx.eur == null || (currency && currency !== bookCurrency)) fiatComplete = false;
+    }
     if (event.flow === "incoming") {
       month.inBtc += event.btc;
       month.inValue += event.valueEur;
@@ -2779,6 +2792,7 @@ export function monthlyFlows(snapshot: OverviewSnapshot, now: Date = new Date())
     inValue: sum((month) => month.inValue),
     outValue: sum((month) => month.outValue),
     feeBtc,
+    fiatComplete,
     hasActivity: inBtc > 0 || outBtc > 0 || feeBtc > 0,
   };
 }

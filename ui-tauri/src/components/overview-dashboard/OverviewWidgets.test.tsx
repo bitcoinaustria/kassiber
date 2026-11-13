@@ -84,6 +84,45 @@ describe("tax year widget privacy", () => {
   });
 });
 
+describe("tax year widget split status", () => {
+  const split = (status: string) =>
+    renderToStaticMarkup(
+      createElement(TaxYearWidget, {
+        snapshot: {
+          ...MOCK_OVERVIEW,
+          fiat: { ...MOCK_OVERVIEW.fiat, completeness: COMPLETE },
+          taxFreeBalance: {
+            rule: "austrian_altbestand",
+            jurisdictionCode: "AT",
+            fiatCurrency: "EUR",
+            status,
+            taxFreeQuantitySats: 50_000_000,
+            taxableQuantitySats: 25_000_000,
+            totalQuantitySats: 75_000_000,
+            taxFreeMarketValue: null,
+            taxableMarketValue: null,
+            needsJournals: status === "needs_journals",
+            quarantines: status === "quarantines" ? 2 : 0,
+            buckets: [],
+          },
+        },
+        hideSensitive: false,
+      }),
+    );
+
+  it("withholds a split that waits on journals", () => {
+    const html = split("needs_journals");
+    expect(html).not.toContain("0.50000000");
+    expect(html).toContain("Run journals before relying on the tax-free split.");
+  });
+
+  it("withholds a split blocked by quarantines", () => {
+    const html = split("quarantines");
+    expect(html).not.toContain("0.25000000");
+    expect(html).toContain("Review 2 quarantines");
+  });
+});
+
 describe("money in and out", () => {
   const NOW = new Date(2026, 10, 15);
   const tx = (id: string, date: string, amountSat: number, eur: number, extra: Partial<OverviewSnapshot["txs"][number]> = {}) => ({
@@ -118,6 +157,34 @@ describe("money in and out", () => {
     // A move between own wallets adds only its fee.
     expect(flows.feeBtc).toBeCloseTo(0.00003);
     expect(flows.hasActivity).toBe(true);
+  });
+
+  it("counts a fee row whose fee is its amount, once", () => {
+    const flows = monthlyFlows(
+      snapshot([
+        tx("fee-as-amount", "2026-05-02 10:00", -3_000, -2, { type: "Fee" }),
+        tx("fee-both", "2026-05-03 10:00", -2_000, -1, { type: "Fee", feeSat: 2_000 }),
+      ]),
+      NOW,
+    );
+    expect(flows.feeBtc).toBeCloseTo(0.00005);
+    expect(flows.inBtc + flows.outBtc).toBe(0);
+    expect(flows.hasActivity).toBe(true);
+  });
+
+  it("leaves fiat totals aside when a flow is in another currency or unpriced", () => {
+    const eur = monthlyFlows(snapshot([tx("in", "2026-03-04 10:00", 50_000_000, 30_000)]), NOW);
+    expect(eur.fiatComplete).toBe(true);
+    const usd = monthlyFlows(
+      snapshot([
+        tx("in", "2026-03-04 10:00", 50_000_000, 30_000),
+        tx("usd", "2026-04-04 10:00", 10_000_000, 9_000, { fiatCurrency: "USD" }),
+      ]),
+      NOW,
+    );
+    expect(usd.fiatComplete).toBe(false);
+    const unpriced = monthlyFlows(snapshot([tx("in", "2026-03-04 10:00", 50_000_000, 0, { eur: null })]), NOW);
+    expect(unpriced.fiatComplete).toBe(false);
   });
 
   it("is left out when the last twelve months saw nothing", () => {

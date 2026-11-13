@@ -475,14 +475,18 @@
       "costBasis": "Cost basis",
       "taxFree": "Tax-free (old holdings)",
       "taxable": "Taxable (new holdings)",
-      "basisIncomplete": "Cost basis is incomplete, so gains are not shown until it is resolved."
+      "basisIncomplete": "Cost basis is incomplete, so gains are not shown until it is resolved.",
+      "taxFreeNeedsJournals": "Run journals before relying on the tax-free split.",
+      "taxFreeQuarantines_one": "Review {{count}} quarantine before relying on the tax-free split.",
+      "taxFreeQuarantines_other": "Review {{count}} quarantines before relying on the tax-free split."
     },
     "flows": {
       "title": "Money in and out, last 12 months",
       "chartAria": "Bitcoin received and spent per month",
       "received": "Received",
       "spent": "Spent",
-      "fees": "Fees"
+      "fees": "Fees",
+      "fiatIncomplete": "Some of these are not valued in {{currency}}, so the totals are in bitcoin."
     }
   }
 }

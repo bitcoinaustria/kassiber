@@ -247,6 +247,14 @@ describe("holdings layouts", () => {
     expect(html).toContain(">4<");
   });
 
+  it("keeps trend rows in one column until two of them fit", () => {
+    const trend = renderToStaticMarkup(createElement(HoldingsTrendLayout, props()));
+    expect(trend).toContain("@min-[72rem]/holdings:grid-cols-2");
+    expect(trend).not.toContain("@min-[44rem]/holdings:grid-cols-2");
+    const list = renderToStaticMarkup(createElement(HoldingsListLayout, props()));
+    expect(list).toContain("@min-[44rem]/holdings:grid-cols-2");
+  });
+
   it("masks shares and its own amounts in every layout under Hide all", () => {
     for (const layout of [HoldingsListLayout, HoldingsTilesLayout, HoldingsTableLayout, HoldingsTrendLayout]) {
       const html = renderToStaticMarkup(

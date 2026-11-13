@@ -115,14 +115,25 @@ const SourceName = ({ item, showSync = false }: { item: HoldingsItem; showSync?:
   );
 };
 
+// Where a second column starts. A trend row's fixed tracks take about 24.5rem
+// before the name gets any room, so two of them need a much wider card.
+const TWO_COLUMNS = {
+  list: "@min-[44rem]/holdings:grid-flow-col @min-[44rem]/holdings:grid-cols-2 @min-[44rem]/holdings:grid-rows-[repeat(var(--holding-rows),auto)]",
+  trend: "@min-[72rem]/holdings:grid-flow-col @min-[72rem]/holdings:grid-cols-2 @min-[72rem]/holdings:grid-rows-[repeat(var(--holding-rows),auto)]",
+} as const;
+
 /** Two columns read down, then across; the fixed figure columns keep both in line. */
-const TwoColumnList = ({ rows, children }: { rows: HoldingsItem[]; children: (item: HoldingsItem) => ReactNode }) => (
+const TwoColumnList = ({
+  rows,
+  wide = "list",
+  children,
+}: {
+  rows: HoldingsItem[];
+  wide?: keyof typeof TWO_COLUMNS;
+  children: (item: HoldingsItem) => ReactNode;
+}) => (
   <ul
-    className={cn(
-      "grid gap-x-8 gap-y-0.5",
-      rows.length > 1 &&
-        "@min-[44rem]/holdings:grid-flow-col @min-[44rem]/holdings:grid-cols-2 @min-[44rem]/holdings:grid-rows-[repeat(var(--holding-rows),auto)]",
-    )}
+    className={cn("grid gap-x-8 gap-y-0.5", rows.length > 1 && TWO_COLUMNS[wide])}
     style={{ "--holding-rows": Math.ceil(rows.length / 2) } as CSSProperties}
   >
     {rows.map((item) => (
@@ -284,7 +295,7 @@ export const HoldingsTableLayout = ({ rows, hideSensitive, hideShares, fiatLabel
 export const HoldingsTrendLayout = ({ rows, hideSensitive, hideShares, valueLabel }: HoldingsLayoutProps) => {
   const { t } = useTranslation("overview");
   return (
-    <TwoColumnList rows={rows}>
+    <TwoColumnList rows={rows} wide="trend">
       {(item) => {
         const trend = item.trend ?? [];
         const change = trend.length > 1 ? trend[trend.length - 1] - trend[0] : 0;

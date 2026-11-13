@@ -58,6 +58,12 @@ export const TaxYearWidget = ({
   const tone = (value: number) =>
     value >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
   const taxFree = snapshot.taxFreeBalance;
+  // As on Wallets: an inventory waiting on journals or blocked by
+  // quarantines is not shown as a split.
+  const taxFreeStatus = taxFree
+    ? taxFree.status ?? (taxFree.needsJournals ? "needs_journals" : taxFree.quarantines > 0 ? "quarantines" : "current")
+    : null;
+  const taxFreeCurrent = taxFreeStatus === "current";
   const rows: Array<{ label: string; value: string; className?: string }> = [
     {
       label: t("widgets.tax.realized"),
@@ -78,11 +84,11 @@ export const TaxYearWidget = ({
     rows.push(
       {
         label: t("widgets.tax.taxFree"),
-        value: formatBtc(taxFree.taxFreeQuantitySats / 100_000_000, { precision: 8 }),
+        value: taxFreeCurrent ? formatBtc(taxFree.taxFreeQuantitySats / 100_000_000, { precision: 8 }) : "—",
       },
       {
         label: t("widgets.tax.taxable"),
-        value: formatBtc(taxFree.taxableQuantitySats / 100_000_000, { precision: 8 }),
+        value: taxFreeCurrent ? formatBtc(taxFree.taxableQuantitySats / 100_000_000, { precision: 8 }) : "—",
       },
     );
   }
@@ -109,6 +115,13 @@ export const TaxYearWidget = ({
       {basisKnown ? null : (
         <p className="text-2xs text-amber-700 dark:text-amber-300">{t("widgets.tax.basisIncomplete")}</p>
       )}
+      {taxFree && !taxFreeCurrent ? (
+        <p className="text-2xs text-amber-700 dark:text-amber-300">
+          {taxFreeStatus === "quarantines"
+            ? t("widgets.tax.taxFreeQuarantines", { count: taxFree.quarantines })
+            : t("widgets.tax.taxFreeNeedsJournals")}
+        </p>
+      ) : null}
     </WidgetCard>
   );
 };
@@ -134,7 +147,9 @@ export const FlowsWidget = ({
   const flows = monthlyFlows(snapshot);
   if (!flows.hasActivity) return null;
   const { months } = flows;
-  const isBitcoinMode = currency === "btc";
+  // Fiat totals only when every flow is valued in the book's currency;
+  // otherwise bitcoin, which every flow has.
+  const isBitcoinMode = currency === "btc" || !flows.fiatComplete;
   const peak = Math.max(...months.map((month) => Math.max(month.inBtc, month.outBtc)), 0) || 1;
   const amount = (btc: number, value: number) =>
     maskSensitive(
@@ -198,6 +213,9 @@ export const FlowsWidget = ({
           </dd>
         </div>
       </dl>
+      {currency !== "btc" && !flows.fiatComplete ? (
+        <p className="text-2xs text-muted-foreground">{t("widgets.flows.fiatIncomplete", { currency: fiatCurrency })}</p>
+      ) : null}
     </WidgetCard>
   );
 };

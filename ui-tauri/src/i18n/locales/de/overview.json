@@ -475,14 +475,18 @@
       "costBasis": "Anschaffungskosten",
       "taxFree": "Steuerfrei (Altbestand)",
       "taxable": "Steuerpflichtig (Neubestand)",
-      "basisIncomplete": "Die Anschaffungskosten sind unvollständig; Gewinne erscheinen erst, wenn das geklärt ist."
+      "basisIncomplete": "Die Anschaffungskosten sind unvollständig; Gewinne erscheinen erst, wenn das geklärt ist.",
+      "taxFreeNeedsJournals": "Verarbeite Journale, bevor du dich auf die steuerfreie Aufteilung verlässt.",
+      "taxFreeQuarantines_one": "Prüfe {{count}} Quarantäne, bevor du dich auf die steuerfreie Aufteilung verlässt.",
+      "taxFreeQuarantines_other": "Prüfe {{count}} Quarantänen, bevor du dich auf die steuerfreie Aufteilung verlässt."
     },
     "flows": {
       "title": "Ein- und Ausgänge, letzte 12 Monate",
       "chartAria": "Bitcoin pro Monat erhalten und ausgegeben",
       "received": "Erhalten",
       "spent": "Ausgegeben",
-      "fees": "Gebühren"
+      "fees": "Gebühren",
+      "fiatIncomplete": "Einige davon sind nicht in {{currency}} bewertet, daher sind die Summen in Bitcoin."
     }
   }
 }

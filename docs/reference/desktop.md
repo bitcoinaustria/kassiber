@@ -461,12 +461,15 @@ percentage while a network filter is on.
 Two widgets follow. Tax year shows the daemon's realized result this year,
 unrealized result and cost basis, plus the Austrian tax-free and taxable split
 when the book has one; with an incomplete basis it shows no gains and says
-why. Its year is the UTC calendar year the daemon counts realized results
+why, and a split waiting on journals or blocked by quarantines shows no
+quantities, as on Wallets. Its year is the UTC calendar year the daemon counts realized results
 in. Money in and out shows the last twelve months of bitcoin received and
 spent per month, classified as the chart's activity dots are, so moves between
-your own wallets stay out, with totals and fees; a year without any leaves the
-widget out. Both mask their amounts while amounts are hidden, and "Hide all"
-also drops the monthly bars, whose heights tell how money moved.
+your own wallets count only their fees, with totals and fees underneath; a
+year without any leaves the widget out. Fiat totals need every flow valued in
+the book's currency; otherwise the totals are in bitcoin and the widget says
+why. Both mask their amounts while amounts are hidden, and "Hide all" also
+drops the monthly bars, whose heights tell how money moved.
 
 Overview, Wallets, the book-set overview, and the Reports metric strip read the
 daemon's `fiat.completeness` block (see [the daemon reference](daemon.md)) instead of
