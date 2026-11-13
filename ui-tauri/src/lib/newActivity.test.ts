@@ -26,9 +26,15 @@ function record(id: string, direction: string, wallet = "Treasury") {
   };
 }
 
-function job(label: string, result: Record<string, unknown>, status = "done") {
+let jobSequence = 0;
+function job(
+  label: string,
+  result: Record<string, unknown>,
+  status = "done",
+  id = `job-${label}-${++jobSequence}`,
+) {
   return {
-    id: `job-${label}`,
+    id,
     job_type: "onchain_wallet",
     source_key: `wallet:${label}`,
     source_label: label,
@@ -74,7 +80,7 @@ describe("new transactions from a run", () => {
     const outcome = { wallet: "Exchange", status: "synced", imported: 4 };
     const found = newActivityFromRun({
       results: [outcome as never],
-      completed: [job("Exchange", outcome)],
+      completed: [job("Exchange", outcome, "done", "job-Exchange")],
     });
     expect(found).toEqual({
       records: [],
@@ -92,7 +98,9 @@ describe("new transactions from a run", () => {
   });
 
   it("falls back to the imported count when a source lists no records", () => {
-    const found = newActivityFromRun({ completed: [job("Exchange", { imported: 4 })] });
+    const found = newActivityFromRun({
+      completed: [job("Exchange", { imported: 4 }, "done", "job-Exchange")],
+    });
     expect(found).toEqual({
       records: [],
       unlisted: [{ wallet: "Exchange", count: 4, job: "job-Exchange" }],
@@ -226,7 +234,9 @@ describe("the new transactions entry", () => {
 
   it("does not announce a replayed count-only job, or a re-inserted txid, twice", () => {
     const countOnly = () =>
-      newActivityFromRun({ completed: [job("Exchange", { imported: 4 })] });
+      newActivityFromRun({
+        completed: [job("Exchange", { imported: 4 }, "done", "job-replayed")],
+      });
     recordNewActivity(countOnly(), SCOPE);
     useNotificationStore.getState().markSeen();
     recordNewActivity(countOnly(), SCOPE);
@@ -246,6 +256,42 @@ describe("the new transactions entry", () => {
     useNotificationStore.getState().markSeen();
     recordNewActivity(withTxid("row-2"), SCOPE);
     expect(activity()[0].params.transactionIds).toEqual(["row-1"]);
+  });
+
+  it("announces both sides of a transfer between own wallets", () => {
+    const transfer = newActivityFromRun({
+      completed: [
+        job("Hot", {
+          inserted_records: [{ ...record("r1", "outbound", "Hot"), external_id: "txid#bb" }],
+        }),
+        job("Cold", {
+          inserted_records: [{ ...record("r2", "inbound", "Cold"), external_id: "txid#bb" }],
+        }),
+      ],
+    });
+    recordNewActivity(transfer, SCOPE);
+    expect(activity()[0].params).toMatchObject({ transactions: 2, incoming: 1, outgoing: 1 });
+  });
+
+  it("does not let a large replayed job through after per-transaction keys roll over", () => {
+    const big = () =>
+      newActivityFromRun({
+        completed: [
+          job(
+            "Treasury",
+            {
+              inserted_records: Array.from({ length: 5_001 }, (_, index) =>
+                record(`big-${index}`, "inbound"),
+              ),
+            },
+            "done",
+            "job-big",
+          ),
+        ],
+      });
+    recordNewActivity(big(), SCOPE);
+    recordNewActivity(big(), SCOPE);
+    expect(activity()[0].params.transactions).toBe(5_001);
   });
 
   it("keeps what each book announced apart", () => {

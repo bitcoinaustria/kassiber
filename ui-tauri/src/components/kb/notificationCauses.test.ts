@@ -69,6 +69,17 @@ describe("notification causes", () => {
     expect(
       classifyCause({ message: "anything", code: "network_egress_disabled" }),
     ).toBe("offline");
+    // An apostrophe inside a quoted name does not leak its words.
+    expect(
+      classifyCause({
+        label: "Wallet",
+        message: "Backend 'Bob's timeout' did not respond with Electrum-format JSON",
+      }),
+    ).toBeNull();
+    // The status outranks the server's own wording.
+    expect(
+      classifyCause({ message: "HTTP 401 from backend for host: service unavailable" }),
+    ).toBe("credentials");
   });
 
   it("folds wallets with the same cause into one group, biggest first", () => {
@@ -200,6 +211,8 @@ describe("the assistant's question", () => {
         sourceGroup([
           { label: "/Users/alice/private/recovery.kassiber", message: "network I/O failed" },
           { label: "https://node.example/private", message: "network I/O failed" },
+          { label: "[fdab::abcd]", message: "network I/O failed" },
+          { label: "node:8", message: "network I/O failed" },
           { label: "Cold", message: "network I/O failed" },
         ]),
         mode,
@@ -207,7 +220,14 @@ describe("the assistant's question", () => {
       );
       expect(prompt, mode).not.toContain("/Users/alice");
       expect(prompt, mode).not.toContain("node.example");
-      expect(prompt, mode).toContain("Connection to the server failed: Cold (+2 more)");
+      expect(prompt, mode).not.toContain("fdab");
+      expect(prompt, mode).not.toContain("node:8");
+      // Hide amounts masks "node:8" (a digit) to ••••, which reveals nothing.
+      expect(prompt, mode).toContain(
+        mode === "normal"
+          ? "Connection to the server failed: Cold (+4 more)"
+          : "Connection to the server failed: ••••, Cold (+3 more)",
+      );
     }
     const named = {
       ...sourceGroup([{ label: "https://node.example/x", message: "network I/O failed" }]),

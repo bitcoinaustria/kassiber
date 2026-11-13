@@ -17,11 +17,15 @@ export interface NewActivity {
     /** The row id, for opening one transaction. */
     id: string;
     /**
-     * What identifies the transaction across runs: its external id (the
-     * txid) when known, so a rescan that re-inserts a row under a new id is
-     * not announced again; otherwise the row id.
+     * What identifies the transaction across runs, scoped like the daemon's
+     * own fingerprint: external id (the txid), wallet, direction, and asset
+     * when the txid is known, so a rescan that re-inserts a row under a new
+     * id is not announced again while both sides of a transfer between own
+     * wallets still are; otherwise the row id.
      */
     key: string;
+    /** The freshness job that reported it, when known. */
+    job?: string;
     direction: "incoming" | "outgoing" | null;
     wallet?: string;
   }>;
@@ -44,6 +48,20 @@ const MAX_WALLETS = 500;
  */
 const MAX_ANNOUNCED = 5_000;
 const announced = new Set<string>();
+/**
+ * Completed jobs already announced, kept apart from the per-transaction
+ * keys so evicting old keys never lets a replayed job through.
+ */
+const MAX_ANNOUNCED_JOBS = 2_000;
+const announcedJobs = new Set<string>();
+
+function rememberJob(book: string | null, job: string) {
+  announcedJobs.add(announcedKey(book, job));
+  if (announcedJobs.size > MAX_ANNOUNCED_JOBS) {
+    const oldest = announcedJobs.values().next().value;
+    if (oldest !== undefined) announcedJobs.delete(oldest);
+  }
+}
 
 function announcedKey(book: string | null, key: string): string {
   return JSON.stringify([book, key]);
@@ -60,6 +78,7 @@ function remember(book: string | null, key: string) {
 /** For tests: forget what this session announced. */
 export function resetAnnouncedActivity(): void {
   announced.clear();
+  announcedJobs.clear();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -88,19 +107,24 @@ function collectOutcome(
       if (!isRecord(record)) continue;
       const id = text(record.transaction_id);
       if (!id) continue;
-      const key = text(record.external_id) ?? id;
+      const external = text(record.external_id);
+      const recordWallet = text(record.wallet) ?? wallet;
+      const key = external
+        ? JSON.stringify([external, recordWallet ?? null, record.direction ?? null, record.asset ?? null])
+        : id;
       if (seen.has(key)) continue;
       seen.add(key);
       activity.records.push({
         id,
         key,
+        ...(job ? { job } : {}),
         direction:
           record.direction === "inbound"
             ? "incoming"
             : record.direction === "outbound"
               ? "outgoing"
               : null,
-        wallet: text(record.wallet) ?? wallet,
+        wallet: recordWallet,
       });
     }
     return;
@@ -159,16 +183,16 @@ export function recordNewActivity(
     (entry) =>
       entry.code === "activity.new" && entry.scope.book === book && !entry.seenAt,
   );
+  const jobSeen = (job: string | undefined) =>
+    job !== undefined && announcedJobs.has(announcedKey(book, job));
   const fresh = activity.records.filter(
-    (record) => !announced.has(announcedKey(book, record.key)),
+    (record) => !jobSeen(record.job) && !announced.has(announcedKey(book, record.key)),
   );
-  const unlisted = activity.unlisted.filter(
-    (item) => !item.job || !announced.has(announcedKey(book, `job:${item.job}`)),
-  );
+  const unlisted = activity.unlisted.filter((item) => !jobSeen(item.job));
   const unlistedCount = unlisted.reduce((sum, item) => sum + item.count, 0);
   if (fresh.length === 0 && unlistedCount === 0) return;
   for (const record of fresh) remember(book, record.key);
-  for (const item of unlisted) if (item.job) remember(book, `job:${item.job}`);
+  for (const item of [...fresh, ...unlisted]) if (item.job) rememberJob(book, item.job);
 
   const wallets = new Map<string, number>();
   for (const wallet of earlier?.params.walletCounts ?? []) {

@@ -57,7 +57,9 @@ function escapeRegExp(text: string): string {
 
 /** The message with interpolated names removed: quoted text and the label. */
 function templateText(message: string, label: string | undefined): string {
-  let text = message.replace(/'[^']*'|"[^"]*"|`[^`]*`/g, "''");
+  // Greedy, from the first quote to the last: a quoted name can itself hold
+  // an apostrophe ("Bob's node").
+  let text = message.replace(/'.*'|".*"|`.*`/g, "''");
   const trimmed = label?.trim();
   if (trimmed) text = text.replace(new RegExp(escapeRegExp(trimmed), "gi"), "''");
   return text;
@@ -72,6 +74,12 @@ export function classifyCause(
     detail.code && detail.code !== "rate_limited" ? CODE_CAUSES[detail.code] : undefined;
   if (byCode) return byCode;
   const message = templateText(detail.message ?? "", detail.label);
+  // An HTTP status outranks any wording around it, which may be the
+  // server's own response body.
+  const status = /\bhttp (\d{3})\b/i.exec(message)?.[1];
+  if (status === "401" || status === "403") return "credentials";
+  if (status === "429") return "rateLimited";
+  if (status === "502" || status === "503" || status === "504") return "unavailable";
   for (const [cause, pattern] of MESSAGE_CAUSES) {
     if (pattern.test(message)) return cause;
   }

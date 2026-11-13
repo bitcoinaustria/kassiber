@@ -509,12 +509,12 @@ export const ASSISTANT_TROUBLESHOOT_CODES: readonly ConditionCode[] = [
 
 /**
  * A wallet name the assistant may see: a plain name. A label that looks
- * like a location (a path, URL, domain, IP address, or host:port) or that
+ * like a location (a path, URL, domain, IPv4 or IPv6 address, or a port) or that
  * credential redaction would change is configuration, not a name, and is
  * left out.
  */
 const LOCATION_LIKE =
-  /[/\\~]|:\/\/|\b\d{1,3}(\.\d{1,3}){3}\b|\b[a-z0-9-]+(\.[a-z0-9-]+)+\b|:\d{2,5}\b|@/i;
+  /[/\\~[\]]|:\/\/|\b\d{1,3}(\.\d{1,3}){3}\b|\b[a-z0-9-]+(\.[a-z0-9-]+)+\b|:\d{1,5}\b|([0-9a-f]{0,4}:){2,}[0-9a-f]{0,4}|@/i;
 export function assistantSafeName(label: string): string | null {
   const trimmed = label.trim();
   if (!trimmed || LOCATION_LIKE.test(trimmed)) return null;
