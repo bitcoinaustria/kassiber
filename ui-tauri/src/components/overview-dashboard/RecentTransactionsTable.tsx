@@ -16,6 +16,7 @@ import {
 } from "@/lib/currency";
 import { transactionTypeLabel } from "@/lib/transactionTypeLabel";
 import { cn } from "@/lib/utils";
+import { useBookRefreshStore } from "@/daemon/bookRefresh";
 
 import {
   blurClass,
@@ -64,6 +65,7 @@ export const RecentTransactionsTable = ({
 }) => {
   const { t } = useTranslation("overview");
   const { t: tTransactions } = useTranslation("transactions");
+  const highlightedTxIds = useBookRefreshStore((state) => state.highlightedTxIds);
   const resolvedTitle = title ?? t("recentTx.title");
   const resolvedShowAllLabel = showAllLabel ?? t("recentTx.showAll");
   const [visibleCount, setVisibleCount] = React.useState(RECENT_TX_REVEAL_STEP);
@@ -202,8 +204,11 @@ export const RecentTransactionsTable = ({
                 (tx.tags[0]?.toLowerCase() === tx.status ||
                   statusLabel.toLowerCase() === primaryTag.toLowerCase());
               const typeLabel = tagIsStatus ? flowLabel : primaryTag;
-              const rowClassName =
-                "group flex min-w-0 items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4";
+              const rowClassName = cn(
+                "group flex min-w-0 items-center gap-2.5 px-3 py-1.5 text-left transition-colors duration-700 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none sm:px-4",
+                // A row the last book refresh brought in, for a few seconds.
+                highlightedTxIds.has(tx.id) && "bg-primary/10",
+              );
               const rowContent = (
                 <>
                   <span

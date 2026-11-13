@@ -75,6 +75,20 @@
       "openGitHub": "Open GitHub",
       "notNow": "Not now",
       "ok": "OK"
+    },
+    "freshness": {
+      "label": "Book status",
+      "syncing": "Syncing wallets",
+      "processing": "Processing journals",
+      "loading": "Loading changes",
+      "failed": "Refresh needs attention",
+      "needsJournals": "Journals need processing",
+      "current": "Up to date",
+      "newTransactions_one": "{{count}} new transaction",
+      "newTransactions_other": "{{count}} new transactions",
+      "removedTransactions_one": "{{count}} transaction removed",
+      "removedTransactions_other": "{{count}} transactions removed",
+      "balance": "balance"
     }
   },
   "projects": {

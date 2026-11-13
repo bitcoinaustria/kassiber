@@ -107,6 +107,7 @@ import {
   DAEMON_AUTH_REQUIRED_EVENT,
   daemonMutationKey,
   formatDaemonEnvelopeError,
+  refreshDaemonQueries,
   shouldHandleDaemonAuthRequiredEvent,
   useDaemon,
 } from "@/daemon/client";
@@ -192,6 +193,7 @@ import { ExternalBrowserLink } from "./ExternalBrowserLink";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
+import { BookFreshnessIndicator } from "./BookFreshnessIndicator";
 import { NetworkStatusIndicator } from "./NetworkStatusIndicator";
 import {
   daemonQueryUsesShellProgress,
@@ -1695,14 +1697,14 @@ export function AppShell() {
           if (disposed) return;
           const value = event.payload;
           if (value && typeof value === "object" && "event" in value && value.event === true && "kind" in value && value.kind === "ui.chain_analysis.watches.changed" && !("request_id" in value)) {
-            void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+            void refreshDaemonQueries(queryClient, null);
             addNotification({ title: t("chainAnalysis:watch.notificationTitle"), body: t("chainAnalysis:watch.notificationBody"), tone: "info", dedupeKey: "local-evidence-watches", target: "/chain-analysis" });
             return;
           }
           const signal = classifyDaemonFreshnessEvent(event.payload);
           if (!signal) return;
 
-          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+          void refreshDaemonQueries(queryClient, null);
           if (signal === "refresh") {
             const store = useUiStore.getState();
             const previousFailure = store.notifications.find(
@@ -3120,6 +3122,10 @@ function ShellTitlebarControls({
         {preAlphaBannerVisible ? <AlphaNotice /> : null}
       </div>
       <div className="flex shrink-0 items-center gap-0.5 pr-2 pl-2">
+        <BookFreshnessIndicator
+          daemonEnabled={daemonEnabled}
+          needsJournals={needsJournals}
+        />
         {/* Split control: primary click runs an incremental book refresh; the
             caret opens the other "bring the book current" actions. The book
             refresh already chains source sync + auto-pair + journals, so this

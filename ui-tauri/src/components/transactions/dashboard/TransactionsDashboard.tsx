@@ -152,7 +152,9 @@ const TransactionsDashboard = ({
   const explorerSettings = useUiStore((s) => s.explorerSettings);
   const currency = useCurrency();
   const { isSyncing } = useWalletSyncAction();
-  const baseRefreshSkeleton = isSyncing || isDataRefreshing;
+  // While the book updates the table and workbench keep their rows and
+  // figures on screen, dimmed; skeletons are only for a first load.
+  const isTableRefreshing = isSyncing || isDataRefreshing;
   const previousBookKey = React.useRef(bookKey);
   // Table and chart rows retain the daemon's accounting projection. An exact
   // source record resolved for detail is passed separately below.
@@ -231,7 +233,9 @@ const TransactionsDashboard = ({
   // assistant as this page's counts.
   const dashboardSnapshotIsCurrent =
     dashboardQuery.isSuccess && !dashboardQuery.isPlaceholderData;
-  const showRefreshSkeleton = baseRefreshSkeleton || dashboardQuery.isLoading;
+  const isWorkbenchLoading = dashboardQuery.isLoading;
+  const isWorkbenchRefreshing =
+    isTableRefreshing || (dashboardQuery.isFetching && !isWorkbenchLoading);
   React.useEffect(() => {
     setDaemonHistoryYears(
       dashboardSnapshot
@@ -451,7 +455,7 @@ const TransactionsDashboard = ({
         "relative",
         className,
       )}
-      aria-busy={showRefreshSkeleton}
+      aria-busy={isWorkbenchRefreshing || isWorkbenchLoading}
     >
       <div
         id="transactions-period-nav"
@@ -505,7 +509,8 @@ const TransactionsDashboard = ({
           swapCandidateTotal={dashboardSnapshot?.swapCandidateTotal ?? swapCandidateTotal}
           dashboardSnapshot={dashboardSnapshot}
           dashboardSnapshotIsCurrent={dashboardSnapshotIsCurrent}
-          isRefreshing={showRefreshSkeleton}
+          isLoading={isWorkbenchLoading}
+          isRefreshing={isWorkbenchRefreshing}
         />
       )}
 
@@ -534,7 +539,7 @@ const TransactionsDashboard = ({
           onChartSelectionChange={setFlowChartSelection}
           onQuickFilterChange={setQuickFilter}
           onBreakdownSelectionChange={setBreakdownSelection}
-          isRefreshing={showRefreshSkeleton}
+          isRefreshing={isTableRefreshing}
           hasMoreRecords={hasMoreTransactions}
           isLoadingMoreRecords={isLoadingMoreTransactions}
           onLoadMoreRecords={onLoadMoreTransactions}

@@ -688,3 +688,37 @@ kassiber status
 ```
 
 Use `--cli ...` for any other symlink or executable name.
+
+## Loading and freshness
+
+Screens show skeletons only before their first data arrives. Once a screen has
+shown data, it keeps showing it until the new data replaces it; a refresh
+never blanks it. The one exception is a different dataset: picking another
+tax year on Reports shows a placeholder until that year's report arrives,
+because the previous year's figures under the new heading would be wrong.
+Filter and period changes on Transactions keep the previous rows dimmed while
+the new ones load.
+
+A sync, a journal run, a market-rate refresh, a background freshness event,
+or a mutation that changes the book starts a book refresh cycle
+(`ui-tauri/src/daemon/bookRefresh.ts`). Every mounted `useDaemon` read keeps
+the data it showed while the cycle refetches. The cycle reads the book's
+revision (`status` with `revision: true`, see
+[request routing](daemon.md#request-routing)) before and after the refetch, and
+refetches again when a write landed in between, up to three passes. Then all
+screens switch to the new data in the same render, so the Overview balance
+and its transaction list always come from one state of the book. A cycle
+holds the screen for at most 15 seconds. Daemon reads are refused while a
+sync runs, so a cycle never shows the book halfway through one.
+
+The title bar's book status names one state for the whole book: updating
+(syncing wallets, processing journals, or loading changes), refresh needs
+attention, journals need processing, or up to date. After a cycle it names
+what changed for 30 seconds (new or removed transactions and the balance
+move, hidden in privacy mode), and rows the cycle brought in are highlighted
+on Transactions and the Overview's latest transactions for a few seconds.
+While the book updates, screens dim only the figures that will change; they
+stay readable and clickable, and the table pauses loading more rows until the
+update lands. Cached reads stay for 30 minutes after a screen closes, so
+reopening it shows its data at once; locking, switching books, or switching
+profiles empties the cache.

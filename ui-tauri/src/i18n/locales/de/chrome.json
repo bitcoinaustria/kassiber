@@ -75,6 +75,20 @@
       "openGitHub": "GitHub öffnen",
       "notNow": "Nicht jetzt",
       "ok": "OK"
+    },
+    "freshness": {
+      "label": "Status der Bücher",
+      "syncing": "Sync läuft",
+      "processing": "Journale werden verarbeitet",
+      "loading": "Änderungen werden geladen",
+      "failed": "Aktualisierung braucht Aufmerksamkeit",
+      "needsJournals": "Journale müssen verarbeitet werden",
+      "current": "Aktuell",
+      "newTransactions_one": "{{count}} neue Transaktion",
+      "newTransactions_other": "{{count}} neue Transaktionen",
+      "removedTransactions_one": "{{count}} Transaktion entfernt",
+      "removedTransactions_other": "{{count}} Transaktionen entfernt",
+      "balance": "Guthaben"
     }
   },
   "projects": {

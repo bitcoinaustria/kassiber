@@ -40,7 +40,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   TableBody,
   TableCell,
@@ -62,6 +61,7 @@ import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
+import { useBookRefreshStore } from "@/daemon/bookRefresh";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import type {
   HistoryRevertTarget,
@@ -251,6 +251,7 @@ const TransactionsTable = ({
   const { t } = useTranslation(["transactions", "common", "assistant"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const highlightedTxIds = useBookRefreshStore((state) => state.highlightedTxIds);
   const {
     status: statusFilter,
     flow: flowFilter,
@@ -1026,18 +1027,17 @@ const TransactionsTable = ({
     scrollTableIntoView,
   ]);
 
-  const virtualRowCount = isRefreshing
-    ? 10
-    : filteredTransactions.length + (hasMoreRecords ? 1 : 0);
+  // A refresh keeps the rows on screen (dimmed, still readable and
+  // clickable); they swap to the refreshed set in one step when it lands.
+  const virtualRowCount =
+    filteredTransactions.length + (hasMoreRecords ? 1 : 0);
   const rowVirtualizer = useVirtualizer({
     count: virtualRowCount,
     getScrollElement: () => tableScrollRef.current,
     estimateSize: () => 76,
     overscan: 8,
     getItemKey: (index) =>
-      isRefreshing
-        ? `refresh-${index}`
-        : (filteredTransactions[index]?.id ?? `loader-${index}`),
+      filteredTransactions[index]?.id ?? `loader-${index}`,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
   const firstVirtualRow = virtualRows[0];
@@ -1602,8 +1602,7 @@ const TransactionsTable = ({
                 marginBottom: tableCardFrame.marginBottom,
               }
         }
-        role={isRefreshing ? "status" : undefined}
-        aria-live={isRefreshing ? "polite" : undefined}
+        aria-busy={isRefreshing || undefined}
       >
         {!isExpanded && (
           <div
@@ -1752,14 +1751,21 @@ const TransactionsTable = ({
               <TableHead className="w-[48px]"></TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {!isRefreshing && virtualRowCount === 0 ? (
+          <TableBody
+            className={cn(
+              "transition-opacity motion-reduce:transition-none",
+              isRefreshing && "opacity-60",
+            )}
+          >
+            {virtualRowCount === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={7}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
-                  {t("table.empty")}
+                  {isRefreshing
+                    ? t("table.virtual.refreshing")
+                    : t("table.empty")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -1773,44 +1779,6 @@ const TransactionsTable = ({
                   </TableRow>
                 ) : null}
                 {virtualRows.map((virtualRow) => {
-                  if (isRefreshing) {
-                    return (
-                      <tr
-                        key={virtualRow.key}
-                        ref={rowVirtualizer.measureElement}
-                        data-index={virtualRow.index}
-                        className="border-b transition-colors"
-                      >
-                        <TableCell>
-                          <div className="space-y-2">
-                            <Skeleton className="h-4 w-48 max-w-full" />
-                            <Skeleton className="h-3 w-72 max-w-full" />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="space-y-2">
-                            <Skeleton className="ml-auto h-4 w-24" />
-                            <Skeleton className="ml-auto h-3 w-16" />
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <Skeleton className="h-5 w-28" />
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                          <Skeleton className="h-5 w-24" />
-                        </TableCell>
-                        <TableCell className="hidden xl:table-cell">
-                          <Skeleton className="h-5 w-20" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-6 w-24" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="size-8 rounded-md" />
-                        </TableCell>
-                      </tr>
-                    );
-                  }
                   if (virtualRow.index >= filteredTransactions.length) {
                     return (
                       <tr
@@ -1897,7 +1865,11 @@ const TransactionsTable = ({
                     key={txn.id}
                     ref={rowVirtualizer.measureElement}
                     data-index={virtualRow.index}
-                    className="cursor-pointer border-b align-top transition-colors hover:bg-muted/35"
+                    className={cn(
+                      "cursor-pointer border-b align-top transition-colors duration-700 hover:bg-muted/35 motion-reduce:transition-none",
+                      highlightedTxIds.has(txn.id) && "bg-primary/10",
+                    )}
+                    data-new={highlightedTxIds.has(txn.id) || undefined}
                     onClick={() => openTransactionDetail(txn)}
                   >
                     <TableCell className="overflow-hidden whitespace-normal">

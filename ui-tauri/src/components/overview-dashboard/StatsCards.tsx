@@ -70,8 +70,7 @@ export const StatsCards = ({
   return (
     <div
       className="kb-surface overflow-hidden"
-      role={isRefreshing ? "status" : undefined}
-      aria-live={isRefreshing ? "polite" : undefined}
+      aria-busy={isRefreshing || undefined}
     >
       <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         <button
@@ -98,7 +97,12 @@ export const StatsCards = ({
             {/* `tabular-nums`: these tiles sit side by side, so proportional
                 digits leave the figures misaligned across tiles and make them
                 jitter as values update mid-sync. */}
-            <p className="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
+            <p
+              className={cn(
+                "text-lg font-semibold tracking-tight tabular-nums transition-opacity motion-reduce:transition-none sm:text-xl",
+                isMarketRateRefreshing && "opacity-60",
+              )}
+            >
               {formatMarketRateValue(snapshot, to)}
             </p>
             <p
@@ -128,7 +132,9 @@ export const StatsCards = ({
             </div>
             <p
               className={cn(
-                "text-lg font-semibold tracking-tight tabular-nums sm:text-xl",
+                "text-lg font-semibold tracking-tight tabular-nums transition-opacity motion-reduce:transition-none sm:text-xl",
+                // Will change when the update lands; still readable meanwhile.
+                isRefreshing && "opacity-60",
                 blurClass(hideSensitive),
               )}
             >
@@ -157,8 +163,9 @@ export const StatsCards = ({
             </div>
             <p
               className={cn(
-                "text-lg font-semibold tracking-tight tabular-nums sm:text-xl",
+                "text-lg font-semibold tracking-tight tabular-nums transition-opacity motion-reduce:transition-none sm:text-xl",
                 completenessIssue && "text-amber-600 dark:text-amber-400",
+                isRefreshing && "opacity-60",
                 blurClass(hideSensitive),
               )}
             >
