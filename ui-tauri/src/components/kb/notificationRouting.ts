@@ -4,11 +4,7 @@ import {
   type NotificationOperation,
   type NotificationScope,
 } from "@/store/notifications";
-import {
-  NOTIFICATION_COMMANDS,
-  type NotificationAction,
-  type NotificationCommand,
-} from "@/store/ui";
+import type { NotificationAction } from "@/store/ui";
 
 import { APP_ROUTE_PATHS, type AppRoutePath } from "./menuIntent";
 import {
@@ -102,16 +98,20 @@ export function notificationTarget(
   return tone === "error" ? logsOrSettings : undefined;
 }
 
-/** A notification button, checked against the routes and commands it may use. */
-export type ResolvedNotificationAction =
-  | { label: string; kind: "navigate"; to: NotificationTarget }
-  | { label: string; kind: "command"; command: NotificationCommand };
+/** A legacy notification button: navigation to a known route, nothing else. */
+export type ResolvedNotificationAction = {
+  label: string;
+  kind: "navigate";
+  to: NotificationTarget;
+};
 
 /**
- * Resolve a stored action into something the bell can run, or null. Persisted
- * state is not trusted to name a route or command: anything outside the known
- * lists is dropped, and a `/logs` target takes the same developer-tools
- * detour as a notification's own click target.
+ * Resolve a legacy action into a route the bell may open, or null. Only
+ * known routes pass, and a `/logs` target takes the same developer-tools
+ * detour as a notification's own click target. A legacy entry has no book
+ * scope or original options, so anything that would mutate (a `command`
+ * from an older sender) is refused rather than replayed against the open
+ * book.
  */
 export function resolveNotificationAction(
   action: NotificationAction | undefined,
@@ -119,12 +119,6 @@ export function resolveNotificationAction(
 ): ResolvedNotificationAction | null {
   const label = action?.label?.trim();
   if (!action || !label) return null;
-  if (
-    action.command &&
-    (NOTIFICATION_COMMANDS as readonly string[]).includes(action.command)
-  ) {
-    return { label, kind: "command", command: action.command };
-  }
   const target = asRoutePath(action.target);
   if (!target) return null;
   if (target === "/logs") {

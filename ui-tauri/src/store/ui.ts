@@ -47,22 +47,15 @@ export interface NotificationProgress {
 }
 
 /**
- * Shell commands a legacy notification button may run. A closed list rather
- * than a callback, so an action stays plain data that the bell checks when it
- * renders. Structured entries use `NotificationOperation` in
- * `store/notifications.ts`, which also carries the original options.
- */
-export const NOTIFICATION_COMMANDS = ["process-journals", "refresh-book"] as const;
-export type NotificationCommand = (typeof NOTIFICATION_COMMANDS)[number];
-
-/**
- * One button on a notification: a route to open or a shell command to run.
- * `label` is localized by the producer, like the title and body.
+ * One button on a legacy notification: a route to open. `label` is
+ * localized by the producer, like the title and body. Legacy entries carry
+ * no book scope, so they cannot run anything; an operation with its
+ * original options and book is a `NotificationOperation` on a structured
+ * entry (`store/notifications.ts`).
  */
 export interface NotificationAction {
   label: string;
   target?: string;
-  command?: NotificationCommand;
 }
 
 /**

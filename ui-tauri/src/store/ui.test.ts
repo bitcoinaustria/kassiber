@@ -125,7 +125,7 @@ describe("UI persistence", () => {
       body: "1 needs attention",
       tone: "warning",
       details: ["Cold wallet: HTTP 502 from https://node.example:3002/api"],
-      action: { label: "Retry", command: "refresh-book" },
+      action: { label: "Open settings", target: "/settings/bitcoin" },
     });
 
     expect(useUiStore.getState().notifications[0].details).toEqual([
@@ -138,7 +138,7 @@ describe("UI persistence", () => {
     expect(encoded).not.toContain('"details"');
     // Nothing of a notification survives a restart, its action least of all:
     // replayed later, it would run against whichever book is open then.
-    expect(encoded).not.toContain('"command":"refresh-book"');
+    expect(encoded).not.toContain("/settings/bitcoin");
     expect(encoded).not.toContain("Book refresh needs attention");
   });
 
@@ -169,7 +169,7 @@ describe("UI persistence", () => {
       tone: "error",
       dedupeKey: "book-refresh",
       details: ["Cold wallet: timeout"],
-      action: { label: "Retry", command: "refresh-book" },
+      action: { label: "Open settings", target: "/settings/bitcoin" },
     });
     addNotification({
       title: "Book refresh started",

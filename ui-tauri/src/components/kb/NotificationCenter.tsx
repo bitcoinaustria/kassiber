@@ -259,14 +259,6 @@ export function NotificationCenter({
 
   const runLegacyAction = (action: ResolvedNotificationAction) => {
     setOpen(false);
-    if (action.kind === "command") {
-      runOperation(
-        action.command === "process-journals"
-          ? { kind: "process-journals", autoPair: true }
-          : { kind: "refresh-book", forceFull: false },
-      );
-      return;
-    }
     void navigate({ to: action.to });
   };
 
@@ -432,15 +424,7 @@ export function NotificationCenter({
                       )}
                       action={
                         resolved
-                          ? {
-                              label: resolved.label,
-                              resolved,
-                              pending:
-                                resolved.kind === "command" &&
-                                Boolean(
-                                  pendingOperations[resolved.command],
-                                ),
-                            }
+                          ? { label: resolved.label, resolved, pending: false }
                           : undefined
                       }
                       onNavigate={(to) => {
@@ -579,9 +563,7 @@ function ActionButton({
   const operation =
     action.resolved.kind === "operation"
       ? action.resolved.operation.kind
-      : action.resolved.kind === "command"
-        ? action.resolved.command
-        : null;
+      : null;
   const pendingLabel =
     operation === "process-journals"
       ? t("notifications.processing")

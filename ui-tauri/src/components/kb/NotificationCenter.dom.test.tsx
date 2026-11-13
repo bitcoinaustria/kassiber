@@ -484,7 +484,7 @@ describe("NotificationCenter actions and scope", () => {
         legacy({
           id: "c",
           title: "Tampered command",
-          action: { label: "Run", command: "rm" as never },
+          action: { label: "Run", command: "rm" } as never,
         }),
       ],
     });
@@ -594,20 +594,21 @@ describe("NotificationCenter legacy entries", () => {
     expect(navigate).toHaveBeenLastCalledWith({ to: "/review" });
   });
 
-  it("maps a legacy command onto the default operation", () => {
+  it("refuses a legacy command: it has no book or options to run with", () => {
     useUiStore.setState({
       notifications: [
         legacy({
           id: "a",
           title: "Old failure",
           tone: "error",
-          action: { label: "Retry", command: "refresh-book" },
+          action: { label: "Retry", command: "refresh-book" } as never,
         }),
       ],
     });
     const { runOperation } = openBell();
-    act(() => void fireEvent.click(screen.getByRole("button", { name: "Retry" })));
-    expect(runOperation).toHaveBeenCalledWith({ kind: "refresh-book", forceFull: false });
+    expect(entry("Old failure")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(runOperation).not.toHaveBeenCalled();
   });
 });
 
@@ -686,7 +687,7 @@ describe("notification persistence", () => {
       body: `Saved ${SENTINEL_PATH} (${SENTINEL_AMOUNT})`,
       tone: "error",
       details: ["Cold storage: tcp://10.0.0.7:50001 refused"],
-      action: { label: "Retry", command: "refresh-book" },
+      action: { label: "Open settings", target: "/settings/bitcoin" },
     });
     useNotificationStore.getState().raiseCondition(
       sourceFailure("s1", SENTINEL_LABEL, SENTINEL_PATH),
@@ -700,7 +701,7 @@ describe("notification persistence", () => {
       SENTINEL_PATH,
       SENTINEL_AMOUNT,
       "10.0.0.7",
-      "refresh-book",
+      "/settings/bitcoin",
       "notifications",
     ]) {
       expect(stored).not.toContain(sentinel);
