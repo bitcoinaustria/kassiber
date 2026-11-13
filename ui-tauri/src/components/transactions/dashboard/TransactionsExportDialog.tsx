@@ -9,6 +9,7 @@ import {
   type QuarantineExportBlock,
 } from "@/lib/quarantineExportBlock";
 import { QuarantineExportBlockNotice } from "@/components/kb/quarantine/QuarantineExportBlockNotice";
+import { showFeedback } from "@/lib/feedback";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,7 +25,6 @@ import { exportBasename, saveDaemonExport } from "@/lib/exportFile";
 import { formatCount } from "@/lib/localeFormat";
 import { pageHeaderActionClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
-import { useUiStore } from "@/store/ui";
 
 import { ExportFormatMark, ExportFormatPicker } from "./ExportFormatPicker";
 import { ExportPeriodPicker } from "./ExportPeriodPicker";
@@ -143,7 +143,6 @@ function useSettled<T>(value: T, delayMs: number): T {
 export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: string | undefined }) {
   const { t } = useTranslation(["transactions", "common"]);
   const navigate = useNavigate();
-  const addNotification = useUiStore((s) => s.addNotification);
   const [open, setOpen] = React.useState(false);
   const [excludedWallets, setExcludedWallets] = React.useState<Set<string>>(() => new Set());
   const [format, setFormat] = React.useState<ExportFormatId>("xlsx");
@@ -205,7 +204,7 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
       setExportBlock(blocked);
       return;
     }
-    addNotification({ title: t("dashboard.export.failed"), body: errorMessage(error), tone: "error" });
+    showFeedback({ title: t("dashboard.export.failed"), description: errorMessage(error), descriptionPrivacy: "free-text", tone: "error" });
   };
 
   const finish = async (payload: ExportResult | undefined) => {
@@ -218,13 +217,13 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
         filters: [formatSpec.filter],
       });
       const warnings = payload?.warnings ?? [];
-      addNotification({
+      showFeedback({
         title: isLabels
           ? t("dashboard.export.labels.done")
           : warnings.length
             ? t("dashboard.export.doneWithWarnings")
             : t("dashboard.export.done"),
-        body: [
+        description: [
           copied
             ? t("dashboard.export.savedTo", { name: exportBasename(savedPath) })
             : isLabels
@@ -232,10 +231,11 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
               : t("dashboard.export.rows", { count: payload?.rows ?? 0 }),
           ...warnings,
         ].join("\n"),
+        descriptionPrivacy: "free-text",
         tone: warnings.length ? "warning" : "success",
       });
     } catch (error) {
-      addNotification({ title: t("dashboard.export.failed"), body: errorMessage(error), tone: "error" });
+      showFeedback({ title: t("dashboard.export.failed"), description: errorMessage(error), descriptionPrivacy: "free-text", tone: "error" });
     }
   };
 

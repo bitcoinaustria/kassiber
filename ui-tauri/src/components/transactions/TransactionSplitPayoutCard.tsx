@@ -14,7 +14,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useDaemonMutation } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
-import { useUiStore } from "@/store/ui";
 
 import {
   buildSplitPayoutArgs,
@@ -42,7 +41,6 @@ export function TransactionSplitPayoutCard({
   sourceAsset,
   outboundBtc,
 }: TransactionSplitPayoutCardProps) {
-  const addNotification = useUiStore((state) => state.addNotification);
   const createPayout = useDaemonMutation("ui.transfers.payouts.create");
   const { runJournalProcessing } = useJournalProcessingAction();
 
@@ -56,6 +54,11 @@ export function TransactionSplitPayoutCard({
   );
   const [counterparty, setCounterparty] = React.useState("");
   const [notes, setNotes] = React.useState("");
+// The outcome shows beside the button that asked for it; the journal run
+// that follows reports itself.
+const [outcome, setOutcome] = React.useState<
+  { kind: "saved" } | { kind: "error"; message: string } | null
+>(null);
 
   const { outError, payoutError, ready } = splitPayoutValidation({
     outAmount,
@@ -66,6 +69,7 @@ export function TransactionSplitPayoutCard({
 
   const submit = async () => {
     if (!canSubmit) return;
+    setOutcome(null);
     try {
       await createPayout.mutateAsync(
         buildSplitPayoutArgs({
@@ -78,20 +82,15 @@ export function TransactionSplitPayoutCard({
           notes,
         }),
       );
-      addNotification({
-        title: "Split payout recorded",
-        body: "Saved the payout portion; reprocessing journals to apply.",
-        tone: "success",
-      });
+      setOutcome({ kind: "saved" });
       runJournalProcessing();
     } catch (error) {
-      addNotification({
-        title: "Could not record split payout",
-        body:
+      setOutcome({
+        kind: "error",
+        message:
           error instanceof Error
             ? error.message
             : "Kassiber could not save the split transfer/swap resolution.",
-        tone: "error",
       });
     }
   };
@@ -200,7 +199,16 @@ export function TransactionSplitPayoutCard({
         />
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {outcome?.kind === "error" ? (
+          <p role="alert" className="text-xs text-destructive">
+            Could not record split payout: {outcome.message}
+          </p>
+        ) : outcome?.kind === "saved" ? (
+          <p role="status" className="text-xs text-muted-foreground">
+            Split payout recorded; reprocessing journals to apply it.
+          </p>
+        ) : null}
         <Button size="sm" disabled={!canSubmit} onClick={() => void submit()}>
           {createPayout.isPending ? "Saving…" : "Record payout & reprocess"}
           <ArrowRight className="size-3.5" aria-hidden="true" />
