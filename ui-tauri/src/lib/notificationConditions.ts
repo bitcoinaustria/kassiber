@@ -261,8 +261,9 @@ export function applyFreshnessRun(
  * The listener receives events for whichever book the daemon had open when
  * the work ran; one delayed past a switch, or one that names no book, must
  * not raise or clear anything in the book open now. Those events are left to
- * the caller's re-read of the open book's state. Returns whether the event
- * was applied.
+ * the caller's re-read of the open book's state. The graph worker's error
+ * events name no book, so they are never filed here; the re-read still
+ * shows any source they left stale. Returns whether the event was applied.
  */
 export function applyFreshnessEvent(
   event: DaemonFreshnessEvent,

@@ -226,7 +226,6 @@ impl Daemon {
         };
         let cancel = grant.cancellation();
         let worker_cancel = cancel.clone();
-        let profile = grant.profile().to_owned();
         let owner = self.owner.as_ref().ok_or_else(|| {
             AppError::new("project_in_use", "Graph worker requires project ownership")
         })?;
@@ -258,11 +257,20 @@ impl Daemon {
                         let output_closed = output
                             .event(
                                 "ui.freshness.worker",
-                                worker_error(
-                                    "freshness_background_open_failed",
-                                    "Graph worker could not open its book",
-                                    &profile,
-                                ),
+                                dict([
+                                    ("status", kassiber_envelope::s("error")),
+                                    (
+                                        "code",
+                                        kassiber_envelope::s("freshness_background_open_failed"),
+                                    ),
+                                    (
+                                        "message",
+                                        kassiber_envelope::s(
+                                            "Graph worker could not open its book",
+                                        ),
+                                    ),
+                                    ("retryable", Value::Bool(true)),
+                                ]),
                             )
                             .is_err();
                         return GraphFinished {
@@ -283,11 +291,15 @@ impl Daemon {
                         output
                             .event(
                                 "ui.freshness.worker",
-                                worker_error(
-                                    "freshness_background_error",
-                                    "Graph reference worker failed",
-                                    &profile,
-                                ),
+                                dict([
+                                    ("status", kassiber_envelope::s("error")),
+                                    ("code", kassiber_envelope::s("freshness_background_error")),
+                                    (
+                                        "message",
+                                        kassiber_envelope::s("Graph reference worker failed"),
+                                    ),
+                                    ("retryable", Value::Bool(true)),
+                                ]),
                             )
                             .is_err()
                     }
@@ -592,34 +604,9 @@ impl Daemon {
     }
 }
 
-/// A `ui.freshness.worker` error event. It names the profile it ran for, as
-/// `ui.freshness.background` does, so a listener can tell an event that
-/// arrives after a book switch from one about the open book.
-fn worker_error(code: &str, message: &str, profile: &str) -> Value {
-    dict([
-        ("status", kassiber_envelope::s("error")),
-        ("code", kassiber_envelope::s(code)),
-        ("message", kassiber_envelope::s(message)),
-        ("retryable", Value::Bool(true)),
-        ("profile", dict([("id", kassiber_envelope::s(profile))])),
-    ])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_worker_error_names_its_profile() {
-        let event = worker_error("freshness_background_error", "failed", "pf-1");
-        let profile = get(&event, "profile").cloned().unwrap_or(Value::Null);
-        assert_eq!(get(&profile, "id"), Some(&kassiber_envelope::s("pf-1")));
-        assert_eq!(
-            get(&event, "code"),
-            Some(&kassiber_envelope::s("freshness_background_error"))
-        );
-        assert_eq!(get(&event, "status"), Some(&kassiber_envelope::s("error")));
-    }
 
     fn active(replied: bool, hold: std::sync::mpsc::Receiver<()>) -> Active {
         Active {
