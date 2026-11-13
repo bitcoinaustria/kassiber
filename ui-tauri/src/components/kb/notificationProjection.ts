@@ -508,42 +508,63 @@ export const ASSISTANT_TROUBLESHOOT_CODES: readonly ConditionCode[] = [
 ];
 
 /**
+ * A wallet name the assistant may see: a plain name. A label that looks
+ * like a location (a path, URL, domain, IP address, or host:port) or that
+ * credential redaction would change is configuration, not a name, and is
+ * left out.
+ */
+const LOCATION_LIKE =
+  /[/\\~]|:\/\/|\b\d{1,3}(\.\d{1,3}){3}\b|\b[a-z0-9-]+(\.[a-z0-9-]+)+\b|:\d{2,5}\b|@/i;
+export function assistantSafeName(label: string): string | null {
+  const trimmed = label.trim();
+  if (!trimmed || LOCATION_LIKE.test(trimmed)) return null;
+  return redactCredentials(trimmed) === trimmed ? trimmed : null;
+}
+
+/**
  * The question handed to the assistant. Built from fixed, translated text
- * only: the entry's title and body, each cause in plain words, and the
- * wallet names (context the assistant's own tools already see, scrubbed of
- * anything credential-shaped). Raw daemon messages and hints never go:
- * they can carry paths, hosts, ports, or URLs, which are configuration the
- * assistant does not get. An unclassified error is only counted.
+ * only: the entry's generic title and body (never a title that names a
+ * wallet), each cause in plain words, and plain wallet names. Raw daemon
+ * messages and hints never go: they can carry paths, hosts, ports, or URLs,
+ * which are configuration the assistant does not get. An unclassified
+ * error, and a name that looks like a location, are only counted.
  */
 export function assistantTroubleshootPrompt(
   group: ConditionGroup,
   mode: PrivacyMode,
   t: ChromeT,
 ): string {
-  const projected = projectConditionGroup(group, mode, t);
+  // Hide all's projection is the generic wording: no label in title or body.
+  const generic = projectConditionGroup(group, "hideAll", t);
   const lines = groupDetails(group.entries.flatMap((entry) => entry.details ?? [])).map(
     (detailGroup) => {
       if (!detailGroup.cause) {
         return t("notifications.assistantOtherError", { count: detailGroup.count });
       }
       const cause = t(`notifications.cause.${detailGroup.cause}`);
-      const names = detailGroup.labels
-        .map((label) => projectLabel(label, mode))
-        .filter((name): name is string => Boolean(name))
-        .map((name) => redactCredentials(name));
-      if (names.length) {
-        return t("notifications.detailLine", { label: cause, message: names.join(", ") });
-      }
-      return detailGroup.count > 1
-        ? t("notifications.causeCount", { cause, count: detailGroup.count })
+      const names =
+        mode === "hideAll"
+          ? []
+          : detailGroup.labels
+              .map((label) => projectLabel(label, mode))
+              .filter((name): name is string => Boolean(name))
+              .map((name) => assistantSafeName(name))
+              .filter((name): name is string => Boolean(name));
+      const withheld = detailGroup.count - names.length;
+      const listed = names.length
+        ? t("notifications.detailLine", { label: cause, message: names.join(", ") })
         : cause;
+      return withheld > 0 && names.length
+        ? t("notifications.assistantMoreSources", { line: listed, count: withheld })
+        : names.length
+          ? listed
+          : detailGroup.count > 1
+            ? t("notifications.causeCount", { cause, count: detailGroup.count })
+            : cause;
     },
   );
-  const seen = [projected.body, ...lines.map((line) => `- ${line}`)]
+  const seen = [generic.body, ...lines.map((line) => `- ${line}`)]
     .filter(Boolean)
     .join("\n");
-  return t("notifications.assistantPrompt", {
-    title: redactCredentials(projected.title),
-    seen,
-  });
+  return t("notifications.assistantPrompt", { title: generic.title, seen });
 }

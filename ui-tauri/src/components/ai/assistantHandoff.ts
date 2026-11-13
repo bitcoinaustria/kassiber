@@ -3,7 +3,7 @@ import type {
   AssistantScreenContext,
   AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
-import type { BookStamp } from "@/components/ai/bookStamp";
+import { sameBookScope, type BookStamp } from "@/components/ai/bookStamp";
 import type { DaemonScopeBoundary } from "@/daemon/client";
 import i18n from "@/i18n";
 import { showFeedback } from "@/lib/feedback";
@@ -38,11 +38,20 @@ export function beginAssistantHandoff(
   assistant: AssistantSessionContextValue,
   origin: HandoffOrigin = {},
 ): ((prompt: string) => void) | null {
-  const book: BookStamp | null = origin.book
-    ? origin.book
-    : origin.boundary
-      ? { daemonSession: origin.boundary.daemonSession, scope: origin.boundary.expectedScope }
-      : (assistant.captureBook?.() ?? null);
+  const boundaryBook: BookStamp | null = origin.boundary
+    ? { daemonSession: origin.boundary.daemonSession, scope: origin.boundary.expectedScope }
+    : null;
+  // A given stamp and a page boundary must agree; otherwise nothing is sent.
+  if (
+    origin.book &&
+    boundaryBook &&
+    (origin.book.daemonSession !== boundaryBook.daemonSession ||
+      !sameBookScope(origin.book.scope, boundaryBook.scope))
+  ) {
+    return null;
+  }
+  const book: BookStamp | null =
+    origin.book ?? boundaryBook ?? assistant.captureBook?.() ?? null;
   if (!book) {
     showFeedback({
       title: i18n.t("queue.bookLoading.title", { ns: "assistant" }),

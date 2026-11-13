@@ -76,7 +76,10 @@ describe("new transactions from a run", () => {
       results: [outcome as never],
       completed: [job("Exchange", outcome)],
     });
-    expect(found).toEqual({ records: [], unlisted: [{ wallet: "Exchange", count: 4 }] });
+    expect(found).toEqual({
+      records: [],
+      unlisted: [{ wallet: "Exchange", count: 4, job: "job-Exchange" }],
+    });
   });
 
   it("reads results when no job completed with a result", () => {
@@ -90,7 +93,10 @@ describe("new transactions from a run", () => {
 
   it("falls back to the imported count when a source lists no records", () => {
     const found = newActivityFromRun({ completed: [job("Exchange", { imported: 4 })] });
-    expect(found).toEqual({ records: [], unlisted: [{ wallet: "Exchange", count: 4 }] });
+    expect(found).toEqual({
+      records: [],
+      unlisted: [{ wallet: "Exchange", count: 4, job: "job-Exchange" }],
+    });
   });
 
   it("is nothing when a run imported nothing", () => {
@@ -98,6 +104,26 @@ describe("new transactions from a run", () => {
       newActivityFromRun({ completed: [job("A", { imported: 0, inserted_records: [] })] }),
     ).toBeNull();
     expect(newActivityFromRun(undefined)).toBeNull();
+  });
+});
+
+describe("new transactions from a direct sync", () => {
+  it("keeps a direct wallet outcome next to a completed journal job", () => {
+    // The daemon returns direct outcomes in `results`; `completed` may hold
+    // only the journal step (planning.rs).
+    const found = newActivityFromRun({
+      results: [
+        {
+          wallet: "Mapped",
+          status: "synced",
+          inserted_records: [record("t1", "inbound", "Mapped")],
+        } as never,
+      ],
+      completed: [
+        { id: "j1", job_type: "journal_refresh", status: "done", result: { rebuilt: true } },
+      ],
+    });
+    expect(found?.records.map((item) => item.id)).toEqual(["t1"]);
   });
 });
 
@@ -196,6 +222,39 @@ describe("the new transactions entry", () => {
       "W3: 1 new",
       "+9 more wallets",
     ]);
+  });
+
+  it("does not announce a replayed count-only job, or a re-inserted txid, twice", () => {
+    const countOnly = () =>
+      newActivityFromRun({ completed: [job("Exchange", { imported: 4 })] });
+    recordNewActivity(countOnly(), SCOPE);
+    useNotificationStore.getState().markSeen();
+    recordNewActivity(countOnly(), SCOPE);
+    expect(activity()[0].params.transactions).toBe(4);
+    expect(activity()[0].seenAt).toBeDefined();
+
+    // A rescan re-inserts the same txid under a new row id.
+    const withTxid = (rowId: string) =>
+      newActivityFromRun({
+        completed: [
+          job("Treasury", {
+            inserted_records: [{ ...record(rowId, "inbound"), external_id: "txid#aa" }],
+          }),
+        ],
+      });
+    recordNewActivity(withTxid("row-1"), SCOPE);
+    useNotificationStore.getState().markSeen();
+    recordNewActivity(withTxid("row-2"), SCOPE);
+    expect(activity()[0].params.transactionIds).toEqual(["row-1"]);
+  });
+
+  it("keeps what each book announced apart", () => {
+    const run = () =>
+      newActivityFromRun({ completed: [job("Treasury", { inserted_records: [record("t1", "inbound")] })] });
+    recordNewActivity(run(), SCOPE);
+    recordNewActivity(run(), { book: "db:/books/b.sqlite3" });
+    const books = activity().map((entry) => entry.scope.book).sort();
+    expect(books).toEqual([BOOK, "db:/books/b.sqlite3"].sort());
   });
 
   it("is filed by a background event for the open book only", () => {

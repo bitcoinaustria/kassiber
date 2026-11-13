@@ -23,7 +23,9 @@ export const NOTIFICATION_CAUSES = [
 ] as const;
 export type NotificationCause = (typeof NOTIFICATION_CAUSES)[number];
 
+/** Codes that say what happened on their own. */
 const CODE_CAUSES: Readonly<Record<string, NotificationCause>> = {
+  network_egress_disabled: "offline",
   network_error: "connection",
   backend_timeout: "connection",
   backend_tls_config_invalid: "certificate",
@@ -31,31 +33,49 @@ const CODE_CAUSES: Readonly<Record<string, NotificationCause>> = {
   cancelled: "cancelled",
 };
 
+/**
+ * Fixed phrases from the daemon's message templates and common HTTP status
+ * text. Matched only after quoted names and the source's own label are
+ * removed, so a backend called "tls-node" is not read as a TLS failure.
+ */
 const MESSAGE_CAUSES: ReadonlyArray<[NotificationCause, RegExp]> = [
-  ["offline", /offline mode|outbound requests are disabled/i],
-  ["rateLimited", /rate[ -]?limit|too many requests|\b429\b|cooling down/i],
-  ["unavailable", /temporarily unavailable|service unavailable|\b50[234]\b/i],
-  ["certificate", /certificate|\btls\b|handshake|\bca bundle/i],
-  ["credentials", /\b401\b|\b403\b|unauthori[sz]ed|forbidden|api key|authenticat/i],
-  ["noBackend", /no sync backend/i],
+  ["offline", /kassiber is in offline mode|outbound requests are disabled/i],
+  ["rateLimited", /rate limited the request|too many requests|\(http 429\)|\bhttp 429\b|cooling down/i],
+  ["unavailable", /temporarily unavailable|service unavailable|\(http 50[234]\)|\bhttp 50[234]\b/i],
+  ["credentials", /\bhttp 40[13]\b|\(http 40[13]\)|\b40[13] (unauthori[sz]ed|forbidden)\b|invalid api key|authentication failed/i],
+  ["certificate", /certificate (verify|is not trusted|has expired|is invalid)|tls handshake failed|custom ca bundle/i],
+  ["noBackend", /no sync backend is configured/i],
   [
     "connection",
-    /network i\/o|connection (refused|reset|closed)|could not connect|unreachable|timed? ?out|timeout|dns|budget exhausted/i,
+    /network i\/o failed|connection (refused|reset|closed)|could not connect|timed out|\btimeout\b|request budget exhausted/i,
   ],
-  ["cancelled", /\bcancel+ed\b/i],
 ];
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** The message with interpolated names removed: quoted text and the label. */
+function templateText(message: string, label: string | undefined): string {
+  let text = message.replace(/'[^']*'|"[^"]*"|`[^`]*`/g, "''");
+  const trimmed = label?.trim();
+  if (trimmed) text = text.replace(new RegExp(escapeRegExp(trimmed), "gi"), "''");
+  return text;
+}
+
 export function classifyCause(
-  detail: Pick<NotificationDetail, "message" | "phraseKey" | "code">,
+  detail: Pick<NotificationDetail, "message" | "phraseKey" | "code" | "label">,
 ): NotificationCause | null {
   if (detail.phraseKey === "coolingDown") return "rateLimited";
-  const message = detail.message ?? "";
-  // The text tells offline and 429-vs-503 apart where one code covers both.
+  // `rate_limited` covers both 429 and 5xx, so its message decides.
+  const byCode =
+    detail.code && detail.code !== "rate_limited" ? CODE_CAUSES[detail.code] : undefined;
+  if (byCode) return byCode;
+  const message = templateText(detail.message ?? "", detail.label);
   for (const [cause, pattern] of MESSAGE_CAUSES) {
     if (pattern.test(message)) return cause;
   }
-  const byCode = detail.code ? CODE_CAUSES[detail.code] : undefined;
-  if (byCode) return byCode;
+  if (detail.code === "rate_limited") return "rateLimited";
   if (detail.phraseKey === "cancelled") return "cancelled";
   return null;
 }

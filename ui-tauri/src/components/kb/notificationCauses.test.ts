@@ -52,6 +52,25 @@ describe("notification causes", () => {
     expect(groups[0].messages[0].text).toContain("tcp/ssl port");
   });
 
+  it("does not read a cause out of a backend or wallet name", () => {
+    // The Electrum format error names the backend; "tls-node" is a name.
+    expect(
+      classifyCause({
+        message: "Backend 'tls-node' did not respond with Electrum-format JSON",
+        code: "app_error",
+      }),
+    ).toBeNull();
+    expect(
+      classifyCause({
+        label: "tls-node",
+        message: "tls-node returned HTTP 401",
+      }),
+    ).toBe("credentials");
+    expect(
+      classifyCause({ message: "anything", code: "network_egress_disabled" }),
+    ).toBe("offline");
+  });
+
   it("folds wallets with the same cause into one group, biggest first", () => {
     const details: NotificationDetail[] = [
       ...Array.from({ length: 12 }, (_, index) => ({
@@ -173,6 +192,35 @@ describe("the assistant's question", () => {
     expect(prompt).not.toContain("10.0.0.5");
     expect(prompt).not.toContain("/Users/alice");
     expect(prompt).not.toContain("Backup");
+  });
+
+  it("never sends a name that is a path or URL, nor a title that names one", () => {
+    for (const mode of ["normal", "hideAmounts"] as const) {
+      const prompt = assistantTroubleshootPrompt(
+        sourceGroup([
+          { label: "/Users/alice/private/recovery.kassiber", message: "network I/O failed" },
+          { label: "https://node.example/private", message: "network I/O failed" },
+          { label: "Cold", message: "network I/O failed" },
+        ]),
+        mode,
+        t,
+      );
+      expect(prompt, mode).not.toContain("/Users/alice");
+      expect(prompt, mode).not.toContain("node.example");
+      expect(prompt, mode).toContain("Connection to the server failed: Cold (+2 more)");
+    }
+    const named = {
+      ...sourceGroup([{ label: "https://node.example/x", message: "network I/O failed" }]),
+      code: "connection.sync-failed" as const,
+    };
+    named.entries = named.entries.map((entry) => ({
+      ...entry,
+      code: "connection.sync-failed" as const,
+      params: { sources: ["https://node.example/x"] },
+    }));
+    const prompt = assistantTroubleshootPrompt(named, "normal", t);
+    expect(prompt).not.toContain("node.example");
+    expect(prompt).toContain("A wallet could not sync");
   });
 
   it("drops wallet names under Hide all", () => {

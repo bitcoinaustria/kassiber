@@ -14,25 +14,43 @@ import {
 export interface NewActivity {
   /** Transactions the daemon listed, each once. */
   records: Array<{
+    /** The row id, for opening one transaction. */
     id: string;
+    /**
+     * What identifies the transaction across runs: its external id (the
+     * txid) when known, so a rescan that re-inserts a row under a new id is
+     * not announced again; otherwise the row id.
+     */
+    key: string;
     direction: "incoming" | "outgoing" | null;
     wallet?: string;
   }>;
   /** New rows a source reported only as a count. */
-  unlisted: Array<{ wallet?: string; count: number }>;
+  unlisted: Array<{
+    wallet?: string;
+    count: number;
+    /** The freshness job that reported it, when known; replays are skipped. */
+    job?: string;
+  }>;
 }
 
 /** Wallets a "new transactions" entry keeps counts for; a sane upper bound. */
 const MAX_WALLETS = 500;
 
 /**
- * Transaction ids already announced this session, so a replayed event does
- * not report them again once their entry has been seen. RAM only, bounded.
+ * What this session already announced, per book: transaction keys and the
+ * jobs behind count-only outcomes, so a replayed event does not report them
+ * again once their entry has been seen. RAM only, bounded.
  */
 const MAX_ANNOUNCED = 5_000;
 const announced = new Set<string>();
-function remember(id: string) {
-  announced.add(id);
+
+function announcedKey(book: string | null, key: string): string {
+  return JSON.stringify([book, key]);
+}
+
+function remember(book: string | null, key: string) {
+  announced.add(announcedKey(book, key));
   if (announced.size > MAX_ANNOUNCED) {
     const oldest = announced.values().next().value;
     if (oldest !== undefined) announced.delete(oldest);
@@ -61,6 +79,7 @@ function collectOutcome(
   seen: Set<string>,
   outcome: Record<string, unknown>,
   fallbackLabel: string | undefined,
+  job: string | undefined,
 ) {
   const wallet = text(outcome.wallet) ?? fallbackLabel;
   const records = outcome.inserted_records;
@@ -68,10 +87,13 @@ function collectOutcome(
     for (const record of records) {
       if (!isRecord(record)) continue;
       const id = text(record.transaction_id);
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
+      if (!id) continue;
+      const key = text(record.external_id) ?? id;
+      if (seen.has(key)) continue;
+      seen.add(key);
       activity.records.push({
         id,
+        key,
         direction:
           record.direction === "inbound"
             ? "incoming"
@@ -85,14 +107,17 @@ function collectOutcome(
   }
   const imported = outcome.imported;
   if (typeof imported === "number" && Number.isSafeInteger(imported) && imported > 0) {
-    activity.unlisted.push({ wallet, count: imported });
+    activity.unlisted.push({ wallet, count: imported, ...(job ? { job } : {}) });
   }
 }
 
 /**
- * What a run (a foreground book refresh or a background event) added: the
- * per-wallet results it returned and the freshness jobs it completed. A
- * transaction listed twice counts once. Null when nothing is new.
+ * What a run (a foreground book refresh or a background event) added. A
+ * run's `results` copy the outcomes of the wallet jobs it completed, but a
+ * wallet synced directly appears only in `results` (next to, say, a
+ * completed journal job). So every completed job is read, then each result
+ * whose wallet no completed job already reported. A transaction listed
+ * twice counts once. Null when nothing is new.
  */
 export function newActivityFromRun(
   data: FreshnessRunData | null | undefined,
@@ -100,21 +125,18 @@ export function newActivityFromRun(
   if (!data) return null;
   const activity: NewActivity = { records: [], unlisted: [] };
   const seen = new Set<string>();
-  // The daemon builds `results` from the jobs it completed, so a run that
-  // carries both reports each outcome twice: read the completed jobs, and
-  // `results` only when no job finished with a result.
-  const done = (data.completed ?? []).filter(
-    (job) => job.status === "done" && isRecord(job.result),
-  );
-  if (done.length > 0) {
-    for (const job of done) {
-      collectOutcome(activity, seen, job.result as Record<string, unknown>, job.source_label || undefined);
-    }
-  } else {
-    for (const result of data.results ?? []) {
-      if (!isRecord(result) || result.status !== "synced") continue;
-      collectOutcome(activity, seen, result, undefined);
-    }
+  const covered = new Set<string>();
+  for (const job of data.completed ?? []) {
+    if (job.status !== "done" || !isRecord(job.result)) continue;
+    const label = text(job.result.wallet) ?? (job.source_label || undefined);
+    if (label) covered.add(label);
+    collectOutcome(activity, seen, job.result, job.source_label || undefined, job.id);
+  }
+  for (const result of data.results ?? []) {
+    if (!isRecord(result) || result.status !== "synced") continue;
+    const label = text(result.wallet);
+    if (label && covered.has(label)) continue;
+    collectOutcome(activity, seen, result, undefined, undefined);
   }
   return activity.records.length || activity.unlisted.length ? activity : null;
 }
@@ -123,27 +145,30 @@ export function newActivityFromRun(
  * File (or grow) the book's "new transactions" entry. Until the center has
  * shown it, later runs add to the same entry, so an afternoon of background
  * syncs is one row rather than one per run. Once seen, the next run starts
- * a fresh entry.
+ * a fresh entry; anything this session already announced for the book is
+ * not announced again.
  */
 export function recordNewActivity(
   activity: NewActivity | null,
   scope: NotificationScope,
 ): void {
   if (!activity) return;
+  const book = scope.book;
   const store = useNotificationStore.getState();
   const earlier = store.results.find(
     (entry) =>
-      entry.code === "activity.new" &&
-      entry.scope.book === scope.book &&
-      !entry.seenAt,
+      entry.code === "activity.new" && entry.scope.book === book && !entry.seenAt,
   );
-  const known = new Set(earlier?.params.transactionIds ?? []);
-  // Announced before, in an entry since seen and replaced: not new again.
   const fresh = activity.records.filter(
-    (record) => !known.has(record.id) && !announced.has(record.id),
+    (record) => !announced.has(announcedKey(book, record.key)),
   );
-  const unlistedCount = activity.unlisted.reduce((sum, item) => sum + item.count, 0);
+  const unlisted = activity.unlisted.filter(
+    (item) => !item.job || !announced.has(announcedKey(book, `job:${item.job}`)),
+  );
+  const unlistedCount = unlisted.reduce((sum, item) => sum + item.count, 0);
   if (fresh.length === 0 && unlistedCount === 0) return;
+  for (const record of fresh) remember(book, record.key);
+  for (const item of unlisted) if (item.job) remember(book, `job:${item.job}`);
 
   const wallets = new Map<string, number>();
   for (const wallet of earlier?.params.walletCounts ?? []) {
@@ -153,10 +178,12 @@ export function recordNewActivity(
     if (label) wallets.set(label, (wallets.get(label) ?? 0) + count);
   };
   for (const record of fresh) addWallet(record.wallet, 1);
-  for (const item of activity.unlisted) addWallet(item.wallet, item.count);
+  for (const item of unlisted) addWallet(item.wallet, item.count);
 
-  const transactionIds = [...known, ...fresh.map((record) => record.id)];
-  for (const record of fresh) remember(record.id);
+  const transactionIds = [
+    ...(earlier?.params.transactionIds ?? []),
+    ...fresh.map((record) => record.id),
+  ];
   const total = (earlier?.params.transactions ?? 0) + fresh.length + unlistedCount;
   const incoming =
     (earlier?.params.incoming ?? 0) +
@@ -172,7 +199,7 @@ export function recordNewActivity(
 
   store.addResult({
     code: "activity.new",
-    scope: { book: scope.book, expected: scope.expected },
+    scope: { book, expected: scope.expected },
     severity: "info",
     params: {
       transactions: total,
