@@ -9,7 +9,11 @@ import type {
   ResultEntry,
 } from "@/store/notifications";
 
-import { mayHoldAmount, projectFreeText } from "./notificationPrivacy";
+import {
+  mayHoldAmount,
+  projectFreeText,
+  projectLabel,
+} from "./notificationPrivacy";
 
 /**
  * What the center and the toasts may show of an entry in the current privacy
@@ -46,10 +50,11 @@ function projectDetail(
     : undefined;
   const message = projectFreeText(detail.message, mode, t);
   const text = [phrase, message].filter(Boolean).join(" — ");
-  if (detail.label && text) {
-    return t("notifications.detailLine", { label: detail.label, message: text });
+  const label = projectLabel(detail.label, mode);
+  if (label && text) {
+    return t("notifications.detailLine", { label, message: text });
   }
-  return detail.label ?? (text || null);
+  return label ?? (text || null);
 }
 
 function projectDetails(
@@ -207,9 +212,9 @@ export function projectJob(
       : job.params.forceFull
         ? t("notifications.job.bookRescan")
         : t("notifications.job.bookRefresh");
-  // A phase label is producer text that can name a source.
-  const label =
-    mode === "hideAll" ? undefined : job.progress.label?.trim() || undefined;
+  // A phase label is producer text that can name a source, and a source
+  // name can carry an amount.
+  const label = projectFreeText(job.progress.label, mode, t);
   return { title, label: label && label !== title ? label : undefined };
 }
 

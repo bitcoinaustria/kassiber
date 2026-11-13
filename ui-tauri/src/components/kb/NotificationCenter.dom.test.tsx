@@ -697,6 +697,40 @@ describe("NotificationCenter privacy modes", () => {
     expect(text).toContain("Hot: failed — connection refused");
   });
 
+  it("Hide amounts masks labels and progress text that carry an amount", () => {
+    const store = useNotificationStore.getState();
+    store.raiseCondition(sourceFailure("s3", "Savings (0.4242 BTC)", "timeout"));
+    store.startJob({
+      id: "book-refresh",
+      code: "book-refresh",
+      scope: { book: A },
+      progress: { value: 40, label: "Syncing Savings (0.4242 BTC)" },
+    });
+    useUiStore.setState({
+      notifications: [
+        legacy({
+          id: "p",
+          title: "Wallet refresh",
+          body: "Scanning",
+          progress: { value: 10, label: "Savings (0.4242 BTC): 3 of 9" },
+        }),
+      ],
+    });
+
+    openBell();
+    expandAll();
+    expect(renderedText()).toContain("Syncing Savings (0.4242 BTC)");
+    cleanup();
+
+    useUiStore.setState({ privacyMode: "hideAmounts" });
+    openBell();
+    expandAll();
+    const text = renderedText();
+    expect(text).not.toContain("0.4242");
+    expect(text).toContain("••••: failed — timeout");
+    expect(within(entry("Refreshing book")).getByText("Hidden while amounts are hidden.")).toBeTruthy();
+  });
+
   it("Hide all shows generic text, keeps actions, and leaks nothing", () => {
     seed();
     useUiStore.setState({ privacyMode: "hideAll" });

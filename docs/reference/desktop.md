@@ -663,7 +663,8 @@ notice; the menu's refresh reopens the sync card.
 
 Rows render from stable codes in the current language and privacy mode, not
 from stored sentences. Hide amounts withholds any free text (such as a backend
-error) that contains digits; Hide all shows generic titles and no labels,
+error or a progress caption) that contains digits and masks wallet or source
+names that do; Hide all shows generic titles and no labels,
 file names, paths, or error text, while actions keep working. The list and
 the toasts are hidden while Kassiber is locked.
 
