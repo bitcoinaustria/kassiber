@@ -17,6 +17,11 @@ import {
   type Currency,
 } from "@/lib/currency";
 import { type SwapRail } from "@/lib/bitcoinRail";
+import {
+  DEFAULT_HOLDINGS_VIEW,
+  type HoldingsRail,
+  type HoldingsView,
+} from "@/store/ui";
 import { formatShortDate } from "@/lib/date";
 import {
   basisIncompleteFromMs,
@@ -120,6 +125,30 @@ export type HoldingsItem = {
    * for the "Other sources" row and for sources that never synced (imports).
    */
   lastSyncAt?: string;
+  /** The wallet the row opens; none for the "Other sources" row. */
+  connectionId?: string;
+  /** A source that held bitcoin once and holds none now. */
+  empty?: boolean;
+  /** Its newest transaction, for the activity sort and the row's date. */
+  lastTransactionAt?: string | null;
+  /** A failed or running sync, so a figure is not read as current. */
+  syncState?: "syncing" | "error";
+  /** The network group the row sits in; exchanges and files are "other". */
+  group?: HoldingsRail;
+  transactionCount?: number;
+  /** Month-end bitcoin from the wallet's own movements, oldest first. */
+  trend?: number[];
+};
+
+export type HoldingsBySource = {
+  /** Holding sources first, then any listed empty ones. */
+  items: HoldingsItem[];
+  /** Empty sources not listed in `items`, for the "N empty" line. */
+  folded: HoldingsItem[];
+  /** Sources the rail filter leaves out. */
+  filteredOut: number;
+  /** The bitcoin the listed sources hold. */
+  totalBtc: number;
 };
 
 export type PortfolioChartPoint = {
@@ -607,6 +636,19 @@ export function latestPortfolioBalanceBtc(snapshot: OverviewSnapshot) {
   const latestBalance = snapshot.balanceSeries[snapshot.balanceSeries.length - 1];
   if (typeof latestBalance === "number") return latestBalance;
   return fiatBalance;
+}
+
+/**
+ * The bitcoin the balance tile shows: the daemon's display total, the same
+ * chain-observed wallet balances the tile's fiat value and Holdings by Source
+ * use. The portfolio series ends at the sum of the history, which differs
+ * from it when history and chain disagree.
+ */
+export function displayBalanceBtc(snapshot: OverviewSnapshot) {
+  const total = snapshot.balanceSummary?.totalBtc;
+  return typeof total === "number" && Number.isFinite(total)
+    ? total
+    : latestPortfolioBalanceBtc(snapshot);
 }
 
 /** The portfolio value tile: what the bitcoin is worth against its basis. */
@@ -2234,6 +2276,37 @@ export function formatPortfolioDetailLabel(value: string) {
   });
 }
 
+/** Months the Holdings trend spans, ending with the current one. */
+export const HOLDINGS_TREND_MONTHS = 12;
+
+/**
+ * A wallet's month-end bitcoin over the last twelve months, from the daemon's
+ * balances at the end of each month the wallet moved: each carries forward
+ * until the next, and before the first the wallet held nothing. Empty for a
+ * wallet that never moved.
+ */
+export function monthEndTrend(
+  points: ReadonlyArray<{ month: string; balanceBtc: number }>,
+  now: Date,
+  months = HOLDINGS_TREND_MONTHS,
+): number[] {
+  if (!points.length) return [];
+  const sorted = [...points].sort((a, b) => a.month.localeCompare(b.month));
+  const values: number[] = [];
+  let index = 0;
+  let balance = 0;
+  for (let offset = months - 1; offset >= 0; offset -= 1) {
+    const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    while (index < sorted.length && sorted[index].month <= key) {
+      balance = sorted[index].balanceBtc;
+      index += 1;
+    }
+    values.push(balance);
+  }
+  return values;
+}
+
 export function percentOf(value: number, total: number) {
   if (total <= 0) return 0;
   return Math.round((value / total) * 100);
@@ -2288,49 +2361,84 @@ function holdingRail(connection: OverviewSnapshot["connections"][number]): SwapR
 }
 
 /**
- * The sources holding bitcoin, largest first. Past `shown` sources the
- * smallest fold into one "Other sources" row, so the list stays `shown` long.
- * Ranks and shares come from the bitcoin held, so they hold without a rate.
+ * The book's sources as the Holdings card lists them: holding sources in the
+ * chosen order, past `view.limit` the rest folded into one "Other sources"
+ * row, then the emptied ones listed, folded or left out. Shares are of all the
+ * bitcoin held, so a filtered row keeps the share it has of the whole book.
  */
-export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): HoldingsItem[] {
+export function buildHoldingsBySource(
+  snapshot: OverviewSnapshot,
+  view: HoldingsView = DEFAULT_HOLDINGS_VIEW,
+  now: Date = new Date(),
+): HoldingsBySource {
   const fiatRate = activeMarketFiatRate(snapshot);
-  const rows = snapshot.connections
-    .filter((connection) => connection.balance > 0)
-    .map((connection) => ({
-      name: connection.label,
-      btc: connection.balance,
-      // An exchange, file or ecash source gets no rail logo, not a guessed one.
-      rail: holdingRail(connection),
-      lastSyncAt: connection.lastSyncAt ?? undefined,
-    }))
-    .sort((a, b) => b.btc - a.btc);
-  const total = rows.reduce((sum, item) => sum + item.btc, 0);
-  const visibleRows: Array<{
-    name: string;
-    nameKey?: string;
-    btc: number;
-    rail?: SwapRail;
-    lastSyncAt?: string;
-  }> =
-    rows.length > shown
-      ? [
-          ...rows.slice(0, shown - 1),
-          {
-            name: "",
-            nameKey: "holdings.otherSources",
-            btc: rows.slice(shown - 1).reduce((sum, item) => sum + item.btc, 0),
-          },
-        ]
-      : rows;
-  return visibleRows.map((item) => ({
-    name: item.name,
-    nameKey: item.nameKey,
-    btc: item.btc,
-    value: item.btc * fiatRate,
-    percent: percentOf(item.btc, total),
-    rail: item.rail,
-    ...(item.lastSyncAt ? { lastSyncAt: item.lastSyncAt } : {}),
-  }));
+  const bookTotal = snapshot.connections.reduce(
+    (sum, connection) => sum + Math.max(connection.balance, 0),
+    0,
+  );
+  const toItem = (connection: OverviewSnapshot["connections"][number]): HoldingsItem => ({
+    name: connection.label,
+    btc: Math.max(connection.balance, 0),
+    value: Math.max(connection.balance, 0) * fiatRate,
+    percent: percentOf(Math.max(connection.balance, 0), bookTotal),
+    // An exchange, file or ecash source gets no rail logo, not a guessed one.
+    rail: holdingRail(connection),
+    connectionId: connection.id,
+    ...(connection.lastSyncAt ? { lastSyncAt: connection.lastSyncAt } : {}),
+    empty: !(connection.balance > 0),
+    lastTransactionAt: connection.lastTransactionAt ?? null,
+    syncState:
+      connection.status === "error" || connection.status === "syncing"
+        ? connection.status
+        : undefined,
+    group: holdingRail(connection) ?? "other",
+    transactionCount: connection.transactionCount,
+    trend: connection.monthBalances ? monthEndTrend(connection.monthBalances, now) : undefined,
+  });
+  const railOf = (connection: OverviewSnapshot["connections"][number]): HoldingsRail =>
+    holdingRail(connection) ?? "other";
+  const wallets = snapshot.connections.filter((connection) => !connection.deprecated || connection.balance > 0);
+  const listed = wallets.filter((connection) => view.rails.includes(railOf(connection)));
+  const sorted = listed.map(toItem).sort(holdingsOrder(view.sort));
+  const holding = sorted.filter((item) => !item.empty);
+  // A source never funded is configuration, not an emptied holding.
+  const emptied = sorted.filter(
+    (item) => item.empty && Boolean(item.lastTransactionAt),
+  );
+  const shown = view.limit > 0 && holding.length > view.limit
+    ? [
+        ...holding.slice(0, view.limit - 1),
+        foldedHoldings(holding.slice(view.limit - 1), bookTotal, fiatRate),
+      ]
+    : holding;
+  return {
+    items: view.empty === "show" ? [...shown, ...emptied] : shown,
+    folded: view.empty === "fold" ? emptied : [],
+    filteredOut: wallets.length - listed.length,
+    totalBtc: holding.reduce((sum, item) => sum + item.btc, 0),
+  };
+}
+
+function holdingsOrder(sort: HoldingsView["sort"]) {
+  return (a: HoldingsItem, b: HoldingsItem) => {
+    if (sort === "name") return a.name.localeCompare(b.name, currentUiLocale());
+    if (sort === "activity") {
+      const byDate = (b.lastTransactionAt ?? "").localeCompare(a.lastTransactionAt ?? "");
+      if (byDate) return byDate;
+    }
+    return b.btc - a.btc || a.name.localeCompare(b.name, currentUiLocale());
+  };
+}
+
+function foldedHoldings(rows: HoldingsItem[], bookTotal: number, fiatRate: number): HoldingsItem {
+  const btc = rows.reduce((sum, item) => sum + item.btc, 0);
+  return {
+    name: "",
+    nameKey: "holdings.otherSources",
+    btc,
+    value: btc * fiatRate,
+    percent: percentOf(btc, bookTotal),
+  };
 }
 
 export const readinessToneStyles: Record<OverviewHealthTone, string> = {
@@ -2615,3 +2723,76 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot, reviewCount?:
   };
 }
 
+const FLOW_MONTHS = 12;
+
+export type MonthFlow = {
+  key: string;
+  date: Date;
+  inBtc: number;
+  outBtc: number;
+  inValue: number;
+  outValue: number;
+};
+
+export type MonthlyFlows = {
+  months: MonthFlow[];
+  inBtc: number;
+  outBtc: number;
+  inValue: number;
+  outValue: number;
+  feeBtc: number;
+  /**
+   * Every flow counted carries a value in the book's currency. A flow priced
+   * in another fiat, or not priced, leaves the fiat totals unusable.
+   */
+  fiatComplete: boolean;
+  /** Anything received, spent or paid in fees inside the window. */
+  hasActivity: boolean;
+};
+
+/**
+ * Received and spent per calendar month over the last twelve, oldest first,
+ * from the same flow reading as the chart's activity dots. Moves between
+ * the book's own wallets count only their fees.
+ */
+export function monthlyFlows(snapshot: OverviewSnapshot, now: Date = new Date()): MonthlyFlows {
+  const months: MonthFlow[] = Array.from({ length: FLOW_MONTHS }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (FLOW_MONTHS - 1 - index), 1);
+    return { key: `${date.getFullYear()}-${date.getMonth()}`, date, inBtc: 0, outBtc: 0, inValue: 0, outValue: 0 };
+  });
+  const byKey = new Map(months.map((month) => [month.key, month]));
+  const bookCurrency = activeMarketFiatCurrency(snapshot).toUpperCase();
+  let feeBtc = 0;
+  let fiatComplete = true;
+  for (const event of activityTxs(snapshot)) {
+    const month = byKey.get(`${event.occurredAt.getFullYear()}-${event.occurredAt.getMonth()}`);
+    if (!month) continue;
+    // A fee row may carry its fee as the amount rather than as feeSat; its
+    // volume is the larger of the two, so neither is counted twice.
+    feeBtc += event.flow === "fee" ? event.volumeBtc : event.feeBtc;
+    if (event.flow === "incoming" || event.flow === "outgoing") {
+      const currency = event.tx.fiatCurrency?.toUpperCase();
+      if (event.tx.eur == null || (currency && currency !== bookCurrency)) fiatComplete = false;
+    }
+    if (event.flow === "incoming") {
+      month.inBtc += event.btc;
+      month.inValue += event.valueEur;
+    } else if (event.flow === "outgoing") {
+      month.outBtc += event.btc;
+      month.outValue += event.valueEur;
+    }
+  }
+  const sum = (pick: (month: MonthFlow) => number) => months.reduce((total, month) => total + pick(month), 0);
+  const inBtc = sum((month) => month.inBtc);
+  const outBtc = sum((month) => month.outBtc);
+  return {
+    months,
+    inBtc,
+    outBtc,
+    inValue: sum((month) => month.inValue),
+    outValue: sum((month) => month.outValue),
+    feeBtc,
+    fiatComplete,
+    hasActivity: inBtc > 0 || outBtc > 0 || feeBtc > 0,
+  };
+}

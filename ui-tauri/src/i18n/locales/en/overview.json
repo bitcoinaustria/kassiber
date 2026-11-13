@@ -186,7 +186,62 @@
     "otherSources": "Other sources",
     "empty": "No wallet holds bitcoin yet.",
     "lastSynced": "synced {{time}}",
-    "lastSyncedAt": "Last synced {{date}}"
+    "lastSyncedAt": "Last synced {{date}}",
+    "settingsAria": "Holdings settings",
+    "sortLabel": "Sort by",
+    "sort": {
+      "balance": "Balance",
+      "name": "Name",
+      "activity": "Latest activity"
+    },
+    "emptyLabel": "Empty sources",
+    "emptyMode": {
+      "fold": "Fold into one line",
+      "show": "List them",
+      "hide": "Hide them"
+    },
+    "railsLabel": "Networks",
+    "rail": {
+      "onchain": "On-chain",
+      "liquid": "Liquid",
+      "lightning": "Lightning",
+      "other": "Exchanges and files"
+    },
+    "limitLabel": "Sources shown",
+    "limitAll": "All",
+    "emptySources_one": "{{count}} empty source",
+    "emptySources_other": "{{count}} empty sources",
+    "hideEmpty": "Hide empty sources",
+    "filteredOut_one": "{{count}} source filtered out",
+    "filteredOut_other": "{{count}} sources filtered out",
+    "showAllRails": "Show all",
+    "noneListed": "No source matches this filter.",
+    "openSource": "Open {{name}}",
+    "lastActivity": "Latest activity {{date}}",
+    "syncState": {
+      "syncing": "Syncing",
+      "error": "Sync failed"
+    },
+    "shareBar": "Share of bitcoin by source",
+    "layoutLabel": "Layout",
+    "layout": {
+      "list": "List",
+      "tiles": "Tiles",
+      "table": "Table",
+      "trend": "Trend, last 12 months"
+    },
+    "table": {
+      "source": "Source",
+      "network": "Network",
+      "bitcoin": "Bitcoin",
+      "value": "Value",
+      "share": "Share",
+      "transactions": "Transactions",
+      "lastActivity": "Latest activity"
+    },
+    "transactions_one": "{{count}} transaction",
+    "transactions_other": "{{count}} transactions",
+    "trendChange": "{{change}} over 12 months"
   },
   "recentTx": {
     "title": "Recent Transactions",
@@ -410,5 +465,28 @@
     "quarantines_one": "{{count}} quarantined transaction is excluded. Resolve it in the <queue>quarantine queue</queue> before relying on the number.",
     "quarantines_other": "{{count}} quarantined transactions are excluded. Resolve them in the <queue>quarantine queue</queue> before relying on the number.",
     "exportDraft": "Incomplete draft — exports remain available for review."
+  },
+  "widgets": {
+    "tax": {
+      "title": "Tax year {{year}}",
+      "openReports": "Reports",
+      "realized": "Realized gains this year",
+      "unrealized": "Unrealized gains",
+      "costBasis": "Cost basis",
+      "taxFree": "Tax-free (old holdings)",
+      "taxable": "Taxable (new holdings)",
+      "basisIncomplete": "Cost basis is incomplete, so gains are not shown until it is resolved.",
+      "taxFreeNeedsJournals": "Run journals before relying on the tax-free split.",
+      "taxFreeQuarantines_one": "Review {{count}} quarantine before relying on the tax-free split.",
+      "taxFreeQuarantines_other": "Review {{count}} quarantines before relying on the tax-free split."
+    },
+    "flows": {
+      "title": "Money in and out, last 12 months",
+      "chartAria": "Bitcoin received and spent per month",
+      "received": "Received",
+      "spent": "Spent",
+      "fees": "Fees",
+      "fiatIncomplete": "Some of these are not valued in {{currency}}, so the totals are in bitcoin."
+    }
   }
 }

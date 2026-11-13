@@ -34,6 +34,49 @@ export type NotificationTone = "info" | "success" | "warning" | "error";
 // workbench, so switching screens keeps the range the user picked.
 export type BookChartPeriod = PeriodKey;
 
+/** How the Overview's Holdings by Source card orders and filters its rows. */
+export const HOLDINGS_LAYOUTS = ["list", "tiles", "table", "trend"] as const;
+export type HoldingsLayout = (typeof HOLDINGS_LAYOUTS)[number];
+export type HoldingsSort = "balance" | "name" | "activity";
+export type HoldingsEmpty = "fold" | "show" | "hide";
+export type HoldingsRail = "onchain" | "lightning" | "liquid" | "other";
+export const HOLDINGS_RAILS: readonly HoldingsRail[] = ["onchain", "liquid", "lightning", "other"];
+export const HOLDINGS_LIMITS = [8, 16, 0] as const;
+export type HoldingsView = {
+  layout: HoldingsLayout;
+  sort: HoldingsSort;
+  empty: HoldingsEmpty;
+  /** Rails listed; every rail when all are on. */
+  rails: HoldingsRail[];
+  /** Sources listed before the rest fold into "Other sources"; 0 lists all. */
+  limit: (typeof HOLDINGS_LIMITS)[number];
+};
+export const DEFAULT_HOLDINGS_VIEW: HoldingsView = {
+  layout: "list",
+  sort: "balance",
+  empty: "fold",
+  rails: [...HOLDINGS_RAILS],
+  limit: 8,
+};
+
+export function normalizeHoldingsView(value: unknown): HoldingsView {
+  if (!value || typeof value !== "object") return DEFAULT_HOLDINGS_VIEW;
+  const view = value as Partial<Record<keyof HoldingsView, unknown>>;
+  const pick = <T,>(options: readonly T[], candidate: unknown, fallback: T) =>
+    options.includes(candidate as T) ? (candidate as T) : fallback;
+  const rails = Array.isArray(view.rails)
+    ? HOLDINGS_RAILS.filter((rail) => (view.rails as unknown[]).includes(rail))
+    : DEFAULT_HOLDINGS_VIEW.rails;
+  return {
+    layout: pick(HOLDINGS_LAYOUTS, view.layout, DEFAULT_HOLDINGS_VIEW.layout),
+    sort: pick<HoldingsSort>(["balance", "name", "activity"], view.sort, DEFAULT_HOLDINGS_VIEW.sort),
+    empty: pick<HoldingsEmpty>(["fold", "show", "hide"], view.empty, DEFAULT_HOLDINGS_VIEW.empty),
+    // An emptied filter would hide everything; start over with every rail.
+    rails: rails.length ? rails : DEFAULT_HOLDINGS_VIEW.rails,
+    limit: pick(HOLDINGS_LIMITS, view.limit, DEFAULT_HOLDINGS_VIEW.limit),
+  };
+}
+
 export const DEFAULT_APP_SCALE = 0.9;
 export const DEFAULT_THEME: ThemePreference = "dark";
 export const MIN_APP_SCALE = 0.8;
@@ -429,6 +472,8 @@ export interface UiState {
   bookChartPeriods: Record<string, BookChartPeriod>;
   /** Remembered column sort per table (see `store/tableSort.ts`). */
   tableSorts: TableSorts;
+  /** Holdings by Source sort, filter and folding; the same for every book. */
+  holdingsView: HoldingsView;
   /**
    * Book keys whose in-progress first-sync card the user collapsed via
    * "Continue in background". Ephemeral (not persisted): re-opening from the
@@ -524,6 +569,7 @@ export interface UiState {
     period: BookChartPeriod,
   ) => void;
   setTableSort: (table: TableSortId, sort: TableSort | null) => void;
+  setHoldingsView: (patch: Partial<HoldingsView>) => void;
   setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
   clearSourceFundsDraft: (profileKey: string) => void;
   setDeferredConnectionSetup: (intent: DeferredConnectionSetup | null) => void;
@@ -731,6 +777,7 @@ export function uiStatePartialForStorage(state: UiState) {
     firstSyncDone: state.firstSyncDone,
     bookChartPeriods: state.bookChartPeriods,
     tableSorts: state.tableSorts,
+    holdingsView: state.holdingsView,
     sourceFundsDrafts: state.sourceFundsDrafts,
   };
 }
@@ -859,6 +906,7 @@ export const useUiStore = create<UiState>()(
       firstSyncDone: {},
       bookChartPeriods: {},
       tableSorts: {},
+      holdingsView: DEFAULT_HOLDINGS_VIEW,
       firstSyncCardDismissed: {},
       sourceFundsDrafts: {},
       setLang: (lang) => set({ lang }),
@@ -1145,6 +1193,10 @@ export const useUiStore = create<UiState>()(
           ),
         })),
       clearNotifications: () => set({ notifications: [] }),
+      setHoldingsView: (patch) =>
+        set((state) => ({
+          holdingsView: normalizeHoldingsView({ ...state.holdingsView, ...patch }),
+        })),
       setBookChartPeriod: (bookKey, period) =>
         set((state) =>
           state.bookChartPeriods[bookKey] === period
@@ -1281,6 +1333,7 @@ export const useUiStore = create<UiState>()(
                 .overviewChartPeriods ??
               current.bookChartPeriods,
           ),
+          holdingsView: normalizeHoldingsView(restored.holdingsView),
           sourceFundsDrafts:
             restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
           // Added without a version bump: `merge` fills it for older blobs.

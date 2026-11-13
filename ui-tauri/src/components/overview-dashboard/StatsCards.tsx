@@ -14,7 +14,7 @@ import {
   buildPortfolioStat,
   formatCompactDisplayMoney,
   formatMarketRateValue,
-  latestPortfolioBalanceBtc,
+  displayBalanceBtc,
   marketRateCompactLabel,
   marketRateDetailLabel,
   portfolioCompletenessDetail,
@@ -133,7 +133,7 @@ export const StatsCards = ({
               )}
             >
               {maskSensitive(
-                formatBtc(latestPortfolioBalanceBtc(snapshot), { precision: 3 }),
+                formatBtc(displayBalanceBtc(snapshot), { precision: 3 }),
                 hideSensitive,
               )}
             </p>
