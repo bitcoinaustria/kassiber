@@ -18479,6 +18479,8 @@ else byte for byte.
 
 | `ui.connections.exchange.status`, `.test`, `.create` and `.sync` set up and sync exchange API connections in the desktop ([exchange connections in the desktop](exchange-desktop.md)); Python does not advertise them and answers each with `daemon_unavailable` without writing; the Rust daemon advertises them after Python's kinds | the desktop flow is new in Rust | `exchange_api/tests/desktop_api.rs`, `tests/test_rust_exchange_desktop.py`, `tests/test_python_rust_only_exchange_desktop.py`, `crates/runtime/tests/capabilities.rs`, `tests/test_connection_catalog_drift.py` |
 
+| `backends trust-certificate NAME [--fingerprint SHA256]` and the desktop kinds `ui.backends.certificate.fetch` / `ui.backends.certificate.trust` fetch a saved backend's TLS certificate and pin it after the user confirms its fingerprint ([self-signed certificates](backends.md#self-signed-certificates)); Python has neither | confirmed trust on first use is new in Rust | `crates/kassiber/tests/backend_certificates.rs`, `crates/chain/src/certificates/tests.rs`, `crates/cli/tests/argparse_parity.rs` (`rust_only`), `crates/cli/tests/describe_drift.rs` (pinned description), `crates/runtime/tests/capabilities.rs` (`admin` like `backends reveal-token` and `ui.backends.delete`; the fetch kind `operator` like the connection tests), `crates/cli/tests/certificate_trust_reachability.rs` |
+
 The assistant's tools are unchanged: no exchange sync is an AI tool, and
 `ui.wallets.request_input` keeps Python's source list. Parity tests compare
 the Rust daemon's ready line with Python's after removing the Rust-only kinds

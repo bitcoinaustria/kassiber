@@ -107,6 +107,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 - Resolve Markdown reference links relative to this skill file, including links to shared in-product references outside this directory.
 - Kassiber already has `reports export-pdf`; do not invent bespoke render scripts unless the user specifically wants a custom format beyond the built-in export.
 - Never run `wallets reveal-descriptor` or `backends reveal-token`; they print raw secrets. The user runs them locally.
+- Never confirm `backends trust-certificate --fingerprint`. Fetching shows the server's SHA-256 fingerprint; only the user can compare it with their server and pin it. On `tls_certificate_changed`, do not re-pin: tell the user, who decides whether they replaced the certificate.
 - `network_egress_disabled` naming offline mode means the user switched Kassiber offline; `kassiber offline status` confirms it. Work from local data, and run `kassiber offline off` only when the user asks to connect.
 - Wallet accounts are not a general ledger. `account_type` and `asset` are descriptive bucket metadata.
 

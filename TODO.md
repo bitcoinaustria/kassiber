@@ -2100,6 +2100,14 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Privacy and security follow-ups
 
+- [ ] Backend certificate trust ([self-signed certificates](docs/reference/backends.md#self-signed-certificates))
+  follow-ups: decide whether a pinned leaf should still have to name the host
+  (today a `localhost` certificate reached by LAN IP is refused as
+  unpinnable, unlike Sparrow); let the notification for an untrusted or
+  changed certificate open the trust dialog directly (its source condition
+  does not name the backend, so it opens Connections), and offer it from the
+  title-bar connection check.
+
 - [ ] Harden against infostealers running as the user: `exports/` and
   `attachments/` sit outside SQLCipher, CLI remembered unlock on Linux is
   readable by any same-user process through the unlocked Secret Service, and
