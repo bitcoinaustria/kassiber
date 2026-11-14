@@ -19,32 +19,65 @@ use crate::{dbdump, entry_path, restore, Blobs, Entry, Session};
 /// input followed.
 pub const PROCESS_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// The recording test that held a wallet's first history request in its
-/// loopback server while it sent a freshness control (cancel, revoke,
-/// pause, offline). The tape answers at once, so without the same hold
-/// whether the control lands before the job's next check is a race with
-/// how fast the fetch runs.
-const HELD_FETCH_TEST: &str = "tests/test_rust_freshness_lifecycle.py::\
-     test_live_freshness_controls_remain_available_during_fetch[";
+/// A recording test that held a wallet's first history request in its
+/// loopback server while it sent one input. The tape answers at once, so
+/// without the same hold whether that input lands before the job's next
+/// check is a race with how fast the fetch runs.
+#[derive(Debug, PartialEq, Eq)]
+struct HeldFetch {
+    /// The test id, up to its parameter.
+    test: &'static str,
+    /// The input the test sent while the request was held.
+    control: usize,
+    release: Release,
+}
 
-/// Its inputs: the sync, a status read, a competing sync, then the control.
-const HELD_CONTROL_INPUT: usize = 3;
+/// When the test let the held request finish.
+#[derive(Debug, PartialEq, Eq)]
+enum Release {
+    /// Once the control's answer printed.
+    AfterAnswer,
+    /// Once stdout had been quiet for `QUIET` after the input: the test
+    /// drained what the process printed until nothing came for that long.
+    AfterQuiet,
+}
 
-/// The request a session's recording held, as tape-hold bytes.
-fn held_request(session: &Session) -> Option<&'static str> {
-    if !session.test.as_deref()?.starts_with(HELD_FETCH_TEST) {
-        return None;
-    }
-    Some(
-        match session
-            .env
-            .get("KASSIBER_BACKEND_FIXTURE_KIND")
-            .map(String::as_str)
-        {
-            Some("electrum") => "blockchain.scripthash.get_history",
-            _ => "/scripthash/",
-        },
-    )
+const QUIET: Duration = Duration::from_millis(100);
+
+const HELD_FETCHES: &[HeldFetch] = &[
+    // The sync, a status read, a competing sync, then a freshness control
+    // (cancel, revoke, pause, offline).
+    HeldFetch {
+        test: "tests/test_rust_freshness_lifecycle.py::\
+               test_live_freshness_controls_remain_available_during_fetch[",
+        control: 3,
+        release: Release::AfterAnswer,
+    },
+    // The sync, then EOF: the daemon cancels and joins the request before it
+    // exits. Released early, the fetch outran the cancellation now and then
+    // (more progress, then a request the tape never had).
+    HeldFetch {
+        test: "tests/test_rust_freshness_lifecycle.py::\
+               test_live_freshness_eof_joins_the_request_before_exit[",
+        control: 1,
+        release: Release::AfterQuiet,
+    },
+];
+
+/// The hold a session's recording had, and the request it held as tape-hold
+/// bytes.
+fn held_request(session: &Session) -> Option<(&'static HeldFetch, &'static str)> {
+    let test = session.test.as_deref()?;
+    let held = HELD_FETCHES.iter().find(|h| test.starts_with(h.test))?;
+    let pattern = match session
+        .env
+        .get("KASSIBER_BACKEND_FIXTURE_KIND")
+        .map(String::as_str)
+    {
+        Some("electrum") => "blockchain.scripthash.get_history",
+        _ => "/scripthash/",
+    };
+    Some((held, pattern))
 }
 
 /// Where recordings keep their state roots: `record.sh` runs the suite in a
@@ -98,13 +131,210 @@ pub struct Replayed {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
     pub exit: crate::Exit,
+    /// The state this run left, as on disk: still in the replay's paths.
+    /// [`Replayed::recorded_after`] maps it back to the recorded ones.
     pub after: Vec<Vec<Entry>>,
     pub store: PathBuf,
-    /// When this run's process started and ended (µs since the epoch): a
-    /// re-recorded session takes them as its window, so the clock readings
-    /// it now holds are recognized as generated.
-    pub started_us: i64,
-    pub ended_us: i64,
+    /// What this run sent at each recorded input (in the recorded paths):
+    /// the recorded text with this run's printed ids (document tokens, job
+    /// ids) in place of the recording's. `None` where it sent nothing (an
+    /// EOF, or an input the run never reached).
+    pub stdin: Vec<Option<String>>,
+    /// The clock spans this run's readings came from (µs since the epoch):
+    /// its real start and end, and the virtual spans the clock shim showed
+    /// the process. A re-recorded session keeps them as windows, so the
+    /// clock readings it now holds are recognized as generated.
+    pub spans: Vec<(i64, i64)>,
+    /// The comparison's path mapping (recorded to replayed).
+    pub paths: Paths,
+}
+
+impl Replayed {
+    /// The state this run left, in the recorded paths: every text file,
+    /// SQLite text value and file name the comparison maps back through
+    /// [`Paths::back`] is rewritten the same way, so a session re-recorded
+    /// from another checkout (or temp dir, or account) replays clean from
+    /// any. New blobs go into `store`; `work` is scratch space.
+    pub fn recorded_after(&self, work: &Path) -> Result<Vec<Vec<Entry>>, String> {
+        let store = Blobs::new(&self.store);
+        self.after
+            .iter()
+            .map(|entries| recorded_entries(entries, &store, &self.paths, work))
+            .collect()
+    }
+}
+
+/// `session` as `replayed` left it, for `session-replay replay --update`:
+/// its output, exit, the inputs it sent (with the ids it printed and read
+/// back), its clock spans and the state it left, blobs copied into the
+/// recording's `blobs`. Everything is in the recorded paths, mapped back
+/// the way the comparison maps a replay, so the session replays clean
+/// from any checkout. `work` is scratch space.
+pub fn rerecorded(
+    mut session: Session,
+    blobs: &Blobs,
+    replayed: &Replayed,
+    work: &Path,
+) -> Result<Session, String> {
+    let after = replayed.recorded_after(work)?;
+    let scan = Blobs::new(&replayed.store);
+    let copy = |hash: &str| -> Result<String, String> {
+        let bytes = scan.get(hash).map_err(|e| e.to_string())?;
+        blobs.put(&bytes).map_err(|e| e.to_string())
+    };
+    session.stdout = blobs.put(&replayed.stdout).map_err(|e| e.to_string())?;
+    session.stderr = blobs.put(&replayed.stderr).map_err(|e| e.to_string())?;
+    session.exit = replayed.exit.clone();
+    // Ids the replay printed and the test sent back (a document token)
+    // must match the output recorded above: a later replay maps the ids of
+    // recorded output lines onto its own, so a stale one would go out as is.
+    for (chunk, sent) in session.stdin.iter_mut().zip(&replayed.stdin) {
+        if let (Some(data), Some(sent)) = (chunk.data.as_mut(), sent) {
+            *data = base64::engine::general_purpose::STANDARD.encode(sent);
+        }
+    }
+    for span in &replayed.spans {
+        if !session.rerecorded_us.contains(span) {
+            session.rerecorded_us.push(*span);
+        }
+    }
+    for (root, mut after) in session.roots.iter_mut().zip(after) {
+        // A book's ciphertext stays only where the recording kept one
+        // (`pack --keep-ciphertext`): nothing compares it, and the replay's
+        // is a megabyte of pages no other session shares.
+        let kept: HashSet<&str> = root
+            .after
+            .iter()
+            .filter_map(|e| match e {
+                Entry::File {
+                    path,
+                    encryption: Some(e),
+                    ..
+                } if e.ciphertext.is_some() => Some(path.as_str()),
+                _ => None,
+            })
+            .collect();
+        for entry in &mut after {
+            if let Entry::File {
+                path,
+                blob,
+                encryption,
+                ..
+            } = entry
+            {
+                *blob = copy(blob)?;
+                if let Some(e) = encryption {
+                    e.ciphertext = match &e.ciphertext {
+                        Some(ciphertext) if kept.contains(path.as_str()) => Some(copy(ciphertext)?),
+                        _ => None,
+                    };
+                }
+            }
+        }
+        root.after = after;
+    }
+    Ok(session)
+}
+
+/// One root's entries with replayed paths mapped back (see
+/// [`Replayed::recorded_after`]).
+fn recorded_entries(
+    entries: &[Entry],
+    store: &Blobs,
+    paths: &Paths,
+    work: &Path,
+) -> Result<Vec<Entry>, String> {
+    let reverse = paths.reversed();
+    let blob_of = |name: &str| {
+        entries.iter().find_map(|e| match e {
+            Entry::File { path, blob, .. } if path == name => store.get(blob).ok(),
+            _ => None,
+        })
+    };
+    // Journals of books rewritten below: the rewrite checkpoints them in.
+    let mut absorbed = HashSet::new();
+    let mut out = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let mut entry = entry.clone();
+        if let Entry::File {
+            path,
+            blob,
+            size,
+            encryption,
+            ..
+        } = &mut entry
+        {
+            let bytes = store.get(blob).map_err(|e| format!("{path}: {e}"))?;
+            let rewritten = if dbdump::is_sqlite(&bytes) {
+                let wal = blob_of(&format!("{path}-wal")).unwrap_or_default();
+                if reverse.named_in(&bytes) || reverse.named_in(&wal) {
+                    fs::create_dir_all(work).map_err(|e| e.to_string())?;
+                    let file = work.join("book.sqlite");
+                    let mut leftovers = Vec::new();
+                    for suffix in ["", "-wal", "-shm", "-journal"] {
+                        let mut name = file.clone().into_os_string();
+                        name.push(suffix);
+                        let _ = fs::remove_file(&name);
+                        leftovers.push(PathBuf::from(name));
+                    }
+                    fs::write(&file, &bytes).map_err(|e| e.to_string())?;
+                    if !wal.is_empty() {
+                        fs::write(&leftovers[1], &wal).map_err(|e| e.to_string())?;
+                    }
+                    relocate_database(&file, &reverse).map_err(|e| format!("{path}: {e}"))?;
+                    let moved = fs::read(&file).map_err(|e| e.to_string())?;
+                    for leftover in &leftovers {
+                        let _ = fs::remove_file(leftover);
+                    }
+                    for suffix in ["-wal", "-shm", "-journal"] {
+                        absorbed.insert(format!("{path}{suffix}"));
+                    }
+                    Some(moved)
+                } else {
+                    None
+                }
+            } else if let Some(members) = zip_members(&bytes) {
+                // Before the text branch: an archive of plain text members
+                // can be valid UTF-8, and substituting in its bytes would
+                // break its sizes and checksums. The comparison maps text
+                // members back; a rebuilt archive would not keep the
+                // product's bytes, so refuse instead.
+                if let Some((name, _)) = members.iter().find(|(_, body)| reverse.named_in(body)) {
+                    return Err(format!(
+                        "{path}: archive member {name} names a replay path; \
+                         re-recording cannot map it back"
+                    ));
+                }
+                None
+            } else if let Ok(text) = std::str::from_utf8(&bytes) {
+                let moved = paths.back(text);
+                (moved != text).then(|| moved.into_bytes())
+            } else {
+                None
+            };
+            if let Some(moved) = rewritten {
+                *blob = store.put(&moved).map_err(|e| e.to_string())?;
+                *size = moved.len() as u64;
+                // The kept ciphertext held the replay's paths; without it a
+                // restore encrypts the mapped plaintext again.
+                if let Some(encryption) = encryption {
+                    encryption.ciphertext = None;
+                }
+            }
+        }
+        let replayed_name = entry_path(&entry).to_owned();
+        match &mut entry {
+            Entry::Dir { path, .. } | Entry::File { path, .. } | Entry::Symlink { path, .. } => {
+                *path = paths.back(path);
+            }
+        }
+        out.push((replayed_name, entry));
+    }
+    Ok(out
+        .into_iter()
+        .filter(|(name, _)| !absorbed.contains(name))
+        .map(|(_, entry)| entry)
+        .collect())
 }
 
 /// Path substitutions, longest first: recorded text to replay text.
@@ -133,11 +363,17 @@ impl Paths {
         })
     }
 
+    /// Replayed text to recorded text: the mapping the comparison applies
+    /// to everything a replay printed or left.
     pub fn back(&self, text: &str) -> String {
+        self.reversed().forward(text)
+    }
+
+    /// The inverse substitutions (replayed text to recorded), longest first.
+    pub fn reversed(&self) -> Paths {
         let mut back: Vec<_> = self.0.iter().map(|(a, b)| (b.clone(), a.clone())).collect();
         back.sort_by_key(|p| std::cmp::Reverse(p.0.len()));
-        back.iter()
-            .fold(text.to_owned(), |t, (a, b)| t.replace(a, b))
+        Paths(back)
     }
 }
 
@@ -158,6 +394,23 @@ fn virtual_spans(session: &Session, elapsed_us: i64) -> Vec<(i64, i64)> {
         .into_iter()
         .map(|base| (base, base + elapsed_us.max(0)))
         .collect()
+}
+
+/// The clock spans a replay that ran from `started` to `ended` (µs since
+/// the epoch) compares under: its own run, the recording's (the recorded
+/// state was written during the recording test, which began before the
+/// process, so its readings count as generated on both sides), the virtual
+/// spans the clock shim showed the process, and every re-recording's.
+fn comparison_window(session: &Session, started: i64, ended: i64) -> Window {
+    Window {
+        start: started,
+        end: ended,
+        local_offset_us: local_offset_us(),
+        also: std::iter::once((session.started_us - RECORDING_LOOKBACK_US, session.ended_us))
+            .chain(virtual_spans(session, ended - started))
+            .chain(session.rerecorded_us.iter().copied())
+            .collect(),
+    }
 }
 
 /// The account this replay runs as, from the password database.
@@ -262,12 +515,11 @@ fn artifacts(
                             .join("\n"),
                         Err(error) => format!("database that does not open: {error}"),
                     }
-                } else if let Ok(text) = std::str::from_utf8(&bytes) {
-                    canon.rewrite(&back(paths, text), true)
                 } else if let Some(members) = zip_members(&bytes) {
-                    // An XLSX or ZIP export: each member compares as text
-                    // (with the usual rules, so its creation time is a clock
-                    // reading) or, if binary, by its bytes.
+                    // An XLSX or ZIP export, even one whose bytes are valid
+                    // UTF-8 (stored text members): each member compares as
+                    // text (with the usual rules, so its creation time is a
+                    // clock reading) or, if binary, by its bytes.
                     members
                         .into_iter()
                         .map(|(name, body)| match String::from_utf8(body) {
@@ -282,6 +534,8 @@ fn artifacts(
                         })
                         .collect::<Vec<_>>()
                         .join("\n")
+                } else if let Ok(text) = std::str::from_utf8(&bytes) {
+                    canon.rewrite(&back(paths, text), true)
                 } else {
                     // Binary content (an encrypted book, an archive): its size.
                     format!("binary {} bytes", bytes.len())
@@ -655,14 +909,14 @@ pub fn replay(
         format!("replay:{}", tape.display()),
     );
     // A recording whose loopback server held one request in flight gets the
-    // tape's hold on that request, released below once its control answered.
+    // tape's hold on that request, released below as the test released it.
     let hold = match held_request(session) {
-        Some(pattern) => {
+        Some((held, pattern)) => {
             let dir = scratch.join("hold");
             fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
             fs::write(dir.join("arm"), pattern).map_err(|e| e.to_string())?;
             command.env("KASSIBER_TEST_NET_TAPE_HOLD", &dir);
-            Some(dir)
+            Some((held, dir))
         }
         None => None,
     };
@@ -750,6 +1004,7 @@ pub fn replay(
         }
         true
     };
+    let mut sent: Vec<Option<String>> = vec![None; session.stdin.len()];
     let mut events: Vec<(u64, usize, bool)> = Vec::new();
     for (i, chunk) in session.stdin.iter().enumerate() {
         events.push((chunk.after_lines, i, false));
@@ -773,8 +1028,8 @@ pub fn replay(
                 .status();
             continue;
         }
-        let control = hold.as_ref().filter(|_| index == HELD_CONTROL_INPUT);
-        if let Some(dir) = control {
+        let control = hold.as_ref().filter(|(held, _)| index == held.control);
+        if let Some((_, dir)) = control {
             // The test sent its control while the request was held.
             while !dir.join("held").exists() && Instant::now() < deadline {
                 std::thread::sleep(Duration::from_millis(2));
@@ -810,13 +1065,29 @@ pub fn replay(
                 if let Some(pipe) = stdin.as_mut() {
                     let _ = pipe.write_all(text.as_bytes()).and_then(|_| pipe.flush());
                 }
+                sent[index] = Some(paths.back(&text));
             }
             None => drop(stdin.take()),
         }
-        if let Some(dir) = control {
-            // ...and let the request finish once the control's answer printed.
-            if !wait_for(after + 1) {
-                differences.push("timed out waiting for the held control's answer".into());
+        if let Some((held, dir)) = control {
+            // ...and let the request finish when the test did.
+            let released = match held.release {
+                Release::AfterAnswer => wait_for(after + 1),
+                Release::AfterQuiet => {
+                    let mut seen = lines.load(Ordering::SeqCst);
+                    let mut since = Instant::now();
+                    while since.elapsed() < QUIET && Instant::now() <= deadline {
+                        std::thread::sleep(Duration::from_millis(2));
+                        let now = lines.load(Ordering::SeqCst);
+                        if now != seen {
+                            (seen, since) = (now, Instant::now());
+                        }
+                    }
+                    Instant::now() <= deadline
+                }
+            };
+            if !released {
+                differences.push("timed out waiting to release the held request".into());
                 break;
             }
             fs::write(dir.join("release"), b"").map_err(|e| e.to_string())?;
@@ -861,23 +1132,7 @@ pub fn replay(
         &paths.back(&String::from_utf8_lossy(&stdout)),
         &mut pinned,
     );
-    // The recorded state was written during the recording test, which began
-    // before this process; its readings count as generated on both sides.
-    let recorded_window = Window {
-        start: session.started_us - RECORDING_LOOKBACK_US,
-        end: session.ended_us,
-        local_offset_us: local_offset_us(),
-        also: session.rerecorded_us.clone(),
-    };
-    let replay_window = Window {
-        start: started,
-        end: ended,
-        local_offset_us: local_offset_us(),
-        also: std::iter::once((recorded_window.start, recorded_window.end))
-            .chain(virtual_spans(session, ended - started))
-            .chain(session.rerecorded_us.iter().copied())
-            .collect(),
-    };
+    let replay_window = comparison_window(session, started, ended);
     // Both sides are normalized with the same spans: a reading restored
     // from the starting state appears on both, and a rule that matched it on
     // one side only (the replay window's hour offsets line up with any
@@ -970,8 +1225,11 @@ pub fn replay(
             },
             after: all_after,
             store: scratch.join("after-store"),
-            started_us: started,
-            ended_us: ended,
+            stdin: sent,
+            spans: std::iter::once((started, ended))
+                .chain(virtual_spans(session, ended - started))
+                .collect(),
+            paths,
         },
     })
 }
@@ -1115,5 +1373,482 @@ mod relocation_tests {
         let mut same = Paths::default();
         same.add("/srv/checkout", "/srv/checkout");
         assert!(!same.named_in(b"/srv/checkout/x"));
+    }
+}
+
+#[cfg(test)]
+mod held_fetch_tests {
+    use super::{held_request, Release};
+    use crate::Session;
+
+    fn session(test: &str, backend: &str) -> Session {
+        serde_json::from_value(serde_json::json!({
+            "format": crate::SESSION_FORMAT,
+            "binary": "kassiber",
+            "argv": ["daemon"],
+            "cwd": "/",
+            "env": {"KASSIBER_BACKEND_FIXTURE_KIND": backend},
+            "test": test,
+            "started_us": 0,
+            "ended_us": 0,
+            "stdin": [],
+            "stdout": "",
+            "stderr": "",
+            "signals": [],
+            "exit": {"code": 0, "signal": null},
+            "roots": [],
+            "repo": "/",
+        }))
+        .unwrap()
+    }
+
+    /// The EOF test held its history request while it closed stdin and
+    /// released it once the daemon went quiet: its sessions get the same
+    /// hold on the closing input, for either backend.
+    #[test]
+    fn the_eof_join_sessions_hold_their_fetch_until_quiet() {
+        let test = "tests/test_rust_freshness_lifecycle.py::\
+                    test_live_freshness_eof_joins_the_request_before_exit";
+        for (backend, pattern) in [
+            ("electrum", "blockchain.scripthash.get_history"),
+            ("esplora", "/scripthash/"),
+        ] {
+            let (held, armed) =
+                held_request(&session(&format!("{test}[{backend}]"), backend)).unwrap();
+            assert_eq!((held.control, &held.release), (1, &Release::AfterQuiet));
+            assert_eq!(armed, pattern);
+        }
+        let controls = "tests/test_rust_freshness_lifecycle.py::\
+                        test_live_freshness_controls_remain_available_during_fetch[cancel-esplora]";
+        let (held, _) = held_request(&session(controls, "esplora")).unwrap();
+        assert_eq!((held.control, &held.release), (3, &Release::AfterAnswer));
+        assert!(held_request(&session("tests/test_other.py::test_x", "esplora")).is_none());
+    }
+}
+
+#[cfg(test)]
+mod rerecord_tests {
+    use std::collections::HashSet;
+    use std::fs;
+    use std::path::Path;
+
+    use base64::Engine;
+
+    use super::{artifacts, comparison_window, rerecorded, Paths, Replayed};
+    use crate::compare::Canon;
+    use crate::{dbdump, entry_path, Blobs, Entry, Session};
+
+    const RECORDED_REPO: &str = "/home/rec/.t3/worktrees/kassiber/t3-recorded";
+    const REPLAY_REPO: &str = "/home/runner/verify/r8-gate";
+    const RECORDED_TMP: &str = "/home/rec/tmp/pytest-7";
+    const REPLAY_TMP: &str = "/home/runner/verify/r8-gate/target/session-replay-scratch/1-w0-0/tmp";
+    /// The recording's process: 2026-11-11T02:54:46Z for 21.6 s.
+    const STARTED_US: i64 = 1_794_365_686_167_661;
+    const ENDED_US: i64 = 1_794_365_707_798_928;
+    const OLD_TOKEN: &str = "1d0a3a9e-36f4-4c3e-9a51-2b8f0f7d1c11";
+    const NEW_TOKEN: &str = "6f0e2b7c-8a1d-4f5e-b3c2-9d4a7e1f0b22";
+
+    fn b64(text: &str) -> String {
+        base64::engine::general_purpose::STANDARD.encode(text)
+    }
+
+    fn file(path: &str, blobs: &Blobs, bytes: &[u8]) -> Entry {
+        Entry::File {
+            path: path.to_owned(),
+            mode: 0o644,
+            blob: blobs.put(bytes).unwrap(),
+            size: bytes.len() as u64,
+            encryption: None,
+        }
+    }
+
+    /// A book in WAL mode whose only row (naming `source`) still sits in
+    /// its write-ahead log, as a daemon leaves it: the book and log bytes.
+    fn wal_book(dir: &Path, source: &str) -> (Vec<u8>, Vec<u8>) {
+        let path = dir.join("book.sqlite3");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0;
+             CREATE TABLE wallets (id TEXT, config_json TEXT);",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO wallets VALUES ('a', ?1)",
+            [format!(
+                "{{\"source_file\": \"{source}/relative/bull.csv\"}}"
+            )],
+        )
+        .unwrap();
+        let book = fs::read(&path).unwrap();
+        let wal = fs::read(dir.join("book.sqlite3-wal")).unwrap();
+        drop(conn);
+        (book, wal)
+    }
+
+    fn session(repo: &str, root: &str) -> Session {
+        serde_json::from_value(serde_json::json!({
+            "format": crate::SESSION_FORMAT,
+            "binary": "kassiber",
+            "argv": ["--machine", "daemon"],
+            "cwd": repo,
+            "env": {"HOME": "/home/rec", "TMPDIR": RECORDED_TMP},
+            "test": null,
+            "started_us": STARTED_US,
+            "ended_us": ENDED_US,
+            "stdin": [
+                {"after_lines": 1, "data": b64(&format!(
+                    "{{\"kind\": \"preview\", \"args\": {{\"document_token\": \"{OLD_TOKEN}\", \
+                     \"source_file\": \"{repo}/receipt.png\"}}}}\n"))},
+                {"after_lines": 2, "data": null},
+            ],
+            "stdout": "",
+            "stderr": "",
+            "signals": [],
+            "exit": {"code": 0, "signal": null},
+            "roots": [{"path": root, "file": false, "before": [], "after": []}],
+            "repo": repo,
+        }))
+        .unwrap()
+    }
+
+    /// A replay of a session recorded in one checkout, run from another (a
+    /// verification checkout) and re-recorded because it differed.
+    struct Rerecord {
+        dir: tempfile::TempDir,
+        recording: Blobs,
+        scan: Blobs,
+        paths: Paths,
+        replayed: Replayed,
+        session: Session,
+        sent: String,
+        virtual_end: i64,
+    }
+
+    fn rerecord() -> Rerecord {
+        let dir = tempfile::tempdir().unwrap();
+        let recording = Blobs::new(&dir.path().join("recording"));
+        let store = dir.path().join("after-store");
+        let scan = Blobs::new(&store);
+        let mut paths = Paths::default();
+        paths.add(RECORDED_REPO, REPLAY_REPO);
+        paths.add(RECORDED_TMP, REPLAY_TMP);
+        paths.add("~rec/", "~runner/");
+
+        // What the replay left, as on disk: in the replaying paths.
+        let traceback = format!(
+            "Traceback (most recent call last):\n  File \"{REPLAY_REPO}/kassiber/daemon.py\", \
+             line 21223, in run\nupload {REPLAY_TMP}/kassiber-chat-uploads-1/paste.csv\n\
+             notes ~runner/notes.txt\n"
+        );
+        let books = dir.path().join("books");
+        fs::create_dir_all(&books).unwrap();
+        let (book, wal) = wal_book(&books, REPLAY_REPO);
+        let after = vec![
+            Entry::Dir {
+                path: "data".into(),
+                mode: 0o755,
+            },
+            file("data/kassiber.sqlite3", &scan, &book),
+            file("data/kassiber.sqlite3-wal", &scan, &wal),
+            file("python-stderr.txt", &scan, traceback.as_bytes()),
+            file("receipt.png", &scan, b"\x89PNG\r\n\x1a\n binary"),
+        ];
+        let sent = format!(
+            "{{\"kind\": \"preview\", \"args\": {{\"document_token\": \"{NEW_TOKEN}\", \
+             \"source_file\": \"{RECORDED_REPO}/receipt.png\"}}}}\n"
+        );
+        // The re-recording run took 43.3 s on the clock shim's virtual
+        // clock, from the recorded start.
+        let virtual_end = STARTED_US + 43_310_000;
+        let replayed = Replayed {
+            stdout: format!("{{\"document_token\": \"{NEW_TOKEN}\"}}\n").into_bytes(),
+            stderr: Vec::new(),
+            exit: crate::Exit {
+                code: Some(0),
+                signal: None,
+            },
+            after: vec![after],
+            store,
+            stdin: vec![Some(sent.clone()), None],
+            spans: vec![
+                (1_794_635_190_043_740, 1_794_635_233_351_737),
+                (STARTED_US, virtual_end),
+            ],
+            paths: paths.clone(),
+        };
+        let root = "/mnt/bt/popen-gw4/test_bull_wallet_create_daemon0";
+        let work = dir.path().join("work");
+        let session = rerecorded(session(RECORDED_REPO, root), &recording, &replayed, &work)
+            .expect("re-record");
+        Rerecord {
+            dir,
+            recording,
+            scan,
+            paths,
+            replayed,
+            session,
+            sent,
+            virtual_end,
+        }
+    }
+
+    /// The state a re-record stores is what the recording checkout would
+    /// have left: no replaying checkout, temp dir or account in any file,
+    /// book or name, so a later replay from any checkout compares clean.
+    #[test]
+    fn a_rerecord_from_another_checkout_stores_state_in_the_recorded_paths() {
+        let run = rerecord();
+        let stored = &run.session.roots[0].after;
+        let book_text = |bytes: &[u8]| {
+            let copy = run.dir.path().join("dump.sqlite3");
+            fs::write(&copy, bytes).unwrap();
+            if let Some(Entry::File { blob, .. }) = stored
+                .iter()
+                .find(|e| entry_path(e) == "data/kassiber.sqlite3-wal")
+            {
+                fs::write(
+                    run.dir.path().join("dump.sqlite3-wal"),
+                    run.recording.get(blob).unwrap(),
+                )
+                .unwrap();
+            }
+            let rows = dbdump::dump(&copy).unwrap();
+            let _ = fs::remove_file(&copy);
+            format!("{rows:?}")
+        };
+        for entry in stored {
+            let Entry::File { path, blob, .. } = entry else {
+                continue;
+            };
+            if path.ends_with("-wal") {
+                continue;
+            }
+            let bytes = run.recording.get(blob).unwrap();
+            let text = if dbdump::is_sqlite(&bytes) {
+                book_text(&bytes)
+            } else {
+                String::from_utf8_lossy(&bytes).into_owned()
+            };
+            for replay_path in [REPLAY_REPO, "~runner/"] {
+                assert!(
+                    !text.contains(replay_path),
+                    "{path} kept {replay_path}: {text}"
+                );
+            }
+            if dbdump::is_sqlite(&bytes) {
+                assert!(
+                    text.contains(&format!("{RECORDED_REPO}/relative/bull.csv")),
+                    "{text}"
+                );
+            }
+        }
+        let stored_text = |name: &str| {
+            stored
+                .iter()
+                .find_map(|e| match e {
+                    Entry::File { path, blob, .. } if path == name => {
+                        Some(String::from_utf8(run.recording.get(blob).unwrap()).unwrap())
+                    }
+                    _ => None,
+                })
+                .unwrap()
+        };
+        assert_eq!(
+            stored_text("python-stderr.txt"),
+            format!(
+                "Traceback (most recent call last):\n  File \"{RECORDED_REPO}/kassiber/daemon.py\", \
+                 line 21223, in run\nupload {RECORDED_TMP}/kassiber-chat-uploads-1/paste.csv\n\
+                 notes ~rec/notes.txt\n"
+            )
+        );
+        // The book's log is folded into the mapped book, not kept beside it
+        // holding the replay's paths.
+        let names: Vec<&str> = stored.iter().map(entry_path).collect();
+        assert!(!names.contains(&"data/kassiber.sqlite3-wal"), "{names:?}");
+
+        // ...and the comparison finds it equal to what the replay left.
+        let pinned = HashSet::new();
+        let window = comparison_window(&run.session, run.virtual_end, run.virtual_end + 1);
+        let dumps = run.dir.path().join("dumps");
+        fs::create_dir_all(&dumps).unwrap();
+        let recorded_state = artifacts(
+            &dumps,
+            stored,
+            &run.recording,
+            &mut Canon::new(window.clone(), &pinned),
+            None,
+        );
+        let replayed_state = artifacts(
+            &dumps,
+            &run.replayed.after[0],
+            &run.scan,
+            &mut Canon::new(window, &pinned),
+            Some(&run.paths),
+        );
+        assert_eq!(recorded_state, replayed_state);
+    }
+
+    /// An id the replay printed and the test sent back (a document token)
+    /// is stored as this run sent it: the stored output holds this run's
+    /// token, and a later replay maps recorded output ids onto its own, so
+    /// a request still carrying the recording's token would go out stale.
+    #[test]
+    fn a_rerecord_stores_the_inputs_the_replay_sent() {
+        let run = rerecord();
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(run.session.stdin[0].data.as_deref().unwrap())
+            .unwrap();
+        let decoded = String::from_utf8(decoded).unwrap();
+        assert!(decoded.contains(NEW_TOKEN), "{decoded}");
+        assert_eq!(decoded, run.sent);
+        assert_eq!(run.session.stdin[1].data, None, "EOF stays EOF");
+    }
+
+    /// A reading the re-recording's process took on the clock shim's
+    /// virtual clock after the recording's own end is generated for a
+    /// later, faster replay.
+    #[test]
+    fn a_rerecord_keeps_the_virtual_clock_span_it_ran_in() {
+        let run = rerecord();
+        let fast = comparison_window(&run.session, STARTED_US, STARTED_US + 5_000_000);
+        let pinned = HashSet::new();
+        let mut canon = Canon::new(fast, &pinned);
+        // 2026-11-11T02:55:28Z: 20 s after the recording ended, 1 s before
+        // the re-recording did on the virtual clock.
+        let late = "{\"finished_at\":\"2026-11-11T02:55:28Z\"}";
+        assert_eq!(canon.rewrite(late, true), "{\"finished_at\":\"<time>\"}");
+    }
+
+    /// A re-recorded book keeps its ciphertext only where the recording
+    /// kept one (`pack --keep-ciphertext`); nothing compares it.
+    #[test]
+    fn a_rerecord_keeps_ciphertext_only_where_the_recording_did() {
+        let dir = tempfile::tempdir().unwrap();
+        let recording = Blobs::new(&dir.path().join("recording"));
+        let store = dir.path().join("after-store");
+        let scan = Blobs::new(&store);
+        let book = |blobs: &Blobs, path: &str, ciphertext: Option<&[u8]>| Entry::File {
+            path: path.to_owned(),
+            mode: 0o644,
+            blob: blobs.put(b"plaintext pages").unwrap(),
+            size: 15,
+            encryption: Some(crate::encrypted::Encryption {
+                passphrase: "synthetic".into(),
+                ciphertext: ciphertext.map(|c| blobs.put(c).unwrap()),
+                page_size: 4096,
+                page_count: 1,
+            }),
+        };
+        let mut recorded = session(RECORDED_REPO, "/mnt/tmp/r");
+        recorded.roots[0].after = vec![
+            book(&recording, "kept.sqlite3", Some(b"recorded ciphertext")),
+            book(&recording, "plain.sqlite3", None),
+        ];
+        let replayed = Replayed {
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+            exit: crate::Exit {
+                code: Some(0),
+                signal: None,
+            },
+            after: vec![vec![
+                book(&scan, "kept.sqlite3", Some(b"replayed ciphertext")),
+                book(&scan, "plain.sqlite3", Some(b"replayed ciphertext 2")),
+            ]],
+            store,
+            stdin: Vec::new(),
+            spans: Vec::new(),
+            paths: Paths::default(),
+        };
+        let session =
+            rerecorded(recorded, &recording, &replayed, &dir.path().join("work")).unwrap();
+        let ciphertext = |name: &str| {
+            session.roots[0].after.iter().find_map(|e| match e {
+                Entry::File {
+                    path,
+                    encryption: Some(e),
+                    ..
+                } if path == name => Some(e.ciphertext.clone()),
+                _ => None,
+            })
+        };
+        let kept = ciphertext("kept.sqlite3").unwrap().expect("kept");
+        assert_eq!(recording.get(&kept).unwrap(), b"replayed ciphertext");
+        assert_eq!(ciphertext("plain.sqlite3"), Some(None));
+    }
+
+    /// An archive with `body` as its one member `sheet.xml`, stored
+    /// (uncompressed) or deflated.
+    fn archive(body: &str, stored: bool) -> Vec<u8> {
+        let options = zip::write::SimpleFileOptions::default();
+        let options = if stored {
+            // Mode 0o720 stores its attributes as `D0 81`, a valid UTF-8
+            // pair (0o644's `A4 81` is not).
+            options
+                .compression_method(zip::CompressionMethod::Stored)
+                .unix_permissions(0o720)
+        } else {
+            options.compression_method(zip::CompressionMethod::Deflated)
+        };
+        let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        archive.start_file("sheet.xml", options).unwrap();
+        std::io::Write::write_all(&mut archive, body.as_bytes()).unwrap();
+        archive.finish().unwrap().into_inner()
+    }
+
+    /// A ZIP export the replay left naming its paths cannot be mapped back
+    /// without rebuilding the product's archive: re-recording refuses. That
+    /// holds for an archive whose bytes happen to be valid UTF-8 (stored
+    /// text members): substituting in it as text would leave its sizes and
+    /// checksums wrong, a corrupt archive in the recording.
+    #[test]
+    fn a_rerecord_refuses_an_archive_naming_replay_paths() {
+        let deflated = archive(&format!("{REPLAY_REPO}/a.csv"), false);
+        // A stored archive whose checksum and other header bytes are valid
+        // UTF-8 as well.
+        let utf8 = (0..10_000)
+            .map(|n| archive(&format!("{REPLAY_REPO}/a.csv {n}"), true))
+            .find(|bytes| std::str::from_utf8(bytes).is_ok())
+            .expect("a stored archive that is valid UTF-8");
+        for bytes in [deflated, utf8] {
+            let dir = tempfile::tempdir().unwrap();
+            let store = dir.path().join("after-store");
+            let scan = Blobs::new(&store);
+            let mut paths = Paths::default();
+            paths.add(RECORDED_REPO, REPLAY_REPO);
+            let after = vec![file("exports/report.xlsx", &scan, &bytes)];
+            // The comparison reads it member by member, mapped back.
+            let pinned = HashSet::new();
+            let window = comparison_window(&session(RECORDED_REPO, "/mnt/r"), 0, 1);
+            let dumps = dir.path().join("dumps");
+            fs::create_dir_all(&dumps).unwrap();
+            let compared = artifacts(
+                &dumps,
+                &after,
+                &scan,
+                &mut Canon::new(window, &pinned),
+                Some(&paths),
+            );
+            let text = compared.values().flatten().cloned().collect::<String>();
+            assert!(text.contains("member sheet.xml"), "{text}");
+            assert!(text.contains(&format!("{RECORDED_REPO}/a.csv")), "{text}");
+            let replayed = Replayed {
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+                exit: crate::Exit {
+                    code: Some(0),
+                    signal: None,
+                },
+                after: vec![after],
+                store,
+                stdin: Vec::new(),
+                spans: Vec::new(),
+                paths,
+            };
+            let error = replayed
+                .recorded_after(&dir.path().join("work"))
+                .unwrap_err();
+            assert!(error.contains("exports/report.xlsx"), "{error}");
+        }
     }
 }

@@ -102,11 +102,18 @@ fn root_path() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r#"/mnt/(?:tmp|bt)/[^"'\s\\]+"#).unwrap())
 }
 
+///
+/// The random part is the longest tail that fits: `token_urlsafe` names
+/// draw from `[A-Za-z0-9_-]`, so a name like `kassiber-chat-uploads-j-aB3dE9`
+/// is all random after the prefix, not a `-j` segment and six characters.
+/// Hence the lazy prefix, and `tmp` tried before a general prefix.
 fn temporary_name() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"^(?:[A-Za-z][A-Za-z0-9.]*(?:-[A-Za-z0-9.]+)*[-_]|\.?tmp)([A-Za-z0-9_-]{6,8})$")
-            .unwrap()
+        Regex::new(
+            r"^(?:\.?tmp|[A-Za-z][A-Za-z0-9.]*?(?:-[A-Za-z0-9.]+?)*?[-_])([A-Za-z0-9_-]{6,8})$",
+        )
+        .unwrap()
     })
 }
 
@@ -996,6 +1003,29 @@ mod tests {
         // Outside the roots, and names that are words, stay.
         let kept = a.rewrite("/home/x/tmpzxLZfBnQ /mnt/tmp/kassiber-data/statement", true);
         assert_eq!(kept, "/home/x/tmpzxLZfBnQ /mnt/tmp/kassiber-data/statement");
+    }
+
+    /// A random name whose first characters are a dash or underscore
+    /// (`token_urlsafe` draws them like any letter) is random as a whole:
+    /// read as a `-j` name segment plus six random characters, it compared
+    /// as `kassiber-chat-uploads-j-<gen>` against `kassiber-chat-uploads-<gen>`.
+    #[test]
+    fn temporary_names_with_a_leading_dash_number_whole() {
+        let pinned = HashSet::new();
+        let rewrite = |text: &str| Canon::new(window(), &pinned).rewrite(text, true);
+        let recorded = rewrite("/mnt/tmp/kassiber-chat-uploads-XjMTS7Hk/tmpzxLZfBnQ/paste.csv");
+        for replayed in [
+            "/mnt/tmp/kassiber-chat-uploads-j-aB3dE9/tmp0HCb0AO9/paste.csv",
+            "/mnt/tmp/kassiber-chat-uploads--aB3dE9x/tmpj-xY7zQ2/paste.csv",
+            "/mnt/tmp/kassiber-chat-uploads-_aB3dE9x/tmp_xY7zQ2w/paste.csv",
+            "/mnt/tmp/kassiber-chat-uploads-Q_aB3dE9/tmp-xY7zQ2w/paste.csv",
+        ] {
+            assert_eq!(rewrite(replayed), recorded, "{replayed}");
+        }
+        assert!(recorded.contains("kassiber-chat-uploads-<"), "{recorded}");
+        // Fixed name segments before the random tail stay literal.
+        let kept = rewrite("/mnt/tmp/kassiber-r5-desktop-od6dr16w/data");
+        assert!(kept.contains("kassiber-r5-desktop-<"), "{kept}");
     }
 
     #[test]
