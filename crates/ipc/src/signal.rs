@@ -329,6 +329,111 @@ pub fn install_interrupt() -> io::Result<Interrupt> {
     interrupt_imp::install_once()
 }
 
+/// The provider broker's termination signals (plan 23): SIGTERM, SIGINT
+/// and SIGHUP each write their number to a private pipe that
+/// [`TerminationSignals::wait`] reads, so one thread can stop the broker's
+/// children and remove its directories as ordinary code, then exit.
+///
+/// Handlers rather than a blocked mask with `sigwait`: a child inherits the
+/// blocked mask across exec (std does not reset it), so every provider CLI
+/// would then ignore the daemon's SIGTERM, while a handler resets to the
+/// default action in the exec'd child.
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug)]
+pub struct TerminationSignals {
+    reader: std::os::fd::RawFd,
+}
+
+#[cfg(unix)]
+impl TerminationSignals {
+    /// Block until one of the signals arrives and answer its number.
+    pub fn wait(&self) -> io::Result<i32> {
+        loop {
+            let mut byte = 0u8;
+            // SAFETY: one byte into a local buffer from the leaked, blocking
+            // read end of the pipe.
+            let read = unsafe { libc::read(self.reader, (&mut byte as *mut u8).cast(), 1) };
+            match read {
+                1 => return Ok(i32::from(byte)),
+                0 => return Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
+                _ => {
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() != Some(libc::EINTR) {
+                        return Err(error);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+mod termination_imp {
+    use super::*;
+    use std::os::fd::{AsRawFd, IntoRawFd};
+    use std::sync::atomic::AtomicI32;
+    use std::sync::OnceLock;
+
+    static WRITER: AtomicI32 = AtomicI32::new(-1);
+    static INSTALLED: OnceLock<io::Result<TerminationSignals>> = OnceLock::new();
+
+    extern "C" fn handle(signal: libc::c_int) {
+        let fd = WRITER.load(Ordering::SeqCst);
+        if fd >= 0 {
+            let byte = u8::try_from(signal).unwrap_or(0);
+            // SAFETY: write(2) is async-signal-safe; the descriptor is a
+            // leaked non-blocking pipe end, so a full pipe just drops it.
+            unsafe {
+                libc::write(fd, (&byte as *const u8).cast(), 1);
+            }
+        }
+    }
+
+    fn install() -> io::Result<TerminationSignals> {
+        // std creates both ends close-on-exec: children never hold them.
+        let (reader, writer) = io::pipe()?;
+        // SAFETY: writer is a live descriptor owned here.
+        let flags = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) };
+        if flags == -1
+            // SAFETY: as above; only O_NONBLOCK is added.
+            || unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) }
+                == -1
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let reader = reader.into_raw_fd();
+        WRITER.store(writer.into_raw_fd(), Ordering::SeqCst);
+        for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+            // SAFETY: sigaction is plain data; the handler only reads an
+            // atomic and calls write(2). SA_RESTART keeps other calls going.
+            unsafe {
+                let mut action: libc::sigaction = std::mem::zeroed();
+                action.sa_sigaction = handle as *const () as libc::sighandler_t;
+                action.sa_flags = libc::SA_RESTART;
+                libc::sigemptyset(&mut action.sa_mask);
+                if libc::sigaction(signal, &action, std::ptr::null_mut()) == -1 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+        }
+        Ok(TerminationSignals { reader })
+    }
+
+    pub(super) fn install_once() -> io::Result<TerminationSignals> {
+        match INSTALLED.get_or_init(install) {
+            Ok(signals) => Ok(*signals),
+            Err(error) => Err(io::Error::new(error.kind(), error.to_string())),
+        }
+    }
+}
+
+/// Route SIGTERM, SIGINT and SIGHUP to [`TerminationSignals`] for the rest
+/// of the process. Later calls return the same state.
+#[cfg(unix)]
+pub fn install_termination_signals() -> io::Result<TerminationSignals> {
+    termination_imp::install_once()
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

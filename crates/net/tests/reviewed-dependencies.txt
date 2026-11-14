@@ -140,3 +140,8 @@ kassiber-ai test-harness
 # R6-8 MCP: the stdio JSON-RPC server and its read-only tool projection;
 # no I/O of its own beyond the streams it is handed.
 kassiber-mcp
+
+# Plan 23: the AI provider broker served by the kassiber binary. Its tool
+# bridge uses kassiber-ipc's AF_UNIX socket and named pipe only; provider
+# CLIs start through one reviewed launch (executables.rs, provider_command).
+kassiber-provider-broker

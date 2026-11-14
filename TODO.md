@@ -130,11 +130,41 @@ adds the provider broker client for CLI agent runtimes.
 - [x] R6-6b: the provider broker client and its gated process route, so CLI
   agent runtimes (`ai.provider_runtime.status` probes, model listing and
   connection tests on `*-cli://default` rows) stop answering `not_implemented`.
-- [ ] Build and run the broker's Windows paths (`TerminateProcess`, `PATHEXT`
-  lookup, `USERPROFILE` expansion, `tests/broker_windows.rs`) on Windows.
-- [x] Settle where packaged builds find `provider_broker/index.mjs` (R7): beside
-  the executable in every artifact; Linux CLI packages install under
-  `/usr/lib/kassiber-cli` ([Rust packaging](docs/reference/rust-packaging.md)).
+- [ ] Build and run the broker's Windows paths on Windows: the client's
+  (`TerminateProcess`, `USERPROFILE` expansion, `tests/broker_windows.rs`) and
+  the Rust provider broker's (`PATHEXT` lookup, the named-pipe tool bridge,
+  agent termination).
+- [x] Settle where packaged builds find `provider_broker/index.mjs` (R7).
+  Superseded by [plan 23](docs/plan/23-rust-provider-broker.md): the binary
+  serves the broker, and Linux CLI packages install `/usr/bin/kassiber` again.
+- [x] Plan 23 step 1: `crates/provider-broker`, `kassiber --provider-broker`
+  and `--provider-broker-mcp`, and the daemon's switch away from Node.
+- [x] Plan 23 step 2: port the Claude and Codex, ACP and OpenCode adapters and
+  their tests.
+- [ ] Release blocker for the first release with the Rust provider broker:
+  run one real chat turn with a tool call per provider (Claude, Codex,
+  OpenCode 1 and 2, Copilot) against `kassiber --provider-broker`, and one
+  tool turn on Windows (named-pipe bridge, `PATHEXT`) or say in the release
+  notes that CLI providers on Windows are untested. The port was proven only
+  against fake CLIs replaying the TypeScript broker's wire traffic.
+- [ ] Rust provider broker follow-ups (plan 23 reviews), hardening of
+  behaviour the TypeScript broker shared:
+  - Hash the Codex session cursor over the tools as the daemon sent them, not
+    the parsed definitions (a reordered tool field would start fresh threads
+    instead of resuming).
+  - Cap provider stdout lines (Codex, ACP) and OpenCode 1 event frames; only
+    OpenCode 2 is bounded.
+  - Fail the turn on a `tool_results` line serde cannot read, and when OpenCode
+    1's event stream never opens, instead of waiting for the daemon's watchdog.
+  - SIGKILL an ACP agent that ignores SIGTERM before removing its home, and
+    refuse new provider launches once termination cleanup has started.
+  - A black-box test that SIGTERM mid-turn kills the agent and removes the
+    turn's directories.
+  - Fall back to a short temporary directory when the tool bridge's socket
+    path would exceed the platform's `AF_UNIX` limit (a long `TMPDIR` now
+    fails tool turns, as it did in TypeScript).
+- [x] Plan 23 step 3: remove the TypeScript broker, its npm packages and the
+  `provider_broker/` packaging.
 - [x] CLI proxy providers ([reference](docs/reference/ai-cli-proxy.md)):
   `kind = "cli_proxy"` for a CLIProxyAPI server, model discovery only on an
   explicit test or refresh, each model's format from its family, the
@@ -2069,10 +2099,11 @@ See [tax countries](docs/reference/tax-countries.md) and
   operator broker socket for the agent's own commands while the host-launched
   MCP server still reaches it, and document the recommended settings.
 - [ ] End the AI broker's whole process tree on Windows (a Job Object, plus a
-  cooperative shutdown message so it can clean up). `Popen.terminate()` ends
-  only the broker there, so a cancelled or timed-out chat leaves the provider
-  CLI running; the daemon-owned temp root is removed best-effort afterwards.
-- [ ] Add more Agent Client Protocol agents to `provider-broker/src/acp.ts`
+  cooperative shutdown message so it can clean up). `TerminateProcess` ends
+  only the `kassiber --provider-broker` process there, so a cancelled or
+  timed-out chat leaves the provider CLI running; the daemon-owned temp root
+  is removed best-effort afterwards.
+- [ ] Add more Agent Client Protocol agents to `crates/provider-broker/src/acp.rs`
   once each can start with every built-in tool removed and none of the user's
   MCP servers, hooks, memory, or settings loaded, verified against a live
   signed-in CLI. Gemini needs a non-root way to override user settings (and to

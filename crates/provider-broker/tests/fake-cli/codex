@@ -1,0 +1,87 @@
+#!/bin/sh
+# A fake `codex app-server --stdio` for the provider broker's tests (no
+# Node, no network). It logs every line it receives to wire.jsonl and
+# answers by method; behaviour comes from files beside it:
+#   initialize.json   the initialize result (default: a 0.160.0 userAgent)
+#   thread.json       the thread/start and thread/resume result (default:
+#                     thread-1, ephemeral as requested, model gpt-5.4)
+#   resume-error      reject thread/resume with this message
+#   models.json       the model/list result; models-<cursor>.json per page
+#   stall-catalog     leave model/list unanswered
+#   legacy            reject a "default" serviceTier as pre-"default" servers do
+#   reject-turn       reject turn/start with this message
+#   turn.jsonl        lines printed after the turn/start answer
+#   after-tool.jsonl  lines printed once Kassiber answers the tool call
+#                     "tool-1" (turn.jsonl holds that request); the
+#                     completion then follows them
+#   completion.json   the turn/completed line (default: completed)
+#   stderr, exit      what the server prints on stderr and exits with
+#                     instead of answering initialize
+fixture=${0%/*}
+. "$fixture/record.sh"
+[ "$1" = app-server ] || exit 2
+answer() {
+  printf '{"id":%s,"result":%s}\n' "$1" "$2"
+}
+reject() {
+  message=$(printf '%s' "$2" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  printf '{"id":%s,"error":{"code":-32600,"message":"%s"}}\n' "$1" "$message"
+}
+complete() {
+  if [ -f "$fixture/completion.json" ]; then cat "$fixture/completion.json"; else
+    echo '{"method":"turn/completed","params":{"turn":{"status":"completed"}}}'; fi
+}
+while IFS= read -r line; do
+  printf '%s\n' "$line" >> "$fixture/wire.jsonl"
+  id=$(printf '%s\n' "$line" | sed -n 's/^{"id":\([0-9][0-9]*\),"method":".*/\1/p')
+  method=$(printf '%s\n' "$line" | sed -n 's/^{"id":[0-9][0-9]*,"method":"\([^"]*\)".*/\1/p')
+  if [ -z "$id" ]; then
+    case "$line" in
+      '{"id":"tool-1",'*)
+        cat "$fixture/after-tool.jsonl"
+        complete ;;
+    esac
+    continue
+  fi
+  case "$method" in
+    initialize)
+      if [ -f "$fixture/stderr" ]; then
+        cat "$fixture/stderr" >&2
+        exit "$(cat "$fixture/exit" 2>/dev/null || echo 1)"
+      fi
+      if [ -f "$fixture/initialize.json" ]; then answer "$id" "$(cat "$fixture/initialize.json")"; else
+        answer "$id" '{"userAgent":"codex_cli_rs/0.160.0 (Linux 6.0; x86_64) xterm"}'; fi ;;
+    thread/start|thread/resume)
+      if [ "$method" = thread/resume ] && [ -f "$fixture/resume-error" ]; then
+        reject "$id" "$(cat "$fixture/resume-error")"
+        continue
+      fi
+      if [ -f "$fixture/thread.json" ]; then answer "$id" "$(cat "$fixture/thread.json")"; else
+        case "$line" in *'"ephemeral":true'*) ephemeral=true ;; *) ephemeral=false ;; esac
+        answer "$id" "{\"thread\":{\"id\":\"thread-1\",\"ephemeral\":$ephemeral},\"model\":\"gpt-5.4\",\"serviceTier\":null}"
+      fi ;;
+    model/list)
+      [ -f "$fixture/stall-catalog" ] && continue
+      cursor=$(printf '%s\n' "$line" | sed -n 's/.*"params":{"cursor":"\([^"]*\)"}.*/\1/p')
+      if [ -n "$cursor" ]; then answer "$id" "$(cat "$fixture/models-$cursor.json")"
+      elif [ -f "$fixture/models.json" ]; then answer "$id" "$(cat "$fixture/models.json")"
+      else answer "$id" '{"data":[{"id":"gpt-5.4","model":"gpt-5.4","displayName":"GPT-5.4","isDefault":true,"supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"high"}],"serviceTiers":[{"id":"priority","name":"Fast","description":"2x speed, increased usage"}]},{"id":"gpt-5.4-mini","model":"gpt-5.4-mini","serviceTiers":[]}]}'
+      fi ;;
+    turn/start)
+      if [ -f "$fixture/reject-turn" ]; then
+        reject "$id" "$(cat "$fixture/reject-turn")"
+        continue
+      fi
+      if [ -f "$fixture/legacy" ]; then
+        case "$line" in *'"serviceTier":"default"'*)
+          reject "$id" 'Invalid request: unknown variant `default`, expected `fast` or `flex`'
+          continue ;;
+        esac
+      fi
+      answer "$id" '{}'
+      if [ -f "$fixture/turn.jsonl" ]; then cat "$fixture/turn.jsonl"; fi
+      [ -f "$fixture/after-tool.jsonl" ] || complete ;;
+    *)
+      answer "$id" '{}' ;;
+  esac
+done

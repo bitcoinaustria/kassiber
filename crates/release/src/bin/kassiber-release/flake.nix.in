@@ -21,11 +21,7 @@
         buildInputs = [ pkgs.stdenv.cc.cc.lib ];
         installPhase = ''
           runHook preInstall
-          # The binary finds the AI provider broker beside its executable.
-          install -Dpm755 kassiber "$out/libexec/kassiber-cli/kassiber"
-          install -Dpm644 provider_broker/index.mjs             "$out/libexec/kassiber-cli/provider_broker/index.mjs"
-          mkdir -p "$out/bin"
-          ln -s "$out/libexec/kassiber-cli/kassiber" "$out/bin/kassiber"
+          install -Dpm755 kassiber "$out/bin/kassiber"
           install -Dpm644 ${./LICENSE}             "$out/share/licenses/kassiber-cli/LICENSE"
           runHook postInstall
         '';

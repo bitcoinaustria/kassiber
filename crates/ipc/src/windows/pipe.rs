@@ -308,6 +308,25 @@ impl PipeStream {
         Ok(chunks)
     }
 
+    /// Read what one `ReadFile` returns, at most `max` bytes: the provider
+    /// broker's line-oriented tool bridge reads this way. An empty result is
+    /// end of file (the other end closed); a passed deadline is `TimedOut`.
+    pub fn recv_some(&mut self, max: usize) -> io::Result<Vec<u8>> {
+        let deadline = self.io_timeout.map(|timeout| Instant::now() + timeout);
+        let read_size = max.clamp(1, IO_CHUNK_BYTES);
+        match self.overlapped_io(
+            false,
+            vec![0u8; read_size].into_boxed_slice(),
+            deadline,
+            "named-pipe read timed out",
+            "ReadFile from named pipe failed",
+        ) {
+            Ok((buffer, read)) => Ok(buffer[..read].to_vec()),
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(Vec::new()),
+            Err(error) => Err(error),
+        }
+    }
+
     /// Write all of `payload` in 64 KiB chunks before the deadline.
     pub fn send_all(&mut self, payload: &[u8]) -> io::Result<()> {
         let deadline = self.io_timeout.map(|timeout| Instant::now() + timeout);
@@ -339,6 +358,30 @@ impl PipeStream {
 impl Drop for PipeStream {
     fn drop(&mut self) {
         self.close_handle();
+    }
+}
+
+/// Byte-stream reads through [`PipeStream::recv_some`].
+impl io::Read for PipeStream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        let data = self.recv_some(buf.len())?;
+        buf[..data.len()].copy_from_slice(&data);
+        Ok(data.len())
+    }
+}
+
+/// Writes through [`PipeStream::send_all`]; nothing is buffered.
+impl io::Write for PipeStream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.send_all(buf)?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 

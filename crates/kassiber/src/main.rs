@@ -1,4 +1,5 @@
-//! The `kassiber` binary: the CLI and `kassiber daemon` (plan 21, R1).
+//! The `kassiber` binary: the CLI, `kassiber daemon`, the operator broker and
+//! the AI provider broker (plan 21, R1; plan 23).
 //!
 //! It arms the egress gate before anything else, so a test environment
 //! that sets `KASSIBER_TEST_NO_EGRESS` on a build without the attempt
@@ -71,6 +72,17 @@ fn main() -> ExitCode {
     }
     if argv == ["--operator-broker-server"] {
         return ExitCode::from(u8::try_from(broker::serve(BUILD)).unwrap_or(1));
+    }
+    // The AI provider broker (plan 23), which the daemon starts per CLI-provider
+    // request, and the MCP server a provider CLI starts for Kassiber's tools.
+    if argv == ["--provider-broker"] {
+        return ExitCode::from(u8::try_from(kassiber_provider_broker::serve()).unwrap_or(1));
+    }
+    if let [flag, socket, manifest] = argv.as_slice() {
+        if flag == "--provider-broker-mcp" {
+            let code = kassiber_provider_broker::serve_mcp(socket, manifest);
+            return ExitCode::from(u8::try_from(code).unwrap_or(1));
+        }
     }
     let stdin = std::io::stdin();
     let streams = Streams {

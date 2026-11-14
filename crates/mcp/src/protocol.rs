@@ -99,6 +99,7 @@ impl Cancelled {
 /// whether it is a tool error.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToolOutcome {
+    /// `Value::Null` for none: `structuredContent` is then omitted.
     pub structured: Value,
     pub text: PyStr,
     pub is_error: bool,
@@ -585,7 +586,9 @@ impl McpServer {
                 ("text", Value::Str(outcome.text)),
             ])]),
         )];
-        if era.structured() {
+        // `null` means the tool has no structured result (the provider
+        // broker's bridged tools); the field is then left out.
+        if era.structured() && outcome.structured != Value::Null {
             result.push((Key::from("structuredContent"), outcome.structured));
         }
         if outcome.is_error {

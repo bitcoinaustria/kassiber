@@ -63,8 +63,9 @@ class DesktopPackagingTest(unittest.TestCase):
 
         Plan 21 stage 7: every leg builds the Rust `kassiber` binary once with
         scripts/build-rust-cli.sh, smokes it, packages it as the CLI, and
-        stages that exact file as the sidecar, with the provider broker and
-        the build record beside it. No PyInstaller build may come back.
+        stages that exact file as the sidecar, with the build record beside
+        it. No PyInstaller build may come back, and no Node provider-broker
+        bundle either: the binary serves the broker itself (plan 23).
         """
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"
@@ -85,7 +86,8 @@ class DesktopPackagingTest(unittest.TestCase):
             '            "$sidecar_dir/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"',
             workflow,
         )
-        self.assertIn('"$sidecar_dir/provider_broker/index.mjs"', workflow)
+        self.assertNotIn("provider_broker", workflow)
+        self.assertNotIn("broker:build", workflow)
         self.assertIn('"$sidecar_dir/BUILD_INFO.json"', workflow)
         self.assertIn('test ! -e "$root/_internal"', workflow)
         # The production binary: never the test harness.
@@ -313,8 +315,6 @@ class DesktopPackagingTest(unittest.TestCase):
             binary = root / "kassiber"
             binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             binary.chmod(0o755)
-            broker = root / "index.mjs"
-            broker.write_text("export {};\n", encoding="utf-8")
             build_info = root / "BUILD_INFO.json"
             build_info.write_text("{}\n", encoding="utf-8")
             tools = root / "tools"
@@ -337,8 +337,6 @@ class DesktopPackagingTest(unittest.TestCase):
                             str(ROOT / "scripts/package-cli-archive.sh"),
                             "--binary",
                             str(binary),
-                            "--broker",
-                            str(broker),
                             "--build-info",
                             str(build_info),
                             "--name",

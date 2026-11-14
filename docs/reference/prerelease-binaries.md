@@ -97,8 +97,9 @@ The workflow currently builds:
   x86_64 additionally as GUI-free `kassiber-cli` `.deb` and binary `.rpm`
   packages. The extracted
   executable is named `kassiber` (`kassiber.exe` on Windows), with
-  `BUILD_INFO.json` and the AI provider broker (`provider_broker/index.mjs`)
-  beside it. These artifacts do not require the desktop app. Linux is built on
+  `BUILD_INFO.json` beside it; the binary also serves the AI provider broker
+  (`kassiber --provider-broker`). These artifacts do not require the desktop
+  app. Linux is built on
   Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build, and
   the build refuses a binary above that floor.
 - Desktop previews: a macOS arm64 `.app` zip plus `.dmg`, Linux `.AppImage`,
@@ -295,10 +296,9 @@ strips it with Xcode's `strip`, ad-hoc signs it under the identifier
 Mach-O that links only macOS system libraries and reports
 `Kassiber <version> (dev, commit <12 hex>)`. It then runs the packaged-binary
 smoke CI runs. It places the binary at the sidecar location,
-`binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, with the provider
-broker beside it, so the supervisor, the bundled CLI launcher and the Touch ID
-helper's identity check find it unchanged, and re-signs it under that
-identifier if Tauri's bundle signing changed it. Tauri seals the bundle with an
+`binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, so the supervisor,
+the bundled CLI launcher and the Touch ID helper's identity check find it
+unchanged, and re-signs it under that identifier if Tauri's bundle signing changed it. Tauri seals the bundle with an
 ad-hoc signature (`signingIdentity` `-`) before it makes the DMG. It probes the
 freshly built bundles and only reads installed apps' build records, never
 executes them. The app is named **Kassiber Dev** (`at.bitcoinaustria.kassiber.dev`)
