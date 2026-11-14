@@ -113,10 +113,6 @@ third-party package or runtime requirement is added.
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
 | `i18next` | `25.8.18` (exact) | Desktop UI localization runtime (English/German, expandable); see [docs/reference/i18n.md](docs/reference/i18n.md) | MIT |
 | `react-i18next` | `16.5.8` (exact) | React bindings (hooks/provider) for i18next translations | MIT |
-| `@opencode-ai/sdk` | `1.18.10` (exact) | Typed client for the loopback OpenCode server supervised by Kassiber | MIT |
-| `@modelcontextprotocol/sdk` | `^1.30.0` | Ephemeral local MCP server that carries Kassiber's typed tool schemas into the Claude, OpenCode, and Copilot CLIs | MIT |
-| `@agentclientprotocol/sdk` | `1.5.0` (exact) | Agent Client Protocol client for the GitHub Copilot CLI supervised by the chat broker | Apache-2.0 |
-| `zod` | `4.4.3` (exact) | JSON-Schema-to-validator conversion for the tool schemas that MCP server advertises | MIT |
 | `fs2` | `0.4.3` | Cross-platform exclusive advisory lock for update-check consent and in-flight GitHub requests | MIT OR Apache-2.0 |
 | `dirs` | `6.0.0` | Resolves an absolute per-user home directory before the Tauri app handle exists | MIT OR Apache-2.0 |
 | `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider storage and runtime CLI remembered unlock; no standard-library native credential API | MIT OR Apache-2.0 |
@@ -160,8 +156,9 @@ third-party package or runtime requirement is added.
 ## Notable downstream license note
 
 The September 2026 security refresh uses frontend overrides to select patched
-compatible versions for existing router, provider-broker and build-tool
-dependencies, rather than adding new frameworks. Device sync was removed on
+compatible versions for existing router and build-tool dependencies, rather
+than adding new frameworks; the provider-broker ones left with the TypeScript
+broker ([plan 23](docs/plan/23-rust-provider-broker.md)). Device sync was removed on
 2026-09-30 together with its `spake2`, `zeroconf` and `qrcode` dependencies.
 The package-manager lockfiles remain the authoritative transitive inventory.
 
@@ -202,7 +199,6 @@ Payments protocol testing. It is not a Kassiber runtime dependency.
 | --- | --- | --- | --- |
 | [Sparrow Frigate](https://github.com/sparrowwallet/frigate) | `dev/regtest/Dockerfile.frigate`, `dev/regtest/compose.bitcoin.yml` | Optional regtest Electrum server for BIP352 Silent Payments discovery | Apache-2.0 |
 | [serde_yaml](https://github.com/dtolnay/serde-yaml) | `crates/repo-checks/Cargo.toml` (dev only), `0.9.34`, locked transitive of Typst | Parses the GitHub Actions workflows for the repository's action pin-policy test; not linked into any shipped binary | MIT OR Apache-2.0 |
-| [esbuild](https://github.com/evanw/esbuild) | `ui-tauri/package.json`, `ui-tauri/provider-broker/` | Bundles the TypeScript chat provider broker into one file (`ui-tauri/provider-broker/dist/index.mjs`); it is a build dependency, not a provider runtime | MIT |
 | [happy-dom](https://github.com/capricorn86/happy-dom), [Testing Library](https://github.com/testing-library/react-testing-library) | `ui-tauri/package.json`, `*.dom.test.tsx` | Mounted desktop-UI tests: a DOM for React effects to run in, and `renderHook`/`act` to drive them. Opt-in per file; the default suite stays static-render on Node | MIT |
 
 ## Adapted source code

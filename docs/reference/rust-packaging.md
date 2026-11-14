@@ -46,12 +46,13 @@ its fonts (`crates/pdf/fonts`: DM Sans, JetBrains Mono, Liberation Sans), the
 bundled Kraken BTC/EUR and BTC/USD hourly and daily rates
 (`crates/rates/data/kraken`, about 15 MB of the binary), the AI skill
 references (`crates/ai/skill_references`), the pairing-service catalog, the
-OCR prompt, and the WebPKI roots used when the host has no CA bundle. Three
-things are not compiled in:
+OCR prompt, and the WebPKI roots used when the host has no CA bundle. The AI
+provider broker is the binary itself (`kassiber --provider-broker`,
+[plan 23](../plan/23-rust-provider-broker.md)); no script or runtime ships
+beside it. Two things are not compiled in:
 
 | File | Where | Why |
 | --- | --- | --- |
-| `provider_broker/index.mjs` | `<executable dir>/provider_broker/` | `kassiber_ai::broker::bundled_script()` resolves the real executable path and looks there. Without it, CLI-backed AI providers report the broker as unavailable. It still needs Node.js 20+ on the host, as before. |
 | `BUILD_INFO.json` | beside the executable in archives and sidecar directories | Readable build provenance; `kassiber-release macos sign` refuses to sign an app without one. The binary itself carries channel and commit from compile time. |
 | Host CA bundle | the system store | `rustls-native-certs`, with `SSL_CERT_FILE` authoritative and WebPKI roots as the fallback ([Linux packaging](linux-packaging.md#frozen-tls-trust)). |
 
@@ -60,27 +61,29 @@ things are not compiled in:
 Sizes are bytes. "Python" is the published v0.22.78 asset, the last with the
 PyInstaller sidecar. "Rust" is the local
 Linux build below (host glibc 2.44, so functional evidence only; the release
-floor build runs on Ubuntu 22.04 in CI).
+floor build runs on Ubuntu 22.04 in CI). The Rust sizes were measured while
+artifacts still carried the Node provider-broker bundle beside the binary,
+which [plan 23](../plan/23-rust-provider-broker.md) removed.
 
 | Artifact | Python sidecar (v0.22.78) | Rust | Python size | Rust size |
 | --- | --- | --- | ---: | ---: |
-| `kassiber-cli-linux-x64.tar.gz` | one-file PyInstaller `kassiber` + `BUILD_INFO.json` | `kassiber` + `BUILD_INFO.json` + `provider_broker/index.mjs` | 89,237,493 | 49,102,562 |
-| `kassiber-cli-linux-x64.deb` | one-file binary at `/usr/bin/kassiber`; `Depends: libc6 (>= 2.35), zlib1g` | `/usr/lib/kassiber-cli/{kassiber,provider_broker/index.mjs}`, `/usr/bin/kassiber` symlink; `Depends: libc6 (>= 2.35), libgcc-s1` | 86,678,852 | needs dpkg-deb |
+| `kassiber-cli-linux-x64.tar.gz` | one-file PyInstaller `kassiber` + `BUILD_INFO.json` | `kassiber` + `BUILD_INFO.json` | 89,237,493 | 49,102,562 |
+| `kassiber-cli-linux-x64.deb` | one-file binary at `/usr/bin/kassiber`; `Depends: libc6 (>= 2.35), zlib1g` | binary at `/usr/bin/kassiber`; `Depends: libc6 (>= 2.35), libgcc-s1` | 86,678,852 | needs dpkg-deb |
 | `kassiber-cli-linux-x64.rpm` | same as the deb; `Requires: zlib` | same layout as the deb; zlib dropped (rpmbuild derives `libgcc_s`) | 89,263,758 | needs rpmbuild |
-| `kassiber-linux-x64.deb` | Tauri deb; sidecar `/usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu` (one-file) | same path, Rust binary, plus `binaries/provider_broker/` and `binaries/BUILD_INFO.json` | 96,342,954 | 57,763,444 |
+| `kassiber-linux-x64.deb` | Tauri deb; sidecar `/usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu` (one-file) | same path, Rust binary, plus `binaries/BUILD_INFO.json` | 96,342,954 | 57,763,444 |
 | `kassiber-linux-x64.rpm` | repacked from the desktop deb | unchanged repack | 96,084,918 | needs rpmbuild |
 | `kassiber-linux-x64.AppImage` | Tauri AppImage, same sidecar, bundled GTK/WebKit, host Wayland client | same, Rust sidecar | 174,234,104 | needs linuxdeploy |
 | `kassiber-cli-macos-arm64.tar.gz` | final: the notarized app + `kassiber` launcher symlink | unchanged shape; the app carries the Rust sidecar | 79,452,271 | needs native run |
-| `kassiber-macos-arm64.app.zip`, `.dmg` | one-dir sidecar `binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin` + `_internal/` | same path, single Rust Mach-O, no `_internal/`, broker and `BUILD_INFO.json` beside it | 80,701,241 / 103,805,146 | needs native run |
-| `kassiber-cli-windows-x64.zip` | one-file `kassiber.exe` + `BUILD_INFO.json` | `kassiber.exe` + `BUILD_INFO.json` + `provider_broker/index.mjs` | 76,666,370 | needs native run |
-| `kassiber-windows-x64.msi`, `.exe` | `binaries/kassiber-cli-x86_64-pc-windows-msvc.exe` + `bin/kassiber.exe` (PATH copy) | same, Rust; `bin/provider_broker/` beside the PATH copy | 82,616,320 / 79,044,700 | needs native run |
+| `kassiber-macos-arm64.app.zip`, `.dmg` | one-dir sidecar `binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin` + `_internal/` | same path, single Rust Mach-O, no `_internal/`, `BUILD_INFO.json` beside it | 80,701,241 / 103,805,146 | needs native run |
+| `kassiber-cli-windows-x64.zip` | one-file `kassiber.exe` + `BUILD_INFO.json` | `kassiber.exe` + `BUILD_INFO.json` | 76,666,370 | needs native run |
+| `kassiber-windows-x64.msi`, `.exe` | `binaries/kassiber-cli-x86_64-pc-windows-msvc.exe` + `bin/kassiber.exe` (PATH copy) | same, Rust | 82,616,320 / 79,044,700 | needs native run |
 | `kassiber-<version>-manifest.txt` (+ `.sig`) | SHA-256 of every asset; OpenSSH signature | unchanged | — | generated locally, unsigned |
 
 No release artifact carries an SBOM today; the Rust build does not add one.
 Channel renderers consume these assets: AUR (`kassiber-release render-aur`) and Nix
-(`kassiber-release render-nix`) now install the CLI under `/usr/lib/kassiber-cli`
-(`$out/libexec/kassiber-cli` in Nix) with the broker beside it and depend on
-`gcc-libs` / `stdenv.cc.cc.lib` instead of zlib; Homebrew is unchanged.
+(`kassiber-release render-nix`) install the binary as `/usr/bin/kassiber`
+(`$out/bin/kassiber` in Nix) and depend on `gcc-libs` / `stdenv.cc.cc.lib`
+instead of zlib; Homebrew is unchanged.
 
 Bundled sidecar names keep the Rust target triples, so the supervisor
 (`bundled_sidecar` in `ui-tauri/src-tauri/src/supervisor.rs`), the macOS bundle
@@ -235,8 +238,8 @@ smoke's JSON assertions, 7-Zip):
 ```
 
 It builds and smokes `kassiber.exe` (operator unlock included), writes the CLI
-zip, stages the sidecar and the PATH copy `bin/kassiber.exe` with the broker
-beside each, and builds the MSI and NSIS setup into `dist/windows-x64/`.
+zip, stages the sidecar and the PATH copy `bin/kassiber.exe`, and builds the
+MSI and NSIS setup into `dist/windows-x64/`.
 Nothing on Windows has been run for this change: the build, the SQLCipher
 open, the keyring formats and the installers all need that run. The
 OS-level no-egress check is Linux-only.
@@ -249,9 +252,9 @@ OS-level no-egress check is Linux-only.
   the no-egress check. The smoke's JSON assertions use `jq`, and the no-egress
   check is shell plus a compiled seccomp watcher and resolver shim; nothing in
   the job needs Python.
-- `build-desktop` refuses a staged `_internal/` payload, requires the broker
-  and `BUILD_INFO.json` beside the sidecar, copies the broker beside the
-  Windows PATH copy, and on Linux runs the glibc floor check on the shell and
-  on the sidecar inside both the deb and the AppImage.
+- `build-desktop` refuses a staged `_internal/` payload, requires
+  `BUILD_INFO.json` beside the sidecar, stages the Windows PATH copy, and on
+  Linux runs the glibc floor check on the shell and on the sidecar inside both
+  the deb and the AppImage.
 - Path filters follow the Rust inputs (`crates/**`, embedded data, skill
-  references, the provider broker and the build scripts).
+  references and the build scripts).

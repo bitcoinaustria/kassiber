@@ -86,7 +86,11 @@ unchanged; Node.js is no longer needed for any Kassiber feature.
    build script, and the Node hint in `broker_unavailable`. Update
    [AI](../reference/ai.md), [Rust packaging](../reference/rust-packaging.md),
    [prerelease binaries](../reference/prerelease-binaries.md),
-   `THIRD_PARTY_LICENSES.md` and `TODO.md`.
+   `THIRD_PARTY_LICENSES.md` and `TODO.md`. Done: the hint now reads
+   "Reinstall Kassiber, or use an HTTP/Ollama/oMLX provider."; Linux CLI
+   packages (deb, rpm, AUR, Nix) install the binary as `/usr/bin/kassiber`
+   again, since `/usr/lib/kassiber-cli` existed only for the broker. Step 2
+   compares against the TypeScript broker as of `ef4bfcb5c`.
 
 ## Risks
 
