@@ -109,6 +109,14 @@ impl TlsTrust {
         Self::from_file(path, RootSource::Backend)
     }
 
+    /// The configured certificates' DER bytes; empty for every other trust.
+    pub fn certificate_ders(&self) -> Vec<&[u8]> {
+        match self {
+            Self::Roots(snapshot) => snapshot.certificates.iter().map(|c| c.as_ref()).collect(),
+            _ => Vec::new(),
+        }
+    }
+
     /// Accept PEM contents separately from the path for stored backend settings.
     pub fn backend_pem(pem: &[u8]) -> Result<Self, Error> {
         Self::from_pem(pem, RootSource::Backend)

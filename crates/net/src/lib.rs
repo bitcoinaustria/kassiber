@@ -233,6 +233,10 @@ impl Request {
         self
     }
 
+    pub fn endpoint(&self) -> &Endpoint {
+        &self.endpoint
+    }
+
     /// Classify an explicitly local AI provider, requiring loopback and no proxy.
     /// This classification grants no offline exception or network authority.
     pub fn on_device_ai(mut self) -> Self {

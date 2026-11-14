@@ -138,7 +138,7 @@ fn directory_string(tag: u8, value: &[u8]) -> Result<String, Error> {
         0x0c | 0x13 | 0x14 | 0x16 => std::str::from_utf8(value)
             .map(str::to_owned)
             .map_err(|_| invalid())?,
-        0x1e if value.len() % 2 == 0 => {
+        0x1e if value.len().is_multiple_of(2) => {
             if value
                 .as_chunks::<2>()
                 .0

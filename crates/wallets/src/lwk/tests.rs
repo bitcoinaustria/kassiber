@@ -542,6 +542,8 @@ fn lwk_transport_fences_pass_through_and_other_failures_are_redacted() {
         ("interaction_required", "interaction_required"),
         ("network_egress_disabled", "network_egress_disabled"),
         ("stale_context", "stale_context"),
+        ("tls_certificate_untrusted", "tls_certificate_untrusted"),
+        ("tls_certificate_changed", "tls_certificate_changed"),
         ("network_error", "backend_sync_failed"),
         ("protocol_error", "backend_sync_failed"),
     ] {

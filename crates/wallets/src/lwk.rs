@@ -283,7 +283,13 @@ impl Execution {
     fn transport_failed(&self, error: AppError) -> AppError {
         if matches!(
             error.code.as_str(),
-            "cancelled" | "interaction_required" | "network_egress_disabled" | "stale_context"
+            "cancelled"
+                | "interaction_required"
+                | "network_egress_disabled"
+                | "stale_context"
+                // Fixed texts; the desktop offers certificate trust for them.
+                | "tls_certificate_untrusted"
+                | "tls_certificate_changed"
         ) {
             error
         } else {
