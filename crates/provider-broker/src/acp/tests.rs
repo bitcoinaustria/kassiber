@@ -17,47 +17,35 @@ thread_local! {
 
 const FAKE_SCRIPT: &str = include_str!("fake-copilot.sh");
 
-/// The fake script, written once per test process; every fake directory
-/// links to it (the script finds its directory from the link's path).
+/// Write the fake script to `path` and wait until it runs.
 ///
-/// Writing an executable per test would race the other threads' spawns:
-/// a child forked while the file is open for writing keeps that descriptor
-/// until it execs, and executing the file meanwhile fails with `ETXTBSY`.
-/// One write, retried until the script runs, leaves no such window.
-fn shared_script() -> &'static Path {
-    static SCRIPT: std::sync::OnceLock<(tempfile::TempDir, PathBuf)> = std::sync::OnceLock::new();
-    let (_, path) = SCRIPT.get_or_init(|| {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = tempfile::Builder::new()
-            .prefix("kassiber-acp-script-")
-            .tempdir()
-            .unwrap();
-        let path = dir.path().join("fake-copilot.sh");
-        std::fs::write(&path, FAKE_SCRIPT).unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        std::fs::write(dir.path().join("version"), "1.0.93\n").unwrap();
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            let ran = run_provider(
-                ProviderId::Copilot,
-                &path,
-                &["--version"],
-                RunOptions::default(),
-            );
-            match ran {
-                Err(failure) if failure.message().ends_with("ETXTBSY") => {
-                    assert!(Instant::now() < deadline, "{failure}");
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                ran => {
-                    ran.unwrap();
-                    break;
-                }
+/// Another test thread that spawns while the file is open for writing
+/// leaves a child holding that descriptor until it execs, and executing the
+/// file meanwhile fails with `ETXTBSY`. Once one run has succeeded no such
+/// descriptor can exist any more (the write was closed before it), so
+/// every later launch is safe.
+fn install_script(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::write(path, FAKE_SCRIPT).unwrap();
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match run_provider(
+            ProviderId::Copilot,
+            path,
+            &["--version"],
+            RunOptions::default(),
+        ) {
+            Err(failure) if failure.message().ends_with("ETXTBSY") => {
+                assert!(Instant::now() < deadline, "{failure}");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            ran => {
+                ran.unwrap();
+                return;
             }
         }
-        (dir, path)
-    });
-    path
+    }
 }
 
 /// A fake `copilot` in a directory of its own, with its transcript.
@@ -72,8 +60,8 @@ impl Fake {
             .prefix("kassiber-acp-bin-")
             .tempdir()
             .unwrap();
-        std::os::unix::fs::symlink(shared_script(), dir.path().join("copilot")).unwrap();
         std::fs::write(dir.path().join("version"), "GitHub Copilot CLI 1.0.93.\n").unwrap();
+        install_script(&dir.path().join("copilot"));
         Self {
             dir,
             steps: Vec::new(),
