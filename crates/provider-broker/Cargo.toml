@@ -16,6 +16,9 @@ kassiber-ipc = { path = "../ipc" }
 # through the existing stdio server; its JSON model keeps object order.
 kassiber-mcp = { path = "../mcp" }
 kassiber-envelope = { path = "../envelope" }
+# OpenCode's loopback HTTP API and the free port its first generation
+# needs: the only crate that may open a socket (crates/net/tests/chokepoint.rs).
+kassiber-net = { path = "../net" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 serde = { version = "1", features = ["derive"] }
@@ -33,6 +36,8 @@ fancy-regex = "0.20"
 nix = { version = "0.30", features = ["signal", "fs"] }
 
 [dev-dependencies]
+# Loopback OpenCode servers for the adapter's fake-CLI tests.
+kassiber-net = { path = "../net", features = ["test-support"] }
 tempfile = "3"
 
 [lints.rust]
