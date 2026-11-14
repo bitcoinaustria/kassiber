@@ -260,12 +260,12 @@ fn recorded_entries(
                 } else {
                     None
                 }
-            } else if let Ok(text) = std::str::from_utf8(&bytes) {
-                let moved = paths.back(text);
-                (moved != text).then(|| moved.into_bytes())
             } else if let Some(members) = zip_members(&bytes) {
-                // The comparison maps text members back; a rebuilt archive
-                // would not keep the product's bytes, so refuse instead.
+                // Before the text branch: an archive of plain text members
+                // can be valid UTF-8, and substituting in its bytes would
+                // break its sizes and checksums. The comparison maps text
+                // members back; a rebuilt archive would not keep the
+                // product's bytes, so refuse instead.
                 if let Some((name, _)) = members.iter().find(|(_, body)| reverse.named_in(body)) {
                     return Err(format!(
                         "{path}: archive member {name} names a replay path; \
@@ -273,6 +273,9 @@ fn recorded_entries(
                     ));
                 }
                 None
+            } else if let Ok(text) = std::str::from_utf8(&bytes) {
+                let moved = paths.back(text);
+                (moved != text).then(|| moved.into_bytes())
             } else {
                 None
             };
@@ -479,12 +482,11 @@ fn artifacts(
                             .join("\n"),
                         Err(error) => format!("database that does not open: {error}"),
                     }
-                } else if let Ok(text) = std::str::from_utf8(&bytes) {
-                    canon.rewrite(&back(paths, text), true)
                 } else if let Some(members) = zip_members(&bytes) {
-                    // An XLSX or ZIP export: each member compares as text
-                    // (with the usual rules, so its creation time is a clock
-                    // reading) or, if binary, by its bytes.
+                    // An XLSX or ZIP export, even one whose bytes are valid
+                    // UTF-8 (stored text members): each member compares as
+                    // text (with the usual rules, so its creation time is a
+                    // clock reading) or, if binary, by its bytes.
                     members
                         .into_iter()
                         .map(|(name, body)| match String::from_utf8(body) {
@@ -499,6 +501,8 @@ fn artifacts(
                         })
                         .collect::<Vec<_>>()
                         .join("\n")
+                } else if let Ok(text) = std::str::from_utf8(&bytes) {
+                    canon.rewrite(&back(paths, text), true)
                 } else {
                     // Binary content (an encrypted book, an archive): its size.
                     format!("binary {} bytes", bytes.len())
@@ -1675,37 +1679,78 @@ mod rerecord_tests {
         assert_eq!(ciphertext("plain.sqlite3"), Some(None));
     }
 
+    /// An archive with `body` as its one member `sheet.xml`, stored
+    /// (uncompressed) or deflated.
+    fn archive(body: &str, stored: bool) -> Vec<u8> {
+        let options = zip::write::SimpleFileOptions::default();
+        let options = if stored {
+            // Mode 0o720 stores its attributes as `D0 81`, a valid UTF-8
+            // pair (0o644's `A4 81` is not).
+            options
+                .compression_method(zip::CompressionMethod::Stored)
+                .unix_permissions(0o720)
+        } else {
+            options.compression_method(zip::CompressionMethod::Deflated)
+        };
+        let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        archive.start_file("sheet.xml", options).unwrap();
+        std::io::Write::write_all(&mut archive, body.as_bytes()).unwrap();
+        archive.finish().unwrap().into_inner()
+    }
+
     /// A ZIP export the replay left naming its paths cannot be mapped back
-    /// without rebuilding the product's archive: re-recording refuses.
+    /// without rebuilding the product's archive: re-recording refuses. That
+    /// holds for an archive whose bytes happen to be valid UTF-8 (stored
+    /// text members): substituting in it as text would leave its sizes and
+    /// checksums wrong, a corrupt archive in the recording.
     #[test]
     fn a_rerecord_refuses_an_archive_naming_replay_paths() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = dir.path().join("after-store");
-        let scan = Blobs::new(&store);
-        let mut paths = Paths::default();
-        paths.add(RECORDED_REPO, REPLAY_REPO);
-        let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-        archive
-            .start_file("sheet.xml", zip::write::SimpleFileOptions::default())
-            .unwrap();
-        std::io::Write::write_all(&mut archive, format!("{REPLAY_REPO}/a.csv").as_bytes()).unwrap();
-        let bytes = archive.finish().unwrap().into_inner();
-        let replayed = Replayed {
-            stdout: Vec::new(),
-            stderr: Vec::new(),
-            exit: crate::Exit {
-                code: Some(0),
-                signal: None,
-            },
-            after: vec![vec![file("exports/report.xlsx", &scan, &bytes)]],
-            store,
-            stdin: Vec::new(),
-            spans: Vec::new(),
-            paths,
-        };
-        let error = replayed
-            .recorded_after(&dir.path().join("work"))
-            .unwrap_err();
-        assert!(error.contains("exports/report.xlsx"), "{error}");
+        let deflated = archive(&format!("{REPLAY_REPO}/a.csv"), false);
+        // A stored archive whose checksum and other header bytes are valid
+        // UTF-8 as well.
+        let utf8 = (0..10_000)
+            .map(|n| archive(&format!("{REPLAY_REPO}/a.csv {n}"), true))
+            .find(|bytes| std::str::from_utf8(bytes).is_ok())
+            .expect("a stored archive that is valid UTF-8");
+        for bytes in [deflated, utf8] {
+            let dir = tempfile::tempdir().unwrap();
+            let store = dir.path().join("after-store");
+            let scan = Blobs::new(&store);
+            let mut paths = Paths::default();
+            paths.add(RECORDED_REPO, REPLAY_REPO);
+            let after = vec![file("exports/report.xlsx", &scan, &bytes)];
+            // The comparison reads it member by member, mapped back.
+            let pinned = HashSet::new();
+            let window = comparison_window(&session(RECORDED_REPO, "/mnt/r"), 0, 1);
+            let dumps = dir.path().join("dumps");
+            fs::create_dir_all(&dumps).unwrap();
+            let compared = artifacts(
+                &dumps,
+                &after,
+                &scan,
+                &mut Canon::new(window, &pinned),
+                Some(&paths),
+            );
+            let text = compared.values().flatten().cloned().collect::<String>();
+            assert!(text.contains("member sheet.xml"), "{text}");
+            assert!(text.contains(&format!("{RECORDED_REPO}/a.csv")), "{text}");
+            let replayed = Replayed {
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+                exit: crate::Exit {
+                    code: Some(0),
+                    signal: None,
+                },
+                after: vec![after],
+                store,
+                stdin: Vec::new(),
+                spans: Vec::new(),
+                paths,
+            };
+            let error = replayed
+                .recorded_after(&dir.path().join("work"))
+                .unwrap_err();
+            assert!(error.contains("exports/report.xlsx"), "{error}");
+        }
     }
 }
