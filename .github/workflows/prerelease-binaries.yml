@@ -13,7 +13,6 @@ on:
       - "scripts/smoke-packaged-cli.sh"
       - "scripts/package-cli-archive.sh"
       - "scripts/check-packaged-cli-no-egress.sh"
-      - "ui-tauri/provider-broker/**"
       - "scripts/build-apt-repository.sh"
       - "scripts/build-rpm-repository.sh"
       - "scripts/package-cli-deb.sh"
@@ -130,33 +129,6 @@ jobs:
         with:
           setup-rust: "false"
 
-      # The AI provider broker is a Node script bundled from
-      # ui-tauri/provider-broker. It is deliberately NOT committed. The Rust
-      # binary looks for it at <executable dir>/provider_broker/index.mjs, so
-      # every artifact ships it beside the executable — otherwise the packaged
-      # CLI silently loses every CLI-backed AI provider.
-      - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '22'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 10.33.0
-
-      - name: Build AI provider broker bundle
-        run: |
-          pnpm --dir ui-tauri install --frozen-lockfile
-          pnpm --dir ui-tauri run broker:build
-
-      - name: Verify broker bundle exists
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s ui-tauri/provider-broker/dist/index.mjs
-          echo "broker bundle: $(wc -c < ui-tauri/provider-broker/dist/index.mjs) bytes"
-
       - name: Install Linux RPM tooling
         if: runner.os == 'Linux'
         run: |
@@ -269,10 +241,8 @@ jobs:
         run: |
           set -euo pipefail
           package_name="kassiber-cli-${{ matrix.target }}"
-          broker=ui-tauri/provider-broker/dist/index.mjs
           scripts/package-cli-archive.sh \
             --binary "dist/kassiber${{ matrix.exe_ext }}" \
-            --broker "$broker" \
             --build-info build/BUILD_INFO.json \
             --name "$package_name" \
             --format "${{ matrix.archive }}" \
@@ -280,19 +250,16 @@ jobs:
           if [ "$RUNNER_OS" = "Linux" ]; then
             scripts/package-cli-deb.sh \
               --binary "dist/kassiber${{ matrix.exe_ext }}" \
-              --broker "$broker" \
               --version "$PACKAGE_VERSION" \
               --output "release/${package_name}.deb"
             scripts/package-cli-rpm.sh \
               --binary "dist/kassiber${{ matrix.exe_ext }}" \
-              --broker "$broker" \
               --version "$PACKAGE_VERSION" \
               --architecture x86_64 \
               --output "release/${package_name}.rpm"
             rpm_path="$PWD/release/${package_name}.rpm"
             rpm_root="$(mktemp -d)"
             (cd "$rpm_root" && rpm2cpio "$rpm_path" | cpio --quiet -id)
-            test -s "$rpm_root/usr/lib/kassiber-cli/provider_broker/index.mjs"
             "$rpm_root/usr/bin/kassiber" --version \
               | grep "$(git rev-parse --short=12 HEAD)"
           fi
@@ -309,7 +276,7 @@ jobs:
           if-no-files-found: error
 
       # The sidecar is the same executable under its target-triple name, with
-      # the broker and the build record beside it. macOS keeps the `kassiber-cli/` directory the
+      # the build record beside it. macOS keeps the `kassiber-cli/` directory the
       # Touch ID helper's identity check and the bundle launcher expect; the
       # others stage flat. Both layouts are what `bundled_sidecar` in
       # ui-tauri/src-tauri/src/supervisor.rs looks for.
@@ -321,11 +288,10 @@ jobs:
           if [ "$RUNNER_OS" = "macOS" ]; then
             sidecar_dir=sidecar/kassiber-cli
           fi
-          mkdir -p "$sidecar_dir/provider_broker"
+          mkdir -p "$sidecar_dir"
           cp "dist/kassiber${{ matrix.exe_ext }}" \
             "$sidecar_dir/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
           chmod 755 "$sidecar_dir/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
-          cp ui-tauri/provider-broker/dist/index.mjs "$sidecar_dir/provider_broker/index.mjs"
           # The macOS signer requires embedded build provenance in the app;
           # the Python sidecar carried it inside its payload.
           cp build/BUILD_INFO.json "$sidecar_dir/BUILD_INFO.json"
@@ -436,7 +402,6 @@ jobs:
           fi
           # A leftover one-dir payload (the retired Python sidecar) must never ride along.
           test ! -e "$root/_internal"
-          test -s "$root/provider_broker/index.mjs"
           test -s "$root/BUILD_INFO.json"
           count="$(find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
           test "$count" = "${{ matrix.sidecar_expected }}"
@@ -445,11 +410,8 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then
             sidecar="$(find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*.exe' -print -quit)"
             test -n "$sidecar"
-            # The PATH entry runs this copy directly, so the broker it looks
-            # for beside its own executable has to be there too.
+            # The PATH entry runs this copy directly.
             cp "$sidecar" ui-tauri/src-tauri/bin/kassiber.exe
-            mkdir -p ui-tauri/src-tauri/bin/provider_broker
-            cp "$root/provider_broker/index.mjs" ui-tauri/src-tauri/bin/provider_broker/index.mjs
           fi
 
       - name: Build unsigned desktop preview
@@ -505,7 +467,6 @@ jobs:
               "$launcher" --version | grep "$expected_commit"
               "$launcher" --help >/dev/null
               resources="$(dirname "$(dirname "$launcher")")"
-              test -s "$resources/binaries/kassiber-cli/provider_broker/index.mjs"
               test ! -e "$resources/binaries/kassiber-cli/_internal"
               ;;
             Linux)
@@ -515,7 +476,7 @@ jobs:
               APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --cli --version \
                 | grep "$expected_commit"
               # The shell and the sidecar inside both installers must load on
-              # the glibc floor, and the sidecar must find its broker.
+              # the glibc floor.
               deb="$(find ui-tauri/src-tauri/target -path '*/release/bundle/deb/*.deb' -print -quit)"
               test -n "$deb"
               payload="$(mktemp -d)"
@@ -523,13 +484,11 @@ jobs:
               scripts/check-linux-glibc-floor.sh --any-libraries "$payload/usr/bin/kassiber-ui"
               scripts/check-linux-glibc-floor.sh \
                 "$payload/usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu"
-              test -s "$payload/usr/lib/Kassiber/binaries/provider_broker/index.mjs"
               inspection="$(mktemp -d)"
               (
                 cd "$inspection"
                 "$OLDPWD/$appimage" --appimage-extract 'usr/lib/Kassiber/binaries/*' >/dev/null
               )
-              test -s "$inspection/squashfs-root/usr/lib/Kassiber/binaries/provider_broker/index.mjs"
               scripts/check-linux-glibc-floor.sh \
                 "$inspection/squashfs-root/usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu"
               ;;

@@ -84,7 +84,7 @@ output byte-identical.
 | --- | --- | --- | --- |
 | AI skill references (10 files, 3,051 lines) | `kassiber/ai/skill_references/` | `crates/ai/skill_references/` | 10 `include_str!` in `crates/ai/src/skills.rs`; `docs/reference/ai.md`, `r6-ai-operator-port.md`, `rust-packaging.md`; `AGENTS.md`; `skills/kassiber/SKILL.md` links; the `prerelease-binaries.yml` path filter. The allowlist (`SKILL_REFERENCE_NAMES`) and the catalog's index are names only and don't change. |
 | Kraken rates (4 CSV, 15 MB, 2 README) | `kassiber/data/rates/kraken/` | `crates/rates/data/kraken/` | 4 `include_str!` and `bundled_path()` in `crates/rates/src/csv.rs`; `scripts/build-bundled-hourly-rates.py` |
-| Provider-broker bundle (build output, gitignored) | `kassiber/ai/provider_broker/index.mjs` | `ui-tauri/provider-broker/dist/index.mjs` | `ui-tauri/package.json` `broker:build`; `prerelease-binaries.yml` (7 sites); `build-linux-x64-rust-artifacts.sh`; `build-macos-arm64-rust-app.sh`; `kassiber-cli.spec`; `.gitignore` |
+| Provider-broker bundle (build output, gitignored) | `kassiber/ai/provider_broker/index.mjs` | `ui-tauri/provider-broker/dist/index.mjs` | `ui-tauri/package.json` `broker:build`; `prerelease-binaries.yml` (7 sites); `build-linux-x64-rust-artifacts.sh`; `build-macos-arm64-rust-app.sh`; `kassiber-cli.spec`; `.gitignore`; removed under [plan 23](23-rust-provider-broker.md) |
 | Python-core rules | `kassiber/AGENTS.md`, `kassiber/CLAUDE.md` | `crates/AGENTS.md`, `crates/CLAUDE.md` | rewritten for the Rust crates; the root `AGENTS.md` links |
 | Journal semantics pin | `crates/store/tests/semantics_reference.rs` reads `kassiber/db.py` | the Rust constant is the authority | delete the test; the stored-semantics goldens keep it pinned |
 
@@ -153,8 +153,9 @@ tools, never the Python capture tools that made them:
   Python they are re-made by replaying: `scripts/replay-sessions.sh` names
   every session that differs, and after review a deliberate change
   re-records those with `session-replay replay --update`, which writes the
-  new run's output, exit and state into each differing session (same argv,
-  environment and starting state). Review the diffs, archive with
+  new run's output, exit, state and sent inputs into each differing session
+  (same argv, environment and starting state), mapped back to the recorded
+  paths (see [testing](../reference/testing.md#replaying-the-recorded-sessions)). Review the diffs, archive with
   `session-replay archive`, publish, bump the lock.
 - **The porters' recorded goldens** (P2's freshness sessions and tapes,
   P3's CLI sessions and books, P1's routing replays) are rewritten by their
@@ -284,7 +285,7 @@ rewrite. Each rule below covers a value that differs between two correct runs.
 | Values that came in through argv, the environment, stdin or the starting state are pinned | they are inputs and must stay literal. Stdin ids the process printed first are echoes, not inputs. |
 | Clock readings inside the run's window (±5 s, the recording's window plus 10 minutes of lookback) become `<time>` | wall-clock reads. ISO, compact (`20261110T120000Z`) and epoch forms. |
 | The same at whole hours up to 72 h away, or at 7, 14, 30, 60, 90, 180 or 365 days | expiries derived from the clock, such as a 90-day dismissal. Arbitrary offsets stay literal, so a fixture dated 10 days after the run compares exactly. |
-| Both sides are normalized with the same spans: the replay's window, the recording's, and the window of any run that re-recorded the session (`rerecorded_us`) | a reading restored from the starting state appears on both sides; with one-sided spans, the hour-offset rule matched it whenever the replay ran at the same minutes and seconds, so equal state differed at random. A re-recorded session keeps its first window, which still covers the frozen SQLite clock, and adds the re-run's, which covers the real clock. |
+| Both sides are normalized with the same spans: the replay's window, the recording's, and the window of any run that re-recorded the session (`rerecorded_us`) | a reading restored from the starting state appears on both sides; with one-sided spans, the hour-offset rule matched it whenever the replay ran at the same minutes and seconds, so equal state differed at random. A re-recorded session keeps its first window, which still covers the frozen SQLite clock, and adds the re-run's spans: its real clock, and the clock shim's virtual one (the recorded start plus the re-run's elapsed time, which a slow re-run stretches past the recording's end). |
 | A clock stamp's collision suffix in a file name (`report-<time>-2.csv`) folds into `<time>` | writers stamp names to the second and take the next free `-N`; which run's writes share a second is timing. Same-shaped files compare as a multiset by content, so a missing, extra or changed file still differs. |
 | A diagnostics report's `platform` (system, kernel release, machine) becomes `<host>` | it names the machine that ran the replay; every other report field compares. |
 | The replayed process's own clock span counts as generated: its realtime base (the recorded start, or the shared SQLite clock's base) to that base plus the replay's elapsed time | the shim runs the process on the recording's calendar at real speed, so a slow machine writes readings past the recorded window's end. |
