@@ -2813,6 +2813,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-provider-broker"
+version = "0.1.0"
+dependencies = [
+ "fancy-regex 0.20.0",
+ "getrandom 0.4.3",
+ "kassiber-envelope",
+ "kassiber-ipc",
+ "kassiber-mcp",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "nix 0.30.1",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "kassiber-pydecimal"
 version = "0.1.0"
 dependencies = [
