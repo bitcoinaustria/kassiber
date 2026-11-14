@@ -79,8 +79,8 @@ pub trait Host {
     fn discovery(&self) -> &Cache;
     /// The gate every provider request and broker launch is authorized by.
     fn gate(&self) -> Gate;
-    /// How the provider broker is found: the environment overrides, else
-    /// the bundled script.
+    /// How the provider broker is found: the `KASSIBER_AI_PROVIDER_BROKER`
+    /// override, else this executable with `--provider-broker`.
     fn broker(&self) -> Locate {
         crate::broker::default_locate()
     }
@@ -1511,7 +1511,10 @@ pub fn system_gate() -> Gate {
     // Test builds: the one fake broker an armed observer admits.
     #[cfg(feature = "test-harness")]
     let gate = match std::env::var_os("KASSIBER_RUST_TEST_AI_BROKER_FIXTURE") {
-        Some(script) => gate.with_broker_fixture(script.into()),
+        Some(program) => gate.with_broker_fixture(kassiber_net::BrokerProgram::new(
+            Some(program.into()),
+            Vec::new(),
+        )),
         None => gate,
     };
     gate
@@ -1532,11 +1535,11 @@ mod tests {
         broker: Option<(Gate, Locate)>,
     }
 
-    /// A POSIX `sh` script run as the broker ("Node" is `/bin/sh`), logging
+    /// A POSIX `sh` script run as the broker (`/bin/sh <script>`), logging
     /// each request it reads.
     struct FakeBroker {
         dir: std::path::PathBuf,
-        script: std::path::PathBuf,
+        program: kassiber_net::BrokerProgram,
         gate: Gate,
     }
 
@@ -1558,15 +1561,18 @@ mod tests {
                 format!("IFS= read -r request\nprintf '%s\\n' \"$request\" >> '{log}'\n{body}"),
             )
             .unwrap();
+            let program = kassiber_net::BrokerProgram::new(
+                kassiber_net::which("sh"),
+                vec![script.into_os_string()],
+            );
             let gate = Gate::new(|| kassiber_net::Offline::Online, Default::default())
                 .with_test_observer(false)
-                .with_broker_fixture(script.clone());
-            Self { dir, script, gate }
+                .with_broker_fixture(program.clone());
+            Self { dir, program, gate }
         }
 
         fn host(&self) -> (Gate, Locate) {
-            let program =
-                kassiber_net::BrokerProgram::new(kassiber_net::which("sh"), self.script.clone());
+            let program = self.program.clone();
             (
                 self.gate.clone(),
                 std::sync::Arc::new(move || program.clone()),

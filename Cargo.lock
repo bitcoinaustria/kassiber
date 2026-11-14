@@ -2495,6 +2495,7 @@ dependencies = [
  "kassiber-operator",
  "kassiber-ownership",
  "kassiber-paths",
+ "kassiber-provider-broker",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-rates",

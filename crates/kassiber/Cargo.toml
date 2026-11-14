@@ -62,6 +62,7 @@ kassiber-pyjson = { path = "../pyjson" }
 kassiber-paths = { path = "../paths" }
 kassiber-ownership = { path = "../ownership" }
 kassiber-operator = { path = "../operator" }
+kassiber-provider-broker = { path = "../provider-broker" }
 kassiber-ipc = { path = "../ipc" }
 kassiber-store = { path = "../store" }
 kassiber-secrets = { path = "../secrets", features = ["native-keyring"] }

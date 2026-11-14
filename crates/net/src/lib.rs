@@ -43,9 +43,9 @@ pub mod test_support;
 #[cfg(unix)]
 pub use broker::temp_parent_for;
 pub use broker::{
-    broker_script, broker_temp_parent, mount_fstype, node_executable, splitlines, which,
-    BrokerError, BrokerOutput, BrokerProcess, BrokerProgram, BrokerSignal, BROKER_GRACE,
-    BROKER_NODE_ENV, BROKER_SCRIPT_ENV, BROKER_TMPDIR_ENV,
+    broker_temp_parent, mount_fstype, splitlines, which, BrokerError, BrokerOutput, BrokerProcess,
+    BrokerProgram, BrokerSignal, BROKER_GRACE, BROKER_PROGRAM_ENV, BROKER_TMPDIR_ENV,
+    PROVIDER_BROKER_FLAG,
 };
 pub use http::{
     Cancel, HttpOptions, HttpRequest, HttpResponse, HttpStream, RedirectPolicy, Upgrade,
@@ -305,7 +305,7 @@ pub struct Gate {
     attempts: Ledger,
     observer: Observer,
     cln_fixture: Option<std::path::PathBuf>,
-    broker_fixture: Option<std::path::PathBuf>,
+    broker_fixture: Option<BrokerProgram>,
 }
 
 fn env_value(name: &str) -> String {

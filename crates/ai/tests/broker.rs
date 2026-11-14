@@ -1,8 +1,8 @@
 //! Ports of `tests/test_ai_broker.py` (`BrokerClientTest`) and the broker
 //! classes of `tests/test_ai_fast_mode.py`. The fake brokers are POSIX `sh`
-//! scripts run as "Node" (`/bin/sh <script>`), standing in for the Python
-//! fakes the pytest suite installed through `KASSIBER_AI_BROKER_NODE` and
-//! `KASSIBER_AI_PROVIDER_BROKER`. Every gate here arms the attempt observer,
+//! scripts the broker program runs as `/bin/sh <script>` in place of
+//! `kassiber --provider-broker`, standing in for the Python fakes the pytest
+//! suite installed through `KASSIBER_AI_PROVIDER_BROKER`. Every gate here arms the attempt observer,
 //! so each launch is counted.
 #![cfg(unix)]
 
@@ -113,9 +113,14 @@ impl Drop for Scratch {
     }
 }
 
-/// The "Node" that runs the fake brokers.
+/// The shell that runs the fake brokers.
 fn shell() -> PathBuf {
     kassiber_net::which("sh").expect("sh on PATH for the fake brokers")
+}
+
+/// The broker program for a fake: the shell with the script.
+fn program(script: &Path) -> BrokerProgram {
+    BrokerProgram::new(Some(shell()), vec![script.as_os_str().to_owned()])
 }
 
 /// A fake broker under `scratch`, with `LOG` naming its request log.
@@ -136,7 +141,7 @@ impl Fake {
         std::fs::write(&script, format!("LOG='{log_path}'\n{FAKE_PRELUDE}{body}")).unwrap();
         let gate = Gate::new(|| Offline::Online, Ledger::default())
             .with_test_observer(false)
-            .with_broker_fixture(script.clone());
+            .with_broker_fixture(program(&script));
         Self {
             _scratch: scratch,
             script,
@@ -149,8 +154,12 @@ impl Fake {
         Self::new(FAKE_BROKER)
     }
 
+    fn program(&self) -> BrokerProgram {
+        program(&self.script)
+    }
+
     fn locate(&self) -> Locate {
-        let program = BrokerProgram::new(Some(shell()), self.script.clone());
+        let program = self.program();
         Arc::new(move || program.clone())
     }
 
@@ -865,23 +874,23 @@ fn a_probe_without_a_result_or_with_broken_output_is_unavailable() {
 }
 
 #[test]
-fn missing_node_reports_unavailable_without_credentials() {
+fn a_missing_broker_reports_unavailable_without_credentials() {
     let fake = Fake::standard();
-    let missing: Locate = Arc::new(|| BrokerProgram::new(None, PathBuf::from("/nonexistent")));
+    let missing: Locate = Arc::new(|| BrokerProgram::new(None, vec!["--provider-broker".into()]));
     let error = runtime_status(&fake.gate, &missing, Scope::All).unwrap_err();
     assert_eq!(error.code, "ai_unavailable");
     assert!(!error.message.to_lowercase().contains("token"));
     assert_eq!(fake.launches(), 0);
-    let no_script: Locate =
-        Arc::new(|| BrokerProgram::new(Some(shell()), PathBuf::from("/nonexistent/index.mjs")));
-    let mut client = fake.client("codex-cli://default").with_locate(no_script);
+    let no_program: Locate =
+        Arc::new(|| BrokerProgram::new(Some(PathBuf::from("/nonexistent/kassiber")), Vec::new()));
+    let mut client = fake.client("codex-cli://default").with_locate(no_program);
     let none = Value::Null;
     let error = collect(&mut client, &chat(None, None, "m", &none, &[])).unwrap_err();
     assert_eq!(
         (error.code.as_str(), error.hint.as_deref()),
         (
             "ai_unavailable",
-            Some("Install Node.js 20 or newer, or use an HTTP/Ollama/oMLX provider.")
+            Some("Check KASSIBER_AI_PROVIDER_BROKER, or use an HTTP/Ollama/oMLX provider.")
         )
     );
     assert_eq!(fake.launches(), 0);
@@ -965,10 +974,10 @@ fn offline_mode_refuses_every_broker_use_before_a_launch() {
     let fake = Fake::standard();
     let gate = Gate::new(|| Offline::Offline, Ledger::default())
         .with_test_observer(false)
-        .with_broker_fixture(fake.script.clone());
+        .with_broker_fixture(fake.program());
     let unavailable = Gate::new(|| Offline::Unavailable, Ledger::default())
         .with_test_observer(false)
-        .with_broker_fixture(fake.script.clone());
+        .with_broker_fixture(fake.program());
     for gate in [gate, unavailable] {
         let error = runtime_status(&gate, &fake.locate(), Scope::All).unwrap_err();
         assert_eq!(
@@ -1010,7 +1019,7 @@ fn offline_mode_mid_tool_session_refuses_the_next_leg() {
         Ledger::default(),
     )
     .with_test_observer(false)
-    .with_broker_fixture(fake.script.clone());
+    .with_broker_fixture(fake.program());
     let mut client = BrokerClient::new("codex-cli://default", Duration::from_secs(30), gate)
         .unwrap()
         .with_locate(fake.locate());
@@ -1053,7 +1062,7 @@ fn every_launch_is_seen_by_the_observer_and_a_strict_one_blocks_it() {
     for gate in [
         Gate::new(|| Offline::Online, Ledger::default())
             .with_test_observer(true)
-            .with_broker_fixture(fake.script.clone()),
+            .with_broker_fixture(fake.program()),
         Gate::new(|| Offline::Online, Ledger::default()).with_test_observer(false),
     ] {
         let locate = fake.locate();

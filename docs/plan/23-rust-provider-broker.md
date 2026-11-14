@@ -74,7 +74,9 @@ unchanged; Node.js is no longer needed for any Kassiber feature.
    working directory, prompt helpers, the dispatcher, the tool bridge and
    the MCP child, `--provider-broker` dispatch, and the daemon-side
    `BrokerProgram` switch. Status and model probes answer through the
-   adapter registry.
+   adapter registry. Done: `crates/provider-broker`; the adapters are
+   stubs that find their CLI and report it as not ported. Termination uses
+   signal handlers, not a blocked mask, because children inherit the mask.
 2. Adapters, in parallel once step 1 lands: Claude and Codex; ACP; OpenCode.
    Each ports the TypeScript adapter's behaviour and its tests, and is
    checked against the TypeScript broker on the same fake provider CLIs

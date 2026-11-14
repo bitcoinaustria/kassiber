@@ -117,3 +117,9 @@ crates/release/tests/tool.rs|release_tool_matches_the_python_scripts|let mut com
 # The daemon's online gate and explicit-trigger consent cover the broker
 # process that runs this.
 crates/provider-broker/src/executables.rs|provider_command|let mut command = Command::new(executable);
+# The provider broker's black-box test: the product binary as
+# `--provider-broker` and `--provider-broker-mcp` with a cleared environment
+# (no provider CLI on PATH, a private HOME and temporary root), and
+# `/bin/kill` for its termination signals.
+crates/kassiber/tests/provider_broker.rs|broker|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/kassiber/tests/provider_broker.rs|signal|let status = Command::new("/bin/kill")
