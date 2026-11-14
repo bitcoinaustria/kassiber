@@ -1,5 +1,8 @@
 use crate::{boundary, loader, Computed, Fusion, JournalState, Refusal};
-use kassiber_custody::{codec, snapshot::BookSnapshot};
+use kassiber_custody::{
+    codec,
+    snapshot::{BookSnapshot, Snapshot},
+};
 use kassiber_pydecimal::{Context, Decimal, DecimalError};
 use kassiber_pyjson::Value as Py;
 use kassiber_store::rusqlite::Connection;
@@ -43,6 +46,9 @@ pub fn memory_snapshot(
     Ok(clone)
 }
 
+/// The text-fusion journal build of a v1 snapshot, kept for the frozen
+/// review-build comparisons. Review itself builds through
+/// [`load_review_state`]; see TODO.md (R4) for its retirement.
 pub struct Prepared {
     response:
         std::cell::OnceCell<Result<kassiber_tax_core::ledger::response::LedgerResponse, Refusal>>,
@@ -94,12 +100,6 @@ impl Prepared {
         })
     }
 
-    pub fn load(conn: &Connection, profile: Py, as_of: &str) -> Result<Self, Refusal> {
-        let loaded = loader::load_read_snapshot(conn, profile, as_of).map_err(load_error)?;
-        let snapshot = loaded.into_custody().map_err(load_error)?;
-        Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)
-    }
-
     pub fn render(&self, ids: impl FnMut() -> String) -> Result<JournalState<'_>, Refusal> {
         let response = self
             .response
@@ -143,16 +143,57 @@ impl Prepared {
         ids: impl FnMut() -> String,
     ) -> Result<JournalState<'_>, Refusal> {
         let mut state = self.render(ids)?;
-        let mut statement = conn.prepare("SELECT id FROM transactions WHERE profile_id=?")?;
-        let live: HashSet<String> = statement
-            .query_map([crate::string(&self.profile["id"])], |row| row.get(0))?
-            .collect::<Result<_, _>>()?;
-        state.quarantines = crate::persistence::dedupe_quarantines(&state.quarantines)?
-            .into_iter()
-            .filter(|row| live.contains(&crate::string(&row.transaction_id)))
-            .collect();
+        state.quarantines = review_quarantines(conn, &self.profile, &state.quarantines)?;
         Ok(state)
     }
+}
+
+/// Review's journal state of `profile` on `conn`'s current read snapshot,
+/// handed to `then`. The book is loaded as of `as_of` and rendered by the
+/// custody, fusion, engine and render steps `journals process` stores from
+/// (`process::render_loaded`), so review and processing cannot compute
+/// different journals for any tax country.
+pub fn load_review_state<R>(
+    conn: &Connection,
+    profile: Py,
+    as_of: &str,
+    then: impl FnOnce(JournalState<'_>) -> R,
+) -> Result<R, Refusal> {
+    let loaded = loader::load_read_snapshot(conn, profile, as_of).map_err(load_error)?;
+    let snapshot = loaded.into_custody().map_err(load_error)?;
+    review_state(conn, &snapshot, then)
+}
+
+/// [`load_review_state`] over a loaded snapshot.
+pub fn review_state<R>(
+    conn: &Connection,
+    snapshot: &Snapshot,
+    then: impl FnOnce(JournalState<'_>) -> R,
+) -> Result<R, Refusal> {
+    let profile = serde_json::to_value(&snapshot.profile)
+        .map_err(|error| Refusal::new("ValueError", error.to_string()))?;
+    crate::process::render_loaded(&profile, snapshot, |state| {
+        let mut state = state.clone();
+        state.quarantines = review_quarantines(conn, &profile, &state.quarantines)?;
+        Ok(then(state))
+    })
+}
+
+/// Review cases: each quarantined transaction once, under its primary
+/// reason, and only the profile's live transactions.
+fn review_quarantines(
+    conn: &Connection,
+    profile: &Value,
+    quarantines: &[crate::QuarantineRow],
+) -> Result<Vec<crate::QuarantineRow>, Refusal> {
+    let mut statement = conn.prepare("SELECT id FROM transactions WHERE profile_id=?")?;
+    let live: HashSet<String> = statement
+        .query_map([crate::string(&profile["id"])], |row| row.get(0))?
+        .collect::<Result<_, _>>()?;
+    Ok(crate::persistence::dedupe_quarantines(quarantines)?
+        .into_iter()
+        .filter(|row| live.contains(&crate::string(&row.transaction_id)))
+        .collect())
 }
 
 fn load_error(error: loader::Error) -> Refusal {

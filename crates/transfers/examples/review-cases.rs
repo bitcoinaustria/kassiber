@@ -30,10 +30,6 @@ fn run(input: &Value) -> Result<Value, Box<dyn std::error::Error>> {
     };
     let mut outputs = Vec::new();
     for args in cases {
-        let Value::List(tape) = field("entry_ids") else {
-            return Err("entry ids must be a list".into());
-        };
-        let mut ids = tape.iter();
         let result = review_workflow::cases(
             &conn,
             &Scope {
@@ -42,7 +38,6 @@ fn run(input: &Value) -> Result<Value, Box<dyn std::error::Error>> {
             },
             args,
             &py_str(field("as_of")),
-            || py_str(ids.next().expect("entry identity tape exhausted")),
         );
         assert_eq!(conn.total_changes(), changes);
         assert_eq!(conn.is_autocommit(), owns);

@@ -733,10 +733,11 @@ mod tests {
         let profile = sql::rows(&conn, "SELECT * FROM profiles WHERE id='p'", [])
             .unwrap()
             .remove(0);
-        let prepared =
-            crate::pipeline::Prepared::load(&conn, profile, "2026-10-31T12:00:00Z").unwrap();
-        let state = prepared.review_state(&conn, || "derived".into()).unwrap();
-        let cases = Cases::from_state(&state);
+        let cases =
+            crate::pipeline::load_review_state(&conn, profile, "2026-10-31T12:00:00Z", |state| {
+                Cases::from_state(&state)
+            })
+            .unwrap();
         let mut operations = list(value(&plan, "operations"));
         let mut builds = 0;
         let error = apply(

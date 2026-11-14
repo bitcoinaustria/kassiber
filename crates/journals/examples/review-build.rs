@@ -1,5 +1,5 @@
 use kassiber_envelope::{get, py_str};
-use kassiber_journals::{boundary, pipeline::Prepared};
+use kassiber_journals::boundary;
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::Connection;
 use serde_json::json;
@@ -20,21 +20,16 @@ fn run(input: &Value) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         "BEGIN"
     })?;
     let changes = conn.total_changes();
-    let result = (|| {
-        let prepared = Prepared::load(&conn, field("profile").clone(), &py_str(field("as_of")))?;
-        let Value::List(ids) = field("entry_ids") else {
-            panic!("entry ids")
-        };
-        let mut ids = ids.iter();
-        let mut identity = || py_str(ids.next().expect("entry identity tape exhausted"));
-        let state = if field("review") == &Value::Bool(true) {
-            prepared.review_state(&conn, &mut identity)?
-        } else {
-            prepared.render(&mut identity)?
-        };
-        assert!(ids.next().is_none(), "entry identity tape not consumed");
-        Ok::<_, kassiber_journals::Refusal>(json!({"state": boundary::canonical(&state)?}))
-    })();
+    // Review's build: the `journals process` path, with review's quarantine
+    // filter. Render entry identities stay empty, as processing leaves them.
+    let result = kassiber_journals::pipeline::load_review_state(
+        &conn,
+        field("profile").clone(),
+        &py_str(field("as_of")),
+        |state| boundary::canonical(&state),
+    )
+    .and_then(|state| state)
+    .map(|state| json!({"state": state}));
     assert_eq!(conn.total_changes(), changes, "journal build wrote rows");
     assert!(
         !conn.is_autocommit(),
