@@ -337,6 +337,146 @@ fn the_mcp_child_refuses_a_missing_manifest() {
     assert!(stderr.starts_with("ENOENT: "), "{stderr}");
 }
 
+/// A fake `opencode` in `dir/bin`: version and model listing from fixed
+/// text, and an OpenCode 2 `serve` announcing `port` and waiting for its
+/// stdin to close. It records the names of its environment per run.
+fn fake_opencode(dir: &Path, version: &str, models: &str, port: u16) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let bin = dir.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::write(dir.join("models"), models).unwrap();
+    let script = format!(
+        r#"#!/bin/sh
+root='{root}'
+case "$1" in
+--version) echo '{version}' ;;
+debug) echo '{{}}' ;;
+models) cat "$root/models" ;;
+serve)
+  export -p > "$root/serve-env"
+  printf '%s\n' "$@" > "$root/serve-argv"
+  printf '{{"url":"http://127.0.0.1:%s"}}\n' '{port}'
+  while read -r _; do :; done ;;
+*) exit 2 ;;
+esac
+"#,
+        root = dir.display()
+    );
+    let executable = bin.join("opencode");
+    std::fs::write(&executable, script).unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+    bin
+}
+
+fn run_with_path(home: &Path, bin: &Path, request: &str) -> Output {
+    let mut child = broker(home, &["--provider-broker"])
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(request.as_bytes())
+        .unwrap();
+    child.wait_with_output().unwrap()
+}
+
+#[test]
+fn opencode_status_reports_a_ready_cli_and_one_that_needs_a_login() {
+    let home = tempfile::tempdir().unwrap();
+    let bin = fake_opencode(home.path(), "1.18.10", "provider/model\n", 1);
+    let request = "{\"command\": \"status\", \"provider\": \"opencode\"}\n";
+    let out = run_with_path(home.path(), &bin, request);
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap(),
+        "{\"type\":\"result\",\"data\":[{\"provider\":\"opencode\",\"display_name\":\"OpenCode\",\"privacy_posture\":\"remote\",\"native_tools\":\"disabled\",\"models\":[{\"id\":\"provider/model\",\"display_name\":\"model\",\"owned_by\":\"OpenCode · provider\",\"source_provider\":\"provider\",\"privacy_posture\":\"remote\",\"privacy_reason\":\"OpenCode does not report an endpoint for this provider.\",\"supports_reasoning_effort\":false,\"reasoning_efforts\":[]}],\"state\":\"ready\",\"message\":\"Ready using the existing OpenCode configuration.\",\"version\":\"1.18.10\",\"executable\":\"opencode\"}]}\n"
+    );
+    std::fs::write(home.path().join("models"), "").unwrap();
+    let out = run_with_path(home.path(), &bin, request);
+    let events: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(events["data"][0]["state"], "authentication_required");
+    assert_eq!(
+        events["data"][0]["message"],
+        "Run `opencode auth login` outside Kassiber."
+    );
+}
+
+#[test]
+fn an_opencode_2_turn_streams_through_the_binary() {
+    use kassiber_net::test_support::{FakeService, Reply};
+    use std::sync::{mpsc, Arc, Mutex};
+    if Path::new("/etc/opencode").exists() {
+        // OpenCode 2 refuses machine-managed configuration.
+        return;
+    }
+    let feed: Arc<Mutex<Option<mpsc::Sender<Vec<u8>>>>> = Arc::default();
+    let emit = |feed: &Arc<Mutex<Option<mpsc::Sender<Vec<u8>>>>>, value: Value| {
+        if let Some(sender) = feed.lock().unwrap().as_ref() {
+            let _ = sender.send(format!("data: {value}\n\n").into_bytes());
+        }
+    };
+    let events = feed.clone();
+    let service = FakeService::start(move |request| {
+        let path = request.target.split('?').next().unwrap_or_default();
+        match path {
+            "/api/session" => Reply::json(200, "{\"data\":{\"id\":\"ses_1\"}}"),
+            "/api/session/ses_1" => {
+                Reply::json(200, "{\"data\":{\"id\":\"ses_1\",\"outcome\":\"succeeded\"}}")
+            }
+            "/api/event" => {
+                let (sender, pieces) = mpsc::channel();
+                *events.lock().unwrap() = Some(sender);
+                emit(&events, json!({"type": "server.connected", "data": {}}));
+                Reply::fed("text/event-stream", pieces)
+            }
+            "/api/session/ses_1/prompt" => {
+                emit(&events, json!({"type": "session.text.delta", "data": {"sessionID": "ses_1", "delta": "Hello"}}));
+                emit(&events, json!({"type": "session.idle", "data": {"sessionID": "ses_1"}}));
+                Reply::json(200, "{\"data\":{}}")
+            }
+            _ => Reply::json(404, "{}"),
+        }
+    })
+    .unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let bin = fake_opencode(home.path(), "opencode v2.2.0", "", service.port());
+    let out = run_with_path(
+        home.path(),
+        &bin,
+        "{\"command\":\"chat\",\"provider\":\"opencode\",\"model\":\"fixture/model\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}\n",
+    );
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap(),
+        "{\"type\":\"status\",\"phase\":\"connecting\",\"message\":\"Starting OpenCode server\"}\n{\"type\":\"delta\",\"content\":\"Hello\"}\n{\"type\":\"done\",\"finish_reason\":\"stop\"}\n"
+    );
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("serve-argv")).unwrap(),
+        "serve\n--stdio\n--hostname=127.0.0.1\n--port=0\n"
+    );
+    let env = std::fs::read_to_string(home.path().join("serve-env")).unwrap();
+    for name in [
+        "OPENCODE_SERVER_PASSWORD",
+        "OPENCODE_CONFIG_CONTENT",
+        "KASSIBER_AI_BROKER",
+    ] {
+        assert!(env.contains(name), "{name}");
+    }
+    let paths = service.paths();
+    assert_eq!(paths[0], "POST /api/session");
+    assert_eq!(paths[1], "GET /api/event");
+    assert!(paths.contains(&"POST /api/session/ses_1/prompt".to_owned()));
+    // The turn's directory is gone.
+    let left: Vec<_> = std::fs::read_dir(home.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.starts_with("kassiber-ai-"))
+        .collect();
+    assert!(left.is_empty(), "{left:?}");
+}
+
 // GitHub Copilot over ACP against a fake `copilot` (plan 23, step 2).
 #[path = "provider_broker/acp.rs"]
 mod acp;

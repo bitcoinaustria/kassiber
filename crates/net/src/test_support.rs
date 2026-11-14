@@ -291,10 +291,16 @@ pub struct Reply {
     /// Python suites' `_Computed` replies did (a provider's next leg after a
     /// tool round, from what that round returned).
     pub computed: Option<Computed>,
+    /// Further body pieces, each sent as a chunk as it arrives, until the
+    /// sender is dropped (a server-sent event stream a test drives).
+    pub feed: Option<Feed>,
 }
 
 /// A reply built from the request body it answers.
 pub type Computed = Arc<dyn Fn(&[u8]) -> Reply + Send + Sync>;
+
+/// The body pieces of a [`Reply::fed`] reply.
+pub type Feed = Arc<Mutex<std::sync::mpsc::Receiver<Vec<u8>>>>;
 
 impl Reply {
     pub fn json(status: u16, body: &str) -> Self {
@@ -321,6 +327,17 @@ impl Reply {
             chunk_size: None,
             hold: false,
             computed: None,
+            feed: None,
+        }
+    }
+
+    /// A chunked reply whose body is whatever `pieces` receives, each piece
+    /// written as it arrives, ending when its sender is dropped.
+    pub fn fed(content_type: &str, pieces: std::sync::mpsc::Receiver<Vec<u8>>) -> Self {
+        Self {
+            chunk_size: Some(1),
+            feed: Some(Arc::new(Mutex::new(pieces))),
+            ..Self::raw(200, content_type, b"")
         }
     }
 
@@ -518,6 +535,30 @@ fn write_reply(stream: &mut std::net::TcpStream, reply: &Reply, stop: &AtomicBoo
                 chunk.extend_from_slice(b"\r\n");
                 if stream.write_all(&chunk).is_err() || stream.flush().is_err() {
                     return;
+                }
+            }
+            if let Some(feed) = &reply.feed {
+                let feed = feed.lock().unwrap_or_else(|e| e.into_inner());
+                loop {
+                    let piece = match feed.recv_timeout(Duration::from_millis(5)) {
+                        Ok(piece) => piece,
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                            if stop.load(Ordering::SeqCst) {
+                                return;
+                            }
+                            continue;
+                        }
+                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                    };
+                    if piece.is_empty() {
+                        continue;
+                    }
+                    let mut chunk = format!("{:x}\r\n", piece.len()).into_bytes();
+                    chunk.extend_from_slice(&piece);
+                    chunk.extend_from_slice(b"\r\n");
+                    if stream.write_all(&chunk).is_err() || stream.flush().is_err() {
+                        return;
+                    }
                 }
             }
             if !reply.hold {

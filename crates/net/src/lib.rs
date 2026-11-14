@@ -43,9 +43,9 @@ pub mod test_support;
 #[cfg(unix)]
 pub use broker::temp_parent_for;
 pub use broker::{
-    broker_temp_parent, mount_fstype, splitlines, which, BrokerError, BrokerOutput, BrokerProcess,
-    BrokerProgram, BrokerSignal, BROKER_GRACE, BROKER_PROGRAM_ENV, BROKER_TMPDIR_ENV,
-    PROVIDER_BROKER_FLAG,
+    broker_temp_parent, free_loopback_port, mount_fstype, splitlines, which, BrokerError,
+    BrokerOutput, BrokerProcess, BrokerProgram, BrokerSignal, BROKER_GRACE, BROKER_PROGRAM_ENV,
+    BROKER_TMPDIR_ENV, PROVIDER_BROKER_FLAG,
 };
 pub use http::{
     Cancel, HttpOptions, HttpRequest, HttpResponse, HttpStream, RedirectPolicy, Upgrade,

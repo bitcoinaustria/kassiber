@@ -364,6 +364,17 @@ pub fn mount_fstype(path: &str, mounts_path: &Path) -> Option<String> {
     best.map(|(_, fstype)| fstype)
 }
 
+/// A TCP port on 127.0.0.1 that was free a moment ago, for a provider CLI
+/// the provider broker starts as its own loopback server (OpenCode 1's
+/// `serve --port=<port>`; `availablePort()` in the TypeScript broker). The
+/// listener is bound and closed again here; nothing is accepted, and no
+/// connection leaves the machine. Another process may take the port before
+/// the CLI binds it; the CLI then fails to start, and so does the turn.
+pub fn free_loopback_port() -> io::Result<u16> {
+    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
+    Ok(listener.local_addr()?.port())
+}
+
 /// `_broker_temp_parent()`: where the per-turn root goes, `None` for the
 /// system temporary directory (disk-backed).
 ///
