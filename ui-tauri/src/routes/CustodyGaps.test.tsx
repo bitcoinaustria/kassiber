@@ -7,7 +7,6 @@ import {
   BridgePreviewPanel,
   CorrectionPreviewPanel,
   CustodyCoverageTimeline,
-  CustodyLineageTimeline,
   ResidualPreviewPanel,
   ReviewHistoryPanel,
 } from "./CustodyGaps";
@@ -26,6 +25,7 @@ import {
   type ResidualClassificationPreview,
   canShowNoKnownCustodyGaps,
   collectCustodyGapPages,
+  canUndoAutomaticPairing,
   collectCustodyLineagePages,
   custodyGapActionMode,
   formatCustodyMsat,
@@ -422,15 +422,15 @@ describe("CustodyGaps imported-policy coverage", () => {
       <CustodyCoverageTimeline snapshot={coverage} />,
     );
 
-    expect(html).toContain("Imported wallet policy timeline");
-    expect(html).toContain("Ownership universe unknown");
+    expect(html).toContain("Scan coverage");
+    expect(html).toContain("Diagnostics only");
+    expect(html).not.toContain("Ownership universe unknown");
     expect(html).toContain("Operations vault");
     expect(html).toContain("Retired epoch");
     expect(html).toContain("Active epoch");
     expect(html).toContain("Exclusive scan bound: 50");
     expect(html).toContain("Highest used index: 7");
     expect(html).toContain("No used index observed");
-    expect(html).toContain("never clears a custody gap");
     expect(html).not.toContain("xpub6PrivateMaterial");
     expect(html).not.toContain("wpkh(secret-descriptor)");
     expect(html).not.toContain("bc1privateaddress");
@@ -471,59 +471,16 @@ describe("CustodyGaps canonical custody lineage", () => {
     ],
   };
 
-  it("shows exact custody finality separately from a prior tax-basis barrier", () => {
-    const html = renderToStaticMarkup(
-      <CustodyLineageTimeline snapshot={lineage} />,
-    );
-
-    expect(html).toContain("Custody lineage");
-    expect(html).toContain("Treasury vault");
-    expect(html).toContain("Spending wallet");
-    expect(html).toContain("6.09 BTC");
-    expect(html).toContain("Custody verified");
-    expect(html).toContain("Tax basis blocked");
-    expect(html).toContain(
-      "Custody is settled, but tax basis remains blocked",
-    );
-    expect(html).toContain(
-      "Exact outputs from one recorded chain transaction",
-    );
-  });
-
-  it("labels an exact exchange withdrawal as automatic, not reviewed", () => {
-    const html = renderToStaticMarkup(
-      <CustodyLineageTimeline
-        snapshot={{
-          ...lineage,
-          items: [
-            {
-              ...lineage.items[0],
-              basis_state: "eligible",
-              evidence_reason: "exchange_txid_exact",
-            },
-          ],
-        }}
-      />,
-    );
-
-    expect(html).toContain("Custody verified");
-    expect(html).toContain(
-      "Exchange withdrawal naming this transaction, exact amount (automatic)",
-    );
-    expect(html).not.toContain("Reviewed internal transfer record");
-  });
-
-  it("does not render transaction, wallet, component, or bundle identifiers", () => {
-    const html = renderToStaticMarkup(
-      <CustodyLineageTimeline snapshot={lineage} />,
-    );
-
-    expect(html).not.toContain("private-out-transaction-id");
-    expect(html).not.toContain("private-in-transaction-id");
-    expect(html).not.toContain("private-source-wallet-id");
-    expect(html).not.toContain("private-target-wallet-id");
-    expect(html).not.toContain("private-atomic-bundle-id");
-    expect(html).not.toContain("private-component-id");
+  it("offers undo only for automatic pairings a dismissal can reverse", () => {
+    const item = {
+      ...lineage.items[0],
+      custody_state: "internal_verified" as const,
+      basis_state: "eligible" as const,
+      evidence_reason: "exchange_txid_exact",
+    };
+    expect(canUndoAutomaticPairing(item)).toBe(true);
+    expect(canUndoAutomaticPairing({ ...item, evidence_reason: "row_matched" })).toBe(false);
+    expect(canUndoAutomaticPairing({ ...item, custody_state: "internal_reviewed" })).toBe(false);
   });
 
   it("keeps older lineage reachable and summarizes all loaded pages", () => {

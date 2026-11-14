@@ -24,6 +24,7 @@ export type QuarantineActionKind =
   | "wait_for_confirmation"
   | "resolve_root"
   | "review_pair"
+  | "restore_pairing"
   | "process_journals";
 
 export interface QuarantineAction {
@@ -33,6 +34,13 @@ export interface QuarantineAction {
   gap_id?: string;
   transaction_id?: string;
   pair_id?: string;
+  /**
+   * `restore_pairing`: the dismissal that undid an automatic link between
+   * exactly this held row's two transactions; deleting it links them back.
+   */
+  dismissal_id?: string;
+  out_transaction_id?: string;
+  in_transaction_id?: string;
 }
 
 export interface QuarantineWalletRef {

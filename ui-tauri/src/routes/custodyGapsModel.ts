@@ -319,6 +319,12 @@ export interface CustodyLineageItem {
   occurred_at: string | null;
   asset: string;
   amount_msat: string | number;
+  /** The moved amount and the sending transaction's fee at its price; null when unpriced. */
+  fiat_currency?: string | null;
+  fiat_value?: number | null;
+  /** The sending transaction's network fee; it covers the whole transaction. */
+  fee_msat?: string | number | null;
+  fee_fiat_value?: number | null;
   from_wallet_id: string;
   from_wallet_label: string;
   to_wallet_id: string;

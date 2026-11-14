@@ -31,6 +31,7 @@ export type CauseKey =
   | "ownershipDuplicateOutbound"
   | "liquidGraphIncomplete"
   | "recordedAuthorityConflict"
+  | "unlinkedAutomaticPair"
   | "chronologyMismatch"
   | "networkMismatch"
   | "feeImplausible"
@@ -162,12 +163,13 @@ const CAUSE_CATEGORIES: Record<CauseKey, QuarantineCategory> = {
   channelClose: "missing_wallet_history",
   gapHold: "missing_wallet_history",
   implicitDelta: "missing_wallet_history",
-  ownershipAmountMismatch: "missing_chain_evidence",
-  ownershipConservation: "missing_chain_evidence",
+  ownershipAmountMismatch: "needs_decision",
+  ownershipConservation: "needs_decision",
   ownershipFeeEvidence: "missing_chain_evidence",
   ownershipAssetEvidence: "missing_chain_evidence",
   liquidGraphIncomplete: "missing_chain_evidence",
-  recordedAuthorityConflict: "missing_chain_evidence",
+  recordedAuthorityConflict: "needs_decision",
+  unlinkedAutomaticPair: "needs_decision",
   samouraiUnverified: "missing_chain_evidence",
   conflictingSpend: "missing_chain_evidence",
   pendingConfirmation: "missing_chain_evidence",
@@ -213,6 +215,21 @@ const CAUSE_CATEGORIES: Record<CauseKey, QuarantineCategory> = {
   ownedFanout: "needs_decision",
   pairAmbiguous: "needs_decision",
 };
+
+/**
+ * A held send whose automatic link the owner removed: the daemon offers to
+ * link exactly that pair back. Asked as the question it leaves open, the
+ * same way the Transfers screen asks it.
+ */
+export function unlinkedAutomaticPair(
+  reason: string,
+  actions?: readonly QuarantineAction[] | null,
+): boolean {
+  return (
+    reason === "recorded_transfer_authority_conflict" &&
+    Boolean(actions?.some((action) => action.kind === "restore_pairing" && action.dismissal_id))
+  );
+}
 
 export function causeKeyFor(
   reason: string,
@@ -263,6 +280,8 @@ export interface CauseCopy {
 
 export interface CauseContext {
   reason: string;
+  /** The row's actions: a link the owner removed reads as that question. */
+  actions?: readonly QuarantineAction[] | null;
   category?: QuarantineCategory | null;
   evidence?: QuarantineEvidence | null;
   detail?: Record<string, unknown> | null;
@@ -288,7 +307,9 @@ function joinLabels(labels: string[]) {
 export function causeCopy(context: CauseContext, typedT: TFunction<"journals">): CauseCopy {
   const t = typedT as unknown as DynamicT;
   const evidence = context.evidence ?? {};
-  const key = causeKeyFor(context.reason, evidence, context.detail);
+  const key = unlinkedAutomaticPair(context.reason, context.actions)
+    ? "unlinkedAutomaticPair"
+    : causeKeyFor(context.reason, evidence, context.detail);
   const wallet =
     evidence.wallet_label || context.wallet || t("quarantine.cause.fallback.wallet");
   const wallets =
@@ -428,6 +449,8 @@ export function actionLabel(action: QuarantineAction, t: TFunction<"journals">) 
       return t("quarantine.cta.resolveRoot");
     case "review_pair":
       return t("quarantine.cta.reviewPair");
+    case "restore_pairing":
+      return t("quarantine.cta.restorePairing");
     case "process_journals":
       return t("quarantine.cta.processJournals");
     default:

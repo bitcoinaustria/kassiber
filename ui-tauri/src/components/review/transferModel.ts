@@ -33,6 +33,24 @@ export interface TransferCandidate {
   conflict_set_id: string;
   /** Candidates sharing a leg with this one, itself included. */
   conflict_size: number;
+  /** The owner's linking rule that matches this candidate, with the terms it sets. */
+  rule_match?: { rule_id: string; rule_name: string | null; kind?: string | null; policy?: string | null };
+}
+
+/** The kind and treatment linking it records: a matching rule's, else the matcher's default. */
+export function candidateTerms(candidate: TransferCandidate): { kind: string; policy: string } {
+  return {
+    kind: candidate.rule_match?.kind || candidate.default_kind,
+    policy: candidate.rule_match?.policy || candidate.default_policy,
+  };
+}
+
+/**
+ * A match to look at before linking: not exact, or competing with another
+ * match for one of its sides. These open the receipt picker, not a one-click link.
+ */
+export function needsReview(candidate: TransferCandidate): boolean {
+  return candidate.confidence !== "exact" || candidate.conflict_size > 1;
 }
 
 export interface TransferSuggestions {
@@ -60,8 +78,24 @@ export function bulkPairable(candidates: TransferCandidate[]) {
       candidate.confidence === "exact" &&
       candidate.conflict_size <= 1 &&
       candidate.method !== "ownership_graph" &&
-      candidate.default_policy === "carrying-value",
+      candidateTerms(candidate).policy === "carrying-value",
   ).slice(0, 50);
+}
+
+/** Asset codes that are bitcoin on any rail (chain, Lightning, Liquid, exchange ledgers). */
+export const BITCOIN_ASSETS: ReadonlySet<string> = new Set(["BTC", "XBT", "XXBT", "LBTC", "L-BTC"]);
+
+export const isBitcoinAsset = (asset: string) => BITCOIN_ASSETS.has(asset.trim().toUpperCase());
+
+/**
+ * Another asset on the receiving side: a swap out of bitcoin, taxable unless
+ * its policy says otherwise. Bitcoin changing rails (BTC to LBTC, a peg, a
+ * Lightning swap) is not one.
+ */
+export function isDifferentAssetMove(outAsset: string, inAsset: string, kind?: string | null): boolean {
+  if (outAsset.trim().toUpperCase() === inAsset.trim().toUpperCase()) return false;
+  if (isBitcoinAsset(outAsset) && isBitcoinAsset(inAsset)) return false;
+  return !(kind && BITCOIN_SWAP_KINDS.has(kind));
 }
 
 /** Same asset on both legs: a move between wallets rather than a swap. */
@@ -79,9 +113,9 @@ export const BITCOIN_SWAP_KINDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * What pairing a candidate records: a move of the same asset, bitcoin
- * changing rails, or a swap into another asset. The same reading as
- * Transfers & Custody.
+ * What linking a candidate records: a move of the same asset, bitcoin
+ * changing rails, or a swap into another asset. The same reading as the
+ * Transfers screen.
  */
 export function moveType(candidate: TransferCandidate): "transfer" | "bitcoinSwap" | "swap" {
   if (isSameAsset(candidate)) return "transfer";
@@ -90,3 +124,7 @@ export function moveType(candidate: TransferCandidate): "transfer" | "bitcoinSwa
   }
   return "swap";
 }
+
+/** The chip on a swap into another asset, wherever such a move is listed. */
+export const differentAssetBadgeClassName =
+  "rounded-md border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-2xs leading-tight text-amber-800 dark:text-amber-200";
