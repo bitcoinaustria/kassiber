@@ -24,6 +24,7 @@ import {
 } from "recharts";
 
 import { PeriodYearMenu } from "@/components/kb/PeriodYearMenu";
+import { StatTile } from "@/components/kb/StatTile";
 import { ChartContainer } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
@@ -547,7 +548,7 @@ const TransactionWorkbench = ({
     onTableFiltersReset,
   ]);
   const openSwapWorkflow = React.useCallback(() => {
-    void navigate({ to: "/swaps" });
+    void navigate({ to: "/transfers" });
   }, [navigate]);
   const handleSwapWorkflowClick = React.useCallback(
     () => {
@@ -668,78 +669,45 @@ const TransactionWorkbench = ({
         className="kb-surface relative z-20 grid grid-cols-2 overflow-visible @2xl/page:grid-cols-3 @6xl/page:grid-cols-6"
         aria-busy={isLoading || isRefreshing || undefined}
       >
-        {metricCards.map((metric, index) => {
-          const Icon = metric.icon;
-          const className = cn(
-            "min-w-0 space-y-2 border-b p-3 text-left @2xl/page:p-4",
-            index % 2 === 1 && "border-l",
-            index % 3 === 0 ? "@2xl/page:border-l-0" : "@2xl/page:border-l",
-            index > 0 ? "@6xl/page:border-l" : "@6xl/page:border-l-0",
-            metric.onClick &&
-              !isLoading &&
-              "relative isolate w-full cursor-pointer overflow-hidden transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:before:scale-x-100 [&>*]:relative [&>*]:z-10",
-          );
-          const content = isLoading ? (
-            <>
-              <div className="flex items-center gap-2">
-                <Skeleton className="size-4 rounded-md" />
-                <Skeleton className="h-3 w-20" />
-              </div>
-              <Skeleton className="h-6 w-24" />
-              <Skeleton className="h-3 w-16" />
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Icon className={cn("size-4", metric.tone)} aria-hidden="true" />
-                <span className="truncate">{metric.label}</span>
-              </div>
-              <div
-                className={cn(
-                  "truncate text-xl font-semibold tracking-tight transition-opacity motion-reduce:transition-none",
-                  isRefreshing && "opacity-60",
-                )}
-              >
-                {metric.countOnly
-                  ? `${metric.value.eur}`
-                  : metric.onClick
-                    ? (
-                      <span className={blurClass(hideSensitive)}>
-                        {formatDisplayMoney(
-                          metric.value.eur,
-                          Math.abs(metric.value.btc),
-                          currency,
-                        )}
-                      </span>
-                    )
-                    : formatMetricValue(
+        {metricCards.map((metric, index) => (
+          <StatTile
+            key={metric.label}
+            label={metric.label}
+            icon={metric.icon}
+            tone={metric.tone}
+            meta={metric.meta}
+            loading={isLoading}
+            refreshing={isRefreshing}
+            onClick={metric.onClick}
+            ariaLabel={metric.ariaLabel}
+            className={cn(
+              "border-b",
+              index % 2 === 1 && "border-l",
+              index % 3 === 0 ? "@2xl/page:border-l-0" : "@2xl/page:border-l",
+              index > 0 ? "@6xl/page:border-l" : "@6xl/page:border-l-0",
+            )}
+            value={
+              metric.countOnly
+                ? `${metric.value.eur}`
+                : metric.onClick
+                  ? (
+                    <span className={blurClass(hideSensitive)}>
+                      {formatDisplayMoney(
                         metric.value.eur,
                         Math.abs(metric.value.btc),
                         currency,
-                        hideSensitive,
                       )}
-              </div>
-              <div className="truncate text-xs text-muted-foreground">
-                {metric.meta}
-              </div>
-            </>
-          );
-          return metric.onClick && !isLoading ? (
-            <button
-              key={metric.label}
-              type="button"
-              className={className}
-              onClick={metric.onClick}
-              aria-label={metric.ariaLabel}
-            >
-              {content}
-            </button>
-          ) : (
-            <div key={metric.label} className={className}>
-              {content}
-            </div>
-          );
-        })}
+                    </span>
+                  )
+                  : formatMetricValue(
+                      metric.value.eur,
+                      Math.abs(metric.value.btc),
+                      currency,
+                      hideSensitive,
+                    )
+            }
+          />
+        ))}
 
         <div className="relative z-40 col-span-2 flex min-h-[360px] flex-col p-3 @2xl/page:col-span-3 @2xl/page:p-4 @6xl/page:col-span-6">
           <div className="mb-3 flex shrink-0 flex-col gap-2 @xl/page:flex-row @xl/page:items-start @xl/page:justify-between @xl/page:gap-3">
