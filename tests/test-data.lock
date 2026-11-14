@@ -2,7 +2,7 @@
 # scripts/fetch-test-data.sh; never edit by hand (see
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
-commit c8de0f38f0ab5797f361c686fd2847ffad6409a9
+commit 2276f4c7f6b44cf4029f0a1942035df44f2818c8
 ab2bfbb90cc8996dcee6933efaf1a0fd9ea88f89 crates/ai/tests/data/vectors.json
 b02df587ab3b14801a923c1049f1ce4062b1188e crates/chain/fixtures/python_btcpay.json
 76906734c1ea7bd4f09690ad90894cfcadf9f333 crates/chain/fixtures/python_cln.json
