@@ -155,22 +155,17 @@ smoke_root="$(cd "$smoke_root" && pwd -P)"
 run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$RUST_BIN" --scratch "$smoke_root/smoke" \
   --expect-commit "$APP_COMMIT"
 
-# The AI provider broker ships beside the sidecar, where the binary looks for
-# it (<executable dir>/provider_broker/index.mjs).
 run pnpm --dir ui-tauri install --frozen-lockfile
-run pnpm --dir ui-tauri run broker:build
-test -s "$ROOT/ui-tauri/provider-broker/dist/index.mjs"
 
 # The one-dir location and file name the supervisor, the CLI launcher and the
-# Touch ID helper's identity check look in. Sweep the flat layout too, so a
-# binary from an older build never shadows this one.
+# Touch ID helper's identity check look in. Sweep the flat layout and an old
+# Node provider_broker/ too, so nothing from an older build rides along.
 mkdir -p "$BINARIES_DIR"
 find "$BINARIES_DIR" -maxdepth 1 -type f -name 'kassiber-cli-*' -delete
 rm -rf "${BINARIES_DIR:?}/kassiber-cli" "${BINARIES_DIR:?}/provider_broker"
-mkdir -p "$BINARIES_DIR/kassiber-cli/provider_broker"
+mkdir -p "$BINARIES_DIR/kassiber-cli"
 run cp "$RUST_BIN" "$BINARIES_DIR/kassiber-cli/$SIDECAR_NAME"
 run chmod 755 "$BINARIES_DIR/kassiber-cli/$SIDECAR_NAME"
-run cp "$ROOT/ui-tauri/provider-broker/dist/index.mjs" "$BINARIES_DIR/kassiber-cli/provider_broker/index.mjs"
 
 TAURI_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-tauri-config.XXXXXX")"
 trap 'rm -rf "$smoke_root" "$TAURI_CONFIG_DIR"' EXIT
@@ -203,7 +198,6 @@ if [ -d "$APP_BUNDLE" ]; then
     echo "The app bundle still carries an old Python sidecar payload; refusing it." >&2
     exit 1
   fi
-  test -s "$APP_BUNDLE/Contents/Resources/binaries/kassiber-cli/provider_broker/index.mjs"
   # The sidecar keeps its file name as its signing identifier, which the Touch
   # ID helper's identity check expects. Tauri's ad-hoc bundle signing may
   # re-sign nested code under a derived identifier; if so, restore it and

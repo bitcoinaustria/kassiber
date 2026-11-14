@@ -1,0 +1,47 @@
+[package]
+name = "kassiber-provider-broker"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "The AI provider broker the kassiber binary serves as `kassiber --provider-broker` (plan 23)"
+
+[dependencies]
+# The tool bridge's AF_UNIX socket and Windows named pipe: the only crate the
+# chokepoint scanner lets open them.
+kassiber-ipc = { path = "../ipc" }
+# The MCP child (`kassiber --provider-broker-mcp`) serves the tool manifest
+# through the existing stdio server; its JSON model keeps object order.
+kassiber-mcp = { path = "../mcp" }
+kassiber-envelope = { path = "../envelope" }
+# OpenCode's loopback HTTP API and the free port its first generation
+# needs: the only crate that may open a socket (crates/net/tests/chokepoint.rs).
+kassiber-net = { path = "../net" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+serde = { version = "1", features = ["derive"] }
+# raw_value passes tool arguments and schemas through in their own key order.
+serde_json = { version = "1", features = ["raw_value"] }
+# Unguessable call ids, bridge pipe names and temporary-directory suffixes;
+# std has no portable cryptographic source.
+getrandom = "=0.4.3"
+# JavaScript-compatible redaction: one rule needs a backreference.
+fancy-regex = "0.20"
+# Codex's session cursor binds the tool catalog by a SHA-256 prefix
+# (`toolFingerprint` in codex.ts); std has no cryptographic hash.
+sha2 = "0.11"
+
+[target.'cfg(unix)'.dependencies]
+# SIGTERM to a tracked agent, errno names and access(X_OK), through nix's
+# safe wrappers.
+nix = { version = "0.30", features = ["signal", "fs"] }
+
+[dev-dependencies]
+# Loopback OpenCode servers for the adapter's fake-CLI tests.
+kassiber-net = { path = "../net", features = ["test-support"] }
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"

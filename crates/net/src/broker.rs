@@ -1,7 +1,7 @@
 //! The AI provider broker's process route (`kassiber/ai/broker_client.py`).
 //!
-//! The bundled Node broker starts the provider CLIs (Claude, Codex, OpenCode,
-//! ACP agents), which reach their vendors, so a launch is network work: it
+//! The provider broker (`kassiber --provider-broker`, plan 23) starts the
+//! provider CLIs (Claude, Codex, OpenCode, ACP agents), which reach their vendors, so a launch is network work: it
 //! needs a [`Route`] for [`Request::ai_broker`], which passes the same online
 //! gate as Python's `require_online` (offline mode refuses it; the product
 //! `KASSIBER_NO_EGRESS` switch leaves AI alone, as in Python) and an
@@ -9,7 +9,9 @@
 //! (`Operation::Process`); it admits only the fake broker a harness named.
 //! The product ledger records none, as Python records none.
 //!
-//! The broker runs as `[node, script]` with the full environment plus
+//! The broker runs as [`BrokerProgram`] says (this executable with
+//! `--provider-broker`, or the `KASSIBER_AI_PROVIDER_BROKER` override) with
+//! the full environment plus
 //! `KASSIBER_AI_BROKER_TMPDIR`, a private per-turn root this process owns,
 //! in RAM where [`broker_temp_parent`] finds a safe place for it. On Unix it
 //! leads a new process group, so a cancel or a timeout can reach the CLIs it
@@ -29,27 +31,23 @@ use std::time::{Duration, Instant};
 
 /// The variable naming the broker's per-turn root, written to its environment.
 pub const BROKER_TMPDIR_ENV: &str = "KASSIBER_AI_BROKER_TMPDIR";
-/// The Node executable override.
-pub const BROKER_NODE_ENV: &str = "KASSIBER_AI_BROKER_NODE";
-/// The broker script override.
-pub const BROKER_SCRIPT_ENV: &str = "KASSIBER_AI_PROVIDER_BROKER";
+/// The broker override: an executable run without arguments (tests name
+/// fake brokers here).
+pub const BROKER_PROGRAM_ENV: &str = "KASSIBER_AI_PROVIDER_BROKER";
+/// The argument this executable serves the provider broker under.
+pub const PROVIDER_BROKER_FLAG: &str = "--provider-broker";
 /// How long a terminated broker gets before its group is killed.
 pub const BROKER_GRACE: Duration = Duration::from_secs(2);
 
 const BROKER_LABEL: &str = "provider-broker";
-const NODE_FALLBACKS: &[&str] = &[
-    "/opt/homebrew/bin/node",
-    "/usr/local/bin/node",
-    "~/.local/bin/node",
-    "/opt/local/bin/node",
-];
 const POLL: Duration = Duration::from_millis(5);
 
-/// What a broker launch runs: `_node_executable()` and `_broker_script()`.
+/// What a broker launch runs: a program and its arguments. Consent binds
+/// both.
 #[derive(Clone, PartialEq, Eq)]
 pub struct BrokerProgram {
-    node: Option<PathBuf>,
-    script: PathBuf,
+    program: Option<PathBuf>,
+    args: Vec<OsString>,
 }
 
 impl fmt::Debug for BrokerProgram {
@@ -59,28 +57,47 @@ impl fmt::Debug for BrokerProgram {
 }
 
 impl BrokerProgram {
-    pub fn new(node: Option<PathBuf>, script: PathBuf) -> Self {
-        Self { node, script }
+    pub fn new(program: Option<PathBuf>, args: Vec<OsString>) -> Self {
+        Self { program, args }
     }
 
-    /// Read afresh from the environment, as Python does for every request:
-    /// `KASSIBER_AI_BROKER_NODE` if it names an executable file, else `node`
-    /// on `PATH`, else the fixed fallbacks; `KASSIBER_AI_PROVIDER_BROKER`,
-    /// else `bundled`.
-    pub fn locate(bundled: &Path) -> Self {
-        Self {
-            node: node_executable(),
-            script: broker_script(bundled),
+    /// Read afresh from the environment for every request:
+    /// `KASSIBER_AI_PROVIDER_BROKER`, run without arguments, else `current`
+    /// (the running executable) with `--provider-broker`.
+    pub fn locate(current: Option<PathBuf>) -> Self {
+        Self::locate_from(env_os(BROKER_PROGRAM_ENV), current)
+    }
+
+    /// [`BrokerProgram::locate`] with the override explicit. A set override
+    /// must name an executable file: one that does not leaves no program
+    /// (the broker is unavailable) rather than falling back to the default.
+    pub fn locate_from(configured: Option<OsString>, current: Option<PathBuf>) -> Self {
+        match configured.filter(|value| !value.is_empty()) {
+            Some(configured) => {
+                let candidate = expanduser(Path::new(&configured));
+                Self {
+                    program: executable_file(&candidate).then_some(candidate),
+                    args: Vec::new(),
+                }
+            }
+            None => Self {
+                program: current,
+                args: vec![PROVIDER_BROKER_FLAG.into()],
+            },
         }
     }
 
-    pub fn script(&self) -> &Path {
-        &self.script
+    pub fn program(&self) -> Option<&Path> {
+        self.program.as_deref()
     }
 
-    /// `node and script.is_file()`.
+    pub fn args(&self) -> &[OsString] {
+        &self.args
+    }
+
+    /// A program that is a file.
     pub fn available(&self) -> bool {
-        self.node.is_some() && self.script.is_file()
+        self.program.as_deref().is_some_and(Path::is_file)
     }
 }
 
@@ -88,29 +105,29 @@ fn env_os(name: &str) -> Option<OsString> {
     std::env::var_os(name).filter(|value| !value.is_empty())
 }
 
-/// `_node_executable()`.
-pub fn node_executable() -> Option<PathBuf> {
-    if let Some(configured) = env_os(BROKER_NODE_ENV) {
-        let candidate = expanduser(Path::new(&configured));
-        if executable_file(&candidate) {
-            return Some(candidate);
-        }
-    }
-    if let Some(found) = which("node") {
-        return Some(found);
-    }
-    NODE_FALLBACKS
-        .iter()
-        .map(|raw| expanduser(Path::new(raw)))
-        .find(|candidate| executable_file(candidate))
+/// This process's executable, for starting another copy of it (the provider
+/// broker, and the broker's MCP child).
+///
+/// A Linux package upgrade can replace the binary while the daemon runs;
+/// `current_exe` then names a path that no longer exists (`… (deleted)`), and
+/// every CLI provider would read as unavailable until a restart. The kernel
+/// still links the running image at `/proc/<pid>/exe` for as long as this
+/// process lives, so that path stands in. Elsewhere the path is kept as is.
+pub fn running_executable() -> Option<PathBuf> {
+    running_executable_from(std::env::current_exe().ok()?, std::process::id())
 }
 
-/// `_broker_script()`.
-pub fn broker_script(bundled: &Path) -> PathBuf {
-    match env_os(BROKER_SCRIPT_ENV) {
-        Some(configured) => expanduser(Path::new(&configured)),
-        None => bundled.to_path_buf(),
+fn running_executable_from(current: PathBuf, pid: u32) -> Option<PathBuf> {
+    #[cfg(target_os = "linux")]
+    if !current.is_file() {
+        let image = PathBuf::from(format!("/proc/{pid}/exe"));
+        if image.is_file() {
+            return Some(image);
+        }
     }
+    #[cfg(not(target_os = "linux"))]
+    let _ = pid;
+    Some(current)
 }
 
 /// `candidate.is_file() and os.access(candidate, os.X_OK)`.
@@ -372,6 +389,17 @@ pub fn mount_fstype(path: &str, mounts_path: &Path) -> Option<String> {
     best.map(|(_, fstype)| fstype)
 }
 
+/// A TCP port on 127.0.0.1 that was free a moment ago, for a provider CLI
+/// the provider broker starts as its own loopback server (OpenCode 1's
+/// `serve --port=<port>`; `availablePort()` in the TypeScript broker). The
+/// listener is bound and closed again here; nothing is accepted, and no
+/// connection leaves the machine. Another process may take the port before
+/// the CLI binds it; the CLI then fails to start, and so does the turn.
+pub fn free_loopback_port() -> io::Result<u16> {
+    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
+    Ok(listener.local_addr()?.port())
+}
+
 /// `_broker_temp_parent()`: where the per-turn root goes, `None` for the
 /// system temporary directory (disk-backed).
 ///
@@ -479,10 +507,11 @@ impl Request {
 }
 
 impl Gate {
-    /// The one fake broker script an armed loopback observer admits.
+    /// The one fake broker (program and arguments) an armed loopback
+    /// observer admits.
     #[cfg(any(test, feature = "test-support"))]
-    pub fn with_broker_fixture(mut self, script: PathBuf) -> Self {
-        self.broker_fixture = Some(script);
+    pub fn with_broker_fixture(mut self, program: BrokerProgram) -> Self {
+        self.broker_fixture = Some(program);
         self
     }
 }
@@ -491,7 +520,7 @@ impl Gate {
 pub enum BrokerError {
     /// A gate refusal: offline, consent, or a non-broker route.
     Gate(Error),
-    /// No Node, or no script file.
+    /// No broker program, or it is not a file.
     Missing,
     /// The temporary root or the launch failed.
     Io,
@@ -505,11 +534,11 @@ impl From<Error> for BrokerError {
 
 impl Route {
     /// Start the broker. The gate is checked first, as `require_online` is;
-    /// a missing Node or script starts nothing.
+    /// a missing broker program starts nothing.
     pub fn spawn_broker(self) -> Result<BrokerProcess, BrokerError> {
         self.check()?;
         let program = self.request.broker.as_ref().ok_or(Error::InvalidEndpoint)?;
-        let (Some(node), true) = (program.node.clone(), program.script.is_file()) else {
+        let Some(executable) = program.program.clone().filter(|path| path.is_file()) else {
             return Err(BrokerError::Missing);
         };
         if self.gate.observer != Observer::Disabled {
@@ -517,15 +546,15 @@ impl Route {
                 .attempts
                 .record(&self.request, &self.request.endpoint, Operation::Process, 0);
             if self.gate.observer == Observer::Strict
-                || self.gate.broker_fixture.as_ref() != Some(&program.script)
+                || self.gate.broker_fixture.as_ref() != Some(program)
             {
                 std::panic::panic_any(TestEgressBlocked);
             }
         }
         let root = make_temp_root(broker_temp_parent().as_deref()).map_err(|_| BrokerError::Io)?;
-        let mut command = Command::new(node);
+        let mut command = Command::new(executable);
         command
-            .arg(&program.script)
+            .args(&program.args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -795,6 +824,27 @@ mod tests {
     use crate::{Consent, Ledger, Offline};
     use std::os::unix::fs::PermissionsExt;
 
+    #[test]
+    fn a_replaced_binary_is_started_through_the_running_image() {
+        let current = std::env::current_exe().unwrap();
+        let pid = std::process::id();
+        assert_eq!(
+            running_executable_from(current.clone(), pid),
+            Some(current.clone())
+        );
+        let mut deleted = current.into_os_string();
+        deleted.push(" (deleted)");
+        let expected = if cfg!(target_os = "linux") {
+            PathBuf::from(format!("/proc/{pid}/exe"))
+        } else {
+            PathBuf::from(&deleted)
+        };
+        assert_eq!(
+            running_executable_from(PathBuf::from(deleted), pid),
+            Some(expected)
+        );
+    }
+
     struct Parent {
         _dir: tempfile::TempDir,
         runtime: PathBuf,
@@ -966,7 +1016,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let script = dir.path().join("broker.sh");
         fs::write(&script, "echo 'must not run' >&2\nexit 1\n").unwrap();
-        let program = BrokerProgram::new(which("sh"), script.clone());
+        let program = BrokerProgram::new(which("sh"), vec![script.clone().into()]);
         let online = Gate::new(|| Offline::Online, Ledger::default());
         let request = Request::ai_broker(program.clone());
         let route = online
@@ -986,7 +1036,10 @@ mod tests {
             offline.authorize(request.clone(), Some(Consent::explicit_trigger(&request))),
             Err(Error::Offline)
         ));
-        let other = Request::ai_broker(BrokerProgram::new(which("sh"), dir.path().join("x")));
+        let other = Request::ai_broker(BrokerProgram::new(
+            which("sh"),
+            vec![dir.path().join("x").into()],
+        ));
         assert!(matches!(
             online.authorize(request, Some(Consent::explicit_trigger(&other))),
             Err(Error::ConsentScope)
@@ -1003,13 +1056,14 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_node_or_script_starts_nothing_and_counts_no_attempt() {
+    fn a_missing_broker_program_starts_nothing_and_counts_no_attempt() {
         let dir = tempfile::tempdir().unwrap();
         let mut gate = Gate::new(|| Offline::Online, Ledger::default());
         gate.observer = Observer::LoopbackAllowed;
         for program in [
-            BrokerProgram::new(None, dir.path().join("broker.sh")),
-            BrokerProgram::new(which("sh"), dir.path().join("absent.sh")),
+            BrokerProgram::new(None, vec![PROVIDER_BROKER_FLAG.into()]),
+            BrokerProgram::new(Some(dir.path().join("absent")), Vec::new()),
+            BrokerProgram::new(Some(dir.path().to_path_buf()), Vec::new()),
         ] {
             let request = Request::ai_broker(program);
             let route = gate
@@ -1018,6 +1072,37 @@ mod tests {
             assert!(matches!(route.spawn_broker(), Err(BrokerError::Missing)));
         }
         assert!(gate.attempts().records.is_empty());
+    }
+
+    #[test]
+    fn the_broker_is_this_executable_unless_an_override_names_another() {
+        let dir = tempfile::tempdir().unwrap();
+        let current = dir.path().join("kassiber");
+        let default = BrokerProgram::locate_from(None, Some(current.clone()));
+        assert_eq!(default.program(), Some(current.as_path()));
+        assert_eq!(default.args(), [OsString::from("--provider-broker")]);
+        assert_eq!(
+            BrokerProgram::locate_from(Some("".into()), Some(current.clone())),
+            default
+        );
+        assert_eq!(BrokerProgram::locate_from(None, None).program(), None);
+        // The override runs without arguments and must be an executable file;
+        // one that is not leaves no program instead of the default.
+        let fake = dir.path().join("fake-broker");
+        fs::write(&fake, "#!/bin/sh\n").unwrap();
+        let overridden =
+            BrokerProgram::locate_from(Some(fake.clone().into()), Some(current.clone()));
+        assert_eq!(overridden.program(), None);
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+        let overridden =
+            BrokerProgram::locate_from(Some(fake.clone().into()), Some(current.clone()));
+        assert_eq!(overridden.program(), Some(fake.as_path()));
+        assert!(overridden.args().is_empty());
+        assert!(overridden.available());
+        let missing =
+            BrokerProgram::locate_from(Some(dir.path().join("absent").into()), Some(current));
+        assert_eq!(missing.program(), None);
+        assert!(!missing.available());
     }
 
     #[test]

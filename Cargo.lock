@@ -2495,6 +2495,7 @@ dependencies = [
  "kassiber-operator",
  "kassiber-ownership",
  "kassiber-paths",
+ "kassiber-provider-broker",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-rates",
@@ -2810,6 +2811,25 @@ dependencies = [
  "typst",
  "typst-layout",
  "typst-pdf",
+]
+
+[[package]]
+name = "kassiber-provider-broker"
+version = "0.1.0"
+dependencies = [
+ "fancy-regex 0.20.0",
+ "getrandom 0.4.3",
+ "kassiber-envelope",
+ "kassiber-ipc",
+ "kassiber-mcp",
+ "kassiber-net",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "nix 0.30.1",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
 ]
 
 [[package]]

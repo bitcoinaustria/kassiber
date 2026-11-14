@@ -853,7 +853,7 @@
   {
     "id": "R66b-fixture-only",
     "file": "crates/net/src/broker.rs",
-    "find": "                || self.gate.broker_fixture.as_ref() != Some(&program.script)\n",
+    "find": "                || self.gate.broker_fixture.as_ref() != Some(program)\n",
     "replace": "",
     "expect_failing": [
       "every_launch_is_seen_by_the_observer_and_a_strict_one_blocks_it"
@@ -863,12 +863,12 @@
   {
     "id": "R66b-missing-script",
     "file": "crates/net/src/broker.rs",
-    "find": "(program.node.clone(), program.script.is_file())",
-    "replace": "(program.node.clone(), true)",
+    "find": "program.program.clone().filter(|path| path.is_file())",
+    "replace": "program.program.clone()",
     "expect_failing": [
-      "a_missing_node_or_script_starts_nothing_and_counts_no_attempt"
+      "a_missing_broker_program_starts_nothing_and_counts_no_attempt"
     ],
-    "rule": "No Node or no script file starts nothing and counts no attempt."
+    "rule": "A broker program that is not a file starts nothing and counts no attempt."
   },
   {
     "id": "R66b-runtime-dir-mode",

@@ -82,7 +82,7 @@ third-party package or runtime requirement is added.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
-| `getrandom` | `0.4.3` (exact) | OS randomness for Rust credential enrollment, invalidation generations and backup preview capabilities | MIT OR Apache-2.0 |
+| `getrandom` | `0.4.3` (exact) | OS randomness for Rust credential enrollment, invalidation generations and backup preview capabilities, and the provider broker's tool-call ids, bridge pipe names and private temporary-directory names | MIT OR Apache-2.0 |
 | `bdk_wallet` | `=3.0.0` | Native in-memory watch-only wallet state and indexing matching bdkpython; standard library and descriptor parsing alone cannot reproduce BDK's update model. No BDK storage or connector features | MIT OR Apache-2.0 |
 | `bdk_chain` | `=0.23.3` | Native graph, chain checkpoints and changeset merging matching the Python binding; fetched data comes through Kassiber's consent-bound clients | MIT OR Apache-2.0 |
 | `bdk_core` | `=0.6.3` | Exact BDK script requests, transaction updates and confirmation anchors; keeps the native observer's update contract pinned to Python | MIT OR Apache-2.0 |
@@ -113,10 +113,6 @@ third-party package or runtime requirement is added.
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
 | `i18next` | `25.8.18` (exact) | Desktop UI localization runtime (English/German, expandable); see [docs/reference/i18n.md](docs/reference/i18n.md) | MIT |
 | `react-i18next` | `16.5.8` (exact) | React bindings (hooks/provider) for i18next translations | MIT |
-| `@opencode-ai/sdk` | `1.18.10` (exact) | Typed client for the loopback OpenCode server supervised by Kassiber | MIT |
-| `@modelcontextprotocol/sdk` | `^1.30.0` | Ephemeral local MCP server that carries Kassiber's typed tool schemas into the Claude, OpenCode, and Copilot CLIs | MIT |
-| `@agentclientprotocol/sdk` | `1.5.0` (exact) | Agent Client Protocol client for the GitHub Copilot CLI supervised by the chat broker | Apache-2.0 |
-| `zod` | `4.4.3` (exact) | JSON-Schema-to-validator conversion for the tool schemas that MCP server advertises | MIT |
 | `fs2` | `0.4.3` | Cross-platform exclusive advisory lock for update-check consent and in-flight GitHub requests | MIT OR Apache-2.0 |
 | `dirs` | `6.0.0` | Resolves an absolute per-user home directory before the Tauri app handle exists | MIT OR Apache-2.0 |
 | `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider storage and runtime CLI remembered unlock; no standard-library native credential API | MIT OR Apache-2.0 |
@@ -130,7 +126,7 @@ third-party package or runtime requirement is added.
 | `zbus-secret-service-keyring-store` | `1.0.0` | Explicit Linux Secret Service backend for AI provider API keys and Python-compatible CLI remembered unlock; runtime use is isolated behind `kassiber-secrets/native-keyring`, keeping D-Bus/Tokio out of core-only builds; avoids kernel-keyutils fallback | MIT OR Apache-2.0 |
 | `num-bigint` / `num-integer` / `num-traits` | `0.4` / `0.1` / `0.2` | Arbitrary-precision coefficients for the CPython-compatible decimal type (`crates/pydecimal`) the tax engine and the backend crates share, and Python's unbounded ints in `crates/pyjson` | MIT OR Apache-2.0 |
 | `serde` / `serde_json` | `1.0.228` / `1` | JSON request/response documents and storage manifests at the tax and custody Python boundary; wallet CLI config intake reuses the locked arbitrary-precision parser because the standard library has no JSON parser; persisted Python text uses `kassiber-pyjson`; custody enables arbitrary integers and correctly rounded float parsing; its CPython codec preserves raw object order; the existing `raw_value` feature retains unported local snapshot fragments during the typed migration, with no new package or lockfile dependency | MIT OR Apache-2.0 |
-| `fancy-regex` | `0.20` | Backtracking regexes (over `regex-automata`/`regex-syntax`) for redaction and partition public-watch-material projections, which need lookbehind and lookahead; local attachment filename sanitization reuses the same frozen CPython Unicode class | MIT |
+| `fancy-regex` | `0.20` | Backtracking regexes (over `regex-automata`/`regex-syntax`) for redaction and partition public-watch-material projections, which need lookbehind and lookahead; local attachment filename sanitization reuses the same frozen CPython Unicode class; the provider broker's JavaScript-compatible error redaction needs its backreference | MIT |
 | `age` | `0.12` | In-process streaming passphrase encryption for partition and `.kassiber` backups, compatible with Python's pyrage format | MIT OR Apache-2.0 |
 | `tar` | `0.4` | Partition and `.kassiber` archive encoding/reading; the latter retains Python's count-only attachment manifest | MIT OR Apache-2.0 |
 | `rustls` / `rustls-webpki` | `0.23` / locked transitive | TLS and certificate/hostname verification over `kassiber-net`'s guarded stream; the standard library has no TLS implementation. Automatic networking is never delegated to a client SDK | Apache-2.0 OR ISC OR MIT / ISC |
@@ -144,11 +140,11 @@ third-party package or runtime requirement is added.
 
 | `rusqlite` / `libsqlite3-sys` | `0.40.1` (exact) / locked transitive | Existing-book Rust runtime; SQLite's backup/transaction APIs and bundled SQLCipher are unavailable in the standard library | MIT / MIT (bindings); public domain (SQLite), BSD-style (SQLCipher community) |
 | `openssl-src` / `openssl-sys` | locked transitive | Vendored SQLCipher crypto on Linux/Windows avoids an undeclared system OpenSSL runtime; macOS selects CommonCrypto | Apache-2.0 / MIT |
-| `sha2` | `0.10` (custody), `0.11` (storage, attachments and backup staging) | Persisted custody evidence/observation commitments, Python-compatible project/schema/remembered-account digests, managed attachment hashes and desktop restore staging commitments; unified with native Secret Service's RustCrypto generation; no standard-library cryptographic hash | MIT OR Apache-2.0 |
+| `sha2` | `0.10` (custody), `0.11` (storage, attachments, backup staging and the provider broker) | Persisted custody evidence/observation commitments, Python-compatible project/schema/remembered-account digests, managed attachment hashes, desktop restore staging commitments and the provider broker's Codex tool-catalog fingerprint; unified with native Secret Service's RustCrypto generation; no standard-library cryptographic hash | MIT OR Apache-2.0 |
 | `ssh-key` / `signature` | `=0.6.7` / `=2.2.0`, default features off, `std` and `ed25519` only | In-process `verify-download` signature check replacing the `ssh-keygen -Y verify` subprocess: the SSHSIG signed-data encoding and Ed25519 verification. Kassiber keeps OpenSSH's own armour and field parsing, which the crate's stricter PEM decoder does not reproduce. No key generation, encryption, RSA, ECDSA or I/O | Apache-2.0 OR MIT |
 | `ed25519-dalek` / `ed25519` / `ssh-encoding` / `ssh-cipher` / `pem-rfc7468` / `base64ct` | locked transitive (`2.2.0` / `2.2.3` / `0.2.0` / `0.2.0` / `0.7.0` / `1.8.3`) | ssh-key's Ed25519 verifier (canonical-scalar checking, as OpenSSH 10.6 verifies) and its wire, cipher-name and PEM support; the lockfile also lists ssh-key's optional RSA/ECDSA crates, which are not compiled | BSD-3-Clause / Apache-2.0 OR MIT |
 | `zeroize` | `1` | Erases application-owned passphrase, fd input and key-literal buffers on drop, including error paths | MIT OR Apache-2.0 |
-| `nix` / `libc` | `0.30` / `0.2` | OS-account-home/uid lookup, no-follow file flags, exclusive atomic storage publication unavailable in the standard library, consuming raw passphrase fds without assuming a valid Rust descriptor, and test-only journal-loader process CPU timing | MIT / MIT OR Apache-2.0 |
+| `nix` / `libc` | `0.30` / `0.2` | OS-account-home/uid lookup, no-follow file flags, exclusive atomic storage publication unavailable in the standard library, consuming raw passphrase fds without assuming a valid Rust descriptor, test-only journal-loader process CPU timing, and the provider broker's SIGTERM to a tracked agent, errno names and executable lookup | MIT / MIT OR Apache-2.0 |
 | `windows-sys` | `0.61` | Windows native ownership SID checks, stable AppData, and Python-compatible file identity; no standard-library owner/SID API | MIT OR Apache-2.0 |
 | `rpassword` | `7` | Restoring no-echo controlling-terminal passphrase prompt; the standard library has no portable terminal echo control | Apache-2.0 OR MIT |
 | `toml_edit` | `0.25`, parse only (dev only) | Parse Cargo dependency, feature, patch/replace and source policy in the network chokepoint regression scanner; the standard library has no TOML parser, and line matching missed valid Cargo syntax | MIT OR Apache-2.0 |
@@ -160,8 +156,9 @@ third-party package or runtime requirement is added.
 ## Notable downstream license note
 
 The September 2026 security refresh uses frontend overrides to select patched
-compatible versions for existing router, provider-broker and build-tool
-dependencies, rather than adding new frameworks. Device sync was removed on
+compatible versions for existing router and build-tool dependencies, rather
+than adding new frameworks; the provider-broker ones left with the TypeScript
+broker ([plan 23](docs/plan/23-rust-provider-broker.md)). Device sync was removed on
 2026-09-30 together with its `spake2`, `zeroconf` and `qrcode` dependencies.
 The package-manager lockfiles remain the authoritative transitive inventory.
 
@@ -202,7 +199,6 @@ Payments protocol testing. It is not a Kassiber runtime dependency.
 | --- | --- | --- | --- |
 | [Sparrow Frigate](https://github.com/sparrowwallet/frigate) | `dev/regtest/Dockerfile.frigate`, `dev/regtest/compose.bitcoin.yml` | Optional regtest Electrum server for BIP352 Silent Payments discovery | Apache-2.0 |
 | [serde_yaml](https://github.com/dtolnay/serde-yaml) | `crates/repo-checks/Cargo.toml` (dev only), `0.9.34`, locked transitive of Typst | Parses the GitHub Actions workflows for the repository's action pin-policy test; not linked into any shipped binary | MIT OR Apache-2.0 |
-| [esbuild](https://github.com/evanw/esbuild) | `ui-tauri/package.json`, `ui-tauri/provider-broker/` | Bundles the TypeScript chat provider broker into one file (`ui-tauri/provider-broker/dist/index.mjs`); it is a build dependency, not a provider runtime | MIT |
 | [happy-dom](https://github.com/capricorn86/happy-dom), [Testing Library](https://github.com/testing-library/react-testing-library) | `ui-tauri/package.json`, `*.dom.test.tsx` | Mounted desktop-UI tests: a DOM for React effects to run in, and `renderHook`/`act` to drive them. Opt-in per file; the default suite stays static-render on Node | MIT |
 
 ## Adapted source code

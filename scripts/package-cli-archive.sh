@@ -3,24 +3,19 @@
 #
 #   <name>/kassiber[.exe]
 #   <name>/BUILD_INFO.json
-#   <name>/provider_broker/index.mjs
 #
-# The binary finds the AI provider broker at <executable dir>/provider_broker/
-# (kassiber_ai::broker::bundled_script); without it, CLI-backed AI providers
-# report the broker as unavailable. GNU tar archives are byte-reproducible for
-# a fixed SOURCE_DATE_EPOCH.
+# GNU tar archives are byte-reproducible for a fixed SOURCE_DATE_EPOCH.
 set -euo pipefail
 export LC_ALL=C
 
 usage() {
   cat >&2 <<'EOF'
-Usage: scripts/package-cli-archive.sh --binary PATH --broker PATH --build-info PATH
+Usage: scripts/package-cli-archive.sh --binary PATH --build-info PATH
                                       --name NAME --format tar|zip --output-dir DIR
 EOF
 }
 
 binary=""
-broker=""
 build_info=""
 name=""
 format=""
@@ -28,7 +23,6 @@ output_dir=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --binary) binary="${2:-}"; shift 2 ;;
-    --broker) broker="${2:-}"; shift 2 ;;
     --build-info) build_info="${2:-}"; shift 2 ;;
     --name) name="${2:-}"; shift 2 ;;
     --format) format="${2:-}"; shift 2 ;;
@@ -37,11 +31,10 @@ while [ "$#" -gt 0 ]; do
     *) echo "Unknown argument: $1" >&2; usage; exit 2 ;;
   esac
 done
-for value in "$binary" "$broker" "$build_info" "$name" "$format" "$output_dir"; do
+for value in "$binary" "$build_info" "$name" "$format" "$output_dir"; do
   [ -n "$value" ] || { usage; exit 2; }
 done
 [ -x "$binary" ] || { echo "CLI binary is not executable: $binary" >&2; exit 1; }
-[ -s "$broker" ] || { echo "Provider broker bundle is missing: $broker" >&2; exit 1; }
 [ -s "$build_info" ] || { echo "BUILD_INFO.json is missing: $build_info" >&2; exit 1; }
 case "$name" in
   kassiber-cli-[a-z0-9-]*) ;;
@@ -68,12 +61,11 @@ archive="$output_dir/$name.$extension"
 [ ! -e "$archive" ] || { echo "Output already exists: $archive" >&2; exit 1; }
 staging="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-cli-archive.XXXXXX")"
 trap 'rm -rf "$staging"' EXIT
-mkdir -p "$staging/$name/provider_broker"
+mkdir -p "$staging/$name"
 cp "$binary" "$staging/$name/$exe_name"
 cp "$build_info" "$staging/$name/BUILD_INFO.json"
-cp "$broker" "$staging/$name/provider_broker/index.mjs"
-chmod 755 "$staging/$name" "$staging/$name/provider_broker" "$staging/$name/$exe_name"
-chmod 644 "$staging/$name/BUILD_INFO.json" "$staging/$name/provider_broker/index.mjs"
+chmod 755 "$staging/$name" "$staging/$name/$exe_name"
+chmod 644 "$staging/$name/BUILD_INFO.json"
 
 if [ "$format" = zip ]; then
   (cd "$staging" && 7z a -tzip "$archive" "$name" >/dev/null)

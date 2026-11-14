@@ -22,7 +22,7 @@ fn sensitive_windows_provider_fails_before_resolution_or_spawn() {
             .unwrap()
             .with_locate(Arc::new(move || {
                 flag.store(true, Ordering::SeqCst);
-                BrokerProgram::new(None, "index.mjs".into())
+                BrokerProgram::new(None, vec!["--provider-broker".into()])
             }));
     let messages = vec![dict([
         ("role", s("user")),

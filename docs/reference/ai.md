@@ -275,24 +275,15 @@ The implementation keeps those invariants in one client. Prepared tool-loop
 context is an explicit typed input and cannot be combined with the legacy
 message input accidentally. HTTP transport lives in
 [`crates/ai/src/transport`](../../crates/ai/src/transport/mod.rs).
-Fixed external CLI locators route through the bundled Node/TypeScript broker in
-`ui-tauri/provider-broker`; the backend supervises that JSONL process through
-[`crates/ai/src/broker`](../../crates/ai/src/broker/mod.rs).
-
-### Building the broker from a source checkout
-
-The broker ships as a single bundled `ui-tauri/provider-broker/dist/index.mjs`,
-built by esbuild from `ui-tauri/provider-broker/src`. It is **not committed** —
-release builds produce it before packaging. In a source checkout the CLI-backed
-providers report `ai_unavailable` until you build it once:
-
-```bash
-pnpm --dir ui-tauri run broker:build
-```
-
-`pnpm --dir ui-tauri run build` runs that step first, so a desktop build already
-covers it. Point `KASSIBER_AI_PROVIDER_BROKER` at another path to override which
-script is spawned.
+Fixed external CLI locators route through the provider broker, which the
+`kassiber` binary itself serves as `kassiber --provider-broker`
+([`crates/provider-broker`](../../crates/provider-broker/src/lib.rs),
+[plan 23](../plan/23-rust-provider-broker.md)); the backend starts one broker
+process per request and supervises that JSONL process through
+[`crates/ai/src/broker`](../../crates/ai/src/broker/mod.rs). Nothing extra is
+built or installed for it, and no Node.js runtime is involved. Tests point
+`KASSIBER_AI_PROVIDER_BROKER` at a fake broker executable, which is then run
+without arguments.
 
 ## Privacy warning
 
@@ -703,10 +694,9 @@ executables, reports `ready`, `missing executable`, or `authentication
 required`, and tells the user to run the provider's normal login command
 outside Kassiber when necessary. It uses Codex `app-server`, the Claude
 executable's `--output-format stream-json` event stream with strict MCP config,
-the OpenCode 1 SDK or OpenCode 2 HTTP API against a temporary loopback server, and the
-Agent Client Protocol for GitHub Copilot. A local Node.js executable
-meeting the [broker package requirements](../../ui-tauri/package.json) is
-required to run the bundled broker.
+the OpenCode 1 or OpenCode 2 HTTP API against a temporary loopback server, and the
+Agent Client Protocol for GitHub Copilot. Only the provider's own CLI has to
+be installed.
 
 OpenCode discovery and chat support the 1.x CLI (tested with 1.18.10) and stable
 2.x (tested with 2.2.0). Version 2 uses its current model/provider HTTP endpoints
@@ -746,7 +736,7 @@ error code and does not establish that the user's prompt was invalid.
 ### Agent Client Protocol agents
 
 [ACP](https://agentclientprotocol.com) is JSON-RPC over an agent CLI's stdio.
-One generic adapter (`ui-tauri/provider-broker/src/acp.ts`) carries the
+One generic adapter (`crates/provider-broker/src/acp.rs`) carries the
 conversation, permission requests, and the Kassiber MCP server for every agent
 in its table, so adding an agent is a table entry rather than a new protocol
 client. ACP has no portable way to switch off an agent's own shell, file, and
@@ -2153,7 +2143,7 @@ transport and provider protections against the
 
 - [Kassiber CLI skill](../../skills/kassiber/SKILL.md)
 - [`../../crates/ai/`](../../crates/ai/) (catalog, selection, transport, broker client, chat)
-- [`../../ui-tauri/provider-broker/`](../../ui-tauri/provider-broker/)
+- [`../../crates/provider-broker/`](../../crates/provider-broker/) (the provider broker, `kassiber --provider-broker`)
 - [`../plan/08-external-document-reconciliation.md`](../plan/08-external-document-reconciliation.md)
 - [Privacy & security](privacy-and-security.md)
 - [CLI proxy providers](ai-cli-proxy.md)

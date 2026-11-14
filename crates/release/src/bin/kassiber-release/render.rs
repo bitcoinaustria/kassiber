@@ -246,11 +246,7 @@ sha256sums=('{license_sha256}'
             '{artifact_sha256}')
 
 package() {{
-  # The binary finds the AI provider broker beside its resolved executable.
-  install -Dpm755 "${{srcdir}}/kassiber-cli-linux-x64/kassiber"     "${{pkgdir}}/usr/lib/kassiber-cli/kassiber"
-  install -Dpm644 "${{srcdir}}/kassiber-cli-linux-x64/provider_broker/index.mjs"     "${{pkgdir}}/usr/lib/kassiber-cli/provider_broker/index.mjs"
-  install -dm755 "${{pkgdir}}/usr/bin"
-  ln -s ../lib/kassiber-cli/kassiber "${{pkgdir}}/usr/bin/kassiber"
+  install -Dpm755 "${{srcdir}}/kassiber-cli-linux-x64/kassiber"     "${{pkgdir}}/usr/bin/kassiber"
   install -Dpm644 "${{srcdir}}/LICENSE"     "${{pkgdir}}/usr/share/licenses/${{pkgname}}/LICENSE"
 }}
 "#

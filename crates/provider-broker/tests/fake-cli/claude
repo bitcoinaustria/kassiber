@@ -1,0 +1,53 @@
+#!/bin/sh
+# A fake Claude CLI for the provider broker's tests (no Node, no network).
+# Behaviour comes from files beside it:
+#   version, auth, auth-exit  what `--version` and `auth status --json` say
+#   help                      what `--help` prints
+#   stream.jsonl              stream-json lines a turn prints after stdin ends
+#   stderr, exit              a turn's stderr and exit code
+#   mcp-call                  an MCP `tools/call` line: start the server from
+#                             --mcp-config and call it before answering
+fixture=${0%/*}
+. "$fixture/record.sh"
+case "$1" in
+  --version)
+    if [ -f "$fixture/version" ]; then cat "$fixture/version"; else echo '2.1.287 (Claude Code)'; fi
+    exit 0 ;;
+  auth)
+    if [ -f "$fixture/auth" ]; then cat "$fixture/auth"; else echo '{"loggedIn":true}'; fi
+    exit "$(cat "$fixture/auth-exit" 2>/dev/null || echo 0)" ;;
+esac
+mcp_config=
+previous=
+for arg; do
+  if [ "$arg" = --help ]; then
+    if [ -f "$fixture/help" ]; then cat "$fixture/help"; else echo '  --no-session-persistence  Disable session persistence'; fi
+    exit 0
+  fi
+  [ "$previous" = --mcp-config ] && mcp_config=$arg
+  previous=$arg
+done
+cat > "$call/stdin"
+if [ -f "$fixture/mcp-call" ] && [ -n "$mcp_config" ]; then
+  # {"mcpServers":{"kassiber":{"command":"...","args":["...",...]}}}
+  command=$(printf '%s' "$mcp_config" | sed -n 's/.*"command":"\([^"]*\)".*/\1/p')
+  args=$(printf '%s' "$mcp_config" | sed -n 's/.*"args":\[\(.*\)\]}}}$/\1/p' | sed 's/^"//; s/"$//; s/","/ /g')
+  mkfifo "$call/mcp-in"
+  # shellcheck disable=SC2086 # the arguments are paths without spaces
+  "$command" $args < "$call/mcp-in" > "$call/mcp-out" &
+  server=$!
+  exec 3> "$call/mcp-in"
+  printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"fake-claude","version":"0"}}}' >&3
+  printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}' >&3
+  cat "$fixture/mcp-call" >&3
+  tries=0
+  until grep -Eq '"id": ?2[,}]' "$call/mcp-out" 2>/dev/null || [ "$tries" -ge 400 ]; do
+    sleep 0.05
+    tries=$((tries + 1))
+  done
+  exec 3>&-
+  wait "$server"
+fi
+if [ -f "$fixture/stderr" ]; then cat "$fixture/stderr" >&2; fi
+if [ -f "$fixture/stream.jsonl" ]; then cat "$fixture/stream.jsonl"; fi
+exit "$(cat "$fixture/exit" 2>/dev/null || echo 0)"

@@ -132,9 +132,6 @@ run "$release_tool" build-info --output "$work/BUILD_INFO.json" \
   --run-id local --channel "$channel"
 
 run pnpm --dir ui-tauri install --frozen-lockfile
-run pnpm --dir ui-tauri run broker:build
-broker="$ROOT/ui-tauri/provider-broker/dist/index.mjs"
-test -s "$broker"
 
 smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-linux-smoke.XXXXXX")"
 trap 'rm -rf "$smoke_root"' EXIT
@@ -144,25 +141,23 @@ run "$ROOT/scripts/check-packaged-cli-no-egress.sh" --cli "$binary" \
   --scratch "$smoke_root/no-egress"
 
 name="kassiber-cli-$TARGET"
-run "$ROOT/scripts/package-cli-archive.sh" --binary "$binary" --broker "$broker" \
+run "$ROOT/scripts/package-cli-archive.sh" --binary "$binary" \
   --build-info "$work/BUILD_INFO.json" --name "$name" --format tar --output-dir "$release"
 if [ "$want_deb" -eq 1 ]; then
-  run "$ROOT/scripts/package-cli-deb.sh" --binary "$binary" --broker "$broker" \
+  run "$ROOT/scripts/package-cli-deb.sh" --binary "$binary" \
     --version "$version" --architecture amd64 --output "$release/$name.deb"
 fi
 if [ "$want_rpm" -eq 1 ]; then
-  run "$ROOT/scripts/package-cli-rpm.sh" --binary "$binary" --broker "$broker" \
+  run "$ROOT/scripts/package-cli-rpm.sh" --binary "$binary" \
     --version "$version" --architecture x86_64 --output "$release/$name.rpm"
 fi
 
-# Desktop: the same binary as the flat sidecar, with the broker and the build
-# record beside it, then the Tauri bundles.
+# Desktop: the same binary as the flat sidecar, with the build record beside
+# it, then the Tauri bundles.
 binaries="$ROOT/ui-tauri/src-tauri/binaries"
 find "$binaries" -mindepth 1 -maxdepth 1 ! -name .gitignore ! -name .gitkeep -exec rm -rf -- {} +
-mkdir -p "$binaries/provider_broker"
 cp "$binary" "$binaries/kassiber-cli-$TRIPLE"
 chmod 755 "$binaries/kassiber-cli-$TRIPLE"
-cp "$broker" "$binaries/provider_broker/index.mjs"
 cp "$work/BUILD_INFO.json" "$binaries/BUILD_INFO.json"
 
 bundles="deb"
@@ -179,8 +174,8 @@ desktop_deb="$(find "$bundle_dir/deb" -maxdepth 1 -type f -name '*.deb' -print -
 test -n "$desktop_deb"
 cp "$desktop_deb" "$release/kassiber-$TARGET.deb"
 
-# The deb payload: shell and sidecar on the floor, broker beside the sidecar,
-# and the sidecar is byte-for-byte the CLI built above.
+# The deb payload: shell and sidecar on the floor, and the sidecar is
+# byte-for-byte the CLI built above.
 payload="$work/desktop-deb"
 mkdir -p "$payload"
 (cd "$payload" && ar x "$desktop_deb" && tar -xf data.tar.* && rm -f data.tar.* control.tar.* debian-binary)
@@ -188,7 +183,6 @@ mkdir -p "$payload"
 sidecar="$payload/usr/lib/Kassiber/binaries/kassiber-cli-$TRIPLE"
 "$ROOT/scripts/check-linux-glibc-floor.sh" "$sidecar" "$glibc_floor"
 cmp "$sidecar" "$binary"
-test -s "$payload/usr/lib/Kassiber/binaries/provider_broker/index.mjs"
 test -x "$payload/usr/bin/kassiber"
 
 if [ "$want_appimage" -eq 1 ]; then

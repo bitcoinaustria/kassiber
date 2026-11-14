@@ -84,7 +84,7 @@ output byte-identical.
 | --- | --- | --- | --- |
 | AI skill references (10 files, 3,051 lines) | `kassiber/ai/skill_references/` | `crates/ai/skill_references/` | 10 `include_str!` in `crates/ai/src/skills.rs`; `docs/reference/ai.md`, `r6-ai-operator-port.md`, `rust-packaging.md`; `AGENTS.md`; `skills/kassiber/SKILL.md` links; the `prerelease-binaries.yml` path filter. The allowlist (`SKILL_REFERENCE_NAMES`) and the catalog's index are names only and don't change. |
 | Kraken rates (4 CSV, 15 MB, 2 README) | `kassiber/data/rates/kraken/` | `crates/rates/data/kraken/` | 4 `include_str!` and `bundled_path()` in `crates/rates/src/csv.rs`; `scripts/build-bundled-hourly-rates.py` |
-| Provider-broker bundle (build output, gitignored) | `kassiber/ai/provider_broker/index.mjs` | `ui-tauri/provider-broker/dist/index.mjs` | `ui-tauri/package.json` `broker:build`; `prerelease-binaries.yml` (7 sites); `build-linux-x64-rust-artifacts.sh`; `build-macos-arm64-rust-app.sh`; `kassiber-cli.spec`; `.gitignore` |
+| Provider-broker bundle (build output, gitignored) | `kassiber/ai/provider_broker/index.mjs` | `ui-tauri/provider-broker/dist/index.mjs` | `ui-tauri/package.json` `broker:build`; `prerelease-binaries.yml` (7 sites); `build-linux-x64-rust-artifacts.sh`; `build-macos-arm64-rust-app.sh`; `kassiber-cli.spec`; `.gitignore`; removed under [plan 23](23-rust-provider-broker.md) |
 | Python-core rules | `kassiber/AGENTS.md`, `kassiber/CLAUDE.md` | `crates/AGENTS.md`, `crates/CLAUDE.md` | rewritten for the Rust crates; the root `AGENTS.md` links |
 | Journal semantics pin | `crates/store/tests/semantics_reference.rs` reads `kassiber/db.py` | the Rust constant is the authority | delete the test; the stored-semantics goldens keep it pinned |
 

@@ -3,7 +3,8 @@
 //! executor against a scripted loopback provider. Replaces the kill-holding
 //! tests of `tests/test_rust_ai_chat.py`.
 //!
-//! The fake broker is a POSIX shell script (`/bin/sh` stands in for node):
+//! The fake broker is an executable POSIX shell script, which
+//! `KASSIBER_AI_PROVIDER_BROKER` runs in place of `kassiber --provider-broker`:
 //! it logs every line it reads, runs one tool round when the chat offers
 //! tools, and answers with a provider session cursor.
 
@@ -50,13 +51,16 @@ fn book() -> Sandbox {
     let broker = sandbox.path("broker/fake_broker.sh");
     std::fs::create_dir_all(broker.parent().unwrap()).unwrap();
     std::fs::write(&broker, FAKE_BROKER).unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&broker, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
     let broker = broker.to_string_lossy().into_owned();
     sandbox
         .set("KASSIBER_RUST_TEST_AI_TIME", TIME)
         .set("KASSIBER_RUST_TEST_AI_CHECKED_AT", CHECKED_AT)
         // AI keeps its own online gate; the observer admits loopback.
         .set("KASSIBER_NO_EGRESS", "1")
-        .set("KASSIBER_AI_BROKER_NODE", "/bin/sh")
         .set("KASSIBER_AI_PROVIDER_BROKER", broker.clone())
         .set("KASSIBER_RUST_TEST_AI_BROKER_FIXTURE", broker);
     for argv in [
