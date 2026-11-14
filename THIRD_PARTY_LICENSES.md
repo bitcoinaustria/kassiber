@@ -23,8 +23,7 @@ The R1 Rust runtime reuses those explicit native stores for bound CLI
 remembered unlock, with Python-compatible items in its separate namespace.
 Its minimal release notifier delegates the GitHub request to the bundled CLI
 sidecar rather than carrying a second HTTP client. The desktop and CLI
-coordinate update-check consent revocation with an owner-only advisory lock;
-the native side uses `fs2` for the cross-platform file-lock primitive.
+coordinate update-check consent revocation with an owner-only advisory lock.
 Kassiber's own tax engine is a Rust crate (`tax-engine/core`, MIT);
 the rows below list the direct Rust dependencies, and the root `Cargo.lock` is
 the transitive inventory.
@@ -113,7 +112,6 @@ third-party package or runtime requirement is added.
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
 | `i18next` | `25.8.18` (exact) | Desktop UI localization runtime (English/German, expandable); see [docs/reference/i18n.md](docs/reference/i18n.md) | MIT |
 | `react-i18next` | `16.5.8` (exact) | React bindings (hooks/provider) for i18next translations | MIT |
-| `fs2` | `0.4.3` | Cross-platform exclusive advisory lock for update-check consent and in-flight GitHub requests | MIT OR Apache-2.0 |
 | `dirs` | `6.0.0` | Resolves an absolute per-user home directory before the Tauri app handle exists | MIT OR Apache-2.0 |
 | `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider storage and runtime CLI remembered unlock; no standard-library native credential API | MIT OR Apache-2.0 |
 | `apple-native-keyring-store` | `1.0.0` | macOS Keychain backend for AI provider API keys and opt-in database passphrase remember-unlock | MIT OR Apache-2.0 |
@@ -128,10 +126,10 @@ third-party package or runtime requirement is added.
 | `serde` / `serde_json` | `1.0.228` / `1` | JSON request/response documents and storage manifests at the tax and custody Python boundary; wallet CLI config intake reuses the locked arbitrary-precision parser because the standard library has no JSON parser; persisted Python text uses `kassiber-pyjson`; custody enables arbitrary integers and correctly rounded float parsing; its CPython codec preserves raw object order; the existing `raw_value` feature retains unported local snapshot fragments during the typed migration, with no new package or lockfile dependency | MIT OR Apache-2.0 |
 | `fancy-regex` | `0.20` | Backtracking regexes (over `regex-automata`/`regex-syntax`) for redaction and partition public-watch-material projections, which need lookbehind and lookahead; local attachment filename sanitization reuses the same frozen CPython Unicode class; the provider broker's JavaScript-compatible error redaction needs its backreference | MIT |
 | `age` | `0.12` | In-process streaming passphrase encryption for partition and `.kassiber` backups, compatible with Python's pyrage format | MIT OR Apache-2.0 |
-| `tar` | `0.4` | Partition and `.kassiber` archive encoding/reading; the latter retains Python's count-only attachment manifest | MIT OR Apache-2.0 |
+| `tar` | `0.4`, default features off (no extended-attribute support) | Partition and `.kassiber` archive encoding/reading; the latter retains Python's count-only attachment manifest | MIT OR Apache-2.0 |
 | `rustls` / `rustls-webpki` | `0.23` / locked transitive | TLS and certificate/hostname verification over `kassiber-net`'s guarded stream; the standard library has no TLS implementation. Automatic networking is never delegated to a client SDK | Apache-2.0 OR ISC OR MIT / ISC |
 | `ring` / `untrusted` | locked transitive | rustls's explicitly selected cryptographic provider and bounded cryptographic input parsing; no new system TLS library | Apache-2.0 AND ISC / ISC |
-| `rustls-native-certs` / `rustls-pki-types` | `0.8` / locked transitive | Platform root selection and PEM/DER parsing for immutable consent-bound trust snapshots; unavailable in the standard library | Apache-2.0 OR ISC OR MIT / Apache-2.0 OR MIT |
+| `rustls-pki-types` | locked transitive | PEM/DER parsing for immutable consent-bound trust snapshots; unavailable in the standard library. Roots come from `SSL_CERT_FILE`, a host bundle file, or `webpki-roots`, never from a platform-store loader | Apache-2.0 OR MIT |
 | `webpki-roots` | `1` | Embedded Mozilla CA fallback matching the frozen Python certifi bootstrap's intent, without downloading roots at runtime | CDLA-Permissive-2.0 |
 | `httparse` | `1.10` | Mature bounded HTTP/1.1 header parser; a full HTTP client could introduce an ungated connector | MIT OR Apache-2.0 |
 | `url` / `idna` / `idna_adapter` | `2.5` / locked transitive / `~1.0`, default features off | URL and redirect-origin parsing without DNS; the adapter's ASCII-only mode enforces reviewed A-label host identities without pulling in ICU4X | MIT OR Apache-2.0 |
