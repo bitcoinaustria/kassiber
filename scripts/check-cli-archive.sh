@@ -14,7 +14,6 @@ trap 'rm -rf "$work"' EXIT
 
 printf '#!/bin/sh\nexit 0\n' > "$work/kassiber"
 chmod 755 "$work/kassiber"
-printf 'export {};\n' > "$work/index.mjs"
 printf '{}\n' > "$work/BUILD_INFO.json"
 mkdir "$work/tools"
 cat > "$work/tools/7z" <<'SH'
@@ -32,7 +31,7 @@ for spec in zip:zip tar:tar.gz; do
   dir="$work/run-$format"
   mkdir "$dir"
   printed="$(cd "$dir" && PATH="$work/tools:$PATH" "$ROOT/scripts/package-cli-archive.sh" \
-    --binary "$work/kassiber" --broker "$work/index.mjs" --build-info "$work/BUILD_INFO.json" \
+    --binary "$work/kassiber" --build-info "$work/BUILD_INFO.json" \
     --name kassiber-cli-test-x64 --format "$format" --output-dir release)" ||
     { echo "check-cli-archive: packaging $format failed" >&2; exit 1; }
   archive="$dir/release/kassiber-cli-test-x64.$suffix"

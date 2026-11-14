@@ -22,14 +22,8 @@ log/
 /reports
 /.pnpm-store
 
-# Built by `pnpm --dir ui-tauri run broker:build` into
-# ui-tauri/provider-broker/dist/ (ignored there as `dist/`), in CI before
-# packaging rather than committed.
-
-# Staged by the Windows packaging legs: the PATH copy of the sidecar and the
-# provider broker it finds beside itself.
+# Staged by the Windows packaging legs: the PATH copy of the sidecar.
 ui-tauri/src-tauri/bin/kassiber.exe
-ui-tauri/src-tauri/bin/provider_broker/
 # >>> generated test data: tests/test-data.lock (scripts/fetch-test-data.sh --ignore)
 /.test-data/
 /crates/ai/tests/data/vectors.json
