@@ -1,7 +1,7 @@
 //! The provider broker client (`BrokerAIClient` in
 //! `kassiber/ai/broker_client.py`): the CLI agent runtimes (Claude, Codex,
-//! OpenCode, Copilot) behind the bundled TypeScript broker, which stays a
-//! subprocess.
+//! OpenCode, Copilot) behind the provider broker, a subprocess this binary
+//! serves as `kassiber --provider-broker` (plan 23).
 //!
 //! Each broker process takes one JSONL request on its first stdin line and
 //! answers with JSONL events. A status or model probe reads to EOF under
@@ -19,7 +19,6 @@
 //! reads without a bound and lets the decode error escape).
 
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -44,24 +43,13 @@ pub const RUNTIME_STATUS_TIMEOUT: Duration = Duration::from_secs(35);
 /// The cap on a model listing's timeout.
 const MODELS_TIMEOUT_CAP: Duration = Duration::from_secs(35);
 
-/// Where a build finds the bundled script without an override:
-/// `<executable dir>/provider_broker/index.mjs`; `pnpm broker:build` writes
-/// it to `ui-tauri/provider-broker/dist/`.
-pub fn bundled_script() -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(Path::to_path_buf))
-        .unwrap_or_default()
-        .join("provider_broker")
-        .join("index.mjs")
-}
-
-/// How a client finds Node and the script, afresh for every request.
+/// How a client finds the broker program, afresh for every request.
 pub type Locate = Arc<dyn Fn() -> BrokerProgram + Send + Sync>;
 
-/// The environment overrides, else the bundled script.
+/// `KASSIBER_AI_PROVIDER_BROKER` (an executable run without arguments), else
+/// this executable with `--provider-broker`.
 pub fn default_locate() -> Locate {
-    Arc::new(|| BrokerProgram::locate(&bundled_script()))
+    Arc::new(|| BrokerProgram::locate(kassiber_net::running_executable()))
 }
 
 /// `_broker_unavailable()`.
@@ -70,7 +58,7 @@ pub fn broker_unavailable() -> AppError {
         "ai_unavailable",
         "The local AI provider broker is unavailable",
     )
-    .with_hint("Install Node.js 20 or newer, or use an HTTP/Ollama/oMLX provider.")
+    .with_hint("Reinstall Kassiber, or use an HTTP/Ollama/oMLX provider.")
     .retryable(true)
 }
 
@@ -570,7 +558,7 @@ impl BrokerClient {
         })
     }
 
-    /// Find Node and the script some other way (tests: a fake broker).
+    /// Find the broker program some other way (tests: a fake broker).
     pub fn with_locate(mut self, locate: Locate) -> Self {
         self.locate = locate;
         self

@@ -111,3 +111,18 @@ crates/wallets/tests/freshness/main.rs|run_taped|let mut command = Command::new(
 crates/release/src/bin/kassiber-release/macos.rs|capture|let output = Command::new(&args[0])
 crates/release/src/publish.rs|sign|let spawned = Command::new(&keygen)
 crates/release/tests/tool.rs|release_tool_matches_the_python_scripts|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber-release"));
+# Plan 23 provider broker: every provider CLI (status probes and agent turns)
+# starts here with the allowlisted provider environment, the turn's private
+# working directory and no standard streams unless the adapter pipes them.
+# The daemon's online gate and explicit-trigger consent cover the broker
+# process that runs this.
+crates/provider-broker/src/executables.rs|provider_command|let mut command = Command::new(executable);
+# The provider broker's black-box test: the product binary as
+# `--provider-broker` and `--provider-broker-mcp` with a cleared environment
+# (no provider CLI on PATH, a private HOME and temporary root), and
+# `/bin/kill` for its termination signals.
+crates/kassiber/tests/provider_broker.rs|broker|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/kassiber/tests/provider_broker.rs|signal|let status = Command::new("/bin/kill")
+# The Claude and Codex adapters through the same binary, with a fake CLI
+# directory as the whole PATH (plan 23, step 2).
+crates/kassiber/tests/provider_broker_claude_codex.rs|broker|let mut child = Command::new(env!("CARGO_BIN_EXE_kassiber"))
