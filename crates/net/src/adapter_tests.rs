@@ -300,10 +300,11 @@ fn verified_tls_rejects_untrusted_roots_and_wrong_names() {
         let result = HttpRequest::new("GET", &format!("https://{host}:{port}/"))
             .unwrap()
             .send(route(&gate, request), HttpOptions::default());
-        if success {
-            assert_eq!(result.unwrap().body, b"ok");
-        } else {
-            assert!(matches!(result, Err(Error::Tls)));
+        match (success, host) {
+            (true, _) => assert_eq!(result.unwrap().body, b"ok"),
+            // The test CA is no bundled root: an untrusted chain, not a fault.
+            (false, "localhost") => assert!(matches!(result, Err(Error::CertificateUntrusted))),
+            (false, _) => assert!(matches!(result, Err(Error::Tls))),
         }
         handle.join().unwrap();
     }
@@ -852,4 +853,319 @@ fn tls_read_checks_offline_once_and_cached_timeouts_do_not_repeat_options() {
     transport.prepare_read().unwrap();
     assert_eq!(transport.read_timeout, Some(Duration::from_secs(3)));
     handle.join().unwrap();
+}
+
+const LND: (&[u8], &[u8]) = (
+    include_bytes!("../tests/fixtures/lnd-ca.pem"),
+    include_bytes!("../tests/fixtures/lnd-ca-key.pem"),
+);
+const OPENSSL: (&[u8], &[u8]) = (
+    include_bytes!("../tests/fixtures/openssl-ca.pem"),
+    include_bytes!("../tests/fixtures/openssl-ca-key.pem"),
+);
+const CN_ONLY: (&[u8], &[u8]) = (
+    include_bytes!("../tests/fixtures/cn-only.pem"),
+    include_bytes!("../tests/fixtures/cn-only-key.pem"),
+);
+
+/// One TLS server session with `cert`; returns whether the client ever sent
+/// application data (it must not, for a capture or a refused certificate).
+fn tls_session(
+    server: TcpListener,
+    cert: &'static [u8],
+    key: &'static [u8],
+    reply: bool,
+) -> thread::JoinHandle<bool> {
+    thread::spawn(move || {
+        let mut stream = tls_server_with(accept(&server), cert, key);
+        if reply {
+            head(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                .unwrap();
+            stream.flush().unwrap();
+            return true;
+        }
+        let mut byte = [0];
+        matches!(stream.read(&mut byte), Ok(n) if n > 0)
+    })
+}
+
+fn https_get(gate: &Gate, host: &str, port: u16, trust: TlsTrust) -> Result<HttpResponse, Error> {
+    let request = Request::new(Subsystem::Sync, Endpoint::new(host, port).unwrap(), trust);
+    HttpRequest::new("GET", &format!("https://{host}:{port}/"))
+        .unwrap()
+        .send(route(gate, request), HttpOptions::default())
+}
+
+#[test]
+fn fetched_certificate_is_the_presented_leaf_and_sends_no_application_data() {
+    for (pem, key) in [LND, OPENSSL, CN_ONLY] {
+        for http in [false, true] {
+            let (server, port) = listener();
+            let handle = tls_session(server, pem, key, false);
+            let gate = test_gate(|| Offline::Online);
+            let request = Request::new(
+                Subsystem::Sync,
+                Endpoint::new("localhost", port).unwrap(),
+                TlsTrust::BundledRoots,
+            );
+            let presented = route(&gate, request)
+                .fetch_certificate(Duration::from_secs(5), http)
+                .unwrap();
+            assert!(
+                !handle.join().unwrap(),
+                "no application data after a capture"
+            );
+            let leaf = CertificateDer::from_pem_slice(pem).unwrap();
+            assert_eq!(presented.leaf_der(), leaf.as_ref());
+            assert_eq!(
+                CertificateDer::from_pem_slice(presented.leaf_pem().as_bytes()).unwrap(),
+                leaf
+            );
+            assert_eq!(presented.host(), "localhost");
+            let summary = presented.summary().unwrap();
+            assert_eq!(summary.subject.as_deref(), Some("localhost"));
+            assert_eq!(summary.issuer.as_deref(), Some("localhost"));
+            assert!(summary.self_issued);
+            assert!(summary.not_before < summary.not_after);
+            assert_eq!(presented.pin_refusal(), None);
+            assert!(!presented.trusted_by(&TlsTrust::BundledRoots).unwrap());
+            assert!(presented
+                .trusted_by(&TlsTrust::backend_pem(pem).unwrap())
+                .unwrap());
+            assert!(presented.trusted_by(&TlsTrust::ExplicitInsecure).is_err());
+            // Handshake bytes only: no HTTP request was ever written.
+            assert!(gate
+                .ledger()
+                .snapshot(0, 2000)
+                .records
+                .iter()
+                .all(|r| r.method.is_none()));
+        }
+    }
+}
+
+#[test]
+fn fetched_ca_signed_chain_is_trusted_by_its_root_and_unpinnable_by_ip() {
+    let dir = tempfile::tempdir().unwrap();
+    let ca_file = dir.path().join("ca.pem");
+    std::fs::write(&ca_file, CA).unwrap();
+    let ca = TlsTrust::ca_file(&ca_file).unwrap();
+    for host in ["localhost", "127.0.0.1"] {
+        let (server, port) = listener();
+        let handle = tls_session(server, CERT, KEY, false);
+        let gate = test_gate(|| Offline::Online);
+        let request = Request::new(
+            Subsystem::Sync,
+            Endpoint::new(host, port).unwrap(),
+            TlsTrust::BundledRoots,
+        );
+        let presented = route(&gate, request)
+            .fetch_certificate(Duration::from_secs(5), true)
+            .unwrap();
+        assert!(!handle.join().unwrap());
+        let summary = presented.summary().unwrap();
+        assert_eq!(summary.issuer.as_deref(), Some("Kassiber-Test-CA"));
+        assert!(!summary.self_issued);
+        assert_eq!(summary.names, ["localhost", "hidden.onion"]);
+        assert!(!presented.trusted_by(&TlsTrust::BundledRoots).unwrap());
+        if host == "localhost" {
+            assert!(presented.trusted_by(&ca).unwrap());
+            assert_eq!(presented.pin_refusal(), None);
+        } else {
+            // No IP SAN: neither the CA nor a pin can vouch for 127.0.0.1.
+            assert!(!presented.trusted_by(&ca).unwrap());
+            assert_eq!(presented.pin_refusal(), Some(PinRefusal::NameMismatch));
+        }
+    }
+}
+
+#[test]
+fn fetch_refuses_plaintext_offline_and_missing_consent_before_any_attempt() {
+    let request = Request::new(
+        Subsystem::Sync,
+        Endpoint::new("127.0.0.1", 9).unwrap(),
+        TlsTrust::Plaintext,
+    );
+    let gate = test_gate(|| Offline::Online);
+    assert!(matches!(
+        route(&gate, request.clone()).fetch_certificate(Duration::from_secs(1), false),
+        Err(Error::InvalidEndpoint)
+    ));
+    let request = Request::new(
+        Subsystem::Sync,
+        Endpoint::new("127.0.0.1", 9).unwrap(),
+        TlsTrust::BundledRoots,
+    );
+    assert!(matches!(
+        gate.authorize(request.clone(), None),
+        Err(Error::ConsentMissing)
+    ));
+    let offline = Arc::new(AtomicBool::new(false));
+    let state = offline.clone();
+    let gate = test_gate(move || {
+        if state.load(Ordering::SeqCst) {
+            Offline::Offline
+        } else {
+            Offline::Online
+        }
+    });
+    let route = route(&gate, request);
+    offline.store(true, Ordering::SeqCst);
+    assert!(matches!(
+        route.fetch_certificate(Duration::from_secs(1), false),
+        Err(Error::Offline)
+    ));
+    assert!(gate.attempts().records.is_empty());
+}
+
+#[test]
+fn fetch_goes_through_the_routes_socks_proxy() {
+    let (server, port) = listener();
+    let handle = thread::spawn(move || {
+        let mut socket = accept(&server);
+        let mut greeting = [0; 3];
+        socket.read_exact(&mut greeting).unwrap();
+        assert_eq!(greeting, [5, 1, 0]);
+        socket.write_all(&[5, 0]).unwrap();
+        let mut target = [0; 19];
+        socket.read_exact(&mut target).unwrap();
+        assert_eq!(&target[5..17], b"hidden.onion");
+        socket.write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 0]).unwrap();
+        let mut stream = tls_server(socket);
+        let mut byte = [0];
+        assert!(stream.read(&mut byte).is_err());
+        assert_eq!(stream.conn.server_name(), Some("hidden.onion"));
+    });
+    let gate = test_gate(|| Offline::Online);
+    let proxy = Proxy::new("socks5h", Endpoint::new("127.0.0.1", port).unwrap(), None).unwrap();
+    let request = Request::new(
+        Subsystem::Sync,
+        Endpoint::new("hidden.onion", 50002).unwrap(),
+        TlsTrust::BundledRoots,
+    )
+    .with_proxy(proxy);
+    let presented = route(&gate, request)
+        .fetch_certificate(Duration::from_secs(5), false)
+        .unwrap();
+    handle.join().unwrap();
+    assert_eq!(
+        presented.leaf_der(),
+        CertificateDer::from_pem_slice(CERT).unwrap().as_ref()
+    );
+    assert!(gate
+        .attempts()
+        .records
+        .iter()
+        .all(|r| r.host == "127.0.0.1" && r.operation != Operation::Dns));
+}
+
+#[test]
+fn untrusted_and_changed_certificates_are_distinct_errors() {
+    // No configured certificate: every self-signed shape and an unknown CA
+    // are untrusted, whatever webpki's reason (CaUsedAsEndEntity included).
+    for (pem, key) in [LND, OPENSSL, CN_ONLY, (CERT, KEY)] {
+        let (server, port) = listener();
+        let handle = tls_session(server, pem, key, false);
+        let gate = test_gate(|| Offline::Online);
+        let Err(error) = https_get(&gate, "localhost", port, TlsTrust::BundledRoots) else {
+            panic!("an untrusted certificate connected");
+        };
+        assert!(matches!(error, Error::CertificateUntrusted), "{error}");
+        assert_eq!(error.app_error().code, "tls_certificate_untrusted");
+        assert!(!handle.join().unwrap());
+    }
+    // A pinned backend whose server now shows another certificate, self-signed
+    // or CA-issued, has changed; it is never accepted or re-pinned.
+    for (pem, key) in [OPENSSL, (CERT, KEY)] {
+        let (server, port) = listener();
+        let handle = tls_session(server, pem, key, false);
+        let gate = test_gate(|| Offline::Online);
+        let Err(error) = https_get(
+            &gate,
+            "localhost",
+            port,
+            TlsTrust::backend_pem(LND.0).unwrap(),
+        ) else {
+            panic!("a changed certificate connected");
+        };
+        assert!(matches!(error, Error::CertificateChanged), "{error}");
+        let app = error.app_error();
+        assert_eq!(app.code, "tls_certificate_changed");
+        assert!(!app.retryable);
+        assert!(!handle.join().unwrap());
+    }
+    // The pinned certificate itself still connects.
+    let (server, port) = listener();
+    let handle = tls_session(server, LND.0, LND.1, true);
+    let gate = test_gate(|| Offline::Online);
+    assert_eq!(
+        https_get(
+            &gate,
+            "localhost",
+            port,
+            TlsTrust::backend_pem(LND.0).unwrap()
+        )
+        .unwrap()
+        .body,
+        b"ok"
+    );
+    handle.join().unwrap();
+    // A pinned leaf that names another host is a TLS fault, not a change.
+    let (server, port) = listener();
+    let handle = tls_session(server, LND.0, LND.1, false);
+    let gate = test_gate(|| Offline::Online);
+    assert!(matches!(
+        https_get(
+            &gate,
+            "127.0.0.1",
+            port,
+            TlsTrust::backend_pem(LND.0).unwrap()
+        ),
+        Err(Error::Tls)
+    ));
+    handle.join().unwrap();
+}
+
+#[test]
+fn fetch_checks_the_tls12_server_signature_too() {
+    let (server, port) = listener();
+    let handle = thread::spawn(move || {
+        let config = rustls::ServerConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_protocol_versions(&[&rustls::version::TLS12])
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![CertificateDer::from_pem_slice(LND.0).unwrap()],
+            PrivateKeyDer::from_pem_slice(LND.1).unwrap(),
+        )
+        .unwrap();
+        let mut stream = rustls::StreamOwned::new(
+            rustls::ServerConnection::new(Arc::new(config)).unwrap(),
+            accept(&server),
+        );
+        let mut byte = [0];
+        assert!(stream.read(&mut byte).is_err());
+        assert_eq!(
+            stream.conn.protocol_version(),
+            Some(rustls::ProtocolVersion::TLSv1_2)
+        );
+    });
+    let gate = test_gate(|| Offline::Online);
+    let request = Request::new(
+        Subsystem::Sync,
+        Endpoint::new("localhost", port).unwrap(),
+        TlsTrust::BundledRoots,
+    );
+    let presented = route(&gate, request)
+        .fetch_certificate(Duration::from_secs(5), false)
+        .unwrap();
+    handle.join().unwrap();
+    assert_eq!(
+        presented.leaf_der(),
+        CertificateDer::from_pem_slice(LND.0).unwrap().as_ref()
+    );
 }

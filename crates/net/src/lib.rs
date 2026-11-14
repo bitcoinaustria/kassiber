@@ -52,7 +52,7 @@ pub use http::{
 };
 pub use offline::OfflineCache;
 pub use process::{ClnConfig, ClnMethod, ClnProcessError};
-pub use tls::{RootCertificates, TlsTrust};
+pub use tls::{CertificateSummary, PinRefusal, PresentedCertificate, RootCertificates, TlsTrust};
 // Shared pure URL parsing keeps the reviewed URL dependency in this crate.
 pub use url::Url as HttpUrl;
 
@@ -609,6 +609,51 @@ impl Route {
         })))
     }
 
+    /// Fetch the certificate chain a TLS server presents, for an explicit user
+    /// trust decision. The handshake goes through this route's proxy and gate
+    /// like any connection, the server's handshake signature over the chain is
+    /// checked, and then the handshake is aborted: no application data is
+    /// written and the chain is never treated as trusted. `http` matches
+    /// [`HttpRequest::send`]: ALPN `http/1.1` and HTTP CONNECT proxies.
+    pub fn fetch_certificate(
+        self,
+        timeout: Duration,
+        http: bool,
+    ) -> Result<PresentedCertificate, Error> {
+        self.check()?;
+        if self.request.cln.is_some()
+            || self.request.broker.is_some()
+            || self.request.tls == TlsTrust::Plaintext
+        {
+            return Err(Error::InvalidEndpoint);
+        }
+        if self
+            .request
+            .proxy
+            .as_ref()
+            .is_some_and(|p| p.kind == ProxyKind::Http)
+            && !http
+        {
+            return Err(Error::ProxyUnsupported);
+        }
+        let deadline = Instant::now()
+            .checked_add(timeout)
+            .ok_or(Error::InvalidTimeout)?;
+        remaining(deadline)?;
+        let host = self.request.endpoint.host.clone();
+        let (capture, config) = tls::Capture::new(http)?;
+        // Never served from a recorded tape: the capture needs a live handshake.
+        #[cfg(feature = "test-observer")]
+        let result = self.connect_socket(timeout, Some(config), deadline, &Default::default());
+        #[cfg(not(feature = "test-observer"))]
+        let result = self.connect_socket(timeout, Some(config), deadline);
+        match (capture.take(&host), result) {
+            (Some(presented), _) => Ok(presented),
+            (None, Err(error)) => Err(error),
+            (None, Ok(_)) => Err(Error::Tls),
+        }
+    }
+
     /// Serve a recorded connection: the same checks, observer and ledger
     /// records as a real connect, and the recorded bytes instead of a socket.
     #[cfg(feature = "test-observer")]
@@ -878,6 +923,11 @@ pub enum Error {
     ProxyUnsupported,
     TrustInvalid,
     Tls,
+    /// The server's chain reaches no trusted root (for example a self-signed
+    /// certificate) and no certificate is configured for this route.
+    CertificateUntrusted,
+    /// A backend certificate is configured and the server presented another one.
+    CertificateChanged,
     HttpInvalid,
     ResponseTooLarge,
     RedirectRefused,
@@ -914,6 +964,8 @@ impl fmt::Display for Error {
                 Self::ProxyUnsupported => "ProxyUnsupported",
                 Self::TrustInvalid => "TLS trust configuration is invalid",
                 Self::Tls => "TLS certificate or handshake failed",
+                Self::CertificateUntrusted => "TLS certificate is not trusted",
+                Self::CertificateChanged => "TLS certificate changed",
                 Self::HttpInvalid => "Invalid HTTP message",
                 Self::ResponseTooLarge => "HTTP response is too large",
                 Self::RedirectRefused => "HTTP redirect refused",
@@ -963,6 +1015,16 @@ impl Error {
             Self::HttpInvalid | Self::ResponseTooLarge | Self::RedirectRefused | Self::RedirectLimit => {
                 AppError::new("protocol_error", self.to_string())
             }
+            Self::CertificateUntrusted => AppError::new(
+                "tls_certificate_untrusted",
+                "The server's TLS certificate is not signed by an authority Kassiber trusts",
+            )
+            .with_hint("If this is your own server with a self-signed certificate, compare its fingerprint with the one the server shows and trust it for this backend."),
+            Self::CertificateChanged => AppError::new(
+                "tls_certificate_changed",
+                "This server's certificate changed: it no longer matches the certificate trusted for this backend",
+            )
+            .with_hint("Kassiber does not replace a trusted certificate on its own. If you replaced the server's certificate, confirm the new fingerprint on the server itself before trusting it; otherwise someone may be impersonating the server."),
             Self::Io(_) | Self::Tls | Self::SocksProtocol => {
                 AppError::new("network_error", "network I/O failed").retryable(true)
             }
