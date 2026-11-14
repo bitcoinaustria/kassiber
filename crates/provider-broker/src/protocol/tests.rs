@@ -97,8 +97,9 @@ fn redacts_the_secret_itself_not_merely_its_label() {
     }
 }
 
-/// The exact output of the TypeScript `safeErrorMessage` on the same inputs
-/// (run under Node during the port).
+/// The output of the TypeScript `safeErrorMessage` on the same inputs (run
+/// under Node during the port), except where it left a credential in place:
+/// a scheme after a label, and quoted values it could not close.
 #[test]
 fn redaction_matches_the_typescript_rules_exactly() {
     for (input, expected) in [
@@ -134,8 +135,22 @@ fn redaction_matches_the_typescript_rules_exactly() {
         ("ask-abcdefghijk stays", "ask-abcdefghijk stays"),
         ("/home/bob/x and /homeless/y", "~/x and /homeless/y"),
         ("PASSWORD = 'hunter22' end", "PASSWORD = [redacted] end"),
-        // An unclosed quote leaves the value alone, as the backreference does.
-        (r#"token: "abc"#, r#"token: "abc"#),
+        // TypeScript left these in place.
+        (r#"token: "abc"#, "token: [redacted]"),
+        (r#"token: "abc def"#, "token: [redacted]"),
+        (
+            r#"{"apiKey": "two words", "x": 1}"#,
+            r#"{"apiKey": [redacted], "x": 1}"#,
+        ),
+        (r#"password='a,b' end"#, "password=[redacted] end"),
+        (
+            "token: Bearer synthetic-secret-value",
+            "token: [redacted] [redacted]",
+        ),
+        (
+            "authorization=Basic dXNlcjpwYXNz",
+            "authorization=[redacted] [redacted]",
+        ),
         ("first line\r\nsecond line token=x", "first line"),
         ("   \n anything", "Provider request failed."),
         ("", "Provider request failed."),

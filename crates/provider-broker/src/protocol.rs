@@ -720,12 +720,10 @@ static REDACTIONS: LazyLock<Vec<Redaction>> = LazyLock::new(|| {
     vec![
         // URL userinfo, before anything else rewrites the URL.
         rule(format!(r"://[^/@{SPACE}]+@"), "://[redacted]@"),
-        // JSON or quoted assignment: "apiKey": "secret".
-        rule(
-            format!(r#"(["']?(?:{labels})["']?[{SPACE}]*[:=][{SPACE}]*)(["']?)[^"',;{SPACE}]+\2"#),
-            "${1}[redacted]",
-        ),
         // A bare scheme + credential, whether or not a label preceded it.
+        // Before the assignment rule: that one would take the scheme word as
+        // the value (`token: Bearer x` -> `token: [redacted] x`), leaving
+        // the credential after it.
         rule(
             format!(
                 r"{WORD_START}({}|{})[{SPACE}]+[^{SPACE}]+",
@@ -733,6 +731,15 @@ static REDACTIONS: LazyLock<Vec<Redaction>> = LazyLock::new(|| {
                 ascii_ci("basic")
             ),
             "${1} [redacted]",
+        ),
+        // JSON or quoted assignment: "apiKey": "secret". A quoted value runs
+        // to its closing quote, or to the end of the line when it has none,
+        // so spaces, commas or a missing quote cannot leave it in place.
+        rule(
+            format!(
+                r#"(["']?(?:{labels})["']?[{SPACE}]*[:=][{SPACE}]*)(?:(["'])(?:(?!\2).)*\2?|[^"',;{SPACE}]+)"#
+            ),
+            "${1}[redacted]",
         ),
         // Vendor-shaped tokens standing alone.
         rule(

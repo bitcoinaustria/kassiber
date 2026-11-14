@@ -281,8 +281,7 @@ pub fn mcp_command(
         .open(&manifest)
         .and_then(|mut file| file.write_all(&body))
         .map_err(|error| fs_failure("open", &manifest, &error))?;
-    let executable = std::env::current_exe()
-        .ok()
+    let executable = kassiber_net::running_executable()
         .and_then(|path| path.into_os_string().into_string().ok())
         .ok_or_else(|| BrokerFailure::new("Kassiber broker executable path is unavailable."))?;
     let manifest = manifest

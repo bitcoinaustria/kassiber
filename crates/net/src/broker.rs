@@ -105,6 +105,31 @@ fn env_os(name: &str) -> Option<OsString> {
     std::env::var_os(name).filter(|value| !value.is_empty())
 }
 
+/// This process's executable, for starting another copy of it (the provider
+/// broker, and the broker's MCP child).
+///
+/// A Linux package upgrade can replace the binary while the daemon runs;
+/// `current_exe` then names a path that no longer exists (`… (deleted)`), and
+/// every CLI provider would read as unavailable until a restart. The kernel
+/// still links the running image at `/proc/<pid>/exe` for as long as this
+/// process lives, so that path stands in. Elsewhere the path is kept as is.
+pub fn running_executable() -> Option<PathBuf> {
+    running_executable_from(std::env::current_exe().ok()?, std::process::id())
+}
+
+fn running_executable_from(current: PathBuf, pid: u32) -> Option<PathBuf> {
+    #[cfg(target_os = "linux")]
+    if !current.is_file() {
+        let image = PathBuf::from(format!("/proc/{pid}/exe"));
+        if image.is_file() {
+            return Some(image);
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = pid;
+    Some(current)
+}
+
 /// `candidate.is_file() and os.access(candidate, os.X_OK)`.
 fn executable_file(candidate: &Path) -> bool {
     candidate.is_file() && access_x(candidate)
@@ -798,6 +823,27 @@ mod tests {
     use super::*;
     use crate::{Consent, Ledger, Offline};
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn a_replaced_binary_is_started_through_the_running_image() {
+        let current = std::env::current_exe().unwrap();
+        let pid = std::process::id();
+        assert_eq!(
+            running_executable_from(current.clone(), pid),
+            Some(current.clone())
+        );
+        let mut deleted = current.into_os_string();
+        deleted.push(" (deleted)");
+        let expected = if cfg!(target_os = "linux") {
+            PathBuf::from(format!("/proc/{pid}/exe"))
+        } else {
+            PathBuf::from(&deleted)
+        };
+        assert_eq!(
+            running_executable_from(PathBuf::from(deleted), pid),
+            Some(expected)
+        );
+    }
 
     struct Parent {
         _dir: tempfile::TempDir,

@@ -141,11 +141,19 @@ adds the provider broker client for CLI agent runtimes.
   and `--provider-broker-mcp`, and the daemon's switch away from Node.
 - [x] Plan 23 step 2: port the Claude and Codex, ACP and OpenCode adapters and
   their tests.
-- [ ] Rust provider broker follow-ups: hash the Codex session cursor over the
-  tools as the daemon sent them, not the parsed definitions (a reordered tool
-  field would start fresh threads instead of resuming); decide whether
-  OpenCode 1's event stream needs more than `kassiber-net`'s 64 MiB response
-  cap for very long turns.
+- [ ] Rust provider broker follow-ups (plan 23 reviews), hardening of
+  behaviour the TypeScript broker shared:
+  - Hash the Codex session cursor over the tools as the daemon sent them, not
+    the parsed definitions (a reordered tool field would start fresh threads
+    instead of resuming).
+  - Cap provider stdout lines (Codex, ACP) and OpenCode 1 event frames; only
+    OpenCode 2 is bounded.
+  - Fail the turn on a `tool_results` line serde cannot read, and when OpenCode
+    1's event stream never opens, instead of waiting for the daemon's watchdog.
+  - SIGKILL an ACP agent that ignores SIGTERM before removing its home, and
+    refuse new provider launches once termination cleanup has started.
+  - A black-box test that SIGTERM mid-turn kills the agent and removes the
+    turn's directories.
 - [x] Plan 23 step 3: remove the TypeScript broker, its npm packages and the
   `provider_broker/` packaging.
 - [x] CLI proxy providers ([reference](docs/reference/ai-cli-proxy.md)):

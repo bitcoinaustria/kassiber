@@ -49,7 +49,7 @@ pub type Locate = Arc<dyn Fn() -> BrokerProgram + Send + Sync>;
 /// `KASSIBER_AI_PROVIDER_BROKER` (an executable run without arguments), else
 /// this executable with `--provider-broker`.
 pub fn default_locate() -> Locate {
-    Arc::new(|| BrokerProgram::locate(std::env::current_exe().ok()))
+    Arc::new(|| BrokerProgram::locate(kassiber_net::running_executable()))
 }
 
 /// `_broker_unavailable()`.
