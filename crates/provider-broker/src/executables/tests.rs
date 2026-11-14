@@ -42,6 +42,30 @@ fn script(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
+/// Run a freshly written script, retrying while exec reports `ETXTBSY`.
+///
+/// A test thread that forks while [`script`] still has the file open for
+/// writing leaves a child holding that descriptor until it execs, and
+/// executing the file meanwhile fails with `ETXTBSY`. That window closes on
+/// its own, so the run is retried rather than reported.
+#[cfg(unix)]
+fn when_not_busy<T>(
+    mut run: impl FnMut() -> Result<T, crate::protocol::BrokerFailure>,
+) -> Result<T, crate::protocol::BrokerFailure> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        match run() {
+            Err(failure)
+                if failure.message().ends_with("ETXTBSY")
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            ran => return ran,
+        }
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn detects_an_executable_through_path_and_reports_missing_binaries() {
@@ -94,12 +118,14 @@ fn captures_a_providers_full_stdout_even_when_it_exits_immediately() {
         "awk 'BEGIN{for(i=0;i<8000;i++)print \"0123456789012345678901234\"}'\n",
     );
     for _ in 0..5 {
-        let output = run_provider(
-            ProviderId::Codex,
-            &command,
-            &[] as &[&str],
-            RunOptions::default(),
-        )
+        let output = when_not_busy(|| {
+            run_provider(
+                ProviderId::Codex,
+                &command,
+                &[] as &[&str],
+                RunOptions::default(),
+            )
+        })
         .unwrap();
         assert_eq!(output.code, Some(0));
         assert_eq!(output.stdout.len(), 8000 * 26);
@@ -119,16 +145,18 @@ fn runs_with_the_provider_environment_and_discards_stderr() {
         (OsString::from("PATH"), OsString::from("/usr/bin:/bin")),
         (OsString::from("KASSIBER_AI_BROKER"), OsString::from("1")),
     ];
-    let output = run_provider(
-        ProviderId::Codex,
-        &command,
-        &[] as &[&str],
-        RunOptions {
-            cwd: Some(root.path()),
-            env: Some(&env),
-            ..RunOptions::default()
-        },
-    )
+    let output = when_not_busy(|| {
+        run_provider(
+            ProviderId::Codex,
+            &command,
+            &[] as &[&str],
+            RunOptions {
+                cwd: Some(root.path()),
+                env: Some(&env),
+                ..RunOptions::default()
+            },
+        )
+    })
     .unwrap();
     assert_eq!(output.code, Some(7));
     assert!(
@@ -149,15 +177,17 @@ fn keeps_stdout_up_to_the_limit_and_drains_the_rest() {
         "kassiber-test-flood",
         "awk 'BEGIN{for(i=0;i<100000;i++)print \"0123456789\"}'\n",
     );
-    let output = run_provider(
-        ProviderId::Claude,
-        &command,
-        &[] as &[&str],
-        RunOptions {
-            limit: Some(10),
-            ..RunOptions::default()
-        },
-    )
+    let output = when_not_busy(|| {
+        run_provider(
+            ProviderId::Claude,
+            &command,
+            &[] as &[&str],
+            RunOptions {
+                limit: Some(10),
+                ..RunOptions::default()
+            },
+        )
+    })
     .unwrap();
     assert_eq!(output.code, Some(0));
     // The first chunk is kept whole, then nothing more.
