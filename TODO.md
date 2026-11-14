@@ -141,6 +141,12 @@ adds the provider broker client for CLI agent runtimes.
   and `--provider-broker-mcp`, and the daemon's switch away from Node.
 - [x] Plan 23 step 2: port the Claude and Codex, ACP and OpenCode adapters and
   their tests.
+- [ ] Release blocker for the first release with the Rust provider broker:
+  run one real chat turn with a tool call per provider (Claude, Codex,
+  OpenCode 1 and 2, Copilot) against `kassiber --provider-broker`, and one
+  tool turn on Windows (named-pipe bridge, `PATHEXT`) or say in the release
+  notes that CLI providers on Windows are untested. The port was proven only
+  against fake CLIs replaying the TypeScript broker's wire traffic.
 - [ ] Rust provider broker follow-ups (plan 23 reviews), hardening of
   behaviour the TypeScript broker shared:
   - Hash the Codex session cursor over the tools as the daemon sent them, not
