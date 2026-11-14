@@ -336,3 +336,7 @@ fn the_mcp_child_refuses_a_missing_manifest() {
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(stderr.starts_with("ENOENT: "), "{stderr}");
 }
+
+// GitHub Copilot over ACP against a fake `copilot` (plan 23, step 2).
+#[path = "provider_broker/acp.rs"]
+mod acp;
