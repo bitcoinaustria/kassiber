@@ -869,6 +869,20 @@ fn transport(config: &serde_json::Value) -> Vec<Option<String>> {
     TRANSPORT_FIELDS
         .iter()
         .map(|key| match config.get(*key) {
+            // Stored rows hold a boolean where a dotenv backend held "1":
+            // compare what the flag means, not how it was spelled.
+            value if *key == "insecure" => {
+                let on = match value {
+                    Some(serde_json::Value::Bool(on)) => *on,
+                    Some(serde_json::Value::Number(n)) => n.as_i64() == Some(1),
+                    Some(serde_json::Value::String(text)) => matches!(
+                        text.trim().to_ascii_lowercase().as_str(),
+                        "1" | "true" | "yes" | "on"
+                    ),
+                    _ => false,
+                };
+                on.then(|| "true".to_owned())
+            }
             None | Some(serde_json::Value::Null) => None,
             Some(serde_json::Value::String(text)) if text.trim().is_empty() => None,
             Some(serde_json::Value::String(text)) => Some(text.clone()),
@@ -1006,5 +1020,30 @@ fn execute(
             "not_implemented",
             "backend operation is not implemented",
         )),
+    }
+}
+
+#[cfg(test)]
+mod transport_tests {
+    use super::transport;
+    use serde_json::json;
+
+    #[test]
+    fn a_seeded_backend_compares_equal_to_its_dotenv_spelling() {
+        let dotenv = json!({"kind":"esplora","url":"https://node.local/api","insecure":"1","certificate":""});
+        let stored = json!({"kind":"esplora","url":"https://node.local/api","insecure":true});
+        assert_eq!(transport(&dotenv), transport(&stored));
+        for off in [json!("0"), json!(false), json!(null), json!("")] {
+            let a = json!({"kind":"esplora","url":"https://node.local/api","insecure":off});
+            assert_eq!(
+                transport(&a),
+                transport(&json!({"kind":"esplora","url":"https://node.local/api"}))
+            );
+        }
+        // A real change still differs.
+        let moved = json!({"kind":"esplora","url":"https://other.local/api","insecure":true});
+        assert_ne!(transport(&moved), transport(&stored));
+        let proxied = json!({"kind":"esplora","url":"https://node.local/api","insecure":true,"tor_proxy":"127.0.0.1:9050"});
+        assert_ne!(transport(&proxied), transport(&stored));
     }
 }
