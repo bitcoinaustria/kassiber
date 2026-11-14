@@ -841,10 +841,21 @@ fn redacts_a_provider_failure_that_carries_a_credential() {
 }
 
 #[test]
-fn reports_an_agent_that_exits_mid_turn_with_its_redacted_stderr() {
+fn reports_an_agent_that_exits_mid_turn() {
+    // The agent held its own stdout: the stream ends with it, and the closed
+    // connection is what the TypeScript broker reported.
     let fake = Fake::new()
         .session()
         .step("err Error: token=ghp_abcdefghijklmnop failed for /home/alice/x")
+        .step("exit 1");
+    let (result, _) = run_chat(&fake, &chat_request(json!({})));
+    assert_eq!(result.unwrap_err().message(), "ACP connection closed");
+    // Something else keeps stdout open: the exit ends the turn, with the
+    // redacted stderr.
+    let fake = Fake::new()
+        .session()
+        .step("err Error: token=ghp_abcdefghijklmnop failed for /home/alice/x")
+        .step("linger 2")
         .step("exit 1");
     let (result, _) = run_chat(&fake, &chat_request(json!({})));
     let failure = result.unwrap_err();
@@ -852,7 +863,7 @@ fn reports_an_agent_that_exits_mid_turn_with_its_redacted_stderr() {
         failure.message(),
         "GitHub Copilot ended without a terminal response. Error: token=[redacted] failed for ~/x"
     );
-    let quiet = Fake::new().session().step("exit 0");
+    let quiet = Fake::new().session().step("linger 2").step("exit 0");
     let (result, _) = run_chat(&quiet, &chat_request(json!({})));
     assert_eq!(
         result.unwrap_err().message(),

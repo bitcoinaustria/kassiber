@@ -46,10 +46,12 @@ const POLL: Duration = Duration::from_millis(10);
 /// How long an early-exit message waits for the rest of stderr.
 const STDERR_DRAIN: Duration = Duration::from_millis(250);
 
-/// After stdout closes, how long a chat waits for the process to exit
-/// before it reports the closed connection instead of the exit. Node raced
-/// the two events; the exit, which carries stderr, usually won.
-const EXIT_AFTER_CLOSE: Duration = Duration::from_millis(250);
+/// After the agent exits, how long a chat waits for its stdout to end before
+/// it reports the exit instead. Node raced the two; the end of the stream
+/// won whenever the agent itself held stdout (checked against the
+/// TypeScript broker), so the exit and its stderr are reported only when
+/// something else keeps the stream open.
+const CLOSE_AFTER_EXIT: Duration = Duration::from_millis(250);
 
 /// `ACP connection closed`: the SDK's reason when the stream ends.
 pub const CLOSED: &str = "ACP connection closed";
@@ -108,7 +110,6 @@ struct State {
     pending: HashSet<u64>,
     responses: HashMap<u64, Result<Value, RpcError>>,
     closed: Option<String>,
-    closed_at: Option<Instant>,
 }
 
 /// What the reader thread, the stderr thread and the adapter share.
@@ -135,7 +136,6 @@ impl Shared {
         let mut state = self.state();
         if state.closed.is_none() {
             state.closed = Some(reason.to_owned());
-            state.closed_at = Some(Instant::now());
         }
         drop(state);
         self.changed.notify_all();
@@ -484,9 +484,9 @@ impl AgentProcess {
 
     /// Wait for the answer to request `id`.
     ///
-    /// The tripwire wins over anything else, then the answer. With
-    /// `watch_exit` an exited agent ends the wait (`exitedEarly` in the
-    /// chat), and after stdout closes the exit is given a moment to show.
+    /// The tripwire wins over anything else, then the answer, then a closed
+    /// connection. With `watch_exit` an agent that exited while its stdout
+    /// stays open ends the wait too (`exitedEarly` in the chat).
     pub fn wait(
         &self,
         id: u64,
@@ -494,6 +494,7 @@ impl AgentProcess {
         watch_exit: bool,
     ) -> Result<Value, Wait> {
         let mut state = self.shared.state();
+        let mut exited_at: Option<Instant> = None;
         loop {
             if self.shared.violated() {
                 return Err(Wait::Violation);
@@ -501,16 +502,17 @@ impl AgentProcess {
             if let Some(answer) = state.responses.remove(&id) {
                 return answer.map_err(Wait::Rpc);
             }
-            if watch_exit && matches!(self.shared.child.try_wait(), Ok(Some(_))) {
-                return Err(Wait::Exited);
-            }
             if let Some(reason) = &state.closed {
-                let grace_over = state
-                    .closed_at
-                    .is_none_or(|at| at.elapsed() >= EXIT_AFTER_CLOSE);
-                if !watch_exit || grace_over {
-                    return Err(Wait::Closed(reason.clone()));
-                }
+                return Err(Wait::Closed(reason.clone()));
+            }
+            if watch_exit
+                && exited_at.is_none()
+                && matches!(self.shared.child.try_wait(), Ok(Some(_)))
+            {
+                exited_at = Some(Instant::now());
+            }
+            if exited_at.is_some_and(|at| at.elapsed() >= CLOSE_AFTER_EXIT) {
+                return Err(Wait::Exited);
             }
             let now = Instant::now();
             if deadline.is_some_and(|deadline| now >= deadline) {

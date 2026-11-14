@@ -15,6 +15,7 @@
 #   > JSON             write JSON as one stdout line
 #   err TEXT           write TEXT to stderr
 #   exit N             exit with status N
+#   linger N           leave a process holding stdout open for N seconds
 #   mcp TOOL ARGS      start the MCP server from --additional-mcp-config and
 #                      call TOOL with the JSON object ARGS through it
 #   exit-marker PATH   on SIGTERM, write "exited" to PATH 300 ms later, then
@@ -65,6 +66,7 @@ while IFS= read -r step <&3; do
     "> "*) printf '%s\n' "${step#> }" ;;
     "err "*) printf '%s\n' "${step#err }" >&2 ;;
     "exit "*) exit "${step#exit }" ;;
+    "linger "*) sleep "${step#linger }" & ;;
     "mcp "*)
       rest=${step#mcp }
       mcp_call "${rest%% *}" "${rest#* }"
