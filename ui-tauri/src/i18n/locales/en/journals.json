@@ -29,7 +29,8 @@
     },
     "actions": {
       "processJournals": "Process journals",
-      "viewLedgerEntries": "View ledger entries"
+      "viewLedgerEntries": "View ledger entries",
+      "verifyJournals": "Check reproducibility"
     },
     "unavailable": {
       "title": "Ledger unavailable",
@@ -90,6 +91,24 @@
       "transferIn": "Transfer in",
       "transferOut": "Transfer out",
       "neutralSwap": "Neutral swap"
+    },
+    "verify": {
+      "title": "Check journal reproducibility",
+      "description": "Kassiber recomputes the journals from this book's current inputs in a private copy in memory and compares them with the stored journals. Nothing is written and nothing leaves this device.",
+      "running": "Recomputing journals…",
+      "status": {
+        "identical": "The stored journals are exactly what the current inputs produce.",
+        "different_one": "{{count}} stored row differs from a recomputation.",
+        "different_other": "{{count}} stored rows differ from a recomputation.",
+        "stale": "The inputs changed since the journals were processed. Process journals first; this is not a sign of wrong numbers.",
+        "noTransactions": "This book has no transactions to check.",
+        "refused": "Recomputing the journals was refused: {{message}}"
+      },
+      "nondeterministic": "Two recomputations also disagreed with each other. This points at a Kassiber bug, not at your data.",
+      "byWallet": "Wallets: {{wallets}}",
+      "byYear": "Years: {{years}}",
+      "truncated": "Showing the first {{count}} differences.",
+      "nextStep": "Processing the journals again replaces the stored rows."
     }
   },
   "reportable": {
