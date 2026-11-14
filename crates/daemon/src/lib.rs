@@ -158,6 +158,8 @@ pub fn supported_kinds() -> Vec<&'static str> {
                 "ui.backends.electrum.test",
                 "ui.backends.http.test",
                 "ui.backends.lightning.test",
+                "ui.backends.certificate.fetch",
+                "ui.backends.certificate.trust",
             ]
             .contains(k)
     }));

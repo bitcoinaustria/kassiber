@@ -13,6 +13,7 @@ pub const COMMANDS: &[&str] = &[
     "backends.set-default",
     "backends.clear-default",
     "backends.reveal-token",
+    "backends.trust-certificate",
 ];
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
     book.service(

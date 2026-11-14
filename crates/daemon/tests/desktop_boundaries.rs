@@ -64,6 +64,8 @@ const DESKTOP_KINDS: &[&str] = &[
     "ui.backends.public_defaults",
     "ui.backends.btcpay.test",
     "ui.backends.electrum.test",
+    "ui.backends.certificate.fetch",
+    "ui.backends.certificate.trust",
     "ui.transactions.metadata.update",
     "ui.onboarding.complete",
     "ui.wallets.create",

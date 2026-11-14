@@ -4,7 +4,7 @@
 use crate::spec::*;
 
 /// Every parser `build_parser()` builds, depth first; index 0 is `kassiber`.
-pub(crate) static PARSERS: [Parser; 384] = [
+pub(crate) static PARSERS: [Parser; 385] = [
     Parser {
         prog: "kassiber",
         description: Some("Open-source, local-first Bitcoin accounting with wallet buckets and multi-wallet support. CLI surface of the Kassiber suite; a desktop GUI is also available."),
@@ -1562,7 +1562,7 @@ pub(crate) static PARSERS: [Parser; 384] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("backends_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 112), ("kinds", 113), ("get", 114), ("create", 115), ("update", 116), ("delete", 117), ("set-default", 118), ("clear-default", 119), ("reveal-token", 120)], choice_help: &[ChoiceHelp { dest: "reveal-token", metavar: "reveal-token", help: Help::Text("Print the raw token / auth-header for a backend (requires database unlock)") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("backends_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 112), ("kinds", 113), ("get", 114), ("create", 115), ("update", 116), ("delete", 117), ("set-default", 118), ("clear-default", 119), ("reveal-token", 120), ("trust-certificate", 384)], choice_help: &[ChoiceHelp { dest: "reveal-token", metavar: "reveal-token", help: Help::Text("Print the raw token / auth-header for a backend (requires database unlock)") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5778,6 +5778,19 @@ pub(crate) static PARSERS: [Parser; 384] = [
         options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--backend", 3), ("--wallet", 4)],
         mutex_groups: &[],
         sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber backends trust-certificate",
+        description: Some("Fetch the TLS certificate a backend's server presents (an explicit network request) and print its SHA-256 fingerprint. Nothing is trusted until you compare that fingerprint with the server and re-run with --fingerprint; the certificate is then pinned for this backend only."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &[], dest: Some("name"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("Backend name"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--fingerprint"], dest: Some("fingerprint"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("The SHA-256 fingerprint you confirmed (colons optional); pins the certificate only if the server still presents it"), metavar: Some("SHA256"), choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--fingerprint", 2)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0, 2] }],
         defaults: &[],
     },
 ];

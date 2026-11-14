@@ -120,6 +120,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.backends.btcpay.test",
   "ui.backends.detect_core",
   "ui.backends.electrum.test",
+  "ui.backends.certificate.fetch",
+  "ui.backends.certificate.trust",
   "ui.backends.http.test",
   "ui.backends.lightning.test",
   "ui.profiles.snapshot",
