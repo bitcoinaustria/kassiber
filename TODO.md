@@ -31,6 +31,14 @@ only fixed or compared Python were removed.
   can stay retired: the Austrian Neu cutoff copies comparison, the
   tax-country end-to-end modules, the Bitpanda importer tests and the AI tool
   schema budget test.
+- [ ] Session replay: test `replay` → `replay --update` → `replay` end to end
+  from a checkout other than the recording's. The re-record tests in
+  `crates/session-replay/src/replay.rs` drive `replay::rerecorded` with a
+  hand-built replay, because a live replay needs the clock shim beside the
+  test binary.
+- [ ] Session replay: cover a re-record that maps a file name back to the
+  recorded paths, and one that rewrites an encrypted book's plaintext and so
+  drops its stale ciphertext; neither has a test yet.
 
 ## Rust backend R0
 
