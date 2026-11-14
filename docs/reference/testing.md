@@ -174,7 +174,8 @@ replays clean from any other. Each request the test sent back with an id
 the process printed (a document token, a job id) is stored as this run
 sent it, with this run's id, and the clock spans the run saw (its real
 time and the clock shim's virtual time) join the session's
-`rerecorded_us`. A ZIP or XLSX export that names a replaying path cannot be
+`rerecorded_us`. A book's ciphertext stays only where the recording kept
+one (`pack --keep-ciphertext`). A ZIP or XLSX export that names a replaying path cannot be
 mapped back without rebuilding the archive; re-recording that session
 fails and says so. Review every
 changed session before archiving; see

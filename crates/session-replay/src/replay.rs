@@ -166,16 +166,35 @@ pub fn rerecorded(
         }
     }
     for (root, mut after) in session.roots.iter_mut().zip(after) {
+        // A book's ciphertext stays only where the recording kept one
+        // (`pack --keep-ciphertext`): nothing compares it, and the replay's
+        // is a megabyte of pages no other session shares.
+        let kept: HashSet<&str> = root
+            .after
+            .iter()
+            .filter_map(|e| match e {
+                Entry::File {
+                    path,
+                    encryption: Some(e),
+                    ..
+                } if e.ciphertext.is_some() => Some(path.as_str()),
+                _ => None,
+            })
+            .collect();
         for entry in &mut after {
             if let Entry::File {
-                blob, encryption, ..
+                path,
+                blob,
+                encryption,
+                ..
             } = entry
             {
                 *blob = copy(blob)?;
                 if let Some(e) = encryption {
-                    if let Some(ciphertext) = &e.ciphertext {
-                        e.ciphertext = Some(copy(ciphertext)?);
-                    }
+                    e.ciphertext = match &e.ciphertext {
+                        Some(ciphertext) if kept.contains(path.as_str()) => Some(copy(ciphertext)?),
+                        _ => None,
+                    };
                 }
             }
         }
@@ -1596,6 +1615,64 @@ mod rerecord_tests {
         // the re-recording did on the virtual clock.
         let late = "{\"finished_at\":\"2026-11-11T02:55:28Z\"}";
         assert_eq!(canon.rewrite(late, true), "{\"finished_at\":\"<time>\"}");
+    }
+
+    /// A re-recorded book keeps its ciphertext only where the recording
+    /// kept one (`pack --keep-ciphertext`); nothing compares it.
+    #[test]
+    fn a_rerecord_keeps_ciphertext_only_where_the_recording_did() {
+        let dir = tempfile::tempdir().unwrap();
+        let recording = Blobs::new(&dir.path().join("recording"));
+        let store = dir.path().join("after-store");
+        let scan = Blobs::new(&store);
+        let book = |blobs: &Blobs, path: &str, ciphertext: Option<&[u8]>| Entry::File {
+            path: path.to_owned(),
+            mode: 0o644,
+            blob: blobs.put(b"plaintext pages").unwrap(),
+            size: 15,
+            encryption: Some(crate::encrypted::Encryption {
+                passphrase: "synthetic".into(),
+                ciphertext: ciphertext.map(|c| blobs.put(c).unwrap()),
+                page_size: 4096,
+                page_count: 1,
+            }),
+        };
+        let mut recorded = session(RECORDED_REPO, "/mnt/tmp/r");
+        recorded.roots[0].after = vec![
+            book(&recording, "kept.sqlite3", Some(b"recorded ciphertext")),
+            book(&recording, "plain.sqlite3", None),
+        ];
+        let replayed = Replayed {
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+            exit: crate::Exit {
+                code: Some(0),
+                signal: None,
+            },
+            after: vec![vec![
+                book(&scan, "kept.sqlite3", Some(b"replayed ciphertext")),
+                book(&scan, "plain.sqlite3", Some(b"replayed ciphertext 2")),
+            ]],
+            store,
+            stdin: Vec::new(),
+            spans: Vec::new(),
+            paths: Paths::default(),
+        };
+        let session =
+            rerecorded(recorded, &recording, &replayed, &dir.path().join("work")).unwrap();
+        let ciphertext = |name: &str| {
+            session.roots[0].after.iter().find_map(|e| match e {
+                Entry::File {
+                    path,
+                    encryption: Some(e),
+                    ..
+                } if path == name => Some(e.ciphertext.clone()),
+                _ => None,
+            })
+        };
+        let kept = ciphertext("kept.sqlite3").unwrap().expect("kept");
+        assert_eq!(recording.get(&kept).unwrap(), b"replayed ciphertext");
+        assert_eq!(ciphertext("plain.sqlite3"), Some(None));
     }
 
     /// A ZIP export the replay left naming its paths cannot be mapped back
