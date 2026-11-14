@@ -1407,6 +1407,19 @@ redacted before they enter AI/UI tool metadata; exact backend URLs are not sent
 to the provider. If any source refresh row fails, the maintenance/report-blocker
 path returns a blocking `sync_failed` item instead of saying reports are ready.
 
+`ui_journals_verify` is a read tool over the [reproducibility check](replay-bundle.md):
+it recomputes the journals in a private in-memory copy and returns statuses,
+counts per table, wallet and year, and each listed difference as its table,
+change kind and changed column names (`journal_verify_for_ai`): no cell values,
+amounts, row keys, transaction ids, labels or refusal messages. Lists and the
+wallet and year count maps are capped at 50 entries (the largest counts, keys
+cut to 64 characters, at most 20 column names per difference); the rest is
+summarized as `by_wallet_omitted` / `by_year_omitted` with its entry and row
+counts. When the check fails before producing a report, the assistant gets the
+error code and a fixed message, never the error text, which can quote book
+values. It does not refresh journals first, since a stale book is one of
+the answers it gives, and it is not an automatic context read.
+
 Quoted or search-like questions can trigger `ui.transactions.search` before the
 provider is called. Matching transaction notes, descriptions, counterparties,
 tags, and values may then be included in the provider context; keep inference

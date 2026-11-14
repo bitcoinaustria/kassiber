@@ -52,3 +52,17 @@ kassiber --format plain reports balance-sheet
 ```
 
 For fresh installs, a zero-wallet or zero-journal result is expected. For established books, treat those as investigation prompts rather than silent success.
+
+## Are the journals reproducible?
+
+`ui.journals.verify` (CLI `kassiber journals verify`) recomputes the journals
+from the book's current inputs in a private in-memory copy and compares them
+with the stored ones. It writes nothing and contacts nothing.
+
+- `identical`: the stored journals are exactly what the inputs produce.
+- `different`: name the tables, wallets and years it lists. With
+  `deterministic: false` two recomputations disagreed, which points at a
+  Kassiber bug rather than the user's data.
+- `stale` / `not_processed`: inputs changed since processing; process the
+  journals first. This is not a sign of wrong numbers.
+- `refused`: processing itself would refuse; follow its error.
