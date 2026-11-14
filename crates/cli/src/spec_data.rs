@@ -4,7 +4,7 @@
 use crate::spec::*;
 
 /// Every parser `build_parser()` builds, depth first; index 0 is `kassiber`.
-pub(crate) static PARSERS: [Parser; 384] = [
+pub(crate) static PARSERS: [Parser; 385] = [
     Parser {
         prog: "kassiber",
         description: Some("Open-source, local-first Bitcoin accounting with wallet buckets and multi-wallet support. CLI surface of the Kassiber suite; a desktop GUI is also available."),
@@ -3396,7 +3396,7 @@ pub(crate) static PARSERS: [Parser; 384] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("journals_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("process", 228), ("list", 229), ("quarantined", 230), ("transfers", 231), ("events", 233), ("quarantine", 236)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("journals_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("process", 228), ("list", 229), ("quarantined", 230), ("transfers", 231), ("events", 233), ("quarantine", 236), ("verify", 384)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5778,6 +5778,20 @@ pub(crate) static PARSERS: [Parser; 384] = [
         options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--backend", 3), ("--wallet", 4)],
         mutex_groups: &[],
         sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber journals verify",
+        description: Some("Recompute the journals from the book's current inputs in memory and compare them with the stored journals. Read-only."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--limit"], dest: Some("limit"), nargs: Nargs::Single, constant: Lit::None, default: Lit::Int(20), value_type: ValueType::Int, required: false, help: Help::Text("Differences to list (1-200); counts always cover every row"), metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--limit", 3)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3] }],
         defaults: &[],
     },
 ];

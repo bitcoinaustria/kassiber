@@ -8,6 +8,7 @@ mod journals;
 mod lightning;
 mod onboarding;
 mod rates_rebuild;
+mod reproduce;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -1287,6 +1288,13 @@ impl Book for RealBook {
         args: Option<&Value>,
         source: &str,
     ) -> Result<Value, AppError> {
+        if matches!(kind, "journals.verify" | "ui.journals.verify") {
+            #[cfg(feature = "test-harness")]
+            let sources = journals::Sources;
+            #[cfg(not(feature = "test-harness"))]
+            let sources = kassiber_transfers::SystemSources;
+            return reproduce::verify_journals(self.conn()?, kind, args, &sources);
+        }
         if kind == "ui.journals.quarantine.resolve" {
             let empty = kassiber_envelope::dict::<&str>([]);
             let args = match args {

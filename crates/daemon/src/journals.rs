@@ -9,6 +9,7 @@ pub const KINDS: &[&str] = &[
     "ui.journals.transfers.list",
     "ui.journals.quarantine",
     "ui.journals.quarantine.resolve",
+    "ui.journals.verify",
 ];
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {

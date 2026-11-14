@@ -2485,6 +2485,7 @@ dependencies = [
  "kassiber-backup",
  "kassiber-chain",
  "kassiber-cli",
+ "kassiber-custody",
  "kassiber-daemon",
  "kassiber-diagnostics",
  "kassiber-envelope",

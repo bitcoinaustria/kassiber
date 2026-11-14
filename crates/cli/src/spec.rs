@@ -99,7 +99,7 @@ pub const AI_PROVIDER_KIND_CHANGE_HELP: &str = "Change the privacy kind, or make
 
 /// Leaves only the Rust backend serves; Python's grammar lacks them
 /// (added by hand).
-pub const RUST_ONLY_LEAVES: &[&str] = &["wallets.sync-bitpanda"];
+pub const RUST_ONLY_LEAVES: &[&str] = &["wallets.sync-bitpanda", "journals.verify"];
 /// Backend kinds only the Rust backend accepts, extra `--kind` choices of
 /// `backends create` and `backends update`.
 pub const RUST_ONLY_BACKEND_KINDS: &[&str] = &["bitpanda"];
