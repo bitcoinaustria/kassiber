@@ -26,6 +26,9 @@ serde_json = { version = "1", features = ["raw_value"] }
 getrandom = "=0.4.3"
 # JavaScript-compatible redaction: one rule needs a backreference.
 fancy-regex = "0.20"
+# Codex's session cursor binds the tool catalog by a SHA-256 prefix
+# (`toolFingerprint` in codex.ts); std has no cryptographic hash.
+sha2 = "0.11"
 
 [target.'cfg(unix)'.dependencies]
 # SIGTERM to a tracked agent, errno names and access(X_OK), through nix's

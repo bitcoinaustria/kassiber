@@ -123,3 +123,6 @@ crates/provider-broker/src/executables.rs|provider_command|let mut command = Com
 # `/bin/kill` for its termination signals.
 crates/kassiber/tests/provider_broker.rs|broker|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/kassiber/tests/provider_broker.rs|signal|let status = Command::new("/bin/kill")
+# The Claude and Codex adapters through the same binary, with a fake CLI
+# directory as the whole PATH (plan 23, step 2).
+crates/kassiber/tests/provider_broker_claude_codex.rs|broker|let mut child = Command::new(env!("CARGO_BIN_EXE_kassiber"))
