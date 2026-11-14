@@ -166,7 +166,17 @@ scripts/fetch-test-data.sh --publish tests/data/sessions/*
 The script passes its options to `session-replay replay`; `--update`
 writes the new run's output, exit and state into each session that differs,
 in the extracted copy under `target/session-replay-data`; it is refused
-when `CI` is set. Review every
+when `CI` is set. What it writes is what the comparison saw, in the
+recorded paths: the replaying checkout, temp dir and `~user` are mapped
+back to the recording's in output, state files, book text values and file
+names (`replay::rerecorded`), so a session re-recorded from any checkout
+replays clean from any other. Each request the test sent back with an id
+the process printed (a document token, a job id) is stored as this run
+sent it, with this run's id, and the clock spans the run saw (its real
+time and the clock shim's virtual time) join the session's
+`rerecorded_us`. A ZIP or XLSX export that names a replaying path cannot be
+mapped back without rebuilding the archive; re-recording that session
+fails and says so. Review every
 changed session before archiving; see
 [changing a frozen golden](#changing-a-frozen-golden).
 
