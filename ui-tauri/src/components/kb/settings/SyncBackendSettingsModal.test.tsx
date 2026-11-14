@@ -256,3 +256,40 @@ describe("backend certificate trust entry", () => {
     expect(hooks.invoke.mock.calls.map(call => call[0])).toEqual(["ui.backends.electrum.test"]);
   });
 });
+
+describe("backend certificate trust with unsaved edits", () => {
+  it("asks to save first and ignores the form's test result", async () => {
+    hooks.invoke.mockResolvedValue({ data: { ok: false, logs: [
+      "Connection failed: The server's TLS certificate is not signed by an authority Kassiber trusts",
+    ] } });
+    const saved: Backend = {
+      id: "home", name: "Home node", health: "", on: true, auth: "none",
+      chain: "bitcoin", network: "main", net: "BTC", kind: "esplora",
+      url: "https://node.local/api",
+    };
+    const render = () => {
+      hooks.cursor = 0;
+      return SyncBackendSettingsModal({ open: true, initial: saved, onClose: vi.fn(), onSave: vi.fn() });
+    };
+    render();
+    hooks.effects.splice(0).forEach(effect => effect());
+    const urlIndex = hooks.states.findIndex(value => value === "https://node.local/api");
+    expect(urlIndex).toBeGreaterThanOrEqual(0);
+    hooks.states[urlIndex] = "https://other.local/api";
+    const tree = render();
+    expect(button(tree, "certificateTrust.checkButton")?.disabled).toBe(true);
+    button(tree, "backendModal.testConnection")!.onClick();
+    await vi.waitFor(() => expect(hooks.invoke).toHaveBeenCalledOnce());
+    const after = render();
+    const rows: string[] = [];
+    (function walk(node: ReactNode) {
+      if (Array.isArray(node)) node.forEach(walk);
+      else if (isValidElement<{ children?: ReactNode; description?: unknown }>(node)) {
+        if (typeof node.props.description === "string") rows.push(node.props.description);
+        walk(node.props.children);
+      }
+    })(after);
+    expect(rows).toContain("certificateTrust.saveFirst");
+    expect(rows).not.toContain("certificateTrust.testUntrusted");
+  });
+});

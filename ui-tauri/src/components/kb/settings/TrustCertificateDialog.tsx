@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
+import { CopyButton } from "@/components/kb/CopyButton";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +19,7 @@ import {
   type PresentedCertificate,
   type TrustedCertificate,
 } from "@/lib/certificateTrust";
+import { formatDateTime } from "@/lib/localeFormat";
 
 export type TrustCertificatePhase =
   | "intro"
@@ -38,11 +40,26 @@ export interface TrustCertificateViewProps {
   onClose: () => void;
 }
 
-function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Field({
+  label,
+  value,
+  mono,
+  action,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  action?: React.ReactNode;
+}) {
   return (
     <div className="grid gap-0.5 sm:grid-cols-[9rem_1fr] sm:gap-3">
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className={mono ? "font-mono text-sm break-all" : "text-sm break-words"}>{value}</dd>
+      <dd className="flex min-w-0 items-start gap-2">
+        <span className={mono ? "min-w-0 font-mono text-sm break-all" : "min-w-0 text-sm break-words"}>
+          {value}
+        </span>
+        {action}
+      </dd>
     </div>
   );
 }
@@ -63,8 +80,14 @@ export function TrustCertificateView({
   onTrust,
   onClose,
 }: TrustCertificateViewProps) {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t, i18n } = useTranslation(["settings", "common"]);
   const busy = phase === "fetching" || phase === "trusting";
+  // A fetched certificate that would replace a pin is a changed certificate,
+  // however the dialog was opened.
+  const changed =
+    phase !== "done" &&
+    (problem === "changed" || Boolean(presented?.replaces_fingerprint_sha256));
+  const date = (value: string) => formatDateTime(value, i18n.language) ?? value;
   return (
     <>
       <DialogHeader>
@@ -74,7 +97,7 @@ export function TrustCertificateView({
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-3 text-sm">
-        {problem === "changed" ? (
+        {changed ? (
           <p
             role="alert"
             className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-700 dark:text-red-300"
@@ -99,7 +122,20 @@ export function TrustCertificateView({
                 label={t("certificateTrust.fingerprint")}
                 value={presented.fingerprint_sha256}
                 mono
+                action={
+                  <CopyButton
+                    value={presented.fingerprint_sha256}
+                    ariaLabel={t("certificateTrust.copyFingerprint")}
+                  />
+                }
               />
+              {presented.replaces_fingerprint_sha256 && phase !== "done" ? (
+                <Field
+                  label={t("certificateTrust.previousFingerprint")}
+                  value={presented.replaces_fingerprint_sha256}
+                  mono
+                />
+              ) : null}
               {presented.subject ? (
                 <Field label={t("certificateTrust.subject")} value={presented.subject} />
               ) : null}
@@ -115,8 +151,8 @@ export function TrustCertificateView({
                 <Field
                   label={t("certificateTrust.validity")}
                   value={t("certificateTrust.validityRange", {
-                    from: presented.not_before,
-                    to: presented.not_after,
+                    from: date(presented.not_before),
+                    to: date(presented.not_after),
                   })}
                 />
               ) : null}
@@ -126,9 +162,7 @@ export function TrustCertificateView({
             )}
             {presented.replaces_fingerprint_sha256 && phase !== "done" ? (
               <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-800 dark:text-amber-200">
-                {t("certificateTrust.replaces", {
-                  previous: presented.replaces_fingerprint_sha256,
-                })}
+                {t("certificateTrust.replaces")}
               </p>
             ) : null}
             {presented.clears_insecure && phase !== "done" ? (

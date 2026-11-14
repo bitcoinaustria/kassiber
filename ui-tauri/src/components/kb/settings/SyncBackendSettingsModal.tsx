@@ -484,8 +484,6 @@ export function SyncBackendSettingsModal({
   const certificateTrustAvailable = Boolean(
     initial && canTrustCertificate(initial.kind, initial.url),
   );
-  const testCertificateProblem =
-    testState === "fail" ? certificateProblemFromText(testLog) : null;
   // Editing connection details must not reinterpret the backend's chain identity.
   const chain = initial?.chain ?? (type.net === "LIQUID" ? "liquid" : "bitcoin");
   const bookDomain = bookScope.data?.data?.domains.find(domain => domain.chain === chain);
@@ -570,6 +568,24 @@ export function SyncBackendSettingsModal({
       ? `${proxyHost.trim()}:${proxyPort.trim()}`
       : undefined;
   const onionEndpoint = proxyCapable && isOnionEndpoint(effectiveUrl);
+  // The trust flow reaches the saved URL and proxy; with unsaved edits the
+  // form's connection test says nothing about that endpoint.
+  const savedTrustUrl = initial
+    ? showElectrumEndpointParts
+      ? buildElectrumUrl(parseElectrumEndpoint(initial.url))
+      : initial.url.trim()
+    : "";
+  const savedTrustProxy = initial?.proxy
+    ? `${initial.proxy.host}:${initial.proxy.port}`
+    : "";
+  const certificateTrustUnsaved =
+    certificateTrustAvailable &&
+    (effectiveUrl.trim().toLowerCase() !== savedTrustUrl.toLowerCase() ||
+      (proxyValue ?? "") !== savedTrustProxy);
+  const testCertificateProblem =
+    testState === "fail" && !certificateTrustUnsaved
+      ? certificateProblemFromText(testLog)
+      : null;
   const effectiveInfrastructureOwner =
     type.net === "LN"
       ? undefined
@@ -1725,7 +1741,9 @@ export function SyncBackendSettingsModal({
                 <SettingsRow
                   label={t("certificateTrust.rowLabel")}
                   description={
-                    testCertificateProblem === "changed"
+                    certificateTrustUnsaved
+                      ? t("certificateTrust.saveFirst")
+                      : testCertificateProblem === "changed"
                       ? t("certificateTrust.testChanged")
                       : testCertificateProblem === "untrusted"
                         ? t("certificateTrust.testUntrusted")
@@ -1737,7 +1755,7 @@ export function SyncBackendSettingsModal({
                     variant={testCertificateProblem ? "default" : "outline"}
                     size="sm"
                     onClick={() => setCertificateDialogOpen(true)}
-                    disabled={isSavingBackend}
+                    disabled={isSavingBackend || certificateTrustUnsaved}
                   >
                     {t("certificateTrust.checkButton")}
                   </Button>
@@ -1791,6 +1809,7 @@ export function SyncBackendSettingsModal({
     </Dialog>
     {initial && certificateTrustAvailable ? (
       <TrustCertificateDialog
+        key={initial.id}
         open={certificateDialogOpen}
         backend={initial.id}
         backendLabel={initial.name}

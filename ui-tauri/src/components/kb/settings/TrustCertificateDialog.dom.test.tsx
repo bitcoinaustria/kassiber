@@ -88,7 +88,10 @@ describe("TrustCertificateDialog", () => {
     expect(daemon.invoke).toHaveBeenCalledWith("ui.backends.certificate.fetch", { name: "home" });
     expect(screen.getByText(FINGERPRINT)).toBeTruthy();
     expect(screen.getByText("node.local:50002")).toBeTruthy();
-    expect(screen.getByText("Itself (self-signed)")).toBeTruthy();
+    expect(screen.getByText("Self-signed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy SHA-256 fingerprint" })).toBeTruthy();
+    // No replaced pin, no problem: no changed-certificate warning.
+    expect(screen.queryByRole("alert")).toBeNull();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Trust this server" }));
     });
@@ -111,7 +114,7 @@ describe("TrustCertificateDialog", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Fetch certificate" }));
     });
-    expect(screen.getByText(/fingerprint 01:F4/)).toBeTruthy();
+    expect(screen.getByText("01:F4")).toBeTruthy();
     expect(screen.getByText(/turns certificate verification back on/)).toBeTruthy();
   });
 
@@ -140,5 +143,68 @@ describe("TrustCertificateDialog", () => {
         expect(i18n.getFixedT(lang)(full as never), `${lang} ${key}`).not.toBe(full);
       }
     }
+  });
+});
+
+describe("TrustCertificateDialog review details", () => {
+  const PREVIOUS =
+    "01:F4:A0:43:BF:C6:EC:5F:FD:F3:BD:53:2D:B6:45:B8:A9:79:36:70:93:1B:07:96:90:3F:F0:C4:72:1C:B3:E8";
+
+  it("warns about a changed certificate even when opened without a problem", async () => {
+    daemon.invoke.mockResolvedValue({
+      data: { ...presented, replaces_fingerprint_sha256: PREVIOUS },
+    });
+    open();
+    expect(screen.queryByRole("alert")).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Fetch certificate" }));
+    });
+    expect(screen.getByRole("alert").textContent).toContain("certificate changed");
+    // The replaced fingerprint is its own wrapping, monospace field.
+    const previous = screen.getByText(PREVIOUS);
+    expect(previous.className).toContain("break-all");
+    expect(previous.className).toContain("font-mono");
+    expect(screen.getByText("Previously trusted")).toBeTruthy();
+  });
+
+  it("shows validity dates in the interface language", async () => {
+    await act(async () => {
+      await i18n.changeLanguage("de");
+    });
+    daemon.invoke.mockResolvedValue({ data: presented });
+    open();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Zertifikat abrufen" }));
+    });
+    expect(screen.getByText(/01\.01\.2026/)).toBeTruthy();
+    expect(screen.getByText("Selbstsigniert")).toBeTruthy();
+  });
+
+  it("drops the earlier certificate when Retry fetches again", async () => {
+    let calls = 0;
+    daemon.invoke.mockImplementation(async (kind: string) => {
+      calls += 1;
+      if (kind === "ui.backends.certificate.trust") {
+        throw new (DaemonRequestError as unknown as new (code: string) => Error)(
+          "backend_certificate_mismatch",
+        );
+      }
+      if (calls === 1) return { data: presented };
+      return new Promise(() => undefined); // the second fetch is still running
+    });
+    open();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Fetch certificate" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Trust this server" }));
+    });
+    expect(screen.queryByText(FINGERPRINT)).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    });
+    expect(screen.queryByText(FINGERPRINT)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Trust this server" })).toBeNull();
   });
 });

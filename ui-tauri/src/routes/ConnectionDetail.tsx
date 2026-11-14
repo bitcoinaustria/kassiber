@@ -153,9 +153,8 @@ import { useNotificationStore } from "@/store/notifications";
 import { useUiStore } from "@/store/ui";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
 import { ExchangeSyncCard } from "@/components/kb/exchange/ExchangeSyncCard";
-import { TrustCertificateDialog } from "@/components/kb/settings/TrustCertificateDialog";
+import { CertificateTrustOffer } from "@/components/kb/settings/CertificateTrustOffer";
 import {
-  CERTIFICATE_TRUST_KINDS,
   certificateProblemFromCode,
   certificateProblemFromText,
   type CertificateProblem,
@@ -581,7 +580,7 @@ function ConnectionDetailView({
   txs,
   hideSensitive,
 }: ConnectionDetailViewProps) {
-  const { t, i18n } = useTranslation(["connections", "common", "settings"]);
+  const { t, i18n } = useTranslation(["connections", "common"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
@@ -744,7 +743,6 @@ function ConnectionDetailView({
   // offers the explicit trust dialog for the wallet's backend.
   const [certificateProblem, setCertificateProblem] =
     useState<CertificateProblem | null>(null);
-  const [certificateDialogOpen, setCertificateDialogOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editLabel, setEditLabel] = useState(connection.label);
   const [editPassphrase, setEditPassphrase] = useState("");
@@ -1661,33 +1659,16 @@ function ConnectionDetailView({
           role="status"
         >
           {syncErrorMessage}
-          {certificateProblem &&
-          walletDetail?.backend?.name &&
-          CERTIFICATE_TRUST_KINDS.includes(walletDetail.backend.kind ?? "") ? (
-            <div className="mt-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setCertificateDialogOpen(true)}
-              >
-                {t("settings:certificateTrust.checkButton")}
-              </Button>
-            </div>
-          ) : null}
+          <CertificateTrustOffer
+            problem={certificateProblem}
+            backend={walletDetail?.backend}
+            onTrusted={() => {
+              setCertificateProblem(null);
+              setSyncErrorMessage(null);
+            }}
+          />
         </div>
       )}
-      {walletDetail?.backend?.name ? (
-        <TrustCertificateDialog
-          open={certificateDialogOpen}
-          backend={walletDetail.backend.name}
-          problem={certificateProblem}
-          onClose={() => setCertificateDialogOpen(false)}
-          onTrusted={() => {
-            setCertificateProblem(null);
-            setSyncErrorMessage(null);
-          }}
-        />
-      ) : null}
 
       {reconciliation.available && !reconciliation.reconciled ? (
         // Only surface reconciliation when it needs attention: the two figures
