@@ -525,7 +525,7 @@ impl Claude {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let spawned = command.spawn();
+        let spawned = crate::executables::spawn_provider(&mut command);
         let turn = (|| {
             events.write(&Event::Status {
                 phase: "connecting".into(),

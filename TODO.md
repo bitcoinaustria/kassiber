@@ -154,6 +154,9 @@ adds the provider broker client for CLI agent runtimes.
     refuse new provider launches once termination cleanup has started.
   - A black-box test that SIGTERM mid-turn kills the agent and removes the
     turn's directories.
+  - Fall back to a short temporary directory when the tool bridge's socket
+    path would exceed the platform's `AF_UNIX` limit (a long `TMPDIR` now
+    fails tool turns, as it did in TypeScript).
 - [x] Plan 23 step 3: remove the TypeScript broker, its npm packages and the
   `provider_broker/` packaging.
 - [x] CLI proxy providers ([reference](docs/reference/ai-cli-proxy.md)):

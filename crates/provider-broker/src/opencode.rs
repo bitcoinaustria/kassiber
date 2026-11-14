@@ -480,7 +480,8 @@ impl ServerProcess {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut child = command.spawn().map_err(NotReady::Spawn)?;
+        let mut child =
+            crate::executables::spawn_provider(&mut command).map_err(NotReady::Spawn)?;
         let stdin = child.stdin.take();
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();

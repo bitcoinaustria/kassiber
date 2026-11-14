@@ -8,7 +8,8 @@
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
 
 use crate::cleanup::track_child;
 use crate::env::provider_environment;
@@ -176,6 +177,35 @@ pub fn provider_command(
     command
 }
 
+/// Start a provider command, retrying briefly while exec reports `ETXTBSY`.
+///
+/// `ETXTBSY` means some process still holds the executable open for
+/// writing: a CLI update finishing, or a thread elsewhere in this process
+/// that forked while a file was being written and has not exec'd yet. Both
+/// pass within moments, and a failed exec starts nothing, so the launch is
+/// retried for up to two seconds rather than reported as a failure.
+pub fn spawn_provider(command: &mut Command) -> io::Result<Child> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match command.spawn() {
+            Err(error) if text_file_busy(&error) && Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            spawned => return spawned,
+        }
+    }
+}
+
+#[cfg(unix)]
+fn text_file_busy(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(nix::errno::Errno::ETXTBSY as i32)
+}
+
+#[cfg(not(unix))]
+fn text_file_busy(_: &io::Error) -> bool {
+    false
+}
+
 /// Options for [`run_provider`].
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RunOptions<'a> {
@@ -216,9 +246,8 @@ pub fn run_provider(
     let limit = options.limit.unwrap_or(RUN_LIMIT);
     let mut command = provider_command(provider, executable, args, options.cwd, options.env);
     command.stdout(Stdio::piped());
-    let mut child = command
-        .spawn()
-        .map_err(|error| spawn_failure(executable, &error))?;
+    let mut child =
+        spawn_provider(&mut command).map_err(|error| spawn_failure(executable, &error))?;
     let stdout = child.stdout.take();
     let child = track_child(child);
     let mut kept = Vec::new();

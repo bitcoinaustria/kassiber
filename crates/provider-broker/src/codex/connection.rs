@@ -149,8 +149,7 @@ impl Connection {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut child = command
-            .spawn()
+        let mut child = crate::executables::spawn_provider(&mut command)
             .map_err(|error| spawn_failure(executable, &error))?;
         let stdin = Stdin(Arc::new(Mutex::new(child.stdin.take())));
         let stdout = child.stdout.take();

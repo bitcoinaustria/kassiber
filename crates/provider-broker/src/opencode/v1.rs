@@ -170,7 +170,7 @@ fn probe_environment(
     let failed = || fail("OpenCode privacy verification failed.");
     let mut command = provider_command(PROVIDER, executable, args, Some(cwd), Some(env.as_slice()));
     command.stdout(Stdio::piped());
-    let mut child = command.spawn().map_err(|_| failed())?;
+    let mut child = crate::executables::spawn_provider(&mut command).map_err(|_| failed())?;
     let stdout = child.stdout.take();
     let child = track_child(child);
     let (sender, done) = mpsc::channel();

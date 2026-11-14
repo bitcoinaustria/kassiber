@@ -237,8 +237,7 @@ pub fn start_agent(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut child = command
-        .spawn()
+    let mut child = crate::executables::spawn_provider(&mut command)
         .map_err(|error| spawn_failure(executable, &error))?;
     let stdin = child.stdin.take();
     let stdout = child.stdout.take();
