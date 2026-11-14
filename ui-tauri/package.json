@@ -11,8 +11,7 @@
     "dev:bridge": "VITE_DAEMON=bridge vite",
     "dev:demo": "VITE_DAEMON=bridge KASSIBER_DEV_DATA_ROOT=\"${KASSIBER_REGTEST_DEMO_HOME:-$HOME/.kassiber/regtest-demo}/data\" vite",
     "dev:shell": "tauri dev",
-    "broker:build": "tsc -p provider-broker/tsconfig.json && esbuild provider-broker/src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=provider-broker/dist/index.mjs",
-    "build": "pnpm broker:build && tsc -b && vite build",
+    "build": "tsc -b && vite build",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "preview": "vite preview",
@@ -22,11 +21,8 @@
     "blocks:add:dashboard5": "sh -c 'set -a; [ -f .env ] && . ./.env; set +a; if [ -z \"${SHADCNBLOCKS_API_KEY:-}\" ] || [ \"$SHADCNBLOCKS_API_KEY\" = \"replace_with_your_shadcnblocks_api_key\" ]; then echo \"Set SHADCNBLOCKS_API_KEY in ui-tauri/.env first\" >&2; exit 1; fi; pnpm dlx shadcn@latest add @shadcnblocks/dashboard5'"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "1.5.0",
     "@fontsource-variable/dm-sans": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.5",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "@opencode-ai/sdk": "1.18.10",
     "@tanstack/react-query": "^5.71.1",
     "@tanstack/react-router": "^1.114.3",
     "@tanstack/react-virtual": "^3.14.4",
@@ -47,7 +43,6 @@
     "remark-gfm": "^4.0.0",
     "tailwind-merge": "^2.6.0",
     "three": "0.186.0",
-    "zod": "4.4.3",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
@@ -62,7 +57,6 @@
     "@types/react-dom": "^19.0.3",
     "@types/three": "0.186.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "esbuild": "^0.25.0",
     "eslint": "^9.18.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.18",
