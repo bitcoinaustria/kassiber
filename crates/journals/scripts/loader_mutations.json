@@ -3072,8 +3072,8 @@
   {
     "id": "JL-review-raw-admission",
     "file": "crates/journals/src/pipeline.rs",
-    "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",
-    "replace": "let typed = snapshot.typed().map_err(|message| Refusal::new(\"RuntimeError\", message))?; typed.validate().map_err(|message| Refusal::new(\"RuntimeError\", message))?; Self::from_snapshot(typed)",
+    "find": "    review_state(conn, &snapshot, then)\n",
+    "replace": "    let typed = snapshot.typed().map_err(|message| Refusal::new(\"RuntimeError\", message))?;\n    typed.validate().map_err(|message| Refusal::new(\"RuntimeError\", message))?;\n    review_state(conn, &snapshot, then)\n",
     "expect_failing": [
       "review_assembler_preserves_raw_admission_and_refusal_ownership"
     ],
@@ -3081,9 +3081,9 @@
   },
   {
     "id": "JL-review-raw-refusal",
-    "file": "crates/journals/src/pipeline.rs",
-    "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",
-    "replace": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(|error| Refusal::new(\"RuntimeError\", error.message))?)",
+    "file": "crates/journals/src/process.rs",
+    "find": "let stages = kassiber_custody::run_loaded(snapshot, true).map_err(custody_error)?;",
+    "replace": "let stages = kassiber_custody::run_loaded(snapshot, true).map_err(|error| Refusal::new(\"RuntimeError\", error.message))?;",
     "expect_failing": [
       "review_assembler_preserves_raw_admission_and_refusal_ownership"
     ],
@@ -3122,8 +3122,8 @@
   {
     "id": "rules-country-swap-values-written",
     "file": "crates/custody/src/ledger_request.rs",
-    "find": "                        \"swap_values\",\n",
-    "replace": "",
+    "find": "\n    \"swap_values\",\n",
+    "replace": "\n",
     "expect_failing": [
       "a_rules_countrys_expenses_and_move_rows_decode"
     ],
@@ -3132,8 +3132,8 @@
   {
     "id": "rules-country-gifts-written",
     "file": "crates/custody/src/ledger_request.rs",
-    "find": "                        \"gifts_given\",\n",
-    "replace": "",
+    "find": "\n    \"gifts_given\",\n",
+    "replace": "\n",
     "expect_failing": [
       "a_rules_countrys_expenses_and_move_rows_decode"
     ],
@@ -3142,8 +3142,8 @@
   {
     "id": "rules-country-pool-scope-written",
     "file": "crates/custody/src/ledger_request.rs",
-    "find": "                        \"pool_scope\",\n                        \"fee_units\",",
-    "replace": "                        \"fee_units\",",
+    "find": "    \"pool_scope\",\n    \"fee_units\",",
+    "replace": "    \"fee_units\",",
     "expect_failing": [
       "a_rules_countrys_expenses_and_move_rows_decode"
     ],

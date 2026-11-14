@@ -62,8 +62,8 @@
   {
     "id": "JDESKTOP-precommit",
     "file": "crates/journals/src/process.rs",
-    "find": "    writes.check()?;\n    let commit = kassiber_custody::timing::span(\"commit\");",
-    "replace": "    let commit = kassiber_custody::timing::span(\"commit\");",
+    "find": "        writes.check()?;\n        let commit = kassiber_custody::timing::span(\"commit\");",
+    "replace": "        let commit = kassiber_custody::timing::span(\"commit\");",
     "expect_failing": [
       "journals_desktop_cancellation_before_commit_rolls_back_pairs_and_every_journal_write"
     ],

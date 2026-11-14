@@ -152,8 +152,7 @@ fn assert_cases(encrypted: bool) {
 
 fn native_cases(conn: &Connection, scenario: &Value, args: &Value) -> Value {
     let build = field(scenario, "build");
-    let mut ids = list(field(build, "entry_ids")).iter();
-    let page = review_workflow::cases(
+    review_workflow::cases(
         conn,
         &Scope {
             workspace_id: "w",
@@ -161,14 +160,8 @@ fn native_cases(conn: &Connection, scenario: &Value, args: &Value) -> Value {
         },
         args,
         &py_str(field(build, "as_of")),
-        || py_str(ids.next().expect("native entry identity tape")),
     )
-    .unwrap();
-    assert!(
-        ids.next().is_none(),
-        "native build consumes the identity tape"
-    );
-    page
+    .unwrap()
 }
 
 #[test]
@@ -219,7 +212,6 @@ fn native_review_cases_build_on_the_live_connection_and_preserve_pending_caller_
             },
             &dict::<&str>([]),
             &py_str(field(field(scenario, "build"), "as_of")),
-            || panic!("excluded observations produce no entries"),
         )
         .unwrap();
         assert!(list(field(&page, "cases")).is_empty());
@@ -248,27 +240,22 @@ fn native_review_cases_refuse_cursors_before_loading_and_preserve_build_refusals
             profile_id: "p",
         };
         let as_of = py_str(field(field(scenario, "build"), "as_of"));
-        let error =
-            review_workflow::cases(&conn, &scope, &dict([("cursor", s("bad"))]), &as_of, || {
-                panic!("invalid cursor cannot build")
-            })
+        let error = review_workflow::cases(&conn, &scope, &dict([("cursor", s("bad"))]), &as_of)
             .unwrap_err();
         let review_workflow::Error::Service(error) = error else {
             panic!("cursor validation must precede corrupt amount loading")
         };
         assert_eq!(error.code, "validation");
         assert_eq!(error.message, "Review cursor is malformed");
-        let error = review_workflow::cases(&conn, &scope, &dict::<&str>([]), &as_of, || {
-            panic!("invalid amount cannot render")
-        })
-        .unwrap_err();
+        let error = review_workflow::cases(&conn, &scope, &dict::<&str>([]), &as_of).unwrap_err();
         let review_workflow::Error::Build(error) = error else {
             panic!("retain full assembler refusal")
         };
-        let expected = kassiber_journals::pipeline::Prepared::load(
+        let expected = kassiber_journals::pipeline::load_review_state(
             &conn,
             field(field(scenario, "build"), "profile").clone(),
             &as_of,
+            |_| (),
         )
         .err()
         .unwrap();

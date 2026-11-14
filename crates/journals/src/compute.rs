@@ -47,11 +47,6 @@ pub fn compute_snapshot(snapshot: BookSnapshot, finalized: bool) -> Result<Compu
     finish(rows, stages)
 }
 
-pub fn compute_loaded(snapshot: Snapshot, finalized: bool) -> Result<Computed, Refusal> {
-    let stages = kassiber_custody::run_loaded(&snapshot, finalized)?;
-    finish(snapshot, stages)
-}
-
 fn finish(snapshot: Snapshot, stages: Stages) -> Result<Computed, Refusal> {
     let fusion = match &stages.finalized_projection {
         Some(projection) => {

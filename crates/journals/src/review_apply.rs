@@ -2,7 +2,7 @@
 use crate::{persistence, storage::RebuildCache};
 use crate::{
     review_effects, review_simulation,
-    review_workflow::{derived_ids, facts, prepare, profile, Error},
+    review_workflow::{facts, profile, with_state, Error},
 };
 use kassiber_custody::codec;
 use kassiber_envelope::{dict, get, s, set, AppError};
@@ -184,14 +184,15 @@ pub fn apply(
         review_support::parse_json(&text(existing, "receipt_json"))?
     } else {
         review_support::require_input_version(conn, scope, &value(artifact, "base_input_version"))?;
-        let before = prepare(conn, scope, as_of)?;
-        let state = before.review_state(conn, derived_ids())?;
-        if !review_artifact::equal(
-            &review_effects::effects(&state, conn, scope, &normalized, sources)?,
-            &value(artifact, "before"),
-        ) {
-            return Err(stale("Review evidence changed; create a fresh preview"));
-        }
+        let cases = with_state(conn, scope, as_of, |state| {
+            if !review_artifact::equal(
+                &review_effects::effects(state, conn, scope, &normalized, sources)?,
+                &value(artifact, "before"),
+            ) {
+                return Err(stale("Review evidence changed; create a fresh preview"));
+            }
+            Ok(review_simulation::Cases::from_state(state))
+        })?;
         let mut operations = list(&normalized).to_vec();
         let results = review_simulation::apply(
             conn,
@@ -200,26 +201,28 @@ pub fn apply(
             sources,
             request.authored_source,
             false,
-            review_simulation::Cases::from_state(&state),
+            cases,
             |conn| facts(conn, scope, as_of),
         )?;
-        let after = prepare(conn, scope, as_of)?;
-        // Persistence derives canonical entry identities from their economic
-        // keys; temporary render identities never enter the durable journal.
-        let state = after.review_state(conn, derived_ids())?;
-        let mut effects = review_effects::effects(&state, conn, scope, &normalized, sources)?;
-        if !review_artifact::equal(&effects, &value(artifact, "after")) {
-            return Err(stale("Review effects changed; create a fresh preview"));
-        }
-        let current = profile(conn, scope)?;
-        let stored = persistence::store_ledger_state(
-            conn,
-            &codec::to_json(&current),
-            &state,
-            &sources.now(conn)?,
-            &mut || sources.uuid(conn).map_err(service_refusal),
-            &mut (),
-        )?;
+        // The journals review stores come from the path `journals process`
+        // stores from. Persistence derives canonical entry identities from
+        // their economic keys, as it does there.
+        let (mut effects, current, stored) = with_state(conn, scope, as_of, |state| {
+            let effects = review_effects::effects(state, conn, scope, &normalized, sources)?;
+            if !review_artifact::equal(&effects, &value(artifact, "after")) {
+                return Err(stale("Review effects changed; create a fresh preview"));
+            }
+            let current = profile(conn, scope)?;
+            let stored = persistence::store_ledger_state(
+                conn,
+                &codec::to_json(&current),
+                state,
+                &sources.now(conn)?,
+                &mut || sources.uuid(conn).map_err(service_refusal),
+                &mut (),
+            )?;
+            Ok((effects, current, stored))
+        })?;
         set(&mut effects, "processed_at", s(stored.processed_at));
         let affected = transaction_ids(&results);
         let receipt = dict([

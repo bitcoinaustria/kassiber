@@ -46,6 +46,10 @@ survive only as frozen test fixtures. The engine owns the marker/quarantine
 contract and the disposal categories; the report crate maps the categories
 into report buckets. See [the Austrian handoff](../austrian-handoff.md).
 
+Review plans, validation and apply build their journal state through the
+same custody, fusion, engine and render steps as `journals process`, for
+every tax country ([review builds](r4-journal-pipeline.md#review-builds-through-the-same-path)).
+
 Engine calls pool each asset across the wallets of a profile, so a same-asset
 move can carry basis between owned wallets. Wallet identity is
 preserved through each entry's exchange label and per-wallet balances.

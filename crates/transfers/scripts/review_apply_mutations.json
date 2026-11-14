@@ -52,8 +52,8 @@
   {
     "id": "RVA-before-effects",
     "file": "crates/journals/src/review_apply.rs",
-    "find": "        if !review_artifact::equal(\n            &review_effects::effects(&state, conn, scope, &normalized, sources)?,\n            &value(artifact, \"before\"),\n        ) {",
-    "replace": "        if false {",
+    "find": "            if !review_artifact::equal(\n                &review_effects::effects(state, conn, scope, &normalized, sources)?,\n                &value(artifact, \"before\"),\n            ) {",
+    "replace": "            if false {",
     "expect_failing": [
       "review_apply_refuses_changed_before_and_after_effects_and_rolls_back"
     ],
@@ -72,8 +72,8 @@
   {
     "id": "RVA-canonical-store",
     "file": "crates/journals/src/review_apply.rs",
-    "find": "            &state,\n            &sources.now(conn)?,",
-    "replace": "            &before.review_state(conn, derived_ids())?,\n            &sources.now(conn)?,",
+    "find": "                state,\n                &sources.now(conn)?,",
+    "replace": "                &{\n                    let mut stale = state.clone();\n                    stale.entries.clear();\n                    stale\n                },\n                &sources.now(conn)?,",
     "expect_failing": [
       "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
     ],
@@ -102,8 +102,8 @@
   {
     "id": "RVA-operation-source",
     "file": "crates/journals/src/review_apply.rs",
-    "find": "            request.authored_source,\n            false,\n            review_simulation::Cases::from_state(&state),",
-    "replace": "            \"user\",\n            false,\n            review_simulation::Cases::from_state(&state),",
+    "find": "            request.authored_source,\n            false,\n            cases,",
+    "replace": "            \"user\",\n            false,\n            cases,",
     "expect_failing": [
       "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
     ],

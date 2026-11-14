@@ -3,6 +3,69 @@ use kassiber_journals::{boundary, pipeline::Prepared};
 use kassiber_store::rusqlite::Connection;
 use serde_json::{json, Value};
 
+/// A canonical state without its render-time entry identities (persistence
+/// derives the stored ones) and the quantity stage's canonical input (which
+/// no journal reads, `QuantityState::json_with_views`), with its quantity
+/// projection's observations and postings in their own fields.
+fn comparable(mut state: Value) -> Value {
+    for entry in state["entries"].as_array_mut().unwrap() {
+        entry["id"] = json!("");
+    }
+    state["custody_quantity"]
+        .as_object_mut()
+        .unwrap()
+        .remove("canonical_input");
+    let projection = state["custody_quantity"]["projection"]
+        .as_object_mut()
+        .unwrap();
+    let observations = projection.remove("observations").unwrap_or(json!([]));
+    let postings = projection.remove("postings").unwrap_or(json!([]));
+    json!({"state": state, "observations": observations, "postings": postings})
+}
+
+/// The typed review state as [`comparable`] has it, reading each quantity
+/// row's fields that `expected` holds through the state's views.
+fn typed_projection(state: &kassiber_journals::JournalState<'_>, expected: &Value) -> Value {
+    let mut typed = comparable(serde_json::from_str(&boundary::canonical(state).unwrap()).unwrap());
+    let (observations, postings) = state.quantity_refs();
+    let projection = &expected["custody_quantity"]["projection"];
+    let read = |rows: &Value, at: &dyn Fn(usize, &str) -> Value, count: usize| {
+        assert_eq!(rows.as_array().map_or(0, Vec::len), count);
+        Value::Array(
+            rows.as_array()
+                .into_iter()
+                .flatten()
+                .enumerate()
+                .map(|(index, row)| {
+                    Value::Object(
+                        row.as_object()
+                            .unwrap()
+                            .keys()
+                            .map(|key| (key.clone(), at(index, key)))
+                            .collect(),
+                    )
+                })
+                .collect(),
+        )
+    };
+    typed["observations"] = read(
+        &projection["observations"],
+        &|index, key| observations[index].at(key).clone(),
+        observations.len(),
+    );
+    // A posting read in place has no `$type` or `domain`, which no journal
+    // reads; take them from the reference.
+    typed["postings"] = read(
+        &projection["postings"],
+        &|index, key| match key {
+            "$type" | "domain" => projection["postings"][index][key].clone(),
+            _ => postings[index].at(key).clone(),
+        },
+        postings.len(),
+    );
+    typed
+}
+
 #[test]
 fn review_builds_match_complete_python_states() {
     let cases: Vec<Value> = serde_json::from_str(include_str!("data/review-builds.json")).unwrap();
@@ -82,6 +145,22 @@ fn review_builds_match_complete_python_states() {
             actual, case["expected"],
             "{}: {}",
             case["name"], case["sources"]
+        );
+        // Review builds through `journals process`'s own path; it renders
+        // the same state but for the identities persistence derives and the
+        // quantity projection rows it reads through views.
+        let expected: Value =
+            serde_json::from_str(case["expected"]["state"].as_str().unwrap()).unwrap();
+        let typed = kassiber_journals::pipeline::review_state(&conn, &loaded, |state| {
+            typed_projection(&state, &expected)
+        })
+        .unwrap();
+        assert_eq!(
+            typed,
+            comparable(expected.clone()),
+            "typed {}: {}",
+            case["name"],
+            case["sources"]
         );
         assert_eq!(conn.total_changes(), changes);
         assert!(!conn.is_autocommit());
