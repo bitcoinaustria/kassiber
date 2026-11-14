@@ -147,11 +147,15 @@ that could not replay identically are listed with their reason in
 
 Stdin replays after the recorded number of stdout lines and the network tape
 answers at once, so a recording whose test held a request in flight would
-race on replay. The sessions of
-`test_live_freshness_controls_remain_available_during_fetch` get that hold
-back from the tape (`KASSIBER_TEST_NET_TAPE_HOLD`): the first history request
-waits, the control goes in once it is held, and the request finishes after the
-control has answered (`held_request` in `crates/session-replay/src/replay.rs`).
+race on replay. Those sessions get the hold back from the tape
+(`KASSIBER_TEST_NET_TAPE_HOLD`, `HELD_FETCHES` in
+`crates/session-replay/src/replay.rs`): the first history request waits, the
+test's input goes in once it is held, and the request finishes when the test
+let it. For `test_live_freshness_controls_remain_available_during_fetch` that
+is after the control has answered; for
+`test_live_freshness_eof_joins_the_request_before_exit` the input is EOF and
+the release follows once stdout has been quiet for 100 ms, as the test drained
+the daemon's output before it released the request.
 
 The recorder needed the pytest suite, so no new sessions are recorded. New
 coverage goes into Rust tests. A reviewed, deliberate change re-records the

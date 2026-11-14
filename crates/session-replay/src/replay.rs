@@ -19,32 +19,65 @@ use crate::{dbdump, entry_path, restore, Blobs, Entry, Session};
 /// input followed.
 pub const PROCESS_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// The recording test that held a wallet's first history request in its
-/// loopback server while it sent a freshness control (cancel, revoke,
-/// pause, offline). The tape answers at once, so without the same hold
-/// whether the control lands before the job's next check is a race with
-/// how fast the fetch runs.
-const HELD_FETCH_TEST: &str = "tests/test_rust_freshness_lifecycle.py::\
-     test_live_freshness_controls_remain_available_during_fetch[";
+/// A recording test that held a wallet's first history request in its
+/// loopback server while it sent one input. The tape answers at once, so
+/// without the same hold whether that input lands before the job's next
+/// check is a race with how fast the fetch runs.
+#[derive(Debug, PartialEq, Eq)]
+struct HeldFetch {
+    /// The test id, up to its parameter.
+    test: &'static str,
+    /// The input the test sent while the request was held.
+    control: usize,
+    release: Release,
+}
 
-/// Its inputs: the sync, a status read, a competing sync, then the control.
-const HELD_CONTROL_INPUT: usize = 3;
+/// When the test let the held request finish.
+#[derive(Debug, PartialEq, Eq)]
+enum Release {
+    /// Once the control's answer printed.
+    AfterAnswer,
+    /// Once stdout had been quiet for `QUIET` after the input: the test
+    /// drained what the process printed until nothing came for that long.
+    AfterQuiet,
+}
 
-/// The request a session's recording held, as tape-hold bytes.
-fn held_request(session: &Session) -> Option<&'static str> {
-    if !session.test.as_deref()?.starts_with(HELD_FETCH_TEST) {
-        return None;
-    }
-    Some(
-        match session
-            .env
-            .get("KASSIBER_BACKEND_FIXTURE_KIND")
-            .map(String::as_str)
-        {
-            Some("electrum") => "blockchain.scripthash.get_history",
-            _ => "/scripthash/",
-        },
-    )
+const QUIET: Duration = Duration::from_millis(100);
+
+const HELD_FETCHES: &[HeldFetch] = &[
+    // The sync, a status read, a competing sync, then a freshness control
+    // (cancel, revoke, pause, offline).
+    HeldFetch {
+        test: "tests/test_rust_freshness_lifecycle.py::\
+               test_live_freshness_controls_remain_available_during_fetch[",
+        control: 3,
+        release: Release::AfterAnswer,
+    },
+    // The sync, then EOF: the daemon cancels and joins the request before it
+    // exits. Released early, the fetch outran the cancellation now and then
+    // (more progress, then a request the tape never had).
+    HeldFetch {
+        test: "tests/test_rust_freshness_lifecycle.py::\
+               test_live_freshness_eof_joins_the_request_before_exit[",
+        control: 1,
+        release: Release::AfterQuiet,
+    },
+];
+
+/// The hold a session's recording had, and the request it held as tape-hold
+/// bytes.
+fn held_request(session: &Session) -> Option<(&'static HeldFetch, &'static str)> {
+    let test = session.test.as_deref()?;
+    let held = HELD_FETCHES.iter().find(|h| test.starts_with(h.test))?;
+    let pattern = match session
+        .env
+        .get("KASSIBER_BACKEND_FIXTURE_KIND")
+        .map(String::as_str)
+    {
+        Some("electrum") => "blockchain.scripthash.get_history",
+        _ => "/scripthash/",
+    };
+    Some((held, pattern))
 }
 
 /// Where recordings keep their state roots: `record.sh` runs the suite in a
@@ -876,14 +909,14 @@ pub fn replay(
         format!("replay:{}", tape.display()),
     );
     // A recording whose loopback server held one request in flight gets the
-    // tape's hold on that request, released below once its control answered.
+    // tape's hold on that request, released below as the test released it.
     let hold = match held_request(session) {
-        Some(pattern) => {
+        Some((held, pattern)) => {
             let dir = scratch.join("hold");
             fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
             fs::write(dir.join("arm"), pattern).map_err(|e| e.to_string())?;
             command.env("KASSIBER_TEST_NET_TAPE_HOLD", &dir);
-            Some(dir)
+            Some((held, dir))
         }
         None => None,
     };
@@ -995,8 +1028,8 @@ pub fn replay(
                 .status();
             continue;
         }
-        let control = hold.as_ref().filter(|_| index == HELD_CONTROL_INPUT);
-        if let Some(dir) = control {
+        let control = hold.as_ref().filter(|(held, _)| index == held.control);
+        if let Some((_, dir)) = control {
             // The test sent its control while the request was held.
             while !dir.join("held").exists() && Instant::now() < deadline {
                 std::thread::sleep(Duration::from_millis(2));
@@ -1036,10 +1069,25 @@ pub fn replay(
             }
             None => drop(stdin.take()),
         }
-        if let Some(dir) = control {
-            // ...and let the request finish once the control's answer printed.
-            if !wait_for(after + 1) {
-                differences.push("timed out waiting for the held control's answer".into());
+        if let Some((held, dir)) = control {
+            // ...and let the request finish when the test did.
+            let released = match held.release {
+                Release::AfterAnswer => wait_for(after + 1),
+                Release::AfterQuiet => {
+                    let mut seen = lines.load(Ordering::SeqCst);
+                    let mut since = Instant::now();
+                    while since.elapsed() < QUIET && Instant::now() <= deadline {
+                        std::thread::sleep(Duration::from_millis(2));
+                        let now = lines.load(Ordering::SeqCst);
+                        if now != seen {
+                            (seen, since) = (now, Instant::now());
+                        }
+                    }
+                    Instant::now() <= deadline
+                }
+            };
+            if !released {
+                differences.push("timed out waiting to release the held request".into());
                 break;
             }
             fs::write(dir.join("release"), b"").map_err(|e| e.to_string())?;
@@ -1325,6 +1373,56 @@ mod relocation_tests {
         let mut same = Paths::default();
         same.add("/srv/checkout", "/srv/checkout");
         assert!(!same.named_in(b"/srv/checkout/x"));
+    }
+}
+
+#[cfg(test)]
+mod held_fetch_tests {
+    use super::{held_request, Release};
+    use crate::Session;
+
+    fn session(test: &str, backend: &str) -> Session {
+        serde_json::from_value(serde_json::json!({
+            "format": crate::SESSION_FORMAT,
+            "binary": "kassiber",
+            "argv": ["daemon"],
+            "cwd": "/",
+            "env": {"KASSIBER_BACKEND_FIXTURE_KIND": backend},
+            "test": test,
+            "started_us": 0,
+            "ended_us": 0,
+            "stdin": [],
+            "stdout": "",
+            "stderr": "",
+            "signals": [],
+            "exit": {"code": 0, "signal": null},
+            "roots": [],
+            "repo": "/",
+        }))
+        .unwrap()
+    }
+
+    /// The EOF test held its history request while it closed stdin and
+    /// released it once the daemon went quiet: its sessions get the same
+    /// hold on the closing input, for either backend.
+    #[test]
+    fn the_eof_join_sessions_hold_their_fetch_until_quiet() {
+        let test = "tests/test_rust_freshness_lifecycle.py::\
+                    test_live_freshness_eof_joins_the_request_before_exit";
+        for (backend, pattern) in [
+            ("electrum", "blockchain.scripthash.get_history"),
+            ("esplora", "/scripthash/"),
+        ] {
+            let (held, armed) =
+                held_request(&session(&format!("{test}[{backend}]"), backend)).unwrap();
+            assert_eq!((held.control, &held.release), (1, &Release::AfterQuiet));
+            assert_eq!(armed, pattern);
+        }
+        let controls = "tests/test_rust_freshness_lifecycle.py::\
+                        test_live_freshness_controls_remain_available_during_fetch[cancel-esplora]";
+        let (held, _) = held_request(&session(controls, "esplora")).unwrap();
+        assert_eq!((held.control, &held.release), (3, &Release::AfterAnswer));
+        assert!(held_request(&session("tests/test_other.py::test_x", "esplora")).is_none());
     }
 }
 
