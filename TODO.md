@@ -1983,6 +1983,19 @@ See [tax countries](docs/reference/tax-countries.md) and
   remember-me affordances on Windows/Linux. Existing desktop Touch ID and CLI
   remembered unlock remain convenience over SQLCipher, never a substitute.
 
+## Journal reproducibility
+
+Shipped: [the reproducibility check](docs/reference/replay-bundle.md#reproducibility-check)
+on the CLI, daemon, desktop and assistant.
+
+- [ ] Measure the check on a large book: it holds up to three in-memory
+  copies of the database (pristine, recomputation, determinism re-run). Done
+  when the peak memory and time are recorded in the reference and a
+  large-book run stays within the desktop's budget.
+- [ ] Decide whether time-dependent inputs (for example an expiring pair
+  dismissal) should report as `stale` rather than a difference when the
+  check runs long after processing.
+
 ## Daemon, contracts, and performance
 
 - [ ] Support OpenCode 2 OAuth-backed private turns once credentials can be
