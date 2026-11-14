@@ -302,11 +302,9 @@ pub fn chat_args(
     }
     if let Some(effort) = request.option("reasoning_effort") {
         if truthy(effort) && effort.as_str() != Some("auto") {
-            let Some(effort) = effort.as_str() else {
-                return Err(BrokerFailure::new("Invalid reasoning effort."));
-            };
+            // Node passes a non-string option as `String(value)`.
             args.push("--effort".to_owned());
-            args.push(effort.to_owned());
+            args.push(crate::codex::js_string(Some(effort)));
         }
     }
     // `--settings` still applies under `--setting-sources ""`: it is inline

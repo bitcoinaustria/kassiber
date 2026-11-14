@@ -330,7 +330,7 @@ pub fn fast_service_tier(model: &Value) -> Option<(String, Option<String>)> {
 }
 
 /// JavaScript's `String(value)` (`None` is `undefined`).
-fn js_string(value: Option<&Value>) -> String {
+pub(crate) fn js_string(value: Option<&Value>) -> String {
     match value {
         None => "undefined".to_owned(),
         Some(Value::Null) => "null".to_owned(),

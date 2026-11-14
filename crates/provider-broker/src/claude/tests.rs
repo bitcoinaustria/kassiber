@@ -234,6 +234,9 @@ fn builds_the_layered_tool_denial_invocation() {
         assert!(!quiet.iter().any(|arg| arg == "--effort"), "{effort}");
         assert_eq!(after(&quiet, "--model"), "sonnet");
     }
+    // A non-string effort crosses as JavaScript's String(value).
+    let numeric = args(&claude("default", json!({"reasoning_effort": 5})));
+    assert_eq!(after(&numeric, "--effort"), "5");
     let resumed = args(&claude(
         "opus",
         json!({"provider_session_id": OPUS_SESSION}),
