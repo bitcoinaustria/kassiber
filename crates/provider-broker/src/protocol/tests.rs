@@ -161,6 +161,11 @@ fn redaction_matches_the_typescript_rules_exactly() {
             r#"failed: Bearer x","password": "synthetic-secret""#,
             "failed: Bearer [redacted] [redacted]",
         ),
+        (r#"token: Bearer "synthetic-secret""#, "token: [redacted]"),
+        (
+            "token: Basic 'synthetic-secret' end",
+            "token: [redacted] end",
+        ),
         ("first line\r\nsecond line token=x", "first line"),
         ("   \n anything", "Provider request failed."),
         ("", "Provider request failed."),
@@ -186,6 +191,75 @@ fn redaction_matches_the_typescript_rules_exactly() {
         ),
     ] {
         assert_eq!(safe_error_message(input), expected, "{input}");
+    }
+}
+
+/// Every combination of label spelling, separator, scheme and quoting, with
+/// text before and a JSON key after, keeps the credential out. The secret
+/// has no vendor shape, so only the label and scheme rules can catch it.
+#[test]
+fn no_labelled_credential_survives_any_scheme_or_quoting() {
+    let secret = "synthetic-credential-value";
+    let labels = [
+        "token",
+        "\"token\"",
+        "'apiKey'",
+        "API_KEY",
+        "authorization",
+        "Authorization",
+        "password",
+        "secret",
+        "passphrase",
+        "bearer",
+    ];
+    let separators = [":", ": ", "=", " = ", ":\t"];
+    let schemes = ["", "Bearer ", "bearer  ", "Basic ", "BASIC\t"];
+    let quotes = [("", ""), ("\"", "\""), ("'", "'"), ("\"", ""), ("'", "")];
+    let tails = [
+        "",
+        " end",
+        ",\"password\": \"x\"}",
+        "; next=1",
+        " and more text",
+    ];
+    let mut checked = 0;
+    for label in labels {
+        for separator in separators {
+            for scheme in schemes {
+                for (open, close) in quotes {
+                    for tail in tails {
+                        // A quote around the scheme too: `"Bearer secret"`.
+                        for wrapped in [false, true] {
+                            let value = if wrapped {
+                                format!("{open}{scheme}{secret}{close}")
+                            } else {
+                                format!("{scheme}{open}{secret}{close}")
+                            };
+                            let input = format!("failed: {{{label}{separator}{value}{tail}");
+                            let safe = safe_error_message(&input);
+                            assert!(!safe.contains(secret), "{input} -> {safe}");
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(checked, 10 * 5 * 5 * 5 * 5 * 2);
+}
+
+/// A scheme with no label before it, quoted or not.
+#[test]
+fn no_bare_scheme_credential_survives() {
+    let secret = "synthetic-credential-value";
+    for input in [
+        format!("Bearer {secret}"),
+        format!("got Basic {secret} back"),
+        format!("bearer \"{secret}\""),
+        format!("BEARER\t'{secret}',\"password\": \"x\""),
+    ] {
+        let safe = safe_error_message(&input);
+        assert!(!safe.contains(secret), "{input} -> {safe}");
     }
 }
 

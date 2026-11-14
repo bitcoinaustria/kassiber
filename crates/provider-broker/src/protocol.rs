@@ -720,15 +720,16 @@ static REDACTIONS: LazyLock<Vec<Redaction>> = LazyLock::new(|| {
     vec![
         // URL userinfo, before anything else rewrites the URL.
         rule(format!(r"://[^/@{SPACE}]+@"), "://[redacted]@"),
-        // JSON or quoted assignment: "apiKey": "secret". A quoted value runs
-        // to its closing quote, or to the end of the line when it has none,
-        // so spaces, commas or a missing quote cannot leave it in place. An
-        // unquoted value that opens with a scheme takes the credential after
-        // it too (`token: Bearer x`): otherwise the scheme word would be the
-        // whole value and the credential would stay.
+        // JSON or quoted assignment: "apiKey": "secret". The value may open
+        // with a scheme (`token: Bearer x`, `token: Basic 'x'`), which is
+        // taken with the credential after it: otherwise the scheme word
+        // would be the whole value and the credential would stay. A quoted
+        // credential runs to its closing quote, or to the end of the line
+        // when it has none, so spaces, commas or a missing quote cannot
+        // leave it in place.
         rule(
             format!(
-                r#"(["']?(?:{labels})["']?[{SPACE}]*[:=][{SPACE}]*)(?:(["'])(?:(?!\2).)*\2?|(?:(?:{}|{})[{SPACE}]+)?[^"',;{SPACE}]+)"#,
+                r#"(["']?(?:{labels})["']?[{SPACE}]*[:=][{SPACE}]*)(?:(?:{}|{})[{SPACE}]+)?(?:(["'])(?:(?!\2).)*\2?|[^"',;{SPACE}]+)"#,
                 ascii_ci("bearer"),
                 ascii_ci("basic")
             ),
