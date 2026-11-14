@@ -24,9 +24,7 @@ use std::time::{Duration, Instant};
 
 use crate::cleanup::{track_child, TrackedChild};
 use crate::env::environment_from;
-use crate::executables::{
-    fallback_dirs, provider_command, resolve_in, run_provider, spawn_failure, RunOptions,
-};
+use crate::executables::{fallback_dirs, provider_command, resolve_in, run_provider, RunOptions};
 use crate::protocol::{
     js_space, js_trim, provider_status, safe_error_message, sensitive_context, stateless_session,
     BrokerFailure, ChatRequest, ProviderId, ProviderState, ProviderStatus,
@@ -458,8 +456,6 @@ pub enum NotReady {
     /// It exited first, with this code (`None` after a signal).
     Exited(Option<i32>),
     TimedOut,
-    /// The caller refused what it announced.
-    Refused(BrokerFailure),
 }
 
 /// How long a server gets to announce itself.
@@ -581,9 +577,4 @@ impl ServerProcess {
     pub fn wait(&self) {
         let _ = self.child.wait();
     }
-}
-
-/// The spawn failure Node reports for `executable`.
-pub fn spawn_error(executable: &Path, error: &std::io::Error) -> BrokerFailure {
-    spawn_failure(executable, error)
 }

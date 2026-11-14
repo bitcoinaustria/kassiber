@@ -118,11 +118,6 @@ impl Frames {
         }
     }
 
-    /// The bytes received but not yet framed.
-    pub fn pending(&self) -> &[u8] {
-        &self.buffer
-    }
-
     /// The next frame's text, before its blank line, with `\r\n` already
     /// turned into `\n`; `Ok(None)` when the body ended. `normalize_cr` also
     /// turns a lone `\r` into `\n`, as the OpenCode 1 SDK does. `limit`

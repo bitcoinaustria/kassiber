@@ -696,7 +696,6 @@ fn start_server(
             code.map_or("null".to_owned(), |code| code.to_string())
         ))),
         Err(NotReady::TimedOut) => Err(fail("OpenCode server startup timed out.")),
-        Err(NotReady::Refused(failure)) => Err(failure),
     }
 }
 

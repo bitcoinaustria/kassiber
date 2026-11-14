@@ -626,7 +626,6 @@ pub fn start_server(executable: &Path, cwd: &Path, env: &Env) -> Result<Server, 
         match ServerProcess::start(executable, &args, cwd, &env, false, announced_port) {
             Ok(started) => started,
             Err(NotReady::TimedOut) => return Err(fail("OpenCode server startup timed out.")),
-            Err(NotReady::Refused(failure)) => return Err(failure),
             Err(NotReady::Spawn(_) | NotReady::Exited(_)) => {
                 return Err(fail("OpenCode server could not start."))
             }
