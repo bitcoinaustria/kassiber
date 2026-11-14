@@ -5,7 +5,7 @@ use crate::backend_runtime::{
     canonical, manual_mode, normalize_chain, normalize_network, tombstones, BUILTINS, KINDS,
     RESERVED,
 };
-pub use crate::backend_runtime::{Config, GraphRuntime};
+pub use crate::backend_runtime::{environment_overrides, Config, GraphRuntime, TRANSPORT_FIELDS};
 use kassiber_store::rusqlite::{params, types::Value as SqlValue};
 use std::collections::{BTreeMap, BTreeSet};
 #[path = "backend_desktop.rs"]
@@ -863,6 +863,95 @@ impl Config {
         Ok(result)
     }
 }
+/// A resolved backend's transport fields, empty values as absent, so two
+/// resolutions compare equal exactly when they would connect alike.
+fn transport(config: &serde_json::Value) -> Vec<Option<String>> {
+    TRANSPORT_FIELDS
+        .iter()
+        .map(|key| match config.get(*key) {
+            None | Some(serde_json::Value::Null) => None,
+            Some(serde_json::Value::String(text)) if text.trim().is_empty() => None,
+            Some(serde_json::Value::String(text)) => Some(text.clone()),
+            Some(other) => Some(other.to_string()),
+        })
+        .collect()
+}
+
+/// Whether any stored backend's certificate names `path`.
+pub fn certificate_referenced(conn: &Connection, path: &str) -> Result<bool> {
+    let mut statement = conn
+        .prepare("SELECT config_json FROM backends")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, Option<String>>(0))
+        .map_err(sql_error)?;
+    for row in rows {
+        let config = row.map_err(sql_error)?.unwrap_or_default();
+        if serde_json::from_str::<serde_json::Value>(&config)
+            .ok()
+            .and_then(|v| {
+                v.get("certificate")
+                    .and_then(|c| c.as_str().map(str::to_owned))
+            })
+            .is_some_and(|certificate| certificate == path)
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+impl Config {
+    /// The last step of a confirmed certificate trust, in one write
+    /// transaction: refuse unless `name` still resolves to the transport the
+    /// certificate was fetched for (`fetched_for`, a `resolve` result), point
+    /// its certificate at `pin` and turn insecure off, then require `verify`
+    /// to accept the resolution that results before committing. Any refusal
+    /// rolls back, leaving the previous certificate setting. Returns that
+    /// previous setting.
+    pub fn pin_certificate(
+        &self,
+        conn: &Connection,
+        name: &str,
+        fetched_for: &serde_json::Value,
+        pin: &str,
+        verify: &dyn Fn(&serde_json::Value) -> Result<()>,
+        sources: &dyn Sources,
+    ) -> Result<Option<String>> {
+        let name = kassiber_pytext::strip(name).to_lowercase();
+        let tx = kassiber_store::write_transaction(conn).map_err(sql_error)?;
+        let current = self.resolve(&tx, &name)?;
+        if transport(&current) != transport(fetched_for) {
+            return Err(AppError::new(
+                "backend_certificate_config_changed",
+                format!("Backend '{name}' changed while its certificate was being checked"),
+            )
+            .with_hint(
+                "Nothing was trusted. Check the certificate again for the backend as it is now.",
+            ));
+        }
+        let previous = current
+            .get("certificate")
+            .and_then(serde_json::Value::as_str)
+            .filter(|path| !path.trim().is_empty())
+            .map(str::to_owned);
+        update(
+            &tx,
+            &dict([
+                ("name", s(&name)),
+                (
+                    "config",
+                    dict([("certificate", s(pin)), ("insecure", Value::Null)]),
+                ),
+            ]),
+            sources,
+        )?;
+        verify(&self.resolve(&tx, &name)?)?;
+        tx.commit().map_err(sql_error)?;
+        Ok(previous)
+    }
+}
+
 /// `list_backend_kinds()`: a static catalog that needs no book.
 pub fn kinds() -> Value {
     Value::List(KINDS.iter().map(|k| dict([("kind", s(k))])).collect())

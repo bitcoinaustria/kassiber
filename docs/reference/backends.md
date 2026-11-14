@@ -746,15 +746,29 @@ What happens:
   certificate** in the desktop dialog. Kassiber connects through the
   backend's configured proxy, completes the TLS handshake far enough to check
   the server's signature with the certificate, and stops: no request, no
-  credentials, and no application data are sent. Launch, status, listing
+  backend credentials, and no application data are sent to the backend (a
+  configured proxy is negotiated as usual, with its own credentials). Launch, status, listing
   backends, opening Settings, connection tests, and syncs never fetch a
   certificate. Offline mode refuses it.
 - Confirming fetches again and pins the certificate only if the server still
   presents the fingerprint you confirmed (`backend_certificate_mismatch`
   otherwise, and nothing is written). The pin is the server's certificate as
-  one PEM file, `<data root>/certificates/<backend>-<hash>.pem`, written
-  owner-only (`0600` in a `0700` directory). The backend's `CERTIFICATE` then
-  names that file and `INSECURE` is turned off.
+  one immutable PEM file named by its SHA-256,
+  `<data root>/certificates/<sha256>.pem`, owner-only (`0600` in a `0700`
+  directory owned by you; an existing directory is tightened, one owned by
+  someone else is refused). The backend's `CERTIFICATE` is then switched to
+  that file and `INSECURE` turned off in one write transaction, and only if
+  the backend still has the URL, kind, proxy, certificate and insecure
+  setting the certificate was fetched for
+  (`backend_certificate_config_changed` otherwise). Before committing,
+  Kassiber checks that the backend as it now resolves would connect with
+  exactly this pin and with verification on (`backend_certificate_not_effective`
+  otherwise). A refusal leaves the previous pin and setting in place; a
+  replaced pin file no backend refers to is removed after the commit.
+- A backend whose kind, URL, proxy, certificate or insecure setting is
+  overridden by an environment variable (`KASSIBER_BACKEND_<NAME>_<FIELD>`)
+  is refused before any connection (`backend_certificate_overridden`, naming
+  the variables but not their values): a stored pin could be silently unused.
 - There is nothing to pin, and the command says so
   (`backend_certificate_already_trusted`), when the certificate already chains
   to a trusted authority or already matches the backend's `CERTIFICATE`.

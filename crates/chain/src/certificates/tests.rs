@@ -194,3 +194,35 @@ fn a_configured_ca_that_covers_the_server_leaves_nothing_to_pin() {
         .unwrap();
     assert_eq!(error.code, "backend_certificate_unpinnable");
 }
+
+#[test]
+fn only_an_effective_pin_counts_as_trusted() {
+    let server = FakeTls::start(fixtures::SELF_SIGNED, http_reply).unwrap();
+    let port = server.port();
+    let fetched = fetch(
+        &gate(),
+        &CertificateConsent::explicit("home"),
+        &esplora(port, json!({})),
+    )
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let pin = dir.path().join("pin.pem");
+    std::fs::write(&pin, fetched.pem()).unwrap();
+    let other = dir.path().join("other.pem");
+    std::fs::write(&other, fixtures::OTHER_SELF_SIGNED.0).unwrap();
+    verify_pinned(&esplora(port, json!({"certificate": pin})), &fetched).unwrap();
+    for config in [
+        // Verification stays off whatever the certificate says.
+        esplora(port, json!({"certificate": pin, "insecure": "1"})),
+        esplora(port, json!({})),
+        esplora(port, json!({"certificate": other})),
+        esplora(port, json!({"certificate": dir.path().join("missing.pem")})),
+        json!({"name":"home","kind":"esplora","url":format!("http://localhost:{port}/api"),"certificate":pin}),
+    ] {
+        assert_eq!(
+            verify_pinned(&config, &fetched).unwrap_err().code,
+            "backend_certificate_not_effective",
+            "{config}"
+        );
+    }
+}

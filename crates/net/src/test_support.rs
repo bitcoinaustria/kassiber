@@ -920,9 +920,12 @@ pub struct FakeTls {
     identity: Arc<Mutex<(Vec<u8>, Vec<u8>)>>,
     connections: Arc<std::sync::atomic::AtomicUsize>,
     hits: Arc<Mutex<Vec<Vec<u8>>>>,
+    accept_hook: AcceptHook,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
+
+type AcceptHook = Arc<Mutex<Option<Box<dyn Fn(usize) + Send>>>>;
 
 impl FakeTls {
     pub fn start(
@@ -939,6 +942,8 @@ impl FakeTls {
         let accepted = connections.clone();
         let hits = Arc::new(Mutex::new(Vec::new()));
         let requests = hits.clone();
+        let accept_hook: AcceptHook = Arc::new(Mutex::new(None));
+        let hook = accept_hook.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = stop.clone();
         let thread = thread::spawn(move || loop {
@@ -953,7 +958,10 @@ impl FakeTls {
                 }
                 Err(_) => return,
             };
-            accepted.fetch_add(1, Ordering::SeqCst);
+            let number = accepted.fetch_add(1, Ordering::SeqCst) + 1;
+            if let Some(hook) = hook.lock().unwrap().as_ref() {
+                hook(number);
+            }
             let _ = socket.set_nonblocking(false);
             let _ = socket.set_read_timeout(Some(Duration::from_secs(3)));
             let _ = socket.set_write_timeout(Some(Duration::from_secs(3)));
@@ -991,6 +999,7 @@ impl FakeTls {
             identity,
             connections,
             hits,
+            accept_hook,
             stop,
             thread: Some(thread),
         })
@@ -998,6 +1007,12 @@ impl FakeTls {
 
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    /// Run `hook` with each connection's number (from 1) once it is accepted
+    /// and before its handshake: a test's "meanwhile" step.
+    pub fn on_accept(&self, hook: impl Fn(usize) + Send + 'static) {
+        *self.accept_hook.lock().unwrap() = Some(Box::new(hook));
     }
 
     /// Serve another certificate from the next connection on.

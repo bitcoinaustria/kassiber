@@ -253,3 +253,216 @@ fn offline_mode_refuses_the_fetch_before_any_connection() {
     assert_eq!(code(&envelope), "network_egress_disabled");
     assert_eq!(server.connections(), 0);
 }
+
+fn pin_dir(desk: &Desk) -> std::path::PathBuf {
+    desk.root.join("certificates")
+}
+
+fn pins(desk: &Desk) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(pin_dir(desk))
+        .map(|entries| {
+            entries
+                .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+#[test]
+fn an_environment_override_refuses_before_any_connection() {
+    let server = server();
+    let mut desk = desk(&server);
+    // The override would keep verification off whatever the stored row says.
+    // An environment-defined backend needs its kind and URL too; these
+    // mirror the stored row.
+    for (key, value) in [
+        ("KASSIBER_BACKEND_HOME_KIND", "esplora".to_owned()),
+        (
+            "KASSIBER_BACKEND_HOME_URL",
+            format!("https://localhost:{}/api", server.port()),
+        ),
+        ("KASSIBER_BACKEND_HOME_INSECURE", "1".to_owned()),
+    ] {
+        desk.env.insert(key.into(), value);
+    }
+    for args in [
+        &["backends", "trust-certificate", "home"][..],
+        &[
+            "backends",
+            "trust-certificate",
+            "home",
+            "--fingerprint",
+            FINGERPRINT,
+        ],
+    ] {
+        let (exit, envelope) = cli(&desk, args);
+        assert_ne!(exit, 0);
+        assert_eq!(
+            code(&envelope),
+            "backend_certificate_overridden",
+            "{envelope:?}"
+        );
+        let message = field(&envelope, &["error", "message"]);
+        assert!(
+            message.contains(
+                "KASSIBER_BACKEND_HOME_INSECURE, KASSIBER_BACKEND_HOME_KIND, KASSIBER_BACKEND_HOME_URL"
+            ) && !message.contains("localhost"),
+            "{message}"
+        );
+        assert!(
+            !message.contains("=1") && !message.contains("INSECURE="),
+            "{message}"
+        );
+    }
+    let fetched = desk.ask("ui.backends.certificate.fetch", r#"{"name": "home"}"#);
+    assert_eq!(code(&fetched), "backend_certificate_overridden");
+    assert_eq!(server.connections(), 0);
+    assert!(pins(&desk).is_empty());
+}
+
+#[test]
+fn a_backend_changed_mid_handshake_is_not_trusted_and_keeps_its_pin() {
+    let server = server();
+    let desk = desk(&server);
+    let (exit, envelope) = cli(
+        &desk,
+        &[
+            "backends",
+            "trust-certificate",
+            "home",
+            "--fingerprint",
+            FINGERPRINT,
+        ],
+    );
+    assert_eq!(exit, 0, "{envelope:?}");
+    let first = field(&envelope, &["data", "certificate"]).to_owned();
+    assert_eq!(pins(&desk).len(), 1);
+
+    // The server rotates its certificate; while Kassiber checks it, another
+    // process points the backend somewhere else.
+    server.set_identity(fixtures::OTHER_SELF_SIGNED);
+    let database = kassiber_paths::resolve_database_path(&desk.root);
+    server.on_accept(move |_| {
+        let conn = kassiber_store::encryption::open_container(&database, None).unwrap();
+        conn.busy_timeout(std::time::Duration::from_secs(10))
+            .unwrap();
+        conn.execute(
+            "UPDATE backends SET url='https://localhost:1/api' WHERE name='home'",
+            [],
+        )
+        .unwrap();
+    });
+    let (exit, envelope) = cli(
+        &desk,
+        &[
+            "backends",
+            "trust-certificate",
+            "home",
+            "--fingerprint",
+            OTHER,
+        ],
+    );
+    assert_ne!(exit, 0);
+    assert_eq!(
+        code(&envelope),
+        "backend_certificate_config_changed",
+        "{envelope:?}"
+    );
+    // The new pin was never attached and its file is gone; the old pin and
+    // the row's certificate setting are untouched.
+    let names = pins(&desk);
+    assert_eq!(names.len(), 1, "{names:?}");
+    assert!(first.ends_with(&names[0]));
+    let conn = desk.connection();
+    let config: String = conn
+        .query_row(
+            "SELECT config_json FROM backends WHERE name='home'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(config.contains(&names[0]), "{config}");
+}
+
+#[test]
+fn a_replaced_pin_is_removed_only_after_the_new_one_is_committed() {
+    let server = server();
+    let desk = desk(&server);
+    let (_, envelope) = cli(
+        &desk,
+        &[
+            "backends",
+            "trust-certificate",
+            "home",
+            "--fingerprint",
+            FINGERPRINT,
+        ],
+    );
+    let first = field(&envelope, &["data", "certificate"]).to_owned();
+    server.set_identity(fixtures::OTHER_SELF_SIGNED);
+    let (exit, envelope) = cli(
+        &desk,
+        &[
+            "backends",
+            "trust-certificate",
+            "home",
+            "--fingerprint",
+            OTHER,
+        ],
+    );
+    assert_eq!(exit, 0, "{envelope:?}");
+    let second = field(&envelope, &["data", "certificate"]).to_owned();
+    assert_ne!(first, second);
+    assert!(!std::path::Path::new(&first).exists());
+    assert!(std::path::Path::new(&second).exists());
+    assert_eq!(pins(&desk).len(), 1);
+}
+
+#[test]
+fn backends_whose_names_once_shared_a_pin_file_keep_their_own() {
+    let one = server();
+    let two = FakeTls::start(fixtures::OTHER_SELF_SIGNED, |_| {
+        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".to_vec()
+    })
+    .unwrap();
+    let mut desk = Desk::new("backend_certificates");
+    desk.env.remove("KASSIBER_NO_EGRESS");
+    let (a, b) = (
+        format!("{}4842", "home".repeat(10)),
+        format!("{}63481", "home".repeat(10)),
+    );
+    for (name, port, fingerprint) in [(&a, one.port(), FINGERPRINT), (&b, two.port(), OTHER)] {
+        desk.setup_cli(&[
+            "backends",
+            "create",
+            name,
+            "--kind",
+            "esplora",
+            "--url",
+            &format!("https://localhost:{port}/api"),
+        ]);
+        let (exit, envelope) = cli(
+            &desk,
+            &[
+                "backends",
+                "trust-certificate",
+                name,
+                "--fingerprint",
+                fingerprint,
+            ],
+        );
+        assert_eq!(exit, 0, "{envelope:?}");
+    }
+    assert_eq!(pins(&desk).len(), 2);
+    // Each pin still holds its own server's certificate.
+    for name in [&a, &b] {
+        let (_, envelope) = cli(&desk, &["backends", "trust-certificate", name]);
+        assert_eq!(
+            code(&envelope),
+            "backend_certificate_already_trusted",
+            "{name}"
+        );
+    }
+}

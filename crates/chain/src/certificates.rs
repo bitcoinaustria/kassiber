@@ -63,6 +63,11 @@ impl Fetched {
         self.presented.leaf_pem()
     }
 
+    /// The leaf certificate's DER bytes.
+    pub fn der(&self) -> &[u8] {
+        self.presented.leaf_der()
+    }
+
     /// The display payload: no URL (it may carry credentials), no PEM.
     pub fn payload(&self) -> Value {
         let summary = self.presented.summary();
@@ -237,6 +242,29 @@ pub fn fetch(gate: &Gate, consent: &CertificateConsent, config: &Value) -> Resul
         previous,
         clears_insecure,
     })
+}
+
+/// Require that `config` (a backend resolution after the pin was saved)
+/// connects with exactly this certificate as its backend trust and with
+/// verification on: no environment override, insecure flag or other
+/// certificate may leave the pin unused while the trust reports success.
+pub fn verify_pinned(config: &Value, fetched: &Fetched) -> Result<()> {
+    let not_used = || {
+        AppError::new(
+            "backend_certificate_not_effective",
+            "The certificate was saved, but this backend would not connect with it",
+        )
+        .with_hint("Check the backend's certificate and insecure settings, including environment overrides, then trust the certificate again.")
+    };
+    let backend = Backend::new(config, fetched.kind == "electrum").map_err(|_| not_used())?;
+    let trust = backend.request().tls();
+    if !backend.secure
+        || matches!(trust, TlsTrust::ExplicitInsecure | TlsTrust::Plaintext)
+        || trust.certificate_ders() != [fetched.der()]
+    {
+        return Err(not_used());
+    }
+    Ok(())
 }
 
 /// Fetch again and require the fingerprint the user confirmed. A mismatch

@@ -1169,3 +1169,64 @@ fn fetch_checks_the_tls12_server_signature_too() {
         CertificateDer::from_pem_slice(LND.0).unwrap().as_ref()
     );
 }
+
+/// Presents `LND`'s certificate but signs the handshake with another key.
+#[derive(Debug)]
+struct ForeignKey;
+
+impl rustls::server::ResolvesServerCert for ForeignKey {
+    fn resolve(
+        &self,
+        _: rustls::server::ClientHello<'_>,
+    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
+        let key = rustls::crypto::ring::sign::any_supported_type(
+            &PrivateKeyDer::from_pem_slice(OPENSSL.1).unwrap(),
+        )
+        .unwrap();
+        Some(Arc::new(rustls::sign::CertifiedKey::new(
+            vec![CertificateDer::from_pem_slice(LND.0).unwrap()],
+            key,
+        )))
+    }
+}
+
+#[test]
+fn a_certificate_whose_handshake_signature_fails_is_never_captured() {
+    for version in [&rustls::version::TLS12, &rustls::version::TLS13] {
+        let (server, port) = listener();
+        let handle = thread::spawn(move || {
+            let config = rustls::ServerConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_protocol_versions(&[version])
+            .unwrap()
+            .with_no_client_auth()
+            .with_cert_resolver(Arc::new(ForeignKey));
+            let mut stream = rustls::StreamOwned::new(
+                rustls::ServerConnection::new(Arc::new(config)).unwrap(),
+                accept(&server),
+            );
+            let mut byte = [0];
+            // The client aborts: no application byte ever arrives.
+            !matches!(stream.read(&mut byte), Ok(n) if n > 0)
+        });
+        let gate = test_gate(|| Offline::Online);
+        let request = Request::new(
+            Subsystem::Sync,
+            Endpoint::new("localhost", port).unwrap(),
+            TlsTrust::BundledRoots,
+        );
+        let result = route(&gate, request).fetch_certificate(Duration::from_secs(5), true);
+        assert!(
+            result.is_err(),
+            "{version:?} captured an unproven certificate"
+        );
+        assert!(handle.join().unwrap(), "{version:?}");
+        assert!(gate
+            .ledger()
+            .snapshot(0, 2000)
+            .records
+            .iter()
+            .all(|r| r.method.is_none()));
+    }
+}

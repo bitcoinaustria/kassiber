@@ -237,6 +237,11 @@ impl Request {
         &self.endpoint
     }
 
+    /// The trust this request was built with; a reviewed snapshot, not a path.
+    pub fn tls(&self) -> &TlsTrust {
+        &self.tls
+    }
+
     /// Classify an explicitly local AI provider, requiring loopback and no proxy.
     /// This classification grants no offline exception or network authority.
     pub fn on_device_ai(mut self) -> Self {

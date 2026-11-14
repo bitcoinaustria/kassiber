@@ -10,6 +10,7 @@
 use super::*;
 use kassiber_chain::certificates::{self, CertificateConsent, Fetched};
 use kassiber_envelope::{get, py_str};
+use kassiber_setup::backend_certificates;
 
 pub(super) const COMMANDS: &[&str] = &[
     "backends.trust-certificate",
@@ -46,7 +47,21 @@ impl RealBook {
                 "The confirmed certificate fingerprint is required",
             ));
         }
+        // The snapshot every fetch below uses; trusting compares the backend
+        // with it again inside the write transaction.
         let config = self.backends.resolve(self.conn()?, &name)?;
+        let overrides = kassiber_setup::backends::environment_overrides(&name);
+        if !overrides.is_empty() {
+            // Names only: a value could be a proxy credential or a path.
+            return Err(AppError::new(
+                "backend_certificate_overridden",
+                format!(
+                    "Backend '{name}' has connection settings overridden by the environment ({}), so a trusted certificate might not be used",
+                    overrides.join(", ")
+                ),
+            )
+            .with_hint("Unset those variables for Kassiber, then check the certificate again."));
+        }
         let gate = lightning::network_gate();
         // Reached only for one explicit CLI command or registered desktop
         // request naming this backend, after scope and unlock checks.
@@ -73,48 +88,52 @@ impl RealBook {
             .with_details(payload(&fetched)?));
         };
         let fetched = certificates::confirm(&gate, &consent, &config, &expected)?;
-        let path = kassiber_setup::backend_certificates::write_pin(
-            Path::new(&self.data_root),
-            &name,
-            &fetched.pem(),
-        )?;
-        let path_text = path.to_string_lossy().into_owned();
+        let data_root = PathBuf::from(&self.data_root);
+        // A new immutable file: the previous pin stays until the row moves.
+        let pin = backend_certificates::write_pin(&data_root, fetched.der(), &fetched.pem())?;
+        let path_text = pin.path.to_string_lossy().into_owned();
         let conn = self
             .book
             .as_ref()
             .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
             .connection();
-        self.backends.seed_configuration(conn)?;
-        self.backends.merge(conn)?;
-        self.backends.execute(
-            conn,
-            "backends.update",
-            &dict([
-                ("name", s(name.as_str())),
-                (
-                    "config",
-                    dict([
-                        ("certificate", s(path_text.as_str())),
-                        // A pin replaces disabled verification.
-                        ("insecure", Value::Null),
-                    ]),
-                ),
-            ]),
-            &SetupSources,
-        )?;
-        // An environment override wins over the stored setting; then the pin
-        // would never be used, so say so instead of reporting success.
-        let effective = self.backends.resolve(self.conn()?, &name)?;
-        if effective
-            .get("certificate")
-            .and_then(serde_json::Value::as_str)
-            != Some(path_text.as_str())
-        {
-            return Err(AppError::new(
-                "backend_certificate_overridden",
-                "The certificate was saved, but this backend's certificate setting is overridden by its environment or env file",
-            )
-            .with_hint("Remove the CERTIFICATE override for this backend so the trusted certificate is used."));
+        let outcome = self
+            .backends
+            .seed_configuration(conn)
+            .and_then(|()| self.backends.merge(conn))
+            .and_then(|()| {
+                self.backends.pin_certificate(
+                    conn,
+                    &name,
+                    &config,
+                    &path_text,
+                    &|effective| certificates::verify_pinned(effective, &fetched),
+                    &SetupSources,
+                )
+            });
+        let referenced = |path: &str| {
+            kassiber_setup::backends::certificate_referenced(conn, path).unwrap_or(true)
+        };
+        let previous = match outcome {
+            Ok(previous) => previous,
+            Err(error) => {
+                if pin.created {
+                    backend_certificates::remove_unreferenced(
+                        &data_root,
+                        &pin.path,
+                        referenced(&path_text),
+                    );
+                }
+                return Err(error);
+            }
+        };
+        // Committed: a replaced managed pin no backend uses any more can go.
+        if let Some(previous) = previous.filter(|p| *p != path_text) {
+            backend_certificates::remove_unreferenced(
+                &data_root,
+                Path::new(&previous),
+                referenced(&previous),
+            );
         }
         let mut result = fetched.payload();
         result["trusted"] = serde_json::Value::Bool(true);
