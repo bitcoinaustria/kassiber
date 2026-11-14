@@ -399,8 +399,6 @@ fn review_effects_join_live_native_builds_without_writes_or_transaction_changes(
                 }
                 let changes = conn.total_changes();
                 let mode = conn.is_autocommit();
-                let tape = list(field(&build, "entry_ids"));
-                let mut ids = tape.iter();
                 let result = kassiber_journals::review_workflow::inspect_effects(
                     &conn,
                     &Scope {
@@ -409,7 +407,6 @@ fn review_effects_join_live_native_builds_without_writes_or_transaction_changes(
                     },
                     &py(&json!([{"type":"kind_override"}])),
                     &kassiber_envelope::py_str(&field(&build, "as_of")),
-                    || kassiber_envelope::py_str(ids.next().unwrap()),
                 )
                 .unwrap();
                 assert_eq!(

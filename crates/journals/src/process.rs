@@ -255,12 +255,91 @@ fn build_in_transaction<'a>(
     let loaded = loader::load(conn, codec::from_json(&profile)?, &clock).map_err(load_error)?;
     let snapshot = loaded.into_custody().map_err(load_error)?;
     drop(span);
+    let committed = render_loaded(&profile, &snapshot, |state| {
+        progress("storing");
+        writes.check()?;
+        let span = crate::timing::span("persistence_commit");
+        let stored_at = now()?;
+        let stored = persistence::store_ledger_state_with_clock(
+            conn, &profile, state, &stored_at, &mut now, &mut ids, writes,
+        )?;
+        let mut quantity_counts = serde_json::to_value(&stored.quantity_counts)
+            .map_err(|error| Refusal::new("ValueError", error.to_string()))?;
+        quantity_counts["differences"] = json!(crate::array(&state.quantity_differences).len());
+        quantity_counts["blocked"] =
+            json!(!crate::array(&state.custody_quantity["issues"]).is_empty());
+        quantity_counts["blocked_from"] =
+            state.custody_quantity["tax_eligibility"]["blocked_from"].clone();
+        let mut payload = json!({
+            "profile": profile["label"], "entries_created": state.entries.len(),
+            "quarantined": stored.quarantines.len(),
+            "transfers_detected": crate::array(state.custody_transfers).len(),
+            "cross_asset_pairs": crate::array(state.cross_asset_pairs).len(),
+            "auto_priced": auto_priced, "processed_transactions": stored.processed_transactions,
+            "processed_at": stored.processed_at,
+            "custody_quantity": quantity_counts,
+        });
+        if crate::truth(&state.direct_swap_payouts) {
+            payload["direct_swap_payouts"] = json!(crate::array(&state.direct_swap_payouts).len());
+        }
+        for (key, value) in [
+            ("warnings", state.warnings),
+            (
+                "custody_component_blockers",
+                state.custody_component_blockers,
+            ),
+        ] {
+            if crate::truth(value) {
+                payload[key] = value.clone();
+            }
+        }
+        for (key, value) in [
+            ("source_overlap_repair", repairs.source_overlap_repair),
+            ("source_overlap_warning", repairs.source_overlap_warning),
+        ] {
+            if let Some(value) = value {
+                payload[key] = value;
+            }
+        }
+        if repairs.custody_pair_evidence_repairs != 0 {
+            payload["custody_pair_evidence_repairs"] = json!(repairs.custody_pair_evidence_repairs);
+        }
+        if stored.filed_report_impacts_resolved != 0 {
+            payload["filed_report_impacts_resolved"] = json!(stored.filed_report_impacts_resolved);
+        }
+        let ordered_payload = ordered::payload(&payload)?;
+        writes.check()?;
+        let commit = kassiber_custody::timing::span("commit");
+        conn.execute_batch("RELEASE journals_process; COMMIT")?;
+        drop(commit);
+        drop(span);
+        progress("complete");
+        cache.restore()?;
+        Ok(Committed {
+            payload,
+            ordered_payload,
+            checkpoint,
+        })
+    });
+    drop(snapshot);
+    committed
+}
+
+/// The custody, fusion, engine and render steps of `journals process` over a
+/// loaded snapshot, without storage: `then` receives the journal state the
+/// process stores. The replay bundle recomputes through this same path, so
+/// its outputs are the ones processing would store.
+pub(crate) fn render_loaded<R>(
+    profile: &Value,
+    snapshot: &Snapshot,
+    then: impl FnOnce(&crate::JournalState<'_>) -> Result<R, Refusal>,
+) -> Result<R, Refusal> {
     let span = crate::timing::span("custody");
-    let stages = kassiber_custody::run_loaded(&snapshot, true).map_err(custody_error)?;
+    let stages = kassiber_custody::run_loaded(snapshot, true).map_err(custody_error)?;
     drop(span);
     let span = crate::timing::span("render_input");
-    let wallets = wallet_refs(&snapshot);
-    let custody = render_inputs(&snapshot, &stages, &wallets)?;
+    let wallets = wallet_refs(snapshot);
+    let custody = render_inputs(snapshot, &stages, &wallets)?;
     let refs = wallets
         .iter()
         .map(|w| (w["id"].clone(), w.clone()))
@@ -269,7 +348,7 @@ fn build_in_transaction<'a>(
     let span = crate::timing::span("fusion_engine");
     let request_span = crate::timing::span("fusion_request");
     let outcome = ledger_request::build_request_rows(
-        &profile,
+        profile,
         &custody.projection_rows,
         crate::array(&custody.projection["intra_pairs"]),
         crate::array(&custody.projection["cross_asset_pairs"]),
@@ -286,79 +365,17 @@ fn build_in_transaction<'a>(
     drop(engine_span);
     drop(span);
     let render_span = crate::timing::span("render_boundary");
-    let operands = custody.operands(&snapshot, &stages);
-    let state = boundary::build_operands(&profile, &operands, &wallets, &response, String::new)?;
+    let operands = custody.operands(snapshot, &stages);
+    let state = boundary::build_operands(profile, &operands, &wallets, &response, String::new)?;
     drop(render_span);
-    progress("storing");
-    writes.check()?;
-    let span = crate::timing::span("persistence_commit");
-    let stored_at = now()?;
-    let stored = persistence::store_ledger_state_with_clock(
-        conn, &profile, &state, &stored_at, &mut now, &mut ids, writes,
-    )?;
-    let mut quantity_counts = serde_json::to_value(&stored.quantity_counts)
-        .map_err(|error| Refusal::new("ValueError", error.to_string()))?;
-    quantity_counts["differences"] = json!(crate::array(&state.quantity_differences).len());
-    quantity_counts["blocked"] = json!(!crate::array(&state.custody_quantity["issues"]).is_empty());
-    quantity_counts["blocked_from"] =
-        state.custody_quantity["tax_eligibility"]["blocked_from"].clone();
-    let mut payload = json!({
-        "profile": profile["label"], "entries_created": state.entries.len(),
-        "quarantined": stored.quarantines.len(),
-        "transfers_detected": crate::array(state.custody_transfers).len(),
-        "cross_asset_pairs": crate::array(state.cross_asset_pairs).len(),
-        "auto_priced": auto_priced, "processed_transactions": stored.processed_transactions,
-        "processed_at": stored.processed_at,
-        "custody_quantity": quantity_counts,
-    });
-    if crate::truth(&state.direct_swap_payouts) {
-        payload["direct_swap_payouts"] = json!(crate::array(&state.direct_swap_payouts).len());
-    }
-    for (key, value) in [
-        ("warnings", state.warnings),
-        (
-            "custody_component_blockers",
-            state.custody_component_blockers,
-        ),
-    ] {
-        if crate::truth(value) {
-            payload[key] = value.clone();
-        }
-    }
-    for (key, value) in [
-        ("source_overlap_repair", repairs.source_overlap_repair),
-        ("source_overlap_warning", repairs.source_overlap_warning),
-    ] {
-        if let Some(value) = value {
-            payload[key] = value;
-        }
-    }
-    if repairs.custody_pair_evidence_repairs != 0 {
-        payload["custody_pair_evidence_repairs"] = json!(repairs.custody_pair_evidence_repairs);
-    }
-    if stored.filed_report_impacts_resolved != 0 {
-        payload["filed_report_impacts_resolved"] = json!(stored.filed_report_impacts_resolved);
-    }
-    let ordered_payload = ordered::payload(&payload)?;
-    writes.check()?;
-    let commit = kassiber_custody::timing::span("commit");
-    conn.execute_batch("RELEASE journals_process; COMMIT")?;
-    drop(commit);
-    drop(span);
-    progress("complete");
-    cache.restore()?;
+    let result = then(&state);
     let span = kassiber_custody::timing::span("drops");
     drop(state);
     drop(response);
     drop(custody);
     drop(stages);
-    drop(snapshot);
     drop(span);
-    Ok(Committed {
-        payload,
-        ordered_payload,
-        checkpoint,
-    })
+    result
 }
 
 fn load_error(error: loader::Error) -> Refusal {

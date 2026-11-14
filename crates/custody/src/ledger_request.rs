@@ -194,8 +194,37 @@ pub fn build_request_rows<R: RequestRow>(
         ],
     ))))
 }
+/// The fields of a registry country's engine rules, in the order of the
+/// engine's `RulesSpec` (`tests/request_text.rs` derives both from it).
+pub const RULES_FIELDS: &[&str] = &[
+    "kind",
+    "timezone",
+    "holding",
+    "tax_year_start",
+    "pool_scope",
+    "fee_units",
+    "swap_values",
+    "gifts_given",
+    "donations_given",
+    "gifts_received",
+    "gift_losses",
+    "refused_receipts",
+    "zero_cost_kinds",
+    "below_market",
+];
+
+/// The fields of one refused receipt rule, in the order of the engine's
+/// `RefusedReceipt`.
+pub const REFUSED_RECEIPT_FIELDS: &[&str] = &["direction", "kinds", "code", "detail"];
+
 /// Python's compact request wire order is observable in engine parse errors.
 /// Restrict ordering to the builder's schema; never serialize caller metadata.
+///
+/// `journals process` and review send the engine a typed request; this text
+/// remains for a request the typed form refuses, whose engine parse error
+/// names a wire position (`kassiber_journals::engine::ledger`), and for the
+/// frozen comparison harnesses. It must spell every field the builder emits,
+/// including each registry country's rules.
 pub fn request_json(request: &Value) -> String {
     use kassiber_pyjson::Options;
     fn ordered(value: &Value, options: &Options, out: &mut String) {
@@ -227,20 +256,12 @@ pub fn request_json(request: &Value) -> String {
                     &["kind", "long_term_days"]
                 } else if items.get("kind").is_some_and(|v| v == "rules") {
                     // A registry country's engine rules
-                    // (`config::rules_country`), each feature after its zone.
-                    &[
-                        "kind",
-                        "timezone",
-                        "holding",
-                        "tax_year_start",
-                        "pool_scope",
-                        "fee_units",
-                        "swap_values",
-                        "gifts_given",
-                        "donations_given",
-                        "gifts_received",
-                        "gift_losses",
-                    ]
+                    // (`config::rules_country`): every field of the engine's
+                    // `RulesSpec`, in its declaration order.
+                    RULES_FIELDS
+                } else if items.contains_key("kinds") {
+                    // One of a rules country's `refused_receipts`.
+                    REFUSED_RECEIPT_FIELDS
                 } else if items.contains_key("assets") {
                     &["assets", "exchanges", "holders"]
                 } else if items.contains_key("amount_msat") {

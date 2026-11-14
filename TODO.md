@@ -1114,6 +1114,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 
 - [ ] Get the owner's remaining decisions on book-open cost and the allocator;
   decisions 1–4 are recorded in the design.
+- [ ] Retire the text-fusion journal build (`pipeline::Prepared`, `compute`,
+  `compute_snapshot`, `Fusion`, `custody_with_fusion`). Since review
+  [builds through `process::render_loaded`](docs/reference/r4-journal-pipeline.md#review-builds-through-the-same-path),
+  only the frozen review-builds and fusion-parity comparisons and the
+  examples use it. Done when those goldens compare through the typed path
+  alone. `ledger_request::request_json` stays for the engine's text refusal.
 - [x] R4-0: integrate custody, projection fixes, performance, fusion and the
   service/reference fixes on the R5 stack, with a linear replay and completed
   custody, parity and mutation gates; round 4 adds the R5/R4 continuations.

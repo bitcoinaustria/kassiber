@@ -150,5 +150,5 @@ pub(crate) fn pyjson(value: &Value, compact: bool) -> Result<String, Refusal> {
 }
 
 mod compute;
-pub use compute::{compute, compute_loaded, compute_snapshot, Computed, Fusion};
+pub use compute::{compute, compute_snapshot, Computed, Fusion};
 pub use kassiber_custody::Stages;

@@ -382,6 +382,36 @@ diagnostic stays byte-identical and the common path never writes text.
 - No disk logging. Timing spans are a compile-time feature that is off in
   release builds.
 
+### Review builds through the same path
+
+The review workflow (`review` and `ui.review.*`: cases, input requests,
+plans, validation and apply) does not have its own journal build. It loads
+the book on its read snapshot and renders it through
+`process::render_loaded`, the same custody, fusion, engine and render steps
+`journals process` stores from. This goes through
+`pipeline::load_review_state`. Review then keeps each quarantined transaction once, under its primary
+reason, and only the profile's live transactions. Review and processing
+therefore cannot build different requests or journals for any tax country.
+Review previously wrote the ledger request as text, and that text lacked the
+registry countries' rule fields, so review panicked for a German, Swiss,
+Irish, British, Spanish or Japanese book.
+
+Render entry ids stay empty on both paths: persistence derives the stored
+ids from each entry's economic key. The review state also leaves out the
+quantity stage's canonical input, which no journal reads. Apart from that,
+`crates/journals/tests/review_builds.rs` checks the typed review state
+against all 33 frozen review states.
+
+The ledger request text (`ledger_request::request_json`) remains in use. When
+the engine refuses a request that the typed form cannot read,
+`engine::ledger` sends the text so that the engine's parse error names a wire
+position. The text also feeds the frozen comparison harnesses (`compute`,
+`custody_with_fusion`, `pipeline::Prepared::from_snapshot`). The text spells
+every field of the engine's `RulesSpec` and `RefusedReceipt`, in their
+declaration order. `crates/custody/tests/request_text.rs` derives that list
+from the engine's own serialization and from every registry country, so a
+new rules field fails there until the text names it.
+
 ## Migration path
 
 Each step is one worker run with one verified commit boundary. Every step
