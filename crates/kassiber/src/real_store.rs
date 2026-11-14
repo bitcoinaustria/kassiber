@@ -2222,12 +2222,37 @@ impl Book for RealBook {
             authored_source,
             &sources,
         )
-        .map_err(|error| match error {
-            kassiber_journals::review_workflow::Error::Service(error) => error,
-            kassiber_journals::review_workflow::Error::Build(refusal) => {
-                kassiber_journals::service::application_error(refusal)
-            }
-        })
+        .map_err(review_error)
+    }
+    fn review_plan_job(
+        &mut self,
+        args: &Value,
+    ) -> Result<Box<dyn kassiber_runtime::store::ReviewPlanJob>, AppError> {
+        use kassiber_transfers::Sources as _;
+        let (workspace_id, profile_id) = self.resolve_scope(
+            kassiber_envelope::get(args, "workspace"),
+            kassiber_envelope::get(args, "profile"),
+        )?;
+        let conn = self.conn()?;
+        // The clock is sampled once, here, as `review` samples it.
+        let as_of = REVIEW_SOURCES.now_precise(conn)?;
+        let field = |key| {
+            kassiber_envelope::get(args, key)
+                .cloned()
+                .unwrap_or(Value::Null)
+        };
+        let job = kassiber_journals::review_workflow::prepare_plan(
+            conn,
+            &kassiber_transfers::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+            },
+            &field("operations"),
+            &field("expected_input_version"),
+            &as_of,
+        )
+        .map_err(review_error)?;
+        Ok(Box::new(ReviewPlan(job)))
     }
     fn metadata(
         &mut self,
@@ -3337,7 +3362,34 @@ impl Book for RealBook {
             }
         }
         self.db_passphrase = None;
+        // Addresses derived from the closed book's wallets stay out of a
+        // locked or switched daemon's memory.
+        kassiber_journals::loader::forget_derivations();
         Ok(())
+    }
+}
+
+/// The review workflow's clock and ids: the transfer harness's under test.
+#[cfg(feature = "test-harness")]
+const REVIEW_SOURCES: journals::Sources = journals::Sources;
+#[cfg(not(feature = "test-harness"))]
+const REVIEW_SOURCES: kassiber_transfers::SystemSources = kassiber_transfers::SystemSources;
+
+fn review_error(error: kassiber_journals::review_workflow::Error) -> AppError {
+    match error {
+        kassiber_journals::review_workflow::Error::Service(error) => error,
+        kassiber_journals::review_workflow::Error::Build(refusal) => {
+            kassiber_journals::service::application_error(refusal)
+        }
+    }
+}
+
+/// A desktop review preview: the plan runs on the daemon's worker.
+struct ReviewPlan(kassiber_journals::review_workflow::PlanJob);
+
+impl kassiber_runtime::store::ReviewPlanJob for ReviewPlan {
+    fn run(self: Box<Self>, cancelled: &(dyn Fn() -> bool + Sync)) -> Result<Value, AppError> {
+        self.0.run(&REVIEW_SOURCES, cancelled).map_err(review_error)
     }
 }
 

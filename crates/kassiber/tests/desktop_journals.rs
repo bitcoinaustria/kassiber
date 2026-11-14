@@ -903,3 +903,107 @@ fn journals_resolve_by_group_reports_the_same_effect_and_book() {
         desk.check();
     }
 }
+
+// --- an undone automatic pairing (decision D4) ---
+
+/// The send `s` held the way an undone Bark or exchange pairing leaves it:
+/// the platform's statement against the receipt `i`'s chain observation, as
+/// `crates/custody/tests/bark_settlement.rs` shows the custody build stores
+/// it. A report-blocking quantity issue names it.
+const UNDONE: &str = r#"
+DELETE FROM journal_quarantines;
+DELETE FROM journal_quantity_issues;
+INSERT INTO journal_quarantines(transaction_id,workspace_id,profile_id,reason,detail_json,created_at) VALUES
+ ('s','w','p','recorded_transfer_authority_conflict','{"authoritative_transaction_id": "i", "observation_authority_reason": "provenance_missing", "pairing_source": "row_matched", "required_for": "authoritative_same_event_wallet_observation"}','2026-10-31T12:00:00Z');
+INSERT INTO journal_quantity_issues(issue_id,workspace_id,profile_id,issue_type,state,asset,amount_msat,occurred_at,transaction_ids_json,reason,detail_json,created_at) VALUES
+ ('issue-s','w','p','custody_conflict','conflicting','BTC',150000000000,'2024-03-01T00:00:00Z','["s"]','recorded_transfer_authority_conflict','{}','2026-10-31T12:00:00Z');
+"#;
+
+/// The held row of `ui.journals.quarantine` once `dismissals` are stored.
+fn undone_row(dismissals: &str) -> Value {
+    let desk = journal_desk("unused", "plain-unchanged");
+    desk.change(&format!("{UNDONE}{dismissals}"));
+    let page = desk.ask("ui.journals.quarantine", "{}");
+    let items = list(&page, &["data", "items"]);
+    assert_eq!(items.len(), 1, "{page:?}");
+    items[0].clone()
+}
+
+fn action_kinds(row: &Value) -> Vec<&str> {
+    list(row, &["actions"])
+        .iter()
+        .map(|action| path(action, &["kind"]).and_then(text).unwrap())
+        .collect()
+}
+
+fn dismissal(id: &str, out: &str, incoming: &str, expires_at: &str) -> String {
+    format!(
+        "INSERT INTO transaction_pair_dismissals(id,workspace_id,profile_id,out_transaction_id,in_transaction_id,reason,created_at,expires_at) \
+         VALUES('{id}','w','p','{out}','{incoming}','Not one movement','2026-10-31T12:00:00Z',{expires_at});"
+    )
+}
+
+#[test]
+fn an_undone_automatic_pairing_offers_its_restore_first_and_keeps_the_hold() {
+    let held = |row: &Value| {
+        (
+            path(row, &["transaction_id"])
+                .and_then(text)
+                .map(str::to_owned),
+            path(row, &["reason"]).and_then(text).map(str::to_owned),
+            path(row, &["category"]).and_then(text).map(str::to_owned),
+            path(row, &["blocks_reports"]).cloned(),
+        )
+    };
+    let expected = (
+        Some("s".to_owned()),
+        Some("recorded_transfer_authority_conflict".to_owned()),
+        Some("needs_decision".to_owned()),
+        Some(Value::Bool(true)),
+    );
+
+    // Never paired, or a pairing nobody undid: decide by pairing.
+    let plain = undone_row("");
+    assert_eq!(held(&plain), expected);
+    assert_eq!(action_kinds(&plain), ["pair_transfer", "sync_wallet"]);
+
+    // Undone: the dismissal of exactly (s, i) leads. A permanent and a
+    // still-running one count; another pair's dismissal does not.
+    for expires_at in ["NULL", "'2999-01-01T00:00:00Z'"] {
+        let row = undone_row(&format!(
+            "{}{}",
+            dismissal("d-undo", "s", "i", expires_at),
+            dismissal("d-other", "s", "a", "NULL"),
+        ));
+        assert_eq!(held(&row), expected, "{expires_at}");
+        assert_eq!(
+            action_kinds(&row),
+            ["restore_pairing", "pair_transfer", "sync_wallet"],
+            "{expires_at}"
+        );
+        let restore = &list(&row, &["actions"])[0];
+        for (key, value) in [
+            ("transaction_id", "s"),
+            ("dismissal_id", "d-undo"),
+            ("out_transaction_id", "s"),
+            ("in_transaction_id", "i"),
+        ] {
+            assert_eq!(path(restore, &[key]).and_then(text), Some(value), "{key}");
+        }
+    }
+
+    // An expired dismissal or one naming the legs the other way round
+    // restores nothing.
+    for stored in [
+        dismissal("d-old", "s", "i", "'2000-01-01T00:00:00Z'"),
+        dismissal("d-reverse", "i", "s", "NULL"),
+    ] {
+        let row = undone_row(&stored);
+        assert_eq!(held(&row), expected, "{stored}");
+        assert_eq!(
+            action_kinds(&row),
+            ["pair_transfer", "sync_wallet"],
+            "{stored}"
+        );
+    }
+}

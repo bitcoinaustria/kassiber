@@ -1,6 +1,8 @@
 //! `build_transactions_dashboard_snapshot`: flow totals, calendar buckets and
 //! bounded transfer/swap candidates over stored rows. Candidates come from the
 //! caller's suggestion service; they are presentation only and pair nothing.
+use std::borrow::Cow;
+
 use kassiber_pytext::zone::{civil_from_days, days_from_civil, Failure, Zone};
 
 use super::*;
@@ -303,6 +305,27 @@ fn flow(tx: &Value) -> &'static str {
     } else {
         "outgoing"
     }
+}
+/// A settled transfer pair's row books only its swap fee as `amountSat` (zero
+/// for same-asset moves), so transfer volume counts the amount the pair moved:
+/// `inAmountSat`, else `outAmountSat`, priced at the row's rate. Other rows,
+/// and every other segment, count as rendered.
+fn moved(tx: &Value) -> Cow<'_, Value> {
+    let pair = val(tx, "pair");
+    if text(&pair, "type") != "transfer" {
+        return Cow::Borrowed(tx);
+    }
+    let amount = match val(&pair, "inAmountSat") {
+        Value::Null => val(&pair, "outAmountSat"),
+        amount => amount,
+    };
+    if amount == Value::Null {
+        return Cow::Borrowed(tx);
+    }
+    let mut counted = tx.clone();
+    set(&mut counted, "amountSat", amount);
+    set(&mut counted, "eur", Value::Null);
+    Cow::Owned(counted)
 }
 fn reference(candidate: &Value, key: &str) -> String {
     let value = val(candidate, key);
@@ -902,6 +925,12 @@ pub(super) fn execute(
     for tx in &transactions {
         let id = py_str(&val(tx, "id"));
         let segment = candidate_flow.get(&id).copied().unwrap_or_else(|| flow(tx));
+        let counted = if segment == "transfers" {
+            moved(tx)
+        } else {
+            Cow::Borrowed(tx)
+        };
+        let tx = counted.as_ref();
         if !candidate_flow.contains_key(&id) {
             add(stats_of(&mut summary, segment), tx);
             if segment == "incoming" || segment == "outgoing" {

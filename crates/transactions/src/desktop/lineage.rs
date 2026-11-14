@@ -28,6 +28,15 @@ fn or_unknown(row: &Value, key: &str) -> String {
         "unknown".into()
     }
 }
+/// `msat` priced at `rate` per whole coin, or null when the transaction is unpriced.
+fn fiat_of(msat: i64, rate: &Value) -> Value {
+    match rate {
+        Value::Float(n) => Value::Float(
+            kassiber_pytext::parse_float(&format!("{msat}e-11")).unwrap_or_default() * n,
+        ),
+        _ => Value::Null,
+    }
+}
 fn joined(a: &str, b: &str, separator: &str) -> String {
     if a == b {
         a.into()
@@ -200,7 +209,7 @@ pub(super) fn snapshot(
     bind.push(SqlValue::Integer(limit + 1));
     let mut page = rows(
         conn,
-        &format!("SELECT d.decision_id AS _cursor_decision_id,d.source_transaction_id,d.target_transaction_id,d.source_wallet_id,source_wallet.label AS source_wallet_label,d.target_wallet_id,target_wallet.label AS target_wallet_label,d.source_network,d.target_network,d.source_rail,d.target_rail,d.source_asset,d.target_asset,d.source_end_msat-d.source_start_msat AS amount_msat,d.state AS custody_state,d.basis_state,d.basis_barrier_at,d.reason,d.atomic_group_id,d.component_id,d.occurred_at FROM journal_custody_decisions d LEFT JOIN wallets source_wallet ON source_wallet.id=d.source_wallet_id LEFT JOIN wallets target_wallet ON target_wallet.id=d.target_wallet_id WHERE {condition} ORDER BY d.occurred_at DESC,d.decision_id DESC LIMIT ?"),
+        &format!("SELECT d.decision_id AS _cursor_decision_id,d.source_transaction_id,d.target_transaction_id,d.source_wallet_id,source_wallet.label AS source_wallet_label,d.target_wallet_id,target_wallet.label AS target_wallet_label,d.source_network,d.target_network,d.source_rail,d.target_rail,d.source_asset,d.target_asset,d.source_end_msat-d.source_start_msat AS amount_msat,d.state AS custody_state,d.basis_state,d.basis_barrier_at,d.reason,d.atomic_group_id,d.component_id,d.occurred_at,source_tx.fee AS source_fee_msat,source_tx.fiat_rate AS source_fiat_rate,source_tx.fiat_currency AS source_fiat_currency FROM journal_custody_decisions d LEFT JOIN transactions source_tx ON source_tx.id=d.source_transaction_id LEFT JOIN wallets source_wallet ON source_wallet.id=d.source_wallet_id LEFT JOIN wallets target_wallet ON target_wallet.id=d.target_wallet_id WHERE {condition} ORDER BY d.occurred_at DESC,d.decision_id DESC LIMIT ?"),
         params_from_iter(bind),
     )?;
     let more = page.len() > limit as usize;
@@ -238,6 +247,15 @@ pub(super) fn snapshot(
             or_unknown(record, "source_rail"),
             or_unknown(record, "target_rail"),
         );
+        // The sending transaction's network fee and its price, so the row can
+        // show what the move cost and follow the currency toggle. A fee
+        // belongs to the whole transaction, even when this edge is a slice.
+        let fee_msat = num(record, "source_fee_msat");
+        let rate = super::render::positive(&val(record, "source_fiat_rate"));
+        let fiat_currency = match val(record, "source_fiat_currency") {
+            v if truthy(&v) && rate != Value::Null => v,
+            _ => Value::Null,
+        };
         items.push(dict([
             ("out_transaction_id", val(record, "source_transaction_id")),
             ("in_transaction_id", val(record, "target_transaction_id")),
@@ -246,6 +264,24 @@ pub(super) fn snapshot(
             ("source_asset", val(record, "source_asset")),
             ("target_asset", val(record, "target_asset")),
             ("amount_msat", s(num(record, "amount_msat").to_string())),
+            ("fiat_currency", fiat_currency),
+            ("fiat_value", fiat_of(num(record, "amount_msat"), &rate)),
+            (
+                "fee_msat",
+                if fee_msat > 0 {
+                    s(fee_msat.to_string())
+                } else {
+                    Value::Null
+                },
+            ),
+            (
+                "fee_fiat_value",
+                if fee_msat > 0 {
+                    fiat_of(fee_msat, &rate)
+                } else {
+                    Value::Null
+                },
+            ),
             ("from_wallet_id", val(record, "source_wallet_id")),
             ("from_wallet_label", val(record, "source_wallet_label")),
             ("to_wallet_id", val(record, "target_wallet_id")),
@@ -273,4 +309,24 @@ pub(super) fn snapshot(
         ("observation_commitments_included", Value::Bool(false)),
         ("replicated", Value::Bool(false)),
     ]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_move_is_priced_per_whole_coin_and_unpriced_stays_null() {
+        // 0.0575 coin at 52,290 a coin, and a 25,750 sat fee at the same price.
+        let rate = Value::Float(52_290.0);
+        assert_eq!(
+            fiat_of(5_750_000_000, &rate),
+            Value::Float(0.0575 * 52_290.0)
+        );
+        assert_eq!(
+            fiat_of(25_750_000, &rate),
+            Value::Float(0.0002575 * 52_290.0)
+        );
+        assert_eq!(fiat_of(5_750_000_000, &Value::Null), Value::Null);
+    }
 }

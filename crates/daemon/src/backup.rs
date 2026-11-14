@@ -75,6 +75,7 @@ impl Host for Daemon {
     }
     fn close_database(&mut self, expected: &Fingerprint) -> Result<(), AppError> {
         self.stop_watch_worker(true)?;
+        self.previews.stop();
         self.analysis.clear();
         self.document_sessions.clear();
         self.book

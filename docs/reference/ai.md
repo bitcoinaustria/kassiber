@@ -1759,7 +1759,10 @@ resolutions.
 `ui_transfers_dismiss` is on the `core` profile too, behind per-call consent.
 `ui_transfers_dismissals_delete` (`transfers dismissals delete --id ...` or
 `--tx-out/--tx-in`) undoes one and invalidates journals, and a review batch can
-carry the same undo as `undismiss_pair`. A dismissal can be read back:
+carry the same undo as `undismiss_pair`. A quarantined row held because its
+automatic pairing was undone carries a `restore_pairing` action with the
+`dismissal_id` to pass (see [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)).
+A dismissal can be read back:
 `ui_transfers_dismissals_list` (`transfers dismissals list`) returns each
 dismissed pair with both legs' full ids, wallet, direction, amount and
 `expires_at` (null means never). `ui_transfers_suggest` and

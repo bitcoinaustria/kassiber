@@ -210,6 +210,21 @@ typically wants.
   `swap_fee` (BTC float) on every candidate.
 - `kassiber --machine transfers list` shows the persisted fee on every
   active pair.
+- The desktop and assistant pair list (`ui.transfers.list`) also carries
+  `unlinked_msat` on each leg (how much of that transaction's principal no
+  active pair allocates) and `shares_legs` on each pair (whether its
+  transactions may take a further pair: only same-asset manual, coinjoin or
+  whirlpool pairs at carrying value). They describe pair coverage only. Do
+  not present an uncovered amount as a sale, a fee or income; what the
+  journals do with it (usually a held remainder until the user links the
+  receipt the rest arrived in or reviews it) is read from the quarantine.
+- The pair list also gives each leg's `fiat_value` at its own
+  transaction's price and `swap_fee_fiat_value` at the sending price (null
+  when unpriced). With `include_unlinked` (desktop only) it lists pairs the
+  user unlinked whose legs are free again; an unlinked pair grants nothing.
+- Custody lineage rows (`ui.custody.lineage.snapshot`) carry the sending
+  transaction's network fee, which covers the whole transaction, not only
+  that edge, and fiat values at that transaction's price.
 - `kassiber --machine reports tax-summary` aggregates per-year and
   grand total into rows with `row_type=swap_fees_year` and
   `row_type=swap_fees_total`.

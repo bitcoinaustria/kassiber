@@ -32,6 +32,8 @@ pub const KINDS: &[&str] = &[
     "ui.transfers.rules.delete",
     "ui.transfers.rules.set_enabled",
     "ui.transfers.rules.apply",
+    // Rust only: which ways two transactions may be linked, for the desktop.
+    "ui.transfers.pair_options",
 ];
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
@@ -55,6 +57,42 @@ pub fn execute_as(
     };
     if kind == "ui.transfers.review_context" {
         return review_context(book, args);
+    }
+    if kind == "ui.transfers.list" {
+        // The owner's pairs; on request also the pairs they unlinked whose
+        // legs are free again, so the desktop can offer to link them again.
+        let include_unlinked = match get(args, "include_unlinked") {
+            None | Some(Value::Null) => false,
+            Some(Value::Bool(include)) => *include,
+            Some(_) => {
+                return Err(AppError::new(
+                    "validation",
+                    format!("{kind} include_unlinked must be a boolean"),
+                ))
+            }
+        };
+        // The desktop list adds each leg's price for the currency toggle.
+        let pairs = exact_integers(book.transfers("transfers.list-priced", args)?);
+        if !include_unlinked {
+            return Ok(dict([("pairs", pairs)]));
+        }
+        let unlinked = exact_integers(book.transfers("transfers.unlinked", args)?);
+        return Ok(dict([("pairs", pairs), ("unlinked", unlinked)]));
+    }
+    if kind == "ui.transfers.pair_options" {
+        // Which ways the book lets these two transactions be linked. A read.
+        let mut payload = dict::<&str>([]);
+        for (name, alias) in [("tx_out", "out_id"), ("tx_in", "in_id")] {
+            let id = get(args, name)
+                .filter(|v| kassiber_envelope::truthy(v))
+                .or_else(|| get(args, alias).filter(|v| kassiber_envelope::truthy(v)))
+                .filter(|v| matches!(v, Value::Str(_)))
+                .ok_or_else(|| {
+                    AppError::new("validation", format!("{kind} requires tx_out and tx_in"))
+                })?;
+            kassiber_envelope::set(&mut payload, name, id.clone());
+        }
+        return book.transfers("transfers.pair-options", &payload);
     }
     if kind == "ui.custody.coverage.snapshot" {
         let mut unknown: Vec<_> = fields
@@ -241,13 +279,12 @@ pub fn execute_as(
         kassiber_envelope::set(&mut args, "expires_in_days", Value::Int(expiry_days(&raw)?));
     }
     let result = book.transfers(operation, &args)?;
-    let result = if matches!(kind, "ui.transfers.list" | "ui.custody.gaps.history") {
+    let result = if kind == "ui.custody.gaps.history" {
         exact_integers(result)
     } else {
         result
     };
     match kind {
-        "ui.transfers.list" => Ok(dict([("pairs", result)])),
         "ui.transfers.payouts.list" => Ok(dict([("payouts", result)])),
         "ui.transfers.rules.list" => Ok(dict([("rules", result)])),
         _ => Ok(result),
@@ -1179,6 +1216,74 @@ mod gap_tests {
         }
         fn close(&mut self) -> Result<(), AppError> {
             unreachable!()
+        }
+    }
+
+    #[test]
+    fn desktop_pair_list_adds_unlinked_pairs_only_when_asked() {
+        let kind = "ui.transfers.list";
+        let plain = execute(&mut Capture, kind, None).unwrap();
+        let pairs = get(&plain, "pairs").unwrap();
+        assert_eq!(get(pairs, "operation"), Some(&s("transfers.list-priced")));
+        assert!(get(&plain, "unlinked").is_none());
+        let off = execute(
+            &mut Capture,
+            kind,
+            Some(&dict([("include_unlinked", Value::Bool(false))])),
+        )
+        .unwrap();
+        assert!(get(&off, "unlinked").is_none());
+        let both = execute(
+            &mut Capture,
+            kind,
+            Some(&dict([("include_unlinked", Value::Bool(true))])),
+        )
+        .unwrap();
+        assert_eq!(
+            get(get(&both, "unlinked").unwrap(), "operation"),
+            Some(&s("transfers.unlinked"))
+        );
+        assert_eq!(
+            get(get(&both, "pairs").unwrap(), "operation"),
+            Some(&s("transfers.list-priced"))
+        );
+        let error = execute(
+            &mut Capture,
+            kind,
+            Some(&dict([("include_unlinked", s("yes"))])),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "validation");
+    }
+
+    #[test]
+    fn desktop_pair_options_need_both_transactions_and_pass_nothing_else() {
+        let kind = "ui.transfers.pair_options";
+        assert!(KINDS.contains(&kind));
+        let asked = execute(
+            &mut Capture,
+            kind,
+            Some(&dict([
+                ("tx_out", s("a")),
+                ("in_id", s("b")),
+                ("policy", s("taxable")),
+            ])),
+        )
+        .unwrap();
+        assert_eq!(get(&asked, "operation"), Some(&s("transfers.pair-options")));
+        assert_eq!(
+            get(&asked, "args"),
+            Some(&dict([("tx_out", s("a")), ("tx_in", s("b"))]))
+        );
+        for args in [
+            dict([("tx_out", s("a"))]),
+            dict([("tx_out", s("a")), ("tx_in", s(""))]),
+            dict([("tx_out", s("a")), ("tx_in", Value::Int(7.into()))]),
+        ] {
+            assert_eq!(
+                execute(&mut Capture, kind, Some(&args)).unwrap_err().code,
+                "validation"
+            );
         }
     }
 

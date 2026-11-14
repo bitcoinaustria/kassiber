@@ -288,5 +288,25 @@
       "journals_quarantine_summary_carries_currency_and_definitions"
     ],
     "rule": "The quarantine summary's freshness includes the calculation-semantics term."
+  },
+  {
+    "id": "JQUAR-authority-conflict-decision",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "        \"recorded_transfer_authority_conflict\" => info(\n            \"needs_decision\",",
+    "replace": "        \"recorded_transfer_authority_conflict\" => info(\n            \"missing_chain_evidence\",",
+    "expect_failing": [
+      "an_undone_automatic_pairing_offers_its_restore_first_and_keeps_the_hold"
+    ],
+    "rule": "A statement held against an observation of the same transaction needs a pairing decision."
+  },
+  {
+    "id": "JQUAR-restore-pairing-orientation",
+    "file": "crates/journals/src/quarantine.rs",
+    "find": "        \"outbound\" => (own, counterpart),",
+    "replace": "        \"outbound\" => (counterpart, own),",
+    "expect_failing": [
+      "an_undone_automatic_pairing_offers_its_restore_first_and_keeps_the_hold"
+    ],
+    "rule": "Restore pairing names only the dismissal of the held row's own (out, in) pair."
   }
 ]

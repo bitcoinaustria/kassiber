@@ -123,13 +123,19 @@ names the platform row and the receipt, and the platform's withdrawal fee
 books as a transfer fee. Nothing is stored beyond the journal's own decision,
 so the next rebuild re-derives it from the rows. Dismissing the pair (`transfers
 dismiss --tx-out <withdrawal> --tx-in <receipt>`, or `ui.transfers.dismiss`)
-undoes it like a native HTLC transition: the rows return to today's hold until
-the dismissal expires or is deleted. On the desktop, the move's card in the
-custody lineage offers "Undo automatic pairing": after a confirmation it sends
-that dismissal for the longest allowed expiry (3650 days), and until the page
-is left the undone pairing can be restored there, which deletes the dismissal
-(`ui.transfers.dismissals.delete`). Later, `transfers dismissals delete` or
-the assistant restores it.
+undoes it like a native HTLC transition: the rows return to today's hold
+(`recorded_transfer_authority_conflict`) until the dismissal expires or is
+deleted. The held row's quarantine actions then lead with `restore_pairing`,
+which names that dismissal (see [why a transaction is
+quarantined](#why-a-transaction-is-quarantined)). On the desktop, the move's row under
+**Transfers → Paired moves** offers "Undo pairing" to every user (developer
+tools are not needed): after a confirmation that lists both legs and the
+effects, it sends that dismissal for the longest allowed expiry (3650 days)
+and recalculates the journals. The undone pairing stays listed under
+Paired moves → Undone, read back from `ui.transfers.dismissals.list`, and
+while its rows are held it is listed first as a held move. Restore pairing
+deletes the dismissal (`ui.transfers.dismissals.delete`) and recalculates.
+`transfers dismissals delete` and the assistant restore it as well.
 
 | Source | Withdrawal txid | Amount and fee convention |
 | --- | --- | --- |
@@ -146,6 +152,9 @@ receipt whose output another wallet owns or that has an owned input, two owned
 outputs, two receiving wallets and two platform rows for one txid all keep
 their previous treatment. Deposits from an owned wallet to a platform are not
 covered and still need a review.
+
+Books processed before this rule keep their journals until the next rebuild
+(`journals process`, or any change that marks them stale).
 
 ## CoinJoin, Payjoin and intermediate wallets
 
@@ -195,8 +204,9 @@ evidence arrives. Desktop syncs, imports and "Process journals" end with that
 rebuild (see [daemon](daemon.md)); the quarantine snapshot reports
 `summary.freshness` so a list older than the book's transactions is marked.
 
-`core/quarantine_catalog.py` is the single vocabulary for reading a stored
-reason. It never decides whether something is quarantined:
+The catalog in `crates/journals/src/quarantine.rs` is the single vocabulary
+for reading a stored reason. It never decides whether something is
+quarantined:
 
 | Category | Meaning | Typical next step |
 | --- | --- | --- |
@@ -255,6 +265,28 @@ market-value acquisition. Only the owner decides, pair by pair. Unpairing
 removes the suspense on the next journal run, and journal auto-pairing never
 recreates a pair the owner removed.
 
+A `recorded_transfer_authority_conflict` hold (a platform or Bark statement
+and an owned wallet's chain observation of one transaction) is a
+`needs_decision` row: syncing cannot turn a statement into an observation, so
+its actions are `pair_transfer` and then `sync_wallet`, which helps only when
+the held row is a stale chain observation. When an active (unexpired)
+dismissal names exactly the held row's pair, the row's outbound and inbound
+legs taken from the row's direction and `detail.authoritative_transaction_id`,
+the first action is `restore_pairing` with that `dismissal_id` and both
+`out_transaction_id` and `in_transaction_id`. That is an undone automatic
+pairing: restoring it deletes the dismissal (`ui.transfers.dismissals.delete`
+with the id, or `transfers dismissals delete --id <id>`), and the next
+journal rebuild books the move again if it is still exact. Several or no
+matching dismissals, or a row whose counterpart or direction is unclear, get
+no `restore_pairing`. `ownership_transfer_amount_mismatch` and
+`ownership_transfer_conservation_mismatch` (the row's amounts contradict a
+valued graph) are `needs_decision` too, with `pair_transfer` before
+`sync_wallet`; `ownership_transfer_fee_evidence_incomplete` and
+`ownership_transfer_asset_evidence_incomplete` (a missing input, output or fee
+value) stay `missing_chain_evidence` with `sync_wallet`. The category and
+actions are hints only: the hold, its reason and `blocks_reports` do not
+change.
+
 The desktop's Review screen lists these first, under **Can't be booked yet**.
 The section leads with how many rows need the
 user, how many only wait on a cause (listed on request, one line each with the
@@ -292,8 +324,14 @@ offers exclusion only for price and decision questions.
 The **Review** screen holds the everyday decisions: the quarantine causes
 above, and the transfer and swap candidates to pair or set aside, one at a
 time or the exact ones together (see [desktop](desktop.md)). The
-**Transfers & Custody** surface keeps the full matching tools (filters, rules,
-saved views, pair history) beside custody gaps and components. Gaps and components retain their developer-mode gate.
+**Transfers** screen leads with whether every move between the owner's
+wallets is accounted for, lists held moves and the same suggestions, and
+lists every paired move, automatic or reviewed, where automatic pairings are
+undone and restored, and the pairs the owner unlinked whose legs are free
+again, to link again. Link manually links a move the matcher missed; rules and
+saved views open in a sheet; its advanced tools hold missing wallets,
+components and scan coverage. Missing wallets and components retain their developer-mode gate;
+the list of paired moves and its undo do not need it.
 Existing gap links open the selected case, including a case outside the first
 page. Component creation and revision use structured legs and allocations rather
 than a JSON text editor. Unsupported existing shapes are rejected explicitly.
@@ -326,7 +364,7 @@ The shared `core/review_workflow.py` module exposes four operations:
 | Operation | Contract |
 | --- | --- |
 | `review cases` / `ui.review.cases` | Current canonical quarantine cases, paginated with a book/version-bound cursor; rows that only wait on a case are counted in `waiting_count` instead of listed; recent execution receipts support continuation. |
-| `review plan` / `ui.review.plan` | Apply typed operations to an isolated in-memory book snapshot and rebuild with the canonical custody journal. Return a portable artifact containing scope, input version, operations, before/after effects (including per-year tax figures), the tax `delta` and a digest. No live-book writes or network calls. |
+| `review plan` / `ui.review.plan` | Apply typed operations to an isolated in-memory book snapshot and rebuild with the canonical custody journal. Return a portable artifact containing scope, input version, operations, before/after effects (including per-year tax figures), the tax `delta` and a digest. No live-book writes or network calls. The book is copied twice; the effects before and after are rebuilt on the two copies at once, and the operations wait for the cases before only when they read them. The desktop's `preview: true` runs a plan on a daemon worker that a newer preview cancels ([daemon](daemon.md)). |
 | `review apply` / `ui.review.apply` | Revalidate scope, version and effects under one writer transaction, apply the exact operations, rebuild/store journals and append a durable receipt. Any failure rolls back the whole batch. |
 | `review receipt` / `ui.review.receipt` | Retrieve the historical execution and verification result by receipt ID or idempotency key in the active book. |
 
