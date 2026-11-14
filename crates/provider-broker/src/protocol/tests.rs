@@ -103,9 +103,10 @@ fn redacts_the_secret_itself_not_merely_its_label() {
 #[test]
 fn redaction_matches_the_typescript_rules_exactly() {
     for (input, expected) in [
+        // TypeScript: "authorization: [redacted] [redacted]".
         (
             "authorization: Bearer sk-secret-123",
-            "authorization: [redacted] [redacted]",
+            "authorization: [redacted]",
         ),
         (
             r#"{"apiKey":"sk-live-abcdefgh"}"#,
@@ -143,13 +144,22 @@ fn redaction_matches_the_typescript_rules_exactly() {
             r#"{"apiKey": [redacted], "x": 1}"#,
         ),
         (r#"password='a,b' end"#, "password=[redacted] end"),
-        (
-            "token: Bearer synthetic-secret-value",
-            "token: [redacted] [redacted]",
-        ),
+        ("token: Bearer synthetic-secret-value", "token: [redacted]"),
         (
             "authorization=Basic dXNlcjpwYXNz",
-            "authorization=[redacted] [redacted]",
+            "authorization=[redacted]",
+        ),
+        (
+            r#"{"token":"Bearer x","password": "synthetic-secret"}"#,
+            r#"{"token":[redacted],"password": [redacted]}"#,
+        ),
+        (
+            r#"{"authorization":"Basic x","secret":"synthetic-secret"}"#,
+            r#"{"authorization":[redacted],"secret":[redacted]}"#,
+        ),
+        (
+            r#"failed: Bearer x","password": "synthetic-secret""#,
+            "failed: Bearer [redacted] [redacted]",
         ),
         ("first line\r\nsecond line token=x", "first line"),
         ("   \n anything", "Provider request failed."),
