@@ -1,6 +1,6 @@
 # Plan 23: the provider broker in Rust
 
-Status: in progress.
+Status: done. Follow-ups are in `TODO.md`.
 
 ## Why
 
@@ -80,7 +80,15 @@ unchanged; Node.js is no longer needed for any Kassiber feature.
 2. Adapters, in parallel once step 1 lands: Claude and Codex; ACP; OpenCode.
    Each ports the TypeScript adapter's behaviour and its tests, and is
    checked against the TypeScript broker on the same fake provider CLIs
-   before the TypeScript code goes.
+   before the TypeScript code goes. Done: `claude.rs`, `codex.rs`,
+   `acp.rs` and `opencode.rs` (both OpenCode generations, over
+   `kassiber-net`'s HTTP client on the loopback server the adapter
+   starts). The side-by-side runs (53 Claude/Codex, 33 ACP, 25 OpenCode
+   scenarios) matched on events, argv, environment and every request
+   written to the provider; the remaining differences are JSON key order
+   in status objects, the MCP child's replies (no schema validation, as
+   designed), and refusals where TypeScript passed malformed provider
+   output through or crashed.
 3. Removal: `ui-tauri/provider-broker`, `broker:build`, the npm packages
    only it used, the `provider_broker/` packaging in every artifact and
    build script, and the Node hint in `broker_unavailable`. Update
