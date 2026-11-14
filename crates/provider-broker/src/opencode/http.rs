@@ -63,7 +63,9 @@ impl Loopback {
         let request = Request::new(Subsystem::Ai, endpoint, TlsTrust::Plaintext).on_device_ai();
         let consent = Consent::explicit_trigger(&request);
         let route = self.gate.authorize(request, Some(consent))?;
-        let mut http = HttpRequest::new(method, &format!("{}{target}", self.origin()))?;
+        // `fetch`'s default, which the TypeScript broker sent.
+        let mut http = HttpRequest::new(method, &format!("{}{target}", self.origin()))?
+            .header("Accept", "*/*")?;
         for (name, value) in &call.headers {
             http = http.header(name, value)?;
         }
