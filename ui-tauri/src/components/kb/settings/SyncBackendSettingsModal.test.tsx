@@ -202,3 +202,57 @@ describe("Core Lightning commando", () => {
     expect(payload.clear).toEqual(expect.arrayContaining(["token", "commando_peer_id"]));
   });
 });
+
+describe("backend certificate trust entry", () => {
+  const electrum: Backend = {
+    id: "home", name: "Home node", health: "", on: true, auth: "none",
+    chain: "bitcoin", network: "main", net: "BTC", kind: "electrum",
+    url: "ssl://node.local:50002",
+  };
+
+  /** Every `description` prop in the tree (settings rows carry their hint there). */
+  function descriptions(node: ReactNode, out: string[] = []): string[] {
+    if (Array.isArray(node)) node.forEach(child => descriptions(child, out));
+    else if (isValidElement<{ children?: ReactNode; description?: unknown }>(node)) {
+      if (typeof node.props.description === "string") out.push(node.props.description);
+      descriptions(node.props.children, out);
+    }
+    return out;
+  }
+
+  function render(initial: Backend) {
+    hooks.cursor = 0;
+    return SyncBackendSettingsModal({ open: true, initial, onClose: vi.fn(), onSave: vi.fn() });
+  }
+
+  it("offers the trust dialog for a saved TLS backend without contacting it", () => {
+    const { tree } = mount(electrum);
+    expect(descriptions(tree)).toContain("certificateTrust.rowHint");
+    expect(button(tree, "certificateTrust.checkButton")).toBeDefined();
+    expect(hooks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("is not offered for plaintext or unsupported backends", () => {
+    for (const backend of [
+      { ...electrum, url: "tcp://node.local:50001" },
+      { ...electrum, kind: "btcpay", url: "https://pay.example" },
+    ]) {
+      hooks.states.length = 0;
+      const { tree } = mount(backend);
+      expect(button(tree, "certificateTrust.checkButton")).toBeUndefined();
+    }
+  });
+
+  it("points a failed test with an untrusted certificate at the trust dialog", async () => {
+    hooks.invoke.mockResolvedValue({ data: { ok: false, logs: [
+      "Opening Electrum connection to ssl://node.local:50002",
+      "Connection failed: The server's TLS certificate is not signed by an authority Kassiber trusts",
+    ] } });
+    const { tree } = mount(electrum);
+    button(tree, "backendModal.testConnection")!.onClick();
+    await vi.waitFor(() => expect(hooks.invoke).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(descriptions(render(electrum))).toContain("certificateTrust.testUntrusted"));
+    // The test itself never fetched or trusted a certificate.
+    expect(hooks.invoke.mock.calls.map(call => call[0])).toEqual(["ui.backends.electrum.test"]);
+  });
+});

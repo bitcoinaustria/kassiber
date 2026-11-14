@@ -153,6 +153,13 @@ import { useNotificationStore } from "@/store/notifications";
 import { useUiStore } from "@/store/ui";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
 import { ExchangeSyncCard } from "@/components/kb/exchange/ExchangeSyncCard";
+import { TrustCertificateDialog } from "@/components/kb/settings/TrustCertificateDialog";
+import {
+  CERTIFICATE_TRUST_KINDS,
+  certificateProblemFromCode,
+  certificateProblemFromText,
+  type CertificateProblem,
+} from "@/lib/certificateTrust";
 import { useExchangeSync } from "@/components/kb/exchange/useExchangeSync";
 import { isExchangeKind } from "@/components/kb/exchange/exchangeApiModel";
 import type {
@@ -574,7 +581,7 @@ function ConnectionDetailView({
   txs,
   hideSensitive,
 }: ConnectionDetailViewProps) {
-  const { t, i18n } = useTranslation(["connections", "common"]);
+  const { t, i18n } = useTranslation(["connections", "common", "settings"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
@@ -733,6 +740,11 @@ function ConnectionDetailView({
     inventory,
   );
     const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
+  // An untrusted or changed backend certificate behind the last sync error:
+  // offers the explicit trust dialog for the wallet's backend.
+  const [certificateProblem, setCertificateProblem] =
+    useState<CertificateProblem | null>(null);
+  const [certificateDialogOpen, setCertificateDialogOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editLabel, setEditLabel] = useState(connection.label);
   const [editPassphrase, setEditPassphrase] = useState("");
@@ -987,6 +999,7 @@ function ConnectionDetailView({
       }
     }
     setSyncErrorMessage(null);
+    setCertificateProblem(null);
     progressValueRef.current = startingSyncProgress().value ?? 5;
     const forceFull = Boolean(options?.forceFull);
     const ref = { book, connectionId: connection.id, label: connection.label };
@@ -1012,6 +1025,10 @@ function ConnectionDetailView({
         );
         if (status === "error") {
           setSyncErrorMessage(message);
+          setCertificateProblem(
+            certificateProblemFromCode(result?.code) ??
+              certificateProblemFromText(result?.message),
+          );
           recordConnectionSyncFailed(ref, message);
           return;
         }
@@ -1023,6 +1040,11 @@ function ConnectionDetailView({
         const message =
           error instanceof Error ? error.message : t("detail.sync.failedFallback");
         setSyncErrorMessage(message);
+        setCertificateProblem(
+          (error instanceof DaemonRequestError
+            ? certificateProblemFromCode(error.envelope.error?.code)
+            : null) ?? certificateProblemFromText(message),
+        );
         recordConnectionSyncFailed(ref, message);
       } finally {
         endConnectionSync(runId);
@@ -1639,8 +1661,33 @@ function ConnectionDetailView({
           role="status"
         >
           {syncErrorMessage}
+          {certificateProblem &&
+          walletDetail?.backend?.name &&
+          CERTIFICATE_TRUST_KINDS.includes(walletDetail.backend.kind ?? "") ? (
+            <div className="mt-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCertificateDialogOpen(true)}
+              >
+                {t("settings:certificateTrust.checkButton")}
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
+      {walletDetail?.backend?.name ? (
+        <TrustCertificateDialog
+          open={certificateDialogOpen}
+          backend={walletDetail.backend.name}
+          problem={certificateProblem}
+          onClose={() => setCertificateDialogOpen(false)}
+          onTrusted={() => {
+            setCertificateProblem(null);
+            setSyncErrorMessage(null);
+          }}
+        />
+      ) : null}
 
       {reconciliation.available && !reconciliation.reconciled ? (
         // Only surface reconciliation when it needs attention: the two figures

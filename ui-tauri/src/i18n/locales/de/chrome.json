@@ -439,6 +439,7 @@
       "rateLimited": "Server begrenzt Anfragen; neuer Versuch später",
       "unavailable": "Server vorübergehend nicht verfügbar; neuer Versuch später",
       "certificate": "Sichere Verbindung fehlgeschlagen (Zertifikat)",
+      "certificateChanged": "Server-Zertifikat hat sich geändert; nicht vertraut",
       "credentials": "Server hat die Zugangsdaten abgelehnt",
       "noBackend": "Kein Server konfiguriert",
       "connection": "Verbindung zum Server fehlgeschlagen",
