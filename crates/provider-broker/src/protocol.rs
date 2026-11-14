@@ -748,9 +748,9 @@ static REDACTIONS: LazyLock<Vec<Redaction>> = LazyLock::new(|| {
     ]
 });
 
-/// The first 400 UTF-16 code units, as `String.prototype.slice(0, 400)`
+/// The first `units` UTF-16 code units, as `String.prototype.slice(0, units)`
 /// counts them. A surrogate pair the cut would split is dropped whole.
-fn first_utf16_units(text: &str, units: usize) -> &str {
+pub(crate) fn first_utf16_units(text: &str, units: usize) -> &str {
     let mut used = 0;
     for (index, c) in text.char_indices() {
         used += c.len_utf16();
