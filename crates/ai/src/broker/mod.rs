@@ -58,7 +58,7 @@ pub fn broker_unavailable() -> AppError {
         "ai_unavailable",
         "The local AI provider broker is unavailable",
     )
-    .with_hint("Check KASSIBER_AI_PROVIDER_BROKER, or use an HTTP/Ollama/oMLX provider.")
+    .with_hint("Reinstall Kassiber, or use an HTTP/Ollama/oMLX provider.")
     .retryable(true)
 }
 

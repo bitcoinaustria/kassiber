@@ -890,7 +890,7 @@ fn a_missing_broker_reports_unavailable_without_credentials() {
         (error.code.as_str(), error.hint.as_deref()),
         (
             "ai_unavailable",
-            Some("Check KASSIBER_AI_PROVIDER_BROKER, or use an HTTP/Ollama/oMLX provider.")
+            Some("Reinstall Kassiber, or use an HTTP/Ollama/oMLX provider.")
         )
     );
     assert_eq!(fake.launches(), 0);
