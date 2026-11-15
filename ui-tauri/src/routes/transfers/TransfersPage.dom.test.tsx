@@ -57,6 +57,11 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
   return {
     ...actual,
     getTransport: () => ({
+      // The journals recalculate and say so; what that reads again is the client's own list.
+      stream: async ({ kind, args = {} }: { kind: string; args?: Record<string, unknown> }) => {
+        daemon.calls.push({ kind, args });
+        return ok(kind, { processed: true });
+      },
       invoke: async ({ kind, args = {} }: { kind: string; args?: Record<string, unknown> }) => {
         daemon.calls.push({ kind, args });
         if (daemon.failing.has(kind)) {
@@ -125,8 +130,18 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
               return { kind: "error", schema_version: 1, error: { code: "not_found", message: "Transaction not found", retryable: false } };
             }
             daemon.suggestions = daemon.suggestions.filter((candidate) => candidate.out_id !== args.tx_out);
+            daemon.dismissals = [
+              ...daemon.dismissals,
+              {
+                id: "dismissal-7", out_transaction_id: args.tx_out, in_transaction_id: args.tx_in, reason: args.reason, created_at: "2026-11-14T10:00:00Z",
+                expires_at: null, active: true, permanent: true,
+                out: { transaction_id: args.tx_out, wallet: "Hot", asset: "BTC", amount_msat: "5000000000", occurred_at: "2024-05-24T09:51:00Z" },
+                in: { transaction_id: args.tx_in, wallet: "Cold", asset: "BTC", amount_msat: "4990000000", occurred_at: "2024-05-24T10:01:00Z" },
+              },
+            ];
             return ok(kind, { id: "dismissal-7" });
           case "ui.transfers.dismissals.delete":
+            daemon.dismissals = daemon.dismissals.filter((dismissal) => (dismissal as { id: string }).id !== args.dismissal_id);
             return ok(kind, { deleted: true });
           case "ui.saved_views.list":
             return ok(kind, {
@@ -816,8 +831,13 @@ describe("Transfers overview", () => {
     // The list in view stays, with its Undo.
     expect(within(screen.getByTestId("transfers-tabs")).getByRole("button", { name: /^Needs you/ }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.queryByTestId("transfers-suggestions-empty")).toBeNull();
+    // The suggestion set aside is listed where such suggestions are, at once.
+    const aside = within(screen.getByTestId("transfers-tabs")).getByRole("button", { name: /^Set aside/ });
+    expect(aside.textContent).toContain("1");
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(calls("ui.transfers.dismissals.delete").map((call) => call.args)).toEqual([{ dismissal_id: "dismissal-7" }]));
+    // And taken off again after its Undo.
+    await waitFor(() => expect(within(screen.getByTestId("transfers-tabs")).queryByRole("button", { name: /^Set aside/ })).toBeNull());
   });
 
   it("says what Kassiber checks when there is nothing to confirm", async () => {

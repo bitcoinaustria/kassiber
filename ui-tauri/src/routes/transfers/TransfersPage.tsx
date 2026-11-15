@@ -759,6 +759,10 @@ export function TransfersOverview({
                         // The list in view stays, though the decision may empty it.
                         setTab("needs");
                         requestRefresh();
+                        // Recalculating the journals does not read these again: a link
+                        // brings its pair (and Unlink), a suggestion set aside its row.
+                        void pairsQuery.refetch();
+                        void dismissalsQuery.refetch();
                       }}
                       onUndoChange={setSuggestionUndo}
                       refreshing={updating}
