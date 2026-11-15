@@ -4,8 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type KeyboardEvent,
-  type PointerEvent,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 
@@ -14,20 +13,7 @@ import { cn } from "@/lib/utils";
 import type { GlassScene, GlassSceneLook } from "./stage";
 import { webglAvailable } from "./webgl";
 
-// Seen from the upper left, as in the lab renders: block tops and inner faces show.
-const REST_VIEW = { yaw: 0.5, pitch: 0.3 };
-const YAW_LIMIT = 0.95;
-const PITCH_LIMIT = 0.6;
-const DRAG_RADIANS_PER_PIXEL = 0.008;
-const KEY_STEP = 0.08;
-/** A press that moves less than this is a click on a part, not a turn. */
-const CLICK_SLOP = 4;
-
 type Status = "loading" | "ready" | "unavailable";
-
-function clamp(value: number, limit: number) {
-  return Math.min(limit, Math.max(-limit, value));
-}
 
 function isDark() {
   // Static renders (tests, prerendering) have no document; effects set it later.
@@ -65,8 +51,8 @@ function surfaceColor(element: HTMLElement) {
 
 /**
  * A glass 3D view: WebGL check, one canvas per scene, render on change only,
- * shaders compiled before the first draw without blocking the page,
- * drag or arrow keys to turn, Home or double-click to reset. The scene module
+ * shaders compiled before the first draw without blocking the page. The view
+ * is fixed; it does not turn. The scene module
  * (and three.js with it) loads only through `load`, so callers keep it lazy.
  * Without WebGL, or when the scene fails or loses its context, `unavailable`
  * shows instead. Scenes with parts report the part under the pointer and a
@@ -109,8 +95,6 @@ export function Glass3DView({
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<{ scene: GlassScene; draw: () => void } | null>(null);
-  const viewRef = useRef({ ...REST_VIEW });
-  const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
   // `pointer` is where the pointer last was over the drawing, in page pixels.
@@ -151,7 +135,7 @@ export function Glass3DView({
   }, []);
 
   // One pick per frame at most, however fast the pointer moves, at where the
-  // pointer is by then. Also after a turn or resize moves the drawing under it.
+  // pointer is by then. Also after a resize moves the drawing under it.
   const scheduleHover = useCallback(() => {
     const hover = hoverRef.current;
     if (!onHoverRef.current || hover.frame || !hover.pointer) return;
@@ -237,7 +221,6 @@ export function Glass3DView({
         await created.prepare();
         if (disposed) return;
         created.resize(shell.clientWidth, shell.clientHeight);
-        created.setView(viewRef.current.yaw, viewRef.current.pitch);
         sceneRef.current = { scene: created, draw };
         resize.observe(shell);
         draw();
@@ -272,65 +255,16 @@ export function Glass3DView({
     reportHover(null);
   };
 
-  const turn = (yaw: number, pitch: number) => {
-    viewRef.current = { yaw: clamp(yaw, YAW_LIMIT), pitch: clamp(pitch, PITCH_LIMIT) };
-    const current = sceneRef.current;
-    if (!current) return;
-    current.scene.setView(viewRef.current.yaw, viewRef.current.pitch);
-    current.draw();
-    // A drag picks again when it ends; keys and resets turn under a still pointer.
-    if (!dragRef.current) scheduleHover();
-  };
-
-  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { x: event.clientX, y: event.clientY, ...viewRef.current };
-  };
-  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag) {
-      hoverAt(event.clientX, event.clientY);
-      return;
-    }
-    turn(
-      drag.yaw + (event.clientX - drag.x) * DRAG_RADIANS_PER_PIXEL,
-      drag.pitch + (event.clientY - drag.y) * DRAG_RADIANS_PER_PIXEL,
-    );
-  };
-  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    dragRef.current = null;
-    if (!drag) return;
-    const still = Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < CLICK_SLOP;
-    if (still && onSelectPart) {
-      // Picked where the press ended: a tap has no hover before it, and a
-      // queued hover may still name the leg the pointer came from.
-      cancelHover();
-      const part = partAt(event.clientX, event.clientY);
-      reportHover(part);
-      if (canSelect(part)) onSelectPart(part);
-      return;
-    }
-    // The turn moved the drawing under the pointer.
-    hoverAt(event.clientX, event.clientY);
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const { yaw, pitch } = viewRef.current;
-    const moves: Record<string, [number, number]> = {
-      ArrowLeft: [-KEY_STEP, 0],
-      ArrowRight: [KEY_STEP, 0],
-      ArrowUp: [0, -KEY_STEP],
-      ArrowDown: [0, KEY_STEP],
-    };
-    if (event.key === "Home") {
-      event.preventDefault();
-      turn(REST_VIEW.yaw, REST_VIEW.pitch);
-      return;
-    }
-    const move = moves[event.key];
-    if (!move) return;
-    event.preventDefault();
-    turn(yaw + move[0], pitch + move[1]);
+  const onClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!onSelectPart) return;
+    // Picked where the click landed: a tap has no hover before it, and a
+    // queued hover may still name the leg the pointer came from.
+    cancelHover();
+    const part = partAt(event.clientX, event.clientY);
+    // A tap's click comes after its pointer has left; lighting the part then
+    // would leave it lit with nothing to clear it.
+    if (hoverRef.current.pointer) reportHover(part);
+    if (canSelect(part)) onSelectPart(part);
   };
 
   if (status === "unavailable") return <>{unavailable}</>;
@@ -342,22 +276,12 @@ export function Glass3DView({
           ref={shellRef}
           role="img"
           aria-label={ariaLabel}
-          tabIndex={0}
-          className={cn(
-            "relative w-full cursor-grab touch-none overflow-hidden rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing",
-            className,
-          )}
+          className={cn("relative w-full overflow-hidden rounded-md", className)}
           data-testid={testId}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={() => {
-            dragRef.current = null;
-            leave();
-          }}
+          onPointerMove={(event) => hoverAt(event.clientX, event.clientY)}
+          onPointerCancel={leave}
           onPointerLeave={leave}
-          onDoubleClick={() => turn(REST_VIEW.yaw, REST_VIEW.pitch)}
-          onKeyDown={onKeyDown}
+          onClick={onClick}
         />
         {/* Beside the image, not inside it: an image role hides its descendants. */}
         {status === "loading" ? (

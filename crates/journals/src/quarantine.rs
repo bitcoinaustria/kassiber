@@ -99,12 +99,25 @@ fn reason(reason: &str) -> Info {
             "missing_wallet_history",
             &["import_history", "connect_wallet"],
         ),
-        "ownership_transfer_amount_mismatch"
-        | "ownership_transfer_conservation_mismatch"
-        | "ownership_transfer_fee_evidence_incomplete"
+        // The graph lacks an input, output or fee value: more chain data
+        // completes it.
+        "ownership_transfer_fee_evidence_incomplete"
         | "ownership_transfer_asset_evidence_incomplete"
-        | "recorded_transfer_authority_conflict"
         | "samourai_native_event_unverified" => info("missing_chain_evidence", &["sync_wallet"]),
+        // The row's amounts contradict a valued graph: a pairing or component
+        // decides; a stale row may still be corrected by syncing its wallet.
+        "ownership_transfer_amount_mismatch" | "ownership_transfer_conservation_mismatch" => {
+            info("needs_decision", &["pair_transfer", "sync_wallet"])
+        }
+        // A statement and an observation of one transaction: neither a
+        // disposal nor a fresh receipt until paired or explained by a
+        // component. A stale observation may still regain authority by
+        // syncing. `restore_pairing` appears only for an active dismissal of
+        // exactly this pair (an undone automatic pairing).
+        "recorded_transfer_authority_conflict" => info(
+            "needs_decision",
+            &["restore_pairing", "pair_transfer", "sync_wallet"],
+        ),
         "liquid_transfer_graph_incomplete" => {
             info("missing_chain_evidence", &["sync_wallet", "connect_wallet"])
         }
@@ -767,6 +780,79 @@ fn ev<'a>(evidence: &'a [(Key, Py)], key: &str) -> Option<&'a Py> {
         .map(|(_, v)| v)
 }
 
+/// One active dismissal of a held row's pair.
+struct Restore {
+    dismissal_id: String,
+    out_transaction_id: String,
+    in_transaction_id: String,
+}
+
+/// Active transfer dismissals by their `(out, in)` pair, judged with the
+/// matcher's own expiry rule at the current instant.
+fn active_dismissals(
+    conn: &Connection,
+    profile_id: &Sql,
+) -> Result<HashMap<(String, String), Vec<String>>, AppError> {
+    use kassiber_transfers::Sources;
+    let now = kassiber_transfers::SystemSources.now(conn)?;
+    let mut active: HashMap<(String, String), Vec<String>> = HashMap::new();
+    for row in query(
+        conn,
+        "SELECT id, out_transaction_id, in_transaction_id, expires_at
+        FROM transaction_pair_dismissals WHERE profile_id = ?",
+        std::slice::from_ref(profile_id),
+    )? {
+        if !kassiber_transfers::pairing::dismissal_is_active(&py(row.get("expires_at")), &now) {
+            continue;
+        }
+        active
+            .entry((
+                py_str(&py(row.get("out_transaction_id"))),
+                py_str(&py(row.get("in_transaction_id"))),
+            ))
+            .or_default()
+            .push(py_str(&py(row.get("id"))));
+    }
+    Ok(active)
+}
+
+/// The dismissal that undid a held row's pairing: exactly one active
+/// dismissal of the `(out, in)` pair the row's detail names. A row whose
+/// counterpart or direction is unclear gets none.
+fn restore_for(
+    reason_name: &str,
+    detail: &Py,
+    transaction_id: &str,
+    direction: &Py,
+    dismissals: &HashMap<(String, String), Vec<String>>,
+) -> Option<Restore> {
+    if reason_name != "recorded_transfer_authority_conflict" {
+        return None;
+    }
+    let counterpart = text_or_empty(field(detail, "authoritative_transaction_id"));
+    if counterpart.is_empty() || counterpart == transaction_id {
+        return None;
+    }
+    let own = transaction_id.to_owned();
+    let direction = kassiber_pytext::lower(kassiber_pytext::strip(&text_or_empty(Some(direction))));
+    let (out, incoming) = match direction.as_str() {
+        "outbound" => (own, counterpart),
+        "inbound" => (counterpart, own),
+        _ => return None,
+    };
+    match dismissals
+        .get(&(out.clone(), incoming.clone()))
+        .map(Vec::as_slice)
+    {
+        Some([id]) => Some(Restore {
+            dismissal_id: id.clone(),
+            out_transaction_id: out,
+            in_transaction_id: incoming,
+        }),
+        _ => None,
+    }
+}
+
 fn actions(
     info: Info,
     transaction_id: &str,
@@ -774,6 +860,7 @@ fn actions(
     evidence: &[(Key, Py)],
     root: &Py,
     wallets: &HashMap<String, Wallet>,
+    restore: Option<&Restore>,
 ) -> Py {
     let mut actions = Vec::new();
     let own = wallets.get(&text_or_empty(Some(wallet_id)));
@@ -838,6 +925,17 @@ fn actions(
                         ("kind", s(*kind)),
                         ("transaction_id", s(transaction_id)),
                         ("pair_id", pair.clone()),
+                    ]));
+                }
+            }
+            "restore_pairing" => {
+                if let Some(restore) = restore {
+                    actions.push(dict([
+                        ("kind", s(*kind)),
+                        ("transaction_id", s(transaction_id)),
+                        ("dismissal_id", s(restore.dismissal_id.as_str())),
+                        ("out_transaction_id", s(restore.out_transaction_id.as_str())),
+                        ("in_transaction_id", s(restore.in_transaction_id.as_str())),
                     ]));
                 }
             }
@@ -1163,6 +1261,7 @@ fn review(
     let id_param = Sql::Text(profile_id.clone());
     let wallets = wallets(conn, &id_param)?;
     let blocking = blocking_ids(conn, &id_param)?;
+    let dismissals = active_dismissals(conn, &id_param)?;
     let workspace = py_str(&py(profile.get("workspace_id")));
     let mut pairs: HashMap<String, Py> = HashMap::new();
     for record in kassiber_transfers::pair_review_records(conn, &workspace, &profile_id)? {
@@ -1254,6 +1353,13 @@ fn review(
             }
         }
         let blocks = blocking.contains(&transaction_id);
+        let restore = restore_for(
+            &reason_name,
+            &detail,
+            &transaction_id,
+            &py(row.get("direction")),
+            &dismissals,
+        );
         let actions = actions(
             info,
             &transaction_id,
@@ -1261,6 +1367,7 @@ fn review(
             &evidence,
             &root,
             &wallets,
+            restore.as_ref(),
         );
         let mut actions = actions;
         if let Some(pair) = pairs.get(&transaction_id) {
@@ -1747,4 +1854,178 @@ fn scope_error() -> AppError {
         "validation",
         format!("{KIND} scope must be one of: {}", SCOPES.join(", ")),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HELD: &str = "held-send";
+    const RECEIPT: &str = "receipt";
+
+    fn kinds(actions: &Py) -> Vec<String> {
+        let Py::List(items) = actions else {
+            panic!("actions: {actions:?}")
+        };
+        items
+            .iter()
+            .map(|item| text_or_empty(get(item, "kind")))
+            .collect()
+    }
+
+    fn conflict_detail(authoritative: &str) -> Py {
+        dict([
+            ("pairing_source", s("row_matched")),
+            ("authoritative_transaction_id", s(authoritative)),
+            ("observation_authority_reason", s("provenance_missing")),
+            (
+                "required_for",
+                s("authoritative_same_event_wallet_observation"),
+            ),
+        ])
+    }
+
+    fn dismissed(pairs: &[(&str, &str, &str)]) -> HashMap<(String, String), Vec<String>> {
+        let mut map: HashMap<(String, String), Vec<String>> = HashMap::new();
+        for (id, out, incoming) in pairs {
+            map.entry(((*out).to_owned(), (*incoming).to_owned()))
+                .or_default()
+                .push((*id).to_owned());
+        }
+        map
+    }
+
+    fn own_wallet() -> HashMap<String, Wallet> {
+        HashMap::from([(
+            "bark".to_owned(),
+            Wallet {
+                id: "bark".to_owned(),
+                label: "Bark".to_owned(),
+                deprecated: false,
+            },
+        )])
+    }
+
+    fn row_actions(reason_name: &str, restore: Option<&Restore>) -> Py {
+        actions(
+            reason_info(reason_name, &dict::<&str>([])),
+            HELD,
+            &s("bark"),
+            &[],
+            &Py::Null,
+            &own_wallet(),
+            restore,
+        )
+    }
+
+    #[test]
+    fn a_statement_and_observation_conflict_needs_a_pairing_decision() {
+        let info = reason("recorded_transfer_authority_conflict");
+        assert_eq!(info.category, "needs_decision");
+        assert_eq!(
+            info.actions,
+            ["restore_pairing", "pair_transfer", "sync_wallet"]
+        );
+        assert!(!info.downstream());
+    }
+
+    #[test]
+    fn contradicted_ownership_transfers_need_a_decision_and_incomplete_graphs_a_sync() {
+        for name in [
+            "ownership_transfer_amount_mismatch",
+            "ownership_transfer_conservation_mismatch",
+        ] {
+            let info = reason(name);
+            assert_eq!(info.category, "needs_decision", "{name}");
+            assert_eq!(info.actions, ["pair_transfer", "sync_wallet"], "{name}");
+        }
+        for name in [
+            "ownership_transfer_fee_evidence_incomplete",
+            "ownership_transfer_asset_evidence_incomplete",
+            "samourai_native_event_unverified",
+        ] {
+            let info = reason(name);
+            assert_eq!(info.category, "missing_chain_evidence", "{name}");
+            assert_eq!(info.actions, ["sync_wallet"], "{name}");
+        }
+    }
+
+    #[test]
+    fn restore_pairing_leads_only_when_a_dismissal_names_the_pair() {
+        let restore = Restore {
+            dismissal_id: "d1".to_owned(),
+            out_transaction_id: HELD.to_owned(),
+            in_transaction_id: RECEIPT.to_owned(),
+        };
+        let with = row_actions("recorded_transfer_authority_conflict", Some(&restore));
+        assert_eq!(
+            kinds(&with),
+            ["restore_pairing", "pair_transfer", "sync_wallet"]
+        );
+        let Py::List(items) = &with else {
+            unreachable!()
+        };
+        assert_eq!(
+            items[0],
+            dict([
+                ("kind", s("restore_pairing")),
+                ("transaction_id", s(HELD)),
+                ("dismissal_id", s("d1")),
+                ("out_transaction_id", s(HELD)),
+                ("in_transaction_id", s(RECEIPT)),
+            ])
+        );
+        let without = row_actions("recorded_transfer_authority_conflict", None);
+        assert_eq!(kinds(&without), ["pair_transfer", "sync_wallet"]);
+        // Other reasons never offer it, even with a dismissal at hand.
+        let other = row_actions("ownership_transfer_amount_mismatch", Some(&restore));
+        assert_eq!(kinds(&other), ["pair_transfer", "sync_wallet"]);
+    }
+
+    #[test]
+    fn a_dismissal_matches_only_the_held_rows_exact_pair() {
+        let detail = conflict_detail(RECEIPT);
+        let reason_name = "recorded_transfer_authority_conflict";
+        let found = |direction: &str, held: &str, map: &HashMap<(String, String), Vec<String>>| {
+            restore_for(reason_name, &detail, held, &s(direction), map)
+                .map(|r| (r.dismissal_id, r.out_transaction_id, r.in_transaction_id))
+        };
+        // The held send is the pair's out leg.
+        let map = dismissed(&[("d1", HELD, RECEIPT)]);
+        assert_eq!(
+            found("outbound", HELD, &map),
+            Some(("d1".into(), HELD.into(), RECEIPT.into()))
+        );
+        // A dismissal the other way round vetoes another pair.
+        assert_eq!(found("inbound", HELD, &map), None);
+        // A held receipt is the in leg.
+        let receipt_detail = conflict_detail("platform-row");
+        let map = dismissed(&[("d2", "platform-row", RECEIPT)]);
+        assert_eq!(
+            restore_for(reason_name, &receipt_detail, RECEIPT, &s("inbound"), &map)
+                .map(|r| r.dismissal_id),
+            Some("d2".to_owned())
+        );
+        // Another pair of the same row, an unclear direction, no or a
+        // self-naming counterpart, several dismissals, another reason: none.
+        let map = dismissed(&[("d3", HELD, "elsewhere")]);
+        assert_eq!(found("outbound", HELD, &map), None);
+        let map = dismissed(&[("d1", HELD, RECEIPT)]);
+        assert_eq!(found("", HELD, &map), None);
+        assert_eq!(found("transfer", HELD, &map), None);
+        for detail in [dict::<&str>([]), conflict_detail(""), conflict_detail(HELD)] {
+            assert!(restore_for(reason_name, &detail, HELD, &s("outbound"), &map).is_none());
+        }
+        let map = dismissed(&[("d1", HELD, RECEIPT), ("d4", HELD, RECEIPT)]);
+        assert_eq!(found("outbound", HELD, &map), None);
+        let map = dismissed(&[("d1", HELD, RECEIPT)]);
+        assert!(restore_for(
+            "ownership_transfer_amount_mismatch",
+            &detail,
+            HELD,
+            &s("outbound"),
+            &map
+        )
+        .is_none());
+    }
 }

@@ -257,7 +257,6 @@ fn dependency_invalid(name: &str, item: &Item, own: bool) -> bool {
         "httparse",
         "idna_adapter",
         "rustls",
-        "rustls-native-certs",
         "url",
         "webpki-roots",
         "toml_edit",

@@ -2,6 +2,7 @@ use super::*;
 use kassiber_pyjson::BigInt;
 use kassiber_wallets::{config::bitcoin_address_script, descriptors};
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
 struct Groups {
@@ -467,6 +468,92 @@ pub fn owned_index_and_wallets(
     Ok((index.encode(references), warnings, wallets))
 }
 
+/// What the index keeps of one derived descriptor target.
+struct Target {
+    branch_label: String,
+    script_pubkey: Option<String>,
+    address: String,
+    /// Present and non-empty only for a Liquid confidential address.
+    unconfidential_address: Option<String>,
+}
+
+/// A descriptor's targets up to a horizon, or the code its derivation
+/// refused with.
+type Batch = std::result::Result<Arc<Vec<Target>>, String>;
+
+/// Derivations kept across builds. Deriving is a pure function of the plan
+/// and the horizon, and every journal build, review case list and review
+/// plan derives the same batches again: thousands of elliptic-curve steps
+/// for a few Liquid wallets, most of a build's read time. The key is the
+/// plan's fingerprint (a hash of its chain, network, gap limit and each
+/// branch's canonical descriptor, blinding key included), its branch labels
+/// (two plans can share a fingerprint and differ only in how a branch is
+/// named) and the horizon, so a hit returns exactly what deriving again
+/// would. It holds public scripts and addresses only, never descriptor or
+/// key text, and [`forget_derivations`] drops it when the book closes.
+static DERIVATIONS: Mutex<Option<Derivations>> = Mutex::new(None);
+
+/// Batches by plan fingerprint, branch labels and horizon.
+type Derivations = HashMap<(String, Vec<String>, u32), Batch>;
+
+/// Batches kept before the memo starts over; a book has a handful.
+const DERIVATIONS_LIMIT: usize = 256;
+
+/// Drop every kept derivation (the book closed or locked).
+pub fn forget_derivations() {
+    *DERIVATIONS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+}
+
+fn derive(plan: &descriptors::Plan, ceiling: u32) -> Batch {
+    let key = (
+        plan.fingerprint.clone(),
+        plan.branches
+            .iter()
+            .map(|branch| branch.label.clone())
+            .collect(),
+        ceiling,
+    );
+    let memo = || {
+        DERIVATIONS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    };
+    if let Some(batch) = memo().as_ref().and_then(|kept| kept.get(&key)) {
+        return batch.clone();
+    }
+    let batch = plan
+        .derive(None, 0, ceiling)
+        .map(|targets| {
+            Arc::new(
+                targets
+                    .iter()
+                    .map(|target| Target {
+                        branch_label: target["branch_label"].as_str().unwrap_or("").to_owned(),
+                        script_pubkey: target["script_pubkey"].as_str().map(str::to_owned),
+                        address: target["address"].as_str().unwrap_or("").to_owned(),
+                        unconfidential_address: target["unconfidential_address"]
+                            .as_str()
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_owned),
+                    })
+                    .collect(),
+            )
+        })
+        .map_err(|e| e.into_app().code);
+    let mut kept = memo();
+    let kept = kept.get_or_insert_with(HashMap::new);
+    // One batch per plan: a wallet whose used addresses grew derives to a
+    // higher horizon, and the lower one is never read again.
+    kept.retain(|(fingerprint, labels, _), _| !(*fingerprint == key.0 && *labels == key.1));
+    if kept.len() >= DERIVATIONS_LIMIT {
+        kept.clear();
+    }
+    kept.insert(key, batch.clone());
+    batch
+}
+
 fn build(conn: &Connection, profile_id: &str, branches: bool) -> Result<(Index, Vec<Value>)> {
     let wallets=query(conn,"SELECT w.id,w.label,w.kind,w.config_json,a.code AS account_code,a.label AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id=? ORDER BY w.label ASC",[profile_id])?;
     let summary_rows = query(
@@ -483,8 +570,7 @@ fn build(conn: &Connection, profile_id: &str, branches: bool) -> Result<(Index, 
     let mut highest = HashMap::<String, BTreeMap<String, BigInt>>::new();
     // One batch per canonical descriptor and horizon, shared by current and
     // retired policies and wallets. Keep wallet-specific facts out of the memo.
-    let mut derived =
-        HashMap::<(String, u32), std::result::Result<Vec<serde_json::Value>, String>>::new();
+    let mut derived = HashMap::<(String, u32), Batch>::new();
     for row in query(conn,"SELECT wallet_id,txid,vout,address,script_pubkey,branch_label,branch_index,address_index,chain,network FROM wallet_utxos WHERE profile_id=?",[profile_id])? {
         let wallet_id=text(get(&row,"wallet_id"));
         if !wallets.is_empty() && !summaries.contains_key(&wallet_id) { continue; }
@@ -593,9 +679,9 @@ fn build(conn: &Connection, profile_id: &str, branches: bool) -> Result<(Index, 
                 u32::try_from(ceiling).map_err(|_| Error::Invalid("derivation ceiling".into()))?;
             let targets = match derived
                 .entry((plan.fingerprint.clone(), ceiling))
-                .or_insert_with(|| plan.derive(None, 0, ceiling).map_err(|e| e.into_app().code))
+                .or_insert_with(|| derive(&plan, ceiling))
             {
-                Ok(targets) => targets,
+                Ok(targets) => targets.clone(),
                 Err(code) => {
                     warnings.push(Value::from(format!(
                         "Wallet '{}': descriptor not scanned ({code})",
@@ -615,22 +701,12 @@ fn build(conn: &Connection, profile_id: &str, branches: bool) -> Result<(Index, 
                     "derived"
                 },
             );
-            for target in targets {
-                let item = with_branch(
-                    branches,
-                    &item,
-                    target["branch_label"].as_str().unwrap_or("").to_owned(),
-                );
-                index.script(target["script_pubkey"].as_str().map(str::to_owned), &item);
-                index.address(
-                    &Value::from(target["address"].as_str().unwrap_or("")),
-                    &item,
-                );
-                if let Some(address) = target["unconfidential_address"]
-                    .as_str()
-                    .filter(|s| !s.is_empty())
-                {
-                    index.address(&Value::from(address), &item);
+            for target in targets.iter() {
+                let item = with_branch(branches, &item, target.branch_label.clone());
+                index.script(target.script_pubkey.clone(), &item);
+                index.address(&Value::from(target.address.as_str()), &item);
+                if let Some(address) = &target.unconfidential_address {
+                    index.address(&Value::from(address.as_str()), &item);
                 }
             }
         }

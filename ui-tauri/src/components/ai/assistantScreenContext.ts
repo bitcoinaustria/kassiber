@@ -200,24 +200,22 @@ export function assistantScreenContextFor(
 
   if (path === "/swaps" || path === "/transfers") {
     const search = parseTransfersCustodySearch(Object.fromEntries(params));
-    if (search.tab === "gaps") {
+    // The screen keeps its `/swaps` id so assistant references stay stable.
+    if (search.section === "advanced" && (search.tab ?? "gaps") === "gaps") {
       const gap = firstSafeEntity(params, ["gap", "gap_id"]);
       return context("/swaps", ["transfers", "transactions", "wallets"], {
         ...(gap ? { entityType: "custody_gap" as const, entityId: gap } : {}),
         filters: { tab: "gaps" },
       });
     }
-    const transaction = firstSafeEntity(params, ["focus", "tx", "transaction"]);
-    const method = search.method;
+    const transaction = search.link && search.link !== "new" ? search.link : undefined;
     return context("/swaps", ["transfers", "transactions"], {
       ...(transaction
         ? { entityType: "transaction" as const, entityId: transaction }
         : {}),
       filters: optionalFilters([
-        ["method", method],
-        ["tab", params.has("tab") ? search.tab : undefined],
-        ["mode", params.has("mode") ? search.mode : undefined],
-        ["view", params.has("view") ? search.view : undefined],
+        ["section", search.section],
+        ["tab", search.section === "advanced" ? search.tab : undefined],
       ]),
     });
   }

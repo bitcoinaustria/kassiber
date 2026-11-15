@@ -95,6 +95,7 @@ const DESKTOP_KINDS: &[&str] = &[
     // Swap matching.
     "ui.transfers.suggest",
     "ui.transfers.list",
+    "ui.transfers.pair_options",
     "ui.transfers.payouts.list",
     "ui.transfers.payouts.create",
     "ui.transfers.payouts.delete",
@@ -103,6 +104,8 @@ const DESKTOP_KINDS: &[&str] = &[
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
     "ui.transfers.dismissals.delete",
+    // The Transfers screen lists undone automatic pairings so they can be restored.
+    "ui.transfers.dismissals.list",
     "ui.transfers.rules.list",
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",

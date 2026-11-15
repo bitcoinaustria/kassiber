@@ -195,6 +195,33 @@ fn a_configured_ca_that_covers_the_server_leaves_nothing_to_pin() {
 }
 
 #[test]
+fn settings_inside_a_serialized_config_json_count() {
+    let server = FakeTls::start(fixtures::SELF_SIGNED, http_reply).unwrap();
+    let port = server.port();
+    let dir = tempfile::tempdir().unwrap();
+    let pin = dir.path().join("pin.pem");
+    std::fs::write(&pin, fixtures::SELF_SIGNED.0).unwrap();
+    let other = dir.path().join("other.pem");
+    std::fs::write(&other, fixtures::OTHER_SELF_SIGNED.0).unwrap();
+    let consent = CertificateConsent::explicit("home");
+    let nested = |inner: Value| esplora(port, json!({"config_json": inner.to_string()}));
+    assert_eq!(
+        fetch(&gate(), &consent, &nested(json!({"certificate": pin})))
+            .err()
+            .unwrap()
+            .code,
+        "backend_certificate_already_trusted"
+    );
+    let fetched = fetch(&gate(), &consent, &nested(json!({"insecure": true}))).unwrap();
+    assert_eq!(fetched.payload()["clears_insecure"], true);
+    let fetched = fetch(&gate(), &consent, &nested(json!({"certificate": other}))).unwrap();
+    assert_eq!(
+        fetched.payload()["replaces_fingerprint_sha256"],
+        OTHER_FINGERPRINT
+    );
+}
+
+#[test]
 fn only_an_effective_pin_counts_as_trusted() {
     let server = FakeTls::start(fixtures::SELF_SIGNED, http_reply).unwrap();
     let port = server.port();

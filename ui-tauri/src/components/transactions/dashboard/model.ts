@@ -418,6 +418,50 @@ function isRedundantTransactionLabel(label: string, flow: TransactionFlow) {
   return normalized === flowLabelStableEnglish[flow];
 }
 
+type PairedTransferRow = {
+  title: string;
+  movedBtc: number;
+  movedFiat: number | null;
+  feeBtc: number;
+  feeFiat: number | null;
+};
+
+/**
+ * How the table shows a reviewed same-asset move. The daemon collapses both
+ * legs into one row whose `amountSat` is the pair's own fee (zero for a plain
+ * move) and whose counter reads "Transfer fee - BTC -> BTC"; the legs' amounts
+ * ride along on `pair`. Show what arrived in the destination wallet (the
+ * source leg's amount when the destination's is missing), valued at the row's
+ * rate, and the pair's fee separately.
+ */
+function pairedTransferRow(
+  txn: Transaction,
+  t?: Translator,
+): PairedTransferRow | null {
+  const pair = txn.pair;
+  if (!pair || pair.type !== "transfer") return null;
+  const movedSat = Math.abs(pair.inAmountSat || pair.outAmountSat || 0);
+  const feeSat = Math.abs(pair.feeSat ?? 0);
+  const rate = txn.rate ?? null;
+  const movedBtc = movedSat / SATS_PER_BTC;
+  const feeBtc = feeSat / SATS_PER_BTC;
+  const from = pair.outWallet?.trim() || "";
+  const to = pair.inWallet?.trim() || "";
+  const title =
+    from && to
+      ? t
+        ? t("transactions:table.pairedTransfer.title", { from, to })
+        : `Transfer · ${from} → ${to}`
+      : txn.counterparty;
+  return {
+    title,
+    movedBtc,
+    movedFiat: rate === null ? null : movedBtc * rate,
+    feeBtc,
+    feeFiat: rate === null ? null : feeBtc * rate,
+  };
+}
+
 function pairRailLabel(txn: Transaction, t?: Translator) {
   const pair = txn.pair;
   if (!pair) return txn.paymentMethod;
@@ -1925,6 +1969,7 @@ export {
   matchesFlowChartSelection,
   matchesTransactionDeepLink,
   pairRailLabel,
+  pairedTransferRow,
   periodKeys,
   periodLabel,
   periodLabels,
@@ -1963,6 +2008,7 @@ export type {
   FlowChartSegmentStats,
   FlowChartSelection,
   JournalEventsData,
+  PairedTransferRow,
   PeriodKey,
   ResolvedPeriodKey,
   SwapCandidate,

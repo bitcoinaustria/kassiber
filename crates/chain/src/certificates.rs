@@ -181,7 +181,9 @@ pub fn fetch(gate: &Gate, consent: &CertificateConsent, config: &Value) -> Resul
             "There is nothing to pin. If this backend still fails, clear its certificate setting.",
         ));
     }
-    let configured = config::value(config, &["certificate"])
+    // Settings come from the normalized mapping, which also unpacks a
+    // serialized `config_json`.
+    let configured = config::value(&backend.config, &["certificate"])
         .filter(|path| !path.is_empty())
         .and_then(|path| TlsTrust::backend_certificate(Path::new(path)).ok());
     if let Some(configured) = &configured {
@@ -222,8 +224,8 @@ pub fn fetch(gate: &Gate, consent: &CertificateConsent, config: &Value) -> Resul
     }
     let previous = configured
         .as_ref()
-        .and_then(|trust| trust.certificate_ders().first().map(|der| fingerprint(der)));
-    let clears_insecure = config::field(config, &["insecure"])
+        .and_then(|trust| trust.backend_pin_ders().first().map(|der| fingerprint(der)));
+    let clears_insecure = config::field(&backend.config, &["insecure"])
         .map(config::boolean)
         .transpose()?
         .unwrap_or(false);
@@ -255,7 +257,7 @@ pub fn verify_pinned(config: &Value, fetched: &Fetched) -> Result<()> {
     let trust = backend.request().tls();
     if !backend.secure
         || matches!(trust, TlsTrust::ExplicitInsecure | TlsTrust::Plaintext)
-        || trust.certificate_ders() != [fetched.der()]
+        || trust.backend_pin_ders() != [fetched.der()]
     {
         return Err(not_used());
     }

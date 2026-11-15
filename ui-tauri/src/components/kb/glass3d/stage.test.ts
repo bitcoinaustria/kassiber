@@ -93,29 +93,44 @@ function lastCamera() {
 }
 
 describe("shared glass stage", () => {
-  it("preserves graph minimum framing, draws only on demand and never shrinks on rotation", () => {
+  it("preserves graph minimum framing, draws only on demand and keeps one scale", () => {
     const { canvas, drawImage } = outputCanvas();
-    const stage = createGlassStage(canvas, look, (content, own) => {
-      content.add(new Mesh(new BoxGeometry(2, 2, 20), own(new MeshPhysicalMaterial())));
-    });
+    const stage = createGlassStage(
+      canvas,
+      look,
+      (content, own) => {
+        content.add(new Mesh(new BoxGeometry(2, 2, 20), own(new MeshPhysicalMaterial())));
+      },
+      { view: { yaw: 0, pitch: 0 } },
+    );
     stage.resize(880, 500);
-    stage.setView(0, 0);
     expect(stubs.renderer.render).not.toHaveBeenCalled();
     stage.render();
     expect(lastCamera().right).toBeCloseTo(4.4);
     expect(lastCamera().top).toBeCloseTo(2.5);
-    stage.setView(Math.PI / 2, 0);
     stage.render();
-    const expanded = lastCamera().right;
-    expect(expanded).toBeGreaterThan(10);
-    stage.setView(0, 0);
-    stage.render();
-    expect(lastCamera().right).toBe(expanded);
-    expect(stubs.renderer.render).toHaveBeenCalledTimes(3);
+    expect(lastCamera().right).toBeCloseTo(4.4);
+    expect(stubs.renderer.render).toHaveBeenCalledTimes(2);
     // Every draw lands on the view's own canvas, at the drawing's size.
-    expect(drawImage).toHaveBeenCalledTimes(3);
+    expect(drawImage).toHaveBeenCalledTimes(2);
     expect(canvas.width).toBe(880);
     expect(canvas.height).toBe(500);
+    stage.dispose();
+  });
+
+  it("frames the piece as seen from its fixed angle", () => {
+    const stage = createGlassStage(
+      outputCanvas().canvas,
+      look,
+      (content, own) => {
+        content.add(new Mesh(new BoxGeometry(2, 2, 20), own(new MeshPhysicalMaterial())));
+      },
+      { view: { yaw: Math.PI / 2, pitch: 0 } },
+    );
+    stage.resize(880, 500);
+    stage.render();
+    // Turned side-on, the 20-unit depth is the width the frame must hold.
+    expect(lastCamera().right).toBeGreaterThan(10);
     stage.dispose();
   });
 
@@ -196,7 +211,6 @@ describe("shared glass stage", () => {
       content.add(new Mesh(new BoxGeometry(), own(new MeshPhysicalMaterial())));
     });
     stage.resize(880, 500);
-    stage.setView(0, 0);
     await stage.prepare();
     // Keepers once (with one tiny draw for the refraction pass), then the scene.
     expect(stubs.renderer.compileAsync).toHaveBeenCalledTimes(2);
@@ -222,7 +236,6 @@ describe("shared glass stage", () => {
   it("frames an empty inventory without an infinite projection", () => {
     const stage = createGlassStage(outputCanvas().canvas, look, () => {});
     stage.resize(880, 500);
-    stage.setView(0.4, 0.2);
     stage.render();
     expect(lastCamera().right).toBeCloseTo(4.4);
     expect(lastCamera().projectionMatrix.elements.every(Number.isFinite)).toBe(true);
@@ -245,7 +258,6 @@ describe("shared glass stage", () => {
       };
     });
     stage.resize(880, 500);
-    stage.setView(0, 0);
     expect(stage.pick(440, 250)).toBe("box");
     expect(seen!.centre[0]).toBeCloseTo(440);
     expect(seen!.centre[1]).toBeCloseTo(250);
@@ -258,7 +270,6 @@ describe("shared glass stage", () => {
   it("has nothing to pick in a scene without parts", () => {
     const stage = createGlassStage(outputCanvas().canvas, look, () => {});
     stage.resize(880, 500);
-    stage.setView(0, 0);
     expect(stage.pick(440, 250)).toBeNull();
     stage.dispose();
   });

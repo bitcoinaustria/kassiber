@@ -1,14 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 import {
   ArrowRight,
   CheckCircle2,
   Clock3,
-  RotateCcw,
-  ShieldCheck,
   TriangleAlert,
-  Undo2,
   WalletCards,
 } from "lucide-react";
 
@@ -24,23 +20,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   useDaemon,
   useDaemonInfinite,
   useDaemonMutation,
 } from "@/daemon/client";
 import {
   pageDescriptionClassName,
-  pageHeaderClassName,
-  screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -52,31 +37,23 @@ import {
   type CustodyGapStatus,
   type CustodyResidualClassification,
   type CustodyCoverageSnapshot,
-  type CustodyLineageItem,
-  type CustodyLineageSnapshot,
   type BridgePreview,
   type FiledReportImpactPreview,
   type GuidedCorrectionPreview,
   type ResidualClassificationPreview,
-  type UndoneAutomaticPairing,
   bridgeCreateArgs,
   bridgePreviewArgs,
   canShowNoKnownCustodyGaps,
-  canUndoAutomaticPairing,
   collectCustodyGapPages,
-  collectCustodyLineagePages,
   custodyGapActionMode,
   formatCustodyMsat,
-  lineagePairKey,
   reopenConfirmArgs,
   reopenPreviewArgs,
   residualConfirmArgs,
   residualPreviewArgs,
-  restoreAutomaticPairingArgs,
   reviseConfirmArgs,
   revisePreviewArgs,
   shouldOfferResidualClassification,
-  undoAutomaticPairingArgs,
 } from "./custodyGapsModel";
 
 function formatDate(value: string | null, language: string): string {
@@ -116,19 +93,11 @@ export function CustodyCoverageTimeline({
           <h2 id="custody-coverage-title" className="font-semibold">
             {t("coverage.title")}
           </h2>
-          <Badge variant="destructive">{t("coverage.ownershipUnknown")}</Badge>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           {t("coverage.description")}
         </p>
       </div>
-
-      <Card className="gap-2 border-amber-500/30 bg-amber-500/5 py-4">
-        <CardContent className="flex items-start gap-3 px-4 text-sm">
-          <TriangleAlert className="mt-0.5 size-5 shrink-0 text-amber-600" />
-          <p>{t("coverage.technicalOnly")}</p>
-        </CardContent>
-      </Card>
 
       {snapshot.wallets.length ? (
         <div className="space-y-4">
@@ -253,260 +222,6 @@ export function CustodyCoverageTimeline({
   );
 }
 
-type LineageEvidenceKey =
-  | "lineage.evidence.recordedFanout"
-  | "lineage.evidence.rowMatched"
-  | "lineage.evidence.nativeTransfer"
-  | "lineage.evidence.exchangeTxid"
-  | "lineage.evidence.reviewedTransfer"
-  | "lineage.evidence.reviewedGapBridge"
-  | "lineage.evidence.channelLifecycle";
-
-const LINEAGE_EVIDENCE_KEYS: Record<string, LineageEvidenceKey> = {
-  recorded_fanout: "lineage.evidence.recordedFanout",
-  row_matched: "lineage.evidence.rowMatched",
-  verified_native_transfer: "lineage.evidence.nativeTransfer",
-  exchange_txid_exact: "lineage.evidence.exchangeTxid",
-  reviewed_transfer_pair: "lineage.evidence.reviewedTransfer",
-  reviewed_gap_bridge: "lineage.evidence.reviewedGapBridge",
-  manual: "lineage.evidence.reviewedTransfer",
-  bulk_exact: "lineage.evidence.reviewedTransfer",
-  bulk_selected: "lineage.evidence.reviewedTransfer",
-  rule_auto: "lineage.evidence.reviewedTransfer",
-  channel_lifecycle: "lineage.evidence.channelLifecycle",
-};
-
-function lineageEvidenceLabel(
-  item: CustodyLineageItem,
-  t: TFunction<"custodyGaps">,
-): string {
-  const key = LINEAGE_EVIDENCE_KEYS[item.evidence_reason];
-  if (key) return t(key);
-  return item.custody_state === "internal_reviewed"
-    ? t("lineage.evidence.reviewedDefault")
-    : t("lineage.evidence.verifiedDefault");
-}
-
-export function CustodyLineageTimeline({
-  snapshot,
-  onUndo,
-  undoDisabled = false,
-}: {
-  snapshot: CustodyLineageSnapshot;
-  /** Asks to undo an automatic pairing; absent, none is offered. */
-  onUndo?: (item: CustodyLineageItem) => void;
-  undoDisabled?: boolean;
-}) {
-  const { t, i18n } = useTranslation("custodyGaps");
-  const hideSensitive = useUiStore((state) => state.hideSensitive);
-
-  return (
-    <section className="space-y-3" aria-labelledby="custody-lineage-title">
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 id="custody-lineage-title" className="font-semibold">
-            {t("lineage.title")}
-          </h2>
-          <Badge variant="outline">
-            {t("lineage.edgeCount", { count: snapshot.summary.total_count })}
-          </Badge>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-          {t("lineage.description")}
-        </p>
-      </div>
-
-      {snapshot.items.length ? (
-        <div className="space-y-3">
-          {snapshot.items.map((item, index) => (
-            <Card
-              className="gap-3 py-4"
-              key={`${item.occurred_at ?? "unknown"}-${item.from_wallet_label}-${item.to_wallet_label}-${item.amount_msat}-${index}`}
-            >
-              <CardContent className="space-y-3 px-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(item.occurred_at, i18n.language)}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge
-                      variant={
-                        item.custody_state === "internal_verified"
-                          ? "default"
-                          : "outline"
-                      }
-                    >
-                      {t(`lineage.custodyState.${item.custody_state}`)}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        item.basis_state === "eligible"
-                          ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
-                          : "border-amber-500/50 bg-amber-500/5 text-amber-700 dark:text-amber-400",
-                      )}
-                    >
-                      {t(`lineage.basisState.${item.basis_state}`)}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                  <span>{item.from_wallet_label}</span>
-                  <ArrowRight
-                    className="size-4 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <span>{item.to_wallet_label}</span>
-                  <span className={cn("ml-auto", hideSensitive && "sensitive")}>
-                    {formatCustodyMsat(item.amount_msat, item.asset)}
-                  </span>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  {t("lineage.evidenceLabel", {
-                    evidence: lineageEvidenceLabel(item, t),
-                  })}
-                </p>
-                {item.basis_state === "blocked_by_prior_custody_basis" ? (
-                  <p className="text-xs text-amber-700 dark:text-amber-400">
-                    {t("lineage.basisBlocked")}
-                  </p>
-                ) : null}
-                {onUndo && canUndoAutomaticPairing(item) ? (
-                  <div className="flex justify-end">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={undoDisabled}
-                      onClick={() => onUndo(item)}
-                    >
-                      <Undo2 className="size-3.5" aria-hidden="true" />
-                      {t("lineage.undo.action")}
-                    </Button>
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <Card className="gap-2 py-5">
-          <CardContent className="px-5 text-sm text-muted-foreground">
-            {t("lineage.empty")}
-          </CardContent>
-        </Card>
-      )}
-    </section>
-  );
-}
-
-function lineageRoute(item: CustodyLineageItem, t: TFunction<"custodyGaps">) {
-  return t("lineage.undo.route", {
-    from: item.from_wallet_label,
-    to: item.to_wallet_label,
-  });
-}
-
-/** Confirms undoing one automatic pairing before its dismissal is sent. */
-export function UndoAutomaticPairingDialog({
-  item,
-  pending,
-  error,
-  onConfirm,
-  onCancel,
-}: {
-  item: CustodyLineageItem | null;
-  pending: boolean;
-  error: string | null;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const { t } = useTranslation("custodyGaps");
-  const hideSensitive = useUiStore((state) => state.hideSensitive);
-  return (
-    <Dialog open={item !== null} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("lineage.undo.title")}</DialogTitle>
-          <DialogDescription>{t("lineage.undo.description")}</DialogDescription>
-        </DialogHeader>
-        {item ? (
-          <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-            <span>{lineageRoute(item, t)}</span>
-            <span className={cn("ml-auto", hideSensitive && "sensitive")}>
-              {formatCustodyMsat(item.amount_msat, item.asset)}
-            </span>
-          </p>
-        ) : null}
-        <p className="text-xs text-muted-foreground">{t("lineage.undo.restoreHint")}</p>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline" disabled={pending}>
-              {t("lineage.undo.cancel")}
-            </Button>
-          </DialogClose>
-          <Button type="button" disabled={pending} onClick={onConfirm}>
-            {pending ? t("lineage.undo.undoing") : t("lineage.undo.confirm")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** Pairings undone in this session, each restorable by removing its dismissal. */
-export function UndoneAutomaticPairings({
-  undone,
-  pending,
-  error,
-  onRestore,
-}: {
-  undone: readonly UndoneAutomaticPairing[];
-  pending: boolean;
-  error: string | null;
-  onRestore: (undone: UndoneAutomaticPairing) => void;
-}) {
-  const { t } = useTranslation("custodyGaps");
-  const hideSensitive = useUiStore((state) => state.hideSensitive);
-  if (!undone.length) return null;
-  return (
-    <section className="space-y-3" aria-labelledby="custody-undone-title">
-      <div>
-        <h2 id="custody-undone-title" className="font-semibold">
-          {t("lineage.undone.title")}
-        </h2>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-          {t("lineage.undone.description")}
-        </p>
-      </div>
-      {undone.map((entry) => (
-        <Card className="gap-3 py-4" key={lineagePairKey(entry.item)}>
-          <CardContent className="flex flex-wrap items-center gap-2 px-4 text-sm">
-            <span className="font-medium">{lineageRoute(entry.item, t)}</span>
-            <span className={cn("text-muted-foreground", hideSensitive && "sensitive")}>
-              {formatCustodyMsat(entry.item.amount_msat, entry.item.asset)}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="ml-auto"
-              disabled={pending}
-              onClick={() => onRestore(entry)}
-            >
-              <RotateCcw className="size-3.5" aria-hidden="true" />
-              {t("lineage.undone.restore")}
-            </Button>
-          </CardContent>
-        </Card>
-      ))}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-    </section>
-  );
-}
 
 function FiledReportImpactList({
   impacts,
@@ -1232,6 +947,14 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
   );
 }
 
+function hasResidual(gap: CustodyGap): boolean {
+  try {
+    return BigInt(gap.residual_msat) !== 0n;
+  } catch {
+    return true;
+  }
+}
+
 function CustodyGapCard({ gap, expanded, onExpandedChange }: { gap: CustodyGap; expanded: boolean; onExpandedChange: () => void }) {
   const { t, i18n } = useTranslation("custodyGaps");
   const hideSensitive = useUiStore((state) => state.hideSensitive);
@@ -1249,11 +972,8 @@ function CustodyGapCard({ gap, expanded, onExpandedChange }: { gap: CustodyGap; 
             <Badge variant={statusVariant(gap.status)}>
               {t(`status.${gap.status}`)}
             </Badge>
-            <Badge variant="outline">{t(`confidence.${gap.confidence}`)}</Badge>
-            <Badge variant={gap.promotion_eligible ? "default" : "outline"}>
-              {gap.promotion_eligible
-                ? t("candidate.promotionEligible")
-                : t("candidate.searchHint")}
+            <Badge variant="outline" title={gap.promotion_eligible ? t("candidate.promotionEligible") : t("candidate.searchHint")}>
+              {t(`confidence.${gap.confidence}`)}
             </Badge>
           </div>
           <CardDescription>
@@ -1298,7 +1018,7 @@ function CustodyGapCard({ gap, expanded, onExpandedChange }: { gap: CustodyGap; 
               {formatCustodyMsat(gap.return_total_msat, gap.asset)}
             </p>
           </div>
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+          <div className={cn("rounded-lg border p-3", hasResidual(gap) && "border-amber-500/30 bg-amber-500/5")}>
             <p className="text-xs text-muted-foreground">{t("card.residual")}</p>
             <p className={cn("mt-1 font-medium", hideSensitive && "sensitive")}>
               {formatCustodyMsat(gap.residual_msat, gap.asset)}
@@ -1311,20 +1031,17 @@ function CustodyGapCard({ gap, expanded, onExpandedChange }: { gap: CustodyGap; 
   );
 }
 
+/**
+ * Missing wallets: sends that may have come back through a wallet the book
+ * does not know. The verdict comes first; each suggestion opens the exact
+ * guided review below it. Kassiber never closes a gap on its own.
+ */
 export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: string | null; onFocusGap?: (gap: string | null) => void }) {
   const [localFocus, setLocalFocus] = useState<string | null>(null);
   const activeGapId = focusGapId === undefined ? localFocus : focusGapId;
   const setFocus = onFocusGap ?? setLocalFocus;
   const { t } = useTranslation("custodyGaps");
   const hideSensitive = useUiStore((state) => state.hideSensitive);
-  const coverageQuery = useDaemon<CustodyCoverageSnapshot>(
-    "ui.custody.coverage.snapshot",
-  );
-  const lineageQuery = useDaemonInfinite<CustodyLineageSnapshot>(
-    "ui.custody.lineage.snapshot",
-    { limit: 100 },
-    (lastPage) => lastPage.data?.next_cursor ?? undefined,
-  );
   const gapsQuery = useDaemonInfinite<CustodyGapSnapshot>(
     "ui.custody.gaps.list",
     { limit: 100 },
@@ -1336,49 +1053,6 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
     .filter((page): page is CustodyGapSnapshot => Boolean(page));
   const snapshot = pages[0];
   const gaps = collectCustodyGapPages(pages);
-  const dismissPairing = useDaemonMutation<{ id?: string }>("ui.transfers.dismiss");
-  const restorePairing = useDaemonMutation("ui.transfers.dismissals.delete");
-  const [pendingUndo, setPendingUndo] = useState<CustodyLineageItem | null>(null);
-  const [undoError, setUndoError] = useState<string | null>(null);
-  const [undone, setUndone] = useState<UndoneAutomaticPairing[]>([]);
-  const [restoreError, setRestoreError] = useState<string | null>(null);
-  const lineagePages = (lineageQuery.data?.pages ?? [])
-    .map((page) => page.data)
-    .filter((page): page is CustodyLineageSnapshot => Boolean(page));
-  const collectedLineage = collectCustodyLineagePages(lineagePages);
-  // An undone pairing leaves the list at once; the journals recalculate later.
-  const undoneKeys = new Set(undone.map((entry) => lineagePairKey(entry.item)));
-  const lineageSnapshot = collectedLineage && {
-    ...collectedLineage,
-    items: collectedLineage.items.filter(
-      (item) => !undoneKeys.has(lineagePairKey(item)),
-    ),
-  };
-
-  const confirmUndo = async () => {
-    if (!pendingUndo) return;
-    const item = pendingUndo;
-    setUndoError(null);
-    try {
-      const result = await dismissPairing.mutateAsync(undoAutomaticPairingArgs(item));
-      setUndone((current) => [
-        ...current.filter((entry) => lineagePairKey(entry.item) !== lineagePairKey(item)),
-        { item, dismissalId: result.data?.id ?? null },
-      ]);
-      setPendingUndo(null);
-    } catch (cause) {
-      setUndoError(cause instanceof Error ? cause.message : t("lineage.undo.failed"));
-    }
-  };
-  const restore = async (entry: UndoneAutomaticPairing) => {
-    setRestoreError(null);
-    try {
-      await restorePairing.mutateAsync(restoreAutomaticPairingArgs(entry));
-      setUndone((current) => current.filter((other) => other !== entry));
-    } catch (cause) {
-      setRestoreError(cause instanceof Error ? cause.message : t("lineage.undone.failed"));
-    }
-  };
 
   if (gapsQuery.isLoading) return <ScreenSkeleton titleWidth="w-48" />;
   if (gapsQuery.isError || !snapshot) {
@@ -1404,196 +1078,52 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
   );
   const canonicalIssueCount = snapshot.summary.canonical_issue_count ?? 0;
   const canonicalAmounts = snapshot.summary.canonical_unresolved_by_asset ?? [];
-  const canonicalUnquantified =
-    snapshot.summary.canonical_unquantified_issue_count ?? 0;
-  const candidateAmounts = snapshot.summary.candidate_residual_by_asset ?? [];
   const derivedStateCurrent = snapshot.summary.derived_state_current === true;
   const searchComplete = snapshot.summary.search_complete !== false;
   const canShowClear = canShowNoKnownCustodyGaps(snapshot, reviewGaps.length);
+  const needsCount = Math.max(snapshot.summary.needs_review, reviewGaps.length);
 
   return (
     <div className="space-y-(--kb-page-gap)">
-      <div className={pageHeaderClassName}>
-        <p className={pageDescriptionClassName}>{t("description")}</p>
-        <Badge variant="outline" className="w-fit gap-1.5">
-          <ShieldCheck className="size-3.5" /> {t("localOnly")}
-        </Badge>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card className="gap-2 py-4">
-          <CardContent className="flex items-center gap-3 px-4">
-            <TriangleAlert className="size-5 text-amber-600" />
-            <div>
-              <p className="text-xl font-semibold tracking-tight tabular-nums">
-                {snapshot.summary.needs_review}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t("summary.needsReview")}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="gap-2 py-4">
-          <CardContent className="flex items-center gap-3 px-4">
-            <WalletCards className="size-5 text-muted-foreground" />
-            <div>
-              <p className="text-xl font-semibold tracking-tight tabular-nums">{snapshot.summary.total}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("summary.detected")}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="gap-2 py-4">
-          <CardContent className="flex items-center gap-3 px-4">
-            <Clock3 className="size-5 text-muted-foreground" />
-            <div>
-              <p
-                className={cn(
-                  "text-base font-semibold",
-                  hideSensitive && "sensitive",
-                )}
-              >
-                {canonicalIssueCount > 0 ? (
-                  canonicalAmounts.length > 0 ? (
-                    canonicalAmounts.map((item) => (
-                      <span className="block" key={item.asset}>
-                        {formatCustodyMsat(item.amount_msat, item.asset)}
-                      </span>
-                    ))
-                  ) : (
-                    t("summary.blockingIssueCount", { count: canonicalIssueCount })
-                  )
-                ) : candidateAmounts.length > 0 ? (
-                  candidateAmounts.map((item) => (
-                    <span className="block" key={item.asset}>
-                      {formatCustodyMsat(item.amount_msat, item.asset)}
-                    </span>
-                  ))
-                ) : (
-                  formatCustodyMsat(0, "BTC")
-                )}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {canonicalIssueCount > 0
-                  ? t("summary.canonicalUnresolved")
-                  : t("summary.candidateResidual")}
-              </p>
-              {canonicalUnquantified > 0 ? (
-                <p className="text-xs text-amber-700">
-                  {t("summary.unquantified", { count: canonicalUnquantified })}
-                </p>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <p className={pageDescriptionClassName}>{t("description")}</p>
 
       {!derivedStateCurrent ? (
-        <Card className="gap-3 border-amber-500/30 bg-amber-500/5 py-6">
-          <CardHeader className="px-5">
-            <CardTitle className="flex items-center gap-2">
-              <Clock3 className="size-5 text-amber-600" />
-              {t("processing.title")}
-            </CardTitle>
-            <CardDescription>{t("processing.body")}</CardDescription>
-          </CardHeader>
-        </Card>
+        <Verdict tone="warning" icon={<Clock3 className="size-5" aria-hidden="true" />} title={t("processing.title")} body={t("processing.body")} />
+      ) : needsCount > 0 ? (
+        <Verdict
+          tone="warning"
+          icon={<TriangleAlert className="size-5" aria-hidden="true" />}
+          title={t("verdict.needs", { count: needsCount })}
+          body={
+            canonicalIssueCount > 0
+              ? t("verdict.needsBlockingBody", { count: canonicalIssueCount })
+              : t("verdict.needsBody")
+          }
+          amounts={canonicalIssueCount > 0 ? canonicalAmounts.map((item) => formatCustodyMsat(item.amount_msat, item.asset)) : []}
+          hideSensitive={hideSensitive}
+        />
+      ) : canonicalIssueCount > 0 ? (
+        <Verdict
+          tone="warning"
+          icon={<TriangleAlert className="size-5" aria-hidden="true" />}
+          title={t("blocking.title")}
+          body={t("blocking.body", { count: canonicalIssueCount })}
+          amounts={canonicalAmounts.map((item) => formatCustodyMsat(item.amount_msat, item.asset))}
+          hideSensitive={hideSensitive}
+        />
+      ) : canShowClear ? (
+        <Verdict tone="ok" icon={<CheckCircle2 className="size-5" aria-hidden="true" />} title={t("empty.title")} body={t("empty.body")} />
       ) : null}
 
       {!searchComplete ? (
-        <Card className="gap-3 border-amber-500/30 bg-amber-500/5 py-6">
-          <CardHeader className="px-5">
-            <CardTitle className="flex items-center gap-2">
-              <TriangleAlert className="size-5 text-amber-600" />
-              {t("searchIncomplete.title")}
-            </CardTitle>
-            <CardDescription>{t("searchIncomplete.body")}</CardDescription>
-          </CardHeader>
-        </Card>
+        <p className="flex items-start gap-2 text-sm text-muted-foreground">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+          <span>
+            <span className="font-medium text-foreground">{t("searchIncomplete.title")}.</span>{" "}
+            {t("searchIncomplete.body")}
+          </span>
+        </p>
       ) : null}
-
-      {coverageQuery.data?.data ? (
-        <CustodyCoverageTimeline snapshot={coverageQuery.data.data} />
-      ) : coverageQuery.isLoading ? (
-        <Card className="gap-2 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("coverage.title")}</CardTitle>
-            <CardDescription>{t("coverage.loading")}</CardDescription>
-          </CardHeader>
-        </Card>
-      ) : (
-        <Card className="gap-2 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("coverage.title")}</CardTitle>
-            <CardDescription>{t("coverage.unavailable")}</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-
-      <UndoneAutomaticPairings
-        undone={undone}
-        pending={restorePairing.isPending}
-        error={restoreError}
-        onRestore={(entry) => void restore(entry)}
-      />
-      <UndoAutomaticPairingDialog
-        item={pendingUndo}
-        pending={dismissPairing.isPending}
-        error={undoError}
-        onConfirm={() => void confirmUndo()}
-        onCancel={() => {
-          setPendingUndo(null);
-          setUndoError(null);
-        }}
-      />
-      {lineageSnapshot ? (
-        <>
-          <CustodyLineageTimeline
-            snapshot={lineageSnapshot}
-            onUndo={(item) => {
-              setUndoError(null);
-              setPendingUndo(item);
-            }}
-            undoDisabled={dismissPairing.isPending}
-          />
-          {lineageQuery.hasNextPage ? (
-            <div className="flex flex-col items-center gap-2">
-              <p className="text-xs text-muted-foreground">
-                {t("lineage.pagination.loaded", {
-                  loaded: lineageSnapshot.items.length,
-                  total: lineageSnapshot.summary.total_count,
-                })}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={lineageQuery.isFetchingNextPage}
-                onClick={() => void lineageQuery.fetchNextPage()}
-              >
-                {lineageQuery.isFetchingNextPage
-                  ? t("lineage.pagination.loading")
-                  : t("lineage.pagination.loadMore")}
-              </Button>
-            </div>
-          ) : null}
-        </>
-      ) : lineageQuery.isLoading ? (
-        <Card className="gap-2 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("lineage.title")}</CardTitle>
-            <CardDescription>{t("lineage.loading")}</CardDescription>
-          </CardHeader>
-        </Card>
-      ) : (
-        <Card className="gap-2 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("lineage.title")}</CardTitle>
-            <CardDescription>{t("lineage.unavailable")}</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
 
       {activeGapId && !reviewGaps.some((gap) => gap.gap_id === activeGapId) ? (
         <div>
@@ -1601,42 +1131,17 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
         </div>
       ) : null}
       {reviewGaps.length ? (
-        <section
-          className="space-y-3"
-          aria-labelledby="custody-gaps-review-title"
-        >
+        <section className="space-y-3" aria-labelledby="custody-gaps-review-title">
           <div>
             <h2 id="custody-gaps-review-title" className="font-semibold">
               {t("reviewQueue.title")}
             </h2>
-            <p className="text-sm text-muted-foreground">
-              {t("reviewQueue.description")}
-            </p>
+            <p className="text-sm text-muted-foreground">{t("reviewQueue.description")}</p>
           </div>
           {reviewGaps.map((gap) => (
             <CustodyGapCard key={gap.gap_id} gap={gap} expanded={activeGapId === gap.gap_id} onExpandedChange={() => setFocus(activeGapId === gap.gap_id ? null : gap.gap_id)} />
           ))}
         </section>
-      ) : derivedStateCurrent && canonicalIssueCount > 0 ? (
-        <Card className="gap-3 border-amber-500/30 bg-amber-500/5 py-6">
-          <CardHeader className="px-5">
-            <CardTitle className="flex items-center gap-2">
-              <TriangleAlert className="size-5 text-amber-600" />
-              {t("blocking.title")}
-            </CardTitle>
-            <CardDescription>
-              {t("blocking.body", { count: canonicalIssueCount })}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      ) : canShowClear ? (
-        <Card className="items-center gap-3 py-10 text-center">
-          <CheckCircle2 className="size-8 text-emerald-600" />
-          <CardHeader className="max-w-xl px-5">
-            <CardTitle>{t("empty.title")}</CardTitle>
-            <CardDescription>{t("empty.body")}</CardDescription>
-          </CardHeader>
-        </Card>
       ) : null}
       {gapsQuery.hasNextPage ? (
         <div className="flex flex-col items-center gap-2">
@@ -1662,6 +1167,57 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
   );
 }
 
-export function CustodyGaps() {
-  return <div className={screenShellClassName}><CustodyGapsContent /></div>;
+function Verdict({
+  tone,
+  icon,
+  title,
+  body,
+  amounts = [],
+  hideSensitive = false,
+}: {
+  tone: "ok" | "warning";
+  icon: ReactNode;
+  title: string;
+  body: string;
+  amounts?: string[];
+  hideSensitive?: boolean;
+}) {
+  return (
+    <div
+      className="kb-surface flex items-start gap-3 p-(--kb-card-padding)"
+      role="status"
+    >
+      <span
+        className={cn(
+          "mt-0.5 shrink-0",
+          tone === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400",
+        )}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 space-y-0.5">
+        <p className="text-sm font-semibold">{title}</p>
+        <p className="text-sm text-muted-foreground">{body}</p>
+      </div>
+      {amounts.length ? (
+        <div className={cn("ml-auto shrink-0 text-right text-sm font-medium tabular-nums", hideSensitive && "sensitive")}>
+          {amounts.map((amount) => (
+            <span className="block" key={amount}>{amount}</span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Scan coverage for the imported wallets: diagnostics that never decide anything. */
+export function CustodyCoverageSection() {
+  const { t } = useTranslation("custodyGaps");
+  const coverageQuery = useDaemon<CustodyCoverageSnapshot>("ui.custody.coverage.snapshot");
+  if (coverageQuery.data?.data) return <CustodyCoverageTimeline snapshot={coverageQuery.data.data} />;
+  return (
+    <p className="text-sm text-muted-foreground" role="status">
+      {coverageQuery.isLoading ? t("coverage.loading") : t("coverage.unavailable")}
+    </p>
+  );
 }

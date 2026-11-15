@@ -1,25 +1,11 @@
 {
-  "description": "Prüfe Bitcoin, die möglicherweise beim selben Rechtsträger verblieben sind, obwohl sie eine nicht in Kassiber importierte Wallet-Historie durchlaufen haben.",
-  "localOnly": "Lokal analysiert",
-  "summary": {
-    "needsReview": "Zu prüfen",
-    "detected": "Bekannte Lückeneinträge",
-    "unresolved": "Menge mit offener Verwahrungsprüfung",
-    "canonicalUnresolved": "Kanonische blockierende Menge",
-    "candidateResidual": "Nicht blockierender Kandidaten-Resthinweis",
-    "blockingIssueCount_one": "{{count}} blockierendes Problem",
-    "blockingIssueCount_other": "{{count}} blockierende Probleme",
-    "unquantified_one": "{{count}} weiteres blockierendes Problem hat keine exakte Menge.",
-    "unquantified_other": "{{count}} weitere blockierende Probleme haben keine exakte Menge."
-  },
+  "description": "Sendungen, die vielleicht über eine nicht verbundene Wallet zu dir zurückgekommen sind. Kassiber schließt keine davon von selbst.",
   "coverage": {
-    "title": "Zeitleiste importierter Wallet-Policies",
-    "description": "Technische Scan-Abdeckung für in Kassiber importierte Wallet-Policies. Kassiber kann nicht wissen, ob alle Wallets des Rechtsträgers dieses Profils importiert wurden.",
-    "ownershipUnknown": "Gesamtheit der eigenen Wallets unbekannt",
-    "technicalOnly": "Diese Abdeckung kann die Diagnose verbessern, beseitigt aber niemals eine Verwahrungslücke, beweist keine vollständige Wallet-Abdeckung und bestätigt keine externe Veräußerung.",
+    "title": "Scan-Abdeckung",
+    "description": "Was Kassiber für jede importierte Wallet gescannt hat. Nur zur Diagnose: Abdeckung verknüpft, klärt oder bucht nichts.",
     "loading": "Aufgezeichnete technische Abdeckung wird geladen…",
     "unavailable": "Die aufgezeichnete technische Abdeckung ist nicht verfügbar. Der Status der Verwahrungslücken ändert sich dadurch nicht.",
-    "empty": "Es wurde noch keine Abdeckung importierter Policies aufgezeichnet. Das bedeutet nicht, dass keine eigenen Wallets existieren.",
+    "empty": "Es wurde noch keine Scan-Abdeckung aufgezeichnet.",
     "epochCount_one": "{{count}} aufgezeichnete Policy-Epoche",
     "epochCount_other": "{{count}} aufgezeichnete Policy-Epochen",
     "active": "Aktive Epoche",
@@ -39,60 +25,23 @@
     }
   },
   "lineage": {
-    "title": "Verwahrungslinie",
-    "description": "Endgültige Wallet-Bewegungen desselben Rechtsträgers aus dem kanonischen Verwahrungsmodell. Verwahrungsfinalität und steuerliche Basisbereitschaft werden getrennt dargestellt.",
-    "edgeCount_one": "{{count}} Wallet-Bewegung",
-    "edgeCount_other": "{{count}} Wallet-Bewegungen",
-    "loading": "Kanonische Verwahrungslinie wird geladen…",
-    "unavailable": "Die kanonische Verwahrungslinie ist erst nach Verarbeitung des Journals verfügbar.",
-    "empty": "Es wurden noch keine endgültigen internen Wallet-Bewegungen aufgezeichnet.",
-    "evidenceLabel": "Nachweis: {{evidence}}",
-    "basisBlocked": "Die Verwahrung ist geklärt, aber die Steuerbasis bleibt durch eine frühere ungeklärte Verwahrungsgrenze blockiert.",
-    "pagination": {
-      "loaded": "{{loaded}} von {{total}} Wallet-Bewegungen angezeigt",
-      "loadMore": "Ältere Verwahrungslinie laden",
-      "loading": "Ältere Verwahrungslinie wird geladen…"
-    },
-    "custodyState": {
-      "internal_verified": "Verwahrung verifiziert",
-      "internal_reviewed": "Verwahrung geprüft"
-    },
-    "basisState": {
-      "eligible": "Steuerbasis verfügbar",
-      "blocked_by_prior_custody_basis": "Steuerbasis blockiert"
-    },
     "evidence": {
-      "recordedFanout": "Exakte Ausgänge einer aufgezeichneten Chain-Transaktion",
-      "rowMatched": "Exakt übereinstimmende Wallet-Beobachtungen",
-      "nativeTransfer": "Exaktes natives Wallet-Ereignis",
-      "exchangeTxid": "Börsenauszahlung mit dieser Transaktion und exaktem Betrag (automatisch)",
-      "reviewedTransfer": "Geprüfter interner Transferdatensatz",
-      "reviewedGapBridge": "Geprüfte Verwahrungsbrücke über eine fehlende Wallet",
-      "channelLifecycle": "Verifizierter Kanal-Lebenszyklus",
-      "reviewedDefault": "Geprüfter interner Verwahrungsnachweis",
-      "verifiedDefault": "Verifizierter Wallet- oder Chain-Nachweis"
-    },
-    "undo": {
-      "action": "Automatische Paarung aufheben",
-      "title": "Diese automatische Paarung aufheben?",
-      "description": "Kassiber behandelt die Börsenauszahlung und diesen Eingang dann nicht mehr als eine Bewegung zwischen deinen eigenen Wallets. Beide Transaktionen kommen zurück in die Prüfung, und die Journale müssen neu berechnet werden.",
-      "route": "{{from}} → {{to}}",
-      "restoreHint": "Du kannst sie auf dieser Seite wiederherstellen, bis du sie verlässt, oder später über den Assistenten oder „kassiber transfers dismissals delete“. Sonst bleibt die Aufhebung zehn Jahre bestehen.",
-      "cancel": "Paarung behalten",
-      "confirm": "Paarung aufheben",
-      "undoing": "Wird aufgehoben…",
-      "failed": "Die Paarung konnte nicht aufgehoben werden."
-    },
-    "undone": {
-      "title": "Aufgehobene automatische Paarungen",
-      "description": "Diese Paarungen zählen nicht mehr als Bewegungen zwischen deinen eigenen Wallets. Stelle eine wieder her, damit Kassiber sie wieder automatisch paart.",
-      "restore": "Paarung wiederherstellen",
-      "failed": "Die Paarung konnte nicht wiederhergestellt werden."
+      "recordedFanout": "Eine Transaktion hat mehrere deiner Wallets bezahlt",
+      "multiSourceConsolidation": "Mehrere deiner Wallets haben in eine Transaktion eingezahlt",
+      "rowMatched": "Beide Wallets haben dieselbe Transaktion gesehen",
+      "nativeTransfer": "Dieselbe Transaktion in beiden Wallets",
+      "exchangeTxid": "Börsenauszahlung nennt diese Transaktion",
+      "barkTxid": "Bark-Sendung nennt diese Transaktion",
+      "reviewedTransfer": "Von dir verknüpft",
+      "reviewedGapBridge": "Du hast einen Weg über eine fehlende Wallet bestätigt",
+      "channelLifecycle": "Lightning-Kanal geöffnet oder geschlossen",
+      "reviewedDefault": "Von dir geprüfte Bewegung",
+      "verifiedDefault": "Wallet- oder Chain-Nachweis"
     }
   },
   "reviewQueue": {
-    "title": "Mögliche Rückflüsse aus fehlenden Wallets",
-    "description": "Vorschläge sind deterministisch und erstellen niemals automatisch eine Verwahrungsbrücke. Ein langer Zeitraum senkt die Sicherheit, blendet einen plausiblen langfristigen Rückfluss aber nicht aus."
+    "title": "Vielleicht über eine nicht verbundene Wallet zurückgekommen",
+    "description": "Prüfe die exakten Beträge und bestätige dann den Weg oder lege ihn beiseite. Viel Zeit zwischen Sendung und Rückfluss schwächt den Treffer, blendet ihn aber nicht aus."
   },
   "history": {
     "title": "Geprüfte Verwahrungshistorie",
@@ -123,13 +72,13 @@
     "loading": "Weitere Verwahrungslücken werden geladen…"
   },
   "card": {
-    "principal": "Berücksichtigter Hauptbetrag",
-    "knownFee": "Bekannte Netzwerkgebühr",
+    "principal": "Hat deine Wallet verlassen",
+    "knownFee": "Netzwerkgebühr",
     "walletDebit": "Wallet-Abgang: {{amount}}",
-    "mayHaveReturned": "Möglicherweise zurückgekehrt",
-    "residual": "Weiterhin ungeklärt",
-    "review": "Nachweise prüfen",
-    "hideReview": "Nachweise ausblenden"
+    "mayHaveReturned": "Kam zurück",
+    "residual": "Ungeklärt",
+    "review": "Prüfen",
+    "hideReview": "Prüfung ausblenden"
   },
   "candidate": {
     "promotionEligible": "Strukturierter Kandidat",
@@ -142,9 +91,9 @@
     "dismissed": "Für diese Nachweise verworfen"
   },
   "confidence": {
-    "strong": "Starker Vorschlag",
-    "moderate": "Mittlerer Vorschlag",
-    "weak": "Schwacher Vorschlag"
+    "strong": "Starker Treffer",
+    "moderate": "Mittlerer Treffer",
+    "weak": "Schwacher Treffer"
   },
   "review": {
     "loading": "Prüfkontext wird geladen…",
@@ -157,7 +106,7 @@
     "correctionPath": "Möchtest du diese Entscheidung korrigieren? Erstelle eine neue unveränderliche Komponentenrevision und aktiviere sie. Kassiber ersetzt die bisherige Brücke, ohne ihre Prüfungshistorie umzuschreiben."
   },
   "actions": {
-    "previewBridge": "Exakte Brücke prüfen",
+    "previewBridge": "Vorschau und bestätigen",
     "previewing": "Brücke wird geprüft…",
     "previewReady": "Exakte Brückenvorschau erfolgreich",
     "previewAmounts": "{{retained}} fortführen; {{residual}} in Verwahrungs-Suspense offenhalten; {{fee}} als bekannte Gebühr erhalten.",
@@ -165,7 +114,7 @@
     "explicitOwnershipConfirmation": "Ich habe diese exakten Beträge und konkurrierenden Erklärungen geprüft. Ich bestätige, dass die fortgeführte Menge unter der Kontrolle des Rechtsträgers dieses Profils blieb. Kassiber leitet dies nicht für mich ab.",
     "confirmBridge": "Geprüfte Brücke erstellen",
     "creating": "Brücke wird erstellt…",
-    "dismiss": "Diese Nachweise verwerfen",
+    "dismiss": "Nicht dasselbe Bitcoin",
     "dismissConfirm": "Diesen Kandidaten für die aktuellen Nachweise verwerfen? Geänderte Nachweise öffnen ihn erneut.",
     "failed": "Die Aktion für die Verwahrungslücke ist fehlgeschlagen."
   },
@@ -284,23 +233,31 @@
     "return_exceeds_source": "Die vorgeschlagenen Rückflüsse übersteigen die Quellmenge; der Überschuss benötigt eine eigene Klassifizierung."
   },
   "empty": {
-    "title": "Keine bekannten Verwahrungslücken",
-    "body": "Kassiber hat in den derzeit importierten Nachweisen keine ungeklärte Verwahrungslücke gefunden. Ob niemals importierte Wallets existieren, kann Kassiber nicht feststellen."
+    "title": "Keine Rückflüsse über fehlende Wallets gefunden",
+    "body": "Kassiber hat keine Sendung gefunden, die über eine nicht verbundene Wallet zurückgekommen sein könnte."
   },
   "processing": {
-    "title": "Der Status der Verwahrungslücken benötigt eine Journalverarbeitung",
-    "body": "Verarbeite das Journal, bevor die derzeit importierten Nachweise als unauffällig gelten."
+    "title": "Journale müssen neu berechnet werden",
+    "body": "Berechne die Journale neu, bevor du diese Liste als vollständig liest."
   },
   "searchIncomplete": {
     "title": "Die Vorschlagssuche hat eine Kapazitätsgrenze erreicht",
     "body": "Die sichtbaren Hinweise können unvollständig sein. Dies ist eine Einschränkung der beratenden Suche, kein Nachweis einer Veräußerung und für sich allein kein Steuerberichts-Blocker."
   },
   "blocking": {
-    "title": "Bekannte Custody-Menge muss noch geprüft werden",
-    "body": "{{count}} kanonischer Custody-Fall blockiert die endgültige Steuerbasis, obwohl derzeit kein Vorschlag für eine fehlende Wallet ihn automatisch lösen kann. Prüfe die Custody-Komponente oder die Quarantäne-Evidenz."
+    "title": "Ein Verwahrungsbetrag braucht noch eine Entscheidung",
+    "body_one": "{{count}} Verwahrungsfall hält die Steuerbasis zurück, und kein Vorschlag zu fehlenden Wallets erklärt ihn. Prüfe ihn auf der Seite Prüfung oder erfasse eine Komponente.",
+    "body_other": "{{count}} Verwahrungsfälle halten die Steuerbasis zurück, und kein Vorschlag zu fehlenden Wallets erklärt sie. Prüfe sie auf der Seite Prüfung oder erfasse eine Komponente."
   },
   "unavailable": {
     "title": "Verwahrungslücken nicht verfügbar",
     "body": "Kassiber konnte die Übersicht der Verwahrungslücken nicht laden."
+  },
+  "verdict": {
+    "needs_one": "{{count}} Sendung ist vielleicht über eine nicht verbundene Wallet zurückgekommen",
+    "needs_other": "{{count}} Sendungen sind vielleicht über eine nicht verbundene Wallet zurückgekommen",
+    "needsBody": "Das sind Vorschläge, keine Sperren: Sie blockieren keine Berichte. Prüfe einen, wenn eine nicht verbundene Wallet ihn erklären könnte.",
+    "needsBlockingBody_one": "Bis er geprüft ist, hält {{count}} Verwahrungsfall die Steuerbasis zurück. Kassiber schließt keine Lücke von selbst.",
+    "needsBlockingBody_other": "Bis sie geprüft sind, halten {{count}} Verwahrungsfälle die Steuerbasis zurück. Kassiber schließt keine Lücke von selbst."
   }
 }

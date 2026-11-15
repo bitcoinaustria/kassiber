@@ -72,7 +72,6 @@ import {
 import { TransactionGraph3D } from "./graph3d/TransactionGraph3D";
 import { preloadTransactionGraph3D } from "./graph3d/preload";
 import {
-  BOWTIE_LINE_LIMIT,
   bowtieLines,
   bowtieTotal,
   graphIsLiquid,
@@ -1849,7 +1848,6 @@ function TransactionGraphView({
     <TransactionGraph3D
       graph={graph}
       hideSensitive={hideSensitive}
-      maxRows={BOWTIE_LINE_LIMIT}
       size={expanded ? "expanded" : "compact"}
       activePart={activePart}
       onHoverPart={onHoverPart}

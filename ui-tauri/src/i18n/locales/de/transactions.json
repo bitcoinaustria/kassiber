@@ -330,7 +330,8 @@
     },
     "meta": {
       "txCount": "{{count}} Tx",
-      "moveCount": "{{count}} Bewegungen",
+      "moveCount_one": "{{count}} Bewegung",
+      "moveCount_other": "{{count}} Bewegungen",
       "inflow": "Zufluss",
       "outflow": "Abfluss",
       "unpairedUnknown": "ungepaart unbekannt",
@@ -344,7 +345,7 @@
       "showOutgoing": "Ausgehende Transaktionen anzeigen",
       "showNetFlow": "Transaktionen mit externem Fluss anzeigen",
       "showTransfers": "Übertragungs-Transaktionen anzeigen",
-      "openPairingCandidates": "Paarungskandidaten öffnen",
+      "openPairingCandidates": "Verknüpfungsvorschläge öffnen",
       "showPairedSwaps": "Gepaarte Swap-Transaktionen anzeigen",
       "showReviewQueue": "Transaktionen der Prüfwarteschlange anzeigen"
     },
@@ -452,6 +453,10 @@
       "clearTransactionSet": "Auswahl aufheben"
     },
     "empty": "Keine Transaktionen gefunden, die deinen Filtern entsprechen.",
+    "pairedTransfer": {
+      "title": "Übertragung · {{from}} → {{to}}",
+      "fee": "Gebühr {{amount}}"
+    },
     "value": {
       "valuePending": "Wert ausstehend",
       "perBtc": "{{value}} / BTC",
@@ -646,7 +651,7 @@
     "error": "Graph nicht verfügbar",
     "expand": "Vergrößern",
     "expandedTitle": "Erweiterter Transaktionsgraph",
-    "view3dAria": "3D-Ansicht des Transaktionsflusses. Zum Drehen ziehen oder die Pfeiltasten verwenden; Pos1 setzt die Ansicht zurück.",
+    "view3dAria": "3D-Ansicht des Transaktionsflusses.",
     "view3dLoading": "3D-Ansicht wird vorbereitet …",
     "view3dUnavailable": "Die 3D-Ansicht ist auf diesem Gerät nicht verfügbar, daher wird der 2D-Graph gezeigt.",
     "view3dLegend": "Klare Bänder: bekannte Beträge. Milchige Bänder: Betrag unbekannt. Blaue Blöcke: deine Wallets. Alle Inputs werden im Glasring gemeinsam ausgegeben; die Reihenfolge der Bänder sagt nicht, welcher Input welchen Output bezahlt hat.",
@@ -987,7 +992,7 @@
     "unknown": "Unbekannt",
     "noPairedMovement": "Keine gepaarte Bewegung",
     "noPairedMovementBody": "Wenn diese Tx das andere Leg einer Übertragung, eines Swaps oder eines Peg-in/out ist, erscheint das passende Leg hier. Du kannst auch eine manuelle Paarung aus der Swap-Kandidaten-Warteschlange erstellen.",
-    "openPairingReview": "Paarungsprüfung öffnen",
+    "openPairingReview": "Abgleich-Werkzeuge öffnen",
     "loanLegs": "Darlehenslegs",
     "loanId": "Darlehen {{id}}",
     "loanThisLeg": "Dieses Leg",

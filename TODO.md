@@ -1930,9 +1930,18 @@ See [tax countries](docs/reference/tax-countries.md) and
   one verb is used everywhere.
 - [ ] Finish folding the old review pages into Review and its neighbours: the
   sidebar's Tools group is gone (its pages sit under Extras), but paired-transfer
-  history still lives on Transfers & Custody rather than as a Transactions
+  history still lives on Transfers rather than as a Transactions
   filter, matching rules are not in book settings yet, and the address/txid
   ownership lookup is not reachable from Search.
+- [x] Give held own-wallet sends a next step that can fix them on Review. The
+  quarantine catalog files `recorded_transfer_authority_conflict` and the
+  `ownership_transfer_{amount,conservation}_mismatch` reasons under
+  `needs_decision` with `pair_transfer` first, and leads with
+  `restore_pairing` (`dismissal_id`) when an active dismissal names exactly
+  the held row's pair (see [custody resolution](docs/reference/custody-resolution.md#why-a-transaction-is-quarantined)).
+  Review asks "You unlinked this send" with Link it back
+  (`ui.transfers.dismissals.delete`) and Link it to a different receipt (Link
+  manually on Transfers), and drops the sync it cannot answer with.
 
 ## Imports, source evidence, and wallet workflows
 

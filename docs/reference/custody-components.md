@@ -15,8 +15,9 @@ Use a component when a single pair cannot describe the history:
 - a refund or channel lifecycle returns value to the same logical wallet; or
 - an N:M consolidation needs explicit source-to-destination allocation.
 
-In the desktop, open **Transfers & Custody → Components** with developer mode
-enabled. The guided form supports manual bridges and swaps, typed source/sink
+In the desktop, open **Transfers → Advanced tools → Components** with
+developer mode enabled; the list of components comes first and **New
+component** opens the guided form. The guided form supports manual bridges and swaps, typed source/sink
 legs and explicit allocations. Preview the resolved server plan, then separately
 confirm draft creation or activation. Changes to the form or active book require
 a fresh preview. Existing unsupported component shapes remain readable but cannot
@@ -345,8 +346,8 @@ the exact candidate fingerprint reviewed. The desktop uses the same server-side
 candidate lookup and exact preview/confirmation sequence. Neither surface
 returns raw transaction ids, descriptors, or wallet configuration.
 
-The desktop **Swap Matching → Close gaps** tab previews and bulk-activates the
-same JSON contract. The daemon and compiled/browser allowlists expose only the
+The desktop **Transfers → Advanced tools → Components** view previews and
+activates the same contract. The daemon and compiled/browser allowlists expose only the
 specific `ui.transfers.components.*` kinds.
 
 ```bash

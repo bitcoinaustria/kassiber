@@ -54,7 +54,7 @@ beside it. Two things are not compiled in:
 | File | Where | Why |
 | --- | --- | --- |
 | `BUILD_INFO.json` | beside the executable in archives and sidecar directories | Readable build provenance; `kassiber-release macos sign` refuses to sign an app without one. The binary itself carries channel and commit from compile time. |
-| Host CA bundle | the system store | `rustls-native-certs`, with `SSL_CERT_FILE` authoritative and WebPKI roots as the fallback ([Linux packaging](linux-packaging.md#frozen-tls-trust)). |
+| Host CA bundle | the system store | `SSL_CERT_FILE` when set, else the first loadable Linux host bundle, else the embedded WebPKI roots (`TlsTrust::python_default`; [Linux packaging](linux-packaging.md#frozen-tls-trust)). |
 
 ## Artifact inventory
 

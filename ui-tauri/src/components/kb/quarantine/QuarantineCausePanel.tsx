@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useDaemonStreamMutation } from "@/daemon/client";
+import { useDaemonMutation, useDaemonStreamMutation } from "@/daemon/client";
 import { localeForLanguage } from "@/i18n/config";
 import { formatShortDate } from "@/lib/date";
 import { formatSats } from "@/lib/localeFormat";
@@ -26,6 +26,7 @@ import {
 } from "@/lib/connectionNotifications";
 import { recordJournalStep } from "@/lib/journalStepNotice";
 import { activeBookScope } from "@/lib/notificationScope";
+import { showFeedback } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -42,6 +43,7 @@ import {
   quarantineRowMeta,
   samePairCase,
   sheetTabForCause,
+  unlinkedAutomaticPair,
   withLoadedCauses,
   type QuarantineDetailContext,
   type QuarantineSheetTab,
@@ -62,7 +64,7 @@ import type {
 import { sensitiveClass } from "@/lib/sensitive";
 
 /** Actions whose button already says what to do, so the card need not spell it out. */
-const SELF_DESCRIBING_ACTIONS = new Set(["sync_wallet", "connect_wallet", "import_history", "set_price", "pair_transfer"]);
+const SELF_DESCRIBING_ACTIONS = new Set(["sync_wallet", "connect_wallet", "import_history", "set_price", "pair_transfer", "restore_pairing"]);
 /** Pairs or transactions a cause shows before the rest fold away. */
 const SHOWN_ROWS = 3;
 /** Cause cards shown before the rest fold away. */
@@ -154,7 +156,8 @@ export function QuarantineCausePanel({
   const { t } = useTranslation("journals");
   const askAssistantAbout = useAskAssistantAbout();
   const navigate = useNavigate();
-    const [lockedGapNotice, setLockedGapNotice] = React.useState<string | null>(null);
+  const linkBack = useDaemonMutation("ui.transfers.dismissals.delete");
+  const [lockedGapNotice, setLockedGapNotice] = React.useState<string | null>(null);
   const [allCauses, setAllCauses] = React.useState(false);
   const [ownFixing, setOwnFixing] = React.useState<QuarantineFixRequest | null>(null);
   // The book the approximate prices are accepted in, while that step is open.
@@ -259,9 +262,9 @@ export function QuarantineCausePanel({
         onImportHistory(action.wallet_id ?? null);
         return;
       case "review_custody_gap":
-        // Decided at click time; the /swaps route guard enforces the same gate.
+        // Decided at click time; the /transfers route guard enforces the same gate.
         if (useUiStore.getState().developerToolsEnabled && action.gap_id) {
-          void navigate({ to: "/swaps", search: { tab: "gaps", gap: action.gap_id } });
+          void navigate({ to: "/transfers", search: { section: "advanced", tab: "gaps", gap: action.gap_id } });
         } else {
           setLockedGapNotice(group.key);
         }
@@ -279,6 +282,43 @@ export function QuarantineCausePanel({
         // older daemon's legacy-pair action names only the pair: open the root.
         const target = action.transaction_id ?? rootId;
         if (target) openRoot(group, target, "linked");
+        return;
+      }
+      case "pair_transfer": {
+        // Linking is decided in "Link manually" on Transfers, on this send.
+        const link = action.transaction_id ?? rootId;
+        void navigate({ to: "/transfers", search: { link: link ?? "new" } });
+        return;
+      }
+      case "restore_pairing": {
+        // The link the owner removed, back as it was: the same step as
+        // Transfers' "link it back", then the journals recalculate.
+        if (!action.dismissal_id) return;
+        const dismissalId = action.dismissal_id;
+        // Awaited rather than per-call callbacks, so the receipt still shows
+        // if this panel unmounts while the link is restored.
+        void (async () => {
+          try {
+            await linkBack.mutateAsync({ dismissal_id: dismissalId });
+          } catch (error) {
+            showFeedback({
+              tone: "error",
+              title: t("quarantine.panel.linkBackFailedTitle"),
+              description: error instanceof Error ? error.message : undefined,
+              descriptionPrivacy: "free-text",
+              key: `quarantine-link-back-${dismissalId}`,
+            });
+            return;
+          }
+          showFeedback({
+            tone: "success",
+            title: t("quarantine.panel.linkedBackTitle"),
+            description: t("quarantine.panel.linkedBackBody"),
+            descriptionPrivacy: "safe",
+            key: `quarantine-link-back-${dismissalId}`,
+          });
+          onProcessJournals();
+        })();
         return;
       }
       default: {
@@ -485,9 +525,11 @@ function QuarantineCauseCard({
 }) {
   const { t, i18n } = useTranslation("journals");
   const { t: tAssistant } = useTranslation("assistant");
+  const unlinked = unlinkedAutomaticPair(group.reason, group.actions);
   const copy = causeCopy(
     {
       reason: group.reason,
+      actions: group.actions,
       category: group.category,
       evidence: group.evidence,
       wallet: group.root_wallet,
@@ -544,7 +586,10 @@ function QuarantineCauseCard({
   };
   // Typing a price replaces opening the first row's pricing tab.
   const actions = (pairs.length ? group.actions.filter((action) => action.kind !== "review_pair") : group.actions)
-    .filter((action) => !(priceRows.length && action.kind === "set_price"));
+    .filter((action) => !(priceRows.length && action.kind === "set_price"))
+    // A removed link is answered by linking, not by syncing: the sync the
+    // reason offers in general cannot bring that link back.
+    .filter((action) => !(unlinked && action.kind === "sync_wallet"));
   const primaryTaken = Boolean(onAcceptPrices) || (priceRows.length > 0 && !entering);
   // Spelled out where no button carries it, and where a pair decision needs
   // its caution in view.
@@ -699,7 +744,9 @@ function QuarantineCauseCard({
               {action.kind === "sync_wallet" && syncPending ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               ) : null}
-              {actionLabel(action, t)}
+              {unlinked && action.kind === "pair_transfer"
+                ? t("quarantine.cta.linkDifferently")
+                : actionLabel(action, t)}
             </Button>
           ))}
           {/* Nothing of this cause loaded to list: open its first one. */}

@@ -62,7 +62,7 @@
   {
     "id": "RVP-refresh-canonical-decisions",
     "file": "crates/journals/src/review_simulation.rs",
-    "find": "                    state = rebuild(conn)?;\n                    baseline = Baseline::read(conn, scope, &unpaired)?;",
+    "find": "                    rebuilt = Some(rebuild(conn)?);\n                    baseline = Baseline::read(conn, scope, &unpaired)?;",
     "replace": "                    let _ = rebuild(conn)?;\n                    baseline = Baseline::read(conn, scope, &unpaired)?;",
     "expect_failing": [
       "intervening_metadata_requires_refreshed_canonical_suspense_decisions"
@@ -82,8 +82,8 @@
   {
     "id": "RVP-quarantine-target",
     "file": "crates/journals/src/review_simulation.rs",
-    "find": "        if !cases.quarantined.contains(&id) {",
-    "replace": "        if false && !cases.quarantined.contains(&id) {",
+    "find": "        if !before.get()?.quarantined.contains(&id) {",
+    "replace": "        if false && !before.get()?.quarantined.contains(&id) {",
     "expect_failing": [
       "review_plans_match_complete_python_mixed_metadata_effects_and_refusals"
     ],
@@ -112,7 +112,7 @@
   {
     "id": "RVP-input-version",
     "file": "crates/journals/src/review_workflow.rs",
-    "find": "    review_support::require_input_version(&clone, scope, expected_input_version)?;",
+    "find": "    review_support::require_input_version(&before, scope, expected_input_version)?;",
     "replace": "    let _ = expected_input_version;",
     "expect_failing": [
       "review_plans_match_complete_python_mixed_metadata_effects_and_refusals"

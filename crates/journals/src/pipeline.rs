@@ -159,9 +159,23 @@ pub fn load_review_state<R>(
     as_of: &str,
     then: impl FnOnce(JournalState<'_>) -> R,
 ) -> Result<R, Refusal> {
+    load_review_state_until(conn, profile, as_of, || Ok::<(), Refusal>(()), then)
+}
+
+/// [`load_review_state`], asking `proceed` between its steps (read, custody
+/// snapshot, render) and stopping with its error.
+pub(crate) fn load_review_state_until<R, E: From<Refusal>>(
+    conn: &Connection,
+    profile: Py,
+    as_of: &str,
+    proceed: impl Fn() -> Result<(), E>,
+    then: impl FnOnce(JournalState<'_>) -> R,
+) -> Result<R, E> {
     let loaded = loader::load_read_snapshot(conn, profile, as_of).map_err(load_error)?;
+    proceed()?;
     let snapshot = loaded.into_custody().map_err(load_error)?;
-    review_state(conn, &snapshot, then)
+    proceed()?;
+    Ok(review_state(conn, &snapshot, then)?)
 }
 
 /// [`load_review_state`] over a loaded snapshot.
