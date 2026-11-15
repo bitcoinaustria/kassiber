@@ -278,7 +278,7 @@ export function UnlinkDialog({
             </div>
           ) : (
             <p className="text-muted-foreground">
-              {move ? `${t(`review:transfersPage.linked.fixed.${fixedLinkKind(move)}`)} ` : null}
+              {`${t(`review:transfersPage.linked.fixed.${fixedLinkKind(move)}`)} `}
               {t("review:transfersPage.unlink.fixedFix")}
             </p>
           )}
