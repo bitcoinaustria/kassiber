@@ -83,24 +83,6 @@ impl TlsTrust {
         Ok(Self::BundledRoots)
     }
 
-    /// Native platform trust for non-frozen/source behavior. Empty/failed stores
-    /// refuse; never silently substitute Mozilla roots for an operator's store.
-    ///
-    /// `rustls_native_certs` reads two environment variables first: when
-    /// `SSL_CERT_FILE` is set (even to an empty value) or `SSL_CERT_DIR` names
-    /// at least one directory, the roots come only from that file and those
-    /// directories, never from the platform store. A missing or unreadable
-    /// file or directory refuses, as does a set without a certificate.
-    /// `python_default` instead ignores an empty `SSL_CERT_FILE` and never
-    /// reads `SSL_CERT_DIR`. No product path calls this yet.
-    pub fn platform_roots() -> Result<Self, Error> {
-        let result = rustls_native_certs::load_native_certs();
-        if !result.errors.is_empty() {
-            return Err(Error::TrustInvalid);
-        }
-        Self::from_certificates(result.certs, RootSource::Host)
-    }
-
     pub fn ca_file(path: &Path) -> Result<Self, Error> {
         Self::from_file(path, RootSource::Operator)
     }
