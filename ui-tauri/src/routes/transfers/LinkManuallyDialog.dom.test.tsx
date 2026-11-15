@@ -266,6 +266,15 @@ describe("Link manually: as a dialog", () => {
   });
 });
 
+describe("Link manually: as a dialog, pressed outside", () => {
+  it("still closes when the press is outside the dialog", async () => {
+    mount({ transactionId: "send" });
+    await dialog();
+    fireEvent.pointerDown(document.body, { button: 0, pointerType: "mouse" });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe("Link manually: docked beside the page", () => {
   it("is a panel with a name instead of a dialog, takes focus once and closes with its button or Escape", async () => {
     mount({ transactionId: "send" }, false, "panel");

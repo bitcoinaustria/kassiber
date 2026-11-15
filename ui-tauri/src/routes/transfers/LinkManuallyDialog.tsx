@@ -171,6 +171,19 @@ function LinkShell({
 }) {
   const { t } = useTranslation("review");
   const headingRef = React.useRef<HTMLHeadingElement>(null);
+  // The flow's content is portaled into this slot, so in React it sits outside
+  // the dialog; a press or focus there is still inside the dialog.
+  const slotRef = React.useRef<HTMLDivElement | null>(null);
+  const holdSlot = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      slotRef.current = node;
+      attach(node);
+    },
+    [attach],
+  );
+  const keepInside = (event: Event) => {
+    if (event.target instanceof Node && slotRef.current?.contains(event.target)) event.preventDefault();
+  };
   const shown = variant === "panel" && panelSlot !== null;
   // A panel takes no focus trap, so it says it opened by taking focus once.
   React.useEffect(() => {
@@ -217,12 +230,14 @@ function LinkShell({
         data-testid="link-manually"
         data-variant="dialog"
         data-state={state}
+        onPointerDownOutside={keepInside}
+        onFocusOutside={keepInside}
       >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <div ref={attach} className="contents">
+        <div ref={holdSlot} className="contents">
           {children}
         </div>
       </DialogContent>
