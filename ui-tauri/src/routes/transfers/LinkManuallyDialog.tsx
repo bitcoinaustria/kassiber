@@ -60,6 +60,7 @@ import {
   sharesWith,
   linkQuestion,
   pairWarnings,
+  relinkPortion,
   withOpenPart,
   type Difference,
   type LegSide,
@@ -621,15 +622,14 @@ function CheckAndLink({
   const answer: LinkAnswer | null =
     question === "none" ? "carrying-value" : reading ? null : saleOnly ? "taxable" : (chosen ?? before ?? linkAnswer(suggested?.policy));
   const kind = preset?.kind ?? suggested?.kind ?? defaultPairKind(send, receipt);
-  const outAmount = preset?.outAmountMsat ?? null;
-  const portion = outAmount === null ? null : Number(outAmount);
-  // Only a real part of the send was swapped; the whole send is no portion
-  // (and naming it would leave the network fee out of the swap fee).
-  const swappedPortion =
-    portion !== null && Number.isSafeInteger(portion) && portion > 0 && BigInt(portion) < send.amountMsat && question !== "none" ? portion : null;
+  // Only a real part of the send was swapped. One that cannot be sent exactly
+  // stops the link: left out, the core would link the whole send.
+  const portion = relinkPortion(preset?.outAmountMsat, send.amountMsat, question !== "none");
+  const swappedPortion = portion.kind === "part" ? portion.msat : null;
+  const portionUnsendable = portion.kind === "unsendable";
 
   const operations = React.useMemo<ReviewOperation[] | null>(() => {
-    if (!answer) return null;
+    if (!answer || portionUnsendable) return null;
     const operation: ReviewOperation = {
       type: "pair",
       out_transaction_id: send.id,
@@ -640,7 +640,7 @@ function CheckAndLink({
     };
     if (swappedPortion !== null) operation.out_amount_msat = swappedPortion;
     return [operation];
-  }, [answer, kind, receipt.id, relink, send.id, swappedPortion]);
+  }, [answer, kind, portionUnsendable, receipt.id, relink, send.id, swappedPortion]);
   // While the journals recalculate, a plan would be read from a book that is about to change.
   const preview = useReviewPreview(updating ? null : operations, t("transfersPage.effects.unavailable"));
   const outcome = preview.state.status === "ready" ? moveOutcome(preview.state.artifact, send.id, receipt.id) : null;
@@ -802,7 +802,11 @@ function CheckAndLink({
         )}
         {reading ? null : (
         <CheckRow label={t("transfersPage.link.changesTitle")}>
-          {answer ? (
+          {portionUnsendable ? (
+            <p className="text-destructive" role="alert" data-testid="link-portion-unsendable">
+              {t("transfersPage.link.portionUnsendable")}
+            </p>
+          ) : answer ? (
             <PreviewOutcomeView
               state={preview.state}
               outcome={outcome}

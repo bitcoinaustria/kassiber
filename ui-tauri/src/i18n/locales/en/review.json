@@ -1381,6 +1381,7 @@
       "changeSend": "Choose another send",
       "changeReceipt": "Choose another receipt",
       "portion": "Only {{amount}} of the send was swapped, as before.",
+      "portionUnsendable": "The part of the send swapped before can't be restored exactly here, so this link can't be made again from this screen. Nothing was linked.",
       "changesTitle": "What changes",
       "effectReleased": "The send is no longer held.",
       "effectStillHeld": "One side is still held for another reason; it stays under To sort out.",

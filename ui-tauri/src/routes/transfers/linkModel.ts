@@ -109,6 +109,32 @@ export function absMsat(value: bigint): bigint {
 
 type ExactMsat = string | number | null | undefined;
 
+/**
+ * The part of a send a pair linked again swaps, as the core takes it: a
+ * whole number of msat. `whole` when the pair swapped all of the send (or
+ * no part applies); `unsendable` when the saved part cannot be sent exactly
+ * (unreadable, not positive, or past the largest whole number JSON keeps
+ * exact). Left out, the core would take the whole send, so `unsendable`
+ * must stop the link rather than drop the part.
+ */
+export type RelinkPortion = { kind: "whole" } | { kind: "part"; msat: number } | { kind: "unsendable" };
+
+export function relinkPortion(saved: ExactMsat, sendMsat: bigint, applies: boolean): RelinkPortion {
+  if (!applies || saved === null || saved === undefined || saved === "") return { kind: "whole" };
+  let msat: bigint;
+  try {
+    // A number past the safe range was already rounded when it was read.
+    msat = BigInt(typeof saved === "number" ? (Number.isSafeInteger(saved) ? saved : Number.NaN) : saved.trim());
+  } catch {
+    return { kind: "unsendable" };
+  }
+  if (msat <= 0n) return { kind: "unsendable" };
+  // The whole send is no portion (and naming it would leave the network fee out of the swap fee).
+  if (msat >= sendMsat) return { kind: "whole" };
+  if (msat > BigInt(Number.MAX_SAFE_INTEGER)) return { kind: "unsendable" };
+  return { kind: "part", msat: Number(msat) };
+}
+
 function exactMsat(value: ExactMsat): bigint | null {
   if (value === null || value === undefined) return null;
   try {

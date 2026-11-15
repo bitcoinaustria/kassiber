@@ -19,6 +19,7 @@ import {
   pairWarnings,
   parseAmountInput,
   rankCandidates,
+  relinkPortion,
   searchIntent,
   sharesWith,
   widerWindow,
@@ -339,5 +340,24 @@ describe("a transaction linked in part", () => {
     const free = leg("free");
     expect(withOpenPart(free, openParts([]))).toBe(free);
     expect(withOpenPart(free, null)).toBe(free);
+  });
+});
+
+describe("relinkPortion", () => {
+  const send = 20_000_000_000_000_000n;
+  it("sends a part of the send exactly, and the whole send as no part", () => {
+    expect(relinkPortion("4200000000", send, true)).toEqual({ kind: "part", msat: 4_200_000_000 });
+    expect(relinkPortion(4_200_000_000, send, true)).toEqual({ kind: "part", msat: 4_200_000_000 });
+    expect(relinkPortion(send.toString(), send, true)).toEqual({ kind: "whole" });
+    expect(relinkPortion(null, send, true)).toEqual({ kind: "whole" });
+    // Within one asset no part applies.
+    expect(relinkPortion("4200000000", send, false)).toEqual({ kind: "whole" });
+  });
+
+  it("refuses a part it cannot send exactly instead of dropping it", () => {
+    expect(relinkPortion("10000000000000000", send, true)).toEqual({ kind: "unsendable" });
+    expect(relinkPortion(10_000_000_000_000_000, send, true)).toEqual({ kind: "unsendable" });
+    expect(relinkPortion("1.5", send, true)).toEqual({ kind: "unsendable" });
+    expect(relinkPortion("0", send, true)).toEqual({ kind: "unsendable" });
   });
 });

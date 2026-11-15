@@ -613,6 +613,32 @@ describe("Transfers overview", () => {
     expect((await screen.findByTestId("transfers-toast")).textContent).toContain("Linked.");
   });
 
+  it("refuses to link a swapped part again when it cannot be sent exactly, rather than link the whole send", async () => {
+    daemon.items = [];
+    // 100,000 USDT of a 200,000 USDT send: past the largest whole number JSON keeps exact.
+    daemon.unlinked = [
+      {
+        id: "pair-big", out_transaction_id: "usdt-out", in_transaction_id: "lbtc-in", kind: "manual", policy: "taxable", swap_fee_msat: null,
+        out_amount: "10000000000000000", deleted_at: "2026-11-13T14:02:00Z",
+        out: { transaction_id: "usdt-out", wallet: "Liquid USDT", wallet_kind: "liquid", asset: "USDT", occurred_at: "2026-01-01T00:00:00Z", amount_msat: "20000000000000000" },
+        in: { transaction_id: "lbtc-in", wallet: "Liquid hot", wallet_kind: "liquid", asset: "LBTC", occurred_at: "2026-01-01T00:01:00Z", amount_msat: "100000000000" },
+      },
+    ];
+    daemon.txs = {
+      "usdt-out": tx("usdt-out", { account: "Liquid USDT", asset: "USDT", chain: "liquid", amountSat: -20_000_000_000_000, occurredAt: "2026-01-01T00:00:00Z" }),
+      "lbtc-in": tx("lbtc-in", { account: "Liquid hot", asset: "LBTC", chain: "liquid", amountSat: 100_000_000, occurredAt: "2026-01-01T00:01:00Z" }),
+    };
+    mount();
+    await openTab(/^Unlinked by you/);
+    const card = await screen.findByTestId("transfers-recently-unlinked");
+    fireEvent.click(within(card).getByRole("button", { name: /Link Liquid USDT to Liquid hot again/ }));
+    const dialog = await screen.findByTestId("link-manually");
+    expect(await within(dialog).findByTestId("link-portion-unsendable")).toBeTruthy();
+    expect((within(dialog).getByRole("button", { name: "Link again" }) as HTMLButtonElement).disabled).toBe(true);
+    // Nothing is planned, so the whole send is never offered in the part's place.
+    expect(calls("ui.review.plan")).toHaveLength(0);
+  });
+
   it("links manually: picks the send, ranks the receipts, asks what it was and checks before linking", async () => {
     daemon.items = [];
     daemon.txs = PEG_TXS;

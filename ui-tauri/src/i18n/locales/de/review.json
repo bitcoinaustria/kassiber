@@ -1381,6 +1381,7 @@
       "changeSend": "Anderen Ausgang wählen",
       "changeReceipt": "Anderen Eingang wählen",
       "portion": "Nur {{amount}} des Ausgangs wurden getauscht, wie zuvor.",
+      "portionUnsendable": "Der zuvor getauschte Teil des Ausgangs lässt sich hier nicht genau wiederherstellen. Deshalb kann diese Verknüpfung hier nicht erneut gemacht werden. Es wurde nichts verknüpft.",
       "changesTitle": "Was sich ändert",
       "effectReleased": "Der Ausgang wird nicht mehr zurückgehalten.",
       "effectStillHeld": "Eine Seite bleibt aus einem anderen Grund zurückgehalten; sie bleibt unter „Zu klären“.",
