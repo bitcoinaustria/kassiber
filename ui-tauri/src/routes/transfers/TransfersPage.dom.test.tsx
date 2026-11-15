@@ -789,7 +789,7 @@ describe("Transfers overview", () => {
     expect(calls("ui.transfers.pair")).toHaveLength(0);
   });
 
-  it.each(["ui.journals.quarantine", "ui.review.badges", "ui.transfers.dismissals.list"])(
+  it.each(["ui.journals.quarantine", "ui.review.badges", "ui.transfers.dismissals.list", "ui.transfers.suggest"])(
     "says it could not check everything, not that nothing waits, when %s fails",
     async (kind) => {
       daemon.failing = new Set([kind]);
@@ -799,6 +799,15 @@ describe("Transfers overview", () => {
       expect(within(verdict).queryByText("Nothing waits on you")).toBeNull();
       expect(within(verdict).getByRole("button", { name: "Couldn't check everything" })).toBeTruthy();
       if (kind === "ui.review.badges") return;
+      if (kind === "ui.transfers.suggest") {
+        // Opened on the suggestions, whose failure is said there.
+        await waitFor(() => expect(screen.getByText("Transfer suggestions could not be loaded.")).toBeTruthy());
+        expect(within(screen.getByTestId("transfers-tabs")).getByRole("button", { name: /^Needs you/ }).getAttribute("aria-pressed")).toBe("true");
+        daemon.failing = new Set();
+        fireEvent.click(within(verdict).getByRole("button", { name: "Couldn't check everything" }));
+        await waitFor(() => expect(verdict.getAttribute("data-state")).toBe("settled"));
+        return;
+      }
       // The holds are unknown: the list says so instead of "no suggestions to confirm".
       await openTab(/^Needs you/);
       const alert = await screen.findByTestId("transfers-held-unavailable");

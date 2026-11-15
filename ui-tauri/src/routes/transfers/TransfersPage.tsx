@@ -453,9 +453,9 @@ export function TransfersOverview({
   // More undone links than one read holds: which of them are held is not known.
   const dismissalsIncomplete = Boolean(dismissalsQuery.data?.data?.has_more);
   const heldUnavailable = heldQuery.isError || dismissalsQuery.isError || dismissalsIncomplete;
-  const readsUnavailable = heldUnavailable || badgesQuery.isError;
+  const readsUnavailable = heldUnavailable || badgesQuery.isError || suggestQuery.isError;
   const retryReads = () => {
-    for (const query of [badgesQuery, heldQuery, dismissalsQuery]) if (query.isError) void query.refetch();
+    for (const query of [badgesQuery, heldQuery, dismissalsQuery, suggestQuery]) if (query.isError) void query.refetch();
   };
   const verdict = transfersVerdict({
     // Until every page of holds is read, what waits is not known.
@@ -528,6 +528,12 @@ export function TransfersOverview({
     setTab(next);
     setPendingUnlink(null);
   };
+  // What could not be read about what waits is said under Needs you, so the
+  // page opens there. Chosen once: the list it shows reads again on its own.
+  const unreadable = verdict.state === "unavailable";
+  React.useEffect(() => {
+    if (unreadable) setTab((current) => current ?? "needs");
+  }, [unreadable]);
   // A saved view filters the suggestions, so opening one (from the sheet or
   // a link) shows their list, even when nothing in it matches.
   React.useEffect(() => {
