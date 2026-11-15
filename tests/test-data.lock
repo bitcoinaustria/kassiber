@@ -2,7 +2,7 @@
 # scripts/fetch-test-data.sh; never edit by hand (see
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
-commit 2276f4c7f6b44cf4029f0a1942035df44f2818c8
+commit de7b60172f2b2cd4dadc8efb8388e7fabb5f4b30
 ab2bfbb90cc8996dcee6933efaf1a0fd9ea88f89 crates/ai/tests/data/vectors.json
 b02df587ab3b14801a923c1049f1ce4062b1188e crates/chain/fixtures/python_btcpay.json
 76906734c1ea7bd4f09690ad90894cfcadf9f333 crates/chain/fixtures/python_cln.json
@@ -306,10 +306,10 @@ b8cec6475ac742215176924e63c74a78ff8ae21c crates/wallets/tests/data/freshness/adm
 2b2f1801ea6d350d5587d53eead5f6530c80ce2e crates/wallets/tests/data/freshness/blobs.json
 12b5fca4df0ddd53cd3707b4838b0c1ba4ce8476 crates/wallets/tests/data/freshness/execution.json
 534f3f1172bc863b1ac65e453aeaed9e77619777 crates/wallets/tests/data/freshness/graph.json
-13c93c05868c2bbe270a2725faae55c6d98d6556 crates/wallets/tests/data/freshness/journals.json
+d36c4ea38191c56a936d3c76ff1935724ba8eda0 crates/wallets/tests/data/freshness/journals.json
 05ae9532f6644de594bac10405fe2ababbecabec crates/wallets/tests/data/freshness/lifecycle.json
-6b7e572bbd9dd6361a75c3a52a42f74fb5a036ed crates/wallets/tests/data/freshness/native.json
-367b9508f763f658f3c116e4e981b9e66634c338 crates/wallets/tests/data/freshness/product.json
+a1fe4d2fb661b41689f3520829da7f19ac3ce3c1 crates/wallets/tests/data/freshness/native.json
+6d5cd14c8b4214b3fc0dab0249388aa8bb9082e2 crates/wallets/tests/data/freshness/product.json
 dfba0252c78a0b5cdcc49604bd5df89cfd113d95 crates/wallets/tests/data/freshness/queue.json
 0b346216d55f06e5928699d43bb60ba1905a3273 crates/wallets/tests/data/freshness/schemas.json
 7fc58002293ab09248df4dd94104eb76ebc56228 crates/wallets/tests/data/psbt.json
@@ -361,16 +361,16 @@ e34cee35d2bd3f0a19750dd2a9c5018283b708d8 docs/reference/tax-country-ie-vectors.j
 31880f97f7dae43ec53841f1eb55a75125d7152a docs/reference/tax-country-jp-vectors.json
 9d61c8df144465ff8bfd95193370d5cc4e828a9e docs/reference/tax-country-us-vectors.json
 925f522a471bdddc300b4dbf9c7c4233731ac009 tax-engine/core/tests/data/us_fixtures.json
-1a7024360a354d6c4b9fa21716687cb13e457b25 tests/data/sessions/blobs-00.tar.gz
-805ba997e82f1a7df6b97a33728170cea54124a6 tests/data/sessions/blobs-01.tar.gz
-0cfe12a4e8c122608ff0f617c5bf18580e40a17a tests/data/sessions/blobs-02.tar.gz
-5ed070729f50e64c240b3886800457ee3ea3b2c1 tests/data/sessions/blobs-03.tar.gz
-8e75e819c87501012c37c14f31d5be2caf572ec0 tests/data/sessions/blobs-04.tar.gz
-e2520e7302e5239356c48d0b622a524ace820960 tests/data/sessions/blobs-05.tar.gz
-2038b934eeee015d546142e5f004bbb1c1560204 tests/data/sessions/blobs-06.tar.gz
-d1430d39ab5500f175cedc695e14dd64baa01570 tests/data/sessions/blobs-07.tar.gz
+0f27f9785bc8e4ff6b2358af7eb6994e13892970 tests/data/sessions/blobs-00.tar.gz
+132f8888c1c5cedf4415cdaf41bbed7e5fab8d62 tests/data/sessions/blobs-01.tar.gz
+0c1651b4673fbfd81459fe0f9882f07eadc7b082 tests/data/sessions/blobs-02.tar.gz
+dbc916fb3ae4b8a5e115a923206e3b545ab814c8 tests/data/sessions/blobs-03.tar.gz
+44b29ee2c066a86413d5fff3f9ccf659c8482b62 tests/data/sessions/blobs-04.tar.gz
+634b07aee04c245a0c1eb184bfd94d8bd3cb8cb2 tests/data/sessions/blobs-05.tar.gz
+572bc0238092664e86060b73a312917d13259537 tests/data/sessions/blobs-06.tar.gz
+0f79bc1c2a68db7ff12a12c5641bc4d9a5836a9d tests/data/sessions/blobs-07.tar.gz
 5ce6490180b7e5c4fd5b29f97cfb126714500830 tests/data/sessions/dropped.tsv
-bc6bd679c85d772468cec5dec8901d20c0300a9d tests/data/sessions/sessions.tar.gz
+8781ac8e1cc874396920dcdd351427f4ca77efed tests/data/sessions/sessions.tar.gz
 c11fcc0f65d3774dba1b50d9073e021445108cfa tests/fixtures/btcpay_bark/0.13.0/invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted.json
 42cc6ab29f70c797cd2a005d7f4012e8e9ed6fc6 tests/fixtures/btcpay_bark/0.13.0/invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted.json
 58e6a62b68c6ed0b56157f6775cbba73850e29ed tests/fixtures/btcpay_bark/0.13.0/invoice.E5mxtedvENirbwt55k2V1m.payment-methods.accounted.json

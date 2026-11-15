@@ -1270,6 +1270,25 @@ pub fn override_prices(
     }
 }
 
+/// The journal freshness `status` and `reason` of one profile, as the
+/// journal snapshot reports them; `None` when the profile does not exist.
+pub(crate) fn freshness_of(
+    conn: &Connection,
+    profile_id: &str,
+) -> Result<Option<(&'static str, &'static str)>, AppError> {
+    let Some(profile) = query(
+        conn,
+        "SELECT * FROM profiles WHERE id = ?",
+        &[Sql::Text(profile_id.to_owned())],
+    )?
+    .into_iter()
+    .next() else {
+        return Ok(None);
+    };
+    let freshness = freshness(conn, &profile)?;
+    Ok(Some((freshness.status, freshness.reason)))
+}
+
 #[cfg(test)]
 mod explanation_tests {
     use super::*;

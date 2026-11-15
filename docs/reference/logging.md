@@ -215,7 +215,8 @@ bodies).
 
 Only user-initiated actions: the Logs page export (`.md`/`.log`/`.jsonl`,
 watermarked when raw), the support bundle (redaction report + failure
-context), and `kassiber diagnostics`. RP2, whose import writes a file log, was only a
+context), and `kassiber diagnostics`. The journal reproducibility check
+writes nothing. RP2, whose import writes a file log, was only a
 test oracle; nothing in the product or the tests runs it now (its outputs are
 frozen goldens).
 

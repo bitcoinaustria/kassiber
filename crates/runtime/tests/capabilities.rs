@@ -43,7 +43,10 @@ fn tables_match_python() {
     let document = kassiber_pytext::loads(include_str!("data/capabilities.json")).unwrap();
     // Rust-only commands (docs/reference/rust-shell.md#rust-only-commands)
     // carry their siblings' capability; Python has no entry for them.
-    let rust_only = [("wallets.sync-bitpanda", "wallets.sync-binance")];
+    let rust_only = [
+        ("wallets.sync-bitpanda", "wallets.sync-binance"),
+        ("journals.verify", "journals.list"),
+    ];
     for (leaf, sibling) in rust_only {
         assert_eq!(cli_capability(leaf), cli_capability(sibling), "{leaf}");
     }
@@ -69,6 +72,7 @@ fn tables_match_python() {
             "ui.connections.btcpay.create",
         ),
         ("ui.connections.exchange.sync", "ui.connections.btcpay.test"),
+        ("ui.journals.verify", "ui.journals.snapshot"),
         // Which ways two transactions may be linked: a read beside the pair list.
         ("ui.transfers.pair_options", "ui.transfers.list"),
     ];

@@ -326,6 +326,10 @@ phrases, API keys, passwords, bearer tokens, cookies, raw daemon arguments,
 raw AI prompts, imported rows, database files, and stack locals are excluded or
 redacted.
 
+The Journals screen's **Check reproducibility** runs `ui.journals.verify` and
+shows whether the stored journals are identical to a recomputation, stale, or
+which tables, wallets and years differ.
+
 Transaction detail shows a Transaction flow panel beside its tabs, above them
 in narrow windows; the review checklist sits in the header's timeline bar. The
 panel uses `ui.transactions.graph` to draw a local, read-only flow view: valued

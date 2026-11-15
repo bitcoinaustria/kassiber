@@ -52,6 +52,10 @@ caller can show a reconciliation difference or a fallback year-end rate next to
 the saved file. Like the other final exports, it fails closed on stale journals,
 source freshness failures, and quarantines dated in or before the year.
 
+`ui.journals.verify` (read) runs the [reproducibility check](replay-bundle.md) on
+the open book; it accepts only `limit` (1-200, default 20) and returns the
+check's report. It does not contact the network.
+
 `ui.transactions.export_platform_csv` writes the transactions in another
 tool's import format into the managed exports directory. It accepts `platform`
 (`cointracking` or `blockpit`) and an optional `wallets` list (or the single

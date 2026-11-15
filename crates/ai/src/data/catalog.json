@@ -8225,6 +8225,28 @@
    "summary_template": "Recurring source: run",
    "egresses": true,
    "reversible": false
+  },
+  {
+   "name": "ui.journals.verify",
+   "wire_name": "ui_journals_verify",
+   "description": "Check whether the stored journals are exactly what the book's current inputs produce: recomputes them in a private in-memory copy (nothing is written, no network) and returns status identical, different, stale, not_processed, no_transactions or refused, with per-table counts, differences grouped by wallet and year, and the first differing rows (bounded by limit). stale means inputs changed since processing: say journals need processing, not that numbers are wrong. different with deterministic false points at a Kassiber bug, not the user's data.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200,
+      "description": "Maximum differing rows to list; counts always cover every row."
+     }
+    }
+   },
+   "kind_class": "read_only",
+   "daemon_kind": "ui.journals.verify",
+   "summary_template": "Check journal reproducibility",
+   "egresses": false,
+   "reversible": false
   }
  ],
  "aliases": {
