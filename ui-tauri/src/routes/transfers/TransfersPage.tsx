@@ -374,7 +374,7 @@ export function TransfersOverview({
 
   const badgesQuery = useDaemon<ReviewBadges>("ui.review.badges");
   const suggestQuery = useDaemon<TransferSuggestions>("ui.transfers.suggest", {});
-  const pairsQuery = useDaemon<TransferPairsEnvelope>("ui.transfers.list", { include_unlinked: true });
+  const pairsQuery = useDaemon<TransferPairsEnvelope>("ui.transfers.list", { include_unlinked: true, priced: true });
   // As many as one read returns; the core has no further pages to ask for.
   const dismissalsQuery = useDaemon<TransferDismissalsEnvelope>("ui.transfers.dismissals.list", { limit: DISMISSALS_LIMIT });
   // Every page of what the journals hold: a held transfer may be on any of them.

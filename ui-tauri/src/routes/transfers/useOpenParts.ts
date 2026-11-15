@@ -11,6 +11,6 @@ import type { TransferPairsEnvelope } from "./linkedMovesModel";
 import { openParts } from "./linkModel";
 
 export function useOpenParts() {
-  const pairs = useDaemon<TransferPairsEnvelope>("ui.transfers.list", { include_unlinked: true }).data?.data?.pairs;
+  const pairs = useDaemon<TransferPairsEnvelope>("ui.transfers.list", { include_unlinked: true, priced: true }).data?.data?.pairs;
   return React.useMemo(() => (pairs ? openParts(pairs) : null), [pairs]);
 }
