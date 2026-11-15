@@ -891,6 +891,19 @@ fn transport(config: &serde_json::Value) -> Vec<Option<String>> {
         .collect()
 }
 
+/// An opaque revision of what `name` would connect with (`config`, a
+/// `resolve` result): equal exactly when [`transport`] is. A certificate
+/// review carries it so a later trust can refuse a backend whose endpoint,
+/// proxy or trust settings changed since the user looked, before connecting.
+pub fn transport_revision(name: &str, config: &serde_json::Value) -> String {
+    use sha2::{Digest, Sha256};
+    let canonical = serde_json::to_vec(&(name, transport(config))).unwrap_or_default();
+    Sha256::digest(canonical)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 /// Whether any stored backend's certificate names `path`.
 pub fn certificate_referenced(conn: &Connection, path: &str) -> Result<bool> {
     let mut statement = conn

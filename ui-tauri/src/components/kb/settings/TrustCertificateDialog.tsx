@@ -274,6 +274,7 @@ export function TrustCertificateDialog({
       const envelope = await trustCertificate.mutateAsync({
         name: backend,
         fingerprint: presented.fingerprint_sha256,
+        revision: presented.revision,
       });
       if (!envelope.data) throw new Error("empty trust response");
       setPresented(envelope.data);

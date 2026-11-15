@@ -764,7 +764,13 @@ What happens:
   Kassiber checks that the backend as it now resolves would connect with
   exactly this pin and with verification on (`backend_certificate_not_effective`
   otherwise). A refusal leaves the previous pin and setting in place; a
-  replaced pin file no backend refers to is removed after the commit.
+  replaced pin file no backend refers to is removed after the commit. Only
+  files with that `<sha256>.pem` shape are ever removed: a CA bundle of your
+  own in the same folder stays.
+- The desktop binds its confirmation to what you reviewed: a fetch returns a
+  `revision` of the backend's kind, URL, proxy, certificate and insecure
+  setting, and trusting with a revision the backend no longer has is refused
+  before any connection (`backend_certificate_config_changed`).
 - A backend whose kind, URL, proxy, certificate or insecure setting is
   overridden by an environment variable (`KASSIBER_BACKEND_<NAME>_<FIELD>`)
   is refused before any connection (`backend_certificate_overridden`, naming

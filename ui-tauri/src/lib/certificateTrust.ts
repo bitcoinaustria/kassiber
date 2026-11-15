@@ -65,6 +65,8 @@ export interface PresentedCertificate {
   names: string[];
   replaces_fingerprint_sha256: string | null;
   clears_insecure: boolean;
+  /** The backend setup this certificate was fetched for; trust sends it back. */
+  revision: string;
 }
 
 /** `ui.backends.certificate.trust` data. */
@@ -81,6 +83,7 @@ export const CERTIFICATE_ERROR_KEYS = [
   "plaintext",
   "unsupported",
   "mismatch",
+  "changedSinceReview",
   "offline",
   "connection",
   "writeFailed",
@@ -101,6 +104,8 @@ export function certificateErrorKey(code: string | undefined | null): Certificat
       return "unsupported";
     case "backend_certificate_mismatch":
       return "mismatch";
+    case "backend_certificate_config_changed":
+      return "changedSinceReview";
     case "network_egress_disabled":
       return "offline";
     case "network_error":

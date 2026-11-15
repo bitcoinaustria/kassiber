@@ -22,10 +22,22 @@ pub fn pin_path(data_root: &Path, der: &[u8]) -> PathBuf {
     data_root.join(DIRECTORY).join(format!("{digest}.pem"))
 }
 
-/// Whether `path` names a file in the managed pin directory of `data_root`.
+/// Whether `path` is a pin [`write_pin`] could have written: a
+/// `<64 lowercase hex>.pem` file in the pin directory of `data_root`. Any other
+/// file there (a CA bundle the user put in that folder and named in
+/// `certificate`) is theirs, and cleanup never removes it.
 pub fn is_managed(data_root: &Path, path: &Path) -> bool {
     path.parent() == Some(data_root.join(DIRECTORY).as_path())
         && path.extension().is_some_and(|ext| ext == "pem")
+        && path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .is_some_and(|stem| {
+                stem.len() == 64
+                    && stem
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            })
 }
 
 fn failed() -> AppError {
@@ -185,6 +197,20 @@ mod tests {
         fs::write(&outside, "keep").unwrap();
         remove_unreferenced(root.path(), &outside, false);
         assert!(outside.exists());
+        // Nor a file of the user's own inside it: only pin-shaped names.
+        let directory = root.path().join(DIRECTORY);
+        for own in [
+            "ca.pem".to_owned(),
+            format!("{}.pem", "A".repeat(64)),
+            format!("{}.pem", "a".repeat(63)),
+            format!("{}.crt", "a".repeat(64)),
+        ] {
+            let own = directory.join(own);
+            fs::write(&own, "mine").unwrap();
+            assert!(!is_managed(root.path(), &own), "{}", own.display());
+            remove_unreferenced(root.path(), &own, false);
+            assert!(own.exists(), "{}", own.display());
+        }
     }
 
     #[test]

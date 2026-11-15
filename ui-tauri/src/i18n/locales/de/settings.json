@@ -1139,7 +1139,8 @@
       "offline": "Kassiber ist im Offline-Modus. Schalte ihn aus, um den Server zu erreichen.",
       "connection": "Der Server war nicht erreichbar, um sein Zertifikat zu lesen.",
       "writeFailed": "Das Zertifikat konnte nicht im Datenordner des Buchs gespeichert werden.",
-      "overridden": "Das Zertifikat wurde gespeichert, aber eine Umgebungseinstellung überschreibt das Zertifikat dieses Backends, daher wird es nicht verwendet.",
+      "changedSinceReview": "Adresse, Proxy oder Zertifikatseinstellungen dieses Backends haben sich geändert, nachdem du das Zertifikat abgerufen hast. Es wurde nichts vertraut; ruf es erneut ab.",
+      "overridden": "Umgebungsvariablen überschreiben die Verbindungseinstellungen dieses Backends, daher würde ein vertrautes Zertifikat womöglich nicht verwendet. Es wurde nichts vertraut.",
       "unknown": "Die Zertifikatsprüfung ist fehlgeschlagen."
     }
   }

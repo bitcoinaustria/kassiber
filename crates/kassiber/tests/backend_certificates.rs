@@ -8,7 +8,7 @@ mod support;
 
 use kassiber_net::test_support::{fixtures, FakeTls};
 use kassiber_pyjson::Value;
-use support::{kind_of, path, text, Desk};
+use support::{kind_of, path, text, Daemon, Desk};
 
 const FINGERPRINT: &str = "81:4C:F5:98:8C:BF:B3:07:03:EA:D7:34:00:E1:33:39:A2:A4:53:E6:CE:4E:5F:FF:68:DD:8D:9C:5B:17:89:6A";
 const OTHER: &str = "01:F4:A0:43:BF:C6:EC:5F:FD:F3:BD:53:2D:B6:45:B8:A9:79:36:70:93:1B:07:96:90:3F:F0:C4:72:1C:B3:E8";
@@ -206,12 +206,20 @@ fn daemon_fetch_and_trust_and_a_changed_certificate_is_never_repinned_alone() {
     assert!(path(&fetched, &["data", "url"]).is_none());
     assert!(path(&fetched, &["data", "pem"]).is_none());
 
-    // Trust needs the confirmed fingerprint.
+    let revision = field(&fetched, &["data", "revision"]).to_owned();
+    assert_eq!(revision.len(), 64, "{fetched:?}");
+
+    // Trust needs the confirmed fingerprint and the reviewed revision.
     let refused = desk.ask("ui.backends.certificate.trust", r#"{"name": "home"}"#);
+    assert_eq!(code(&refused), "validation");
+    let refused = desk.ask(
+        "ui.backends.certificate.trust",
+        &format!(r#"{{"name": "home", "fingerprint": "{FINGERPRINT}"}}"#),
+    );
     assert_eq!(code(&refused), "validation");
     let trusted = desk.ask(
         "ui.backends.certificate.trust",
-        &format!(r#"{{"name": "home", "fingerprint": "{FINGERPRINT}"}}"#),
+        &format!(r#"{{"name": "home", "fingerprint": "{FINGERPRINT}", "revision": "{revision}"}}"#),
     );
     assert_eq!(
         kind_of(&trusted),
@@ -241,6 +249,92 @@ fn daemon_fetch_and_trust_and_a_changed_certificate_is_never_repinned_alone() {
         server.requests().is_empty(),
         "no application data was ever sent"
     );
+}
+
+#[test]
+fn a_backend_changed_since_review_is_refused_before_connecting() {
+    let server = server();
+    let desk = desk(&server);
+    let fetched = desk.ask("ui.backends.certificate.fetch", r#"{"name": "home"}"#);
+    let revision = field(&fetched, &["data", "revision"]).to_owned();
+    assert_eq!(server.connections(), 1);
+
+    // The backend now goes through a proxy the user never reviewed; the
+    // proxy port is never reached.
+    let proxy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_url = format!("socks5h://127.0.0.1:{}", proxy.local_addr().unwrap().port());
+    proxy.set_nonblocking(true).unwrap();
+    desk.setup_cli(&["backends", "update", "home", "--tor-proxy", &proxy_url]);
+    let refused = desk.ask(
+        "ui.backends.certificate.trust",
+        &format!(r#"{{"name": "home", "fingerprint": "{FINGERPRINT}", "revision": "{revision}"}}"#),
+    );
+    assert_eq!(
+        code(&refused),
+        "backend_certificate_config_changed",
+        "{refused:?}"
+    );
+    assert_eq!(
+        server.connections(),
+        1,
+        "the server was not contacted again"
+    );
+    assert!(proxy.accept().is_err(), "nor the unreviewed proxy");
+    assert!(pins(&desk).is_empty(), "nothing was written");
+
+    // A fresh review of the backend as it is now carries another revision.
+    desk.setup_cli(&["backends", "update", "home", "--clear", "tor-proxy"]);
+    let fetched = desk.ask("ui.backends.certificate.fetch", r#"{"name": "home"}"#);
+    assert_eq!(
+        field(&fetched, &["data", "revision"]),
+        revision,
+        "the same setup again"
+    );
+}
+
+#[test]
+fn the_daemon_shows_the_pin_in_settings_right_after_trusting() {
+    let server = server();
+    let desk = desk(&server);
+    let mut daemon = Daemon::spawn(&desk, &[]);
+    let mut ask = |id: &str, kind: &str, args: &str| {
+        daemon.request(kind, id, Some(args));
+        kassiber_pytext::loads(&daemon.terminal(id)).unwrap()
+    };
+    let home = |listed: &Value| match path(listed, &["data", "backends"]) {
+        Some(Value::List(backends)) => backends
+            .iter()
+            .find(|b| path(b, &["name"]).and_then(text) == Some("home"))
+            .cloned()
+            .unwrap(),
+        other => panic!("{other:?}"),
+    };
+    let before = home(&ask("list-1", "ui.backends.settings.list", "{}"));
+    assert!(path(&before, &["certificate"]).is_none(), "{before:?}");
+    let fetched = ask(
+        "fetch",
+        "ui.backends.certificate.fetch",
+        r#"{"name": "home"}"#,
+    );
+    let revision = field(&fetched, &["data", "revision"]).to_owned();
+    let trusted = ask(
+        "trust",
+        "ui.backends.certificate.trust",
+        &format!(r#"{{"name": "home", "fingerprint": "{FINGERPRINT}", "revision": "{revision}"}}"#),
+    );
+    let pin = field(&trusted, &["data", "certificate"]).to_owned();
+    assert!(!pin.is_empty(), "{trusted:?}");
+    // The same daemon's next settings read, the one the desktop refetches
+    // and a later save starts from, shows the pin and verification on.
+    let after = home(&ask("list-2", "ui.backends.settings.list", "{}"));
+    assert_eq!(field(&after, &["certificate"]), pin, "{after:?}");
+    assert!(
+        !matches!(path(&after, &["insecure"]), Some(Value::Bool(true))),
+        "{after:?}"
+    );
+    daemon.request("daemon.shutdown", "stop", None);
+    daemon.terminal("stop");
+    daemon.exit_cleanly();
 }
 
 #[test]

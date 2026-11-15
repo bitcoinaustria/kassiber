@@ -34,6 +34,7 @@ import { TrustCertificateDialog } from "./TrustCertificateDialog";
 
 const FINGERPRINT =
   "81:4C:F5:98:8C:BF:B3:07:03:EA:D7:34:00:E1:33:39:A2:A4:53:E6:CE:4E:5F:FF:68:DD:8D:9C:5B:17:89:6A";
+const REVISION = "5f".repeat(32);
 const presented = {
   backend: "home",
   kind: "electrum",
@@ -47,6 +48,7 @@ const presented = {
   self_signed: true,
   names: ["node.local"],
   replaces_fingerprint_sha256: null,
+  revision: REVISION,
   clears_insecure: false,
 };
 
@@ -98,6 +100,7 @@ describe("TrustCertificateDialog", () => {
     expect(daemon.invoke).toHaveBeenLastCalledWith("ui.backends.certificate.trust", {
       name: "home",
       fingerprint: FINGERPRINT,
+      revision: REVISION,
     });
     expect(onTrusted).toHaveBeenCalledWith(
       expect.objectContaining({ certificate: "/data/certificates/home.pem" }),

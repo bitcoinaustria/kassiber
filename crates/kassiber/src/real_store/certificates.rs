@@ -26,9 +26,22 @@ fn text(args: &Value, key: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
-fn payload(fetched: &Fetched) -> Result<Value, AppError> {
-    kassiber_pytext::loads(&fetched.payload().to_string())
+/// What a fetch shows, plus the transport revision it was fetched for: the
+/// desktop hands that back when trusting, binding the trust to the backend
+/// setup the user reviewed.
+fn payload(fetched: &Fetched, revision: &str) -> Result<Value, AppError> {
+    let mut shown = fetched.payload();
+    shown["revision"] = serde_json::Value::String(revision.to_owned());
+    kassiber_pytext::loads(&shown.to_string())
         .map_err(|_| AppError::new("internal_error", "certificate payload"))
+}
+
+fn changed_since_review(name: &str) -> AppError {
+    AppError::new(
+        "backend_certificate_config_changed",
+        format!("Backend '{name}' changed since its certificate was checked"),
+    )
+    .with_hint("Nothing was trusted. Check the certificate again for the backend as it is now.")
 }
 
 impl RealBook {
@@ -41,10 +54,17 @@ impl RealBook {
             .ok_or_else(|| AppError::new("validation", "Backend name is required"))?
             .to_lowercase();
         let fingerprint = text(args, "fingerprint");
+        let reviewed = text(args, "revision");
         if operation == "ui.backends.certificate.trust" && fingerprint.is_none() {
             return Err(AppError::new(
                 "validation",
                 "The confirmed certificate fingerprint is required",
+            ));
+        }
+        if operation == "ui.backends.certificate.trust" && reviewed.is_none() {
+            return Err(AppError::new(
+                "validation",
+                "The revision of the reviewed certificate is required",
             ));
         }
         // The snapshot every fetch below uses; trusting compares the backend
@@ -62,6 +82,12 @@ impl RealBook {
             )
             .with_hint("Unset those variables for Kassiber, then check the certificate again."));
         }
+        let revision = kassiber_setup::backends::transport_revision(&name, &config);
+        if reviewed.is_some_and(|reviewed| reviewed != revision) {
+            // Refused before connecting: the endpoint, proxy or trust settings
+            // are not the ones the certificate was reviewed for.
+            return Err(changed_since_review(&name));
+        }
         let gate = lightning::network_gate();
         // Reached only for one explicit CLI command or registered desktop
         // request naming this backend, after scope and unlock checks.
@@ -70,7 +96,7 @@ impl RealBook {
         else {
             let fetched = certificates::fetch(&gate, &consent, &config)?;
             if operation == "ui.backends.certificate.fetch" {
-                return payload(&fetched);
+                return payload(&fetched, &revision);
             }
             return Err(AppError::new(
                 "confirmation_required",
@@ -85,7 +111,7 @@ impl RealBook {
                 "Compare this fingerprint with the one your server shows (for example `openssl x509 -noout -fingerprint -sha256 -in <its certificate>`). If they match, trust it with `kassiber backends trust-certificate {name} --fingerprint {}`.",
                 fetched.fingerprint()
             ))
-            .with_details(payload(&fetched)?));
+            .with_details(payload(&fetched, &revision)?));
         };
         let fetched = certificates::confirm(&gate, &consent, &config, &expected)?;
         let data_root = PathBuf::from(&self.data_root);
@@ -133,6 +159,9 @@ impl RealBook {
                 return Err(error);
             }
         };
+        // Committed: the long-lived desktop daemon answers settings reads from
+        // this view, which must show the pin rather than the old trust setup.
+        self.backends.merge(conn)?;
         // Committed: a replaced managed pin no backend uses any more can go.
         if let Some(previous) = previous.filter(|p| *p != path_text) {
             remove_if_unreferenced(&previous);

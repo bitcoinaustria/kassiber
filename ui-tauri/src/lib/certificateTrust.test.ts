@@ -51,6 +51,7 @@ describe("certificate problems", () => {
   it("maps every refusal to an explained message", () => {
     expect(certificateErrorKey("backend_certificate_already_trusted")).toBe("alreadyTrusted");
     expect(certificateErrorKey("backend_certificate_mismatch")).toBe("mismatch");
+    expect(certificateErrorKey("backend_certificate_config_changed")).toBe("changedSinceReview");
     expect(certificateErrorKey("backend_certificate_unpinnable")).toBe("unpinnable");
     expect(certificateErrorKey("network_egress_disabled")).toBe("offline");
     expect(certificateErrorKey("network_error")).toBe("connection");

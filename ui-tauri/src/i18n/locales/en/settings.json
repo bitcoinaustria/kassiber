@@ -1139,7 +1139,8 @@
       "offline": "Kassiber is in offline mode. Turn it off to reach the server.",
       "connection": "Could not reach the server to read its certificate.",
       "writeFailed": "The certificate could not be saved in the book's data folder.",
-      "overridden": "The certificate was saved, but an environment setting overrides this backend's certificate, so it is not used.",
+      "changedSinceReview": "This backend's address, proxy or certificate settings changed after you fetched the certificate. Nothing was trusted; fetch it again.",
+      "overridden": "Environment variables override this backend's connection settings, so a trusted certificate might not be used. Nothing was trusted.",
       "unknown": "Checking the certificate failed."
     }
   }
