@@ -1158,6 +1158,7 @@
       "loadMore": "Ältere Übertragungen zeigen",
       "loadingMore": "Ältere Übertragungen werden geladen…",
       "loaded": "{{loaded}} von {{total}}",
+      "olderMayMatch": "Ältere Übertragungen sind noch nicht geladen und könnten auch passen.",
       "column": {
         "date": "Datum",
         "route": "Von → Nach",

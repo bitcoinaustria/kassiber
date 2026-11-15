@@ -31,6 +31,8 @@ vi.hoisted(() => {
 
 const daemon = vi.hoisted(() => ({
   items: [] as unknown[],
+  /** Older lineage moves, answered as a second page after `items`. */
+  olderItems: [] as unknown[],
   dismissals: [] as unknown[],
   held: [] as string[],
   heldItems: [] as unknown[],
@@ -57,8 +59,15 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
           return { kind: "error", schema_version: 1, error: { code: "internal", message: "read failed", retryable: false } };
         }
         switch (kind) {
-          case "ui.custody.lineage.snapshot":
-            return ok(kind, { summary: { total_count: daemon.items.length, truncated: false }, items: daemon.items });
+          case "ui.custody.lineage.snapshot": {
+            const total = daemon.items.length + daemon.olderItems.length;
+            if (args.cursor === "older") return ok(kind, { summary: { total_count: total, truncated: false }, items: daemon.olderItems });
+            return ok(kind, {
+              summary: { total_count: total, truncated: daemon.olderItems.length > 0 },
+              items: daemon.items,
+              next_cursor: daemon.olderItems.length ? "older" : null,
+            });
+          }
           case "ui.transfers.list":
             return ok(kind, { pairs: daemon.pairs, ...(args.include_unlinked ? { unlinked: daemon.unlinked } : {}) });
           case "ui.profiles.snapshot":
@@ -280,6 +289,7 @@ beforeEach(async () => {
   await i18n.changeLanguage("en");
   useUiStore.setState({ developerToolsEnabled: false });
   daemon.items = [lineageItem()];
+  daemon.olderItems = [];
   daemon.dismissals = [];
   daemon.held = [];
   daemon.heldItems = [];
@@ -732,6 +742,29 @@ describe("Transfers overview", () => {
     // What it checks sits behind the info icon, to keep the line short.
     expect(within(empty).getByRole("button", { name: /Kassiber checks every send against what arrived in your other wallets/ })).toBeTruthy();
     expect(within(empty).getByText(/link it yourself with Link manually/)).toBeTruthy();
+  });
+
+  it("keeps loading older transfers while a filter is on, since they may match", async () => {
+    // A 2025 move loaded, a 2024 one only on the next page.
+    daemon.items = [
+      lineageItem({ out_transaction_id: "o-2025", in_transaction_id: "i-2025", occurred_at: "2025-03-01T10:00:00Z", from_wallet_label: "Hot 2025" }),
+      lineageItem({ out_transaction_id: "o-2024b", in_transaction_id: "i-2024b", occurred_at: "2024-12-01T10:00:00Z", from_wallet_label: "Hot late 2024" }),
+    ];
+    daemon.olderItems = [lineageItem({ out_transaction_id: "o-2024", in_transaction_id: "i-2024", occurred_at: "2024-01-05T10:00:00Z", from_wallet_label: "Hot early 2024" })];
+    mount();
+    const list = await screen.findByTestId("transfers-linked-list");
+    await waitFor(() => expect(within(list).getByText("Hot 2025")).toBeTruthy());
+    const filters = screen.getByRole("button", { name: "Filters" });
+    fireEvent.pointerDown(filters, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.click(within(await screen.findByRole("menu")).getByRole("menuitemradio", { name: "2024" }));
+    await waitFor(() => expect(within(list).queryByText("Hot 2025")).toBeNull());
+    expect(within(list).getByText("Hot late 2024")).toBeTruthy();
+    expect(screen.getByText("Older transfers aren't loaded yet and may match too.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show older transfers" }));
+    await waitFor(() => expect(within(list).getByText("Hot early 2024")).toBeTruthy());
+    expect(calls("ui.custody.lineage.snapshot").some((call) => call.args.cursor === "older")).toBe(true);
+    // Everything is loaded: nothing more to offer.
+    expect(screen.queryByRole("button", { name: "Show older transfers" })).toBeNull();
   });
 
   it("lists a swap into another asset with a Different asset chip", async () => {

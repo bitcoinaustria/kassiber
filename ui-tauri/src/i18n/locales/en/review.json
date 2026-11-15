@@ -1158,6 +1158,7 @@
       "loadMore": "Show older transfers",
       "loadingMore": "Loading older transfers…",
       "loaded": "Showing {{loaded}} of {{total}}",
+      "olderMayMatch": "Older transfers aren't loaded yet and may match too.",
       "column": {
         "date": "Date",
         "route": "From → To",

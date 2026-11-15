@@ -1861,9 +1861,14 @@ function LinkedMovesCard({
             )}
           </TableBody>
         </table>
-        {visible.length > shown || (hasMore && !filtered) ? (
+        {/* Filters apply to the transfers loaded so far, so older ones stay a click away. */}
+        {visible.length > shown || hasMore ? (
           <div className="flex items-center justify-center gap-3 pt-3 text-xs text-muted-foreground">
-            <span>{t("transfersPage.linked.loaded", { loaded: page.length, total: Math.max(filtered ? visible.length : total, visible.length) })}</span>
+            <span>
+              {filtered && visible.length <= shown
+                ? t("transfersPage.linked.olderMayMatch")
+                : t("transfersPage.linked.loaded", { loaded: page.length, total: Math.max(filtered ? visible.length : total, visible.length) })}
+            </span>
             <Button
               type="button"
               variant="outline"
