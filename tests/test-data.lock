@@ -2,7 +2,7 @@
 # scripts/fetch-test-data.sh; never edit by hand (see
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
-commit 87bc4e4d3ab85ccfab18998a0a0f9426cab64245
+commit de7b60172f2b2cd4dadc8efb8388e7fabb5f4b30
 ab2bfbb90cc8996dcee6933efaf1a0fd9ea88f89 crates/ai/tests/data/vectors.json
 b02df587ab3b14801a923c1049f1ce4062b1188e crates/chain/fixtures/python_btcpay.json
 76906734c1ea7bd4f09690ad90894cfcadf9f333 crates/chain/fixtures/python_cln.json
@@ -306,10 +306,10 @@ b8cec6475ac742215176924e63c74a78ff8ae21c crates/wallets/tests/data/freshness/adm
 2b2f1801ea6d350d5587d53eead5f6530c80ce2e crates/wallets/tests/data/freshness/blobs.json
 12b5fca4df0ddd53cd3707b4838b0c1ba4ce8476 crates/wallets/tests/data/freshness/execution.json
 534f3f1172bc863b1ac65e453aeaed9e77619777 crates/wallets/tests/data/freshness/graph.json
-13c93c05868c2bbe270a2725faae55c6d98d6556 crates/wallets/tests/data/freshness/journals.json
+d36c4ea38191c56a936d3c76ff1935724ba8eda0 crates/wallets/tests/data/freshness/journals.json
 05ae9532f6644de594bac10405fe2ababbecabec crates/wallets/tests/data/freshness/lifecycle.json
-6b7e572bbd9dd6361a75c3a52a42f74fb5a036ed crates/wallets/tests/data/freshness/native.json
-367b9508f763f658f3c116e4e981b9e66634c338 crates/wallets/tests/data/freshness/product.json
+a1fe4d2fb661b41689f3520829da7f19ac3ce3c1 crates/wallets/tests/data/freshness/native.json
+6d5cd14c8b4214b3fc0dab0249388aa8bb9082e2 crates/wallets/tests/data/freshness/product.json
 dfba0252c78a0b5cdcc49604bd5df89cfd113d95 crates/wallets/tests/data/freshness/queue.json
 0b346216d55f06e5928699d43bb60ba1905a3273 crates/wallets/tests/data/freshness/schemas.json
 7fc58002293ab09248df4dd94104eb76ebc56228 crates/wallets/tests/data/psbt.json
