@@ -3,16 +3,9 @@ use super::*;
 use kassiber_envelope::s;
 use std::collections::{BTreeMap, BTreeSet};
 
-fn terms(conn: &Connection, scope: &Scope<'_>, kind: &str) -> Result<Vec<Value>> {
-    terms_with_deleted(conn, scope, kind, false)
-}
-fn terms_with_deleted(
-    conn: &Connection,
-    scope: &Scope<'_>,
-    kind: &str,
-    deleted: bool,
-) -> Result<Vec<Value>> {
-    rows(conn, "SELECT term.*, c.superseded_at,
+/// The columns every authored-term list reads: the term, when its component
+/// was superseded, both legs' transactions and the allocated amounts.
+const TERM_SELECT: &str = "SELECT term.*, c.superseded_at,
         COALESCE(source.anchor_transaction_id,source.transaction_id) AS out_transaction_id,
         COALESCE(target.anchor_transaction_id,target.transaction_id) AS in_transaction_id,
         (SELECT SUM(a.source_amount_msat) FROM custody_component_allocations a
@@ -23,10 +16,44 @@ fn terms_with_deleted(
         JOIN custody_components c ON c.id=term.component_id
         JOIN custody_component_legs source ON source.id=term.source_leg_id
         JOIN custody_component_legs target ON target.id=term.target_leg_id
-        WHERE term.profile_id=? AND term.term_kind=? AND (term.component_id IN
+        ";
+fn terms(conn: &Connection, scope: &Scope<'_>, kind: &str) -> Result<Vec<Value>> {
+    terms_with_deleted(conn, scope, kind, false)
+}
+fn terms_with_deleted(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    kind: &str,
+    deleted: bool,
+) -> Result<Vec<Value>> {
+    rows(
+        conn,
+        &format!(
+            "{TERM_SELECT}WHERE term.profile_id=? AND term.term_kind=? AND (term.component_id IN
           (SELECT DISTINCT component_id FROM custody_component_transaction_memberships WHERE profile_id=?)
           OR (? AND c.state='superseded' AND NOT EXISTS (SELECT 1 FROM custody_components successor WHERE successor.supersedes_component_id=c.id)))
-        ORDER BY term.created_at DESC,term.component_id,term.ordinal", kassiber_store::rusqlite::params![scope.profile_id,kind,scope.profile_id,deleted])
+        ORDER BY term.created_at DESC,term.component_id,term.ordinal"
+        ),
+        kassiber_store::rusqlite::params![scope.profile_id, kind, scope.profile_id, deleted],
+    )
+}
+/// Pair terms the owner removed: each one in a superseded component whose
+/// successor (if any) no longer carries that pair. Unlinking one pair of a
+/// shared send leaves a successor with the others, so the removed pair is
+/// read from the revision it was last in; `superseded_at` is when it went.
+fn removed_pair_terms(conn: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>> {
+    rows(
+        conn,
+        &format!(
+            "{TERM_SELECT}WHERE term.profile_id=? AND term.term_kind='transaction_pair' AND c.state='superseded'
+          AND NOT EXISTS (SELECT 1 FROM custody_components successor
+            JOIN custody_component_economic_terms kept ON kept.component_id=successor.id
+            WHERE successor.supersedes_component_id=c.id AND kept.term_kind=term.term_kind
+              AND kept.legacy_source_id=term.legacy_source_id)
+        ORDER BY c.superseded_at DESC,term.created_at DESC,term.component_id,term.ordinal"
+        ),
+        [scope.profile_id],
+    )
 }
 pub(super) fn pair_records(
     conn: &Connection,
@@ -421,9 +448,8 @@ pub(super) fn unlinked(conn: &Connection, scope: &Scope<'_>, args: &Value) -> Re
     .iter()
     .map(|row| text(row, "transaction_id"))
     .collect();
-    let terms = terms_with_deleted(conn, scope, "transaction_pair", true)?;
     // A leg linked again since, to this partner or another, is not free.
-    let linked: BTreeSet<String> = terms
+    let linked: BTreeSet<String> = terms(conn, scope, "transaction_pair")?
         .iter()
         .filter(|row| matches!(value(row, "superseded_at"), Value::Null))
         .flat_map(|row| {
@@ -433,12 +459,11 @@ pub(super) fn unlinked(conn: &Connection, scope: &Scope<'_>, args: &Value) -> Re
             ]
         })
         .collect();
-    let mut unlinked: Vec<&Value> = terms
-        .iter()
-        .filter(|row| !matches!(value(row, "superseded_at"), Value::Null))
-        .collect();
-    // Newest unlinking first, so a pair unlinked twice keeps its latest terms.
-    unlinked.sort_by_key(|row| std::cmp::Reverse(text(row, "deleted_at")));
+    let removed = removed_pair_terms(conn, scope)?;
+    let mut unlinked: Vec<&Value> = removed.iter().collect();
+    // Newest unlinking first, so a pair unlinked twice keeps its latest terms
+    // and the limit never drops the pair just unlinked.
+    unlinked.sort_by_key(|row| std::cmp::Reverse(text(row, "superseded_at")));
     let mut seen = BTreeSet::new();
     let mut result = Vec::new();
     for row in unlinked {

@@ -804,6 +804,55 @@ fn unlinked_pairs_list_free_legs_with_their_terms_newest_first() {
     );
 }
 #[test]
+fn unlinked_pairs_of_a_shared_send_are_listed_once_the_send_is_free() {
+    let (_dir, book) = fresh();
+    let c = book.connection();
+    let sources = Counting {
+        next: std::cell::Cell::new(0),
+    };
+    let pair = |out: &str, inbound: &str| {
+        counted(
+            c,
+            &sources,
+            "transfers.pair",
+            dict([("tx_out", s(out)), ("tx_in", s(inbound))]),
+        )
+        .unwrap()
+    };
+    let unpair = |pair: &Value| {
+        counted(
+            c,
+            &sources,
+            "transfers.unpair",
+            dict([("pair_id", field(pair, "id").clone())]),
+        )
+        .unwrap()
+    };
+    // One send to two receipts shares a component; unlinking the later pair
+    // leaves a successor that keeps only the earlier one.
+    let first = pair("a", "b");
+    let second = pair("a", "c");
+    unpair(&second);
+    assert!(unlinked_legs(c, &sources).is_empty());
+    // Once the send is free, both are offered, the one unlinked last first
+    // although it was linked first.
+    unpair(&first);
+    assert_eq!(
+        unlinked_legs(c, &sources),
+        vec![("a".into(), "b".into()), ("a".into(), "c".into())]
+    );
+    // A limit of one keeps the pair just unlinked.
+    let limited = counted(
+        c,
+        &sources,
+        "transfers.unlinked",
+        dict([("limit", 1.into())]),
+    )
+    .unwrap();
+    assert_eq!(list(&limited).len(), 1);
+    assert_eq!(field(&list(&limited)[0], "in_transaction_id"), &s("b"));
+}
+#[test]
 fn the_desktop_pair_list_prices_each_leg_and_leaves_the_cli_list_alone() {
     let (_dir, book) = fresh();
     let c = book.connection();

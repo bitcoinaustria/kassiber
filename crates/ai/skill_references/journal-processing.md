@@ -226,19 +226,6 @@ provide from `evidence`, and do not present an assumption as proven. The
 individual AI tool `ui.journals.quarantine.resolve` repairs reviewed prices or
 explicit exclusions.
 
-A `pair_transfer` action means the row needs a pairing (or a custody
-component) it does not have yet. A `restore_pairing` action comes first on a
-`recorded_transfer_authority_conflict` row (a platform or Bark statement
-against an owned wallet's observation of the same transaction) when the owner
-undid that row's automatic pairing: an active dismissal names exactly its
-`out_transaction_id`/`in_transaction_id` pair, and `dismissal_id` is that
-dismissal. Restoring is `ui_transfers_dismissals_delete`
-with that `dismissal_id`, a consent-gated mutation. The owner undid the pairing
-on purpose, so propose restoring only when the user wants the pairing back.
-Journals are stale afterwards; the next rebuild books the move again if it is
-still exact, otherwise the row stays held. Without that action, syncing does
-not resolve this hold: pair it with the user or record a custody component.
-
 For counts, read `ui.journals.quarantine.groups` rather than summing pages: it
 returns whole-book counts and per-asset msat totals by reason and by root
 group, and pages one group's members with a cursor (`quarantine_cursor_stale`
