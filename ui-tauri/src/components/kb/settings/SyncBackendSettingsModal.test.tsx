@@ -18,6 +18,11 @@ vi.mock("react", async original => ({
     if (!(index in hooks.states)) hooks.states[index] = initial;
     return [hooks.states[index], (next: unknown) => { hooks.states[index] = next; }];
   },
+  useRef: (initial: unknown) => {
+    const index = hooks.cursor++;
+    if (!(index in hooks.states)) hooks.states[index] = { current: initial };
+    return hooks.states[index];
+  },
   useMemo: (factory: () => unknown) => factory(),
   useEffect: (effect: () => void) => { hooks.effects.push(effect); },
 }));
@@ -292,6 +297,29 @@ describe("backend certificate trust entry", () => {
       await vi.waitFor(() => expect(hooks.invoke).toHaveBeenCalledOnce());
       await vi.waitFor(() => expect(testHeadline(render(electrum))).toBe(headline));
     }
+  });
+});
+
+describe("a refreshed backend while the form is open", () => {
+  it("keeps unsaved edits when a trust refetches the settings list", () => {
+    const saved: Backend = {
+      id: "home", name: "Home node", health: "", on: true, auth: "none",
+      chain: "bitcoin", network: "main", net: "BTC", kind: "esplora",
+      url: "https://node.local/api",
+    };
+    const props = { open: true, initial: saved, onClose: vi.fn(), onSave: vi.fn() };
+    const render = () => { hooks.cursor = 0; return SyncBackendSettingsModal(props); };
+    render();
+    hooks.effects.splice(0).forEach(effect => effect());
+    const nameIndex = hooks.states.findIndex(value => value === "Home node");
+    expect(nameIndex).toBeGreaterThanOrEqual(0);
+    hooks.states[nameIndex] = "My node";
+    // The settings list comes back with the pinned certificate: a new
+    // object for the same backend.
+    props.initial = { ...saved, certificate: "/data/certificates/abc.pem" };
+    render();
+    hooks.effects.splice(0).forEach(effect => effect());
+    expect(hooks.states[nameIndex]).toBe("My node");
   });
 });
 

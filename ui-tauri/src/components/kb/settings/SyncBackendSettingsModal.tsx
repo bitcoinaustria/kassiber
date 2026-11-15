@@ -649,8 +649,22 @@ export function SyncBackendSettingsModal({
     useProxy,
   ]);
 
+  // The form initializes once per opening and backend (and, for a new
+  // backend, per offered type list). A refreshed `initial` for the same
+  // backend, as a certificate trust refetches the settings list, must not
+  // reset it and discard unsaved edits; the trust handler writes the new
+  // certificate into the form itself.
+  const initializedFor = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      initializedFor.current = null;
+      return;
+    }
+    const formKey = initial
+      ? `backend:${initial.id}`
+      : `new:${initialTypeId ?? ""}:${scopedTypes.map((candidate) => candidate.id).join(",")}`;
+    if (initializedFor.current === formKey) return;
+    initializedFor.current = formKey;
     if (initial) {
       const parsedElectrum = parseElectrumEndpoint(initial.url);
       const initialType =
