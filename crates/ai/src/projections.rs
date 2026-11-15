@@ -1371,8 +1371,11 @@ pub fn journal_verify_for_ai(report: &Value) -> Value {
             dict([("code", get(error, "code").cloned().unwrap_or(Value::Null))]),
         ));
     }
-    if let Some(Value::List(tables)) = get(report, "tables") {
-        let tables = tables
+    // A list cut to `VERIFY_AI_ENTRIES` here is truncated for the assistant
+    // even when the check itself listed everything it found.
+    let mut cut = false;
+    if let Some(Value::List(all)) = get(report, "tables") {
+        let tables = all
             .iter()
             .take(VERIFY_AI_ENTRIES)
             .map(|table| {
@@ -1382,6 +1385,10 @@ pub fn journal_verify_for_ai(report: &Value) -> Value {
                 )
             })
             .collect();
+        if let Some(more) = all.len().checked_sub(VERIFY_AI_ENTRIES).filter(|n| *n > 0) {
+            cut = true;
+            out.push(("tables_omitted", Value::Int((more as i64).into())));
+        }
         out.push(("tables", Value::List(tables)));
     }
     for (name, omitted) in [
@@ -1425,6 +1432,18 @@ pub fn journal_verify_for_ai(report: &Value) -> Value {
             })
             .collect();
         out.push(("differences", Value::List(differences)));
+    }
+    if let Some(Value::List(all)) = get(report, "differences") {
+        if let Some(more) = all.len().checked_sub(VERIFY_AI_ENTRIES).filter(|n| *n > 0) {
+            cut = true;
+            out.push(("differences_omitted", Value::Int((more as i64).into())));
+        }
+    }
+    if cut {
+        match out.iter_mut().find(|(name, _)| *name == "truncated") {
+            Some((_, value)) => *value = Value::Bool(true),
+            None => out.push(("truncated", Value::Bool(true))),
+        }
     }
     dict(out)
 }
@@ -1583,5 +1602,36 @@ mod journal_verify_bound_tests {
             panic!()
         };
         assert_eq!(differences.len(), VERIFY_AI_ENTRIES);
+    }
+
+    #[test]
+    fn a_list_cut_for_the_assistant_is_marked_truncated() {
+        let report = dict([
+            ("status", s("different")),
+            ("truncated", Value::Bool(false)),
+            ("limit", Value::Int(100.into())),
+            (
+                "differences",
+                Value::List(
+                    (0..75)
+                        .map(|_| dict([("table", s("journal_entries")), ("change", s("missing"))]))
+                        .collect(),
+                ),
+            ),
+        ]);
+        let projected = journal_verify_for_ai(&report);
+        assert_eq!(get(&projected, "truncated"), Some(&Value::Bool(true)));
+        assert_eq!(
+            get(&projected, "differences_omitted"),
+            Some(&Value::Int(25.into()))
+        );
+        let within = dict([
+            ("truncated", Value::Bool(false)),
+            ("differences", Value::List(vec![])),
+        ]);
+        assert_eq!(
+            get(&journal_verify_for_ai(&within), "truncated"),
+            Some(&Value::Bool(false))
+        );
     }
 }

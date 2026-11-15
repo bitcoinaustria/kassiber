@@ -1405,7 +1405,8 @@ amounts, row keys, transaction ids, labels or refusal messages. Lists and the
 wallet and year count maps are capped at 50 entries (the largest counts, keys
 cut to 64 characters, at most 20 column names per difference); the rest is
 summarized as `by_wallet_omitted` / `by_year_omitted` with its entry and row
-counts. When the check fails before producing a report, the assistant gets the
+counts, and a cut table or difference list as `tables_omitted` /
+`differences_omitted` with `truncated` set. When the check fails before producing a report, the assistant gets the
 error code and a fixed message, never the error text, which can quote book
 values. It does not refresh journals first, since a stale book is one of
 the answers it gives, and it is not an automatic context read.
