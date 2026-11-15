@@ -74,6 +74,26 @@ describe("buildLinkedMoves", () => {
     expect(move).toMatchObject({ source: "automatic", undoable: true, fromLabel: "BTCPay Bark", toLabel: "Store on-chain" });
   });
 
+  it("keeps each side's own rail on an automatic move between rails", () => {
+    const [funding] = buildLinkedMoves({
+      lineage: [lineageItem({ rail: "bitcoin->lightning", source_rail: "bitcoin", target_rail: "lightning" })],
+      pairs: [],
+      dismissals: [],
+    });
+    expect(funding).toMatchObject({ fromRail: "onchain", toRail: "lightning" });
+    expect(moveType(funding)).toBe("submarine");
+    // A peg-in read by its assets, and a core that sends only the joined rail.
+    const [pegIn] = buildLinkedMoves({
+      lineage: [lineageItem({ rail: "bitcoin->liquid", source_asset: "BTC", target_asset: "LBTC" })],
+      pairs: [],
+      dismissals: [],
+    });
+    expect(pegIn).toMatchObject({ fromRail: "onchain", toRail: "liquid" });
+    expect(moveType(pegIn)).toBe("pegIn");
+    const [same] = buildLinkedMoves({ lineage: [lineageItem({ rail: "lightning" })], pairs: [], dismissals: [] });
+    expect(same).toMatchObject({ fromRail: "lightning", toRail: "lightning" });
+  });
+
   it("lists a reviewed pair once, with the pair id the lineage lacks", () => {
     const reviewed = lineageItem({
       out_transaction_id: "out-cold",

@@ -334,7 +334,13 @@ export interface CustodyLineageItem {
   basis_barrier_at: string | null;
   evidence_reason: string;
   network: string;
+  /** Both rails as one (`bitcoin->lightning` when they differ). */
   rail: string;
+  /** Each side's own rail and asset, which a cross-rail move needs apart. */
+  source_rail?: string | null;
+  target_rail?: string | null;
+  source_asset?: string | null;
+  target_asset?: string | null;
   atomic_bundle_id?: string | null;
   component_id?: string | null;
 }

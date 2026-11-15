@@ -154,12 +154,21 @@ export function isUndoneAutomaticPairing(dismissal: TransferDismissal): boolean 
   return dismissal.active && dismissal.reason === AUTOMATIC_UNDO_REASON;
 }
 
-function lineageRail(item: CustodyLineageItem): SwapRail {
-  return railForLeg(item.asset, item.rail);
+/**
+ * The rail each side of a lineage move is on. Each side has its own rail and
+ * asset; a core that sends only the joined rail (`bitcoin->lightning`) is
+ * read side by side.
+ */
+function lineageRails(item: CustodyLineageItem): { from: SwapRail; to: SwapRail } {
+  const [joinedFrom, joinedTo = joinedFrom] = item.rail.split("->");
+  return {
+    from: railForLeg(item.source_asset || item.asset, item.source_rail || joinedFrom),
+    to: railForLeg(item.target_asset || item.asset, item.target_rail || joinedTo),
+  };
 }
 
 function fromLineage(item: CustodyLineageItem): LinkedMove {
-  const rail = lineageRail(item);
+  const rails = lineageRails(item);
   return {
     key: moveKey(item.out_transaction_id, item.in_transaction_id),
     source: item.custody_state === "internal_reviewed" ? "reviewed" : "automatic",
@@ -168,8 +177,8 @@ function fromLineage(item: CustodyLineageItem): LinkedMove {
     inTransactionId: item.in_transaction_id,
     fromLabel: item.from_wallet_label,
     toLabel: item.to_wallet_label,
-    fromRail: rail,
-    toRail: rail,
+    fromRail: rails.from,
+    toRail: rails.to,
     asset: item.asset,
     amountMsat: item.amount_msat,
     amountFiat: item.fiat_value ?? null,
