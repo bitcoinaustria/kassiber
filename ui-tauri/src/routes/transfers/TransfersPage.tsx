@@ -323,6 +323,18 @@ function restHoldPair(item: QuarantineItem, pairs: readonly TransferPairSummary[
 
 const TOAST_MS = 10_000;
 
+/** The most rows one read of the holds returns. */
+const HELD_PAGE = 100;
+
+/** The next page of holds, or nothing once every row is read. */
+function nextHeldOffset(page: { data?: QuarantineSnapshot }): number | undefined {
+  const summary = page.data?.summary;
+  const items = page.data?.items.length ?? 0;
+  if (!summary || !items) return undefined;
+  const next = (summary.offset ?? 0) + items;
+  return next < (summary.scope_count ?? summary.count ?? 0) ? next : undefined;
+}
+
 interface SavedViewsEnvelope {
   views: TransfersSavedView[];
 }
@@ -361,7 +373,16 @@ export function TransfersOverview({
   const suggestQuery = useDaemon<TransferSuggestions>("ui.transfers.suggest", {});
   const pairsQuery = useDaemon<TransferPairsEnvelope>("ui.transfers.list", { include_unlinked: true });
   const dismissalsQuery = useDaemon<TransferDismissalsEnvelope>("ui.transfers.dismissals.list", {});
-  const heldQuery = useDaemon<QuarantineSnapshot>("ui.journals.quarantine", { limit: 100, offset: 0, scope: "attention" });
+  // Every page of what the journals hold: a held transfer may be on any of them.
+  const heldQuery = useDaemonInfinite<QuarantineSnapshot>(
+    "ui.journals.quarantine",
+    { limit: HELD_PAGE, offset: 0, scope: "attention" },
+    nextHeldOffset,
+  );
+  const { hasNextPage: moreHeld, isFetchingNextPage: fetchingHeld, isError: heldFailed, fetchNextPage: fetchMoreHeld } = heldQuery;
+  React.useEffect(() => {
+    if (moreHeld && !fetchingHeld && !heldFailed) void fetchMoreHeld();
+  }, [moreHeld, fetchingHeld, heldFailed, fetchMoreHeld]);
   const lineageQuery = useDaemonInfinite<CustodyLineageSnapshot>(
     "ui.custody.lineage.snapshot",
     { limit: 100 },
@@ -386,15 +407,18 @@ export function TransfersOverview({
   const pairs = pairsQuery.data?.data?.pairs;
   const unlinkedPairs = pairsQuery.data?.data?.unlinked;
   const dismissals = dismissalsQuery.data?.data?.dismissals;
-  const heldItems = heldQuery.data?.data?.items;
-  const heldIds = React.useMemo(() => new Set((heldItems ?? []).map((item) => item.transaction_id)), [heldItems]);
+  const heldItems = React.useMemo(
+    () => (heldQuery.data?.pages ?? []).flatMap((page) => page.data?.items ?? []),
+    [heldQuery.data?.pages],
+  );
+  const heldIds = React.useMemo(() => new Set(heldItems.map((item) => item.transaction_id)), [heldItems]);
   const held = React.useMemo(() => heldUndonePairings(dismissals ?? [], heldIds), [dismissals, heldIds]);
   // Holds a missing-wallet review explains: read-only until developer tools are on.
   const parts = useOpenParts();
   // So is the unlinked rest of a send the owner linked in part, which anyone can link.
   const gapHolds = React.useMemo(
     () =>
-      (heldItems ?? []).filter((item) =>
+      heldItems.filter((item) =>
         (item.actions ?? []).some(
           (action) => action.kind === "review_custody_gap" || (action.kind === "review_pair" && restHoldPair(item, pairsQuery.data?.data?.pairs, parts) !== null),
         ),
@@ -427,7 +451,9 @@ export function TransfersOverview({
     for (const query of [badgesQuery, heldQuery, dismissalsQuery]) if (query.isError) void query.refetch();
   };
   const verdict = transfersVerdict({
-    loading: badgesQuery.isLoading || suggestQuery.isLoading || lineageQuery.isLoading || heldQuery.isLoading || dismissalsQuery.isLoading,
+    // Until every page of holds is read, what waits is not known.
+    loading:
+      badgesQuery.isLoading || suggestQuery.isLoading || lineageQuery.isLoading || dismissalsQuery.isLoading || heldQuery.isLoading || (Boolean(moreHeld) && !heldFailed),
     unavailable: readsUnavailable,
     journalsStale: Boolean(badgesQuery.data?.data?.journals_needs_processing) && !updating,
     held: waiting,

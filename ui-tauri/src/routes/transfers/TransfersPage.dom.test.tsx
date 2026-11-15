@@ -45,6 +45,8 @@ const daemon = vi.hoisted(() => ({
   failApply: false,
   /** Reads that answer with an error. */
   failing: new Set<string>(),
+  /** A page of holds, by offset, that answers with an error. */
+  failHeldOffset: null as number | null,
   heldAfter: [] as string[],
   calls: [] as Array<{ kind: string; args: Record<string, unknown> }>,
 }));
@@ -105,11 +107,19 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
             return ok(kind, { candidates: daemon.suggestions });
           case "ui.review.badges":
             return ok(kind, { quarantine: daemon.held.length, journals_needs_processing: false, swaps: 0 });
-          case "ui.journals.quarantine":
+          case "ui.journals.quarantine": {
+            // Paged as the core pages it: a slice by offset and limit, with the whole count.
+            const rows = [...daemon.held.map((id) => ({ transaction_id: id })), ...daemon.heldItems];
+            const offset = Number(args.offset ?? 0);
+            const limit = Number(args.limit ?? 20);
+            if (offset === daemon.failHeldOffset) {
+              return { kind: "error", schema_version: 1, error: { code: "internal", message: "read failed", retryable: false } };
+            }
             return ok(kind, {
-              summary: { count: daemon.held.length, by_reason: [], limit: 100 },
-              items: [...daemon.held.map((id) => ({ transaction_id: id })), ...daemon.heldItems],
+              summary: { count: rows.length, scope_count: rows.length, by_reason: [], limit, offset },
+              items: rows.slice(offset, offset + limit),
             });
+          }
           case "ui.transfers.dismiss":
             if (daemon.failDismiss) {
               return { kind: "error", schema_version: 1, error: { code: "not_found", message: "Transaction not found", retryable: false } };
@@ -303,6 +313,7 @@ beforeEach(async () => {
   daemon.failDismiss = false;
   daemon.failApply = false;
   daemon.failing = new Set();
+  daemon.failHeldOffset = null;
   daemon.heldAfter = [];
   daemon.calls = [];
   onOpen.mockClear();
@@ -543,6 +554,28 @@ describe("Transfers overview", () => {
         expect.objectContaining({ dismissal_id: "dismissal-9" }),
       ]),
     );
+  });
+
+  it("reads every page of holds, so a held transfer past the first hundred is still asked about", async () => {
+    daemon.items = [];
+    daemon.dismissals = [undone()];
+    daemon.held = [...Array.from({ length: 150 }, (_, index) => `other-held-${index}`), "out-bark"];
+    mount();
+    const verdict = await screen.findByTestId("transfers-verdict");
+    await waitFor(() => expect(verdict.getAttribute("data-state")).toBe("sortOut"));
+    expect(await screen.findByTestId("transfers-held-move")).toBeTruthy();
+    expect(calls("ui.journals.quarantine").map((call) => call.args.offset)).toEqual([0, 100]);
+  });
+
+  it("says it could not check everything when a later page of holds fails", async () => {
+    daemon.items = [];
+    daemon.held = Array.from({ length: 150 }, (_, index) => `other-held-${index}`);
+    daemon.failHeldOffset = 100;
+    mount();
+    const verdict = await screen.findByTestId("transfers-verdict");
+    await waitFor(() => expect(verdict.getAttribute("data-state")).toBe("unavailable"));
+    await openTab(/^Needs you/);
+    expect(await screen.findByTestId("transfers-held-unavailable")).toBeTruthy();
   });
 
   it("offers the custody-component answer only with developer tools on", async () => {
