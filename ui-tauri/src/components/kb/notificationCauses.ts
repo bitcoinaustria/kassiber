@@ -16,6 +16,7 @@ export const NOTIFICATION_CAUSES = [
   "rateLimited",
   "unavailable",
   "certificate",
+  "certificateChanged",
   "credentials",
   "noBackend",
   "connection",
@@ -29,6 +30,9 @@ const CODE_CAUSES: Readonly<Record<string, NotificationCause>> = {
   network_error: "connection",
   backend_timeout: "connection",
   backend_tls_config_invalid: "certificate",
+  // Distinct from a generic TLS failure: the trust flow can resolve these.
+  tls_certificate_untrusted: "certificate",
+  tls_certificate_changed: "certificateChanged",
   backend_not_configured: "noBackend",
   cancelled: "cancelled",
 };
@@ -43,7 +47,9 @@ const MESSAGE_CAUSES: ReadonlyArray<[NotificationCause, RegExp]> = [
   ["rateLimited", /rate limited the request|too many requests|\(http 429\)|\bhttp 429\b|cooling down/i],
   ["unavailable", /temporarily unavailable|service unavailable|\(http 50[234]\)|\bhttp 50[234]\b/i],
   ["credentials", /\bhttp 40[13]\b|\(http 40[13]\)|\b40[13] (unauthori[sz]ed|forbidden)\b|invalid api key|authentication failed/i],
-  ["certificate", /certificate (verify|is not trusted|has expired|is invalid)|tls handshake failed|custom ca bundle/i],
+  // The daemon's fixed texts for an untrusted or changed backend certificate.
+  ["certificateChanged", /this server's certificate changed/i],
+  ["certificate", /certificate (verify|is not trusted|has expired|is invalid)|tls handshake failed|custom ca bundle|not signed by an authority kassiber trusts/i],
   ["noBackend", /no sync backend is configured/i],
   [
     "connection",

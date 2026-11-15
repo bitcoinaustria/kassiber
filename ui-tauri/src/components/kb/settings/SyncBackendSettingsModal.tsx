@@ -54,6 +54,11 @@ import {
   backendTypeIdForSettingsBackend,
   type SyncBackendTypeId,
 } from "./SyncBackendSettingsModel";
+import { TrustCertificateDialog } from "./TrustCertificateDialog";
+import {
+  canTrustCertificate,
+  certificateProblemFromText,
+} from "@/lib/certificateTrust";
 
 /** The endpoint's privacy posture as text: OK, neutral, or a warning. */
 const POSTURE_TONE: Record<TrustPosture, string> = {
@@ -464,6 +469,7 @@ export function SyncBackendSettingsModal({
   const [testState, setTestState] = React.useState<TestState>("idle");
   const [testLog, setTestLog] = React.useState("");
   const [saveState, setSaveState] = React.useState<"idle" | "saving">("idle");
+  const [certificateDialogOpen, setCertificateDialogOpen] = React.useState(false);
 
   const type =
     SYNC_BACKEND_NETWORKS.find((candidate) => candidate.id === typeId) ??
@@ -473,6 +479,11 @@ export function SyncBackendSettingsModal({
       ? null
       : type.presets.find((candidate) => candidate.id === presetId) ?? null;
   const isEditing = Boolean(initial);
+  // Trust works on the saved backend: the daemon fetches from its stored URL
+  // and proxy. Offered only when the user opens the dialog.
+  const certificateTrustAvailable = Boolean(
+    initial && canTrustCertificate(initial.kind, initial.url),
+  );
   // Editing connection details must not reinterpret the backend's chain identity.
   const chain = initial?.chain ?? (type.net === "LIQUID" ? "liquid" : "bitcoin");
   const bookDomain = bookScope.data?.data?.domains.find(domain => domain.chain === chain);
@@ -557,6 +568,24 @@ export function SyncBackendSettingsModal({
       ? `${proxyHost.trim()}:${proxyPort.trim()}`
       : undefined;
   const onionEndpoint = proxyCapable && isOnionEndpoint(effectiveUrl);
+  // The trust flow reaches the saved URL and proxy; with unsaved edits the
+  // form's connection test says nothing about that endpoint.
+  const savedTrustUrl = initial
+    ? showElectrumEndpointParts
+      ? buildElectrumUrl(parseElectrumEndpoint(initial.url))
+      : initial.url.trim()
+    : "";
+  const savedTrustProxy = initial?.proxy
+    ? `${initial.proxy.host}:${initial.proxy.port}`
+    : "";
+  const certificateTrustUnsaved =
+    certificateTrustAvailable &&
+    (effectiveUrl.trim().toLowerCase() !== savedTrustUrl.toLowerCase() ||
+      (proxyValue ?? "") !== savedTrustProxy);
+  const testCertificateProblem =
+    testState === "fail" && !certificateTrustUnsaved
+      ? certificateProblemFromText(testLog)
+      : null;
   const effectiveInfrastructureOwner =
     type.net === "LN"
       ? undefined
@@ -989,6 +1018,7 @@ export function SyncBackendSettingsModal({
   const isSavingBackend = saveState === "saving";
 
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={(next) => {
@@ -1707,6 +1737,30 @@ export function SyncBackendSettingsModal({
                   className="min-h-32 w-full resize-none rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5"
                 />
               </div>
+              {certificateTrustAvailable ? (
+                <SettingsRow
+                  label={t("certificateTrust.rowLabel")}
+                  description={
+                    certificateTrustUnsaved
+                      ? t("certificateTrust.saveFirst")
+                      : testCertificateProblem === "changed"
+                      ? t("certificateTrust.testChanged")
+                      : testCertificateProblem === "untrusted"
+                        ? t("certificateTrust.testUntrusted")
+                        : t("certificateTrust.rowHint")
+                  }
+                >
+                  <Button
+                    type="button"
+                    variant={testCertificateProblem ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCertificateDialogOpen(true)}
+                    disabled={isSavingBackend || certificateTrustUnsaved}
+                  >
+                    {t("certificateTrust.checkButton")}
+                  </Button>
+                </SettingsRow>
+              ) : null}
             </SettingsGroup>
           </div>
         </ScrollArea>
@@ -1753,5 +1807,24 @@ export function SyncBackendSettingsModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {initial && certificateTrustAvailable ? (
+      <TrustCertificateDialog
+        key={initial.id}
+        open={certificateDialogOpen}
+        backend={initial.id}
+        backendLabel={initial.name}
+        problem={testCertificateProblem}
+        onClose={() => setCertificateDialogOpen(false)}
+        onTrusted={(result) => {
+          // Keep the form in step with what the daemon saved, so a later
+          // Save neither drops the pin nor turns verification off again.
+          setCertificate(result.certificate);
+          setTrustSsl(false);
+          setTestState("idle");
+          setTestLog("");
+        }}
+      />
+    ) : null}
+    </>
   );
 }

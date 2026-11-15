@@ -153,6 +153,12 @@ import { useNotificationStore } from "@/store/notifications";
 import { useUiStore } from "@/store/ui";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
 import { ExchangeSyncCard } from "@/components/kb/exchange/ExchangeSyncCard";
+import { CertificateTrustOffer } from "@/components/kb/settings/CertificateTrustOffer";
+import {
+  certificateProblemFromCode,
+  certificateProblemFromText,
+  type CertificateProblem,
+} from "@/lib/certificateTrust";
 import { useExchangeSync } from "@/components/kb/exchange/useExchangeSync";
 import { isExchangeKind } from "@/components/kb/exchange/exchangeApiModel";
 import type {
@@ -733,6 +739,10 @@ function ConnectionDetailView({
     inventory,
   );
     const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
+  // An untrusted or changed backend certificate behind the last sync error:
+  // offers the explicit trust dialog for the wallet's backend.
+  const [certificateProblem, setCertificateProblem] =
+    useState<CertificateProblem | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editLabel, setEditLabel] = useState(connection.label);
   const [editPassphrase, setEditPassphrase] = useState("");
@@ -987,6 +997,7 @@ function ConnectionDetailView({
       }
     }
     setSyncErrorMessage(null);
+    setCertificateProblem(null);
     progressValueRef.current = startingSyncProgress().value ?? 5;
     const forceFull = Boolean(options?.forceFull);
     const ref = { book, connectionId: connection.id, label: connection.label };
@@ -1012,6 +1023,10 @@ function ConnectionDetailView({
         );
         if (status === "error") {
           setSyncErrorMessage(message);
+          setCertificateProblem(
+            certificateProblemFromCode(result?.code) ??
+              certificateProblemFromText(result?.message),
+          );
           recordConnectionSyncFailed(ref, message);
           return;
         }
@@ -1023,6 +1038,11 @@ function ConnectionDetailView({
         const message =
           error instanceof Error ? error.message : t("detail.sync.failedFallback");
         setSyncErrorMessage(message);
+        setCertificateProblem(
+          (error instanceof DaemonRequestError
+            ? certificateProblemFromCode(error.envelope.error?.code)
+            : null) ?? certificateProblemFromText(message),
+        );
         recordConnectionSyncFailed(ref, message);
       } finally {
         endConnectionSync(runId);
@@ -1639,6 +1659,14 @@ function ConnectionDetailView({
           role="status"
         >
           {syncErrorMessage}
+          <CertificateTrustOffer
+            problem={certificateProblem}
+            backend={walletDetail?.backend}
+            onTrusted={() => {
+              setCertificateProblem(null);
+              setSyncErrorMessage(null);
+            }}
+          />
         </div>
       )}
 
