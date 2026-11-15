@@ -1207,6 +1207,23 @@ history every background pass. Rate jobs reuse the existing
 `rates_checked_minutes` cache and do not run destructive rebuilds in background
 freshness work.
 
+## Backend certificate kinds
+
+`ui.backends.certificate.fetch` (`{name}`) and `ui.backends.certificate.trust`
+(`{name, fingerprint, revision}`) are the desktop's half of the
+[self-signed certificate flow](backends.md#self-signed-certificates). Each is
+one explicit user action for one saved backend: fetch returns `backend`,
+`kind`, `host`, `port`, `fingerprint_sha256` (uppercase, colon-separated),
+`subject`, `issuer`, `not_before`, `not_after`, `self_signed`, `names`,
+`replaces_fingerprint_sha256`, `clears_insecure` and `revision` (an opaque
+digest of the backend's transport settings), never the URL or the certificate
+itself; trust refuses a `revision` the backend no longer has with
+`backend_certificate_config_changed` before connecting, then fetches again, refuses a different fingerprint with
+`backend_certificate_mismatch`, and adds `trusted` and the pin's
+`certificate` path. Fetch is `operator` like the connection tests; trust is
+`admin`. Neither is an AI or MCP tool, and no read, status or listing reaches
+them.
+
 ## Lightning node kinds
 
 `ui.connections.node.snapshot` and `ui.reports.lightning_profitability`

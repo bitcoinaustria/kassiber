@@ -5,7 +5,7 @@ use crate::backend_runtime::{
     canonical, manual_mode, normalize_chain, normalize_network, tombstones, BUILTINS, KINDS,
     RESERVED,
 };
-pub use crate::backend_runtime::{Config, GraphRuntime};
+pub use crate::backend_runtime::{environment_overrides, Config, GraphRuntime, TRANSPORT_FIELDS};
 use kassiber_store::rusqlite::{params, types::Value as SqlValue};
 use std::collections::{BTreeMap, BTreeSet};
 #[path = "backend_desktop.rs"]
@@ -863,6 +863,122 @@ impl Config {
         Ok(result)
     }
 }
+/// A resolved backend's transport fields, empty values as absent, so two
+/// resolutions compare equal exactly when they would connect alike.
+fn transport(config: &serde_json::Value) -> Vec<Option<String>> {
+    TRANSPORT_FIELDS
+        .iter()
+        .map(|key| match config.get(*key) {
+            // Stored rows hold a boolean where a dotenv backend held "1":
+            // compare what the flag means, not how it was spelled.
+            value if *key == "insecure" => {
+                let on = match value {
+                    Some(serde_json::Value::Bool(on)) => *on,
+                    Some(serde_json::Value::Number(n)) => n.as_i64() == Some(1),
+                    Some(serde_json::Value::String(text)) => matches!(
+                        text.trim().to_ascii_lowercase().as_str(),
+                        "1" | "true" | "yes" | "on"
+                    ),
+                    _ => false,
+                };
+                on.then(|| "true".to_owned())
+            }
+            None | Some(serde_json::Value::Null) => None,
+            Some(serde_json::Value::String(text)) if text.trim().is_empty() => None,
+            Some(serde_json::Value::String(text)) => Some(text.clone()),
+            Some(other) => Some(other.to_string()),
+        })
+        .collect()
+}
+
+/// An opaque revision of what `name` would connect with (`config`, a
+/// `resolve` result): equal exactly when [`transport`] is. A certificate
+/// review carries it so a later trust can refuse a backend whose endpoint,
+/// proxy or trust settings changed since the user looked, before connecting.
+pub fn transport_revision(name: &str, config: &serde_json::Value) -> String {
+    use sha2::{Digest, Sha256};
+    let canonical = serde_json::to_vec(&(name, transport(config))).unwrap_or_default();
+    Sha256::digest(canonical)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// Whether any stored backend's certificate names `path`.
+pub fn certificate_referenced(conn: &Connection, path: &str) -> Result<bool> {
+    let mut statement = conn
+        .prepare("SELECT config_json FROM backends")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, Option<String>>(0))
+        .map_err(sql_error)?;
+    for row in rows {
+        let config = row.map_err(sql_error)?.unwrap_or_default();
+        if serde_json::from_str::<serde_json::Value>(&config)
+            .ok()
+            .and_then(|v| {
+                v.get("certificate")
+                    .and_then(|c| c.as_str().map(str::to_owned))
+            })
+            .is_some_and(|certificate| certificate == path)
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+impl Config {
+    /// The last step of a confirmed certificate trust, in one write
+    /// transaction: refuse unless `name` still resolves to the transport the
+    /// certificate was fetched for (`fetched_for`, a `resolve` result), point
+    /// its certificate at `pin` and turn insecure off, then require `verify`
+    /// to accept the resolution that results before committing. Any refusal
+    /// rolls back, leaving the previous certificate setting. Returns that
+    /// previous setting.
+    pub fn pin_certificate(
+        &self,
+        conn: &Connection,
+        name: &str,
+        fetched_for: &serde_json::Value,
+        pin: &str,
+        verify: &dyn Fn(&serde_json::Value) -> Result<()>,
+        sources: &dyn Sources,
+    ) -> Result<Option<String>> {
+        let name = kassiber_pytext::strip(name).to_lowercase();
+        let tx = kassiber_store::write_transaction(conn).map_err(sql_error)?;
+        let current = self.resolve(&tx, &name)?;
+        if transport(&current) != transport(fetched_for) {
+            return Err(AppError::new(
+                "backend_certificate_config_changed",
+                format!("Backend '{name}' changed while its certificate was being checked"),
+            )
+            .with_hint(
+                "Nothing was trusted. Check the certificate again for the backend as it is now.",
+            ));
+        }
+        let previous = current
+            .get("certificate")
+            .and_then(serde_json::Value::as_str)
+            .filter(|path| !path.trim().is_empty())
+            .map(str::to_owned);
+        update(
+            &tx,
+            &dict([
+                ("name", s(&name)),
+                (
+                    "config",
+                    dict([("certificate", s(pin)), ("insecure", Value::Null)]),
+                ),
+            ]),
+            sources,
+        )?;
+        verify(&self.resolve(&tx, &name)?)?;
+        tx.commit().map_err(sql_error)?;
+        Ok(previous)
+    }
+}
+
 /// `list_backend_kinds()`: a static catalog that needs no book.
 pub fn kinds() -> Value {
     Value::List(KINDS.iter().map(|k| dict([("kind", s(k))])).collect())
@@ -917,5 +1033,30 @@ fn execute(
             "not_implemented",
             "backend operation is not implemented",
         )),
+    }
+}
+
+#[cfg(test)]
+mod transport_tests {
+    use super::transport;
+    use serde_json::json;
+
+    #[test]
+    fn a_seeded_backend_compares_equal_to_its_dotenv_spelling() {
+        let dotenv = json!({"kind":"esplora","url":"https://node.local/api","insecure":"1","certificate":""});
+        let stored = json!({"kind":"esplora","url":"https://node.local/api","insecure":true});
+        assert_eq!(transport(&dotenv), transport(&stored));
+        for off in [json!("0"), json!(false), json!(null), json!("")] {
+            let a = json!({"kind":"esplora","url":"https://node.local/api","insecure":off});
+            assert_eq!(
+                transport(&a),
+                transport(&json!({"kind":"esplora","url":"https://node.local/api"}))
+            );
+        }
+        // A real change still differs.
+        let moved = json!({"kind":"esplora","url":"https://other.local/api","insecure":true});
+        assert_ne!(transport(&moved), transport(&stored));
+        let proxied = json!({"kind":"esplora","url":"https://node.local/api","insecure":true,"tor_proxy":"127.0.0.1:9050"});
+        assert_ne!(transport(&proxied), transport(&stored));
     }
 }

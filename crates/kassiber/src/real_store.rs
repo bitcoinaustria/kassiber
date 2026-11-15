@@ -2,6 +2,7 @@
 //! the storage crates; this module projects their results onto R1's transport
 //! contract without opening a network client.
 mod backends;
+mod certificates;
 mod connections;
 mod exchange;
 mod journals;
@@ -1625,6 +1626,9 @@ impl Book for RealBook {
                 &attachments,
                 &SetupSources,
             );
+        }
+        if certificates::COMMANDS.contains(&operation) {
+            return self.backend_certificate(operation, args);
         }
         if operation == "ui.backends.lightning.test" {
             // One explicit desktop request for one configured backend.

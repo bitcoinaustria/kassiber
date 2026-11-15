@@ -46,6 +46,8 @@ fn tables_match_python() {
     let rust_only = [
         ("wallets.sync-bitpanda", "wallets.sync-binance"),
         ("journals.verify", "journals.list"),
+        // Pinning a certificate is a trust decision, admin like revealing a token.
+        ("backends.trust-certificate", "backends.reveal-token"),
     ];
     for (leaf, sibling) in rust_only {
         assert_eq!(cli_capability(leaf), cli_capability(sibling), "{leaf}");
@@ -73,6 +75,10 @@ fn tables_match_python() {
         ),
         ("ui.connections.exchange.sync", "ui.connections.btcpay.test"),
         ("ui.journals.verify", "ui.journals.snapshot"),
+        // Backend certificate trust (docs/reference/backends.md#self-signed-certificates):
+        // fetching is an explicit connection test, trusting is admin.
+        ("ui.backends.certificate.fetch", "ui.backends.electrum.test"),
+        ("ui.backends.certificate.trust", "ui.backends.delete"),
         // Which ways two transactions may be linked: a read beside the pair list.
         ("ui.transfers.pair_options", "ui.transfers.list"),
     ];

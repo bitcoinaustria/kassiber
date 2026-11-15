@@ -19,6 +19,14 @@ use kassiber_pyjson::{dumps, Options, Value};
 /// Each Rust-only leaf and the Python leaf it is described like.
 const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[("sync-bitpanda", "sync-binance")];
 
+/// Rust-only leaves with no Python sibling to be described like, each with
+/// the leaf it follows and its reviewed description
+/// (docs/reference/backends.md#self-signed-certificates).
+const RUST_ONLY_ENTRIES: &[(&str, &str)] = &[(
+    "backends.reveal-token",
+    r#"{"path":["backends","trust-certificate"],"command":"backends trust-certificate","kind":"backends.trust-certificate","help":"Fetch the TLS certificate a backend's server presents (an explicit network request) and print its SHA-256 fingerprint. Nothing is trusted until you compare that fingerprint with the server and re-run with --fingerprint; the certificate is then pinned for this backend only.","effect":"mutating","capability":"admin","needs_database":true,"supports_cursor":false,"supports_dry_run":false,"scope_flags":[],"may_prompt":false,"arguments":[{"name":"name","flags":[],"positional":true,"required":true,"repeatable":false,"choices":null,"secret_input":false,"help":"Backend name"},{"name":"fingerprint","flags":["--fingerprint"],"positional":false,"required":false,"repeatable":false,"choices":null,"secret_input":false,"help":"The SHA-256 fingerprint you confirmed (colons optional); pins the certificate only if the server still presents it"}]}"#,
+)];
+
 fn python_catalog() -> Value {
     fn field<'a>(value: &'a mut Value, name: &str) -> &'a mut Value {
         let Value::Dict(items) = value else {
@@ -39,6 +47,13 @@ fn python_catalog() -> Value {
             .expect("sibling");
         let text = compact(&commands[at]).replace(sibling, leaf);
         commands.insert(at + 1, kassiber_pytext::loads(&text).unwrap());
+    }
+    for (after, entry) in RUST_ONLY_ENTRIES {
+        let at = commands
+            .iter()
+            .position(|c| compact(c).contains(&format!("\"kind\":\"{after}\"")))
+            .expect("preceding leaf");
+        commands.insert(at + 1, kassiber_pytext::loads(entry).unwrap());
     }
     // The Rust-only backend kinds are extra, sorted `--kind` choices.
     for command in commands.iter_mut() {

@@ -153,6 +153,39 @@ fn fields(env: &BTreeMap<String, String>) -> BTreeMap<String, BTreeSet<String>> 
     }
     fields
 }
+/// Fields that decide where and how a backend connects.
+pub const TRANSPORT_FIELDS: &[&str] = &[
+    "kind",
+    "url",
+    "tor_proxy",
+    "proxy",
+    "certificate",
+    "insecure",
+];
+
+/// The process environment variables (names only, never values) that
+/// override one of `name`'s transport fields, as `resolve` applies them.
+pub fn environment_overrides(name: &str) -> Vec<String> {
+    let name = name.trim().to_lowercase();
+    let mut found: Vec<String> = std::env::vars_os()
+        .filter_map(|(key, _)| key.into_string().ok())
+        .filter(|key| {
+            ["SATBOOKS_BACKEND_", "KASSIBER_BACKEND_"]
+                .iter()
+                .any(|prefix| {
+                    key.strip_prefix(prefix)
+                        .and_then(|rest| rest.split_once('_'))
+                        .is_some_and(|(backend, field)| {
+                            !field.is_empty()
+                                && backend.to_lowercase() == name
+                                && TRANSPORT_FIELDS.contains(&canonical(field).as_str())
+                        })
+                })
+        })
+        .collect();
+    found.sort();
+    found
+}
 fn set(conn: &Connection, key: &str, value: &str) -> Result<(), AppError> {
     conn.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[key,value]).map(|_|()).map_err(map_sqlite_error).map_err(error)
 }
@@ -260,6 +293,32 @@ impl Config {
         }
         result["name"] = json!(name);
         Ok(result)
+    }
+
+    /// Whether a backend defined outside the stored rows names `path` as its
+    /// certificate: a merged `backends.env` backend, or a process-environment
+    /// `*_BACKEND_<NAME>_CERTIFICATE` override, which `resolve` applies last.
+    /// A pin file such a backend uses must not be cleaned up.
+    pub fn certificate_used_outside_rows(&self, path: &str) -> bool {
+        let named = |value: &str| kassiber_pytext::strip(value) == path;
+        self.view.values().any(|backend| {
+            matches!(
+                kassiber_envelope::get(backend, "certificate"),
+                Some(kassiber_pyjson::Value::Str(text)) if text.as_str().is_some_and(named)
+            )
+        }) || std::env::vars_os().any(|(key, value)| {
+            let (Some(key), Some(value)) = (key.to_str(), value.to_str()) else {
+                return false;
+            };
+            ["SATBOOKS_BACKEND_", "KASSIBER_BACKEND_"]
+                .iter()
+                .any(|prefix| {
+                    key.strip_prefix(prefix)
+                        .and_then(|rest| rest.split_once('_'))
+                        .is_some_and(|(_, field)| canonical(field) == "certificate")
+                })
+                && named(value)
+        })
     }
 
     /// One merged backend as Python's `runtime_config["backends"][name]`,

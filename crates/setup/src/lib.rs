@@ -1,6 +1,7 @@
 //! Local book setup shared by the CLI and desktop daemon. No transport clients.
 pub mod accounts;
 pub mod agent_access;
+pub mod backend_certificates;
 mod backend_runtime;
 pub mod backends;
 pub mod book_reset;

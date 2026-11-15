@@ -2067,6 +2067,20 @@ or as cross-book disclosure. The GUI uses that object and the exact tool payload
 chips beside the assistant answer, making the result traceable to
 program-derived facts.
 
+### Backend certificate errors
+
+A sync or connection failure `tls_certificate_untrusted` means the user's own
+server presents a certificate no trusted authority signed (often self-signed);
+`tls_certificate_changed` means a backend's pinned certificate no longer
+matches the server. Trusting a certificate is the user's decision, not an
+assistant tool: the assistant points them to **Check certificate…** in the
+backend's settings or on the wallet page, or to
+`kassiber backends trust-certificate <name>`, which shows the SHA-256
+fingerprint to compare first ([self-signed certificates](backends.md#self-signed-certificates)).
+
+The `wallets-backends` skill reference does not say this yet: recorded
+sessions read it verbatim, so its text waits for a reviewed re-record.
+
 ### Visuals in chat
 
 The assistant can answer with an interactive visual through the read-only tool
