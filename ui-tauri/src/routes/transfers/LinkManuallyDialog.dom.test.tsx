@@ -243,6 +243,29 @@ describe("Link manually: where it opens", () => {
   });
 });
 
+describe("Link manually: as a dialog", () => {
+  it("stays open when the search or a candidate is pressed, and closes with Escape", async () => {
+    mount({ transactionId: "send" });
+    const root = await dialog();
+    expect(root.getAttribute("data-variant")).toBe("dialog");
+    const search = await within(root).findByRole("textbox", { name: "Search" });
+    // A press as a mouse makes it: the content is inside the dialog, not outside it.
+    fireEvent.pointerDown(search, { button: 0, pointerType: "mouse" });
+    fireEvent.focus(search);
+    fireEvent.focusIn(search);
+    const [candidate] = await rows(root);
+    fireEvent.pointerDown(candidate, { button: 0, pointerType: "mouse" });
+    fireEvent.pointerUp(candidate, { button: 0, pointerType: "mouse" });
+    fireEvent.click(candidate);
+    await within(root).findByTestId("preview-outcome");
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("link-manually")).toBe(root);
+    // Escape still closes it.
+    fireEvent.keyDown(document.activeElement ?? root, { key: "Escape" });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe("Link manually: docked beside the page", () => {
   it("is a panel with a name instead of a dialog, takes focus once and closes with its button or Escape", async () => {
     mount({ transactionId: "send" }, false, "panel");
