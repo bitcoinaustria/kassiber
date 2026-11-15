@@ -514,6 +514,49 @@ fn a_replaced_pin_is_removed_only_after_the_new_one_is_committed() {
 }
 
 #[test]
+fn a_replaced_pin_another_backend_names_through_the_environment_stays() {
+    let server = server();
+    let mut desk = desk(&server);
+    let (_, envelope) = cli(
+        &desk,
+        &[
+            "backends",
+            "trust-certificate",
+            "home",
+            "--fingerprint",
+            FINGERPRINT,
+        ],
+    );
+    let first = field(&envelope, &["data", "certificate"]).to_owned();
+    // Another backend uses the same pin file only through the environment.
+    for (key, value) in [
+        ("KASSIBER_BACKEND_OTHER_KIND", "esplora"),
+        ("KASSIBER_BACKEND_OTHER_URL", "https://localhost:1/api"),
+        ("KASSIBER_BACKEND_OTHER_CERTIFICATE", first.as_str()),
+    ] {
+        desk.env.insert(key.into(), value.into());
+    }
+    server.set_identity(fixtures::OTHER_SELF_SIGNED);
+    let (exit, envelope) = cli(
+        &desk,
+        &[
+            "backends",
+            "trust-certificate",
+            "home",
+            "--fingerprint",
+            OTHER,
+        ],
+    );
+    assert_eq!(exit, 0, "{envelope:?}");
+    assert_ne!(field(&envelope, &["data", "certificate"]), first);
+    assert!(
+        std::path::Path::new(&first).exists(),
+        "the environment's backend still needs it"
+    );
+    assert_eq!(pins(&desk).len(), 2);
+}
+
+#[test]
 fn backends_whose_names_once_shared_a_pin_file_keep_their_own() {
     let one = server();
     let two = FakeTls::start(fixtures::OTHER_SELF_SIGNED, |_| {

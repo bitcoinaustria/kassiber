@@ -295,6 +295,32 @@ impl Config {
         Ok(result)
     }
 
+    /// Whether a backend defined outside the stored rows names `path` as its
+    /// certificate: a merged `backends.env` backend, or a process-environment
+    /// `*_BACKEND_<NAME>_CERTIFICATE` override, which `resolve` applies last.
+    /// A pin file such a backend uses must not be cleaned up.
+    pub fn certificate_used_outside_rows(&self, path: &str) -> bool {
+        let named = |value: &str| kassiber_pytext::strip(value) == path;
+        self.view.values().any(|backend| {
+            matches!(
+                kassiber_envelope::get(backend, "certificate"),
+                Some(kassiber_pyjson::Value::Str(text)) if text.as_str().is_some_and(named)
+            )
+        }) || std::env::vars_os().any(|(key, value)| {
+            let (Some(key), Some(value)) = (key.to_str(), value.to_str()) else {
+                return false;
+            };
+            ["SATBOOKS_BACKEND_", "KASSIBER_BACKEND_"]
+                .iter()
+                .any(|prefix| {
+                    key.strip_prefix(prefix)
+                        .and_then(|rest| rest.split_once('_'))
+                        .is_some_and(|(_, field)| canonical(field) == "certificate")
+                })
+                && named(value)
+        })
+    }
+
     /// One merged backend as Python's `runtime_config["backends"][name]`,
     /// for local classification only; callers must not project it.
     pub fn configured(&self, name: &str) -> Option<&kassiber_pyjson::Value> {
