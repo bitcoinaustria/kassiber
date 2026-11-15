@@ -11,6 +11,8 @@ pub struct Backend {
     pub(crate) url: String,
     pub(crate) timeout: Duration,
     pub(crate) batch_size: usize,
+    /// The URL selects TLS (`ssl://`, `https://`).
+    pub(crate) secure: bool,
     pub(crate) request: Request,
     pub(crate) config: Value,
 }
@@ -88,6 +90,7 @@ impl Backend {
             url,
             timeout: Duration::from_secs(timeout),
             batch_size,
+            secure,
             request,
             config,
         })

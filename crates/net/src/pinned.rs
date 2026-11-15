@@ -1,7 +1,8 @@
-//! Narrow X.509 compatibility checks for byte-identical backend pins only.
-//! rustls/webpki parses the entire certificate first. This DER reader extracts
-//! validity, DNS SAN presence, EKU and subject CN; it never validates a chain.
-use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+//! Narrow X.509 checks for byte-identical backend pins only. rustls/webpki
+//! parses the entire certificate first. This DER reader checks validity and
+//! EKU, and extracts display fields (issuer, subject CN, SANs) for a trust
+//! decision; it never validates a chain or a host name.
+use rustls::pki_types::{CertificateDer, UnixTime};
 use rustls::{CertificateError, Error};
 
 fn invalid() -> Error {
@@ -112,32 +113,150 @@ fn timestamp(tag: u8, value: &[u8]) -> Result<i64, Error> {
     Ok(((days * 24 + hour) * 60 + minute) * 60 + second)
 }
 
-fn dns_match(pattern: &str, name: &str) -> bool {
-    if !pattern.is_ascii() || pattern.contains('\0') {
-        return false;
-    }
-    if !pattern.contains('*') {
-        return pattern.eq_ignore_ascii_case(name);
-    }
-    // Python/OpenSSL disables partial wildcards and permits one leftmost label.
-    let Some(suffix) = pattern.strip_prefix("*.") else {
-        return false;
-    };
-    let Some((label, rest)) = name.split_once('.') else {
-        return false;
-    };
-    !label.is_empty()
-        && !suffix.contains('*')
-        && suffix.contains('.')
-        && suffix.eq_ignore_ascii_case(rest)
+/// A CN attribute value: UTF8, Printable, T61 or IA5 strings, or ASCII-only BMP.
+fn directory_string(tag: u8, value: &[u8]) -> Result<String, Error> {
+    Ok(match tag {
+        0x0c | 0x13 | 0x14 | 0x16 => std::str::from_utf8(value)
+            .map(str::to_owned)
+            .map_err(|_| invalid())?,
+        0x1e if value.len().is_multiple_of(2) => {
+            if value
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .any(|pair| pair[0] != 0 || !pair[1].is_ascii())
+            {
+                return Err(invalid());
+            }
+            value
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| char::from(pair[1]))
+                .collect()
+        }
+        _ => return Err(invalid()),
+    })
 }
 
-pub(super) fn verify(
-    cert: &CertificateDer<'_>,
-    name: &ServerName<'_>,
-    now: UnixTime,
-) -> Result<(), Error> {
-    let parsed = rustls::server::ParsedCertificate::try_from(cert)?;
+/// The issuer, validity, subject and extensions of a certificate's TBS.
+struct Fields<'a> {
+    issuer: &'a [u8],
+    not_before: i64,
+    not_after: i64,
+    subject: &'a [u8],
+    extensions: &'a [u8],
+}
+
+fn fields(cert: &[u8]) -> Result<Fields<'_>, Error> {
+    let mut certificate = sequence(cert)?;
+    let mut tbs = tagged(&mut certificate, 0x30)?;
+    if tbs.first() == Some(&0xa0) {
+        tagged(&mut tbs, 0xa0)?;
+    }
+    tagged(&mut tbs, 0x02)?; // serial
+    tagged(&mut tbs, 0x30)?; // signature algorithm
+    let issuer = tagged(&mut tbs, 0x30)?;
+    let mut validity = tagged(&mut tbs, 0x30)?;
+    let (tag, value) = take(&mut validity)?;
+    let not_before = timestamp(tag, value)?;
+    let (tag, value) = take(&mut validity)?;
+    let not_after = timestamp(tag, value)?;
+    if !validity.is_empty() {
+        return Err(invalid());
+    }
+    let subject = tagged(&mut tbs, 0x30)?;
+    tagged(&mut tbs, 0x30)?; // SPKI
+    let mut extensions: &[u8] = &[];
+    while !tbs.is_empty() {
+        let (tag, value) = take(&mut tbs)?;
+        if tag == 0xa3 {
+            extensions = sequence(value)?;
+        }
+    }
+    Ok(Fields {
+        issuer,
+        not_before,
+        not_after,
+        subject,
+        extensions,
+    })
+}
+
+/// The first CN in a distinguished name, if it decodes.
+fn common_name(mut name: &[u8]) -> Result<Option<String>, Error> {
+    while !name.is_empty() {
+        let mut rdn = tagged(&mut name, 0x31)?;
+        while !rdn.is_empty() {
+            let mut attribute = tagged(&mut rdn, 0x30)?;
+            let oid = tagged(&mut attribute, 0x06)?;
+            let (tag, value) = take(&mut attribute)?;
+            if oid == [0x55, 4, 3] {
+                return directory_string(tag, value).map(Some);
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Issuer and subject are the same name: a self-signed certificate, or one a
+/// CA issued to itself. Unreadable certificates are not self-issued.
+pub(super) fn self_issued(cert: &CertificateDer<'_>) -> bool {
+    fields(cert.as_ref()).is_ok_and(|f| f.issuer == f.subject)
+}
+
+/// Display fields for a user's trust decision; validates nothing.
+pub(super) fn describe(cert: &CertificateDer<'_>) -> Result<crate::tls::CertificateSummary, Error> {
+    let fields = fields(cert.as_ref())?;
+    let mut names = Vec::new();
+    let mut extensions = fields.extensions;
+    while !extensions.is_empty() {
+        let mut extension = tagged(&mut extensions, 0x30)?;
+        let oid = tagged(&mut extension, 0x06)?;
+        if extension.first() == Some(&0x01) {
+            tagged(&mut extension, 0x01)?;
+        }
+        let value = tagged(&mut extension, 0x04)?;
+        if oid != [0x55, 0x1d, 0x11] {
+            continue;
+        }
+        let mut entries = sequence(value)?;
+        while !entries.is_empty() {
+            let (tag, value) = take(&mut entries)?;
+            match (tag, value.len()) {
+                (0x82, _) if value.is_ascii() => {
+                    names.push(String::from_utf8_lossy(value).into_owned())
+                }
+                (0x87, 4) => names.push(
+                    std::net::Ipv4Addr::from(<[u8; 4]>::try_from(value).expect("len 4"))
+                        .to_string(),
+                ),
+                (0x87, 16) => names.push(
+                    std::net::Ipv6Addr::from(<[u8; 16]>::try_from(value).expect("len 16"))
+                        .to_string(),
+                ),
+                _ => {}
+            }
+        }
+    }
+    Ok(crate::tls::CertificateSummary {
+        subject: common_name(fields.subject).ok().flatten(),
+        issuer: common_name(fields.issuer).ok().flatten(),
+        not_before: fields.not_before,
+        not_after: fields.not_after,
+        self_issued: fields.issuer == fields.subject,
+        names,
+    })
+}
+
+/// Accept a byte-identical pin that is a well-formed TLS server certificate
+/// within its validity window. The host name is deliberately not checked: the
+/// pin is this exact certificate, so only the holder of its key can present
+/// it, whatever host it names. A self-signed `localhost` certificate stays
+/// usable when the server is reached by its LAN address or `.local` name.
+pub(super) fn verify(cert: &CertificateDer<'_>, now: UnixTime) -> Result<(), Error> {
+    // webpki must parse the whole certificate before this reader looks at it.
+    rustls::server::ParsedCertificate::try_from(cert)?;
     let mut certificate = sequence(cert.as_ref())?;
     let mut tbs = tagged(&mut certificate, 0x30)?;
     if tbs.first() == Some(&0xa0) {
@@ -155,9 +274,8 @@ pub(super) fn verify(
     if !validity.is_empty() || before > after || now < before || now > after {
         return Err(invalid());
     }
-    let mut subject = tagged(&mut tbs, 0x30)?;
+    tagged(&mut tbs, 0x30)?; // subject
     tagged(&mut tbs, 0x30)?; // SPKI
-    let mut dns_san = false;
     while !tbs.is_empty() {
         let (tag, value) = take(&mut tbs)?;
         if tag != 0xa3 {
@@ -177,7 +295,7 @@ pub(super) fn verify(
             if oid == [0x55, 0x1d, 0x11] {
                 let mut names = sequence(value)?;
                 while !names.is_empty() {
-                    dns_san |= take(&mut names)?.0 == 0x82;
+                    take(&mut names)?;
                 }
             } else if oid == [0x55, 0x1d, 0x25] {
                 let mut usages = sequence(value)?;
@@ -193,72 +311,14 @@ pub(super) fn verify(
             }
         }
     }
-    if rustls::client::verify_server_name(&parsed, name).is_ok() {
-        return Ok(());
-    }
-    // IP reference identities require IP SANs; never compare an IP with a CN.
-    let ServerName::DnsName(name) = name else {
-        return Err(invalid());
-    };
-    if dns_san {
-        return Err(invalid());
-    }
-    while !subject.is_empty() {
-        let mut rdn = tagged(&mut subject, 0x31)?;
-        while !rdn.is_empty() {
-            let mut attribute = tagged(&mut rdn, 0x30)?;
-            let oid = tagged(&mut attribute, 0x06)?;
-            let (tag, value) = take(&mut attribute)?;
-            if !attribute.is_empty() {
-                return Err(invalid());
-            }
-            if oid != [0x55, 4, 3] {
-                continue;
-            }
-            let value = match tag {
-                0x0c | 0x13 | 0x14 | 0x16 => std::str::from_utf8(value)
-                    .map(str::to_owned)
-                    .map_err(|_| invalid())?,
-                0x1e if value.len() % 2 == 0 => {
-                    if value
-                        .as_chunks::<2>()
-                        .0
-                        .iter()
-                        .any(|pair| pair[0] != 0 || !pair[1].is_ascii())
-                    {
-                        return Err(invalid());
-                    }
-                    value
-                        .as_chunks::<2>()
-                        .0
-                        .iter()
-                        .map(|pair| char::from(pair[1]))
-                        .collect()
-                }
-                _ => return Err(invalid()),
-            };
-            if dns_match(&value, name.as_ref()) {
-                return Ok(());
-            }
-        }
-    }
-    Err(invalid())
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn cn_wildcards_and_der_times_fail_closed() {
-        assert!(dns_match("*.example.com", "node.example.com"));
-        for (pattern, name) in [
-            ("*.example.com", "a.b.example.com"),
-            ("n*.example.com", "node.example.com"),
-            ("*.*.com", "a.b.com"),
-            ("localhost\0evil", "localhost"),
-        ] {
-            assert!(!dns_match(pattern, name));
-        }
+    fn der_times_and_lengths_fail_closed() {
         assert_eq!(timestamp(0x17, b"700101000000Z").unwrap(), 0);
         assert_eq!(timestamp(0x18, b"20000229000000Z").unwrap(), 951782400);
         for value in [

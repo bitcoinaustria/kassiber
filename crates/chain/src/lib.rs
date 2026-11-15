@@ -2,6 +2,7 @@
 //! current consent and a caller-supplied monotonic overall deadline. Wallet
 //! scanning, persistence and ownership decisions belong to the next slice.
 pub mod btcpay;
+pub mod certificates;
 mod config;
 mod core;
 mod detection;

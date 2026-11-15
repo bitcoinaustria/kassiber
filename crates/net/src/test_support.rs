@@ -892,3 +892,150 @@ mod fake_service_tests {
         assert_eq!(service.paths(), ["GET /v1/models"]);
     }
 }
+
+/// Public synthetic TLS fixtures (see `tests/fixtures/README.md`): PEM
+/// certificate and key pairs. Both self-signed ones name `localhost`.
+pub mod fixtures {
+    pub const SELF_SIGNED: (&[u8], &[u8]) = (
+        include_bytes!("../tests/fixtures/lnd-ca.pem"),
+        include_bytes!("../tests/fixtures/lnd-ca-key.pem"),
+    );
+    pub const OTHER_SELF_SIGNED: (&[u8], &[u8]) = (
+        include_bytes!("../tests/fixtures/openssl-ca.pem"),
+        include_bytes!("../tests/fixtures/openssl-ca-key.pem"),
+    );
+    /// Issued by `TEST_CA` for `localhost` and `hidden.onion`.
+    pub const CA_SIGNED: (&[u8], &[u8]) = (
+        include_bytes!("../tests/fixtures/server.pem"),
+        include_bytes!("../tests/fixtures/server-key.pem"),
+    );
+    pub const TEST_CA: &[u8] = include_bytes!("../tests/fixtures/ca.pem");
+}
+
+/// Owned loopback TLS server. Every connection completes a handshake with
+/// the current certificate (replace it to model a server whose certificate
+/// changed), records the first application bytes, and answers with `reply`.
+pub struct FakeTls {
+    port: u16,
+    identity: Arc<Mutex<(Vec<u8>, Vec<u8>)>>,
+    connections: Arc<std::sync::atomic::AtomicUsize>,
+    hits: Arc<Mutex<Vec<Vec<u8>>>>,
+    accept_hook: AcceptHook,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+type AcceptHook = Arc<Mutex<Option<Box<dyn Fn(usize) + Send>>>>;
+
+impl FakeTls {
+    pub fn start(
+        identity: (&[u8], &[u8]),
+        reply: impl Fn(&[u8]) -> Vec<u8> + Send + 'static,
+    ) -> std::io::Result<Self> {
+        use rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let port = listener.local_addr()?.port();
+        let identity = Arc::new(Mutex::new((identity.0.to_vec(), identity.1.to_vec())));
+        let current = identity.clone();
+        let connections = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let accepted = connections.clone();
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let requests = hits.clone();
+        let accept_hook: AcceptHook = Arc::new(Mutex::new(None));
+        let hook = accept_hook.clone();
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopped = stop.clone();
+        let thread = thread::spawn(move || loop {
+            if stopped.load(Ordering::SeqCst) {
+                return;
+            }
+            let socket = match listener.accept() {
+                Ok((socket, _)) => socket,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(2));
+                    continue;
+                }
+                Err(_) => return,
+            };
+            let number = accepted.fetch_add(1, Ordering::SeqCst) + 1;
+            if let Some(hook) = hook.lock().unwrap().as_ref() {
+                hook(number);
+            }
+            let _ = socket.set_nonblocking(false);
+            let _ = socket.set_read_timeout(Some(Duration::from_secs(3)));
+            let _ = socket.set_write_timeout(Some(Duration::from_secs(3)));
+            let (cert, key) = current.lock().unwrap().clone();
+            let config = rustls::ServerConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![CertificateDer::from_pem_slice(&cert).unwrap()],
+                PrivateKeyDer::from_pem_slice(&key).unwrap(),
+            )
+            .unwrap();
+            let mut stream = rustls::StreamOwned::new(
+                rustls::ServerConnection::new(Arc::new(config)).unwrap(),
+                socket,
+            );
+            let mut buffer = [0; 8192];
+            let Ok(count) = stream.read(&mut buffer) else {
+                continue; // the client refused or aborted the handshake
+            };
+            if count == 0 {
+                continue;
+            }
+            requests.lock().unwrap().push(buffer[..count].to_vec());
+            let _ = stream.write_all(&reply(&buffer[..count]));
+            let _ = stream.flush();
+            stream.conn.send_close_notify();
+            let _ = stream.flush();
+        });
+        Ok(Self {
+            port,
+            identity,
+            connections,
+            hits,
+            accept_hook,
+            stop,
+            thread: Some(thread),
+        })
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Run `hook` with each connection's number (from 1) once it is accepted
+    /// and before its handshake: a test's "meanwhile" step.
+    pub fn on_accept(&self, hook: impl Fn(usize) + Send + 'static) {
+        *self.accept_hook.lock().unwrap() = Some(Box::new(hook));
+    }
+
+    /// Serve another certificate from the next connection on.
+    pub fn set_identity(&self, identity: (&[u8], &[u8])) {
+        *self.identity.lock().unwrap() = (identity.0.to_vec(), identity.1.to_vec());
+    }
+
+    /// Accepted TCP connections, whether or not their handshake completed.
+    pub fn connections(&self) -> usize {
+        self.connections.load(Ordering::SeqCst)
+    }
+
+    /// Application data each completed connection sent first.
+    pub fn requests(&self) -> Vec<Vec<u8>> {
+        self.hits.lock().unwrap().clone()
+    }
+}
+
+impl Drop for FakeTls {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
