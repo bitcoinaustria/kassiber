@@ -871,7 +871,8 @@ describe("Link manually: when the core is slow, refuses or the book changes", ()
   });
 
   it("checks again instead of linking when the book changed since the check", async () => {
-    daemon.applyFails = [{ code: "review_plan_stale", message: "Review plan is stale" }];
+    // A write since the check moved the book's input version.
+    daemon.applyFails = [{ code: "custody_review_plan_stale", message: "Review input changed" }];
     mount({ sendId: "send", receiptId: "near" });
     const root = await dialog();
     await within(root).findByTestId("preview-outcome");

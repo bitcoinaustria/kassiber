@@ -1344,7 +1344,8 @@
       "close": "Close",
       "fixedTitle": "Why it can't be unlinked",
       "effectPairTaxable": "Tax figures stay the same: this link already counted as a sale and a purchase. Kassiber only stops treating the two as one {{kind}}.",
-      "restTitle": "Part linked"
+      "restTitle": "Part linked",
+      "stale": "Your book changed since this check, so nothing was unlinked. Kassiber is checking again."
     },
     "unlinked": {
       "title": "Unlinked by you",

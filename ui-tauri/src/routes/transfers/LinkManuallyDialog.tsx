@@ -70,7 +70,7 @@ import {
 } from "./linkModel";
 import { PreviewOutcomeView } from "./MoveEffects";
 import { MoveLeg } from "./MoveLeg";
-import { appliedId, daemonErrorCode, moveOutcome, useReviewPreview, type ReviewOperation } from "./reviewPreview";
+import { appliedId, daemonErrorCode, moveOutcome, useReviewPreview, type ReviewOperation, isStalePlan } from "./reviewPreview";
 import { formatMsatAsBtc, formatMsatAsSats } from "./satsFormat";
 import { useMoveLeg } from "./useMoveLeg";
 import { useOpenParts } from "./useOpenParts";
@@ -709,7 +709,7 @@ function CheckAndLink({
       const result = await preview.apply();
       onLinked({ pairId: appliedId(result, "pair_id"), sendId: send.id, receiptId: receipt.id });
     } catch (cause) {
-      if (daemonErrorCode(cause) === "review_plan_stale") {
+      if (isStalePlan(cause)) {
         // The book changed since the check: run it again rather than link on old figures.
         setError(t("transfersPage.link.stale"));
         preview.retry();

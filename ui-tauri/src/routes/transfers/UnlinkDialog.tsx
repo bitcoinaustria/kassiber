@@ -37,7 +37,7 @@ import { fixedLinkKind, type LinkedMove, type TransferPairSummary } from "./link
 import { DialogSection, FeeLine, PreviewOutcomeView } from "./MoveEffects";
 import { dateTime, hasOpenPart, kindKey, withOpenPart } from "./linkModel";
 import { MoveLeg } from "./MoveLeg";
-import { appliedId, moveOutcome, useReviewPreview, type ReviewOperation } from "./reviewPreview";
+import { appliedId, moveOutcome, useReviewPreview, type ReviewOperation, isStalePlan } from "./reviewPreview";
 import { formatMsatAsBtc } from "./satsFormat";
 import { useMoveLeg } from "./useMoveLeg";
 import { useOpenParts } from "./useOpenParts";
@@ -187,6 +187,12 @@ export function UnlinkDialog({
         onUnlinked({ kind: "automatic", dismissalId: appliedId(result, "dismissal_id"), move }, differently);
       }
     } catch (cause) {
+      if (mode === "automatic" && isStalePlan(cause)) {
+        // The book changed since the dry run: run it again and ask again.
+        setError(t("review:transfersPage.unlink.stale"));
+        preview.retry();
+        return;
+      }
       setError(cause instanceof Error && cause.message ? cause.message : t("review:transfersPage.undo.failed"));
     }
   };

@@ -65,6 +65,16 @@ export function forgetFinishedPreviews() {
   running.clear();
 }
 
+/**
+ * The core refuses an outdated plan with one of two codes: the book's input
+ * version moved (`custody_review_plan_stale`), or its effects no longer match
+ * though the version did not (`review_plan_stale`, e.g. a dismissal ran out).
+ */
+export function isStalePlan(cause: unknown): boolean {
+  const code = daemonErrorCode(cause);
+  return code === "review_plan_stale" || code === "custody_review_plan_stale";
+}
+
 /** Drops a plan the core refused as stale, so checking again plans afresh. */
 function forget(artifact: ReviewArtifact) {
   for (const [cacheKey, cached] of finished) if (cached === artifact) finished.delete(cacheKey);
@@ -182,7 +192,7 @@ export function useReviewPreview(operations: ReviewOperation[] | null, failedTex
     } catch (cause) {
       // The book changed in a way its version does not show (a dismissal ran
       // out): the same version and change would find this plan again.
-      if (daemonErrorCode(cause) === "review_plan_stale") forget(artifact);
+      if (isStalePlan(cause)) forget(artifact);
       throw cause;
     }
   }, [applyMutation, state]);

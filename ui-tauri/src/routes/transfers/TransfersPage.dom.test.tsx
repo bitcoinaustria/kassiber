@@ -43,6 +43,7 @@ const daemon = vi.hoisted(() => ({
   txs: {} as Record<string, unknown>,
   failDismiss: false,
   failApply: false,
+  staleApply: 0,
   /** Reads that answer with an error. */
   failing: new Set<string>(),
   /** The dismissal list says it holds only the newest of them. */
@@ -88,6 +89,10 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
           case "ui.review.plan":
             return ok(kind, artifact(args.operations as Array<Record<string, unknown>>));
           case "ui.review.apply": {
+            if (daemon.staleApply > 0) {
+              daemon.staleApply -= 1;
+              return { kind: "error", schema_version: 1, error: { code: "review_plan_stale", message: "Review plan is stale", retryable: false } };
+            }
             if (daemon.failApply) {
               return { kind: "error", schema_version: 1, error: { code: "not_found", message: "Transaction not found", retryable: false } };
             }
@@ -329,6 +334,7 @@ beforeEach(async () => {
   daemon.txs = {};
   daemon.failDismiss = false;
   daemon.failApply = false;
+  daemon.staleApply = 0;
   daemon.failing = new Set();
   daemon.failHeldOffset = null;
   daemon.moreDismissals = false;
@@ -463,6 +469,24 @@ describe("Transfers overview", () => {
     await waitFor(() => expect(screen.queryByTestId("unlink-dialog")).toBeNull());
     expect(calls("ui.review.apply")).toHaveLength(0);
     expect(calls("ui.transfers.dismiss")).toHaveLength(0);
+  });
+
+  it("checks the undo again instead of unlinking when the core calls its dry run stale", async () => {
+    daemon.staleApply = 1;
+    mount();
+    const menu = await openRowMenu(/Actions for Strike to Cold storage/);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Unlink/ }));
+    const dialog = await screen.findByTestId("unlink-dialog");
+    await within(dialog).findByTestId("preview-outcome");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Unlink" }));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe(
+      "Your book changed since this check, so nothing was unlinked. Kassiber is checking again.",
+    );
+    await waitFor(() => expect(calls("ui.review.plan")).toHaveLength(2));
+    await within(dialog).findByTestId("preview-outcome");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Unlink" }));
+    await waitFor(() => expect(calls("ui.review.apply")).toHaveLength(2));
+    expect(await screen.findByTestId("transfers-strip")).toBeTruthy();
   });
 
   it("applies the previewed undo and says so in a strip at the row, whose Undo links back by the dismissal it returned", async () => {

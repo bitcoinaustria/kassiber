@@ -1344,7 +1344,8 @@
       "close": "Schließen",
       "fixedTitle": "Warum sie sich nicht trennen lässt",
       "effectPairTaxable": "Die Steuerzahlen bleiben gleich: Diese Verknüpfung zählte schon als Verkauf und Kauf. Kassiber behandelt die beiden nur nicht mehr als ein {{kind}}.",
-      "restTitle": "Teilweise verknüpft"
+      "restTitle": "Teilweise verknüpft",
+      "stale": "Dein Buch hat sich seit dieser Prüfung geändert, darum wurde die Verknüpfung nicht entfernt. Kassiber prüft erneut."
     },
     "unlinked": {
       "title": "Von dir getrennt",
