@@ -30,7 +30,7 @@ exit 0
       "last_processed_input_version": 0,
       "current_active_tx_count": 11,
       "processed_journals_current": false
-… [4339 bytes, 146 lines fnv128 094a6ba8fea16caa42ce7eba7689f189]
+… [4343 bytes, 146 lines fnv128 32177630aa41d58c99f91c63d12ee7f5]
 # tax_country=""
 $ --machine journals transfers list
 exit 0
@@ -47,4 +47,4 @@ exit 0
       "last_processed_input_version": 0,
       "current_active_tx_count": 11,
       "processed_journals_current": false
-… [4339 bytes, 146 lines fnv128 094a6ba8fea16caa42ce7eba7689f189]
+… [4343 bytes, 146 lines fnv128 32177630aa41d58c99f91c63d12ee7f5]

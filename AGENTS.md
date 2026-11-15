@@ -18,8 +18,10 @@ a shared contract need verification across its callers, including AI projections
 - Keep observed transactions, ownership evidence, reviewed custody, tax inputs,
   and source-of-funds provenance distinct. A suggestion, graph connection, or
   attached document does not grant ownership, carry basis, or establish tax facts.
-- BTC quantities use integer msat. Preserve exact amounts and fail closed on
-  ambiguous inputs; unresolved custody must not become a guessed taxable event.
+- BTC quantities use integer msat; other crypto assets use the same integer
+  unit (10^-11) and refuse finer amounts. Preserve exact amounts and fail
+  closed on ambiguous inputs; unresolved custody must not become a guessed
+  taxable event.
 - Preserve the Bitcoin subledger and personal workflows. Wallet accounts and
   tax journals are not a double-entry ledger; the opt-in general ledger was
   removed under [plan 19](docs/plan/19-extensions.md#removed).

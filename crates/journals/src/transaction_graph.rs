@@ -2554,7 +2554,13 @@ fn swap_route(conn: &Connection, profile_id: &str, row: &Value) -> Result<Value>
     .next() else {
         return Ok(Value::Null);
     };
-    let fee = int_or_none(g(&pair, "swap_fee_msat"));
+    // A cross-asset pair's raw-unit difference is no fee (plan 24); the
+    // route then names no swap fee at all.
+    let comparable = kassiber_store::assets::units_comparable(
+        &text(g(&pair, "out_asset")),
+        &text(g(&pair, "in_asset")),
+    );
+    let fee = int_or_none(g(&pair, "swap_fee_msat")).filter(|_| comparable);
     let out_amount = int_or_none(g(&pair, "out_amount_msat"));
     let out_full = int_or_none(g(&pair, "out_full_amount_msat"));
     Ok(without_none(dict([
@@ -2575,7 +2581,14 @@ fn swap_route(conn: &Connection, profile_id: &str, row: &Value) -> Result<Value>
         ),
         ("swapFeeMsat", opt_int(fee)),
         ("swapFeeBtc", fee.map_or(Value::Null, msat_to_btc)),
-        ("swapFeeKind", val(&pair, "swap_fee_kind")),
+        (
+            "swapFeeKind",
+            if comparable {
+                val(&pair, "swap_fee_kind")
+            } else {
+                Value::Null
+            },
+        ),
         ("outAmountMsat", opt_int(out_amount)),
         ("outAmountBtc", out_amount.map_or(Value::Null, msat_to_btc)),
         ("outFullAmountMsat", opt_int(out_full)),

@@ -38,8 +38,10 @@ Out of scope unless a future design says otherwise:
   working papers in core
 - remote multi-user service
 - mobile
-- broad altcoin product scope in core; third-party asset extensions are
-  proposed in [19-extensions.md](19-extensions.md)
+- broad altcoin product scope in core beyond
+  [24-crypto-assets.md](24-crypto-assets.md) (other crypto assets from
+  exchange syncs and provider exports, opt-in per wallet); third-party asset
+  extensions are proposed in [19-extensions.md](19-extensions.md)
 
 ## Current Architecture
 
@@ -161,6 +163,9 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
   contracts, transition, recorded-corpus verification, and stages
 - `22-python-removal.md`: inventory and order of operations for deleting
   Python after the Rust cutover, and how frozen goldens are regenerated
+- `24-crypto-assets.md`: other crypto assets from exchange syncs and
+  provider exports, opt-in per wallet (`asset_scope`), exact units, swap
+  legs, and Austrian basis carry
 
 ## Highest-Risk Drift Points
 
