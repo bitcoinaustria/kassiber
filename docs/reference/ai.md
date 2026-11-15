@@ -1774,7 +1774,7 @@ A full-access provider can also propose a bounded dismissal (1 to 3650 days)
 inside a review batch, where the consent preview shows it and the receipt
 records it.
 
-The pair list (`ui_transfers_list`) carries `unlinked_msat` on each leg (how
+The desktop's pair list (`ui.transfers.list` with `priced`) carries `unlinked_msat` on each leg (how
 much of that transaction's principal no active pair allocates) and
 `shares_legs` on each pair (whether its transactions may take a further pair:
 only same-asset manual, coinjoin or whirlpool pairs at carrying value). They

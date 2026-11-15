@@ -257,15 +257,17 @@ the same class of data as `ui.transfers.list`. `ui.transfers.suggest` and
 `excluded_already_journaled`), so an empty candidate list is explained.
 
 `ui.transfers.list` is the desktop's pair list: the CLI's `transfers list`
-rows with each leg's `fiat_value` and, for linking a transfer part by part,
+rows. With `priced: true` (the Transfers screen) it adds each leg's
+`fiat_value` and, for linking a transfer part by part,
 each leg's `unlinked_msat` (its transaction's principal less what the active
 pairs allocate from or to it) and each pair's `shares_legs` (true only for a
 same-asset `manual`, `coinjoin` or `whirlpool` pair at carrying value, the
 pairs whose transactions may take further pairs). Both are read-only
 projections of the stored allocations and say nothing about tax or
 ownership: an uncovered amount is not a disposal, a fee or income, and how
-the journals treat it is read from the quarantine. The `swap-matching` skill
-reference says the same for the assistant. A further pair is
+the journals treat it is read from the quarantine. Without `priced` the rows
+keep the shape the assistant and the recorded sessions read; `docs/reference/ai.md`
+describes the fields until the skill references can change. A further pair is
 still planned and validated in full. `ui.transfers.pair_options` (`tx_out`, `tx_in`; Rust only,
 desktop allowlisted, capability `read`) says which ways the book lets two
 transactions be paired before anything is planned: `policies` lists

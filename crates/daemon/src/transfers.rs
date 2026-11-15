@@ -71,8 +71,25 @@ pub fn execute_as(
                 ))
             }
         };
-        // The desktop list adds each leg's price for the currency toggle.
-        let pairs = exact_integers(book.transfers("transfers.list-priced", args)?);
+        // The Transfers screen asks for `priced`: each leg's price for the
+        // currency toggle and what it has left to link. Without it the list
+        // keeps the shape the assistant and recorded sessions read.
+        let priced = match get(args, "priced") {
+            None | Some(Value::Null) => false,
+            Some(Value::Bool(priced)) => *priced,
+            Some(_) => {
+                return Err(AppError::new(
+                    "validation",
+                    format!("{kind} priced must be a boolean"),
+                ))
+            }
+        };
+        let operation = if priced {
+            "transfers.list-priced"
+        } else {
+            "transfers.list"
+        };
+        let pairs = exact_integers(book.transfers(operation, args)?);
         if !include_unlinked {
             return Ok(dict([("pairs", pairs)]));
         }
@@ -1224,8 +1241,25 @@ mod gap_tests {
         let kind = "ui.transfers.list";
         let plain = execute(&mut Capture, kind, None).unwrap();
         let pairs = get(&plain, "pairs").unwrap();
-        assert_eq!(get(pairs, "operation"), Some(&s("transfers.list-priced")));
+        // Without `priced` the list keeps the shape recorded sessions read.
+        assert_eq!(get(pairs, "operation"), Some(&s("transfers.list")));
         assert!(get(&plain, "unlinked").is_none());
+        let priced = execute(
+            &mut Capture,
+            kind,
+            Some(&dict([("priced", Value::Bool(true))])),
+        )
+        .unwrap();
+        assert_eq!(
+            get(get(&priced, "pairs").unwrap(), "operation"),
+            Some(&s("transfers.list-priced"))
+        );
+        assert_eq!(
+            execute(&mut Capture, kind, Some(&dict([("priced", s("yes"))])))
+                .unwrap_err()
+                .code,
+            "validation"
+        );
         let off = execute(
             &mut Capture,
             kind,
@@ -1236,7 +1270,10 @@ mod gap_tests {
         let both = execute(
             &mut Capture,
             kind,
-            Some(&dict([("include_unlinked", Value::Bool(true))])),
+            Some(&dict([
+                ("include_unlinked", Value::Bool(true)),
+                ("priced", Value::Bool(true)),
+            ])),
         )
         .unwrap();
         assert_eq!(
