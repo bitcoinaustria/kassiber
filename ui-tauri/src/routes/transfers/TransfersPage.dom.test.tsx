@@ -635,6 +635,27 @@ describe("Transfers overview", () => {
     expect(within(note).queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
+  it.each(["ui.custody.lineage.snapshot", "ui.transfers.list"])(
+    "keeps what loaded of the linked transfers and says the list is incomplete when %s fails",
+    async (kind) => {
+      daemon.pairs = [{ ...PEG_OUT_PAIR, deleted_at: null }];
+      daemon.failing = new Set([kind]);
+      mount();
+      const verdict = await screen.findByTestId("transfers-verdict");
+      await waitFor(() => expect(verdict.getAttribute("data-state")).toBe("unavailable"));
+      await openTab(/^Linked/);
+      const notice = await screen.findByTestId("transfers-linked-partial");
+      const list = screen.getByTestId("transfers-linked-list");
+      // The read that worked is still listed.
+      expect(within(list).getByText(kind === "ui.transfers.list" ? "Strike" : "Liquid Treasury")).toBeTruthy();
+      daemon.failing = new Set();
+      fireEvent.click(within(notice).getByRole("button", { name: "Try again" }));
+      await waitFor(() => expect(screen.queryByTestId("transfers-linked-partial")).toBeNull());
+      expect(within(list).getByText("Strike")).toBeTruthy();
+      expect(within(list).getByText("Liquid Treasury")).toBeTruthy();
+    },
+  );
+
   it("says it could not check everything when a later page of holds fails", async () => {
     daemon.items = [];
     daemon.held = Array.from({ length: 150 }, (_, index) => `other-held-${index}`);

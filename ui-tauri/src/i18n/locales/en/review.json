@@ -1155,6 +1155,7 @@
       "empty": "No linked transfers yet.",
       "emptyFilter": "Nothing matches these filters.",
       "unavailable": "Linked transfers could not be loaded.",
+      "partial": "Some linked transfers could not be loaded, so this list may be incomplete.",
       "loading": "Loading linked transfers…",
       "loadMore": "Show older transfers",
       "loadingMore": "Loading older transfers…",

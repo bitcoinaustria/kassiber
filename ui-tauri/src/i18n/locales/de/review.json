@@ -1155,6 +1155,7 @@
       "empty": "Noch keine verknüpften Übertragungen.",
       "emptyFilter": "Nichts passt zu diesen Filtern.",
       "unavailable": "Verknüpfte Übertragungen konnten nicht geladen werden.",
+      "partial": "Einige verknüpfte Übertragungen konnten nicht geladen werden. Die Liste ist deshalb womöglich unvollständig.",
       "loading": "Verknüpfte Übertragungen werden geladen…",
       "loadMore": "Ältere Übertragungen zeigen",
       "loadingMore": "Ältere Übertragungen werden geladen…",

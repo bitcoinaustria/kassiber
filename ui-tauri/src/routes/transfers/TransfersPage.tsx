@@ -453,9 +453,11 @@ export function TransfersOverview({
   // More undone links than one read holds: which of them are held is not known.
   const dismissalsIncomplete = Boolean(dismissalsQuery.data?.data?.has_more);
   const heldUnavailable = heldQuery.isError || dismissalsQuery.isError || dismissalsIncomplete;
-  const readsUnavailable = heldUnavailable || badgesQuery.isError || suggestQuery.isError;
+  // Either read of the linked transfers failing leaves the list without some of them.
+  const linkedPartial = lineageQuery.isError || pairsQuery.isError;
+  const readsUnavailable = heldUnavailable || badgesQuery.isError || suggestQuery.isError || linkedPartial;
   const retryReads = () => {
-    for (const query of [badgesQuery, heldQuery, dismissalsQuery, suggestQuery]) if (query.isError) void query.refetch();
+    for (const query of [badgesQuery, heldQuery, dismissalsQuery, suggestQuery, lineageQuery, pairsQuery]) if (query.isError) void query.refetch();
   };
   const verdict = transfersVerdict({
     // Until every page of holds is read, what waits is not known.
@@ -810,6 +812,8 @@ export function TransfersOverview({
                 onYearChange={setYear}
                 loading={lineageQuery.isLoading || pairsQuery.isLoading}
                 failed={lineageQuery.isError && pairsQuery.isError}
+                partial={linkedPartial}
+                onRetry={retryReads}
                 total={linkedTotal}
                 hasMore={Boolean(lineageQuery.hasNextPage)}
                 loadingMore={lineageQuery.isFetchingNextPage}
@@ -1689,6 +1693,8 @@ function LinkedMovesCard({
   onYearChange,
   loading,
   failed,
+  partial = false,
+  onRetry,
   total,
   hasMore,
   loadingMore,
@@ -1715,6 +1721,9 @@ function LinkedMovesCard({
   onYearChange: (year: number | null) => void;
   loading: boolean;
   failed: boolean;
+  /** One of the two reads behind the list failed: what loaded is shown, said to be part. */
+  partial?: boolean;
+  onRetry?: () => void;
   total: number;
   hasMore: boolean;
   loadingMore: boolean;
@@ -1830,6 +1839,18 @@ function LinkedMovesCard({
               {year}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
+          ) : null}
+        </div>
+      ) : null}
+      {partial && !failed && !loading ? (
+        <div className="flex min-w-0 items-center gap-2 border-t px-3 py-2.5 text-sm sm:px-6" role="alert" data-testid="transfers-linked-partial">
+          <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+          <span className="min-w-0">{t("transfersPage.linked.partial")}</span>
+          {onRetry ? (
+            <Button type="button" size="sm" variant="ghost" className="ml-auto h-7 shrink-0 gap-1.5 text-xs" onClick={onRetry}>
+              <RefreshCw className="size-3.5" aria-hidden="true" />
+              {t("transfersPage.verdict.retry")}
+            </Button>
           ) : null}
         </div>
       ) : null}
