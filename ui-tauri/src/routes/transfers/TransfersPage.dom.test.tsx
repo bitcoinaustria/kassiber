@@ -379,6 +379,43 @@ describe("Transfers overview", () => {
     expect(within(screen.getByTestId("unlink-dialog")).getByText("Unlink this transfer?")).toBeTruthy();
   });
 
+  it("names no fee for a link that shares its send with another link", async () => {
+    // One fee-free 1 BTC send, linked to a receipt of 0.4 and one of 0.6.
+    const leg = (id: string, wallet: string, amount: string, occurred: string) => ({ transaction_id: id, wallet, wallet_kind: "descriptor", asset: "BTC", occurred_at: occurred, amount_msat: amount });
+    daemon.items = [];
+    daemon.pairs = [
+      { id: "pair-a", out_transaction_id: "send-1", in_transaction_id: "recv-a", kind: "manual", policy: "carrying-value", swap_fee_msat: null, shares_legs: true, out: leg("send-1", "Savings", "40000000000", "2024-03-01T10:00:00Z"), in: leg("recv-a", "Spending A", "40000000000", "2024-03-01T10:10:00Z") },
+      { id: "pair-b", out_transaction_id: "send-1", in_transaction_id: "recv-b", kind: "manual", policy: "carrying-value", swap_fee_msat: null, shares_legs: true, out: leg("send-1", "Savings", "60000000000", "2024-03-01T10:00:00Z"), in: leg("recv-b", "Spending B", "60000000000", "2024-03-01T10:10:00Z") },
+    ];
+    daemon.txs = {
+      "send-1": tx("send-1", { account: "Savings", amountSat: -100_000_000, feeSat: 0, occurredAt: "2024-03-01T10:00:00Z" }),
+      "recv-a": tx("recv-a", { account: "Spending A", amountSat: 40_000_000, occurredAt: "2024-03-01T10:10:00Z" }),
+      "recv-b": tx("recv-b", { account: "Spending B", amountSat: 60_000_000, occurredAt: "2024-03-01T10:10:00Z" }),
+    };
+    mount();
+    fireEvent.click(await screen.findByRole("row", { name: /Show the transfer Savings to Spending A/ }));
+    const dialog = await screen.findByTestId("unlink-dialog");
+    // Both sides read: the other link's 0.6 BTC is not this one's fee.
+    await waitFor(() => expect(within(dialog).getByText("Not known for this transfer.")).toBeTruthy());
+    expect(within(dialog).queryByTestId("fee-flag")).toBeNull();
+    expect(dialog.textContent).not.toContain("60,000,000 sats");
+    cleanup();
+    // The same for a receipt two sends funded: 0.4 and 0.6 BTC into one 1 BTC receipt.
+    daemon.pairs = [
+      { id: "pair-c", out_transaction_id: "recv-a", in_transaction_id: "send-1", kind: "manual", policy: "carrying-value", swap_fee_msat: null, shares_legs: true, out: leg("recv-a", "Spending A", "40000000000", "2024-03-01T10:00:00Z"), in: leg("send-1", "Savings", "40000000000", "2024-03-01T10:10:00Z") },
+      { id: "pair-d", out_transaction_id: "recv-b", in_transaction_id: "send-1", kind: "manual", policy: "carrying-value", swap_fee_msat: null, shares_legs: true, out: leg("recv-b", "Spending B", "60000000000", "2024-03-01T10:00:00Z"), in: leg("send-1", "Savings", "60000000000", "2024-03-01T10:10:00Z") },
+    ];
+    daemon.txs = {
+      "recv-a": tx("recv-a", { account: "Spending A", amountSat: -40_000_000, feeSat: 0, occurredAt: "2024-03-01T10:00:00Z" }),
+      "send-1": tx("send-1", { account: "Savings", amountSat: 100_000_000, occurredAt: "2024-03-01T10:10:00Z" }),
+    };
+    mount();
+    fireEvent.click(await screen.findByRole("row", { name: /Show the transfer Spending A to Savings/ }));
+    const second = await screen.findByTestId("unlink-dialog");
+    await waitFor(() => expect(within(second).getByText("Not known for this transfer.")).toBeTruthy());
+    expect(within(second).queryByTestId("fee-flag")).toBeNull();
+  });
+
   it("opens a transfer in a panel beside the table when there is room, and marks its row", async () => {
     const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
       width: 1300, height: 800, top: 0, left: 0, right: 1300, bottom: 800, x: 0, y: 0, toJSON: () => ({}),

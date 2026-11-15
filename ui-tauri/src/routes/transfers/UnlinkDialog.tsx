@@ -132,11 +132,21 @@ export function UnlinkDialog({
   const sendMsat = send.leg ? send.leg.amountMsat : exactBigInt(move.amountMsat);
   const receiptMsat = receipt.leg ? receipt.leg.amountMsat : exactBigInt(move.inAmountMsat);
   const networkFee = send.leg?.feeMsat ?? 0n;
+  // A pair that covers only part of its send or its receipt (a send that
+  // arrived in several receipts, a receipt funded by several sends): what is
+  // missing went to the other links, not to a fee, and which part of the
+  // network fee is this link's is not known.
+  const allocatedOut = move.pairId ? exactBigInt(move.amountMsat) : null;
+  const allocatedIn = move.pairId ? exactBigInt(move.inAmountMsat) : null;
+  const sharesLegs =
+    (allocatedOut !== null && send.leg !== null && allocatedOut !== send.leg.amountMsat) ||
+    (allocatedIn !== null && receipt.leg !== null && allocatedIn !== receipt.leg.amountMsat);
   // A send linked in part has no fee between these two to name: the rest is still open.
+  // A shared one names only a fee the pair records.
   const feeMsat = rest
     ? null
     : (exactBigInt(move.feeMsat) ??
-      (sendMsat !== null && receiptMsat !== null && move.asset === (receipt.leg?.asset ?? move.asset) ? sendMsat + networkFee - receiptMsat : null));
+      (!sharesLegs && sendMsat !== null && receiptMsat !== null && move.asset === (receipt.leg?.asset ?? move.asset) ? sendMsat + networkFee - receiptMsat : null));
 
   // How it was linked, in the owner's words.
   const how =
