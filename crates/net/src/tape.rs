@@ -425,6 +425,9 @@ fn decode_error(text: &str) -> Error {
         "ProxyUnsupported" => Error::ProxyUnsupported,
         "OnionProxyRequired" => Error::OnionProxyRequired,
         "SocksProtocol" => Error::SocksProtocol,
+        // These two are written as their display texts.
+        "TLS certificate is not trusted" => Error::CertificateUntrusted,
+        "TLS certificate changed" => Error::CertificateChanged,
         other => Error::Io(io::Error::other(format!(
             "recorded connection failure: {other}"
         ))),
@@ -653,6 +656,19 @@ mod tests {
         let second = slots[1].take().unwrap();
         assert!(matches!(decode_error(second.failure.as_deref().unwrap()),
             Error::Io(e) if e.kind() == io::ErrorKind::ConnectionRefused));
+    }
+
+    #[test]
+    fn certificate_failures_replay_as_themselves() {
+        // A replay must keep them non-retryable, not turn them into I/O.
+        assert!(matches!(
+            decode_error(&encode_error(&Error::CertificateUntrusted)),
+            Error::CertificateUntrusted
+        ));
+        assert!(matches!(
+            decode_error(&encode_error(&Error::CertificateChanged)),
+            Error::CertificateChanged
+        ));
     }
 
     #[test]

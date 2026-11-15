@@ -92,8 +92,8 @@
   {
     "id": "lwk-fence-passthrough",
     "file": "crates/wallets/src/lwk.rs",
-    "find": "\"cancelled\" | \"interaction_required\" | \"network_egress_disabled\" | \"stale_context\"",
-    "replace": "\"interaction_required\" | \"network_egress_disabled\" | \"stale_context\"",
+    "find": "\"cancelled\"\n                | \"interaction_required\"",
+    "replace": "\"interaction_required\"",
     "expect_failing": [
       "lwk_transport_fences_pass_through_and_other_failures_are_redacted"
     ],

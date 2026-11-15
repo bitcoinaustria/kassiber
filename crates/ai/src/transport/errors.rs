@@ -87,6 +87,8 @@ pub fn transport_error(error: kassiber_net::Error, withheld: &Forms) -> AppError
         Error::Offline | Error::OfflineUnavailable => offline_error(),
         Error::Io(_)
         | Error::Tls
+        | Error::CertificateUntrusted
+        | Error::CertificateChanged
         | Error::InvalidTimeout
         | Error::HttpInvalid
         | Error::ResponseTooLarge
