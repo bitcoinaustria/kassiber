@@ -1774,6 +1774,21 @@ A full-access provider can also propose a bounded dismissal (1 to 3650 days)
 inside a review batch, where the consent preview shows it and the receipt
 records it.
 
+The pair list (`ui_transfers_list`) carries `unlinked_msat` on each leg (how
+much of that transaction's principal no active pair allocates) and
+`shares_legs` on each pair (whether its transactions may take a further pair:
+only same-asset manual, coinjoin or whirlpool pairs at carrying value). They
+describe pair coverage only: an uncovered amount is not a sale, a fee or
+income, and what the journals do with it is read from the quarantine. Each leg
+also has a `fiat_value` at its own transaction's price and each pair a
+`swap_fee_fiat_value` at the sending price (null when unpriced). Custody
+lineage rows carry the sending transaction's network fee, which covers the
+whole transaction rather than one edge, with fiat values at that price.
+
+The assistant's skill references do not say this yet: recorded sessions read
+them verbatim, so changing their text waits for a reviewed re-record of those
+sessions.
+
 Three properties of `ui_transfers_pair` are documented on the tool because the
 model would otherwise have to guess them, and each guess is a real error class:
 

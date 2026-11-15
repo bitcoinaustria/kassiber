@@ -74,18 +74,6 @@ Zero or few candidates does not mean nothing is left to pair. `suggest` (and
 `transfers dismissals delete` undoes it), and `excluded_already_journaled` (legs the journal books as
 deterministic self-transfers, see `journals transfers list`).
 
-A quarantined row's actions say when a dismissal undid an automatic pairing.
-A `restore_pairing` action comes first on a
-`recorded_transfer_authority_conflict` row (a platform or Bark statement
-against an owned wallet's observation of the same transaction) when an active
-dismissal names exactly its `out_transaction_id`/`in_transaction_id` pair;
-`dismissal_id` is that dismissal. Restoring is `ui_transfers_dismissals_delete`
-with that `dismissal_id`, a consent-gated mutation. The owner undid the pairing
-on purpose, so propose restoring only when the user wants the pairing back.
-Journals are stale afterwards; the next rebuild books the move again if it is
-still exact, otherwise the row stays held. Without that action, syncing does
-not resolve this hold: pair it with the user or record a custody component.
-
 Leg references take the full transaction id. A raw txid resolves only when
 one row carries it; CoinJoins and batched deposits share a txid across rows,
 and the error `ambiguous_reference` lists every candidate. Use the intended
@@ -222,21 +210,6 @@ typically wants.
   `swap_fee` (BTC float) on every candidate.
 - `kassiber --machine transfers list` shows the persisted fee on every
   active pair.
-- The desktop and assistant pair list (`ui.transfers.list`) also carries
-  `unlinked_msat` on each leg (how much of that transaction's principal no
-  active pair allocates) and `shares_legs` on each pair (whether its
-  transactions may take a further pair: only same-asset manual, coinjoin or
-  whirlpool pairs at carrying value). They describe pair coverage only. Do
-  not present an uncovered amount as a sale, a fee or income; what the
-  journals do with it (usually a held remainder until the user links the
-  receipt the rest arrived in or reviews it) is read from the quarantine.
-- The pair list also gives each leg's `fiat_value` at its own
-  transaction's price and `swap_fee_fiat_value` at the sending price (null
-  when unpriced). With `include_unlinked` (desktop only) it lists pairs the
-  user unlinked whose legs are free again; an unlinked pair grants nothing.
-- Custody lineage rows (`ui.custody.lineage.snapshot`) carry the sending
-  transaction's network fee, which covers the whole transaction, not only
-  that edge, and fiat values at that transaction's price.
 - `kassiber --machine reports tax-summary` aggregates per-year and
   grand total into rows with `row_type=swap_fees_year` and
   `row_type=swap_fees_total`.
