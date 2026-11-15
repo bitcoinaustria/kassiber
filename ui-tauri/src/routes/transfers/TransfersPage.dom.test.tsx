@@ -106,6 +106,13 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
             return ok(kind, { id: "dismissal-7" });
           case "ui.transfers.dismissals.delete":
             return ok(kind, { deleted: true });
+          case "ui.saved_views.list":
+            return ok(kind, {
+              views:
+                args.surface === "swap_candidates"
+                  ? [{ id: "view-swaps", surface: "swap_candidates", name: "Liquid swaps", filter: { asset_pair: "LBTC/USDT" } }]
+                  : [],
+            });
           default:
             return { kind: "error", schema_version: 1, error: { code: "not_found", message: "unavailable", retryable: false } };
         }
@@ -230,16 +237,28 @@ function undone(overrides: Partial<TransferDismissal> = {}): TransferDismissal {
 
 const onOpen = vi.fn();
 
-function mount() {
+function mount(props: { savedViewId?: string | null } = {}) {
   // The daemon hook retries a failed read on its own; without a delay, so a failure shows at once.
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <TransfersOverview onOpen={onOpen} />
+        <TransfersOverview onOpen={onOpen} savedViewId={props.savedViewId ?? null} />
       </TooltipProvider>
     </QueryClientProvider>,
   );
+  return {
+    ...view,
+    /** Opens the page on a saved view, as following its link does. */
+    openView: (savedViewId: string | null) =>
+      view.rerender(
+        <QueryClientProvider client={client}>
+          <TooltipProvider>
+            <TransfersOverview onOpen={onOpen} savedViewId={savedViewId} />
+          </TooltipProvider>
+        </QueryClientProvider>,
+      ),
+  };
 }
 
 const calls = (kind: string) => daemon.calls.filter((call) => call.kind === kind);
@@ -686,6 +705,23 @@ describe("Transfers overview", () => {
       expect(screen.queryByTestId("transfers-held-unavailable")).toBeNull();
     },
   );
+
+  it("shows the suggestions a saved view opens, from another tab or a link, even when none match", async () => {
+    const view = mount();
+    // Nothing to confirm: the page opens on the linked transfers.
+    const linked = within(await screen.findByTestId("transfers-tabs")).getByRole("button", { name: /^Linked/ });
+    await waitFor(() => expect(linked.getAttribute("aria-pressed")).toBe("true"));
+    view.openView("view-swaps");
+    const needs = within(screen.getByTestId("transfers-tabs")).getByRole("button", { name: /^Needs you/ });
+    await waitFor(() => expect(needs.getAttribute("aria-pressed")).toBe("true"));
+    expect(await screen.findByText("View: Liquid swaps")).toBeTruthy();
+    expect(screen.getByText("No suggestion matches this view.")).toBeTruthy();
+    cleanup();
+    // Followed as a link, it opens there too.
+    mount({ savedViewId: "view-swaps" });
+    expect(await screen.findByText("View: Liquid swaps")).toBeTruthy();
+    expect(within(screen.getByTestId("transfers-tabs")).getByRole("button", { name: /^Needs you/ }).getAttribute("aria-pressed")).toBe("true");
+  });
 
   it("says what Kassiber checks when there is nothing to confirm", async () => {
     daemon.items = [];

@@ -493,6 +493,13 @@ export function TransfersOverview({
     setTab(next);
     setPendingUnlink(null);
   };
+  // A saved view filters the suggestions, so opening one (from the sheet or
+  // a link) shows their list, even when nothing in it matches.
+  React.useEffect(() => {
+    if (!savedViewId) return;
+    setTab("needs");
+    setPendingUnlink(null);
+  }, [savedViewId]);
 
   // On the Linked list a note about a transfer is a strip at its row.
   const strip = toast?.spot && activeTab === "linked" ? toast : null;
@@ -806,6 +813,8 @@ export function TransfersOverview({
         onOpenChange={setRulesOpen}
         onOpenView={(view) => {
           setRulesOpen(false);
+          // Also when the view is the one already open, so its URL does not change.
+          chooseTab("needs");
           onOpen({ savedView: view.id });
           suggestionsRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
         }}
