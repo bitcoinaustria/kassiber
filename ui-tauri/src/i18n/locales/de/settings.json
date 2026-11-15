@@ -911,6 +911,8 @@
     "testConnection": "Verbindung testen",
     "connected": "Verbunden",
     "couldNotReach": "Endpunkt nicht erreichbar",
+    "certificateUntrusted": "Server erreicht, aber seinem Zertifikat wird nicht vertraut",
+    "certificateChanged": "Server erreicht, aber sein Zertifikat hat sich geändert",
     "deleteBackend": "{{name}} löschen",
     "connecting": "Wird verbunden…",
     "saveBackend": "Backend speichern",

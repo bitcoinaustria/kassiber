@@ -220,6 +220,25 @@ describe("backend certificate trust entry", () => {
     return out;
   }
 
+  /** The connection test row's result line. */
+  function testHeadline(node: ReactNode): string | undefined {
+    let found: string | undefined;
+    (function walk(child: ReactNode) {
+      if (Array.isArray(child)) child.forEach(walk);
+      else if (isValidElement<{ children?: ReactNode; description?: unknown; label?: unknown }>(child)) {
+        const description = child.props.description;
+        if (
+          child.props.label === "backendModal.testLabel" &&
+          isValidElement<{ children?: ReactNode }>(description)
+        ) {
+          found = String(description.props.children);
+        }
+        walk(child.props.children);
+      }
+    })(node);
+    return found;
+  }
+
   function render(initial: Backend) {
     hooks.cursor = 0;
     return SyncBackendSettingsModal({ open: true, initial, onClose: vi.fn(), onSave: vi.fn() });
@@ -252,8 +271,27 @@ describe("backend certificate trust entry", () => {
     button(tree, "backendModal.testConnection")!.onClick();
     await vi.waitFor(() => expect(hooks.invoke).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(descriptions(render(electrum))).toContain("certificateTrust.testUntrusted"));
+    // The server was reached: the headline names the certificate, not reachability.
+    expect(testHeadline(render(electrum))).toBe("backendModal.certificateUntrusted");
     // The test itself never fetched or trusted a certificate.
     expect(hooks.invoke.mock.calls.map(call => call[0])).toEqual(["ui.backends.electrum.test"]);
+  });
+
+  it("names a changed certificate and keeps plain failures as unreachable", async () => {
+    for (const [line, headline] of [
+      [
+        "Connection failed: This server's certificate changed: it no longer matches the certificate trusted for this backend",
+        "backendModal.certificateChanged",
+      ],
+      ["Connection failed: connection refused", "backendModal.couldNotReach"],
+    ]) {
+      hooks.invoke.mockReset();
+      hooks.invoke.mockResolvedValue({ data: { ok: false, logs: [line] } });
+      const { tree } = mount(electrum);
+      button(tree, "backendModal.testConnection")!.onClick();
+      await vi.waitFor(() => expect(hooks.invoke).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(testHeadline(render(electrum))).toBe(headline));
+    }
   });
 });
 

@@ -911,6 +911,8 @@
     "testConnection": "Test connection",
     "connected": "Connected",
     "couldNotReach": "Could not reach endpoint",
+    "certificateUntrusted": "Reached the server, but its certificate is not trusted",
+    "certificateChanged": "Reached the server, but its certificate changed",
     "deleteBackend": "Delete {{name}}",
     "connecting": "Connecting…",
     "saveBackend": "Save backend",

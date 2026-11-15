@@ -582,10 +582,11 @@ export function SyncBackendSettingsModal({
     certificateTrustAvailable &&
     (effectiveUrl.trim().toLowerCase() !== savedTrustUrl.toLowerCase() ||
       (proxyValue ?? "") !== savedTrustProxy);
-  const testCertificateProblem =
-    testState === "fail" && !certificateTrustUnsaved
-      ? certificateProblemFromText(testLog)
-      : null;
+  // What the last test failed on, for its headline: a certificate the
+  // server presents but Kassiber does not trust reached the server fine.
+  const testCertificateFailure =
+    testState === "fail" ? certificateProblemFromText(testLog) : null;
+  const testCertificateProblem = certificateTrustUnsaved ? null : testCertificateFailure;
   const effectiveInfrastructureOwner =
     type.net === "LN"
       ? undefined
@@ -1706,7 +1707,11 @@ export function SyncBackendSettingsModal({
                     </span>
                   ) : testState === "fail" ? (
                     <span className="text-destructive">
-                      {t("backendModal.couldNotReach")}
+                      {testCertificateFailure === "changed"
+                        ? t("backendModal.certificateChanged")
+                        : testCertificateFailure === "untrusted"
+                          ? t("backendModal.certificateUntrusted")
+                          : t("backendModal.couldNotReach")}
                     </span>
                   ) : (
                     t("backendModal.testHint")
