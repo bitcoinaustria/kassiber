@@ -439,6 +439,7 @@
       "rateLimited": "Server is limiting requests; retries later",
       "unavailable": "Server temporarily unavailable; retries later",
       "certificate": "Secure connection failed (certificate)",
+      "certificateChanged": "Server certificate changed; not trusted",
       "credentials": "Server rejected the credentials",
       "noBackend": "No server configured",
       "connection": "Connection to the server failed",

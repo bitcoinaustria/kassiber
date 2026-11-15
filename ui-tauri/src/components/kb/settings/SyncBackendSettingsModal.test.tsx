@@ -18,6 +18,11 @@ vi.mock("react", async original => ({
     if (!(index in hooks.states)) hooks.states[index] = initial;
     return [hooks.states[index], (next: unknown) => { hooks.states[index] = next; }];
   },
+  useRef: (initial: unknown) => {
+    const index = hooks.cursor++;
+    if (!(index in hooks.states)) hooks.states[index] = { current: initial };
+    return hooks.states[index];
+  },
   useMemo: (factory: () => unknown) => factory(),
   useEffect: (effect: () => void) => { hooks.effects.push(effect); },
 }));
@@ -200,5 +205,157 @@ describe("Core Lightning commando", () => {
     expect(payload).not.toHaveProperty("token");
     expect(payload.config).not.toHaveProperty("commando_peer_id");
     expect(payload.clear).toEqual(expect.arrayContaining(["token", "commando_peer_id"]));
+  });
+});
+
+describe("backend certificate trust entry", () => {
+  const electrum: Backend = {
+    id: "home", name: "Home node", health: "", on: true, auth: "none",
+    chain: "bitcoin", network: "main", net: "BTC", kind: "electrum",
+    url: "ssl://node.local:50002",
+  };
+
+  /** Every `description` prop in the tree (settings rows carry their hint there). */
+  function descriptions(node: ReactNode, out: string[] = []): string[] {
+    if (Array.isArray(node)) node.forEach(child => descriptions(child, out));
+    else if (isValidElement<{ children?: ReactNode; description?: unknown }>(node)) {
+      if (typeof node.props.description === "string") out.push(node.props.description);
+      descriptions(node.props.children, out);
+    }
+    return out;
+  }
+
+  /** The connection test row's result line. */
+  function testHeadline(node: ReactNode): string | undefined {
+    let found: string | undefined;
+    (function walk(child: ReactNode) {
+      if (Array.isArray(child)) child.forEach(walk);
+      else if (isValidElement<{ children?: ReactNode; description?: unknown; label?: unknown }>(child)) {
+        const description = child.props.description;
+        if (
+          child.props.label === "backendModal.testLabel" &&
+          isValidElement<{ children?: ReactNode }>(description)
+        ) {
+          found = String(description.props.children);
+        }
+        walk(child.props.children);
+      }
+    })(node);
+    return found;
+  }
+
+  function render(initial: Backend) {
+    hooks.cursor = 0;
+    return SyncBackendSettingsModal({ open: true, initial, onClose: vi.fn(), onSave: vi.fn() });
+  }
+
+  it("offers the trust dialog for a saved TLS backend without contacting it", () => {
+    const { tree } = mount(electrum);
+    expect(descriptions(tree)).toContain("certificateTrust.rowHint");
+    expect(button(tree, "certificateTrust.checkButton")).toBeDefined();
+    expect(hooks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("is not offered for plaintext or unsupported backends", () => {
+    for (const backend of [
+      { ...electrum, url: "tcp://node.local:50001" },
+      { ...electrum, kind: "btcpay", url: "https://pay.example" },
+    ]) {
+      hooks.states.length = 0;
+      const { tree } = mount(backend);
+      expect(button(tree, "certificateTrust.checkButton")).toBeUndefined();
+    }
+  });
+
+  it("points a failed test with an untrusted certificate at the trust dialog", async () => {
+    hooks.invoke.mockResolvedValue({ data: { ok: false, logs: [
+      "Opening Electrum connection to ssl://node.local:50002",
+      "Connection failed: The server's TLS certificate is not signed by an authority Kassiber trusts",
+    ] } });
+    const { tree } = mount(electrum);
+    button(tree, "backendModal.testConnection")!.onClick();
+    await vi.waitFor(() => expect(hooks.invoke).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(descriptions(render(electrum))).toContain("certificateTrust.testUntrusted"));
+    // The server was reached: the headline names the certificate, not reachability.
+    expect(testHeadline(render(electrum))).toBe("backendModal.certificateUntrusted");
+    // The test itself never fetched or trusted a certificate.
+    expect(hooks.invoke.mock.calls.map(call => call[0])).toEqual(["ui.backends.electrum.test"]);
+  });
+
+  it("names a changed certificate and keeps plain failures as unreachable", async () => {
+    for (const [line, headline] of [
+      [
+        "Connection failed: This server's certificate changed: it no longer matches the certificate trusted for this backend",
+        "backendModal.certificateChanged",
+      ],
+      ["Connection failed: connection refused", "backendModal.couldNotReach"],
+    ]) {
+      hooks.invoke.mockReset();
+      hooks.invoke.mockResolvedValue({ data: { ok: false, logs: [line] } });
+      const { tree } = mount(electrum);
+      button(tree, "backendModal.testConnection")!.onClick();
+      await vi.waitFor(() => expect(hooks.invoke).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(testHeadline(render(electrum))).toBe(headline));
+    }
+  });
+});
+
+describe("a refreshed backend while the form is open", () => {
+  it("keeps unsaved edits when a trust refetches the settings list", () => {
+    const saved: Backend = {
+      id: "home", name: "Home node", health: "", on: true, auth: "none",
+      chain: "bitcoin", network: "main", net: "BTC", kind: "esplora",
+      url: "https://node.local/api",
+    };
+    const props = { open: true, initial: saved, onClose: vi.fn(), onSave: vi.fn() };
+    const render = () => { hooks.cursor = 0; return SyncBackendSettingsModal(props); };
+    render();
+    hooks.effects.splice(0).forEach(effect => effect());
+    const nameIndex = hooks.states.findIndex(value => value === "Home node");
+    expect(nameIndex).toBeGreaterThanOrEqual(0);
+    hooks.states[nameIndex] = "My node";
+    // The settings list comes back with the pinned certificate: a new
+    // object for the same backend.
+    props.initial = { ...saved, certificate: "/data/certificates/abc.pem" };
+    render();
+    hooks.effects.splice(0).forEach(effect => effect());
+    expect(hooks.states[nameIndex]).toBe("My node");
+  });
+});
+
+describe("backend certificate trust with unsaved edits", () => {
+  it("asks to save first and ignores the form's test result", async () => {
+    hooks.invoke.mockResolvedValue({ data: { ok: false, logs: [
+      "Connection failed: The server's TLS certificate is not signed by an authority Kassiber trusts",
+    ] } });
+    const saved: Backend = {
+      id: "home", name: "Home node", health: "", on: true, auth: "none",
+      chain: "bitcoin", network: "main", net: "BTC", kind: "esplora",
+      url: "https://node.local/api",
+    };
+    const render = () => {
+      hooks.cursor = 0;
+      return SyncBackendSettingsModal({ open: true, initial: saved, onClose: vi.fn(), onSave: vi.fn() });
+    };
+    render();
+    hooks.effects.splice(0).forEach(effect => effect());
+    const urlIndex = hooks.states.findIndex(value => value === "https://node.local/api");
+    expect(urlIndex).toBeGreaterThanOrEqual(0);
+    hooks.states[urlIndex] = "https://other.local/api";
+    const tree = render();
+    expect(button(tree, "certificateTrust.checkButton")?.disabled).toBe(true);
+    button(tree, "backendModal.testConnection")!.onClick();
+    await vi.waitFor(() => expect(hooks.invoke).toHaveBeenCalledOnce());
+    const after = render();
+    const rows: string[] = [];
+    (function walk(node: ReactNode) {
+      if (Array.isArray(node)) node.forEach(walk);
+      else if (isValidElement<{ children?: ReactNode; description?: unknown }>(node)) {
+        if (typeof node.props.description === "string") rows.push(node.props.description);
+        walk(node.props.children);
+      }
+    })(after);
+    expect(rows).toContain("certificateTrust.saveFirst");
+    expect(rows).not.toContain("certificateTrust.testUntrusted");
   });
 });
