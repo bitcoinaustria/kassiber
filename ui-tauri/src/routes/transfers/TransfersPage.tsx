@@ -420,8 +420,15 @@ export function TransfersOverview({
   const candidates = useSettledSuggestions(suggestQuery.data?.data?.candidates, updating, suggestQuery.refetch);
   const linkedTotal = Math.max(counts.automatic + counts.reviewed, lineage?.summary.total_count ?? 0);
   const waiting = held.length + gapHolds.length;
+  // A failed read of the holds is not "nothing held": the page says it could not tell.
+  const heldUnavailable = heldQuery.isError || dismissalsQuery.isError;
+  const readsUnavailable = heldUnavailable || badgesQuery.isError;
+  const retryReads = () => {
+    for (const query of [badgesQuery, heldQuery, dismissalsQuery]) if (query.isError) void query.refetch();
+  };
   const verdict = transfersVerdict({
-    loading: badgesQuery.isLoading || suggestQuery.isLoading || lineageQuery.isLoading,
+    loading: badgesQuery.isLoading || suggestQuery.isLoading || lineageQuery.isLoading || heldQuery.isLoading || dismissalsQuery.isLoading,
+    unavailable: readsUnavailable,
     journalsStale: Boolean(badgesQuery.data?.data?.journals_needs_processing) && !updating,
     held: waiting,
     suggested: candidates.length,
@@ -656,6 +663,7 @@ export function TransfersOverview({
         updating={updating}
         developerToolsEnabled={developerToolsEnabled}
         onRecalculate={requestRefresh}
+        onRetry={retryReads}
         onOpen={onOpen}
         onOpenRules={() => setRulesOpen(true)}
         onLinkManually={() => openLink()}
@@ -687,6 +695,7 @@ export function TransfersOverview({
           <div className="@container/list min-w-0 space-y-(--kb-page-gap)">
             {activeTab === "needs" ? (
               <>
+                {heldUnavailable ? <HeldUnavailable onRetry={retryReads} /> : null}
                 {waiting ? (
                   <SortOutCard
                     headingRef={sortOutRef}
@@ -707,7 +716,7 @@ export function TransfersOverview({
                 ) : null}
                 <div ref={suggestionsRef} className="scroll-mt-4 empty:hidden">
                   {noSuggestions && !savedView ? (
-                    waiting ? null : <SuggestionsEmpty updating={updating} onCheckAgain={requestRefresh} />
+                    waiting || heldUnavailable ? null : <SuggestionsEmpty updating={updating} onCheckAgain={requestRefresh} />
                   ) : (
                     <ReviewTransfers
                       onDecided={requestRefresh}
@@ -918,6 +927,23 @@ function StatusTabs({
   );
 }
 
+/** The holds could not be read: what waits on the owner is unknown, not nothing. */
+function HeldUnavailable({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation("review");
+  return (
+    <section className="kb-surface overflow-hidden" role="alert" data-testid="transfers-held-unavailable">
+      <div className="flex min-w-0 items-center gap-2 px-3 py-2.5 text-sm sm:px-6">
+        <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+        <span className="min-w-0">{t("transfersPage.sortOut.unavailable")}</span>
+        <Button type="button" size="sm" variant="ghost" className="ml-auto h-7 shrink-0 gap-1.5 text-xs" onClick={onRetry}>
+          <RefreshCw className="size-3.5" aria-hidden="true" />
+          {t("transfersPage.verdict.retry")}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 /**
  * Nothing to confirm, in one line: Link manually sits in the page header, and
  * what Kassiber checks waits behind the info icon.
@@ -963,6 +989,7 @@ function TransfersHeader({
   updating,
   developerToolsEnabled,
   onRecalculate,
+  onRetry,
   onOpen,
   onOpenRules,
   onLinkManually,
@@ -974,6 +1001,8 @@ function TransfersHeader({
   updating: boolean;
   developerToolsEnabled: boolean;
   onRecalculate: () => void;
+  /** Reads again what could not be read. */
+  onRetry: () => void;
   onOpen: (next: TransfersCustodySearch) => void;
   onOpenRules: () => void;
   onLinkManually: () => void;
@@ -984,11 +1013,13 @@ function TransfersHeader({
       ? t("transfersPage.verdict.loading")
       : verdict.state === "stale"
         ? t("transfersPage.verdict.staleBody")
-        : verdict.state === "sortOut"
-          ? t("transfersPage.verdict.sortOutTitle", { count: verdict.total })
-          : verdict.state === "settled"
-            ? t("transfersPage.verdict.settledTitle")
-            : t("transfersPage.verdict.emptyTitle");
+        : verdict.state === "unavailable"
+          ? t("transfersPage.verdict.unavailableBody")
+          : verdict.state === "sortOut"
+            ? t("transfersPage.verdict.sortOutTitle", { count: verdict.total })
+            : verdict.state === "settled"
+              ? t("transfersPage.verdict.settledTitle")
+              : t("transfersPage.verdict.emptyTitle");
   return (
     <div className={pageHeaderClassName} data-testid="transfers-verdict" data-state={verdict.state}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
@@ -1005,6 +1036,14 @@ function TransfersHeader({
             onClick={onRecalculate}
             busy={updating}
             busyTitle={t("transfersPage.verdict.updating")}
+          />
+        ) : verdict.state === "unavailable" ? (
+          <ReadinessPill
+            tone="warning"
+            icon={AlertTriangle}
+            title={t("transfersPage.verdict.unavailableTitle")}
+            description={t("transfersPage.verdict.unavailableBody")}
+            onClick={onRetry}
           />
         ) : updating ? (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">

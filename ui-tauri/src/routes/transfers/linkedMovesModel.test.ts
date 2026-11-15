@@ -233,6 +233,13 @@ describe("transfersVerdict", () => {
     expect(transfersVerdict({ ...base, linked: 17 })).toEqual({ state: "settled", linked: 17 });
     expect(transfersVerdict(base).state).toBe("empty");
   });
+
+  it("never calls a book settled when a read it needs failed", () => {
+    expect(transfersVerdict({ ...base, unavailable: true, linked: 17 }).state).toBe("unavailable");
+    expect(transfersVerdict({ ...base, unavailable: true, suggested: 2 }).state).toBe("unavailable");
+    // Journals known to be stale still say so first.
+    expect(transfersVerdict({ ...base, unavailable: true, journalsStale: true }).state).toBe("stale");
+  });
 });
 
 describe("formatMsatAsSats", () => {

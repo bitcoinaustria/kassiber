@@ -1100,7 +1100,10 @@
       "recalculate": "Journale neu berechnen",
       "caveat": "Geprüft werden nur Wallets, die du verbunden hast.",
       "caveatWhy": "Kassiber kann nur Wallets verknüpfen, die es kennt. Eine nie verbundene Wallet kann nicht geprüft werden.",
-      "caveatWhyLabel": "Warum nur verbundene Wallets?"
+      "caveatWhyLabel": "Warum nur verbundene Wallets?",
+      "unavailableTitle": "Nicht alles geprüft",
+      "unavailableBody": "Ein Teil dessen, was auf dich wartet, konnte nicht geladen werden. Ob noch etwas zu klären ist, lässt sich deshalb nicht sagen.",
+      "retry": "Erneut versuchen"
     },
     "stats": {
       "label": "Übertragungen im Überblick",
@@ -1126,7 +1129,8 @@
     },
     "sortOut": {
       "title": "Zu klären",
-      "reports": "Steuerberichte warten, bis jede Frage beantwortet ist."
+      "reports": "Steuerberichte warten, bis jede Frage beantwortet ist.",
+      "unavailable": "Übertragungen, die auf deine Antwort warten, konnten nicht geladen werden."
     },
     "held": {
       "question": "Du hast diesen Ausgang über {{amount}} von {{from}} getrennt.",

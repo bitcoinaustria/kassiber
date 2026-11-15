@@ -405,24 +405,29 @@ export function heldUndonePairings(
 export type TransfersVerdict =
   | { state: "loading" }
   | { state: "stale" }
+  | { state: "unavailable" }
   | { state: "sortOut"; total: number; held: number; suggested: number }
   | { state: "settled"; linked: number }
   | { state: "empty" };
 
 /**
  * What the screen leads with. Stale journals come first because every count
- * below them can be wrong; then what waits on the owner (held moves and
- * suggestions to confirm); then a settled book, which says how many moves it
- * links.
+ * below them can be wrong; then a read that failed, since what it would have
+ * said is unknown rather than nothing; then what waits on the owner (held
+ * moves and suggestions to confirm); then a settled book, which says how
+ * many moves it links.
  */
 export function transfersVerdict({
   loading,
+  unavailable = false,
   journalsStale,
   held,
   suggested,
   linked,
 }: {
   loading: boolean;
+  /** Whether the journals are current, or what they hold, could not be read. */
+  unavailable?: boolean;
   journalsStale: boolean;
   held: number;
   suggested: number;
@@ -430,6 +435,7 @@ export function transfersVerdict({
 }): TransfersVerdict {
   if (loading) return { state: "loading" };
   if (journalsStale) return { state: "stale" };
+  if (unavailable) return { state: "unavailable" };
   if (held + suggested > 0) return { state: "sortOut", total: held + suggested, held, suggested };
   if (linked > 0) return { state: "settled", linked };
   return { state: "empty" };

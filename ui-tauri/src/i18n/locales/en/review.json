@@ -1100,7 +1100,10 @@
       "recalculate": "Recalculate journals",
       "caveat": "Only wallets you've connected are checked.",
       "caveatWhy": "Kassiber can only link wallets it knows about. A wallet you never connected can't be checked.",
-      "caveatWhyLabel": "Why only connected wallets?"
+      "caveatWhyLabel": "Why only connected wallets?",
+      "unavailableTitle": "Couldn't check everything",
+      "unavailableBody": "Part of what waits on you could not be loaded, so this page can't say whether anything is left to sort out.",
+      "retry": "Try again"
     },
     "stats": {
       "label": "Transfers at a glance",
@@ -1126,7 +1129,8 @@
     },
     "sortOut": {
       "title": "To sort out",
-      "reports": "Tax reports wait until each one is answered."
+      "reports": "Tax reports wait until each one is answered.",
+      "unavailable": "Transfers waiting for your answer could not be loaded."
     },
     "held": {
       "question": "You unlinked this {{amount}} send from {{from}}.",

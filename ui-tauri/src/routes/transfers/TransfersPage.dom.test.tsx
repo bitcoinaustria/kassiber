@@ -39,6 +39,8 @@ const daemon = vi.hoisted(() => ({
   txs: {} as Record<string, unknown>,
   failDismiss: false,
   failApply: false,
+  /** Reads that answer with an error. */
+  failing: new Set<string>(),
   heldAfter: [] as string[],
   calls: [] as Array<{ kind: string; args: Record<string, unknown> }>,
 }));
@@ -51,6 +53,9 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
     getTransport: () => ({
       invoke: async ({ kind, args = {} }: { kind: string; args?: Record<string, unknown> }) => {
         daemon.calls.push({ kind, args });
+        if (daemon.failing.has(kind)) {
+          return { kind: "error", schema_version: 1, error: { code: "internal", message: "read failed", retryable: false } };
+        }
         switch (kind) {
           case "ui.custody.lineage.snapshot":
             return ok(kind, { summary: { total_count: daemon.items.length, truncated: false }, items: daemon.items });
@@ -226,7 +231,8 @@ function undone(overrides: Partial<TransferDismissal> = {}): TransferDismissal {
 const onOpen = vi.fn();
 
 function mount() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  // The daemon hook retries a failed read on its own; without a delay, so a failure shows at once.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
@@ -263,6 +269,7 @@ beforeEach(async () => {
   daemon.txs = {};
   daemon.failDismiss = false;
   daemon.failApply = false;
+  daemon.failing = new Set();
   daemon.heldAfter = [];
   daemon.calls = [];
   onOpen.mockClear();
@@ -658,6 +665,27 @@ describe("Transfers overview", () => {
     );
     expect(calls("ui.transfers.pair")).toHaveLength(0);
   });
+
+  it.each(["ui.journals.quarantine", "ui.review.badges", "ui.transfers.dismissals.list"])(
+    "says it could not check everything, not that nothing waits, when %s fails",
+    async (kind) => {
+      daemon.failing = new Set([kind]);
+      mount();
+      const verdict = await screen.findByTestId("transfers-verdict");
+      await waitFor(() => expect(verdict.getAttribute("data-state")).toBe("unavailable"));
+      expect(within(verdict).queryByText("Nothing waits on you")).toBeNull();
+      expect(within(verdict).getByRole("button", { name: "Couldn't check everything" })).toBeTruthy();
+      if (kind === "ui.review.badges") return;
+      // The holds are unknown: the list says so instead of "no suggestions to confirm".
+      await openTab(/^Needs you/);
+      const alert = await screen.findByTestId("transfers-held-unavailable");
+      expect(screen.queryByTestId("transfers-suggestions-empty")).toBeNull();
+      daemon.failing = new Set();
+      fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+      await waitFor(() => expect(verdict.getAttribute("data-state")).toBe("settled"));
+      expect(screen.queryByTestId("transfers-held-unavailable")).toBeNull();
+    },
+  );
 
   it("says what Kassiber checks when there is nothing to confirm", async () => {
     daemon.items = [];
