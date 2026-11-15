@@ -1130,7 +1130,8 @@
     "sortOut": {
       "title": "To sort out",
       "reports": "Tax reports wait until each one is answered.",
-      "unavailable": "Transfers waiting for your answer could not be loaded."
+      "unavailable": "Transfers waiting for your answer could not be loaded.",
+      "incomplete": "There are more unlinked transfers and set-aside suggestions than this screen can read at once, so some transfers that wait for your answer may not be shown."
     },
     "held": {
       "question": "You unlinked this {{amount}} send from {{from}}.",

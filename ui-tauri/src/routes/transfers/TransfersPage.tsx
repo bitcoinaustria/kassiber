@@ -323,6 +323,9 @@ function restHoldPair(item: QuarantineItem, pairs: readonly TransferPairSummary[
 
 const TOAST_MS = 10_000;
 
+/** The most undone links and set-aside suggestions one read returns. */
+const DISMISSALS_LIMIT = 500;
+
 /** The most rows one read of the holds returns. */
 const HELD_PAGE = 100;
 
@@ -372,7 +375,8 @@ export function TransfersOverview({
   const badgesQuery = useDaemon<ReviewBadges>("ui.review.badges");
   const suggestQuery = useDaemon<TransferSuggestions>("ui.transfers.suggest", {});
   const pairsQuery = useDaemon<TransferPairsEnvelope>("ui.transfers.list", { include_unlinked: true });
-  const dismissalsQuery = useDaemon<TransferDismissalsEnvelope>("ui.transfers.dismissals.list", {});
+  // As many as one read returns; the core has no further pages to ask for.
+  const dismissalsQuery = useDaemon<TransferDismissalsEnvelope>("ui.transfers.dismissals.list", { limit: DISMISSALS_LIMIT });
   // Every page of what the journals hold: a held transfer may be on any of them.
   const heldQuery = useDaemonInfinite<QuarantineSnapshot>(
     "ui.journals.quarantine",
@@ -446,7 +450,9 @@ export function TransfersOverview({
   const linkedTotal = Math.max(counts.automatic + counts.reviewed, lineage?.summary.total_count ?? 0);
   const waiting = held.length + gapHolds.length;
   // A failed read of the holds is not "nothing held": the page says it could not tell.
-  const heldUnavailable = heldQuery.isError || dismissalsQuery.isError;
+  // More undone links than one read holds: which of them are held is not known.
+  const dismissalsIncomplete = Boolean(dismissalsQuery.data?.data?.has_more);
+  const heldUnavailable = heldQuery.isError || dismissalsQuery.isError || dismissalsIncomplete;
   const readsUnavailable = heldUnavailable || badgesQuery.isError;
   const retryReads = () => {
     for (const query of [badgesQuery, heldQuery, dismissalsQuery]) if (query.isError) void query.refetch();
@@ -731,7 +737,7 @@ export function TransfersOverview({
           <div className="@container/list min-w-0 space-y-(--kb-page-gap)">
             {activeTab === "needs" ? (
               <>
-                {heldUnavailable ? <HeldUnavailable onRetry={retryReads} /> : null}
+                {heldUnavailable ? <HeldUnavailable incomplete={dismissalsIncomplete && !heldQuery.isError && !dismissalsQuery.isError} onRetry={retryReads} /> : null}
                 {waiting ? (
                   <SortOutCard
                     headingRef={sortOutRef}
@@ -975,17 +981,19 @@ function StatusTabs({
 }
 
 /** The holds could not be read: what waits on the owner is unknown, not nothing. */
-function HeldUnavailable({ onRetry }: { onRetry: () => void }) {
+function HeldUnavailable({ incomplete, onRetry }: { /** Read, but only in part: reading again does not help. */ incomplete: boolean; onRetry: () => void }) {
   const { t } = useTranslation("review");
   return (
     <section className="kb-surface overflow-hidden" role="alert" data-testid="transfers-held-unavailable">
       <div className="flex min-w-0 items-center gap-2 px-3 py-2.5 text-sm sm:px-6">
         <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-        <span className="min-w-0">{t("transfersPage.sortOut.unavailable")}</span>
-        <Button type="button" size="sm" variant="ghost" className="ml-auto h-7 shrink-0 gap-1.5 text-xs" onClick={onRetry}>
-          <RefreshCw className="size-3.5" aria-hidden="true" />
-          {t("transfersPage.verdict.retry")}
-        </Button>
+        <span className="min-w-0">{t(incomplete ? "transfersPage.sortOut.incomplete" : "transfersPage.sortOut.unavailable")}</span>
+        {incomplete ? null : (
+          <Button type="button" size="sm" variant="ghost" className="ml-auto h-7 shrink-0 gap-1.5 text-xs" onClick={onRetry}>
+            <RefreshCw className="size-3.5" aria-hidden="true" />
+            {t("transfersPage.verdict.retry")}
+          </Button>
+        )}
       </div>
     </section>
   );

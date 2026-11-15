@@ -45,6 +45,8 @@ const daemon = vi.hoisted(() => ({
   failApply: false,
   /** Reads that answer with an error. */
   failing: new Set<string>(),
+  /** The dismissal list says it holds only the newest of them. */
+  moreDismissals: false,
   /** A page of holds, by offset, that answers with an error. */
   failHeldOffset: null as number | null,
   heldAfter: [] as string[],
@@ -107,7 +109,7 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
           case "ui.transfers.unpair":
             return ok(kind, { deleted: args.pair_id, pair: daemon.pairs[0] ?? null });
           case "ui.transfers.dismissals.list":
-            return ok(kind, { dismissals: daemon.dismissals, has_more: false });
+            return ok(kind, { dismissals: daemon.dismissals, has_more: daemon.moreDismissals });
           case "ui.transfers.suggest":
             return ok(kind, { candidates: daemon.suggestions });
           case "ui.review.badges":
@@ -329,6 +331,7 @@ beforeEach(async () => {
   daemon.failApply = false;
   daemon.failing = new Set();
   daemon.failHeldOffset = null;
+  daemon.moreDismissals = false;
   daemon.heldAfter = [];
   daemon.calls = [];
   onOpen.mockClear();
@@ -580,6 +583,19 @@ describe("Transfers overview", () => {
     await waitFor(() => expect(verdict.getAttribute("data-state")).toBe("sortOut"));
     expect(await screen.findByTestId("transfers-held-move")).toBeTruthy();
     expect(calls("ui.journals.quarantine").map((call) => call.args.offset)).toEqual([0, 100]);
+  });
+
+  it("asks for as many unlinked transfers as one read gives, and says when there are more", async () => {
+    daemon.moreDismissals = true;
+    mount();
+    const verdict = await screen.findByTestId("transfers-verdict");
+    await waitFor(() => expect(verdict.getAttribute("data-state")).toBe("unavailable"));
+    expect(calls("ui.transfers.dismissals.list")[0].args).toEqual({ limit: 500 });
+    await openTab(/^Needs you/);
+    const note = await screen.findByTestId("transfers-held-unavailable");
+    expect(note.textContent).toContain("more unlinked transfers and set-aside suggestions than this screen can read at once");
+    // Reading again would read the same.
+    expect(within(note).queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
   it("says it could not check everything when a later page of holds fails", async () => {

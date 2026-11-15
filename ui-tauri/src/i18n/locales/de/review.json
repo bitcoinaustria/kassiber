@@ -1130,7 +1130,8 @@
     "sortOut": {
       "title": "Zu klären",
       "reports": "Steuerberichte warten, bis jede Frage beantwortet ist.",
-      "unavailable": "Übertragungen, die auf deine Antwort warten, konnten nicht geladen werden."
+      "unavailable": "Übertragungen, die auf deine Antwort warten, konnten nicht geladen werden.",
+      "incomplete": "Es gibt mehr getrennte Übertragungen und beiseitegelegte Vorschläge, als dieser Bildschirm auf einmal lesen kann. Manche Übertragungen, die auf deine Antwort warten, werden deshalb womöglich nicht gezeigt."
     },
     "held": {
       "question": "Du hast diesen Ausgang über {{amount}} von {{from}} getrennt.",
