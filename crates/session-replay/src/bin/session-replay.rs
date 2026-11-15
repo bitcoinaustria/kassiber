@@ -358,51 +358,17 @@ fn write_session(file: &Path, session: &Session) -> Result<(), String> {
     fs::rename(&tmp, file).map_err(|e| e.to_string())
 }
 
-/// Write what a replay did into its session: output, exit and the state it
-/// left (blobs copied into the recording's store).
+/// Re-record one session file from a replay that differed
+/// (`replay::rerecorded`). `work` is scratch space.
 fn rerecord(
     file: &Path,
     blobs: &Blobs,
     replayed: &kassiber_session_replay::replay::Replayed,
+    work: &Path,
 ) -> Result<(), String> {
-    use kassiber_session_replay::Entry;
-    let mut session = read_session(file)?;
-    let scan = Blobs::new(&replayed.store);
-    let copy = |hash: &str| -> Result<String, String> {
-        let bytes = scan.get(hash).map_err(|e| e.to_string())?;
-        blobs.put(&bytes).map_err(|e| e.to_string())
-    };
-    session.stdout = blobs.put(&replayed.stdout).map_err(|e| e.to_string())?;
-    session.stderr = blobs.put(&replayed.stderr).map_err(|e| e.to_string())?;
-    session.exit = replayed.exit.clone();
-    session
-        .rerecorded_us
-        .push((replayed.started_us, replayed.ended_us));
-    for (root, after) in session.roots.iter_mut().zip(&replayed.after) {
-        let mut after = after.clone();
-        for entry in &mut after {
-            if let Entry::File {
-                blob, encryption, ..
-            } = entry
-            {
-                *blob = copy(blob)?;
-                if let Some(e) = encryption {
-                    if let Some(ciphertext) = &e.ciphertext {
-                        e.ciphertext = Some(copy(ciphertext)?);
-                    }
-                }
-            }
-        }
-        root.after = after;
-    }
-    let bytes = serde_json::to_vec(&session).map_err(|e| e.to_string())?;
-    if file.to_string_lossy().ends_with(".gz") {
-        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(9));
-        std::io::Write::write_all(&mut encoder, &bytes).map_err(|e| e.to_string())?;
-        fs::write(file, encoder.finish().map_err(|e| e.to_string())?).map_err(|e| e.to_string())
-    } else {
-        fs::write(file, bytes).map_err(|e| e.to_string())
-    }
+    let session = read_session(file)?;
+    let session = kassiber_session_replay::replay::rerecorded(session, blobs, replayed, work)?;
+    write_session(file, &session)
 }
 
 /// Archives a recording travels in on the test-data branch: one gzip
@@ -862,7 +828,9 @@ fn main() -> ExitCode {
                 let problems = match result {
                     Ok(outcome) => {
                         if update && !outcome.differences.is_empty() {
-                            if let Err(error) = rerecord(file, &blobs, &outcome.replayed) {
+                            if let Err(error) =
+                                rerecord(file, &blobs, &outcome.replayed, &scratch.join("rerecord"))
+                            {
                                 eprintln!("could not re-record {name}: {error}");
                             }
                         }

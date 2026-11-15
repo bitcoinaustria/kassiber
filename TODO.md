@@ -31,6 +31,14 @@ only fixed or compared Python were removed.
   can stay retired: the Austrian Neu cutoff copies comparison, the
   tax-country end-to-end modules, the Bitpanda importer tests and the AI tool
   schema budget test.
+- [ ] Session replay: test `replay` → `replay --update` → `replay` end to end
+  from a checkout other than the recording's. The re-record tests in
+  `crates/session-replay/src/replay.rs` drive `replay::rerecorded` with a
+  hand-built replay, because a live replay needs the clock shim beside the
+  test binary.
+- [ ] Session replay: cover a re-record that maps a file name back to the
+  recorded paths, and one that rewrites an encrypted book's plaintext and so
+  drops its stale ciphertext; neither has a test yet.
 
 ## Rust backend R0
 
@@ -1144,6 +1152,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
 
 - [ ] Get the owner's remaining decisions on book-open cost and the allocator;
   decisions 1–4 are recorded in the design.
+- [ ] Retire the text-fusion journal build (`pipeline::Prepared`, `compute`,
+  `compute_snapshot`, `Fusion`, `custody_with_fusion`). Since review
+  [builds through `process::render_loaded`](docs/reference/r4-journal-pipeline.md#review-builds-through-the-same-path),
+  only the frozen review-builds and fusion-parity comparisons and the
+  examples use it. Done when those goldens compare through the typed path
+  alone. `ledger_request::request_json` stays for the engine's text refusal.
 - [x] R4-0: integrate custody, projection fixes, performance, fusion and the
   service/reference fixes on the R5 stack, with a linear replay and completed
   custody, parity and mutation gates; round 4 adds the R5/R4 continuations.

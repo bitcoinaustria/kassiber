@@ -2,8 +2,8 @@
   {
     "id": "RVC-native-live-connection",
     "file": "crates/journals/src/review_workflow.rs",
-    "find": "let prepared = Prepared::load(live, profile.clone(), as_of)?;",
-    "replace": "let clone = crate::pipeline::memory_snapshot(live, || Ok(\"synthetic-mutation-key\".into()))?; let _ = clone.execute_batch(\"BEGIN\"); let prepared = Prepared::load(&clone, profile.clone(), as_of)?;",
+    "find": "pipeline::load_review_state(live, profile.clone(), as_of, |state| state.quarantines)?;",
+    "replace": "{ let clone = crate::pipeline::memory_snapshot(live, || Ok(\"synthetic-mutation-key\".into()))?; let _ = clone.execute_batch(\"BEGIN\"); pipeline::load_review_state(&clone, profile.clone(), as_of, |state| state.quarantines)? };",
     "expect_failing": [
       "native_review_cases_build_on_the_live_connection_and_preserve_pending_caller_edits"
     ],
@@ -12,8 +12,8 @@
   {
     "id": "RVC-native-refusal-fields",
     "file": "crates/journals/src/review_workflow.rs",
-    "find": "let prepared = Prepared::load(live, profile.clone(), as_of)?;",
-    "replace": "let prepared = Prepared::load(live, profile.clone(), as_of).map_err(|error| AppError::new(\"internal_error\", error.message.clone()))?;",
+    "find": "pipeline::load_review_state(live, profile.clone(), as_of, |state| state.quarantines)?;",
+    "replace": "pipeline::load_review_state(live, profile.clone(), as_of, |state| state.quarantines).map_err(|error| AppError::new(\"internal_error\", error.message.clone()))?;",
     "expect_failing": [
       "native_review_cases_refuse_cursors_before_loading_and_preserve_build_refusals"
     ],

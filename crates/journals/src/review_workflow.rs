@@ -1,10 +1,7 @@
 //! Native review composition behind `review` and `ui.review.*`: current cases,
 //! input requests, RAM-only plans, atomic application and stored receipts.
 pub use crate::review_apply::{apply, Apply};
-use crate::{
-    pipeline::{self, Prepared},
-    review_effects, review_simulation, Refusal,
-};
+use crate::{pipeline, review_effects, review_simulation, JournalState, Refusal};
 use kassiber_envelope::{dict, get, s, set, AppError};
 use kassiber_pyjson::{PyStr, Value};
 use kassiber_store::rusqlite::Connection;
@@ -51,12 +48,15 @@ pub(crate) fn profile(conn: &Connection, scope: &Scope<'_>) -> Result<Value, Err
     .ok_or_else(|| AppError::new("not_found", "Review profile was not found").into())
 }
 
-pub(crate) fn prepare(
+/// Review's journal state of the scope's profile on `conn`, built by the
+/// same path `journals process` stores from (`pipeline::load_review_state`).
+pub(crate) fn with_state<R>(
     conn: &Connection,
     scope: &Scope<'_>,
     as_of: &str,
-) -> Result<Prepared, Error> {
-    Ok(Prepared::load(conn, profile(conn, scope)?, as_of)?)
+    then: impl FnOnce(&JournalState<'_>) -> Result<R, Error>,
+) -> Result<R, Error> {
+    pipeline::load_review_state(conn, profile(conn, scope)?, as_of, |state| then(&state))?
 }
 
 pub(crate) fn facts(
@@ -64,17 +64,9 @@ pub(crate) fn facts(
     scope: &Scope<'_>,
     as_of: &str,
 ) -> Result<review_simulation::Cases, Error> {
-    let prepared = prepare(conn, scope, as_of)?;
-    let state = prepared.review_state(conn, derived_ids())?;
-    Ok(review_simulation::Cases::from_state(&state))
-}
-
-pub(crate) fn derived_ids() -> impl FnMut() -> String {
-    let mut index = 0u64;
-    move || {
-        index += 1;
-        format!("review-derived-{index}")
-    }
+    with_state(conn, scope, as_of, |state| {
+        Ok(review_simulation::Cases::from_state(state))
+    })
 }
 
 pub fn plan(
@@ -93,10 +85,12 @@ pub fn plan(
     profile(&clone, scope)?;
     review_support::require_input_version(&clone, scope, expected_input_version)?;
     let _simulation = clone.unchecked_transaction().map_err(sql::error)?;
-    let prepared = prepare(&clone, scope, as_of)?;
-    let state = prepared.review_state(&clone, derived_ids())?;
-    let before = review_effects::effects(&state, &clone, scope, &normalized, sources)?;
-    let cases = review_simulation::Cases::from_state(&state);
+    let (before, cases) = with_state(&clone, scope, as_of, |state| {
+        Ok((
+            review_effects::effects(state, &clone, scope, &normalized, sources)?,
+            review_simulation::Cases::from_state(state),
+        ))
+    })?;
     let Value::List(operations) = &mut normalized else {
         unreachable!("normalized operations")
     };
@@ -112,9 +106,9 @@ pub fn plan(
         cases,
         |conn| facts(conn, scope, as_of),
     )?;
-    let prepared = prepare(&clone, scope, as_of)?;
-    let state = prepared.review_state(&clone, derived_ids())?;
-    let after = review_effects::effects(&state, &clone, scope, &normalized, sources)?;
+    let after = with_state(&clone, scope, as_of, |state| {
+        review_effects::effects(state, &clone, scope, &normalized, sources)
+    })?;
     Ok(review_artifact::assemble(
         scope,
         expected_input_version.clone(),
@@ -167,7 +161,6 @@ pub fn inspect_effects(
     scope: &Scope<'_>,
     operations: &Value,
     as_of: &str,
-    ids: impl FnMut() -> String,
 ) -> Result<Value, Error> {
     let _read = if conn.is_autocommit() {
         Some(conn.unchecked_transaction().map_err(sql::error)?)
@@ -182,11 +175,11 @@ pub fn inspect_effects(
     .into_iter()
     .next()
     .ok_or_else(|| AppError::new("not_found", "Review profile was not found"))?;
-    let prepared = Prepared::load(conn, profile, as_of)?;
-    let state = prepared.review_state(conn, ids)?;
-    Ok(review_effects::effects_without_tax(
-        &state, conn, scope, operations,
-    )?)
+    pipeline::load_review_state(conn, profile, as_of, |state| {
+        Ok(review_effects::effects_without_tax(
+            &state, conn, scope, operations,
+        )?)
+    })?
 }
 
 /// Resolve cursor, profile, canonical facts and freshness on one live snapshot.
@@ -196,13 +189,11 @@ pub fn cases(
     scope: &Scope<'_>,
     args: &Value,
     as_of: &str,
-    ids: impl FnMut() -> String,
 ) -> Result<Value, Error> {
     review_cases::inspect_with_error(conn, scope, args, |live, profile| {
-        let prepared = Prepared::load(live, profile.clone(), as_of)?;
-        let state = prepared.review_state(live, ids)?;
-        state
-            .quarantines
+        let quarantines =
+            pipeline::load_review_state(live, profile.clone(), as_of, |state| state.quarantines)?;
+        quarantines
             .into_iter()
             .map(|row| {
                 let value = |value: &serde_json::Value| {
@@ -293,18 +284,18 @@ pub fn request_input(
     };
     let current = profile(conn, scope)?;
     review_support::require_input_version(conn, scope, &expected)?;
-    let prepared = prepare(conn, scope, as_of)?;
-    let state = prepared.review_state(conn, derived_ids())?;
-    let reasons: BTreeMap<PyStr, String> = state
-        .quarantines
-        .iter()
-        .map(|row| {
-            (
-                PyStr::from(kassiber_custody::codec::pystr(&row.transaction_id).as_str()),
-                row.reason.clone(),
-            )
-        })
-        .collect();
+    let reasons: BTreeMap<PyStr, String> = with_state(conn, scope, as_of, |state| {
+        Ok(state
+            .quarantines
+            .iter()
+            .map(|row| {
+                (
+                    PyStr::from(kassiber_custody::codec::pystr(&row.transaction_id).as_str()),
+                    row.reason.clone(),
+                )
+            })
+            .collect())
+    })?;
     let mut sorted = ids;
     sorted.sort();
     let mut cases = Vec::new();
@@ -363,7 +354,7 @@ pub fn execute(
     }
     let as_of = sources.now_precise(conn)?;
     match operation {
-        "review.cases" => cases(conn, scope, args, &as_of, derived_ids()),
+        "review.cases" => cases(conn, scope, args, &as_of),
         "review.request_input" => request_input(conn, scope, args, &as_of),
         "review.plan" => plan(
             conn,

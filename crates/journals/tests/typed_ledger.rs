@@ -179,3 +179,49 @@ fn a_rules_countrys_expenses_and_move_rows_decode() {
     assert_eq!(sale["expenses"], "60000E-4");
     assert_eq!(sale["fragments"][0]["expenses"], "60000E-4");
 }
+
+/// Every registry rules country, through the typed call and the text path:
+/// a book the engine computes, and one whose amount the typed request cannot
+/// read, which `engine::ledger` hands to the text path. That text once
+/// panicked on the fields registry countries emit (`refused_receipts`).
+#[test]
+fn every_registry_country_reads_typed_and_as_text() {
+    let btc = 100_000_000_000u64;
+    let mut countries = 0;
+    for entry in kassiber_tax_countries::COUNTRIES {
+        let Some(Ok(country)) = entry.engine_country() else {
+            continue;
+        };
+        countries += 1;
+        let code = entry.code;
+        let mut request = json!({
+            "schema_version": 2, "operation": "ledger",
+            "policy": {"country": country, "method": entry.default_method.to_lowercase(),
+                       "method_label": entry.default_method,
+                       "require_coarse_review": false,
+                       "pool_scope": entry.default_pool_scope},
+            "config": {"assets": ["BTC"], "exchanges": ["A"], "holders": ["H"]},
+            "holder": "H",
+            "wallets": [{"id": "A", "label": "A"}],
+            "rows": [
+                rules_row("b1", "A", "inbound", "2024-01-10", btc, json!({})),
+                rules_row("s1", "A", "outbound", "2025-03-01", btc / 4,
+                          json!({"rate": "60000E0"})),
+            ],
+            "intra_pairs": [],
+            "cross_asset_pairs": [],
+        });
+        assert!(
+            compare(code, &request).get("ok").is_some(),
+            "{code} computes: {}",
+            compare(code, &request)
+        );
+        request["rows"][0]["amount_msat"] = serde_json::from_str("18446744073709551616").unwrap();
+        assert!(LedgerRequest::deserialize(&request).is_err(), "{code}");
+        assert!(
+            compare(code, &request).get("refusal").is_some(),
+            "{code} refuses"
+        );
+    }
+    assert!(countries >= 6, "{countries} rules countries");
+}

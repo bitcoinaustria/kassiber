@@ -513,10 +513,11 @@ fn review_assembler_preserves_raw_admission_and_refusal_ownership() {
                 .all(|row| row["amount"] == serde_json::json!(1.5)));
             let state = conn.transaction_state(Some("main")).unwrap();
             let reference = kassiber_custody::run_loaded(&loaded, true).err().unwrap();
-            let Err(error) = crate::pipeline::Prepared::load(
+            let Err(error) = crate::pipeline::load_review_state(
                 &conn,
                 get(case, "profile").clone(),
                 &text(get(case, "as_of")),
+                |_| (),
             ) else {
                 panic!("review assembler must preserve the consuming stage refusal")
             };

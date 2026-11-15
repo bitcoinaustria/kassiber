@@ -142,8 +142,8 @@
   {
     "id": "RV-quarantine-primary",
     "file": "crates/journals/src/pipeline.rs",
-    "find": "crate::persistence::dedupe_quarantines(&state.quarantines)?",
-    "replace": "state.quarantines.clone()",
+    "find": "crate::persistence::dedupe_quarantines(quarantines)?",
+    "replace": "quarantines.to_vec()",
     "expect_failing": [
       "review_builds_keep_primary_reasons_and_only_live_profile_anchors"
     ],
