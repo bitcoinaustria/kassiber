@@ -42,15 +42,15 @@ fn line(value: &Value) -> String {
 /// Python never advertised the daemon's Rust-only kinds, so they leave the
 /// `daemon.ready` row before it is compared; every other kind still is.
 fn without_rust_only_kinds(line: String) -> String {
-    if !line.contains("\"daemon.ready\"") {
-        return line;
-    }
-    kassiber_daemon::RUST_ONLY_KINDS
-        .iter()
-        .fold(line, |line, kind| {
-            line.replace(&format!(", \"{kind}\""), "")
-                .replace(&format!("\"{kind}\", "), "")
-        })
+    kassiber_session_replay::compare::without_rust_only_kinds(&line)
+}
+
+#[test]
+fn the_replays_drop_exactly_the_daemons_rust_only_kinds() {
+    assert_eq!(
+        kassiber_session_replay::compare::RUST_ONLY_KINDS,
+        kassiber_daemon::RUST_ONLY_KINDS
+    );
 }
 
 /// The daemon's environment: the recorded one, with every path placed in

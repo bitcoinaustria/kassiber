@@ -74,6 +74,8 @@ zeroize = "1"
 flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 # Loopback OpenCode API fakes for the provider broker's black-box tests.
 kassiber-net = { path = "../net", features = ["test-support"] }
+# The recorded-session replays share its Rust-only kind filter.
+kassiber-session-replay = { path = "../session-replay" }
 tempfile = "3"
 
 [lints.rust]

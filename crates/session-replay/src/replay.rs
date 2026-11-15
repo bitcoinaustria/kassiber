@@ -1154,7 +1154,9 @@ pub fn replay(
         recorded_out
     };
     if daemon {
-        replay_out = crate::compare::group_by_request(&replay_out);
+        // Python never advertised the daemon's Rust-only kinds.
+        replay_out =
+            crate::compare::group_by_request(&crate::compare::without_rust_only_kinds(&replay_out));
     }
     let (a, b) = (
         left.rewrite(&recorded_out, true),

@@ -74,6 +74,18 @@ Zero or few candidates does not mean nothing is left to pair. `suggest` (and
 `transfers dismissals delete` undoes it), and `excluded_already_journaled` (legs the journal books as
 deterministic self-transfers, see `journals transfers list`).
 
+A quarantined row's actions say when a dismissal undid an automatic pairing.
+A `restore_pairing` action comes first on a
+`recorded_transfer_authority_conflict` row (a platform or Bark statement
+against an owned wallet's observation of the same transaction) when an active
+dismissal names exactly its `out_transaction_id`/`in_transaction_id` pair;
+`dismissal_id` is that dismissal. Restoring is `ui_transfers_dismissals_delete`
+with that `dismissal_id`, a consent-gated mutation. The owner undid the pairing
+on purpose, so propose restoring only when the user wants the pairing back.
+Journals are stale afterwards; the next rebuild books the move again if it is
+still exact, otherwise the row stays held. Without that action, syncing does
+not resolve this hold: pair it with the user or record a custody component.
+
 Leg references take the full transaction id. A raw txid resolves only when
 one row carries it; CoinJoins and batched deposits share a txid across rows,
 and the error `ambiguous_reference` lists every candidate. Use the intended
