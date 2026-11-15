@@ -133,6 +133,56 @@ fn policy(c: &Connection, scope: &Scope<'_>, out: &str, inbound: &str, policy: &
     }
     Ok(())
 }
+/// Which ways a pair of these two transactions may be recorded, from the
+/// checks `create` runs before it writes: the desktop asks before it offers
+/// an answer the book would refuse. A read; it decides and stores nothing,
+/// and a pair is still planned and validated in full when it is made.
+pub(super) fn options(c: &Connection, scope: &Scope<'_>, args: &Value) -> Result<Value> {
+    let out = resolve(c, scope, &value(args, "tx_out"), "outbound")?;
+    let inbound = resolve(c, scope, &value(args, "tx_in"), "inbound")?;
+    let same = kassiber_pytext::upper(&text(&out, "asset"))
+        == kassiber_pytext::upper(&text(&inbound, "asset"));
+    let mut policies = Vec::new();
+    for name in POLICIES {
+        // Why a policy is refused, as a stable word next to the core's own text.
+        let refusal = match network(&out, &inbound, name) {
+            Err(error) => Some(("network_mismatch", error.message)),
+            Ok(()) => policy(
+                c,
+                scope,
+                &text(&out, "asset"),
+                &text(&inbound, "asset"),
+                name,
+            )
+            .err()
+            .map(|error| {
+                (
+                    if same { "same_asset" } else { "cross_asset" },
+                    error.message,
+                )
+            }),
+        };
+        policies.push(dict([
+            ("policy", s(*name)),
+            ("allowed", Value::Bool(refusal.is_none())),
+            (
+                "reason",
+                refusal
+                    .as_ref()
+                    .map_or(Value::Null, |(reason, _)| s(*reason)),
+            ),
+            (
+                "message",
+                refusal.map_or(Value::Null, |(_, message)| s(message)),
+            ),
+        ]));
+    }
+    Ok(dict([
+        ("out_transaction_id", value(&out, "id")),
+        ("in_transaction_id", value(&inbound, "id")),
+        ("policies", Value::List(policies)),
+    ]))
+}
 pub(super) fn active_refs(c: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>> {
     let mut refs=rows(c,"SELECT term.legacy_source_id AS id,term.component_id,term.term_kind,COALESCE(source.anchor_transaction_id,source.transaction_id) AS out_transaction_id,CASE WHEN term.term_kind='transaction_pair' THEN COALESCE(target.anchor_transaction_id,target.transaction_id) ELSE NULL END AS in_transaction_id,term.review_kind AS kind,term.tax_policy AS policy FROM custody_component_economic_terms term JOIN custody_component_legs source ON source.id=term.source_leg_id JOIN custody_component_legs target ON target.id=term.target_leg_id WHERE term.profile_id=? AND term.component_id IN (SELECT DISTINCT component_id FROM custody_component_transaction_memberships WHERE profile_id=?) ORDER BY term.created_at,term.component_id,term.ordinal",[scope.profile_id,scope.profile_id])?;
     let claimed: BTreeSet<_> = refs
@@ -160,7 +210,9 @@ pub(super) fn active_refs(c: &Connection, scope: &Scope<'_>) -> Result<Vec<Value
     }
     Ok(refs)
 }
-fn reusable(r: &Value) -> bool {
+/// Whether a pair lets its transactions take further pairs: only a same-asset
+/// manual, coinjoin or whirlpool link at carrying value does.
+pub(super) fn reusable(r: &Value) -> bool {
     kassiber_pytext::upper(&text(r, "out_asset")) == kassiber_pytext::upper(&text(r, "in_asset"))
         && text(r, "policy") == "carrying-value"
         && ["manual", "coinjoin", "whirlpool"].contains(&text(r, "kind").as_str())

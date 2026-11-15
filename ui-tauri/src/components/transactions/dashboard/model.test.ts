@@ -22,6 +22,7 @@ import {
   initialPeriodFromUrl,
   isAttachmentListQueryKeyForTransaction,
   matchesFlowChartSelection,
+  pairedTransferRow,
   readTransactionDetailParams,
   readTransactionScopeParams,
   serializeTransactionFilterParams,
@@ -1173,5 +1174,97 @@ describe("transaction detail routing", () => {
       transactionId: "tx-ledger",
       tab: "details",
     });
+  });
+});
+
+describe("paired transfer rows", () => {
+  type Translate = Parameters<typeof pairedTransferRow>[1];
+  const en = t as unknown as Translate;
+  // The daemon's `ui.transactions.list` row for a settled Bark -> on-chain
+  // sweep: the collapsed pair carries the pair's fee (none) as its amount.
+  function barkSweep(pair: Partial<NonNullable<Tx["pair"]>> = {}): Tx {
+    return rawTx({
+      id: "170cb33f-43c4-49f5-9885-562ecaf3a079",
+      externalId: "6bb93c0819b689af5cc948d718c3978671d832ff764c6ab73702e5d97edce2ea",
+      date: "2026-11-13 11:52",
+      type: "Transfer",
+      kind: "deposit",
+      account: "BTCPay Bark -> Store on-chain",
+      counter: "Transfer fee - BTC -> BTC",
+      amountSat: 0,
+      feeSat: pair.feeSat ?? 0,
+      eur: -0,
+      rate: 92_000,
+      tag: "Transfer",
+      internal: true,
+      pair: {
+        id: "c7a09aab",
+        type: "transfer",
+        kind: "bark_txid_exact",
+        policy: "carrying-value",
+        outWallet: "BTCPay Bark",
+        outAsset: "BTC",
+        outAmountSat: 600_000,
+        inWallet: "Store on-chain",
+        inAsset: "BTC",
+        inAmountSat: 600_000,
+        feeSat: 0,
+        feeKind: null,
+        ...pair,
+      },
+    });
+  }
+
+  it("shows what moved between the wallets instead of the pair's fee", () => {
+    const row = pairedTransferRow(toDashboardTransaction(barkSweep(), 0), en);
+    expect(row).toEqual({
+      title: "Transfer · BTCPay Bark → Store on-chain",
+      movedBtc: 0.006,
+      movedFiat: 552,
+      feeBtc: 0,
+      feeFiat: 0,
+    });
+  });
+
+  it("names the move in Austrian German", () => {
+    const de = i18n.getFixedT("de", "transactions") as unknown as Translate;
+    expect(
+      pairedTransferRow(toDashboardTransaction(barkSweep(), 0), de)?.title,
+    ).toBe("Übertragung · BTCPay Bark → Store on-chain");
+  });
+
+  it("keeps a recorded pair fee apart from the moved amount", () => {
+    const row = pairedTransferRow(
+      toDashboardTransaction(
+        barkSweep({ outAmountSat: 600_420, inAmountSat: 600_000, feeSat: 420 }),
+        0,
+      ),
+      en,
+    );
+    expect(row?.movedBtc).toBe(0.006);
+    expect(row?.feeBtc).toBe(0.0000042);
+    expect(row?.feeFiat).toBeCloseTo(0.3864, 10);
+  });
+
+  it("leaves the value unknown when the row has no rate", () => {
+    const row = pairedTransferRow(
+      toDashboardTransaction({ ...barkSweep(), rate: null, eur: null }, 0),
+      en,
+    );
+    expect(row?.movedBtc).toBe(0.006);
+    expect(row?.movedFiat).toBeNull();
+  });
+
+  it("does not touch swaps or unpaired rows", () => {
+    expect(
+      pairedTransferRow(
+        toDashboardTransaction(
+          barkSweep({ type: "swap", outAsset: "LBTC", inAsset: "BTC" }),
+          0,
+        ),
+        en,
+      ),
+    ).toBeNull();
+    expect(pairedTransferRow(toDashboardTransaction(rawTx(), 0), en)).toBeNull();
   });
 });

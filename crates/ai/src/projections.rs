@@ -740,6 +740,10 @@ pub fn read_for_ai(
             capital_gains_for_ai(book.read(kind, arguments, "gui")?, arguments)
         }
         "ui.journals.events.list" => journal_events_for_ai(book.read(kind, arguments, "gui")?),
+        "ui.journals.verify" => match book.read(kind, arguments, "gui") {
+            Ok(report) => Ok(journal_verify_for_ai(&report)),
+            Err(error) => Err(journal_verify_error(error)),
+        },
         "ui.workspace.overview.snapshot" => {
             if get(state, "cross_book_read_allowed") == Some(&Value::Bool(false)) {
                 return Err(AppError::new(
@@ -1336,5 +1340,298 @@ pub fn stale_journal_figures_for_ai(kind: &str, payload: Value) -> Value {
             )
         }
         _ => payload,
+    }
+}
+
+/// `ui.journals.verify` for the assistant: the check's statuses and counts
+/// per table, wallet and year, and each listed difference as its table,
+/// change kind and changed column names. No cell values, amounts, row keys,
+/// transaction ids, labels or refusal messages reach the provider.
+pub fn journal_verify_for_ai(report: &Value) -> Value {
+    let field = |name: &str| get(report, name).cloned();
+    let mut out = Vec::new();
+    for name in [
+        "status",
+        "reason",
+        "deterministic",
+        "differing",
+        "truncated",
+        "limit",
+        "journal_input_version",
+        "last_processed_input_version",
+        "journal_semantics_version",
+    ] {
+        if let Some(value) = field(name) {
+            out.push((name, value));
+        }
+    }
+    if let Some(error) = get(report, "error") {
+        out.push((
+            "error",
+            dict([("code", get(error, "code").cloned().unwrap_or(Value::Null))]),
+        ));
+    }
+    // A list cut to `VERIFY_AI_ENTRIES` here is truncated for the assistant
+    // even when the check itself listed everything it found.
+    let mut cut = false;
+    if let Some(Value::List(all)) = get(report, "tables") {
+        let tables = all
+            .iter()
+            .take(VERIFY_AI_ENTRIES)
+            .map(|table| {
+                dict(
+                    ["table", "stored", "recomputed", "differing"]
+                        .map(|name| (name, get(table, name).cloned().unwrap_or(Value::Null))),
+                )
+            })
+            .collect();
+        if let Some(more) = all.len().checked_sub(VERIFY_AI_ENTRIES).filter(|n| *n > 0) {
+            cut = true;
+            out.push(("tables_omitted", Value::Int((more as i64).into())));
+        }
+        out.push(("tables", Value::List(tables)));
+    }
+    for (name, omitted) in [
+        ("by_wallet", "by_wallet_omitted"),
+        ("by_year", "by_year_omitted"),
+    ] {
+        if let Some(Value::Dict(counts)) = get(report, name) {
+            let (kept, rest) = capped_counts(counts);
+            out.push((name, Value::Dict(kept)));
+            if let Some(rest) = rest {
+                out.push((omitted, rest));
+            }
+        }
+    }
+    if let Some(Value::List(differences)) = get(report, "differences") {
+        let differences = differences
+            .iter()
+            .take(VERIFY_AI_ENTRIES)
+            .map(|difference| {
+                let columns = match get(difference, "columns") {
+                    Some(Value::List(columns)) => Value::List(
+                        columns
+                            .iter()
+                            .take(VERIFY_AI_COLUMNS)
+                            .map(|column| get(column, "column").cloned().unwrap_or(Value::Null))
+                            .collect(),
+                    ),
+                    _ => Value::List(Vec::new()),
+                };
+                dict([
+                    (
+                        "table",
+                        get(difference, "table").cloned().unwrap_or(Value::Null),
+                    ),
+                    (
+                        "change",
+                        get(difference, "change").cloned().unwrap_or(Value::Null),
+                    ),
+                    ("columns", columns),
+                ])
+            })
+            .collect();
+        out.push(("differences", Value::List(differences)));
+    }
+    if let Some(Value::List(all)) = get(report, "differences") {
+        if let Some(more) = all.len().checked_sub(VERIFY_AI_ENTRIES).filter(|n| *n > 0) {
+            cut = true;
+            out.push(("differences_omitted", Value::Int((more as i64).into())));
+        }
+    }
+    if cut {
+        match out.iter_mut().find(|(name, _)| *name == "truncated") {
+            Some((_, value)) => *value = Value::Bool(true),
+            None => out.push(("truncated", Value::Bool(true))),
+        }
+    }
+    dict(out)
+}
+
+#[cfg(test)]
+mod journal_verify_tests {
+    use super::*;
+
+    #[test]
+    fn the_journal_check_reaches_the_assistant_as_counts_and_column_names_only() {
+        let report = kassiber_pytext::loads(
+            r#"{"status": "different", "reason": "stored journals differ from a recomputation from the current inputs",
+                "profile": "SENTINEL_BOOK", "profile_id": "SENTINEL_PROFILE_ID", "differing": 2,
+                "deterministic": true, "truncated": false, "limit": 20,
+                "tables": [{"table": "journal_entries", "stored": 3, "recomputed": 3, "differing": 2}],
+                "by_wallet": {"w1": 2}, "by_year": {"2024": 2},
+                "error": {"code": "custody_refused", "message": "SENTINEL_MESSAGE 4242.42"},
+                "differences": [{"table": "journal_entries", "change": "changed",
+                  "key": "SENTINEL_TX|w1|disposal|BTC", "transaction_id": "SENTINEL_TX", "wallet_id": "w1", "year": "2024",
+                  "columns": [{"column": "cost_basis_exact", "stored": "SENTINEL_AMOUNT 99999.99", "recomputed": "4242.42"},
+                              {"column": "calculation", "stored": "{\"text\": \"SENTINEL_DESCRIPTION Alice\"}", "recomputed": "x"}]}]}"#,
+        )
+        .unwrap();
+        let projected = dumps(&journal_verify_for_ai(&report), &Options::new()).unwrap();
+        for leaked in [
+            "SENTINEL",
+            "99999.99",
+            "4242.42",
+            "Alice",
+            "\"key\"",
+            "transaction_id",
+        ] {
+            assert!(!projected.contains(leaked), "{leaked}: {projected}");
+        }
+        for kept in [
+            "different",
+            "journal_entries",
+            "cost_basis_exact",
+            "calculation",
+            "\"w1\": 2",
+            "\"2024\": 2",
+            "custody_refused",
+        ] {
+            assert!(projected.contains(kept), "{kept}: {projected}");
+        }
+    }
+}
+
+/// Entries of each list or count map `journal_verify_for_ai` passes on.
+const VERIFY_AI_ENTRIES: usize = 50;
+/// Column names per difference.
+const VERIFY_AI_COLUMNS: usize = 20;
+/// Characters of a count map key (a wallet id or a year).
+const VERIFY_AI_KEY_CHARS: usize = 64;
+
+/// The largest `VERIFY_AI_ENTRIES` counts (ties by key), keys cut to
+/// `VERIFY_AI_KEY_CHARS`, and what was left out.
+fn capped_counts(counts: &[(Key, Value)]) -> (Vec<(Key, Value)>, Option<Value>) {
+    let count = |value: &Value| match value {
+        Value::Int(n) => n.to_string().parse::<i64>().unwrap_or(0),
+        _ => 0,
+    };
+    let mut sorted: Vec<&(Key, Value)> = counts.iter().collect();
+    sorted.sort_by_key(|entry| std::cmp::Reverse(count(&entry.1)));
+    let kept = sorted
+        .iter()
+        .take(VERIFY_AI_ENTRIES)
+        .map(|(key, value)| {
+            let key = match key {
+                Key::Str(text) => {
+                    let text = String::from_utf8_lossy(text.as_surrogatepass_bytes());
+                    Key::from(
+                        text.chars()
+                            .take(VERIFY_AI_KEY_CHARS)
+                            .collect::<String>()
+                            .as_str(),
+                    )
+                }
+                other => other.clone(),
+            };
+            (key, Value::Int(count(value).into()))
+        })
+        .collect();
+    let rest: Vec<_> = sorted.iter().skip(VERIFY_AI_ENTRIES).collect();
+    let omitted = (!rest.is_empty()).then(|| {
+        dict([
+            ("entries", Value::Int((rest.len() as i64).into())),
+            (
+                "count",
+                Value::Int(rest.iter().map(|(_, v)| count(v)).sum::<i64>().into()),
+            ),
+        ])
+    });
+    (kept, omitted)
+}
+
+/// A failed journal check for the assistant: its code and a fixed message,
+/// never the error text (which can quote book values).
+fn journal_verify_error(error: ToolError) -> ToolError {
+    match error {
+        ToolError::App(error) => ToolError::App(AppError::new(
+            error.code.as_str(),
+            "The journal reproducibility check could not run on this book",
+        )),
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod journal_verify_bound_tests {
+    use super::*;
+
+    #[test]
+    fn a_failed_check_reaches_the_assistant_without_its_message() {
+        let error = AppError::new("internal_error", "invalid integer: SENTINEL_COUNT 4242")
+            .with_hint("SENTINEL_HINT");
+        let ToolError::App(projected) = journal_verify_error(ToolError::App(error)) else {
+            panic!("app error");
+        };
+        let text = format!("{projected:?}");
+        assert!(
+            !text.contains("SENTINEL") && !text.contains("4242"),
+            "{text}"
+        );
+        assert_eq!(projected.code, "internal_error");
+    }
+
+    #[test]
+    fn huge_count_maps_are_capped_with_truncation_metadata() {
+        let wallets: Vec<(Key, Value)> = (0..10_000)
+            .map(|i| {
+                (
+                    Key::from(format!("wallet-{i:05}-{}", "x".repeat(100)).as_str()),
+                    Value::Int(((i % 7) + 1).into()),
+                )
+            })
+            .collect();
+        let report = dict([
+            ("status", s("different")),
+            ("by_wallet", Value::Dict(wallets)),
+            (
+                "differences",
+                Value::List(
+                    (0..5_000)
+                        .map(|_| dict([("table", s("journal_entries")), ("change", s("missing"))]))
+                        .collect(),
+                ),
+            ),
+        ]);
+        let projected = journal_verify_for_ai(&report);
+        let text = dumps(&projected, &Options::new()).unwrap();
+        assert!(text.len() < 16 * 1024, "{} bytes", text.len());
+        let omitted = get(&projected, "by_wallet_omitted").expect("truncation metadata");
+        assert_eq!(get(omitted, "entries"), Some(&Value::Int(9_950.into())));
+        let Some(Value::List(differences)) = get(&projected, "differences") else {
+            panic!()
+        };
+        assert_eq!(differences.len(), VERIFY_AI_ENTRIES);
+    }
+
+    #[test]
+    fn a_list_cut_for_the_assistant_is_marked_truncated() {
+        let report = dict([
+            ("status", s("different")),
+            ("truncated", Value::Bool(false)),
+            ("limit", Value::Int(100.into())),
+            (
+                "differences",
+                Value::List(
+                    (0..75)
+                        .map(|_| dict([("table", s("journal_entries")), ("change", s("missing"))]))
+                        .collect(),
+                ),
+            ),
+        ]);
+        let projected = journal_verify_for_ai(&report);
+        assert_eq!(get(&projected, "truncated"), Some(&Value::Bool(true)));
+        assert_eq!(
+            get(&projected, "differences_omitted"),
+            Some(&Value::Int(25.into()))
+        );
+        let within = dict([
+            ("truncated", Value::Bool(false)),
+            ("differences", Value::List(vec![])),
+        ]);
+        assert_eq!(
+            get(&journal_verify_for_ai(&within), "truncated"),
+            Some(&Value::Bool(false))
+        );
     }
 }

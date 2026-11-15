@@ -1930,9 +1930,18 @@ See [tax countries](docs/reference/tax-countries.md) and
   one verb is used everywhere.
 - [ ] Finish folding the old review pages into Review and its neighbours: the
   sidebar's Tools group is gone (its pages sit under Extras), but paired-transfer
-  history still lives on Transfers & Custody rather than as a Transactions
+  history still lives on Transfers rather than as a Transactions
   filter, matching rules are not in book settings yet, and the address/txid
   ownership lookup is not reachable from Search.
+- [x] Give held own-wallet sends a next step that can fix them on Review. The
+  quarantine catalog files `recorded_transfer_authority_conflict` and the
+  `ownership_transfer_{amount,conservation}_mismatch` reasons under
+  `needs_decision` with `pair_transfer` first, and leads with
+  `restore_pairing` (`dismissal_id`) when an active dismissal names exactly
+  the held row's pair (see [custody resolution](docs/reference/custody-resolution.md#why-a-transaction-is-quarantined)).
+  Review asks "You unlinked this send" with Link it back
+  (`ui.transfers.dismissals.delete`) and Link it to a different receipt (Link
+  manually on Transfers), and drops the sync it cannot answer with.
 
 ## Imports, source evidence, and wallet workflows
 
@@ -2019,6 +2028,19 @@ See [tax countries](docs/reference/tax-countries.md) and
   remember-me affordances on Windows/Linux. Existing desktop Touch ID and CLI
   remembered unlock remain convenience over SQLCipher, never a substitute.
 
+## Journal reproducibility
+
+Shipped: [the reproducibility check](docs/reference/replay-bundle.md#reproducibility-check)
+on the CLI, daemon, desktop and assistant.
+
+- [ ] Measure the check on a large book: it holds up to three in-memory
+  copies of the database (pristine, recomputation, determinism re-run). Done
+  when the peak memory and time are recorded in the reference and a
+  large-book run stays within the desktop's budget.
+- [ ] Decide whether time-dependent inputs (for example an expiring pair
+  dismissal) should report as `stale` rather than a difference when the
+  check runs long after processing.
+
 ## Daemon, contracts, and performance
 
 - [ ] Support OpenCode 2 OAuth-backed private turns once credentials can be
@@ -2104,7 +2126,11 @@ See [tax countries](docs/reference/tax-countries.md) and
   follow-ups: let the notification for an untrusted or
   changed certificate open the trust dialog directly (its source condition
   does not name the backend, so it opens Connections), and offer it from the
-  title-bar connection check.
+  title-bar connection check. Carry managed pins in `.kassiber` backups and
+  rebind their paths on restore, so a restored backend keeps its confirmed
+  trust instead of failing closed until it is trusted again. Teach the
+  `wallets-backends` skill reference the two certificate error codes (now in
+  docs/reference/ai.md) in the next reviewed re-record of its sessions.
 
 - [ ] Harden against infostealers running as the user: `exports/` and
   `attachments/` sit outside SQLCipher, CLI remembered unlock on Linux is

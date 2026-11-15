@@ -11,7 +11,7 @@
     "reportHint": "Reports update when processing finishes",
     "phase": {
       "writerWait": "Waiting for the database writer",
-      "autoPair": "Pairing exact own-wallet transfers",
+      "autoPair": "Linking exact own-wallet transfers",
       "preparing": "Preparing journal inputs",
       "repairing": "Checking overlapping sources",
       "pricing": "Applying cached prices",
@@ -29,7 +29,8 @@
     },
     "actions": {
       "processJournals": "Process journals",
-      "viewLedgerEntries": "View ledger entries"
+      "viewLedgerEntries": "View ledger entries",
+      "verifyJournals": "Check reproducibility"
     },
     "unavailable": {
       "title": "Ledger unavailable",
@@ -90,6 +91,24 @@
       "transferIn": "Transfer in",
       "transferOut": "Transfer out",
       "neutralSwap": "Neutral swap"
+    },
+    "verify": {
+      "title": "Check journal reproducibility",
+      "description": "Kassiber recomputes the journals from this book's current inputs in a private copy in memory and compares them with the stored journals. Nothing is written and nothing leaves this device.",
+      "running": "Recomputing journals…",
+      "status": {
+        "identical": "The stored journals are exactly what the current inputs produce.",
+        "different_one": "{{count}} stored row differs from a recomputation.",
+        "different_other": "{{count}} stored rows differ from a recomputation.",
+        "stale": "The inputs changed since the journals were processed. Process journals first; this is not a sign of wrong numbers.",
+        "noTransactions": "This book has no transactions to check.",
+        "refused": "Recomputing the journals was refused: {{message}}"
+      },
+      "nondeterministic": "Two recomputations also disagreed with each other. This points at a Kassiber bug, not at your data.",
+      "byWallet": "Wallets: {{wallets}}",
+      "byYear": "Years: {{years}}",
+      "truncated": "Showing the first {{count}} differences.",
+      "nextStep": "Processing the journals again replaces the stored rows."
     }
   },
   "reportable": {
@@ -158,12 +177,12 @@
       "ownershipSourceAmbiguous": {
         "title": "Several own wallets could have sent this",
         "why": "The inputs belong to more than one of your wallets, or their network does not match the transaction.",
-        "provide": "Open the pairing review and choose which wallets funded this transfer."
+        "provide": "Open the matching tools and choose which wallets funded this transfer."
       },
       "ownershipDestinationAmbiguous": {
         "title": "Several receipts match this transfer",
         "why": "{{wallet}} has more than one incoming transaction that could be the other side of this transfer.",
-        "provide": "Open the pairing review and pick the matching receipt."
+        "provide": "Open the matching tools and pick the right receipt."
       },
       "ownershipDestinationMissingRef": {
         "title": "Destination wallet is not in this book",
@@ -207,23 +226,28 @@
       },
       "recordedAuthorityConflict": {
         "title": "One side comes from a file, the other from the chain",
-        "why": "Only one side of this transfer is confirmed by a chain sync; the other side is an imported record.",
-        "provide": "Sync the wallet whose side came from a file so both sides are observed on chain."
+        "why": "Only one side of this transfer is confirmed by a chain sync; the other side is an imported record, so Kassiber books neither a payment nor a move between your wallets on its own.",
+        "provide": "Link it to the matching receipt in the matching tools. If the side from a file is out of date, syncing that wallet can confirm it from the chain."
+      },
+      "unlinkedAutomaticPair": {
+        "title": "You unlinked this send from {{wallet}}",
+        "why": "You removed its automatic link. The coins arrived in a wallet you own, so Kassiber can't book it as a payment, and tax reports wait until you say what it was.",
+        "provide": "If it was your own move, link it back. If it arrived somewhere else, link it to that receipt."
       },
       "chronologyMismatch": {
         "title": "Transfer arrives before it leaves",
         "why": "The receiving side is dated earlier than the sending side by more than the allowed clock difference.",
-        "provide": "Check the timestamps of the imported rows (time zone) or pair the correct transactions."
+        "provide": "Check the timestamps of the imported rows (time zone) or link the correct transactions."
       },
       "networkMismatch": {
         "title": "Transfer crosses networks",
-        "why": "The two sides of this pair are on different networks or units.",
-        "provide": "Remove the pairing, or record the movement as a swap in the pairing review."
+        "why": "The two linked sides are on different networks or units.",
+        "provide": "Unlink them, or record the movement as a swap in the matching tools."
       },
       "feeImplausible": {
         "title": "Too much is missing in this transfer",
         "why": "More than 1 % (at least 2,500 sats) of this transfer is explained neither by the receipt nor by the fee.",
-        "provide": "If part went to another wallet of yours, connect it; otherwise pair the correct receipt or record the difference."
+        "provide": "If part went to another wallet of yours, connect it; otherwise link the correct receipt or record the difference."
       },
       "privacyHop": {
         "title": "CoinJoin or shared transaction needs evidence",
@@ -248,7 +272,7 @@
       "nativeTransitionAmbiguous": {
         "title": "Several payments match this swap",
         "why": "The payment hash of this Lightning swap matches more than one record.",
-        "provide": "Open the pairing review and choose the matching payment."
+        "provide": "Open the matching tools and choose the right payment."
       },
       "nativeTransitionAmountMismatch": {
         "title": "Swap amounts do not balance",
@@ -262,8 +286,8 @@
       },
       "migrationIncomplete": {
         "title": "An older review could not be carried over",
-        "why": "A transfer pair or payout reviewed in an older version could not be converted to the current format.",
-        "provide": "Open the transaction and review the pairing again."
+        "why": "A transfer link or payout reviewed in an older version could not be converted to the current format.",
+        "provide": "Open the transaction and review the link again."
       },
       "importDuplicate": {
         "title": "An imported transaction may be stored twice",
@@ -281,13 +305,13 @@
         "provide": "Compare the provider's exports. Exclude each row that copies another transaction. If every row is a separate transaction, confirm that instead with the confirm_distinct_import_rows review (kassiber review plan, then review apply); nothing is excluded."
       },
       "legacyPairFee": {
-        "title": "An older transfer pair needs its fee reviewed",
-        "why": "An older version counted this pair's network fee as moved principal but left it out of the sending side's full debit. The pair stays recorded and changes nothing until a corrected revision is reviewed.",
-        "provide": "Review the pair. Preview and apply the corrected revision with kassiber review, update it with transfers update, or unpair it and pair the reviewed legs again. Excluding a leg does not answer this."
+        "title": "An older transfer link needs its fee reviewed",
+        "why": "An older version counted this link's network fee as moved principal but left it out of the sending side's full debit. The link stays recorded and changes nothing until a corrected revision is reviewed.",
+        "provide": "Review the link. Preview and apply the corrected revision with kassiber review, update it with transfers update, or unlink it and link the reviewed legs again. Excluding a leg does not answer this."
       },
       "resetDecisionHeld": {
         "title": "A decision kept by the reset is waiting",
-        "why": "\"Reset book data\" kept a decision on this transaction (a pair, loan mark, link or edit), but another transaction it names did not come back with the sync, or came back with different amounts.",
+        "why": "\"Reset book data\" kept a decision on this transaction (a transfer link, loan mark, other link or edit), but another transaction it names did not come back with the sync, or came back with different amounts.",
         "provide": "Sync the wallet that holds the missing transaction. If it is gone for good, only \"Wipe everything\" in Settings releases the hold for now."
       },
       "gapHold": {
@@ -413,17 +437,17 @@
       "unscopedTransfer": {
         "title": "Transfer without a chain reference",
         "why": "Two rows in different wallets of yours share a provider ID but have no transaction graph, so Kassiber cannot prove they are one transfer.",
-        "provide": "Pair them in the pairing review, or sync the wallets from the chain."
+        "provide": "Link them in the matching tools, or sync the wallets from the chain."
       },
       "ownedFanout": {
         "title": "Payment to several own wallets does not add up",
         "why": "This transaction sends to several of your wallets, but the recorded receipts do not match the amounts.",
-        "provide": "Sync or connect every receiving wallet, or pair the receipts in the pairing review."
+        "provide": "Sync or connect every receiving wallet, or link the receipts in the matching tools."
       },
       "pairAmbiguous": {
-        "title": "The pairing is ambiguous",
-        "why": "The paired transactions do not form one consistent transfer.",
-        "provide": "Open the pairing review and correct the pairing."
+        "title": "The link is ambiguous",
+        "why": "The linked transactions do not form one consistent transfer.",
+        "provide": "Open the matching tools and correct the link."
       },
       "category": {
         "missing_wallet_history": {
@@ -471,9 +495,9 @@
         "currency": "a currency"
       },
       "reviewedSuspensePair": {
-        "title": "A transfer pair doesn't add up",
-        "why": "This transaction is paired with another as a move between your wallets, but less arrived than left. The difference is held open, so cost basis from here on can't be final.",
-        "provide": "Compare the two sides of each pair below. Unpair a pair only if you know its two transactions are unrelated; different transaction ids alone don't show that. If it was a move between your wallets, open it and record where the difference went."
+        "title": "A linked transfer doesn't add up",
+        "why": "This transaction is linked to another as a move between your wallets, but less arrived than left. The difference is held open, so cost basis from here on can't be final.",
+        "provide": "Compare the two sides of each linked transfer below. Unlink one only if you know its two transactions are unrelated; different transaction ids alone don't show that. If it was a move between your wallets, open it and record where the difference went."
       }
     },
     "category": {
@@ -491,7 +515,7 @@
       "importHistory": "Import history",
       "setPrice": "Enter price",
       "classify": "Classify",
-      "pairTransfer": "Open pairing",
+      "pairTransfer": "Open matching tools",
       "reviewCustodyGap": "Review custody gap",
       "attachEvidence": "Attach evidence",
       "waitForConfirmation": "Waiting for confirmation",
@@ -499,12 +523,17 @@
       "processJournals": "Recalculate journals",
       "openTransaction": "Open transaction",
       "askAssistant": "Investigate with assistant",
-      "reviewPair": "Review the pair"
+      "reviewPair": "Review the link",
+      "restorePairing": "Link it back",
+      "linkDifferently": "Link it to a different receipt…"
     },
     "panel": {
       "blocksReports": "Blocks reports",
       "deprecatedWallet": "{{wallet}} is marked deprecated, so “Refresh all” skips it; sync it on its own.",
-      "gapReviewLocked": "Custody-gap review is currently part of the developer tools. Connect the missing wallet or ask the assistant to investigate."
+      "gapReviewLocked": "Custody-gap review is currently part of the developer tools. Connect the missing wallet or ask the assistant to investigate.",
+      "linkedBackTitle": "Linked again",
+      "linkedBackBody": "Journals are being recalculated.",
+      "linkBackFailedTitle": "The link could not be restored"
     },
     "freshness": {
       "staleTitle": "This list may be outdated",
@@ -555,59 +584,59 @@
       "loadError": "This list could not be loaded."
     },
     "fact": {
-      "pairTxidsDiffer": "The two sides are different on-chain transactions. A direct move between your wallets has one, but a move through a wallet Kassiber doesn't track has two, so this alone doesn't make the pair wrong.",
-      "pairReceiptFirst": "The receipt is dated before the payment it is paired with."
+      "pairTxidsDiffer": "The two sides are different on-chain transactions. A direct move between your wallets has one, but a move through a wallet Kassiber doesn't track has two, so this alone doesn't make the link wrong.",
+      "pairReceiptFirst": "The receipt is dated before the payment it is linked to."
     },
     "pair": {
-      "title_one": "The pair",
-      "title_other": "The {{count}} pairs",
+      "title_one": "The linked transfer",
+      "title_other": "The {{count}} linked transfers",
       "sent": "Sent",
       "received": "Received",
-      "unpair": "Unpair",
+      "unpair": "Unlink",
       "confirmBody": "Kassiber then books them on their own: the payment from {{outWallet}} as a disposal and the receipt in {{inWallet}} as a purchase at its market value, unless you classify them otherwise. The difference held open goes away, and journals are recalculated so the transactions waiting on it can clear.",
-      "confirmUndo": "You can pair them again from Transfers & Custody.",
+      "confirmUndo": "You can link them again from Transfers.",
       "cancel": "Cancel",
-      "confirmTitle": "Unpair these two transactions?",
-      "confirm": "Unpair and recalculate",
-      "andMore_one": "and {{count}} more pair",
-      "andMore_other": "and {{count}} more pairs",
-      "pick": "Pick the pair from {{outWallet}} to {{inWallet}}",
-      "unpairPicked_one": "Unpair the picked pair",
-      "unpairPicked_other": "Unpair {{count}} picked pairs",
+      "confirmTitle": "Unlink these two transactions?",
+      "confirm": "Unlink and recalculate",
+      "andMore_one": "and {{count}} more transfer",
+      "andMore_other": "and {{count}} more transfers",
+      "pick": "Pick the transfer from {{outWallet}} to {{inWallet}}",
+      "unpairPicked_one": "Unlink the picked transfer",
+      "unpairPicked_other": "Unlink {{count}} picked transfers",
       "clearPicked": "Clear",
-      "pickLimit": "Up to {{count}} pairs at a time.",
-      "tickLapsed_one": "{{count}} pair you ticked changed or cleared since. Its tick no longer counts; tick it again if it still applies.",
-      "tickLapsed_other": "{{count}} pairs you ticked changed or cleared since. Their ticks no longer count; tick them again if they still apply."
+      "pickLimit": "Up to {{count}} transfers at a time.",
+      "tickLapsed_one": "{{count}} transfer you ticked changed or cleared since. Its tick no longer counts; tick it again if it still applies.",
+      "tickLapsed_other": "{{count}} transfers you ticked changed or cleared since. Their ticks no longer count; tick them again if they still apply."
     },
     "fix": {
-      "title_one": "Unpair this pair?",
-      "title_other": "Unpair these {{count}} pairs?",
-      "body_one": "You picked this pair to unpair. Each side is then booked on its own: the payment as a disposal, the receipt as a purchase at market value, unless you classify them otherwise.",
-      "body_other": "You picked these {{count}} pairs to unpair. Each side is then booked on its own: payments as disposals, receipts as purchases at market value, unless you classify them otherwise.",
+      "title_one": "Unlink this transfer?",
+      "title_other": "Unlink these {{count}} transfers?",
+      "body_one": "You picked this transfer to unlink. Each side is then booked on its own: the payment as a disposal, the receipt as a purchase at market value, unless you classify them otherwise.",
+      "body_other": "You picked these {{count}} transfers to unlink. Each side is then booked on its own: payments as disposals, receipts as purchases at market value, unless you classify them otherwise.",
       "checking": "Checking what this changes",
       "effectQuarantine": "In quarantine: {{before}} → {{after}}",
       "reportsReady": "Reports: ready after this",
       "reportsBlocked": "Reports: still blocked afterwards",
-      "apply_one": "Unpair and recalculate",
-      "apply_other": "Unpair {{count}} and recalculate",
-      "applying": "Unpairing…",
+      "apply_one": "Unlink and recalculate",
+      "apply_other": "Unlink {{count}} and recalculate",
+      "applying": "Unlinking…",
       "stale": "The book changed since this check.",
       "retry": "Check again",
-      "doneTitle_one": "Unpaired {{count}} pair",
-      "doneTitle_other": "Unpaired {{count}} pairs",
+      "doneTitle_one": "Unlinked {{count}} transfer",
+      "doneTitle_other": "Unlinked {{count}} transfers",
       "doneBody": "{{remaining}} left in quarantine.",
-      "recheckFailed": "The pairs could not be checked against the current book.",
-      "leftOut_one": "{{count}} pair you picked is no longer listed as you saw it and was left out.",
-      "leftOut_other": "{{count}} pairs you picked are no longer listed as you saw them and were left out.",
-      "changed_one": "{{count}} pair you picked changed since you saw it. Nothing was unpaired; close this and look at it again.",
-      "changed_other": "{{count}} pairs you picked changed since you saw them. Nothing was unpaired; close this and look at them again.",
-      "nothing_one": "The pair you picked is no longer in quarantine. There is nothing to unpair.",
-      "nothing_other": "None of the pairs you picked is still in quarantine. There is nothing to unpair.",
+      "recheckFailed": "The linked transfers could not be checked against the current book.",
+      "leftOut_one": "{{count}} transfer you picked is no longer listed as you saw it and was left out.",
+      "leftOut_other": "{{count}} transfers you picked are no longer listed as you saw them and were left out.",
+      "changed_one": "{{count}} transfer you picked changed since you saw it. Nothing was unlinked; close this and look at it again.",
+      "changed_other": "{{count}} transfers you picked changed since you saw them. Nothing was unlinked; close this and look at them again.",
+      "nothing_one": "The transfer you picked is no longer in quarantine. There is nothing to unlink.",
+      "nothing_other": "None of the transfers you picked is still in quarantine. There is nothing to unlink.",
       "close": "Close",
-      "noScope": "This book's quarantine does not say which book it is, so nothing can be unpaired from here.",
-      "bookChanged": "Another book is open now. Nothing was unpaired; return to the book you picked these pairs in.",
-      "notACase": "This pair is not one of the pairs to review here. Unpair it from Transfers & Custody.",
-      "sheetChanged": "This pair reads differently now than the sheet showed it. Nothing was unpaired; look at it again.",
+      "noScope": "This book's quarantine does not say which book it is, so nothing can be unlinked from here.",
+      "bookChanged": "Another book is open now. Nothing was unlinked; return to the book you picked these transfers in.",
+      "notACase": "This transfer is not one of the transfers to review here. Unlink it from Transfers.",
+      "sheetChanged": "This transfer reads differently now than the sheet showed it. Nothing was unlinked; look at it again.",
       "reviewLine": "Reviewed as {{kind}}: {{sent}} sent, {{received}} received"
     },
     "section": {

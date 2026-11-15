@@ -319,6 +319,12 @@ export interface CustodyLineageItem {
   occurred_at: string | null;
   asset: string;
   amount_msat: string | number;
+  /** The moved amount and the sending transaction's fee at its price; null when unpriced. */
+  fiat_currency?: string | null;
+  fiat_value?: number | null;
+  /** The sending transaction's network fee; it covers the whole transaction. */
+  fee_msat?: string | number | null;
+  fee_fiat_value?: number | null;
   from_wallet_id: string;
   from_wallet_label: string;
   to_wallet_id: string;
@@ -328,7 +334,13 @@ export interface CustodyLineageItem {
   basis_barrier_at: string | null;
   evidence_reason: string;
   network: string;
+  /** Both rails as one (`bitcoin->lightning` when they differ). */
   rail: string;
+  /** Each side's own rail and asset, which a cross-rail move needs apart. */
+  source_rail?: string | null;
+  target_rail?: string | null;
+  source_asset?: string | null;
+  target_asset?: string | null;
   atomic_bundle_id?: string | null;
   component_id?: string | null;
 }

@@ -1154,7 +1154,9 @@ pub fn replay(
         recorded_out
     };
     if daemon {
-        replay_out = crate::compare::group_by_request(&replay_out);
+        // Python never advertised the daemon's Rust-only kinds.
+        replay_out =
+            crate::compare::group_by_request(&crate::compare::without_rust_only_kinds(&replay_out));
     }
     let (a, b) = (
         left.rewrite(&recorded_out, true),
@@ -1190,7 +1192,14 @@ pub fn replay(
         let dump_dir = scratch.join("dump");
         fs::create_dir_all(&dump_dir).map_err(|e| e.to_string())?;
         let recorded = artifacts(&dump_dir, &root.after, blobs, &mut left, None);
-        let replayed = artifacts(&dump_dir, &after, &scan_blobs, &mut right, Some(&paths));
+        let mut replayed = artifacts(&dump_dir, &after, &scan_blobs, &mut right, Some(&paths));
+        // A file can hold the daemon's records too (a chat client's log of
+        // its stream); Python never advertised the Rust-only kinds there either.
+        for texts in replayed.values_mut() {
+            for text in texts.iter_mut() {
+                *text = crate::compare::without_rust_only_kinds(text);
+            }
+        }
         all_after.push(after.clone());
         for name in recorded
             .keys()

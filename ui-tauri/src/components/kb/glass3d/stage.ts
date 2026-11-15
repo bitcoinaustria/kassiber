@@ -12,7 +12,6 @@ import { glass, LIGHT_TONES, satin } from "./materials";
 export type GlassSceneLook = { background: string; dark: boolean };
 export type GlassScene = {
   resize: (width: number, height: number) => void;
-  setView: (yaw: number, pitch: number) => void;
   /** Compiles the scene's shaders without blocking the page; draw after. */
   prepare: () => Promise<void>;
   /** Explicit draw; no animation loop or background work. */
@@ -37,6 +36,11 @@ export type GlassPointer = {
   toScreen: (x: number, y: number) => [number, number];
   /** CSS pixels per scene unit at the current frame. */
   pixelsPerUnit: number;
+  /**
+   * Changes whenever `toScreen` would answer differently (the view resized),
+   * so a scene may keep what it projected until then.
+   */
+  projection: number;
 };
 
 /** A scene whose parts can be pointed at, e.g. the legs of a transaction. */
@@ -234,9 +238,13 @@ export function warmGlassRenderer(): Promise<void> {
   return warmShared(entry).finally(() => releaseShared(entry));
 }
 
+/** Seen from the upper left, as in the lab renders: block tops and inner faces show. */
+const DEFAULT_VIEW = { yaw: 0.5, pitch: 0.3 };
+
 /**
  * Owns all content geometry and registered materials, including on build failure.
- * Defaults preserve the transaction graph's framing. Set view before first draw.
+ * Defaults preserve the transaction graph's framing and angle. The view is fixed:
+ * the frame is fitted once, so the drawing keeps its scale.
  * Draws through the shared renderer onto `canvas`, a plain 2D canvas.
  */
 export function createGlassStage(
@@ -246,7 +254,7 @@ export function createGlassStage(
     content: Group,
     own: <T extends Material>(material: T) => T,
   ) => GlassPicking | void,
-  { minHalfWidth = 4.4, minHalfHeight = 2.5 } = {},
+  { minHalfWidth = 4.4, minHalfHeight = 2.5, view = DEFAULT_VIEW } = {},
 ): GlassScene {
   const entry = acquireShared();
   const content = new Group();
@@ -281,44 +289,33 @@ export function createGlassStage(
     const bounds = new Box3().setFromObject(content);
     content.position.sub(bounds.getCenter(new Vector3()));
     pivot.add(content);
+    pivot.rotation.set(view.pitch, view.yaw, 0);
+    pivot.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(pivot);
+    if (box.isEmpty()) box.set(new Vector3(), new Vector3());
+    // The camera looks at the pivot, so the frame is symmetric around it.
+    const frame = {
+      halfWidth: Math.max(minHalfWidth, Math.max(Math.abs(box.min.x), Math.abs(box.max.x)) * 1.06),
+      halfHeight: Math.max(minHalfHeight, Math.max(Math.abs(box.min.y), Math.abs(box.max.y)) * 1.1),
+    };
 
-    // Far enough out that no turn can bring a corner past the camera, however
-    // tall a 250-leg fan-in gets.
-    const reach = Math.max(0, new Box3().setFromObject(pivot).getBoundingSphere(new Sphere()).radius);
+    // Far enough out that no corner comes past the camera, however tall a
+    // fan-in gets.
+    const reach = box.getBoundingSphere(new Sphere()).radius;
     const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, reach * 2 + 20);
     camera.position.set(0, 0, reach + 10);
     camera.lookAt(0, 0, 0);
     // Never rendered itself (the shared camera copies it), so its world matrix
     // is kept current here for picking.
     camera.updateMatrixWorld();
-    let frame = { halfWidth: 0, halfHeight: 0 };
-    let size = { width: 1, height: 1 };
     const raycaster = new Raycaster();
     const ndc = new Vector2();
     const probe = new Vector3();
     const drawn = new Vector2();
-
-    // The camera looks at the pivot, so the frame is symmetric around it. It only
-    // grows: turning never clips the piece, and never zooms back in.
-    const fit = () => {
-      pivot.updateMatrixWorld(true);
-      const box = new Box3().setFromObject(pivot);
-      if (box.isEmpty()) box.set(new Vector3(), new Vector3());
-      frame = {
-        halfWidth: Math.max(
-          frame.halfWidth,
-          minHalfWidth,
-          Math.max(Math.abs(box.min.x), Math.abs(box.max.x)) * 1.06,
-        ),
-        halfHeight: Math.max(
-          frame.halfHeight,
-          minHalfHeight,
-          Math.max(Math.abs(box.min.y), Math.abs(box.max.y)) * 1.1,
-        ),
-      };
-    };
+    let size = { width: 1, height: 1 };
+    let projection = 0;
     const applyFrame = () => {
-      if (!frame.halfWidth || !frame.halfHeight) return;
+      projection += 1;
       const aspect = size.width / Math.max(1, size.height);
       let { halfWidth, halfHeight } = frame;
       if (halfWidth / halfHeight > aspect) halfHeight = halfWidth / aspect;
@@ -329,6 +326,9 @@ export function createGlassStage(
       camera.bottom = -halfHeight;
       camera.updateProjectionMatrix();
     };
+    // Framed from the start, so a pick before the first resize is not answered
+    // from three's default frame.
+    applyFrame();
     // Borrow the shared scene and camera for one draw or compile.
     const borrow = <T>(draw: () => T): T => {
       applyLook(entry, look.dark, background);
@@ -344,11 +344,6 @@ export function createGlassStage(
     return {
       resize(width, height) {
         size = { width: Math.max(1, width), height: Math.max(1, height) };
-        applyFrame();
-      },
-      setView(yaw, pitch) {
-        pivot.rotation.set(pitch, yaw, 0);
-        fit();
         applyFrame();
       },
       async prepare() {
@@ -381,7 +376,7 @@ export function createGlassStage(
         output.drawImage(renderer.domElement, 0, 0);
       },
       pick(x, y) {
-        if (!picking || !frame.halfWidth) return null;
+        if (!picking) return null;
         ndc.set((x / size.width) * 2 - 1, 1 - (y / size.height) * 2);
         raycaster.setFromCamera(ndc, camera);
         content.updateMatrixWorld(true);
@@ -394,6 +389,7 @@ export function createGlassStage(
             return [((probe.x + 1) / 2) * size.width, ((1 - probe.y) / 2) * size.height];
           },
           pixelsPerUnit: size.width / (camera.right - camera.left),
+          projection,
         });
       },
       highlight(part) {

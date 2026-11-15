@@ -9,11 +9,18 @@
 //! starts the daemon on the tape, sends each line at the same point and
 //! requires the same rows, per request in order (background events in
 //! their own order), and the same book.
+//!
+//! `KASSIBER_GOLDEN_WRITE=1` (refused under `CI`) rewrites the recorded
+//! rows a replay compares with the rows the daemon produced, after a
+//! deliberate change; everything else in the recording stays as it was.
+//! Review the diff and publish it (plan 22, "Generators become frozen
+//! goldens").
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use crate::golden::{
@@ -22,7 +29,7 @@ use crate::golden::{
 };
 use kassiber_envelope::{get, py_str};
 use kassiber_ipc::unix::UnixStream;
-use kassiber_pyjson::{Options, Value};
+use kassiber_pyjson::{Key, Options, Value};
 
 pub const BIN: &str = env!("CARGO_BIN_EXE_kassiber");
 
@@ -36,7 +43,21 @@ pub fn text(value: &Value) -> String {
 }
 
 fn line(value: &Value) -> String {
-    fixed_elapsed_ms(&text(value))
+    without_rust_only_kinds(fixed_elapsed_ms(&text(value)))
+}
+
+/// Python never advertised the daemon's Rust-only kinds, so they leave the
+/// `daemon.ready` row before it is compared; every other kind still is.
+fn without_rust_only_kinds(line: String) -> String {
+    if !line.contains("\"daemon.ready\"") {
+        return line;
+    }
+    kassiber_daemon::RUST_ONLY_KINDS
+        .iter()
+        .fold(line, |line, kind| {
+            line.replace(&format!(", \"{kind}\""), "")
+                .replace(&format!("\"{kind}\", "), "")
+        })
 }
 
 /// The daemon's environment: the recorded one, with every path placed in
@@ -296,10 +317,7 @@ pub fn field(row: &Value, key: &str) -> String {
 fn grouped(rows: &[Value]) -> Vec<(String, Vec<String>)> {
     let mut groups: Vec<(String, Vec<String>)> = Vec::new();
     for row in rows {
-        let key = match get(row, "request_id") {
-            Some(id) => format!("request {}", text(id)),
-            None => "events".to_owned(),
-        };
+        let key = group(row);
         match groups.iter_mut().find(|(k, _)| *k == key) {
             Some((_, list)) => list.push(line(row)),
             None => groups.push((key, vec![line(row)])),
@@ -307,6 +325,173 @@ fn grouped(rows: &[Value]) -> Vec<(String, Vec<String>)> {
     }
     groups.sort_by(|a, b| a.0.cmp(&b.0));
     groups
+}
+
+/// Whether this run rewrites the recordings instead of comparing them.
+pub fn write_mode() -> bool {
+    let on = std::env::var_os("KASSIBER_GOLDEN_WRITE").is_some_and(|v| v == "1");
+    assert!(
+        !on || std::env::var_os("CI").is_none(),
+        "KASSIBER_GOLDEN_WRITE is refused in CI"
+    );
+    on
+}
+
+/// The request a row answers, or `events` for rows without one.
+fn group(row: &Value) -> String {
+    match get(row, "request_id") {
+        Some(id) => format!("request {}", text(id)),
+        None => "events".to_owned(),
+    }
+}
+
+/// `expected` with every row `assert_same_rows` compares replaced by the
+/// row `actual` holds at its place (its request, its position there) when
+/// the two differ. The recording's order, its row count and the rows that
+/// compare equal stay as recorded.
+fn rewritten(name: &str, actual: &[Value], expected: &[Value]) -> Vec<Value> {
+    for row in actual {
+        let key = group(row);
+        assert!(
+            expected.iter().any(|e| group(e) == key),
+            "{name}: unrecorded rows for {key}"
+        );
+    }
+    let mut seen: Vec<(String, usize)> = Vec::new();
+    expected
+        .iter()
+        .map(|recorded| {
+            let key = group(recorded);
+            let at = match seen.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, n)) => {
+                    *n += 1;
+                    *n - 1
+                }
+                None => {
+                    seen.push((key.clone(), 1));
+                    0
+                }
+            };
+            let row = actual
+                .iter()
+                .filter(|row| group(row) == key)
+                .nth(at)
+                .unwrap_or_else(|| panic!("{name}: {key}: no row {at}, recorded one"));
+            if line(row) == line(recorded) {
+                recorded.clone()
+            } else {
+                in_recorded_order(row, recorded)
+            }
+        })
+        .collect()
+}
+
+/// `actual` with its keys in the order `recorded` has them (new keys after
+/// them): replayed rows come back key-sorted, and the comparison ignores
+/// key order, so the recording's order stays.
+fn in_recorded_order(actual: &Value, recorded: &Value) -> Value {
+    match (actual, recorded) {
+        (Value::Dict(items), Value::Dict(order)) => {
+            let mut out: Vec<(Key, Value)> = order
+                .iter()
+                .filter_map(|(key, old)| {
+                    let (_, new) = items.iter().find(|(k, _)| k == key)?;
+                    Some((key.clone(), in_recorded_order(new, old)))
+                })
+                .collect();
+            for (key, new) in items {
+                if !order.iter().any(|(k, _)| k == key) {
+                    out.push((key.clone(), new.clone()));
+                }
+            }
+            Value::Dict(out)
+        }
+        (Value::List(items), Value::List(old)) => Value::List(
+            items
+                .iter()
+                .enumerate()
+                .map(|(at, new)| match old.get(at) {
+                    Some(old) => in_recorded_order(new, old),
+                    None => new.clone(),
+                })
+                .collect(),
+        ),
+        _ => actual.clone(),
+    }
+}
+
+static WRITING: Mutex<()> = Mutex::new(());
+
+fn slot<'a>(value: &'a mut Value, key: &str) -> &'a mut Value {
+    match value {
+        Value::Dict(items) => items
+            .iter_mut()
+            .find(|(k, _)| matches!(k, Key::Str(s) if s.is(key)))
+            .map(|(_, v)| v)
+            .unwrap_or_else(|| panic!("no {key:?} in the recording")),
+        other => panic!("expected an object, not {other:?}"),
+    }
+}
+
+/// A recording as its files are laid out: compact ASCII JSON with each
+/// case on a line of its own.
+fn recording_text(root: &Value) -> String {
+    let compact = Options::new().compact();
+    let Value::Dict(items) = root else {
+        panic!("a recording is an object")
+    };
+    let Some(((Key::Str(last), Value::List(cases)), head)) = items.split_last() else {
+        panic!("a recording ends with its cases")
+    };
+    assert!(last.is("cases"), "a recording ends with its cases");
+    let head = kassiber_pyjson::dumps(&Value::Dict(head.to_vec()), &compact).unwrap();
+    let cases: Vec<String> = cases
+        .iter()
+        .map(|case| kassiber_pyjson::dumps(case, &compact).unwrap())
+        .collect();
+    format!(
+        "{},\"cases\":[\n{}\n]}}\n",
+        head.strip_suffix('}').unwrap(),
+        cases.join(",\n")
+    )
+}
+
+/// Write `rows` as the recorded rows of call `index` of `test[param]` in
+/// the recording `module` (write mode).
+pub fn write_rows(module: &str, test: &str, param: &str, index: usize, rows: Vec<Value>) {
+    let _one_writer = WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../wallets/tests/data/freshness")
+        .join(format!("{module}.json"));
+    let before = std::fs::read_to_string(&path).unwrap();
+    let mut root = kassiber_pytext::loads(&before).expect("recording JSON");
+    assert_eq!(
+        recording_text(&root),
+        before,
+        "{}: not laid out as write mode writes it",
+        path.display()
+    );
+    let Value::List(cases) = slot(&mut root, "cases") else {
+        panic!("the cases are a list")
+    };
+    let mut matching = cases.iter_mut().filter(|case| {
+        golden::string(case, "test") == test && golden::string(case, "param") == param
+    });
+    let case = matching
+        .next()
+        .unwrap_or_else(|| panic!("no recording of {test}[{param}]"));
+    let Value::List(calls) = slot(case, "calls") else {
+        panic!("the calls are a list")
+    };
+    *slot(&mut calls[index], "rows") = Value::List(rows);
+    assert!(
+        matching.next().is_none(),
+        "two recordings of {test}[{param}]"
+    );
+    // Tests running alongside read the recording; they see it whole.
+    let fresh = path.with_extension("json.write");
+    std::fs::write(&fresh, recording_text(&root)).unwrap();
+    std::fs::rename(&fresh, &path).unwrap();
 }
 
 pub fn assert_same_rows(name: &str, actual: &[Value], expected: &[Value]) {
@@ -392,13 +577,14 @@ pub fn prepare(golden: &Golden, scratch: &Scratch, index: usize, session: &Value
 
 /// Replay a recorded session as it was driven: each line goes out once as
 /// many rows have arrived as had then; the rows and the book must match.
+/// In write mode the rows to record are returned instead of compared.
 pub fn replay_session(
     golden: &Golden,
     scratch: &Scratch,
     name: &str,
     index: usize,
     session: &Value,
-) {
+) -> Option<Vec<Value>> {
     let prepared = prepare(golden, scratch, index, session);
     let mut daemon = Daemon::start(&prepared.root, &prepared.env, &prepared.tape, None);
     let deadline = Instant::now() + Duration::from_secs(120);
@@ -437,7 +623,10 @@ pub fn replay_session(
         .map(|row| Value::from(scratch_unplace(scratch, &text(&row)).as_str()))
         .map(|text| kassiber_pytext::loads(&py_str(&text)).unwrap())
         .collect();
-    assert_same_rows(name, &rows, expected);
+    let write = write_mode().then(|| rewritten(name, &rows, expected));
+    if write.is_none() {
+        assert_same_rows(name, &rows, expected);
+    }
     assert_requests_recorded(name, &prepared.tape);
     let after = value(session, "after");
     if !matches!(after, Value::Null) {
@@ -447,6 +636,7 @@ pub fn replay_session(
             after,
         );
     }
+    write
 }
 
 /// `text` with the scratch directory put back as the recording's

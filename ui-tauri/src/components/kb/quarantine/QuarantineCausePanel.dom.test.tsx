@@ -229,12 +229,12 @@ describe("unpairing pairs that leave a suspense", () => {
     mount(snapshotOf(many(8)));
     expect(screen.queryByRole("button", { name: /^Fix/ })).toBeNull();
     expect(screen.queryByText(/Kassiber can fix/)).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Unpair" })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Unlink" })).toHaveLength(3);
     for (const box of screen.getAllByRole("checkbox")) {
       expect(box.getAttribute("aria-checked")).toBe("false");
     }
     expect(screen.queryByRole("button", { name: /picked/ })).toBeNull();
-    expect(screen.getAllByText(/this alone doesn't make the pair wrong/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/this alone doesn't make the link wrong/).length).toBeGreaterThan(0);
   });
 
   it("leaves a legitimate hop through an untracked wallet alone unless the owner picks it", async () => {
@@ -242,7 +242,7 @@ describe("unpairing pairs that leave a suspense", () => {
     // one movement. Unpairing the pair next to it does not touch it.
     const hop = root("hop", "pair-hop");
     mount(snapshotOf([hop, ...many(2)]));
-    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlink" })[1]);
     await screen.findByText("In quarantine: 11 → 0");
     expect(planned().operations.map((operation) => operation.pair_id)).toEqual(["pair-0"]);
     expect(daemon.apply).not.toHaveBeenCalled();
@@ -253,10 +253,10 @@ describe("unpairing pairs that leave a suspense", () => {
     const boxes = screen.getAllByRole("checkbox");
     fireEvent.click(boxes[0]);
     fireEvent.click(boxes[2]);
-    fireEvent.click(screen.getByRole("button", { name: "Unpair 2 picked pairs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlink 2 picked transfers" }));
     const dialog = await screen.findByRole("dialog");
-    expect(dialog.textContent).toContain("Unpair these 2 pairs?");
-    expect(dialog.textContent).toContain("You picked these 2 pairs");
+    expect(dialog.textContent).toContain("Unlink these 2 transfers?");
+    expect(dialog.textContent).toContain("You picked these 2 transfers");
     expect(await screen.findByText("In quarantine: 11 → 0")).toBeTruthy();
     expect(daemon.cases).toHaveBeenCalledWith({ limit: 1, expected_scope: BOOK });
     expect(planned().expected_input_version).toBe(7);
@@ -267,28 +267,28 @@ describe("unpairing pairs that leave a suspense", () => {
     // The audit reason records the owner's choice, not a verdict on the txids.
     expect(planned().operations[0].reason).toContain("owner");
     expect(planned().operations[0].reason).not.toMatch(/txid/);
-    fireEvent.click(screen.getByRole("button", { name: "Unpair 2 and recalculate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlink 2 and recalculate" }));
     await waitFor(() => expect(daemon.apply).toHaveBeenCalledOnce());
     const applied = daemon.apply.mock.calls[0][0] as { artifact: { digest: string }; expected_scope: unknown; idempotency_key: string };
     expect(applied.artifact.digest).toBe("d".repeat(64));
     expect(applied.expected_scope).toEqual({ workspace_id: "ws", profile_id: "book" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(useFeedbackStore.getState().items.some((entry) => entry.title === "Unpaired 2 pairs")).toBe(true);
+    expect(useFeedbackStore.getState().items.some((entry) => entry.title === "Unlinked 2 transfers")).toBe(true);
   });
 
   it("unpairs one pair through the same preview, naming both wallets", async () => {
     daemon.plan.mockImplementation(async (args: { operations: unknown[] }) => ({ data: artifactFor(args, 4) }));
     mount(snapshotOf(many(2, () => false)));
-    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlink" })[1]);
     const dialog = await screen.findByRole("dialog");
-    expect(dialog.textContent).toContain("Unpair these two transactions?");
+    expect(dialog.textContent).toContain("Unlink these two transactions?");
     expect(dialog.textContent).toContain("the payment from Merchant as a disposal");
     // What is confirmed shows the review itself, not only its legs.
     expect(dialog.textContent).toContain("Reviewed as manual: 14,964,523 sats sent, 14,964,523 sats received");
     expect(await screen.findByText("In quarantine: 11 → 4")).toBeTruthy();
     expect(screen.getByText("Reports: still blocked afterwards")).toBeTruthy();
     expect(planned().operations).toEqual([expect.objectContaining({ type: "unpair", pair_id: "pair-1" })]);
-    fireEvent.click(screen.getByRole("button", { name: "Unpair and recalculate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlink and recalculate" }));
     await waitFor(() => expect(daemon.apply).toHaveBeenCalledOnce());
   });
 
@@ -298,8 +298,8 @@ describe("unpairing pairs that leave a suspense", () => {
     mount(snapshotOf(pairs));
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
-    fireEvent.click(screen.getByRole("button", { name: "Unpair 2 picked pairs" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Unpair 2 and recalculate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlink 2 picked transfers" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Unlink 2 and recalculate" }));
     expect(await screen.findByText("The book changed since this check.")).toBeTruthy();
     // Another session turned the first pair into a reviewed swap refund.
     const revised = {
@@ -308,7 +308,7 @@ describe("unpairing pairs that leave a suspense", () => {
     };
     fresh.items = [revised, pairs[1]];
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("1 pair you picked changed since you saw it");
+    expect((await screen.findByRole("alert")).textContent).toContain("1 transfer you picked changed since you saw it");
     expect(daemon.plan).toHaveBeenCalledOnce();
     expect(screen.queryByRole("button", { name: /and recalculate/ })).toBeNull();
   });
@@ -319,20 +319,20 @@ describe("unpairing pairs that leave a suspense", () => {
     mount(snapshotOf(pairs));
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
-    fireEvent.click(screen.getByRole("button", { name: "Unpair 2 picked pairs" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Unpair 2 and recalculate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlink 2 picked transfers" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Unlink 2 and recalculate" }));
     await screen.findByText("The book changed since this check.");
     fresh.items = [pairs[1]];
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
-    expect(await screen.findByText(/1 pair you picked is no longer listed/)).toBeTruthy();
+    expect(await screen.findByText(/1 transfer you picked is no longer listed/)).toBeTruthy();
     expect(planned(1).operations.map((operation) => operation.pair_id)).toEqual(["pair-1"]);
   });
 
   it("retries an apply that failed without an answer with the same proposal and key", async () => {
     daemon.apply.mockRejectedValueOnce(new Error("connection lost"));
     mount(snapshotOf(many(2)));
-    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Unpair and recalculate" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlink" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Unlink and recalculate" }));
     expect((await screen.findByRole("alert")).textContent).toContain("connection lost");
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     await waitFor(() => expect(daemon.apply).toHaveBeenCalledTimes(2));
@@ -344,7 +344,7 @@ describe("unpairing pairs that leave a suspense", () => {
   it("shows a failed preview and changes nothing on Cancel", async () => {
     daemon.plan.mockRejectedValueOnce(new Error("daemon offline"));
     mount(snapshotOf(many(2)));
-    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlink" })[0]);
     expect((await screen.findByRole("alert")).textContent).toContain("daemon offline");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -357,7 +357,7 @@ describe("unpairing pairs that leave a suspense", () => {
     expect(screen.getByText("3 of 8 shown")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Show more of “/ }));
     expect(screen.getAllByText("Sent")).toHaveLength(8);
-    expect(screen.getAllByRole("button", { name: "Unpair" })).toHaveLength(8);
+    expect(screen.getAllByRole("button", { name: "Unlink" })).toHaveLength(8);
     fireEvent.click(screen.getByRole("button", { name: /^Show fewer of “/ }));
     expect(screen.getAllByText("Sent")).toHaveLength(3);
   });
@@ -401,7 +401,7 @@ describe("a cause's transactions", () => {
     const pairs = many(3);
     const { reread } = mount(snapshotOf(pairs));
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    expect(screen.getByRole("button", { name: "Unpair the picked pair" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unlink the picked transfer" })).toBeTruthy();
     // Another session replaced P1 (pair-0) with P2 on the same transaction.
     const replaced = {
       ...pairs[0],
@@ -409,8 +409,8 @@ describe("a cause's transactions", () => {
     };
     reread(snapshotOf([replaced, pairs[1], pairs[2]]));
     expect(screen.getAllByRole("checkbox")[0].getAttribute("aria-checked")).toBe("false");
-    expect(screen.queryByRole("button", { name: /picked pair/ })).toBeNull();
-    expect(screen.getByRole("status").textContent).toContain("1 pair you ticked changed or cleared since");
+    expect(screen.queryByRole("button", { name: /picked transfer/ })).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("1 transfer you ticked changed or cleared since");
     expect(daemon.plan).not.toHaveBeenCalled();
   });
 
@@ -423,7 +423,7 @@ describe("a cause's transactions", () => {
     const revised = { ...pairs[0], evidence: { ...pairs[0].evidence, pair_fingerprint: "fp-pair-0-revised" } };
     reread(snapshotOf([revised, pairs[1], pairs[2]]));
     expect(screen.getAllByRole("checkbox")[0].getAttribute("aria-checked")).toBe("false");
-    fireEvent.click(screen.getByRole("button", { name: "Unpair the picked pair" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlink the picked transfer" }));
     await screen.findByText("In quarantine: 11 → 0");
     expect(planned().operations.map((operation) => operation.pair_id)).toEqual(["pair-1"]);
   });
@@ -431,7 +431,7 @@ describe("a cause's transactions", () => {
   it("stops when another book is open by the time it checks", async () => {
     mount(snapshotOf(many(2)));
     fresh.scope = { workspace_id: "ws", profile_id: "other-book" };
-    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlink" })[0]);
     expect((await screen.findByRole("alert")).textContent).toContain("Another book is open now");
     expect(daemon.plan).not.toHaveBeenCalled();
   });

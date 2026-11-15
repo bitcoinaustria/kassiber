@@ -11,7 +11,7 @@
     "reportHint": "Berichte werden nach Abschluss der Verarbeitung aktualisiert",
     "phase": {
       "writerWait": "Warten auf den Datenbankzugriff",
-      "autoPair": "Eindeutige Transfers zwischen eigenen Wallets zuordnen",
+      "autoPair": "Eindeutige Übertragungen zwischen eigenen Wallets verknüpfen",
       "preparing": "Journaleingaben werden vorbereitet",
       "repairing": "Überschneidende Quellen werden geprüft",
       "pricing": "Zwischengespeicherte Preise werden angewendet",
@@ -29,7 +29,8 @@
     },
     "actions": {
       "processJournals": "Journale verarbeiten",
-      "viewLedgerEntries": "Hauptbuch-Einträge anzeigen"
+      "viewLedgerEntries": "Hauptbuch-Einträge anzeigen",
+      "verifyJournals": "Reproduzierbarkeit prüfen"
     },
     "unavailable": {
       "title": "Hauptbuch nicht verfügbar",
@@ -90,6 +91,24 @@
       "transferIn": "Transfer ein",
       "transferOut": "Transfer aus",
       "neutralSwap": "Neutraler Tausch"
+    },
+    "verify": {
+      "title": "Reproduzierbarkeit der Journale prüfen",
+      "description": "Kassiber berechnet die Journale aus den aktuellen Daten dieses Buchs in einer privaten Kopie im Arbeitsspeicher neu und vergleicht sie mit den gespeicherten Journalen. Es wird nichts geschrieben und nichts verlässt dieses Gerät.",
+      "running": "Journale werden neu berechnet…",
+      "status": {
+        "identical": "Die gespeicherten Journale entsprechen genau dem, was die aktuellen Daten ergeben.",
+        "different_one": "{{count}} gespeicherte Zeile weicht von der Neuberechnung ab.",
+        "different_other": "{{count}} gespeicherte Zeilen weichen von der Neuberechnung ab.",
+        "stale": "Die Daten haben sich seit der Verarbeitung der Journale geändert. Verarbeite zuerst die Journale; das ist kein Hinweis auf falsche Zahlen.",
+        "noTransactions": "Dieses Buch hat keine Transaktionen zum Prüfen.",
+        "refused": "Die Neuberechnung der Journale wurde abgelehnt: {{message}}"
+      },
+      "nondeterministic": "Auch zwei Neuberechnungen stimmen nicht überein. Das deutet auf einen Fehler in Kassiber hin, nicht auf deine Daten.",
+      "byWallet": "Wallets: {{wallets}}",
+      "byYear": "Jahre: {{years}}",
+      "truncated": "Die ersten {{count}} Abweichungen werden angezeigt.",
+      "nextStep": "Eine erneute Verarbeitung ersetzt die gespeicherten Zeilen."
     }
   },
   "reportable": {
@@ -133,7 +152,7 @@
     "evidence": {
       "austrianMapping": "Österreichische Formularzuordnung {{kennzahl}}",
       "pricedBy": "Bewertet durch {{source}}",
-      "transferMatching": "Übernommen durch Transfer-Zuordnung",
+      "transferMatching": "Übernommen durch Übertragungs-Abgleich",
       "journalProcessing": "Berechnet durch Journalverarbeitung"
     }
   },
@@ -158,12 +177,12 @@
       "ownershipSourceAmbiguous": {
         "title": "Mehrere eigene Wallets kommen als Absender infrage",
         "why": "Die Inputs gehören zu mehr als einer deiner Wallets oder ihr Netzwerk passt nicht zur Transaktion.",
-        "provide": "Öffne die Zuordnung und wähle, welche Wallets diesen Transfer finanziert haben."
+        "provide": "Öffne die Abgleich-Werkzeuge und wähle, welche Wallets diesen Transfer finanziert haben."
       },
       "ownershipDestinationAmbiguous": {
         "title": "Mehrere Eingänge passen zu diesem Transfer",
         "why": "{{wallet}} hat mehr als einen Eingang, der die Gegenseite dieses Transfers sein könnte.",
-        "provide": "Öffne die Zuordnung und wähle den passenden Eingang."
+        "provide": "Öffne die Abgleich-Werkzeuge und wähle den passenden Eingang."
       },
       "ownershipDestinationMissingRef": {
         "title": "Ziel-Wallet fehlt in diesem Buch",
@@ -207,23 +226,28 @@
       },
       "recordedAuthorityConflict": {
         "title": "Eine Seite stammt aus einer Datei, die andere aus der Blockchain",
-        "why": "Nur eine Seite dieses Transfers ist durch einen Blockchain-Sync bestätigt; die andere ist ein importierter Datensatz.",
-        "provide": "Synchronisiere die Wallet, deren Seite aus einer Datei stammt, damit beide Seiten on-chain beobachtet werden."
+        "why": "Nur eine Seite dieser Übertragung ist durch einen Sync aus der Blockchain bestätigt; die andere ist ein importierter Eintrag. Darum bucht Kassiber von sich aus weder eine Zahlung noch eine Bewegung zwischen deinen Wallets.",
+        "provide": "Verknüpfe sie in den Abgleich-Werkzeugen mit dem passenden Eingang. Ist die Seite aus der Datei veraltet, kann ein Sync dieser Wallet sie aus der Blockchain bestätigen."
+      },
+      "unlinkedAutomaticPair": {
+        "title": "Du hast die Verknüpfung dieser Sendung von {{wallet}} aufgehoben",
+        "why": "Die Coins kamen in einer Wallet an, die dir gehört. Darum kann Kassiber sie nicht als Zahlung buchen, und Steuerberichte warten, bis du sagst, was es war.",
+        "provide": "War es deine eigene Bewegung, verknüpfe sie wieder. Kam sie woanders an, verknüpfe sie mit diesem Eingang."
       },
       "chronologyMismatch": {
         "title": "Transfer kommt an, bevor er abgeht",
         "why": "Die Empfangsseite ist um mehr als die erlaubte Zeitabweichung früher datiert als die Sendeseite.",
-        "provide": "Prüfe die Zeitstempel der importierten Zeilen (Zeitzone) oder ordne die richtigen Transaktionen zu."
+        "provide": "Prüfe die Zeitstempel der importierten Zeilen (Zeitzone) oder verknüpfe die richtigen Transaktionen."
       },
       "networkMismatch": {
         "title": "Transfer über verschiedene Netzwerke",
-        "why": "Die beiden Seiten dieses Paars liegen in verschiedenen Netzwerken oder Einheiten.",
-        "provide": "Löse die Zuordnung oder erfasse den Vorgang in der Zuordnung als Swap."
+        "why": "Die beiden verknüpften Seiten liegen in verschiedenen Netzwerken oder Einheiten.",
+        "provide": "Hebe die Verknüpfung auf oder erfasse den Vorgang in den Abgleich-Werkzeugen als Swap."
       },
       "feeImplausible": {
         "title": "In diesem Transfer fehlt zu viel",
         "why": "Mehr als 1 % (mindestens 2.500 Sats) dieses Transfers ist weder durch den Eingang noch durch die Gebühr erklärt.",
-        "provide": "Ging ein Teil an eine andere Wallet von dir, verbinde sie; sonst ordne den richtigen Eingang zu oder erfasse die Differenz."
+        "provide": "Ging ein Teil an eine andere Wallet von dir, verbinde sie; sonst verknüpfe den richtigen Eingang oder erfasse die Differenz."
       },
       "privacyHop": {
         "title": "CoinJoin oder gemeinsame Transaktion braucht Nachweise",
@@ -248,7 +272,7 @@
       "nativeTransitionAmbiguous": {
         "title": "Mehrere Zahlungen passen zu diesem Swap",
         "why": "Der Payment-Hash dieses Lightning-Swaps passt zu mehr als einem Datensatz.",
-        "provide": "Öffne die Zuordnung und wähle die passende Zahlung."
+        "provide": "Öffne die Abgleich-Werkzeuge und wähle die passende Zahlung."
       },
       "nativeTransitionAmountMismatch": {
         "title": "Swap-Beträge gleichen sich nicht aus",
@@ -262,8 +286,8 @@
       },
       "migrationIncomplete": {
         "title": "Eine ältere Prüfung konnte nicht übernommen werden",
-        "why": "Ein in einer älteren Version geprüftes Transfer-Paar oder eine Auszahlung ließ sich nicht ins aktuelle Format übernehmen.",
-        "provide": "Öffne die Transaktion und prüfe die Zuordnung erneut."
+        "why": "Eine in einer älteren Version geprüfte Verknüpfung oder Auszahlung ließ sich nicht ins aktuelle Format übernehmen.",
+        "provide": "Öffne die Transaktion und prüfe die Verknüpfung erneut."
       },
       "importDuplicate": {
         "title": "Eine importierte Transaktion ist möglicherweise doppelt gespeichert",
@@ -281,13 +305,13 @@
         "provide": "Vergleiche die Exporte des Anbieters. Schließe jede Zeile aus, die eine andere Transaktion kopiert. Ist jede Zeile eine eigene Transaktion, bestätige das stattdessen mit der Prüfung confirm_distinct_import_rows (kassiber review plan, dann review apply); dabei wird nichts ausgeschlossen."
       },
       "legacyPairFee": {
-        "title": "Bei einem älteren Transfer-Paar muss die Gebühr geprüft werden",
-        "why": "Eine ältere Version hat die Netzwerkgebühr dieses Paars als übertragenen Betrag gezählt, sie aber nicht in die volle Belastung der sendenden Seite aufgenommen. Das Paar bleibt gespeichert und wirkt erst, wenn eine korrigierte Revision geprüft ist.",
-        "provide": "Prüfe das Paar. Zeige die korrigierte Revision mit kassiber review an und übernimm sie, aktualisiere es mit transfers update oder trenne es und kopple die geprüften Seiten neu. Eine Seite auszuschließen löst das nicht."
+        "title": "Bei einer älteren Verknüpfung muss die Gebühr geprüft werden",
+        "why": "Eine ältere Version hat die Netzwerkgebühr dieser Verknüpfung als übertragenen Betrag gezählt, sie aber nicht in die volle Belastung der sendenden Seite aufgenommen. Die Verknüpfung bleibt gespeichert und wirkt erst, wenn eine korrigierte Revision geprüft ist.",
+        "provide": "Prüfe die Verknüpfung. Zeige die korrigierte Revision mit kassiber review an und übernimm sie, aktualisiere sie mit transfers update oder hebe die Verknüpfung auf und verknüpfe die geprüften Seiten neu. Eine Seite auszuschließen löst das nicht."
       },
       "resetDecisionHeld": {
         "title": "Eine beim Zurücksetzen behaltene Entscheidung wartet",
-        "why": "„Buchdaten zurücksetzen“ hat eine Entscheidung zu dieser Transaktion behalten (ein Paar, eine Kreditmarkierung, eine Verknüpfung oder eine Änderung), aber eine andere genannte Transaktion kam mit dem Sync nicht zurück oder mit anderen Beträgen.",
+        "why": "„Buchdaten zurücksetzen“ hat eine Entscheidung zu dieser Transaktion behalten (eine Übertragungs-Verknüpfung, eine Kreditmarkierung, eine andere Verknüpfung oder eine Änderung), aber eine andere genannte Transaktion kam mit dem Sync nicht zurück oder mit anderen Beträgen.",
         "provide": "Synce die Wallet mit der fehlenden Transaktion. Ist sie endgültig weg, löst vorerst nur „Alles löschen“ in den Einstellungen die Sperre."
       },
       "gapHold": {
@@ -413,17 +437,17 @@
       "unscopedTransfer": {
         "title": "Transfer ohne Blockchain-Bezug",
         "why": "Zwei Zeilen in verschiedenen Wallets von dir teilen eine Anbieter-ID, haben aber keinen Transaktionsgraphen, daher ist nicht nachweisbar, dass es ein Transfer ist.",
-        "provide": "Ordne sie in der Zuordnung zu oder synchronisiere die Wallets aus der Blockchain."
+        "provide": "Verknüpfe sie in den Abgleich-Werkzeugen oder synchronisiere die Wallets aus der Blockchain."
       },
       "ownedFanout": {
         "title": "Zahlung an mehrere eigene Wallets geht nicht auf",
         "why": "Diese Transaktion sendet an mehrere deiner Wallets, aber die erfassten Eingänge passen nicht zu den Beträgen.",
-        "provide": "Synchronisiere oder verbinde alle empfangenden Wallets oder ordne die Eingänge in der Zuordnung zu."
+        "provide": "Synchronisiere oder verbinde alle empfangenden Wallets oder verknüpfe die Eingänge in den Abgleich-Werkzeugen."
       },
       "pairAmbiguous": {
-        "title": "Die Zuordnung ist nicht eindeutig",
-        "why": "Die zugeordneten Transaktionen ergeben keinen eindeutigen Transfer.",
-        "provide": "Öffne die Zuordnung und korrigiere sie."
+        "title": "Die Verknüpfung ist nicht eindeutig",
+        "why": "Die verknüpften Transaktionen ergeben keinen eindeutigen Transfer.",
+        "provide": "Öffne die Abgleich-Werkzeuge und korrigiere die Verknüpfung."
       },
       "category": {
         "missing_wallet_history": {
@@ -471,9 +495,9 @@
         "currency": "eine Währung"
       },
       "reviewedSuspensePair": {
-        "title": "Ein Transfer-Paar geht nicht auf",
-        "why": "Diese Transaktion ist mit einer anderen als Bewegung zwischen deinen Wallets gepaart, aber es kam weniger an, als abging. Die Differenz wird offen gehalten, daher sind die Anschaffungskosten ab hier nicht endgültig.",
-        "provide": "Vergleiche bei jedem Paar unten die beiden Seiten. Entkopple ein Paar nur, wenn du weißt, dass seine zwei Transaktionen nichts miteinander zu tun haben; verschiedene Transaktions-IDs allein zeigen das nicht. War es eine Bewegung zwischen deinen Wallets, öffne sie und erfasse, wohin die Differenz ging."
+        "title": "Eine verknüpfte Übertragung geht nicht auf",
+        "why": "Diese Transaktion ist mit einer anderen als Bewegung zwischen deinen Wallets verknüpft, aber es kam weniger an, als abging. Die Differenz wird offen gehalten, daher sind die Anschaffungskosten ab hier nicht endgültig.",
+        "provide": "Vergleiche bei jeder Verknüpfung unten die beiden Seiten. Hebe eine Verknüpfung nur auf, wenn du weißt, dass ihre zwei Transaktionen nichts miteinander zu tun haben; verschiedene Transaktions-IDs allein zeigen das nicht. War es eine Bewegung zwischen deinen Wallets, öffne sie und erfasse, wohin die Differenz ging."
       }
     },
     "category": {
@@ -491,7 +515,7 @@
       "importHistory": "Historie importieren",
       "setPrice": "Preis eingeben",
       "classify": "Klassifizieren",
-      "pairTransfer": "Zuordnung öffnen",
+      "pairTransfer": "Abgleich-Werkzeuge öffnen",
       "reviewCustodyGap": "Verwahrungslücke prüfen",
       "attachEvidence": "Beleg anhängen",
       "waitForConfirmation": "Wartet auf Bestätigung",
@@ -499,12 +523,17 @@
       "processJournals": "Journale neu berechnen",
       "openTransaction": "Transaktion öffnen",
       "askAssistant": "Mit Assistent untersuchen",
-      "reviewPair": "Paar prüfen"
+      "reviewPair": "Verknüpfung prüfen",
+      "restorePairing": "Wieder verknüpfen",
+      "linkDifferently": "Mit einem anderen Eingang verknüpfen…"
     },
     "panel": {
       "blocksReports": "Blockiert Berichte",
       "deprecatedWallet": "{{wallet}} ist als veraltet markiert, daher überspringt „Alles aktualisieren“ sie; synchronisiere sie einzeln.",
-      "gapReviewLocked": "Die Prüfung von Verwahrungslücken gehört derzeit zu den Entwickler-Tools. Verbinde die fehlende Wallet oder lass den Assistenten untersuchen."
+      "gapReviewLocked": "Die Prüfung von Verwahrungslücken gehört derzeit zu den Entwickler-Tools. Verbinde die fehlende Wallet oder lass den Assistenten untersuchen.",
+      "linkedBackTitle": "Wieder verknüpft",
+      "linkedBackBody": "Die Journale werden neu berechnet.",
+      "linkBackFailedTitle": "Die Verknüpfung konnte nicht wiederhergestellt werden"
     },
     "freshness": {
       "staleTitle": "Diese Liste ist möglicherweise veraltet",
@@ -555,59 +584,59 @@
       "loadError": "Diese Liste konnte nicht geladen werden."
     },
     "fact": {
-      "pairTxidsDiffer": "Die beiden Seiten sind verschiedene On-chain-Transaktionen. Eine direkte Bewegung zwischen deinen Wallets hat eine, eine Bewegung über eine Wallet, die Kassiber nicht kennt, aber zwei. Das allein macht das Paar also nicht falsch.",
-      "pairReceiptFirst": "Der Eingang ist früher datiert als die Zahlung, mit der er gepaart ist."
+      "pairTxidsDiffer": "Die beiden Seiten sind verschiedene On-chain-Transaktionen. Eine direkte Bewegung zwischen deinen Wallets hat eine, eine Bewegung über eine Wallet, die Kassiber nicht kennt, aber zwei. Das allein macht die Verknüpfung also nicht falsch.",
+      "pairReceiptFirst": "Der Eingang ist früher datiert als die Zahlung, mit der er verknüpft ist."
     },
     "pair": {
-      "title_one": "Das Paar",
-      "title_other": "Die {{count}} Paare",
+      "title_one": "Die Verknüpfung",
+      "title_other": "Die {{count}} Verknüpfungen",
       "sent": "Gesendet",
       "received": "Empfangen",
-      "unpair": "Entkoppeln",
+      "unpair": "Verknüpfung aufheben",
       "confirmBody": "Kassiber bucht sie dann einzeln: die Zahlung aus {{outWallet}} als Veräußerung und den Eingang in {{inWallet}} als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst. Die offen gehaltene Differenz entfällt, und die Journale werden neu berechnet, damit die wartenden Transaktionen frei werden.",
-      "confirmUndo": "Du kannst sie unter Übertragungen & Verwahrung wieder paaren.",
+      "confirmUndo": "Du kannst sie unter Übertragungen wieder verknüpfen.",
       "cancel": "Abbrechen",
-      "confirmTitle": "Diese zwei Transaktionen entkoppeln?",
-      "confirm": "Entkoppeln und neu berechnen",
-      "andMore_one": "und {{count}} weiteres Paar",
-      "andMore_other": "und {{count}} weitere Paare",
-      "pick": "Paar von {{outWallet}} nach {{inWallet}} wählen",
-      "unpairPicked_one": "Gewähltes Paar entkoppeln",
-      "unpairPicked_other": "{{count}} gewählte Paare entkoppeln",
+      "confirmTitle": "Verknüpfung dieser zwei Transaktionen aufheben?",
+      "confirm": "Verknüpfung aufheben und neu berechnen",
+      "andMore_one": "und {{count}} weitere Verknüpfung",
+      "andMore_other": "und {{count}} weitere Verknüpfungen",
+      "pick": "Verknüpfung von {{outWallet}} nach {{inWallet}} wählen",
+      "unpairPicked_one": "Gewählte Verknüpfung aufheben",
+      "unpairPicked_other": "{{count}} gewählte Verknüpfungen aufheben",
       "clearPicked": "Auswahl aufheben",
-      "pickLimit": "Höchstens {{count}} Paare auf einmal.",
-      "tickLapsed_one": "{{count}} gewähltes Paar hat sich seither geändert oder ist geklärt. Die Auswahl zählt nicht mehr; wähle es neu, falls es noch zutrifft.",
-      "tickLapsed_other": "{{count}} gewählte Paare haben sich seither geändert oder sind geklärt. Die Auswahl zählt nicht mehr; wähle sie neu, falls sie noch zutreffen."
+      "pickLimit": "Höchstens {{count}} Verknüpfungen auf einmal.",
+      "tickLapsed_one": "{{count}} gewählte Verknüpfung hat sich seither geändert oder ist geklärt. Die Auswahl zählt nicht mehr; wähle sie neu, falls sie noch zutrifft.",
+      "tickLapsed_other": "{{count}} gewählte Verknüpfungen haben sich seither geändert oder sind geklärt. Die Auswahl zählt nicht mehr; wähle sie neu, falls sie noch zutreffen."
     },
     "fix": {
-      "title_one": "Dieses Paar entkoppeln?",
-      "title_other": "Diese {{count}} Paare entkoppeln?",
-      "body_one": "Du hast dieses Paar zum Entkoppeln gewählt. Jede Seite wird dann einzeln gebucht: die Zahlung als Veräußerung, der Eingang als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst.",
-      "body_other": "Du hast diese {{count}} Paare zum Entkoppeln gewählt. Jede Seite wird dann einzeln gebucht: Zahlungen als Veräußerung, Eingänge als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst.",
+      "title_one": "Diese Verknüpfung aufheben?",
+      "title_other": "Diese {{count}} Verknüpfungen aufheben?",
+      "body_one": "Du hast diese Verknüpfung zum Aufheben gewählt. Jede Seite wird dann einzeln gebucht: die Zahlung als Veräußerung, der Eingang als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst.",
+      "body_other": "Du hast diese {{count}} Verknüpfungen zum Aufheben gewählt. Jede Seite wird dann einzeln gebucht: Zahlungen als Veräußerung, Eingänge als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst.",
       "checking": "Prüft, was sich dadurch ändert",
       "effectQuarantine": "In Quarantäne: {{before}} → {{after}}",
       "reportsReady": "Berichte: danach bereit",
       "reportsBlocked": "Berichte: danach weiterhin blockiert",
-      "apply_one": "Entkoppeln und neu berechnen",
-      "apply_other": "{{count}} entkoppeln und neu berechnen",
-      "applying": "Wird entkoppelt…",
+      "apply_one": "Verknüpfung aufheben und neu berechnen",
+      "apply_other": "{{count}} Verknüpfungen aufheben und neu berechnen",
+      "applying": "Wird aufgehoben…",
       "stale": "Das Buch hat sich seit der Prüfung geändert.",
       "retry": "Erneut prüfen",
-      "doneTitle_one": "{{count}} Paar entkoppelt",
-      "doneTitle_other": "{{count}} Paare entkoppelt",
+      "doneTitle_one": "{{count}} Verknüpfung aufgehoben",
+      "doneTitle_other": "{{count}} Verknüpfungen aufgehoben",
       "doneBody": "Noch {{remaining}} in Quarantäne.",
-      "recheckFailed": "Die Paare konnten nicht mit dem aktuellen Buch abgeglichen werden.",
-      "leftOut_one": "{{count}} gewähltes Paar ist nicht mehr so gelistet, wie du es gesehen hast, und wurde ausgelassen.",
-      "leftOut_other": "{{count}} gewählte Paare sind nicht mehr so gelistet, wie du sie gesehen hast, und wurden ausgelassen.",
-      "changed_one": "{{count}} gewähltes Paar hat sich geändert, seit du es gesehen hast. Es wurde nichts entkoppelt; schließe das und sieh es dir noch einmal an.",
-      "changed_other": "{{count}} gewählte Paare haben sich geändert, seit du sie gesehen hast. Es wurde nichts entkoppelt; schließe das und sieh sie dir noch einmal an.",
-      "nothing_one": "Das gewählte Paar ist nicht mehr in Quarantäne. Es gibt nichts zu entkoppeln.",
-      "nothing_other": "Keines der gewählten Paare ist noch in Quarantäne. Es gibt nichts zu entkoppeln.",
+      "recheckFailed": "Die Verknüpfungen konnten nicht mit dem aktuellen Buch abgeglichen werden.",
+      "leftOut_one": "{{count}} gewählte Verknüpfung ist nicht mehr so gelistet, wie du sie gesehen hast, und wurde ausgelassen.",
+      "leftOut_other": "{{count}} gewählte Verknüpfungen sind nicht mehr so gelistet, wie du sie gesehen hast, und wurden ausgelassen.",
+      "changed_one": "{{count}} gewählte Verknüpfung hat sich geändert, seit du sie gesehen hast. Es wurde nichts aufgehoben; schließe das und sieh sie dir noch einmal an.",
+      "changed_other": "{{count}} gewählte Verknüpfungen haben sich geändert, seit du sie gesehen hast. Es wurde nichts aufgehoben; schließe das und sieh sie dir noch einmal an.",
+      "nothing_one": "Die gewählte Verknüpfung ist nicht mehr in Quarantäne. Es gibt nichts aufzuheben.",
+      "nothing_other": "Keine der gewählten Verknüpfungen ist noch in Quarantäne. Es gibt nichts aufzuheben.",
       "close": "Schließen",
-      "noScope": "Die Quarantäne nennt nicht, zu welchem Buch sie gehört, daher kann hier nichts entkoppelt werden.",
-      "bookChanged": "Inzwischen ist ein anderes Buch offen. Es wurde nichts entkoppelt; kehre zum Buch zurück, in dem du die Paare gewählt hast.",
-      "notACase": "Dieses Paar gehört nicht zu den hier zu prüfenden Paaren. Entkopple es unter Übertragungen & Verwahrung.",
-      "sheetChanged": "Dieses Paar liest sich jetzt anders, als das Blatt es gezeigt hat. Es wurde nichts entkoppelt; sieh es dir noch einmal an.",
+      "noScope": "Die Quarantäne nennt nicht, zu welchem Buch sie gehört, daher kann hier keine Verknüpfung aufgehoben werden.",
+      "bookChanged": "Inzwischen ist ein anderes Buch offen. Es wurde nichts aufgehoben; kehre zum Buch zurück, in dem du die Verknüpfungen gewählt hast.",
+      "notACase": "Diese Verknüpfung gehört nicht zu den hier zu prüfenden Verknüpfungen. Hebe sie unter Übertragungen auf.",
+      "sheetChanged": "Diese Verknüpfung liest sich jetzt anders, als das Blatt sie gezeigt hat. Es wurde nichts aufgehoben; sieh sie dir noch einmal an.",
       "reviewLine": "Geprüft als {{kind}}: {{sent}} gesendet, {{received}} erhalten"
     },
     "section": {

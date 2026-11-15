@@ -50,6 +50,8 @@ const ALLOWED: Partial<Record<Rule, Record<string, string>>> = {
       "the sticky period bar's bottom edge",
     "components/transactions/TransactionDetailSheet.tsx":
       "the pinned tab strip masks the detail scrolling under it",
+    "routes/transfers/LinkCandidates.tsx":
+      "the sticky candidate header's bottom edge; a collapsed table's cell border scrolls away",
   },
   backdropBlur: {
     "components/kb/assistant-panel/RightPanel.tsx":

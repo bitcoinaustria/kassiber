@@ -83,24 +83,6 @@ impl TlsTrust {
         Ok(Self::BundledRoots)
     }
 
-    /// Native platform trust for non-frozen/source behavior. Empty/failed stores
-    /// refuse; never silently substitute Mozilla roots for an operator's store.
-    ///
-    /// `rustls_native_certs` reads two environment variables first: when
-    /// `SSL_CERT_FILE` is set (even to an empty value) or `SSL_CERT_DIR` names
-    /// at least one directory, the roots come only from that file and those
-    /// directories, never from the platform store. A missing or unreadable
-    /// file or directory refuses, as does a set without a certificate.
-    /// `python_default` instead ignores an empty `SSL_CERT_FILE` and never
-    /// reads `SSL_CERT_DIR`. No product path calls this yet.
-    pub fn platform_roots() -> Result<Self, Error> {
-        let result = rustls_native_certs::load_native_certs();
-        if !result.errors.is_empty() {
-            return Err(Error::TrustInvalid);
-        }
-        Self::from_certificates(result.certs, RootSource::Host)
-    }
-
     pub fn ca_file(path: &Path) -> Result<Self, Error> {
         Self::from_file(path, RootSource::Operator)
     }
@@ -110,9 +92,14 @@ impl TlsTrust {
     }
 
     /// The configured certificates' DER bytes; empty for every other trust.
-    pub fn certificate_ders(&self) -> Vec<&[u8]> {
+    /// The certificates this trust pins for a backend: only a backend's own
+    /// `certificate` setting is verified as exact pins. Operator and host CA
+    /// files are ordinary roots, even when they hold a server's leaf.
+    pub fn backend_pin_ders(&self) -> Vec<&[u8]> {
         match self {
-            Self::Roots(snapshot) => snapshot.certificates.iter().map(|c| c.as_ref()).collect(),
+            Self::Roots(snapshot) if snapshot.source == RootSource::Backend => {
+                snapshot.certificates.iter().map(|c| c.as_ref()).collect()
+            }
             _ => Vec::new(),
         }
     }
@@ -714,6 +701,27 @@ mod tests {
         include_bytes!("../tests/fixtures/openssl-ca.pem"),
         include_bytes!("../tests/fixtures/cn-only.pem"),
     ];
+
+    #[test]
+    fn only_a_backend_certificate_setting_counts_as_pins() {
+        let leaf = CertificateDer::from_pem_slice(PINS[0]).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("leaf.pem");
+        std::fs::write(&file, PINS[0]).unwrap();
+        // The same leaf in an operator CA file is an ordinary root, which
+        // the connection verifies by chain and name, not as a pin.
+        assert!(TlsTrust::ca_file(&file)
+            .unwrap()
+            .backend_pin_ders()
+            .is_empty());
+        assert_eq!(
+            TlsTrust::backend_certificate(&file)
+                .unwrap()
+                .backend_pin_ders(),
+            [leaf.as_ref()]
+        );
+        assert!(TlsTrust::BundledRoots.backend_pin_ders().is_empty());
+    }
 
     #[test]
     fn backend_pins_accept_python_self_signed_shapes_under_any_host_name() {

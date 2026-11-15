@@ -244,7 +244,10 @@ kassiber wallets update --wallet treasury \
   --config '{"ownership_scan_to_index":1000}'
 ```
 
-Higher values make journal/graph index construction more expensive. Truly
+Higher values make journal/graph index construction more expensive. Derived
+scripts are a pure function of the descriptor and the depth, so a process
+keeps each wallet's batch (public scripts and addresses only) for later
+builds, review cases and plans, and drops it when the book closes. Truly
 unknown address-list change or a script beyond the configured ceiling remains a
 known review edge; Kassiber does not classify an unexplained residual as change
 from amount alone because that would hide legitimate partial payments.

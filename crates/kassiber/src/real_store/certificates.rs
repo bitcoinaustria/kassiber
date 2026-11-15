@@ -141,12 +141,13 @@ impl RealBook {
         // holds that lock from its verify to its commit, so it either commits
         // first (the file is referenced and stays) or verifies after the
         // delete and refuses. A failed check keeps the file.
-        let remove_if_unreferenced = |path: &str| {
+        // Stored rows, `backends.env` and environment overrides all count.
+        let remove_if_unreferenced = |backends: &kassiber_setup::backends::Config, path: &str| {
             let Ok(tx) = kassiber_store::write_transaction(conn) else {
                 return;
             };
-            let referenced =
-                kassiber_setup::backends::certificate_referenced(&tx, path).unwrap_or(true);
+            let referenced = backends.certificate_used_outside_rows(path)
+                || kassiber_setup::backends::certificate_referenced(&tx, path).unwrap_or(true);
             backend_certificates::remove_unreferenced(&data_root, Path::new(path), referenced);
             let _ = tx.commit();
         };
@@ -154,7 +155,7 @@ impl RealBook {
             Ok(previous) => previous,
             Err(error) => {
                 if pin.created {
-                    remove_if_unreferenced(&path_text);
+                    remove_if_unreferenced(&self.backends, &path_text);
                 }
                 return Err(error);
             }
@@ -164,7 +165,7 @@ impl RealBook {
         self.backends.merge(conn)?;
         // Committed: a replaced managed pin no backend uses any more can go.
         if let Some(previous) = previous.filter(|p| *p != path_text) {
-            remove_if_unreferenced(&previous);
+            remove_if_unreferenced(&self.backends, &previous);
         }
         let mut result = fetched.payload();
         result["trusted"] = serde_json::Value::Bool(true);

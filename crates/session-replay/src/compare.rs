@@ -705,6 +705,33 @@ pub fn mask_durations(text: &str) -> String {
     row.replace_all(&text, "${1}<duration>").into_owned()
 }
 
+/// Advertised daemon kinds the Python recordings never had: the same list as
+/// `kassiber_daemon::RUST_ONLY_KINDS` (a daemon test checks they agree). A
+/// new Rust-only kind is listed there instead of re-recording.
+pub const RUST_ONLY_KINDS: &[&str] = &[
+    "ui.transfers.pair_options",
+    "ui.backends.certificate.fetch",
+    "ui.backends.certificate.trust",
+];
+
+/// Replayed daemon output without the Rust-only kinds in its `daemon.ready`
+/// record, compact or spaced JSON alike; every other kind is still compared.
+pub fn without_rust_only_kinds(text: &str) -> String {
+    text.split_inclusive('\n')
+        .map(|line| {
+            if !line.contains("\"daemon.ready\"") {
+                return line.to_owned();
+            }
+            RUST_ONLY_KINDS.iter().fold(line.to_owned(), |line, kind| {
+                line.replace(&format!(", \"{kind}\""), "")
+                    .replace(&format!("\"{kind}\", "), "")
+                    .replace(&format!(",\"{kind}\""), "")
+                    .replace(&format!("\"{kind}\","), "")
+            })
+        })
+        .collect()
+}
+
 /// Daemon output in an order concurrency cannot change: each request's
 /// records keep their order, requests sort by id, unsolicited records first.
 pub fn group_by_request(text: &str) -> String {
@@ -785,6 +812,22 @@ mod tests {
             local_offset_us: HOUR_US,
             also: Vec::new(),
         }
+    }
+
+    #[test]
+    fn rust_only_kinds_leave_daemon_ready_and_nothing_else() {
+        let compact = "{\"kind\":\"daemon.ready\",\"supported_kinds\":[\"a\",\"ui.transfers.pair_options\",\"b\"]}\n";
+        let spaced = "{\"kind\": \"daemon.ready\", \"supported_kinds\": [\"a\", \"ui.transfers.pair_options\"]}\n";
+        let other = "{\"kind\":\"x\",\"data\":[\"ui.transfers.pair_options\",\"b\"]}\n";
+        assert_eq!(
+            without_rust_only_kinds(compact),
+            "{\"kind\":\"daemon.ready\",\"supported_kinds\":[\"a\",\"b\"]}\n"
+        );
+        assert_eq!(
+            without_rust_only_kinds(spaced),
+            "{\"kind\": \"daemon.ready\", \"supported_kinds\": [\"a\"]}\n"
+        );
+        assert_eq!(without_rust_only_kinds(other), other);
     }
 
     #[test]

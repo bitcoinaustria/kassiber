@@ -3,16 +3,9 @@ use super::*;
 use kassiber_envelope::s;
 use std::collections::{BTreeMap, BTreeSet};
 
-fn terms(conn: &Connection, scope: &Scope<'_>, kind: &str) -> Result<Vec<Value>> {
-    terms_with_deleted(conn, scope, kind, false)
-}
-fn terms_with_deleted(
-    conn: &Connection,
-    scope: &Scope<'_>,
-    kind: &str,
-    deleted: bool,
-) -> Result<Vec<Value>> {
-    rows(conn, "SELECT term.*, c.superseded_at,
+/// The columns every authored-term list reads: the term, when its component
+/// was superseded, both legs' transactions and the allocated amounts.
+const TERM_SELECT: &str = "SELECT term.*, c.superseded_at,
         COALESCE(source.anchor_transaction_id,source.transaction_id) AS out_transaction_id,
         COALESCE(target.anchor_transaction_id,target.transaction_id) AS in_transaction_id,
         (SELECT SUM(a.source_amount_msat) FROM custody_component_allocations a
@@ -23,10 +16,44 @@ fn terms_with_deleted(
         JOIN custody_components c ON c.id=term.component_id
         JOIN custody_component_legs source ON source.id=term.source_leg_id
         JOIN custody_component_legs target ON target.id=term.target_leg_id
-        WHERE term.profile_id=? AND term.term_kind=? AND (term.component_id IN
+        ";
+fn terms(conn: &Connection, scope: &Scope<'_>, kind: &str) -> Result<Vec<Value>> {
+    terms_with_deleted(conn, scope, kind, false)
+}
+fn terms_with_deleted(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    kind: &str,
+    deleted: bool,
+) -> Result<Vec<Value>> {
+    rows(
+        conn,
+        &format!(
+            "{TERM_SELECT}WHERE term.profile_id=? AND term.term_kind=? AND (term.component_id IN
           (SELECT DISTINCT component_id FROM custody_component_transaction_memberships WHERE profile_id=?)
           OR (? AND c.state='superseded' AND NOT EXISTS (SELECT 1 FROM custody_components successor WHERE successor.supersedes_component_id=c.id)))
-        ORDER BY term.created_at DESC,term.component_id,term.ordinal", kassiber_store::rusqlite::params![scope.profile_id,kind,scope.profile_id,deleted])
+        ORDER BY term.created_at DESC,term.component_id,term.ordinal"
+        ),
+        kassiber_store::rusqlite::params![scope.profile_id, kind, scope.profile_id, deleted],
+    )
+}
+/// Pair terms the owner removed: each one in a superseded component whose
+/// successor (if any) no longer carries that pair. Unlinking one pair of a
+/// shared send leaves a successor with the others, so the removed pair is
+/// read from the revision it was last in; `superseded_at` is when it went.
+fn removed_pair_terms(conn: &Connection, scope: &Scope<'_>) -> Result<Vec<Value>> {
+    rows(
+        conn,
+        &format!(
+            "{TERM_SELECT}WHERE term.profile_id=? AND term.term_kind='transaction_pair' AND c.state='superseded'
+          AND NOT EXISTS (SELECT 1 FROM custody_components successor
+            JOIN custody_component_economic_terms kept ON kept.component_id=successor.id
+            WHERE successor.supersedes_component_id=c.id AND kept.term_kind=term.term_kind
+              AND kept.legacy_source_id=term.legacy_source_id)
+        ORDER BY c.superseded_at DESC,term.created_at DESC,term.component_id,term.ordinal"
+        ),
+        [scope.profile_id],
+    )
 }
 pub(super) fn pair_records(
     conn: &Connection,
@@ -386,6 +413,206 @@ pub(super) fn pairs(conn: &Connection, scope: &Scope<'_>) -> Result<Value> {
         result.insert(text(&row, "legacy_source_id"), entry);
     }
     Ok(sorted(result))
+}
+/// Pairs the owner unlinked whose legs no active review or component holds
+/// now, newest unlinked first: what "link again" restores, with the kind,
+/// policy and swapped portion the pair had. Reading them grants nothing; a
+/// relink is a new, explicit pair.
+pub(super) fn unlinked(conn: &Connection, scope: &Scope<'_>, args: &Value) -> Result<Value> {
+    let limit = match get(args, "limit") {
+        None | Some(Value::Null) => 50,
+        Some(Value::Int(n)) => n
+            .to_string()
+            .parse::<usize>()
+            .ok()
+            .filter(|n| (1..=200).contains(n))
+            .ok_or_else(|| {
+                AppError::new(
+                    "validation",
+                    "Unlinked pair limit must be between 1 and 200",
+                )
+            })?,
+        Some(_) => {
+            return Err(AppError::new(
+                "validation",
+                "Unlinked pair limit must be between 1 and 200",
+            ))
+        }
+    };
+    let contexts = contexts(conn, scope)?;
+    let held: BTreeSet<String> = rows(
+        conn,
+        "SELECT DISTINCT transaction_id FROM custody_component_transaction_memberships WHERE profile_id=?",
+        [scope.profile_id],
+    )?
+    .iter()
+    .map(|row| text(row, "transaction_id"))
+    .collect();
+    // A leg linked again since, to this partner or another, is not free.
+    let linked: BTreeSet<String> = terms(conn, scope, "transaction_pair")?
+        .iter()
+        .filter(|row| matches!(value(row, "superseded_at"), Value::Null))
+        .flat_map(|row| {
+            [
+                text(row, "out_transaction_id"),
+                text(row, "in_transaction_id"),
+            ]
+        })
+        .collect();
+    let removed = removed_pair_terms(conn, scope)?;
+    let mut unlinked: Vec<&Value> = removed.iter().collect();
+    // Newest unlinking first, so a pair unlinked twice keeps its latest terms
+    // and the limit never drops the pair just unlinked.
+    unlinked.sort_by_key(|row| std::cmp::Reverse(text(row, "superseded_at")));
+    let mut seen = BTreeSet::new();
+    let mut result = Vec::new();
+    for row in unlinked {
+        let row = row.clone();
+        let (out_id, in_id) = (
+            text(&row, "out_transaction_id"),
+            text(&row, "in_transaction_id"),
+        );
+        if held.contains(&out_id)
+            || held.contains(&in_id)
+            || linked.contains(&out_id)
+            || linked.contains(&in_id)
+        {
+            continue;
+        }
+        // A transaction removed since (a re-import) has nothing to link again.
+        let (Some(source), Some(target)) = (contexts.get(&out_id), contexts.get(&in_id)) else {
+            continue;
+        };
+        if !seen.insert((out_id, in_id)) {
+            continue;
+        }
+        let mut entry = common(&row, false)?;
+        let out = fallback(
+            &row,
+            &[
+                "allocated_source_amount_msat",
+                "reviewed_source_amount_msat",
+            ],
+        );
+        let out = if matches!(out, Value::Null) {
+            value(source, "amount")
+        } else {
+            out
+        };
+        let inbound = fallback(&row, &["allocated_sink_amount_msat"]);
+        let inbound = if matches!(inbound, Value::Null) {
+            value(target, "amount")
+        } else {
+            inbound
+        };
+        append(&mut entry, "out", boundary(source, out, true));
+        append(&mut entry, "in", boundary(target, inbound, true));
+        result.push(entry);
+        if result.len() == limit {
+            break;
+        }
+    }
+    Ok(Value::List(result))
+}
+/// The desktop's pair list: `pairs` with each leg's value at its own
+/// transaction's price and the swap fee at the sending price, so the desktop
+/// can follow its currency toggle. Null where a transaction is unpriced. Each
+/// leg also says how much of its transaction no pair covers (`unlinked_msat`)
+/// and each pair whether its transactions may take further pairs
+/// (`shares_legs`), so a send that arrived in parts can be linked part by
+/// part. The CLI list stays as it is.
+pub(super) fn priced_pairs(conn: &Connection, scope: &Scope<'_>) -> Result<Value> {
+    let prices: BTreeMap<String, (f64, Value)> = rows(
+        conn,
+        "SELECT id,fiat_rate,fiat_currency FROM transactions WHERE profile_id=? AND fiat_rate > 0",
+        [scope.profile_id],
+    )?
+    .iter()
+    .filter_map(|row| {
+        let rate = match value(row, "fiat_rate") {
+            Value::Float(rate) => rate,
+            Value::Int(rate) => rate.to_string().parse().ok()?,
+            _ => return None,
+        };
+        Some((text(row, "id"), (rate, value(row, "fiat_currency"))))
+    })
+    .collect();
+    let priced = |transaction: &Value, msat: &Value| match (
+        prices.get(&text(transaction, "transaction_id")),
+        msat,
+    ) {
+        (Some((rate, currency)), Value::Int(msat)) => {
+            let coins: f64 = format!("{msat}e-11").parse().unwrap_or_default();
+            (currency.clone(), Value::Float(coins * rate))
+        }
+        _ => (Value::Null, Value::Null),
+    };
+    let Value::List(mut list) = pairs(conn, scope)? else {
+        return Ok(Value::List(Vec::new()));
+    };
+    // What each transaction has left outside every active pair: its principal
+    // less what the pairs allocate from it (a send) or to it (a receipt).
+    // Read for the paired transactions only, a batch of ids at a time.
+    let paired: Vec<String> = list
+        .iter()
+        .flat_map(|row| ["out", "in"].map(|side| text(&value(row, side), "transaction_id")))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let mut principals: BTreeMap<String, i128> = BTreeMap::new();
+    for ids in paired.chunks(500) {
+        let marks = vec!["?"; ids.len()].join(",");
+        for row in rows(
+            conn,
+            &format!("SELECT id,amount,fee,amount_includes_fee,direction FROM transactions WHERE profile_id=? AND id IN ({marks})"),
+            kassiber_store::rusqlite::params_from_iter(
+                std::iter::once(scope.profile_id).chain(ids.iter().map(String::as_str)),
+            ),
+        )? {
+            principals.insert(text(&row, "id"), crate::pair_spec::principal(&row));
+        }
+    }
+    let mut linked: BTreeMap<(&str, String), i128> = BTreeMap::new();
+    for row in &list {
+        for side in ["out", "in"] {
+            let leg = value(row, side);
+            *linked
+                .entry((side, text(&leg, "transaction_id")))
+                .or_default() += crate::pair_spec::n(&value(&leg, "amount_msat"));
+        }
+    }
+    for row in &mut list {
+        let out = value(row, "out");
+        // Only such a pair lets its transactions take further pairs.
+        let shares_legs = crate::pair_authoring::reusable(&dict([
+            ("out_asset", value(&out, "asset")),
+            ("in_asset", value(&value(row, "in"), "asset")),
+            ("policy", value(row, "policy")),
+            ("kind", value(row, "kind")),
+        ]));
+        let (_, fee) = priced(&out, &value(row, "swap_fee_msat"));
+        let Value::Dict(fields) = row else { continue };
+        for (name, leg) in fields.iter_mut() {
+            if *name != "out".into() && *name != "in".into() {
+                continue;
+            }
+            let (currency, fiat) = priced(leg, &value(leg, "amount_msat"));
+            let id = text(leg, "transaction_id");
+            let side = if *name == "out".into() { "out" } else { "in" };
+            let unlinked = principals.get(&id).map_or(Value::Null, |principal| {
+                let used = linked.get(&(side, id.clone())).copied().unwrap_or(0);
+                crate::pair_spec::num((principal - used).max(0))
+            });
+            if let Value::Dict(leg) = leg {
+                leg.push(("fiat_currency".into(), currency));
+                leg.push(("fiat_value".into(), fiat));
+                leg.push(("unlinked_msat".into(), unlinked));
+            }
+        }
+        fields.push(("swap_fee_fiat_value".into(), fee));
+        fields.push(("shares_legs".into(), Value::Bool(shares_legs)));
+    }
+    Ok(Value::List(list))
 }
 pub(super) fn payouts(conn: &Connection, scope: &Scope<'_>) -> Result<Value> {
     let contexts = contexts(conn, scope)?;

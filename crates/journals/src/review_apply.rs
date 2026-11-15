@@ -201,7 +201,7 @@ pub fn apply(
             sources,
             request.authored_source,
             false,
-            cases,
+            review_simulation::Before::ready(cases),
             |conn| facts(conn, scope, as_of),
         )?;
         // The journals review stores come from the path `journals process`

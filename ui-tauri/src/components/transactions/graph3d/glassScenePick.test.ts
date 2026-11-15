@@ -57,12 +57,15 @@ describe("pointing at the glass transaction graph", () => {
       dark: true,
     });
     scene.resize(900, 360);
-    scene.setView(0, 0);
+    // Seen at the stage's fixed angle, every leg is found where it is drawn.
     expect(sweep(scene, 900, 360)).toEqual(new Set(["input:in", "output:out", "output:fee"]));
     expect(scene.pick(2, 2)).toBeNull();
-    // Turned, the same legs are still found where they now are.
-    scene.setView(0.5, 0.3);
-    expect(sweep(scene, 900, 360)).toEqual(new Set(["input:in", "output:out", "output:fee"]));
+    // Resized, the legs are found where they are drawn now, not where they were.
+    scene.resize(500, 700);
+    // The ribbons meet at the middle; before the resize, nothing was drawn here.
+    expect(scene.pick(250, 350)).not.toBeNull();
+    expect(sweep(scene, 500, 700)).toEqual(new Set(["input:in", "output:out", "output:fee"]));
+    expect(scene.pick(2, 2)).toBeNull();
     scene.highlight("output:out");
     scene.highlight(null);
     scene.dispose();

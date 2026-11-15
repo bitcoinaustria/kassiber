@@ -16,18 +16,14 @@ function runFrames() {
   act(() => pending.forEach((callback) => callback(0)));
 }
 
-/** Left half of the drawing is one leg, right half another; turned, they swap. */
-let turned = false;
+/** Left half of the drawing is one leg, right half another. */
 function partAtX(x: number): string {
-  return x < 200 !== turned ? "input:a" : "output:b";
+  return x < 200 ? "input:a" : "output:b";
 }
 
 function fakeScene() {
   return {
     resize: vi.fn(),
-    setView: vi.fn((yaw: number) => {
-      turned = yaw < 0.5;
-    }),
     render: vi.fn(),
     pick: vi.fn((x: number) => partAtX(x)),
     highlight: vi.fn(),
@@ -38,7 +34,6 @@ function fakeScene() {
 }
 
 beforeEach(() => {
-  turned = false;
   frames = new Map();
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
     nextFrame += 1;
@@ -51,7 +46,6 @@ beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
     ((kind: string) => (kind === "webgl2" ? probe : null)) as never,
   );
-  vi.spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -88,8 +82,7 @@ const at = (x: number) => ({ clientX: x, clientY: 10, pointerId: 1 });
 describe("pointing at the glass view's parts", () => {
   it("selects the part under a tap that never hovered", async () => {
     const { view, onSelectPart } = await mount();
-    fireEvent.pointerDown(view, at(300));
-    fireEvent.pointerUp(view, at(300));
+    fireEvent.click(view, at(300));
     expect(onSelectPart).toHaveBeenCalledExactlyOnceWith("output:b");
   });
 
@@ -99,19 +92,26 @@ describe("pointing at the glass view's parts", () => {
     runFrames();
     expect(onHoverPart).toHaveBeenLastCalledWith("input:a");
     fireEvent.pointerMove(view, at(300));
-    fireEvent.pointerDown(view, at(300));
-    fireEvent.pointerUp(view, at(300));
+    fireEvent.click(view, at(300));
     expect(onSelectPart).toHaveBeenCalledExactlyOnceWith("output:b");
     expect(onHoverPart).toHaveBeenLastCalledWith("output:b");
     runFrames();
     expect(onHoverPart).toHaveBeenLastCalledWith("output:b");
   });
 
+  it("selects on a tap without leaving its part lit once the pointer has gone", async () => {
+    const { view, onSelectPart, onHoverPart } = await mount();
+    // A touch tap: the pointer leaves before the click arrives.
+    fireEvent.pointerLeave(view, at(300));
+    fireEvent.click(view, at(300));
+    expect(onSelectPart).toHaveBeenCalledExactlyOnceWith("output:b");
+    expect(onHoverPart).not.toHaveBeenCalledWith("output:b");
+  });
+
   it("leaves parts it may not select alone", async () => {
     const { view, scene, onSelectPart } = await mount();
     scene.pick.mockReturnValue("output:fee");
-    fireEvent.pointerDown(view, at(300));
-    fireEvent.pointerUp(view, at(300));
+    fireEvent.click(view, at(300));
     expect(onSelectPart).not.toHaveBeenCalled();
     expect(view.style.cursor).toBe("");
   });
@@ -128,14 +128,17 @@ describe("pointing at the glass view's parts", () => {
     expect(view.style.cursor).toBe("pointer");
   });
 
-  it("picks again when a key turns the drawing under a still pointer", async () => {
-    const { view, onHoverPart } = await mount();
+  it("does not turn: no drag, keys or reset change the drawing", async () => {
+    const { view, scene } = await mount();
+    expect(view.getAttribute("tabindex")).toBeNull();
+    const draws = scene.render.mock.calls.length;
+    fireEvent.pointerDown(view, at(100));
     fireEvent.pointerMove(view, at(300));
-    runFrames();
-    expect(onHoverPart).toHaveBeenLastCalledWith("output:b");
+    fireEvent.pointerUp(view, at(300));
     fireEvent.keyDown(view, { key: "ArrowLeft" });
+    fireEvent.doubleClick(view, at(300));
     runFrames();
-    expect(onHoverPart).toHaveBeenLastCalledWith("input:a");
+    expect(scene.render).toHaveBeenCalledTimes(draws);
   });
 
   it("drops a queued hover when the pointer is cancelled or leaves", async () => {

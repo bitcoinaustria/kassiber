@@ -17,7 +17,8 @@ preview alone does not prove the packaged Tauri path accepts the same request.
   Keep amounts as exact decimal strings and revision timestamps lossless.
   Display the server's plan before explicit confirmation; recompute effects
   server-side rather than treating client state as authorization.
-- Transfer/custody navigation is unified in `src/routes/SwapMatching.tsx`;
+- Transfer/custody navigation is unified in `src/routes/transfers/`
+  (`TransfersPage.tsx` with its link, unlink and rules dialogs);
   component editing lives in `src/routes/transfers-custody/`. Preserve the
   developer-mode gate for gaps/components and the collaborative ownership/fee
   limits in [custody resolution](../docs/reference/custody-resolution.md).

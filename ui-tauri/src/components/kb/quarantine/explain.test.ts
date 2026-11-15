@@ -234,15 +234,15 @@ describe("classified quarantine rows", () => {
     ).toBe("reviewedSuspense");
     expect(sheetTabForCause("custody_quantity_unresolved", "needs_decision", evidence)).toBe("linked");
     expect(causeCopy({ reason: "custody_quantity_unresolved", evidence }, t).title).toBe(
-      "A transfer pair doesn't add up",
+      "A linked transfer doesn't add up",
     );
     expect(causeFacts(evidence, t)).toEqual([
-      "The two sides are different on-chain transactions. A direct move between your wallets has one, but a move through a wallet Kassiber doesn't track has two, so this alone doesn't make the pair wrong.",
-      "The receipt is dated before the payment it is paired with.",
+      "The two sides are different on-chain transactions. A direct move between your wallets has one, but a move through a wallet Kassiber doesn't track has two, so this alone doesn't make the link wrong.",
+      "The receipt is dated before the payment it is linked to.",
     ]);
     expect(causeFacts({}, t)).toEqual([]);
     expect(actionLabel({ kind: "review_pair", transaction_id: "out", pair_id: "pair-1" }, t)).toBe(
-      "Review the pair",
+      "Review the link",
     );
   });
 

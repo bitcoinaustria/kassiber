@@ -42,7 +42,9 @@ fn replay(module: &str, test: &str, params: &[&str]) {
                 kassiber_envelope::truthy(golden::value(call, "session")),
                 "{name}: call {index} is not a daemon session"
             );
-            session::replay_session(&golden, &scratch, &name, index, call);
+            if let Some(rows) = session::replay_session(&golden, &scratch, &name, index, call) {
+                session::write_rows(module, test, &param, index, rows);
+            }
         }
     }
     if params.is_empty() {

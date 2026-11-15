@@ -122,8 +122,19 @@ describe("assistantScreenContextFor", () => {
       route: "/swaps",
       entityType: "transaction",
       entityId: "tx-swap",
-      filters: { method: "ownership_graph" },
+      filters: undefined,
       capabilities: ["transfers", "transactions"],
+    });
+  });
+
+  it("keeps the stable screen id on the canonical /transfers route", () => {
+    expect(assistantScreenContextFor("/transfers")).toEqual({
+      route: "/swaps",
+      filters: undefined,
+      capabilities: ["transfers", "transactions"],
+    });
+    expect(assistantScreenContextFor("/transfers", "?section=advanced&tab=gaps&gap=gap-1")).toMatchObject({
+      route: "/swaps", entityType: "custody_gap", entityId: "gap-1", filters: { tab: "gaps" },
     });
   });
 });

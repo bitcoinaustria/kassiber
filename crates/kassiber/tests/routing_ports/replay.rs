@@ -17,8 +17,11 @@
 //! `elapsed_ms` fixed at 0; a value larger than 16 KiB compares by length
 //! and FNV-1a 64 hash.
 //!
-//! `KASSIBER_GOLDEN_WRITE=1` rewrites each golden's `expect` from the
-//! current binary instead of asserting; it refuses to run under `CI`.
+//! `KASSIBER_GOLDEN_WRITE=1` rewrites what differs in each golden's
+//! `expect` from the current binary instead of asserting; it refuses to run
+//! under `CI`. Values that compare equal, unchanged stdout and stderr lines,
+//! recorded identities, `recorded_us` and the file's layout stay as
+//! recorded, so the diff shows only the change.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -1572,6 +1575,25 @@ fn write_mode() -> bool {
     }
 }
 
+/// Python never advertised the daemon's Rust-only kinds, so they leave the
+/// `daemon.ready` line before it is compared; every other kind still is.
+fn without_rust_only_kinds(stdout: &str) -> String {
+    stdout
+        .split_inclusive('\n')
+        .map(|line| {
+            if !line.contains("\"daemon.ready\"") {
+                return line.to_owned();
+            }
+            kassiber_daemon::RUST_ONLY_KINDS
+                .iter()
+                .fold(line.to_owned(), |line, kind| {
+                    line.replace(&format!(",\"{kind}\""), "")
+                        .replace(&format!("\"{kind}\","), "")
+                })
+        })
+        .collect()
+}
+
 fn stdout_value(text: &str) -> Value {
     if text.len() > 4 * BIG {
         big(text.as_bytes())
@@ -1610,10 +1632,10 @@ pub fn replay_with(name: &str, normalize: impl Fn(usize, &mut Value)) {
 /// compares exactly instead of masked.
 pub fn replay_pinned(name: &str, pinned: &[(&str, &str)], normalize: impl Fn(usize, &mut Value)) {
     let path = golden_path(name);
-    let mut golden: Value = serde_json::from_str(
-        &fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display())),
-    )
-    .unwrap();
+    let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let mut golden: Value = serde_json::from_str(&text).unwrap();
+    let writing = write_mode();
+    let recorded = writing.then(|| golden.clone());
     let base = tempfile::Builder::new()
         .prefix("routing-port-")
         .tempdir()
@@ -1648,7 +1670,6 @@ pub fn replay_pinned(name: &str, pinned: &[(&str, &str)], normalize: impl Fn(usi
             }
         }
     }
-    let writing = write_mode();
     let replay_started = now_us();
     let (mut expected_canon, mut actual_canon) = (Canon::new(), Canon::new());
     let mut failures = Vec::new();
@@ -1683,7 +1704,6 @@ pub fn replay_pinned(name: &str, pinned: &[(&str, &str)], normalize: impl Fn(usi
             fs::write(&file, tape_lines(tape)).unwrap();
             file
         });
-        let started = now_us();
         let (exit, out, err) = run_process(session, &paths, tape.as_deref(), &fallback, pinned);
         let ended = now_us();
         let _ = fs::write(base_path.join(format!("session-{index}.out")), &out);
@@ -1698,11 +1718,7 @@ pub fn replay_pinned(name: &str, pinned: &[(&str, &str)], normalize: impl Fn(usi
             recorded[2].as_i64().unwrap() + 2_000_000,
         );
         let replay_window = (replay_started - LOOKBACK_US, ended + 2_000_000);
-        let windows = if writing {
-            vec![replay_window]
-        } else {
-            vec![recorded_window, replay_window]
-        };
+        let windows = vec![recorded_window, replay_window];
         // A strict tape notes what the replay asked that the recording never
         // answered; asking more is a difference even when its failure is
         // swallowed.
@@ -1716,7 +1732,8 @@ pub fn replay_pinned(name: &str, pinned: &[(&str, &str)], normalize: impl Fn(usi
                 ));
             }
         }
-        let stdout = fixed_elapsed(&paths.back(&String::from_utf8_lossy(&out)));
+        let stdout =
+            without_rust_only_kinds(&fixed_elapsed(&paths.back(&String::from_utf8_lossy(&out))));
         let stderr = paths.back(&String::from_utf8_lossy(&err));
         let changed = changes(&before, &after, &paths, &windows);
         let mut actual = json!({
@@ -1725,32 +1742,30 @@ pub fn replay_pinned(name: &str, pinned: &[(&str, &str)], normalize: impl Fn(usi
             "stderr": stderr,
             "changes": comparable(&changed),
         });
+        let mut expected = session["expect"].clone();
+        expected["changes"] = comparable(&expected["changes"]);
+        expected_canon.windows = vec![recorded_window];
+        actual_canon.windows = windows.clone();
+        expected_canon.value(&mut expected);
+        actual_canon.value(&mut actual);
+        normalize(index, &mut expected);
+        normalize(index, &mut actual);
         if writing {
-            // Number identities as a comparison would, for later translation.
-            let mut expected = session["expect"].clone();
-            expected_canon.windows = vec![recorded_window];
-            actual_canon.windows = windows.clone();
-            expected_canon.value(&mut expected);
-            actual_canon.value(&mut actual);
-            golden["sessions"][index]["recorded_us"] = json!([replay_started, started, ended]);
-            golden["sessions"][index]["expect"] = json!({
+            let replayed = json!({
                 "exit": exit,
                 "stdout": stdout_value(&stdout),
                 "stderr": stderr,
                 "changes": changed,
             });
-        } else {
-            let mut expected = session["expect"].clone();
-            expected["changes"] = comparable(&expected["changes"]);
-            expected_canon.windows = vec![recorded_window];
-            actual_canon.windows = windows.clone();
-            expected_canon.value(&mut expected);
-            actual_canon.value(&mut actual);
-            normalize(index, &mut expected);
-            normalize(index, &mut actual);
-            if expected != actual {
-                failures.push(describe(index, &session["args"], &expected, &actual));
-            }
+            rewrite_expect(
+                &mut golden["sessions"][index]["expect"],
+                &replayed,
+                &expected,
+                &actual,
+                &id_map(&expected_canon, &actual_canon),
+            );
+        } else if expected != actual {
+            failures.push(describe(index, &session["args"], &expected, &actual));
         }
         restore_ids(&roots, &books, &id_map(&expected_canon, &actual_canon));
         // The book now holds the recorded identities: number them as the
@@ -1759,14 +1774,233 @@ pub fn replay_pinned(name: &str, pinned: &[(&str, &str)], normalize: impl Fn(usi
             actual_canon.uuids.entry(id.clone()).or_insert(*n);
         }
     }
-    if writing {
-        fs::write(&path, serde_json::to_string_pretty(&golden).unwrap() + "\n").unwrap();
+    if let Some(recorded) = &recorded {
+        let written = spliced(&path, &text, recorded, &golden);
+        if written != text {
+            let fresh = path.with_extension("json.write");
+            fs::write(&fresh, written).unwrap();
+            fs::rename(&fresh, &path).unwrap();
+        }
     }
     if !failures.is_empty() && std::env::var_os("KASSIBER_PORT_KEEP").is_some() {
         let kept = base.keep();
         panic!("{name} (kept {}):\n{}", kept.display(), failures.join("\n"));
     }
     assert!(failures.is_empty(), "{name}:\n{}", failures.join("\n"));
+}
+
+/// Write mode: `recorded` (a session's `expect`) with each value whose
+/// comparable forms `expected` and `actual` differ replaced by the
+/// replay's, its identities translated back to the recorded ones. Text
+/// differs line by line where it can, so equal lines stay as recorded.
+fn rewrite_expect(
+    recorded: &mut Value,
+    replayed: &Value,
+    expected: &Value,
+    actual: &Value,
+    ids: &BTreeMap<String, String>,
+) {
+    let translated =
+        |value: &Value| serde_json::from_str(&replace_ids(&value.to_string(), ids)).unwrap();
+    for key in ["exit", "stdout", "stderr", "changes"] {
+        if expected[key] == actual[key] {
+            continue;
+        }
+        let lines = match (
+            recorded[key].as_str(),
+            replayed[key].as_str(),
+            expected[key].as_str(),
+            actual[key].as_str(),
+        ) {
+            (Some(old), Some(new), Some(e), Some(a)) => merged_lines(old, new, e, a, ids),
+            _ => None,
+        };
+        recorded[key] = lines.map_or_else(|| translated(&replayed[key]), Value::String);
+    }
+}
+
+/// `old` with each line whose comparable form differs (`e` against `a`)
+/// replaced by that line of `new`, when all four have the same lines.
+fn merged_lines(
+    old: &str,
+    new: &str,
+    e: &str,
+    a: &str,
+    ids: &BTreeMap<String, String>,
+) -> Option<String> {
+    let split = |text: &str| text.split('\n').map(str::to_owned).collect::<Vec<_>>();
+    let (old, new, e, a) = (split(old), split(new), split(e), split(a));
+    let n = old.len();
+    if new.len() != n || e.len() != n || a.len() != n {
+        return None;
+    }
+    let lines: Vec<String> = (0..n)
+        .map(|i| {
+            if e[i] == a[i] {
+                old[i].clone()
+            } else {
+                replace_ids(&new[i], ids)
+            }
+        })
+        .collect();
+    Some(lines.join("\n"))
+}
+
+/// Write mode: `text` (the golden as read, parsed as `recorded`) with each
+/// `expect` value that differs in `golden` spliced in; every other byte
+/// stays. A value is replaced only where this writer reproduces its
+/// recorded text exactly, so nothing changes but the value.
+fn spliced(path: &Path, text: &str, recorded: &Value, golden: &Value) -> String {
+    let mut edits = Vec::new();
+    for (index, session) in recorded["sessions"].as_array().unwrap().iter().enumerate() {
+        for key in ["exit", "stdout", "stderr", "changes"] {
+            let (old, new) = (
+                &session["expect"][key],
+                &golden["sessions"][index]["expect"][key],
+            );
+            if old == new {
+                continue;
+            }
+            let span = span_of(
+                text,
+                &[
+                    Step::Key("sessions"),
+                    Step::Index(index),
+                    Step::Key("expect"),
+                    Step::Key(key),
+                ],
+            );
+            // The value sits at indent 4: golden, sessions, session, expect.
+            assert!(
+                text[span.clone()] == value_text(old, 4),
+                "{}: session {index} expect {key} is not laid out as write mode writes it",
+                path.display()
+            );
+            edits.push((span, value_text(new, 4)));
+        }
+    }
+    let mut out = text.to_owned();
+    edits.sort_by_key(|(span, _)| std::cmp::Reverse(span.start));
+    for (span, value) in edits {
+        out.replace_range(span, &value);
+    }
+    assert!(
+        serde_json::from_str::<Value>(&out).unwrap() == *golden,
+        "{}: the rewritten golden does not read back",
+        path.display()
+    );
+    out
+}
+
+enum Step<'a> {
+    Key(&'a str),
+    Index(usize),
+}
+
+fn skip_space(bytes: &[u8], mut at: usize) -> usize {
+    while bytes[at].is_ascii_whitespace() {
+        at += 1;
+    }
+    at
+}
+
+/// The end of the JSON value starting at `at`.
+fn value_end(bytes: &[u8], mut at: usize) -> usize {
+    let mut depth = 0;
+    loop {
+        match bytes[at] {
+            b'"' => {
+                at += 1;
+                while bytes[at] != b'"' {
+                    at += if bytes[at] == b'\\' { 2 } else { 1 };
+                }
+                at += 1;
+            }
+            b'[' | b'{' => {
+                depth += 1;
+                at += 1;
+            }
+            b']' | b'}' => {
+                depth -= 1;
+                at += 1;
+            }
+            _ if depth == 0 => {
+                while at < bytes.len() && !b",]} \n".contains(&bytes[at]) {
+                    at += 1;
+                }
+                return at;
+            }
+            _ => at += 1,
+        }
+        if depth == 0 {
+            return at;
+        }
+    }
+}
+
+/// The byte range of the value at `path` in the JSON `text`.
+fn span_of(text: &str, path: &[Step]) -> std::ops::Range<usize> {
+    let bytes = text.as_bytes();
+    let mut at = skip_space(bytes, 0);
+    for step in path {
+        match step {
+            Step::Key(want) => {
+                assert_eq!(bytes[at], b'{');
+                at = skip_space(bytes, at + 1);
+                loop {
+                    let end = value_end(bytes, at);
+                    let key: String = serde_json::from_str(&text[at..end]).unwrap();
+                    at = skip_space(bytes, end);
+                    assert_eq!(bytes[at], b':');
+                    at = skip_space(bytes, at + 1);
+                    if key == *want {
+                        break;
+                    }
+                    at = skip_space(bytes, value_end(bytes, at));
+                    assert_eq!(bytes[at], b',', "no {want:?} in the golden");
+                    at = skip_space(bytes, at + 1);
+                }
+            }
+            Step::Index(index) => {
+                assert_eq!(bytes[at], b'[');
+                at = skip_space(bytes, at + 1);
+                for _ in 0..*index {
+                    at = skip_space(bytes, value_end(bytes, at));
+                    assert_eq!(bytes[at], b',');
+                    at = skip_space(bytes, at + 1);
+                }
+            }
+        }
+    }
+    at..value_end(bytes, at)
+}
+
+/// `value` as the goldens write it at indent `depth`: `json.dumps(indent=1,
+/// sort_keys=True, ensure_ascii=False)`.
+fn value_text(value: &Value, depth: usize) -> String {
+    let (open, close, items): (char, char, Vec<(Option<&String>, &Value)>) = match value {
+        Value::Array(items) if !items.is_empty() => {
+            ('[', ']', items.iter().map(|v| (None, v)).collect())
+        }
+        Value::Object(map) if !map.is_empty() => {
+            ('{', '}', map.iter().map(|(k, v)| (Some(k), v)).collect())
+        }
+        other => return other.to_string(),
+    };
+    let mut out = String::from(open);
+    for (at, (key, item)) in items.into_iter().enumerate() {
+        out.push_str(if at == 0 { "\n" } else { ",\n" });
+        out.push_str(&" ".repeat(depth + 1));
+        if let Some(key) = key {
+            out.push_str(&Value::String(key.clone()).to_string());
+            out.push_str(": ");
+        }
+        out.push_str(&value_text(item, depth + 1));
+    }
+    out.push('\n');
+    out.push_str(&" ".repeat(depth));
+    out.push(close);
+    out
 }
 
 fn describe(index: usize, args: &Value, expected: &Value, actual: &Value) -> String {

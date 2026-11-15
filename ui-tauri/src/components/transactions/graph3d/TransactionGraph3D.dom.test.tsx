@@ -59,7 +59,7 @@ describe("3D transaction graph scene", () => {
     stubWebgl();
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
     const scene = {
-      resize: vi.fn(), setView: vi.fn(), render: vi.fn(), dispose: vi.fn(),
+      resize: vi.fn(), render: vi.fn(), dispose: vi.fn(),
       pick: vi.fn(() => null), highlight: vi.fn(),
       prepare: vi.fn(async () => undefined), onContextLost: vi.fn(() => () => undefined),
     };
@@ -83,13 +83,12 @@ describe("3D transaction graph scene", () => {
     vi.doUnmock("./glassScene");
   });
 
-  it("selects an input or output on a click, but not the fee, which has no row", async () => {
+  it("selects an input or output on a click, but not the fee or a folded leg, which have no row", async () => {
     stubWebgl();
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
-    vi.spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementation(() => {});
     const pick = vi.fn(() => "output:fee");
     const scene = {
-      resize: vi.fn(), setView: vi.fn(), render: vi.fn(), dispose: vi.fn(), pick, highlight: vi.fn(),
+      resize: vi.fn(), render: vi.fn(), dispose: vi.fn(), pick, highlight: vi.fn(),
       prepare: vi.fn(async () => undefined), onContextLost: vi.fn(() => () => undefined),
     };
     vi.resetModules();
@@ -98,20 +97,52 @@ describe("3D transaction graph scene", () => {
     const onSelectPart = vi.fn();
     render(
       <TooltipProvider>
-        <Fresh graph={graph} hideSensitive={false} maxRows={250} fallback={null} onSelectPart={onSelectPart} />
+        <Fresh
+          graph={{ ...graph, inputs: ["a", "b", "c"].map((id) => ({ ...graph.inputs[0], id })) }}
+          hideSensitive={false}
+          maxRows={1}
+          fallback={null}
+          onSelectPart={onSelectPart}
+        />
       </TooltipProvider>,
     );
     await vi.waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     const view = screen.getByTestId("transaction-graph-3d");
-    const click = () => {
-      fireEvent.pointerDown(view, { clientX: 10, clientY: 10, pointerId: 1 });
-      fireEvent.pointerUp(view, { clientX: 10, clientY: 10, pointerId: 1 });
-    };
+    const click = () => fireEvent.click(view, { clientX: 10, clientY: 10 });
+    click();
+    expect(onSelectPart).not.toHaveBeenCalled();
+    pick.mockReturnValue("input:glass-fold");
     click();
     expect(onSelectPart).not.toHaveBeenCalled();
     pick.mockReturnValue("output:out");
     click();
     expect(onSelectPart).toHaveBeenCalledExactlyOnceWith("output:out");
+    vi.unstubAllGlobals();
+    vi.doUnmock("./glassScene");
+  });
+
+  it("lights the fold strand for a list row whose leg is folded", async () => {
+    stubWebgl();
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    const highlight = vi.fn();
+    const scene = {
+      resize: vi.fn(), render: vi.fn(), dispose: vi.fn(), pick: vi.fn(() => null), highlight,
+      prepare: vi.fn(async () => undefined), onContextLost: vi.fn(() => () => undefined),
+    };
+    vi.resetModules();
+    vi.doMock("./glassScene", () => ({ createGlassScene: () => scene }));
+    const { TransactionGraph3D: Fresh } = await import("./TransactionGraph3D");
+    const folded = { ...graph, inputs: ["a", "b", "c"].map((id) => ({ ...graph.inputs[0], id })) };
+    const view = (activePart: string) => (
+      <TooltipProvider>
+        <Fresh graph={folded} hideSensitive={false} maxRows={1} fallback={null} activePart={activePart} />
+      </TooltipProvider>
+    );
+    const { rerender } = render(view("input:c"));
+    await vi.waitFor(() => expect(highlight).toHaveBeenLastCalledWith("input:glass-fold"));
+    // A leg that is drawn lights itself.
+    rerender(view("input:a"));
+    await vi.waitFor(() => expect(highlight).toHaveBeenLastCalledWith("input:a"));
     vi.unstubAllGlobals();
     vi.doUnmock("./glassScene");
   });

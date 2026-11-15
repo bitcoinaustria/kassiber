@@ -38,11 +38,24 @@ const PICK_TOLERANCE = 6;
 /** How far a hovered ribbon's glow reaches past its edges, in scene units. */
 const SLEEVE = 0.035;
 
-function distanceToPolyline(x: number, y: number, points: Array<[number, number]>) {
+/** A ribbon's centreline on screen, with its bounding box, in CSS pixels. */
+type ScreenRibbon = {
+  legId: string;
+  reach: number;
+  points: Float64Array;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+function distanceToPolyline(x: number, y: number, points: Float64Array) {
   let best = Infinity;
-  for (let index = 1; index < points.length; index += 1) {
-    const [ax, ay] = points[index - 1];
-    const [bx, by] = points[index];
+  for (let index = 2; index < points.length; index += 2) {
+    const ax = points[index - 2];
+    const ay = points[index - 1];
+    const bx = points[index];
+    const by = points[index + 1];
     const dx = bx - ax;
     const dy = by - ay;
     const length = dx * dx + dy * dy;
@@ -248,21 +261,47 @@ export function createGlassScene(
     const blockMeshes = [...blocks.values()].map((block) => block.mesh);
     const sleeves = new Map<string, Mesh>();
     let lit: string | null = null;
+    // The ribbons as last projected: the view is fixed, so they hold until a resize.
+    let onScreen: { projection: number; ribbons: ScreenRibbon[] } | null = null;
+    const project = (pointer: GlassPointer): ScreenRibbon[] =>
+      layout.ribbons.map((ribbon) => {
+        const points = new Float64Array(ribbon.points.length * 2);
+        let [minX, minY, maxX, maxY] = [Infinity, Infinity, -Infinity, -Infinity];
+        ribbon.points.forEach(([x, y], index) => {
+          const [sx, sy] = pointer.toScreen(x, y);
+          points[index * 2] = sx;
+          points[index * 2 + 1] = sy;
+          minX = Math.min(minX, sx);
+          minY = Math.min(minY, sy);
+          maxX = Math.max(maxX, sx);
+          maxY = Math.max(maxY, sy);
+        });
+        const reach = Math.max(PICK_TOLERANCE, (ribbon.thickness * pointer.pixelsPerUnit) / 2);
+        return { legId: ribbon.legId, reach, points, minX, minY, maxX, maxY };
+      });
     return {
       pick(pointer: GlassPointer) {
         // Coins are solid, so a ray finds them exactly; ribbons can be a
         // pixel thin, so they are found by distance on screen instead.
         const hit = pointer.raycaster.intersectObjects(blockMeshes, false)[0];
         if (hit) return hit.object.userData.part as string;
+        if (!onScreen || onScreen.projection !== pointer.projection) {
+          onScreen = { projection: pointer.projection, ribbons: project(pointer) };
+        }
+        const { x, y } = pointer;
         let best: string | null = null;
         let bestDepth = Infinity;
-        for (const ribbon of layout.ribbons) {
-          const reach = Math.max(PICK_TOLERANCE, (ribbon.thickness * pointer.pixelsPerUnit) / 2);
-          const distance = distanceToPolyline(
-            pointer.x,
-            pointer.y,
-            ribbon.points.map(([x, y]) => pointer.toScreen(x, y)),
-          );
+        for (const ribbon of onScreen.ribbons) {
+          const { reach } = ribbon;
+          if (
+            x < ribbon.minX - reach ||
+            x > ribbon.maxX + reach ||
+            y < ribbon.minY - reach ||
+            y > ribbon.maxY + reach
+          ) {
+            continue;
+          }
+          const distance = distanceToPolyline(x, y, ribbon.points);
           // Where ribbons overlap near the collar, the one the pointer is
           // deepest inside wins.
           if (distance <= reach && distance - reach < bestDepth) {

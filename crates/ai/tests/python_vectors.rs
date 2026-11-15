@@ -79,13 +79,24 @@ fn messages(value: &Value) -> Option<&[Value]> {
     }
 }
 
+/// Tools only the Rust runtime offers (`docs/reference/rust-shell.md#rust-only-commands`),
+/// last in the catalog so every Python tool keeps its index; the frozen
+/// vectors never name them.
+const RUST_ONLY_TOOLS: &[&str] = &["ui.journals.verify"];
+
+fn python_tools() -> impl Iterator<Item = &'static kassiber_ai::ToolEntry> {
+    tools()
+        .iter()
+        .filter(|tool| !RUST_ONLY_TOOLS.contains(&tool.name.as_str()))
+}
+
 #[test]
 fn tool_capabilities_match_python() {
     let Some(Value::Dict(expected)) = get(vectors(), "capabilities") else {
         panic!("capabilities");
     };
-    assert_eq!(expected.len(), tools().len());
-    for tool in tools() {
+    assert_eq!(expected.len(), python_tools().count());
+    for tool in python_tools() {
         let want: Vec<Value> = match get(vectors(), "capabilities").and_then(|c| get(c, &tool.name))
         {
             Some(Value::List(items)) => items.clone(),
@@ -108,6 +119,7 @@ fn selection_matches_python() {
             Ok(selected) => {
                 let indexes: Vec<Value> = selected
                     .iter()
+                    .filter(|tool| !RUST_ONLY_TOOLS.contains(&tool.name.as_str()))
                     .map(|tool| {
                         Value::from(
                             tools()

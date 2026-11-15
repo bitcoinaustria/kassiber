@@ -141,7 +141,7 @@
     },
     "reprocessJournals": {
       "text": "Journale neu verarbeiten",
-      "prompt": "Prüfe, ob Journale nach den jüngsten Importen, Kursänderungen, Metadaten-Bearbeitungen oder Transfer-Zuordnungen neu verarbeitet werden müssen."
+      "prompt": "Prüfe, ob Journale nach den jüngsten Importen, Kursänderungen, Metadaten-Bearbeitungen oder Übertragungs-Verknüpfungen neu verarbeitet werden müssen."
     },
     "prepareTaxExport": {
       "text": "Steuer-Export vorbereiten",

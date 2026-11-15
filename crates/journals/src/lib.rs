@@ -19,6 +19,7 @@ pub mod process;
 pub mod quarantine;
 mod render;
 pub mod report_blockers;
+pub mod reproduce;
 mod review_apply;
 pub mod review_effects;
 mod review_simulation;

@@ -742,19 +742,9 @@ export function QuarantineDashboard({
         onUnpair={sheetPairCase ? unpairFromSheet : undefined}
         isUnpairing={fixing !== null}
         onOpenPairingReview={() => {
-          const focus = detailTransaction?.id;
-          const reviewReason = detailContext?.reason.toLowerCase() ?? "";
-          const ownershipReview =
-            reviewReason.includes("ownership_transfer") ||
-            reviewReason.includes("owned_fanout_unresolved");
+          const link = detailTransaction?.id;
           closeDetail();
-          void navigate({
-            to: "/swaps",
-            search: {
-              focus,
-              method: ownershipReview ? "ownership_graph" : undefined,
-            },
-          });
+          void navigate({ to: "/transfers", search: { link: link ?? "new" } });
         }}
         onOpenMarketDataSettings={() => {
           closeDetail();

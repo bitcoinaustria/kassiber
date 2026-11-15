@@ -1397,6 +1397,20 @@ redacted before they enter AI/UI tool metadata; exact backend URLs are not sent
 to the provider. If any source refresh row fails, the maintenance/report-blocker
 path returns a blocking `sync_failed` item instead of saying reports are ready.
 
+`ui_journals_verify` is a read tool over the [reproducibility check](replay-bundle.md):
+it recomputes the journals in a private in-memory copy and returns statuses,
+counts per table, wallet and year, and each listed difference as its table,
+change kind and changed column names (`journal_verify_for_ai`): no cell values,
+amounts, row keys, transaction ids, labels or refusal messages. Lists and the
+wallet and year count maps are capped at 50 entries (the largest counts, keys
+cut to 64 characters, at most 20 column names per difference); the rest is
+summarized as `by_wallet_omitted` / `by_year_omitted` with its entry and row
+counts, and a cut table or difference list as `tables_omitted` /
+`differences_omitted` with `truncated` set. When the check fails before producing a report, the assistant gets the
+error code and a fixed message, never the error text, which can quote book
+values. It does not refresh journals first, since a stale book is one of
+the answers it gives, and it is not an automatic context read.
+
 Quoted or search-like questions can trigger `ui.transactions.search` before the
 provider is called. Matching transaction notes, descriptions, counterparties,
 tags, and values may then be included in the provider context; keep inference
@@ -1759,7 +1773,10 @@ resolutions.
 `ui_transfers_dismiss` is on the `core` profile too, behind per-call consent.
 `ui_transfers_dismissals_delete` (`transfers dismissals delete --id ...` or
 `--tx-out/--tx-in`) undoes one and invalidates journals, and a review batch can
-carry the same undo as `undismiss_pair`. A dismissal can be read back:
+carry the same undo as `undismiss_pair`. A quarantined row held because its
+automatic pairing was undone carries a `restore_pairing` action with the
+`dismissal_id` to pass (see [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)).
+A dismissal can be read back:
 `ui_transfers_dismissals_list` (`transfers dismissals list`) returns each
 dismissed pair with both legs' full ids, wallet, direction, amount and
 `expires_at` (null means never). `ui_transfers_suggest` and
@@ -1770,6 +1787,23 @@ silent.
 A full-access provider can also propose a bounded dismissal (1 to 3650 days)
 inside a review batch, where the consent preview shows it and the receipt
 records it.
+
+The desktop's pair list (`ui.transfers.list` with `priced`) carries `unlinked_msat` on each leg (how
+much of that transaction's principal no active pair allocates) and
+`shares_legs` on each pair (whether its transactions may take a further pair:
+only same-asset manual, coinjoin or whirlpool pairs at carrying value). They
+describe pair coverage only: an uncovered amount is not a sale, a fee or
+income, and what the journals do with it is read from the quarantine. Each leg
+also has a `fiat_value` at its own transaction's price and each pair a
+`swap_fee_fiat_value` at the sending price (null when unpriced). The
+desktop's custody lineage read asks for `priced`, which adds each row's fiat
+value and the sending transaction's network fee (covering the whole
+transaction rather than one edge) at that price; the assistant's lineage tool
+does not pass it and reads the rows without them.
+
+The assistant's skill references do not say this yet: recorded sessions read
+them verbatim, so changing their text waits for a reviewed re-record of those
+sessions.
 
 Three properties of `ui_transfers_pair` are documented on the tool because the
 model would otherwise have to guess them, and each guess is a real error class:
@@ -2033,6 +2067,20 @@ or as cross-book disclosure. The GUI uses that object and the exact tool payload
 chips beside the assistant answer, making the result traceable to
 program-derived facts.
 
+### Backend certificate errors
+
+A sync or connection failure `tls_certificate_untrusted` means the user's own
+server presents a certificate no trusted authority signed (often self-signed);
+`tls_certificate_changed` means a backend's pinned certificate no longer
+matches the server. Trusting a certificate is the user's decision, not an
+assistant tool: the assistant points them to **Check certificate…** in the
+backend's settings or on the wallet page, or to
+`kassiber backends trust-certificate <name>`, which shows the SHA-256
+fingerprint to compare first ([self-signed certificates](backends.md#self-signed-certificates)).
+
+The `wallets-backends` skill reference does not say this yet: recorded
+sessions read it verbatim, so its text waits for a reviewed re-record.
+
 ### Visuals in chat
 
 The assistant can answer with an interactive visual through the read-only tool
@@ -2113,7 +2161,7 @@ The desktop renders each visual as a card under the work log, above the answer
 draws it. Cards animate in: figures count up and lines and bars draw from their
 baseline; the global reduced-motion rule stops all of it. A transaction flow
 is drawn with the transaction detail panel's flat bowtie
-(`TransactionFlowDiagram`), never the panel's draggable 3D view. The desktop
+(`TransactionFlowDiagram`), never the panel's 3D glass view. The desktop
 reads that graph itself with the panel's own local read (`ui.transactions.graph`
 without public lookup), so the chat and the panel draw the same data while the model only
 ever receives the redacted summary without outpoints or addresses. Every card has a table view, "Copy as CSV"

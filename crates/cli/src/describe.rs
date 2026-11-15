@@ -35,6 +35,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "journals.process",
     "journals.quarantine.groups",
     "journals.list",
+    "journals.verify",
     "journals.transfers.list",
     "journals.events.list",
     "journals.events.get",

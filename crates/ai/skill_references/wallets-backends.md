@@ -31,7 +31,6 @@ Behavior to remember:
 - read-only commands keep bootstrap-backed config in memory only; `kassiber init` and backend mutation commands that need canonical bootstrap rows are the explicit bootstrap-import flows
 - deleting a bootstrap-backed backend suppresses the built-in/default bootstrap copy, but a backend present in the current `backends.env` file is treated as an explicit restore signal
 - process-level `KASSIBER_BACKEND_*` overrides still win for the current process over the stored SQLite row
-- a sync or connection error `tls_certificate_untrusted` means the user's own server presents a certificate no trusted authority signed (often self-signed); `tls_certificate_changed` means a backend's pinned certificate no longer matches the server. Trusting a certificate is the user's decision and not an assistant tool: point them to **Check certificate…** in the backend's settings or on the wallet page, or `kassiber backends trust-certificate <name>`, which shows the SHA-256 fingerprint to compare with their server before they confirm. Never suggest `INSECURE` as the fix, and treat a changed certificate the user did not replace as possible impersonation
 
 Built-in defaults often include:
 
