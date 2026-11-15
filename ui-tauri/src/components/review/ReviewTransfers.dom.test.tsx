@@ -84,7 +84,11 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
 });
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
+  Link: ({ children, to, search, ...rest }: { children: React.ReactNode; to: string; search?: Record<string, string> }) => (
+    <a href={search ? `${to}?${new URLSearchParams(search).toString()}` : to} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 import { ReviewTransfers } from "./ReviewTransfers";
@@ -136,9 +140,18 @@ function mount(props: { refreshing?: boolean; onDecided?: () => void } = {}) {
 
 const rows = () => screen.queryAllByRole("listitem");
 
+/** Sets a suggestion aside through its row menu. */
+async function dismissVia(route: string) {
+  const trigger = screen.getByRole("button", { name: `More for ${route}` });
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+  const menu = await screen.findByRole("menu");
+  await act(async () => fireEvent.click(within(menu).getByRole("menuitem", { name: `Not my transfer: ${route}` })));
+}
+
 beforeEach(() => {
   useUiStore.setState({ hideSensitive: false });
-  daemon.candidates = [candidate("a"), candidate("b")];
+  // Exact and alone: these link in one click.
+  daemon.candidates = [candidate("a", { confidence: "exact" }), candidate("b", { confidence: "exact" })];
   daemon.failUnpair = new Set();
   daemon.failPair = false;
   daemon.staleApply = false;
@@ -150,12 +163,16 @@ afterEach(cleanup);
 
 describe("review transfers", () => {
   it.each([
-    ["Pair Hot a to Cold a", "Paired Hot a to Cold a."],
-    ["Not a transfer: Hot a to Cold a", "Set aside Hot a to Cold a."],
+    ["linking", "Linked Hot a to Cold a."],
+    ["setting aside", "Set aside Hot a to Cold a."],
   ])("masks the wallet names in the status after %s", async (action, message) => {
     mount();
     await waitFor(() => expect(rows()).toHaveLength(2));
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: action })));
+    if (action === "linking") {
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Link Hot a to Cold a" })));
+    } else {
+      await dismissVia("Hot a to Cold a");
+    }
     const label = screen.getByText(message);
     expect(label.closest(".sensitive")).toBeNull();
     act(() => useUiStore.getState().setHideSensitive(true));
@@ -168,7 +185,7 @@ describe("review transfers", () => {
     await waitFor(() => expect(rows()).toHaveLength(2));
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Pair Hot a to Cold a" }));
+      fireEvent.click(screen.getByRole("button", { name: "Link Hot a to Cold a" }));
     });
 
     expect(daemon.calls.find((call) => call.kind === "ui.transfers.pair")?.args).toMatchObject({
@@ -177,11 +194,11 @@ describe("review transfers", () => {
       kind: "manual",
       policy: "carrying-value",
       pair_source: "manual",
-      confidence_at_pair: "strong",
+      confidence_at_pair: "exact",
     });
     expect(onDecided).toHaveBeenCalledTimes(1);
     expect(rows()).toHaveLength(1);
-    expect(screen.getByRole("status").textContent).toContain("Paired Hot a to Cold a.");
+    expect(screen.getByRole("status").textContent).toContain("Linked Hot a to Cold a.");
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Undo" }));
@@ -197,9 +214,7 @@ describe("review transfers", () => {
     mount();
     await waitFor(() => expect(rows()).toHaveLength(2));
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Not a transfer: Hot b to Cold b" }));
-    });
+    await dismissVia("Hot b to Cold b");
     expect(rows()).toHaveLength(1);
 
     await act(async () => {
@@ -210,11 +225,67 @@ describe("review transfers", () => {
     ).toEqual({ dismissal_id: "dismissal-1" });
   });
 
+  it("sets several ticked suggestions aside in one step, with one Undo for all of them", async () => {
+    daemon.candidates = [candidate("a"), candidate("b"), candidate("c")];
+    const view = mount();
+    await waitFor(() => expect(rows()).toHaveLength(3));
+    // Nothing is ticked: no bulk step is offered.
+    expect(screen.queryByRole("button", { name: /Set \d+ aside/ })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Hot a to Cold a" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Hot c to Cold c" }));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Set 2 aside" })));
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    expect(daemon.calls.filter((call) => call.kind === "ui.transfers.dismiss").map((call) => [call.args.tx_out, call.args.tx_in])).toEqual([
+      ["out-a", "in-a"],
+      ["out-c", "in-c"],
+    ]);
+    expect(screen.getByRole("status").textContent).toContain("Set aside 2 suggestions.");
+    expect(view.onDecided).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Set \d+ aside/ })).toBeNull();
+    // One Undo restores both.
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Undo" })));
+    await waitFor(() => expect(rows()).toHaveLength(3));
+    expect(daemon.calls.filter((call) => call.kind === "ui.transfers.dismissals.delete")).toHaveLength(2);
+  });
+
+  it("does not keep a row ticked once it was decided on its own, and puts focus where the set-aside rows were", async () => {
+    daemon.candidates = [candidate("a"), candidate("b"), candidate("c")];
+    mount();
+    await waitFor(() => expect(rows()).toHaveLength(3));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Hot b to Cold b" }));
+    expect(screen.getByRole("button", { name: "Set 1 aside" })).toBeTruthy();
+    await dismissVia("Hot b to Cold b");
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Undo" })));
+    await waitFor(() => expect(rows()).toHaveLength(3));
+    // Back, and not ticked: no bulk step is offered for it.
+    expect(screen.getByRole("checkbox", { name: "Select Hot b to Cold b" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.queryByRole("button", { name: /Set \d+ aside/ })).toBeNull();
+    // The last row set aside in bulk: focus lands on the row now in its place, not on the first.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Hot c to Cold c" }));
+    const order = rows().map((row) => row.textContent ?? "");
+    const place = order.findIndex((text) => text.includes("Hot c"));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Set 1 aside" })));
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    const landed = rows()[Math.min(place, 1)];
+    expect(landed.contains(document.activeElement)).toBe(true);
+  });
+
+  it("opens either side of a suggestion on the Transactions page from its menu", async () => {
+    mount();
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    const trigger = screen.getByRole("button", { name: "More for Hot a to Cold a" });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: "Show the send in Transactions" }).getAttribute("href")).toBe("/transactions?tx=out-a");
+    expect(within(menu).getByRole("menuitem", { name: "Show the receipt in Transactions" }).getAttribute("href")).toBe("/transactions?tx=in-a");
+  });
+
   it("keeps the list as read until the recalculation finishes, then reads it again", async () => {
     const view = mount();
     await waitFor(() => expect(rows()).toHaveLength(2));
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Pair Hot a to Cold a" }));
+      fireEvent.click(screen.getByRole("button", { name: "Link Hot a to Cold a" }));
     });
     view.rerender(true);
     // A read of stale journals lists more than is open; it is not shown.
@@ -241,12 +312,12 @@ describe("review transfers", () => {
     mount();
     await waitFor(() => expect(rows()).toHaveLength(5));
 
-    fireEvent.click(screen.getByRole("button", { name: "Pair all 2 exact matches" }));
+    fireEvent.click(screen.getByRole("button", { name: "Link all 2 exact matches" }));
     expect(daemon.calls.some((call) => call.kind === "ui.transfers.bulk_pair")).toBe(false);
     const dialog = await screen.findByRole("dialog");
     await act(async () => {
-      await waitFor(() => expect((within(dialog).getByRole("button", { name: "Pair 2" }) as HTMLButtonElement).disabled).toBe(false));
-      fireEvent.click(within(dialog).getByRole("button", { name: "Pair 2" }));
+      await waitFor(() => expect((within(dialog).getByRole("button", { name: "Link 2" }) as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Link 2" }));
     });
 
     expect(daemon.calls.find((call) => call.kind === "ui.review.plan")?.args).toMatchObject({
@@ -260,19 +331,19 @@ describe("review transfers", () => {
       expected_scope: { workspace_id: "ws", profile_id: "book" }, artifact: daemon.planned,
     });
     expect(rows()).toHaveLength(3);
-    expect(screen.getByRole("status").textContent).toContain("Paired 2 transfers.");
+    expect(screen.getByRole("status").textContent).toContain("Linked 2 transfers.");
   });
 
   it("keeps the confirmed set when new candidates arrive and refuses a stale preview", async () => {
     daemon.candidates = [candidate("a", { confidence: "exact" })];
     mount();
     await waitFor(() => expect(rows()).toHaveLength(1));
-    fireEvent.click(screen.getByRole("button", { name: "Pair 1 exact match" }));
+    fireEvent.click(screen.getByRole("button", { name: "Link 1 exact match" }));
     const dialog = await screen.findByRole("dialog");
-    await waitFor(() => expect((within(dialog).getByRole("button", { name: "Pair 1" }) as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect((within(dialog).getByRole("button", { name: "Link 1" }) as HTMLButtonElement).disabled).toBe(false));
     daemon.candidates.push(candidate("new", { confidence: "exact" }));
     daemon.staleApply = true;
-    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Pair 1" })); });
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Link 1" })); });
     const applied = daemon.calls.find((call) => call.kind === "ui.review.apply")?.args.artifact as { operations: unknown[] };
     expect(applied.operations).toHaveLength(1);
     expect(screen.getByRole("alert").textContent).toContain("Book changed since preview");
@@ -281,22 +352,37 @@ describe("review transfers", () => {
     expect(daemon.calls.some((call) => call.kind === "ui.transfers.bulk_pair")).toBe(false);
   });
 
-  it("takes the matches that competed for a paired leg off the list, and back on undo", async () => {
+  it("asks to review a likely or competing match instead of linking it in one click", async () => {
     daemon.candidates = [
-      candidate("a", { conflict_size: 2 }),
-      candidate("x", { out_id: "out-a", conflict_size: 2 }),
-      candidate("b"),
+      candidate("a", { confidence: "exact", conflict_size: 2 }),
+      candidate("x", { confidence: "exact", out_id: "out-a", conflict_size: 2 }),
+      candidate("l", { confidence: "strong" }),
+      candidate("b", { confidence: "exact" }),
     ];
     mount();
-    await waitFor(() => expect(rows()).toHaveLength(3));
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Pair Hot a to Cold a" }));
-    });
-    expect(rows()).toHaveLength(1);
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    });
-    expect(rows()).toHaveLength(3);
+    await waitFor(() => expect(rows()).toHaveLength(4));
+    for (const route of ["Hot a to Cold a", "Hot x to Cold x", "Hot l to Cold l"]) {
+      expect(screen.queryByRole("button", { name: `Link ${route}` })).toBeNull();
+      expect(screen.getByRole("link", { name: `Review ${route} before linking` }).getAttribute("href")).toContain("link=");
+    }
+    expect(screen.getByRole("button", { name: "Link Hot b to Cold b" })).toBeTruthy();
+  });
+
+  it("links with the terms a matching rule sets", async () => {
+    daemon.candidates = [
+      candidate("a", {
+        confidence: "exact",
+        default_kind: "manual",
+        default_policy: "carrying-value",
+        rule_match: { rule_id: "r1", rule_name: "Pegs", kind: "peg-out", policy: "taxable" },
+      }),
+    ];
+    mount();
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Link Hot a to Cold a" })));
+    expect(daemon.calls.find((call) => call.kind === "ui.transfers.pair")?.args).toEqual(
+      expect.objectContaining({ kind: "peg-out", policy: "taxable" }),
+    );
   });
 
   it("keeps what an undo could not reverse undoable, and lists what it did", async () => {
@@ -304,11 +390,11 @@ describe("review transfers", () => {
     daemon.failUnpair = new Set(["pair-b"]);
     mount();
     await waitFor(() => expect(rows()).toHaveLength(2));
-    fireEvent.click(screen.getByRole("button", { name: "Pair all 2 exact matches" }));
+    fireEvent.click(screen.getByRole("button", { name: "Link all 2 exact matches" }));
     const dialog = await screen.findByRole("dialog");
-    await waitFor(() => expect((within(dialog).getByRole("button", { name: "Pair 2" }) as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect((within(dialog).getByRole("button", { name: "Link 2" }) as HTMLButtonElement).disabled).toBe(false));
     await act(async () => {
-      fireEvent.click(within(dialog).getByRole("button", { name: "Pair 2" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Link 2" }));
     });
     expect(rows()).toHaveLength(0);
 
@@ -320,13 +406,19 @@ describe("review transfers", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
   });
 
-  it("waits with the bulk step while the journals recalculate", async () => {
+  it("mounted while the journals recalculate, waits for the run instead of showing a stale read", async () => {
     daemon.candidates = [candidate("a", { confidence: "exact" })];
-    mount({ refreshing: true });
+    const { rerender } = mount({ refreshing: true });
+    await waitFor(() =>
+      expect(daemon.calls.some((call) => call.kind === "ui.transfers.suggest")).toBe(true),
+    );
+    // A read of stale journals suggests moves that are already linked.
+    expect(rows()).toHaveLength(0);
+    rerender(false);
     await waitFor(() => expect(rows()).toHaveLength(1));
     expect(
-      (screen.getByRole("button", { name: "Pair 1 exact match" }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+      (screen.getByRole("button", { name: "Link 1 exact match" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 
   it("lists a candidate again when its pairing fails", async () => {
@@ -334,7 +426,7 @@ describe("review transfers", () => {
     const { onDecided } = mount();
     await waitFor(() => expect(rows()).toHaveLength(2));
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Pair Hot a to Cold a" }));
+      fireEvent.click(screen.getByRole("button", { name: "Link Hot a to Cold a" }));
     });
     expect(rows()).toHaveLength(2);
     expect(screen.getByRole("alert").textContent).toContain("That leg is paired already");
@@ -369,7 +461,7 @@ describe("what each row shows", () => {
     expect(within(peg).getByText("Bitcoin swap")).toBeTruthy();
     expect(within(peg).getByText("Tax-neutral")).toBeTruthy();
     expect(within(peg).getByTitle("Liquid")).toBeTruthy();
-    expect(within(swap).getByText("Swap")).toBeTruthy();
+    expect(within(swap).getByText("Different asset")).toBeTruthy();
     expect(within(swap).getByText("Taxable")).toBeTruthy();
     expect(within(transfer).getByText("₿ 0.05000000")).toBeTruthy();
     // Another asset is shown in its own unit, never as bitcoin.

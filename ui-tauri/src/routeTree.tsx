@@ -72,9 +72,9 @@ const Journals = lazyRouteComponent(
   () => import("./routes/Journals"),
   "Journals",
 );
-const SwapMatching = lazyRouteComponent(
-  () => import("./routes/SwapMatching"),
-  "SwapMatching",
+const TransfersPage = lazyRouteComponent(
+  () => import("./routes/transfers/TransfersPage"),
+  "TransfersPage",
 );
 const Review = lazyRouteComponent(() => import("./routes/Review"), "Review");
 const Reconcile = lazyRouteComponent(
@@ -222,16 +222,28 @@ const taxEventsRoute = createRoute({
   },
 });
 
+// `/transfers` is the screen; `/swaps` and `/custody-gaps` are its names from
+// before the redesign and redirect with their navigation state.
+const transfersRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/transfers",
+  validateSearch: parseTransfersCustodySearch,
+  beforeLoad: ({ search }) => {
+    if (!useUiStore.getState().developerToolsEnabled && search.section === "advanced") {
+      throw redirect({ to: "/transfers", search: {}, replace: true });
+    }
+  },
+  component: TransfersPage,
+});
+
 const swapMatchingRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/swaps",
   validateSearch: parseTransfersCustodySearch,
   beforeLoad: ({ search }) => {
-    if (!useUiStore.getState().developerToolsEnabled && (search.tab === "gaps" || search.tab === "components")) {
-      throw redirect({ to: "/swaps", search: {}, replace: true });
-    }
+    const gated = !useUiStore.getState().developerToolsEnabled && search.section === "advanced";
+    throw redirect({ to: "/transfers", search: gated ? {} : search, replace: true });
   },
-  component: SwapMatching,
 });
 
 const custodyGapsRoute = createRoute({
@@ -241,16 +253,7 @@ const custodyGapsRoute = createRoute({
   beforeLoad: requireDeveloperTools,
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => {
-    throw redirect({ to: "/swaps", search: custodyGapRedirectSearch(deps), replace: true });
-  },
-});
-
-const transferMatchingRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: "/transfers",
-  validateSearch: parseTransfersCustodySearch,
-  beforeLoad: ({ search }) => {
-    throw redirect({ to: "/swaps", search, replace: true });
+    throw redirect({ to: "/transfers", search: custodyGapRedirectSearch(deps), replace: true });
   },
 });
 
@@ -489,7 +492,7 @@ const routeTree = rootRoute.addChildren([
     journalsRoute,
     swapMatchingRoute,
     custodyGapsRoute,
-    transferMatchingRoute,
+    transfersRoute,
     taxEventsRoute,
     reviewRoute,
     quarantineRoute,

@@ -72,7 +72,6 @@ zeroize
 httparse
 idna_adapter compiled_data
 rustls std ring tls12
-rustls-native-certs
 url
 webpki-roots
 toml_edit parse

@@ -1773,7 +1773,10 @@ resolutions.
 `ui_transfers_dismiss` is on the `core` profile too, behind per-call consent.
 `ui_transfers_dismissals_delete` (`transfers dismissals delete --id ...` or
 `--tx-out/--tx-in`) undoes one and invalidates journals, and a review batch can
-carry the same undo as `undismiss_pair`. A dismissal can be read back:
+carry the same undo as `undismiss_pair`. A quarantined row held because its
+automatic pairing was undone carries a `restore_pairing` action with the
+`dismissal_id` to pass (see [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)).
+A dismissal can be read back:
 `ui_transfers_dismissals_list` (`transfers dismissals list`) returns each
 dismissed pair with both legs' full ids, wallet, direction, amount and
 `expires_at` (null means never). `ui_transfers_suggest` and
@@ -1784,6 +1787,23 @@ silent.
 A full-access provider can also propose a bounded dismissal (1 to 3650 days)
 inside a review batch, where the consent preview shows it and the receipt
 records it.
+
+The desktop's pair list (`ui.transfers.list` with `priced`) carries `unlinked_msat` on each leg (how
+much of that transaction's principal no active pair allocates) and
+`shares_legs` on each pair (whether its transactions may take a further pair:
+only same-asset manual, coinjoin or whirlpool pairs at carrying value). They
+describe pair coverage only: an uncovered amount is not a sale, a fee or
+income, and what the journals do with it is read from the quarantine. Each leg
+also has a `fiat_value` at its own transaction's price and each pair a
+`swap_fee_fiat_value` at the sending price (null when unpriced). The
+desktop's custody lineage read asks for `priced`, which adds each row's fiat
+value and the sending transaction's network fee (covering the whole
+transaction rather than one edge) at that price; the assistant's lineage tool
+does not pass it and reads the rows without them.
+
+The assistant's skill references do not say this yet: recorded sessions read
+them verbatim, so changing their text waits for a reviewed re-record of those
+sessions.
 
 Three properties of `ui_transfers_pair` are documented on the tool because the
 model would otherwise have to guess them, and each guess is a real error class:
@@ -2127,7 +2147,7 @@ The desktop renders each visual as a card under the work log, above the answer
 draws it. Cards animate in: figures count up and lines and bars draw from their
 baseline; the global reduced-motion rule stops all of it. A transaction flow
 is drawn with the transaction detail panel's flat bowtie
-(`TransactionFlowDiagram`), never the panel's draggable 3D view. The desktop
+(`TransactionFlowDiagram`), never the panel's 3D glass view. The desktop
 reads that graph itself with the panel's own local read (`ui.transactions.graph`
 without public lookup), so the chat and the panel draw the same data while the model only
 ever receives the redacted summary without outpoints or addresses. Every card has a table view, "Copy as CSV"

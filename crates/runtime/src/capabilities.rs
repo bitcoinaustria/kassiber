@@ -166,7 +166,7 @@ const DAEMON_READ_KINDS: &str = "
     ui.btcpay.provenance.links ui.transactions.commercial_context
     ui.documents.list ui.journals.snapshot ui.journals.events.list ui.journals.verify
     ui.journals.quarantine ui.journals.transfers.list ui.transfers.suggest ui.transfers.dismissals.list
-    ui.transfers.list ui.transfers.payouts.list
+    ui.transfers.list ui.transfers.pair_options ui.transfers.payouts.list
     ui.transfers.components.list ui.transfers.components.get
     ui.transfers.components.plan ui.custody.coverage.snapshot
     ui.custody.lineage.snapshot ui.custody.gaps.list

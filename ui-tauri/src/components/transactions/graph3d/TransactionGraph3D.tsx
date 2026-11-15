@@ -6,7 +6,14 @@ import { Glass3DView } from "@/components/kb/glass3d/Glass3DView";
 import { InfoHint } from "../TransactionDetailSheetParts";
 
 import type { GraphRow, TransactionGraphPayload } from "../TransactionGraphModel";
-import { legendKeys, ribbonLayout, type LegendKey, type RibbonLayout } from "./ribbonLayout";
+import {
+  GLASS_LINE_LIMIT,
+  glassFoldPart,
+  legendKeys,
+  ribbonLayout,
+  type LegendKey,
+  type RibbonLayout,
+} from "./ribbonLayout";
 
 const LEGEND: ReadonlyArray<{ key: LegendKey; swatch: string }> = [
   { key: "known", swatch: "bg-[#8fb4ff] ring-1 ring-inset ring-white/40" },
@@ -38,12 +45,13 @@ function GraphLegend({ layout }: { layout: RibbonLayout }) {
  * Three.js loads only when this view opens; without WebGL the 2D graph shows.
  * Pointing at a leg lights it and shows `renderLeg`'s card for it; parts are
  * named `input:<id>` and `output:<id>`, the fee among the outputs. A click
- * selects an input or output; the fee has no row of its own to select.
+ * selects an input or output; the fee and a folded "+N more" leg have no row
+ * of their own to select.
  */
 export function TransactionGraph3D({
   graph,
   hideSensitive,
-  maxRows,
+  maxRows = GLASS_LINE_LIMIT,
   size = "expanded",
   fallback,
   activePart = null,
@@ -53,7 +61,8 @@ export function TransactionGraph3D({
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
-  maxRows: number;
+  /** Strands per side before the rest fold into one. */
+  maxRows?: number;
   /** Inline in the detail sheet, or the full expanded dialog. */
   size?: "compact" | "expanded";
   fallback: ReactNode;
@@ -77,22 +86,36 @@ export function TransactionGraph3D({
     () => new Map(layout.ribbons.map((ribbon) => [ribbon.legId, ribbon.row])),
     [layout],
   );
-  const feeParts = useMemo(
-    () => new Set(layout.ribbons.filter((ribbon) => ribbon.fee).map((ribbon) => ribbon.legId)),
+  const unselectable = useMemo(
+    () =>
+      new Set(
+        layout.ribbons
+          .filter((ribbon) => ribbon.fee || ribbon.row.overflow)
+          .map((ribbon) => ribbon.legId),
+      ),
     [layout],
   );
+  // A row lit in the list whose leg is folded lights its side's "+N more" strand.
+  const drawnPart = useMemo(() => {
+    const drawn = new Set(layout.ribbons.map((ribbon) => ribbon.legId));
+    return (part: string | null) => {
+      if (!part || drawn.has(part)) return part;
+      const side = part.startsWith("input:") ? "input" : part.startsWith("output:") ? "output" : null;
+      return side && drawn.has(glassFoldPart(side)) ? glassFoldPart(side) : part;
+    };
+  }, [layout]);
   const [hovered, setHovered] = useState<string | null>(null);
   const hoveredRow = hovered ? rows.get(hovered) : undefined;
   return (
     <Glass3DView
       scene={layout}
-      highlightedPart={hovered ?? activePart}
+      highlightedPart={hovered ?? drawnPart(activePart)}
       onHoverPart={(part) => {
         setHovered(part);
         onHoverPart?.(part);
       }}
       onSelectPart={onSelectPart}
-      selectable={(part) => !feeParts.has(part)}
+      selectable={(part) => !unselectable.has(part)}
       overlay={hoveredRow && renderLeg ? renderLeg(hoveredRow) : null}
       load={(canvas, look) =>
         import("./glassScene").then(({ createGlassScene }) =>

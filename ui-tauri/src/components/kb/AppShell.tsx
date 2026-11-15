@@ -404,6 +404,7 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.overview", icon: Gauge, href: "/overview" },
       { labelKey: "book.transactions", icon: ClipboardList, href: "/transactions" },
       { labelKey: "book.wallets", icon: WalletCards, href: "/connections" },
+      { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/transfers" },
       { labelKey: "book.review", icon: Inbox, href: "/review" },
       { labelKey: "book.reports", icon: BarChart3, href: "/reports" },
       { labelKey: "book.assistant", icon: MessageSquareText, href: "/assistant" },
@@ -412,9 +413,9 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 // Pages for occasional, deeper work. Review lists every decision; these keep
-// the full tools behind it, under Extras with the calculators.
+// the full tools behind it, under Extras with the calculators. Transfers is in
+// the main group: automatic pairings are listed and undone there.
 const EXTRA_BOOK_PAGES = [
-  { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
   { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
   { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
   { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
@@ -565,7 +566,7 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
-    "/swaps",
+    "/transfers",
     {
       titleKey: "nav:book.swaps",
       icon: ArrowLeftRight,

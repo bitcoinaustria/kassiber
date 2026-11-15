@@ -12,7 +12,7 @@ use kassiber_transfers::{review_cases, Scope};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Keep reference exception families and attributes intact through composition.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Error {
     Service(AppError),
     Build(Refusal),
@@ -56,7 +56,20 @@ pub(crate) fn with_state<R>(
     as_of: &str,
     then: impl FnOnce(&JournalState<'_>) -> Result<R, Error>,
 ) -> Result<R, Error> {
-    pipeline::load_review_state(conn, profile(conn, scope)?, as_of, |state| then(&state))?
+    with_state_until(conn, scope, as_of, || Ok(()), then)
+}
+
+/// [`with_state`], asking `proceed` between the build's steps.
+fn with_state_until<R>(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    as_of: &str,
+    proceed: impl Fn() -> Result<(), Error>,
+    then: impl FnOnce(&JournalState<'_>) -> Result<R, Error>,
+) -> Result<R, Error> {
+    pipeline::load_review_state_until(conn, profile(conn, scope)?, as_of, proceed, |state| {
+        then(&state)
+    })?
 }
 
 pub(crate) fn facts(
@@ -75,47 +88,169 @@ pub fn plan(
     operations: &Value,
     expected_input_version: &Value,
     as_of: &str,
-    sources: &dyn Sources,
+    sources: &(dyn Sources + Sync),
 ) -> Result<Value, Error> {
-    let mut normalized = review_operations::normalize(operations)?;
-    let clone = pipeline::memory_snapshot(conn, || {
+    prepare_plan(conn, scope, operations, expected_input_version, as_of)?.run(sources, &|| false)
+}
+
+/// A plan taken off the book: its normalized operations and two private
+/// in-memory copies of the book at the bound input version. One stays as the
+/// book is and yields the effects before; the operations apply to the other.
+/// Taking it is quick and needs the book's connection; running it needs
+/// neither, so the daemon can run it on a worker and let a newer preview
+/// cancel it.
+pub struct PlanJob {
+    before: Connection,
+    after: Connection,
+    workspace_id: String,
+    profile_id: String,
+    operations: Value,
+    expected_input_version: Value,
+    as_of: String,
+}
+
+/// Normalize the operations, copy the book and check its input version.
+pub fn prepare_plan(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    operations: &Value,
+    expected_input_version: &Value,
+    as_of: &str,
+) -> Result<PlanJob, Error> {
+    let normalized = review_operations::normalize(operations)?;
+    let ephemeral_key = |conn: &Connection| -> Result<String, Refusal> {
         conn.query_row("SELECT lower(hex(randomblob(32)))", [], |row| row.get(0))
             .map_err(Refusal::from)
-    })?;
-    profile(&clone, scope)?;
-    review_support::require_input_version(&clone, scope, expected_input_version)?;
-    let _simulation = clone.unchecked_transaction().map_err(sql::error)?;
-    let (before, cases) = with_state(&clone, scope, as_of, |state| {
-        Ok((
-            review_effects::effects(state, &clone, scope, &normalized, sources)?,
-            review_simulation::Cases::from_state(state),
-        ))
-    })?;
-    let Value::List(operations) = &mut normalized else {
-        unreachable!("normalized operations")
     };
-    // An acceptance that names no transaction is filled in with the cases it
-    // accepts, so the artifact names each one.
-    review_simulation::apply(
-        &clone,
-        scope,
-        operations,
-        sources,
-        "user",
-        true,
-        cases,
-        |conn| facts(conn, scope, as_of),
-    )?;
-    let after = with_state(&clone, scope, as_of, |state| {
-        review_effects::effects(state, &clone, scope, &normalized, sources)
-    })?;
-    Ok(review_artifact::assemble(
-        scope,
-        expected_input_version.clone(),
-        normalized,
+    let before = pipeline::memory_snapshot(conn, || ephemeral_key(conn))?;
+    profile(&before, scope)?;
+    review_support::require_input_version(&before, scope, expected_input_version)?;
+    // The second copy is taken from the first, so both hold the same book
+    // even when another process writes the live one in between.
+    let after = pipeline::memory_snapshot(&before, || ephemeral_key(&before))?;
+    Ok(PlanJob {
         before,
         after,
-    )?)
+        workspace_id: scope.workspace_id.to_owned(),
+        profile_id: scope.profile_id.to_owned(),
+        operations: normalized,
+        expected_input_version: expected_input_version.clone(),
+        as_of: as_of.to_owned(),
+    })
+}
+
+/// The error a plan answers once `cancelled` holds at one of its steps.
+pub fn plan_cancelled() -> AppError {
+    AppError::new(
+        "review_plan_cancelled",
+        "The review plan was cancelled before it finished",
+    )
+}
+
+impl PlanJob {
+    /// Rebuild the book before and after the operations, on two threads: the
+    /// copies are independent, so the effects are the ones one thread would
+    /// compute in turn. The operations wait for the cases before only when
+    /// they read them. A failure before the operations wins over theirs, as
+    /// when the steps run in order. `cancelled` is checked between steps.
+    pub fn run(
+        self,
+        sources: &(dyn Sources + Sync),
+        cancelled: &(dyn Fn() -> bool + Sync),
+    ) -> Result<Value, Error> {
+        let PlanJob {
+            before: unchanged,
+            after: changed,
+            workspace_id,
+            profile_id,
+            mut operations,
+            expected_input_version,
+            as_of,
+        } = self;
+        let scope = Scope {
+            workspace_id: &workspace_id,
+            profile_id: &profile_id,
+        };
+        let check = || {
+            if cancelled() {
+                Err(Error::Service(plan_cancelled()))
+            } else {
+                Ok(())
+            }
+        };
+        let as_of = as_of.as_str();
+        let scope = &scope;
+        // The effects before see the operations as they were given; an
+        // acceptance is filled in with its cases only on the changed copy.
+        let given = operations.clone();
+        let (before, after) = std::thread::scope(|threads| {
+            let started = threads.spawn(
+                move || -> Result<(review_simulation::Cases, Value), Error> {
+                    check()?;
+                    let _simulation = unchanged.unchecked_transaction().map_err(sql::error)?;
+                    with_state_until(&unchanged, scope, as_of, check, |state| {
+                        let before =
+                            review_effects::effects(state, &unchanged, scope, &given, sources)?;
+                        Ok((review_simulation::Cases::from_state(state), before))
+                    })
+                },
+            );
+            let started = std::cell::RefCell::new(Some(started));
+            let joined = std::cell::RefCell::new(None);
+            let join = || {
+                if let Some(thread) = started.borrow_mut().take() {
+                    let result = thread
+                        .join()
+                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+                    *joined.borrow_mut() = Some(result);
+                }
+            };
+            let after = (|| -> Result<Value, Error> {
+                check()?;
+                let _simulation = changed.unchecked_transaction().map_err(sql::error)?;
+                let Value::List(batch) = &mut operations else {
+                    unreachable!("normalized operations")
+                };
+                // An acceptance that names no transaction is filled in with the
+                // cases it accepts, so the artifact names each one.
+                review_simulation::apply(
+                    &changed,
+                    scope,
+                    batch,
+                    sources,
+                    "user",
+                    true,
+                    review_simulation::Before::later(|| {
+                        join();
+                        match joined.borrow().as_ref() {
+                            Some(Ok((cases, _))) => Ok(cases.clone()),
+                            Some(Err(error)) => Err(error.clone()),
+                            None => unreachable!("the cases before were joined"),
+                        }
+                    }),
+                    |conn| facts(conn, scope, as_of),
+                )?;
+                check()?;
+                with_state_until(&changed, scope, as_of, check, |state| {
+                    review_effects::effects(state, &changed, scope, &operations, sources)
+                })
+            })();
+            join();
+            let before = joined
+                .into_inner()
+                .expect("the cases before were joined")
+                .map(|(_, before)| before);
+            (before, after)
+        });
+        let (before, after) = (before?, after?);
+        Ok(review_artifact::assemble(
+            scope,
+            expected_input_version,
+            operations,
+            before,
+            after,
+        )?)
+    }
 }
 
 pub fn validate(
@@ -123,7 +258,7 @@ pub fn validate(
     scope: &Scope<'_>,
     artifact: &Value,
     as_of: &str,
-    sources: &dyn Sources,
+    sources: &(dyn Sources + Sync),
 ) -> Result<Value, Error> {
     if !matches!(artifact, Value::Dict(_))
         || value(artifact, "workspace_id") != s(scope.workspace_id)
@@ -347,7 +482,7 @@ pub fn execute(
     operation: &str,
     args: &Value,
     authored_source: &str,
-    sources: &dyn Sources,
+    sources: &(dyn Sources + Sync),
 ) -> Result<Value, Error> {
     if operation == "review.receipt" {
         return Ok(kassiber_transfers::execute(conn, scope, operation, args)?);

@@ -1,25 +1,11 @@
 {
-  "description": "Review Bitcoin that may have remained under the same legal owner while passing through wallet history that is not imported into Kassiber.",
-  "localOnly": "Analyzed locally",
-  "summary": {
-    "needsReview": "Need review",
-    "detected": "Known gap records",
-    "unresolved": "Quantity pending custody review",
-    "canonicalUnresolved": "Canonical blocking quantity",
-    "candidateResidual": "Nonblocking candidate residual hint",
-    "blockingIssueCount_one": "{{count}} blocking issue",
-    "blockingIssueCount_other": "{{count}} blocking issues",
-    "unquantified_one": "{{count}} additional blocking issue has no exact quantity.",
-    "unquantified_other": "{{count}} additional blocking issues have no exact quantity."
-  },
+  "description": "Sends that may have come back to you through a wallet you didn't connect. Kassiber never closes one on its own.",
   "coverage": {
-    "title": "Imported wallet policy timeline",
-    "description": "Technical scan coverage for wallet policies imported into Kassiber. Kassiber cannot know whether every wallet owned by this profile's legal owner was imported.",
-    "ownershipUnknown": "Ownership universe unknown",
-    "technicalOnly": "This coverage can improve diagnostics, but it never clears a custody gap, proves complete wallet coverage, or confirms an external disposal.",
+    "title": "Scan coverage",
+    "description": "What Kassiber has scanned for each imported wallet. Diagnostics only: coverage never links, clears or books anything.",
     "loading": "Loading recorded technical coverage…",
     "unavailable": "Recorded technical coverage is unavailable. This does not change custody-gap status.",
-    "empty": "No imported policy coverage has been recorded yet. This does not mean that no owned wallets exist.",
+    "empty": "No scan coverage has been recorded yet.",
     "epochCount_one": "{{count}} recorded policy epoch",
     "epochCount_other": "{{count}} recorded policy epochs",
     "active": "Active epoch",
@@ -39,60 +25,23 @@
     }
   },
   "lineage": {
-    "title": "Custody lineage",
-    "description": "Finalized same-owner wallet moves from the canonical custody model. Custody finality and tax-basis readiness are shown separately.",
-    "edgeCount_one": "{{count}} wallet move",
-    "edgeCount_other": "{{count}} wallet moves",
-    "loading": "Loading canonical custody lineage…",
-    "unavailable": "Canonical custody lineage is unavailable until the journal has been processed.",
-    "empty": "No finalized internal wallet moves have been recorded yet.",
-    "evidenceLabel": "Evidence: {{evidence}}",
-    "basisBlocked": "Custody is settled, but tax basis remains blocked by an earlier unresolved custody boundary.",
-    "pagination": {
-      "loaded": "Showing {{loaded}} of {{total}} wallet moves",
-      "loadMore": "Load older custody lineage",
-      "loading": "Loading older custody lineage…"
-    },
-    "custodyState": {
-      "internal_verified": "Custody verified",
-      "internal_reviewed": "Custody reviewed"
-    },
-    "basisState": {
-      "eligible": "Tax basis eligible",
-      "blocked_by_prior_custody_basis": "Tax basis blocked"
-    },
     "evidence": {
-      "recordedFanout": "Exact outputs from one recorded chain transaction",
-      "rowMatched": "Exact matched wallet observations",
-      "nativeTransfer": "Exact native wallet event",
-      "exchangeTxid": "Exchange withdrawal naming this transaction, exact amount (automatic)",
-      "reviewedTransfer": "Reviewed internal transfer record",
-      "reviewedGapBridge": "Reviewed missing-wallet custody bridge",
-      "channelLifecycle": "Verified channel lifecycle",
-      "reviewedDefault": "Reviewed internal custody evidence",
-      "verifiedDefault": "Verified wallet or chain evidence"
-    },
-    "undo": {
-      "action": "Undo automatic pairing",
-      "title": "Undo this automatic pairing?",
-      "description": "Kassiber will stop treating the exchange withdrawal and this receipt as one move between your own wallets. Both transactions go back to review, and the journals need recalculating.",
-      "route": "{{from}} → {{to}}",
-      "restoreHint": "You can restore it on this page until you leave, or later through the assistant or “kassiber transfers dismissals delete”. Otherwise the undo lasts ten years.",
-      "cancel": "Keep pairing",
-      "confirm": "Undo pairing",
-      "undoing": "Undoing…",
-      "failed": "The pairing could not be undone."
-    },
-    "undone": {
-      "title": "Undone automatic pairings",
-      "description": "These pairings no longer count as moves between your own wallets. Restore one to let Kassiber pair it automatically again.",
-      "restore": "Restore pairing",
-      "failed": "The pairing could not be restored."
+      "recordedFanout": "One transaction paid several of your wallets",
+      "multiSourceConsolidation": "Several of your wallets paid into one transaction",
+      "rowMatched": "Both wallets saw the same transaction",
+      "nativeTransfer": "The same transaction in both wallets",
+      "exchangeTxid": "Exchange withdrawal names this transaction",
+      "barkTxid": "Bark send names this transaction",
+      "reviewedTransfer": "You linked these",
+      "reviewedGapBridge": "You confirmed a route through a missing wallet",
+      "channelLifecycle": "Lightning channel opened or closed",
+      "reviewedDefault": "You reviewed this move",
+      "verifiedDefault": "Wallet or chain evidence"
     }
   },
   "reviewQueue": {
-    "title": "Possible missing-wallet returns",
-    "description": "Suggestions are deterministic and never create a custody bridge automatically. Time reduces confidence but does not hide a plausible long-term return."
+    "title": "May have come back through a wallet you didn't connect",
+    "description": "Review the exact amounts, then confirm the route or set it aside. A long time between send and return lowers the match but doesn't hide it."
   },
   "history": {
     "title": "Reviewed custody history",
@@ -123,13 +72,13 @@
     "loading": "Loading more custody gaps…"
   },
   "card": {
-    "principal": "Principal considered",
-    "knownFee": "Known network fee",
+    "principal": "Left your wallet",
+    "knownFee": "Network fee",
     "walletDebit": "Wallet debit: {{amount}}",
-    "mayHaveReturned": "May have returned",
-    "residual": "Still unexplained",
-    "review": "Review evidence",
-    "hideReview": "Hide evidence"
+    "mayHaveReturned": "Came back",
+    "residual": "Unexplained",
+    "review": "Review",
+    "hideReview": "Hide review"
   },
   "candidate": {
     "promotionEligible": "Structured candidate",
@@ -142,9 +91,9 @@
     "dismissed": "Dismissed for this evidence"
   },
   "confidence": {
-    "strong": "Strong suggestion",
-    "moderate": "Moderate suggestion",
-    "weak": "Weak suggestion"
+    "strong": "Strong match",
+    "moderate": "Moderate match",
+    "weak": "Weak match"
   },
   "review": {
     "loading": "Loading review context…",
@@ -157,7 +106,7 @@
     "correctionPath": "Need to correct this decision? Create a new immutable component revision and activate it. Kassiber will supersede the prior bridge without rewriting its audit history."
   },
   "actions": {
-    "previewBridge": "Preview exact bridge",
+    "previewBridge": "Preview and confirm",
     "previewing": "Checking bridge…",
     "previewReady": "Exact bridge preview passed",
     "previewAmounts": "Carry {{retained}}; keep {{residual}} in custody suspense; preserve {{fee}} as the known fee.",
@@ -165,7 +114,7 @@
     "explicitOwnershipConfirmation": "I reviewed these exact amounts and competing explanations. I confirm the retained quantity remained under this profile's legal owner's control. Kassiber is not inferring this for me.",
     "confirmBridge": "Create reviewed bridge",
     "creating": "Creating bridge…",
-    "dismiss": "Dismiss this evidence",
+    "dismiss": "Not the same Bitcoin",
     "dismissConfirm": "Dismiss this candidate for its current evidence? Changed evidence will reopen it.",
     "failed": "The custody-gap action failed."
   },
@@ -284,23 +233,31 @@
     "return_exceeds_source": "The proposed returns exceed the source quantity; the excess needs a separate classification."
   },
   "empty": {
-    "title": "No known custody gaps",
-    "body": "Kassiber found no unresolved custody gap in the currently imported evidence. It cannot determine whether wallets that were never imported exist."
+    "title": "No missing-wallet returns found",
+    "body": "Kassiber found no send that may have come back through a wallet you didn't connect."
   },
   "processing": {
-    "title": "Custody gap status needs journal processing",
-    "body": "Process the journal before treating the currently imported evidence as clear."
+    "title": "Journals need recalculating",
+    "body": "Recalculate the journals before reading this list as complete."
   },
   "searchIncomplete": {
     "title": "Suggestion search reached a capacity limit",
     "body": "The visible hints may be incomplete. This is an advisory search limitation, not evidence of a disposal and not a tax-report blocker by itself."
   },
   "blocking": {
-    "title": "Known custody quantity still needs review",
-    "body": "{{count}} canonical custody issue blocks final tax basis, even though no current missing-wallet suggestion can resolve it automatically. Review the custody component or quarantine evidence."
+    "title": "A custody amount still needs a decision",
+    "body_one": "{{count}} custody issue holds back tax basis, and no missing-wallet suggestion explains it. Review it on the Review page or record a component.",
+    "body_other": "{{count}} custody issues hold back tax basis, and no missing-wallet suggestion explains them. Review them on the Review page or record a component."
   },
   "unavailable": {
     "title": "Custody gaps unavailable",
     "body": "Kassiber could not load the custody-gap snapshot."
+  },
+  "verdict": {
+    "needs_one": "{{count}} send may have come back through a wallet you didn't connect",
+    "needs_other": "{{count}} sends may have come back through a wallet you didn't connect",
+    "needsBody": "These are suggestions, not holds: they don't block reports. Review one when a wallet you didn't connect may explain it.",
+    "needsBlockingBody_one": "Until it is reviewed, {{count}} custody issue holds back tax basis. Kassiber never closes a gap on its own.",
+    "needsBlockingBody_other": "Until they are reviewed, {{count}} custody issues hold back tax basis. Kassiber never closes a gap on its own."
   }
 }

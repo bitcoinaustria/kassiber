@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TransactionGraphNode, TransactionGraphPayload } from "../TransactionGraphModel";
-import { legendKeys, ribbonLayout } from "./ribbonLayout";
+import { GLASS_LINE_LIMIT, legendKeys, ribbonLayout } from "./ribbonLayout";
 
 const leg = (
   id: string,
@@ -57,12 +57,12 @@ const send = graph(
 
 describe("ribbon layout", () => {
   it("draws one ribbon and one coin per input and output, as mempool draws one strand", () => {
-    const inputs = Array.from({ length: 72 }, (_, index) => leg(`in${index}`, 100_000 + index, "owned"));
+    const inputs = Array.from({ length: 48 }, (_, index) => leg(`in${index}`, 100_000 + index, "owned"));
     const layout = ribbonLayout(graph(inputs, [leg("a", 3_000_000), leg("b", 4_000_000)], 500), false);
-    expect(blocks(layout, "input")).toHaveLength(72);
+    expect(blocks(layout, "input")).toHaveLength(48);
     expect(blocks(layout, "output")).toHaveLength(2);
     // The fee is a ribbon of its own, with no coin at its end.
-    expect(layout.ribbons).toHaveLength(72 + 2 + 1);
+    expect(layout.ribbons).toHaveLength(48 + 2 + 1);
     expect(layout.ribbons.filter((entry) => entry.fee)).toHaveLength(1);
   });
 
@@ -102,24 +102,26 @@ describe("ribbon layout", () => {
     expect(ribbon(layout, "recipient").estimated).toBe(true);
   });
 
-  it("keeps mempool's 250 legs and folds the rest into one more-leg", () => {
+  it("keeps the glass limit's legs and folds the rest into one more-leg", () => {
     const inputs = Array.from({ length: 300 }, (_, index) => leg(`in${index}`, 10_000, "owned"));
     const layout = ribbonLayout(graph(inputs, [leg("out", 2_999_000)], 1_000), false);
-    expect(blocks(layout, "input")).toHaveLength(251);
-    expect(blocks(layout, "input").at(-1)?.row.overflowCount).toBe(50);
+    expect(blocks(layout, "input")).toHaveLength(GLASS_LINE_LIMIT + 1);
+    expect(blocks(layout, "input").at(-1)?.row.overflowCount).toBe(300 - GLASS_LINE_LIMIT);
+    // The fold is not the server's overflow row, which shares the row id.
+    expect(blocks(layout, "input").at(-1)?.id).toBe("input:glass-fold");
     // Even then both sides fill the same height.
     expect(Math.abs(outerSpan(layout, "input") - outerSpan(layout, "output"))).toBeLessThan(
       outerSpan(layout, "input") * 0.02,
     );
   });
 
-  it("counts the fee towards the destination side's 250 legs", () => {
+  it("counts the fee towards the destination side's legs", () => {
     const outputs = Array.from({ length: 300 }, (_, index) => leg(`out${index}`, 10_000));
     const layout = ribbonLayout(graph([leg("in", 3_001_000, "owned")], outputs, 1_000), false);
     const destination = layout.ribbons.filter((entry) => entry.side === "output");
-    // The fee and 249 outputs stay individual, then one more-leg for the other 51.
-    expect(destination).toHaveLength(251);
-    expect(blocks(layout, "output").at(-1)?.row.overflowCount).toBe(51);
+    // The fee and 59 outputs stay individual, then one more-leg for the other 241.
+    expect(destination).toHaveLength(GLASS_LINE_LIMIT + 1);
+    expect(blocks(layout, "output").at(-1)?.row.overflowCount).toBe(300 - GLASS_LINE_LIMIT + 1);
   });
 
   it("fits zero-value stubs into the shared height", () => {
@@ -162,5 +164,13 @@ describe("ribbon layout", () => {
     expect([...legendKeys(known)].sort()).toEqual(["fee", "known", "other", "own"]);
     const unknownOnly = ribbonLayout(graph([leg("in", null, "owned")], [leg("out", null, "owned")], null), false);
     expect([...legendKeys(unknownOnly)].sort()).toEqual(["own", "unknown"]);
+  });
+
+  it("keeps a big transaction as tall as a small one, not a column of hairlines", () => {
+    const many = (prefix: string, count: number) =>
+      Array.from({ length: count }, (_, index) => leg(`${prefix}${index}`, 10_000 + index));
+    const small = ribbonLayout(graph(many("i", 3), many("o", 3)), false);
+    const big = ribbonLayout(graph(many("i", 300), many("o", 300)), false);
+    expect(outerSpan(big, "input")).toBeCloseTo(outerSpan(small, "input"), 1);
   });
 });

@@ -22,7 +22,7 @@ kassiber-pytext = { path = "../pytext" }
 # Reuse the already locked partition-backup implementations. std has neither
 # age encryption nor a tar codec; passphrases must never enter a child process.
 age = "0.12"
-tar = "0.4"
+tar = { version = "0.4", default-features = false }
 tempfile = "3"
 zeroize = "1"
 rpassword = "7"

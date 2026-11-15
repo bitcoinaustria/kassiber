@@ -102,6 +102,12 @@ pub struct DaemonConfig {
     pub bootstrap: Bootstrap,
 }
 
+/// Advertised kinds the Python reference never had. The replays of its
+/// recorded sessions drop these from `daemon.ready` before comparing, so a
+/// new Rust-only kind is listed here instead of rewriting frozen recordings;
+/// every Python kind is still compared.
+pub const RUST_ONLY_KINDS: &[&str] = &["ui.transfers.pair_options"];
+
 /// Every kind `daemon.ready` advertises.
 pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = vec![SUPPORTED_KINDS[0]];
@@ -434,7 +440,7 @@ fn request_error_envelope(error: &AppError, request: &Value) -> Value {
     app_error_envelope(error, &RequestId::or_null(request), kind)
 }
 
-fn unhandled_error_envelope(error: &AppError, request_id: &RequestId) -> Value {
+pub(crate) fn unhandled_error_envelope(error: &AppError, request_id: &RequestId) -> Value {
     let mut record = app_error_envelope(error, request_id, None);
     if let Value::Dict(fields) = &mut record {
         if let Some((_, Value::Dict(fields))) =
@@ -512,6 +518,8 @@ pub(crate) struct Daemon {
     ai_discovery: Arc<kassiber_ai::discovery::Cache>,
     /// Running chats and the book work their workers queue.
     chats: ai_chat::Chats,
+    /// Desktop review previews running on workers.
+    previews: review::Previews,
 }
 
 impl Daemon {
@@ -542,6 +550,7 @@ impl Daemon {
             agent_access: agent_access::AgentAccess::system(config.build),
             ai_discovery: Default::default(),
             chats: Default::default(),
+            previews: Default::default(),
         }
     }
 
@@ -1104,6 +1113,21 @@ impl Daemon {
             if let Some(locked) = self.open_lazily(&request_id)? {
                 return Ok((Some(locked), false));
             }
+            let unhandled = |error: AppError| match error.code.as_str() {
+                "internal_error" => Failure::Unhandled(error),
+                _ => Failure::App(error),
+            };
+            if let Some(job) =
+                review::preview_job(self.book_mut()?.as_mut(), &kind_text, args.as_ref())
+                    .map_err(unhandled)?
+            {
+                // Only the newest desktop preview is shown; one refused as
+                // malformed or stale leaves the running one alone.
+                self.previews.cancel();
+                self.previews
+                    .start(job, self.output.clone(), request_id.clone())?;
+                return Ok((None, false));
+            }
             // A non-AppError reference failure (`internal_error`) is unhandled there too.
             let payload = review::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())
                 .map_err(|error| match error.code.as_str() {
@@ -1243,13 +1267,17 @@ impl Daemon {
                     false,
                 ))
             }
-            "daemon.shutdown" => Ok((
-                Some(with_request_id(
-                    success("daemon.shutdown", dict::<&str>([])),
-                    &request_id,
-                )),
-                true,
-            )),
+            "daemon.shutdown" => {
+                // Running previews answer before the daemon's last record.
+                self.previews.stop();
+                Ok((
+                    Some(with_request_id(
+                        success("daemon.shutdown", dict::<&str>([])),
+                        &request_id,
+                    )),
+                    true,
+                ))
+            }
             "daemon.lock" => {
                 self.lock()?;
                 Ok((
@@ -1684,6 +1712,7 @@ impl Daemon {
     /// sessions survive, as in Python.
     fn close_project_for_switch(&mut self) -> Result<(), AppError> {
         self.reap_freshness(true)?;
+        self.previews.stop();
         if let Some(mut book) = self.book.take() {
             if let Err(error) = book.close() {
                 self.book = Some(book);
@@ -1702,6 +1731,7 @@ impl Daemon {
     /// passphrase.
     fn lock(&mut self) -> Result<(), AppError> {
         self.reap_freshness(true)?;
+        self.previews.stop();
         self.stop_watch_worker(true)?;
         self.analysis.clear();
         if let Some(mut book) = self.book.take() {
@@ -1808,6 +1838,7 @@ impl Daemon {
     /// The `finally` of Python's `run`: forget the passphrase, close the
     /// book, and release ownership.
     fn shutdown_resources(&mut self) {
+        self.previews.stop();
         let _ = self.stop_watch_worker(false);
         self.analysis.clear();
         let _ = self.agent_access.end_lease(false);
@@ -1976,6 +2007,35 @@ mod source_funds_diagnostic_tests {
 #[cfg(test)]
 mod diagnostic_tests {
     use super::*;
+
+    #[test]
+    fn rust_only_kinds_are_advertised_and_absent_from_python() {
+        let advertised = supported_kinds();
+        for kind in RUST_ONLY_KINDS {
+            assert!(advertised.contains(kind), "{kind} is not advertised");
+            assert!(
+                !kind_order::PYTHON.contains(kind),
+                "{kind} is a Python kind"
+            );
+        }
+    }
+
+    #[test]
+    fn the_session_replay_tool_drops_the_same_rust_only_kinds() {
+        // The replay tool cannot depend on the daemon, so it keeps its own
+        // copy of the list; it must stay this one.
+        let listed = RUST_ONLY_KINDS
+            .iter()
+            .map(|kind| format!("\"{kind}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        assert!(
+            include_str!("../../session-replay/src/compare.rs").contains(&format!(
+                "pub const RUST_ONLY_KINDS: &[&str] = &[{listed}];"
+            )),
+            "crates/session-replay/src/compare.rs must list exactly {listed}"
+        );
+    }
 
     #[test]
     fn privacy_report_daemon_classifies_only_unhandled_failures() {

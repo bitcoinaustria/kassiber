@@ -179,8 +179,8 @@ const DEFERRED_ALLOWED: &[(&str, &str, &str)] = &[
     ),
     (
         "crates/journals/src/review_workflow.rs",
-        "plan",
-        "private in-memory clone of the book",
+        "run",
+        "private in-memory clones of the book (before and after)",
     ),
     (
         "crates/journals/src/review_workflow.rs",

@@ -223,21 +223,21 @@ const PAGE_RESULTS: SearchResult[] = [
   {
     id: "page:swaps-transfers",
     category: "page",
-    title: "Transfers & Custody",
-    subtitle: "Review candidate swap and transfer pairings",
+    title: "Transfers",
+    subtitle: "Moves between your wallets, swaps and their pairings",
     keywords: ["swap", "swaps", "transfer", "transfers", "review", "pair", "custody", "components"],
     iconKey: "transaction",
-    route: { to: "/swaps" },
+    route: { to: "/transfers" },
     privacyTier: "public",
   },
   {
     id: "page:custody-gaps",
     category: "page",
-    title: "Custody Gaps",
-    subtitle: "Review possible returns through missing wallet history",
+    title: "Missing wallets",
+    subtitle: "Sends that may have come back through a wallet you didn't connect",
     keywords: ["custody", "missing wallet", "wallet roll", "whirlpool", "coinjoin"],
     iconKey: "transaction",
-    route: { to: "/swaps", search: { tab: "gaps" } },
+    route: { to: "/transfers", search: { section: "advanced", tab: "gaps" } },
     privacyTier: "public",
   },
   {
@@ -247,7 +247,7 @@ const PAGE_RESULTS: SearchResult[] = [
     subtitle: "Review and edit custody components",
     keywords: ["custody", "component", "components", "migration", "allocations"],
     iconKey: "transaction",
-    route: { to: "/swaps", search: { tab: "components" } },
+    route: { to: "/transfers", search: { section: "advanced", tab: "components" } },
     privacyTier: "public",
   },
   {
@@ -463,7 +463,7 @@ export function buildAppSearchResults({
       // nav has greyed out or hidden (see `devMode.ts`).
       if (!developerToolsEnabled && (
         isDevOnlyRoute(result.route?.to) ||
-        (result.route?.to === "/swaps" && ["gaps", "components"].includes(String(result.route.search?.tab)))
+        (result.route?.to === "/transfers" && result.route.search?.section === "advanced")
       )) return false;
       return true;
     }).map((result) => localizePageResult(result, t)),

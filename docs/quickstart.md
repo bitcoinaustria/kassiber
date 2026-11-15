@@ -161,7 +161,8 @@ kassiber transfers components apply --action create \
   --expected-input-version <input-version-from-preview>
 ```
 
-The same workflow is available under **Swap Matching → Close gaps**. See
+The same workflow is available under **Transfers → Advanced tools →
+Components** (developer tools on). See
 [reference/custody-components.md](reference/custody-components.md) for the JSON
 contract, `untracked_wallet` placeholders, allocation rules, and audit model.
 

@@ -235,6 +235,15 @@ pub trait WatchWorker: Send {
     fn delivered(&mut self, ids: &[String]) -> Result<(), AppError>;
 }
 
+/// A desktop review preview taken off the open book: the operations and
+/// private in-memory copies of the book, never the book itself, so it runs
+/// on a worker while the daemon answers other requests.
+pub trait ReviewPlanJob: Send {
+    /// The plan's artifact, or `review_plan_cancelled` once `cancelled`
+    /// holds at one of its steps.
+    fn run(self: Box<Self>, cancelled: &(dyn Fn() -> bool + Sync)) -> Result<Value, AppError>;
+}
+
 pub trait Book: Send {
     /// Python's `_journals_refresh_payload`: the desktop action pairs
     /// automatically, the assistant's scoped tool does not.
@@ -558,6 +567,11 @@ pub trait Book: Send {
         _authored_source: &str,
     ) -> Result<Value, AppError> {
         Err(not_implemented("review", operation))
+    }
+    /// `review.plan` taken off the book on this thread and run later by the
+    /// returned job; the same arguments, checks and artifact as `review`.
+    fn review_plan_job(&mut self, _args: &Value) -> Result<Box<dyn ReviewPlanJob>, AppError> {
+        Err(not_implemented("review", "review.plan"))
     }
     /// Local metadata edits and append-only history state.
     fn metadata(

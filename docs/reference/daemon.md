@@ -252,11 +252,51 @@ absent from the desktop invoke allowlist.
 `ui.transfers.dismissals.list` reads the profile's transfer-candidate
 dismissals (`include_expired`, `limit` up to 500) with both legs' full ids,
 wallet, direction, asset, amount and time, and `expires_at` (null: never). It
-backs `transfers dismissals list` and the AI tool, and is absent from the
-desktop invoke allowlist. `ui.transfers.suggest` and
+backs `transfers dismissals list`, the AI tool and the desktop Transfers
+screen, which lists automatic pairings the owner undid (so they can be
+restored after a reload) and is on the desktop invoke allowlist. It returns
+the same class of data as `ui.transfers.list`. `ui.transfers.suggest` and
 `ui.transfers.review_context` return profile-wide `exclusions` counts
 (`excluded_by_active_pair`, `excluded_by_dismissal`,
 `excluded_already_journaled`), so an empty candidate list is explained.
+
+`ui.transfers.list` is the desktop's pair list: the CLI's `transfers list`
+rows. With `priced: true` (the Transfers screen) it adds each leg's
+`fiat_value` and, for linking a transfer part by part,
+each leg's `unlinked_msat` (its transaction's principal less what the active
+pairs allocate from or to it) and each pair's `shares_legs` (true only for a
+same-asset `manual`, `coinjoin` or `whirlpool` pair at carrying value, the
+pairs whose transactions may take further pairs). Both are read-only
+projections of the stored allocations and say nothing about tax or
+ownership: an uncovered amount is not a disposal, a fee or income, and how
+the journals treat it is read from the quarantine. Without `priced` the rows
+keep the shape the assistant and the recorded sessions read; `docs/reference/ai.md`
+describes the fields until the skill references can change. A further pair is
+still planned and validated in full. `ui.transfers.pair_options` (`tx_out`, `tx_in`; Rust only,
+desktop allowlisted, capability `read`) says which ways the book lets two
+transactions be paired before anything is planned: `policies` lists
+`carrying-value` and `taxable`, each with `allowed`, and for a refusal a
+`reason` (`same_asset`, `cross_asset`, `network_mismatch`) and the `message`
+`transfers pair` would give. It runs the asset, country and network checks of
+pair authoring and writes nothing; whether a leg is free is still decided when
+the pair is planned. It is not an AI tool: the assistant reads a refusal from
+its review plan.
+
+`ui.review.plan` answers on the request loop like any other kind. A desktop
+dry run sends it with `preview: true`: the daemon checks the arguments, the
+book's input version and the operations' shape, copies the book in memory
+and answers later from a `kassiber-review-preview` worker, so other requests
+are served while the book recalculates. The answer is the same artifact a
+plain plan returns, matched by `request_id`. A newer preview that passes
+those checks cancels the previews still running. Every path that lets go of
+the open book cancels them too and waits for each to answer: locking,
+creating or selecting a project, changing or setting the passphrase,
+restoring a backup and shutting down. A cancelled preview answers
+`review_plan_cancelled` at its next step (between the rebuild's read,
+computation and effects); the steps inside applying the operations are not
+interruptible, so a stop can wait for one rebuild. Plans without the flag
+are unchanged, and the assistant's plans refuse `preview` like any argument
+they do not take.
 
 `ui.review.worklist` is the AI-only bounded accounting queue. It composes
 report readiness, quarantine, stale edits, transfer candidates, and heuristic

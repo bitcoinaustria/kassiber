@@ -43,7 +43,21 @@ pub fn text(value: &Value) -> String {
 }
 
 fn line(value: &Value) -> String {
-    fixed_elapsed_ms(&text(value))
+    without_rust_only_kinds(fixed_elapsed_ms(&text(value)))
+}
+
+/// Python never advertised the daemon's Rust-only kinds, so they leave the
+/// `daemon.ready` row before it is compared; every other kind still is.
+fn without_rust_only_kinds(line: String) -> String {
+    if !line.contains("\"daemon.ready\"") {
+        return line;
+    }
+    kassiber_daemon::RUST_ONLY_KINDS
+        .iter()
+        .fold(line, |line, kind| {
+            line.replace(&format!(", \"{kind}\""), "")
+                .replace(&format!("\"{kind}\", "), "")
+        })
 }
 
 /// The daemon's environment: the recorded one, with every path placed in
