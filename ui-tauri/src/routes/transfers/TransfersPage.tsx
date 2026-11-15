@@ -128,7 +128,7 @@ import {
   type TransferPairsEnvelope,
   type TransfersVerdict,
 } from "./linkedMovesModel";
-import { datePart, hasOpenPart, timePart, type LegSide, type OpenPart } from "./linkModel";
+import { datePart, hasOpenPart, relinkTerms, timePart, type LegSide, type OpenPart } from "./linkModel";
 import { RecentlyUnlinkedCard } from "./RecentlyUnlinkedCard";
 import { RowMenu, TransactionsMenuItems } from "./RowMenu";
 import { SetAsideCard } from "./SetAsideCard";
@@ -266,7 +266,7 @@ interface Spot {
 type Toast = { spot?: Spot } & (
   | { kind: "unlinked"; dismissalId: string | null; move: Pick<LinkedMove, "outTransactionId" | "inTransactionId"> }
   /** `portion`: only part of the send was swapped, so linking it again is checked first. */
-  | { kind: "unpaired"; result: Extract<UnlinkResult, { kind: "pair" }>; portion: boolean }
+  | { kind: "unpaired"; result: Extract<UnlinkResult, { kind: "pair" }>; portion: boolean; listed?: TransferPairSummary }
   | { kind: "linkedBack" }
   /** A link made by hand, with the pair to remove if the owner takes it back. */
   | { kind: "linked"; pairId: string | null; sendId: string }
@@ -599,7 +599,7 @@ export function TransfersOverview({
       receiptId: row.inTransactionId,
       relink: true,
       preset: row.pair
-        ? { kind: row.pair.kind, policy: row.pair.policy, outAmountMsat: row.pair.out_amount ?? null }
+        ? { kind: row.pair.kind, policy: row.pair.policy, terms: relinkTerms(row.pair) }
         : undefined,
     });
   };
@@ -612,7 +612,7 @@ export function TransfersOverview({
       setToast({ kind: "unlinked", dismissalId: result.dismissalId, move: result.move, spot: spotOf(result.move) });
     } else {
       const listed = pairs?.find((pair) => pair.id === result.move.pairId);
-      setToast({ kind: "unpaired", result, portion: swappedPortion(listed, result.pair), spot: spotOf(result.move) });
+      setToast({ kind: "unpaired", result, portion: swappedPortion(listed, result.pair), listed, spot: spotOf(result.move) });
       // Removing a pair leaves the journals to recalculate.
       requestRefresh();
     }
@@ -669,7 +669,9 @@ export function TransfersOverview({
       preset: {
         kind: pair?.kind ?? move.pairKind,
         policy: pair?.policy ?? move.pairPolicy,
-        outAmountMsat: pair?.out_amount ?? null,
+        // The list's record has the amounts the pair's fee was worked out from.
+        // Without it a named part cannot be told apart, and the link is refused.
+        terms: relinkTerms({ ...next.listed, ...(pair ? { out_amount: pair.out_amount, swap_fee_msat: pair.swap_fee_msat } : {}) }),
       },
     });
   };

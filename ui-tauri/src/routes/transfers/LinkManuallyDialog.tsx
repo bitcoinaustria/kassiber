@@ -62,6 +62,7 @@ import {
   pairWarnings,
   relinkPortion,
   withOpenPart,
+  type RelinkTerms,
   type Difference,
   type LegSide,
   type LinkAnswer,
@@ -85,7 +86,7 @@ export interface LinkStart {
   sendId?: string;
   receiptId?: string;
   /** Terms to propose, from the pair as it was before it was unlinked. */
-  preset?: { kind?: string | null; policy?: string | null; outAmountMsat?: string | number | null };
+  preset?: { kind?: string | null; policy?: string | null; terms?: RelinkTerms };
   relink?: boolean;
 }
 
@@ -624,7 +625,7 @@ function CheckAndLink({
   const kind = preset?.kind ?? suggested?.kind ?? defaultPairKind(send, receipt);
   // Only a real part of the send was swapped. One that cannot be sent exactly
   // stops the link: left out, the core would link the whole send.
-  const portion = relinkPortion(preset?.outAmountMsat, send.amountMsat, question !== "none");
+  const portion = relinkPortion(preset?.terms, send.feeMsat, question !== "none");
   const swappedPortion = portion.kind === "part" ? portion.msat : null;
   const portionUnsendable = portion.kind === "unsendable";
 

@@ -109,30 +109,68 @@ export function absMsat(value: bigint): bigint {
 
 type ExactMsat = string | number | null | undefined;
 
+/** The terms a pair had, as its record lists them, to link it again with. */
+export interface RelinkTerms {
+  /** The part of the send the pair covered, as the core recorded it. */
+  outAmountMsat?: ExactMsat;
+  /** The fee the core worked out for the pair. */
+  swapFeeMsat?: ExactMsat;
+  /** Both transactions' amounts as stored, which that fee was worked out from. */
+  sendAmountMsat?: ExactMsat;
+  receiptAmountMsat?: ExactMsat;
+}
+
 /**
- * The part of a send a pair linked again swaps, as the core takes it: a
- * whole number of msat. `whole` when the pair swapped all of the send (or
- * no part applies); `unsendable` when the saved part cannot be sent exactly
- * (unreadable, not positive, or past the largest whole number JSON keeps
- * exact). Left out, the core would take the whole send, so `unsendable`
- * must stop the link rather than drop the part.
+ * Whether linking a pair again names the part of its send it covered, as
+ * the core takes it: a whole number of msat. The record keeps that part
+ * either way, but not whether it was named, and naming it changes the fee
+ * the core works out (a named part: part less receipt; the whole send: its
+ * stored amount less receipt, plus the network fee when the amount leaves
+ * it out). So the recorded fee says which it was. `unsendable` when that
+ * cannot be told, or the part cannot be sent exactly: the link is refused
+ * rather than recorded with other terms.
  */
 export type RelinkPortion = { kind: "whole" } | { kind: "part"; msat: number } | { kind: "unsendable" };
 
-export function relinkPortion(saved: ExactMsat, sendMsat: bigint, applies: boolean): RelinkPortion {
-  if (!applies || saved === null || saved === undefined || saved === "") return { kind: "whole" };
-  let msat: bigint;
+/** Exact msat, refusing a number already rounded when it was read. */
+function strictMsat(value: ExactMsat): bigint | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && !Number.isSafeInteger(value)) return null;
   try {
-    // A number past the safe range was already rounded when it was read.
-    msat = BigInt(typeof saved === "number" ? (Number.isSafeInteger(saved) ? saved : Number.NaN) : saved.trim());
+    return BigInt(typeof value === "number" ? value : value.trim());
   } catch {
-    return { kind: "unsendable" };
+    return null;
   }
-  if (msat <= 0n) return { kind: "unsendable" };
-  // The whole send is no portion (and naming it would leave the network fee out of the swap fee).
-  if (msat >= sendMsat) return { kind: "whole" };
-  if (msat > BigInt(Number.MAX_SAFE_INTEGER)) return { kind: "unsendable" };
-  return { kind: "part", msat: Number(msat) };
+}
+
+export function relinkPortion(terms: RelinkTerms | undefined, sendFeeMsat: bigint | null, applies: boolean): RelinkPortion {
+  const saved = terms?.outAmountMsat;
+  if (!applies || saved === null || saved === undefined || saved === "") return { kind: "whole" };
+  const part = strictMsat(saved);
+  const fee = strictMsat(terms?.swapFeeMsat);
+  const sent = strictMsat(terms?.sendAmountMsat);
+  const received = strictMsat(terms?.receiptAmountMsat);
+  if (part === null || part <= 0n || fee === null || sent === null || received === null) return { kind: "unsendable" };
+  if (fee === part - received) {
+    return part > BigInt(Number.MAX_SAFE_INTEGER) ? { kind: "unsendable" } : { kind: "part", msat: Number(part) };
+  }
+  if (fee === sent - received || (sendFeeMsat !== null && fee === sent - received + sendFeeMsat)) return { kind: "whole" };
+  return { kind: "unsendable" };
+}
+
+/** A pair's terms for linking it again, from its record in the pair list. */
+export function relinkTerms(pair: {
+  out_amount?: ExactMsat;
+  swap_fee_msat?: ExactMsat;
+  out?: { full_amount_msat?: ExactMsat } | null;
+  in?: { full_amount_msat?: ExactMsat } | null;
+}): RelinkTerms {
+  return {
+    outAmountMsat: pair.out_amount ?? null,
+    swapFeeMsat: pair.swap_fee_msat ?? null,
+    sendAmountMsat: pair.out?.full_amount_msat ?? null,
+    receiptAmountMsat: pair.in?.full_amount_msat ?? null,
+  };
 }
 
 function exactMsat(value: ExactMsat): bigint | null {

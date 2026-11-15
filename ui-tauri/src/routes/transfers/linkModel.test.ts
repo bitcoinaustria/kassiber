@@ -344,20 +344,33 @@ describe("a transaction linked in part", () => {
 });
 
 describe("relinkPortion", () => {
-  const send = 20_000_000_000_000_000n;
-  it("sends a part of the send exactly, and the whole send as no part", () => {
-    expect(relinkPortion("4200000000", send, true)).toEqual({ kind: "part", msat: 4_200_000_000 });
-    expect(relinkPortion(4_200_000_000, send, true)).toEqual({ kind: "part", msat: 4_200_000_000 });
-    expect(relinkPortion(send.toString(), send, true)).toEqual({ kind: "whole" });
-    expect(relinkPortion(null, send, true)).toEqual({ kind: "whole" });
+  // A 100,000 sat debit, its 1,000 sat network fee stored in it, and 98,000 sats received.
+  const whole = { outAmountMsat: "99000000", sendAmountMsat: "100000000", receiptAmountMsat: "98000000" };
+  it("links the whole send again when the recorded fee says the pair named no part", () => {
+    // The whole send: the stored amount less the receipt, the fee already in it.
+    expect(relinkPortion({ ...whole, swapFeeMsat: "2000000" }, 1_000_000n, true)).toEqual({ kind: "whole" });
+    // An amount that leaves the fee out: the network fee is added.
+    expect(relinkPortion({ outAmountMsat: "100000000", sendAmountMsat: "100000000", receiptAmountMsat: "98000000", swapFeeMsat: "3000000" }, 1_000_000n, true)).toEqual({ kind: "whole" });
+    expect(relinkPortion({ swapFeeMsat: "2000000" }, null, true)).toEqual({ kind: "whole" });
     // Within one asset no part applies.
-    expect(relinkPortion("4200000000", send, false)).toEqual({ kind: "whole" });
+    expect(relinkPortion({ ...whole, swapFeeMsat: "1" }, null, false)).toEqual({ kind: "whole" });
   });
 
-  it("refuses a part it cannot send exactly instead of dropping it", () => {
-    expect(relinkPortion("10000000000000000", send, true)).toEqual({ kind: "unsendable" });
-    expect(relinkPortion(10_000_000_000_000_000, send, true)).toEqual({ kind: "unsendable" });
-    expect(relinkPortion("1.5", send, true)).toEqual({ kind: "unsendable" });
-    expect(relinkPortion("0", send, true)).toEqual({ kind: "unsendable" });
+  it("names the part again when the recorded fee says the pair named it", () => {
+    expect(relinkPortion({ ...whole, swapFeeMsat: "1000000" }, 1_000_000n, true)).toEqual({ kind: "part", msat: 99_000_000 });
+    expect(relinkPortion({ outAmountMsat: 40_000_000, sendAmountMsat: 100_000_000, receiptAmountMsat: 39_000_000, swapFeeMsat: 1_000_000 }, null, true)).toEqual({ kind: "part", msat: 40_000_000 });
+  });
+
+  it("refuses what it cannot tell or send exactly instead of guessing", () => {
+    // Neither way gives the recorded fee.
+    expect(relinkPortion({ ...whole, swapFeeMsat: "5" }, 1_000_000n, true)).toEqual({ kind: "unsendable" });
+    // The amounts the fee was worked out from are missing.
+    expect(relinkPortion({ outAmountMsat: "99000000", swapFeeMsat: "1000000" }, 1_000_000n, true)).toEqual({ kind: "unsendable" });
+    // Past the largest whole number JSON keeps exact, or rounded already.
+    const big = { sendAmountMsat: "20000000000000000", receiptAmountMsat: "100000000000" };
+    expect(relinkPortion({ ...big, outAmountMsat: "10000000000000000", swapFeeMsat: "9999900000000000" }, null, true)).toEqual({ kind: "unsendable" });
+    expect(relinkPortion({ ...big, outAmountMsat: 10_000_000_000_000_000, swapFeeMsat: "9999900000000000" }, null, true)).toEqual({ kind: "unsendable" });
+    expect(relinkPortion({ ...whole, outAmountMsat: "1.5", swapFeeMsat: "1" }, null, true)).toEqual({ kind: "unsendable" });
+    expect(relinkPortion({ ...whole, outAmountMsat: "0", swapFeeMsat: "1" }, null, true)).toEqual({ kind: "unsendable" });
   });
 });

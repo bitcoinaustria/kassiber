@@ -226,8 +226,8 @@ const PEG_OUT_PAIR = {
   out_amount: 4200000000,
   created_at: "2026-11-13T12:35:09Z",
   deleted_at: "2026-11-13T14:02:00Z",
-  out: { transaction_id: "peg-out", wallet: "Liquid Treasury", wallet_kind: "descriptor", asset: "LBTC", occurred_at: "2024-09-17T02:14:00Z", amount_msat: 4200000000 },
-  in: { transaction_id: "peg-in", wallet: "Treasury 2020", wallet_kind: "address", asset: "BTC", occurred_at: "2024-09-17T03:22:00Z", amount_msat: 4080000000 },
+  out: { transaction_id: "peg-out", wallet: "Liquid Treasury", wallet_kind: "descriptor", asset: "LBTC", occurred_at: "2024-09-17T02:14:00Z", amount_msat: 4200000000, full_amount_msat: 4200000000 },
+  in: { transaction_id: "peg-in", wallet: "Treasury 2020", wallet_kind: "address", asset: "BTC", occurred_at: "2024-09-17T03:22:00Z", amount_msat: 4080000000, full_amount_msat: 4080000000 },
 };
 
 const PEG_TXS = {
@@ -712,6 +712,35 @@ describe("Transfers overview", () => {
     await waitFor(() => expect(screen.queryByTestId("link-manually")).toBeNull());
     expect(calls("ui.review.apply")).toHaveLength(1);
     expect((await screen.findByTestId("transfers-toast")).textContent).toContain("Linked.");
+  });
+
+  it("links a whole send again as the whole send when its stored amount includes the network fee", async () => {
+    // 100,000 sats left with their 1,000 sat fee, 98,000 arrived: the pair covered the 99,000 the
+    // core counts as the send, and its fee of 2,000 says no part was named.
+    daemon.items = [];
+    daemon.unlinked = [
+      {
+        ...PEG_OUT_PAIR,
+        swap_fee_msat: 2000000,
+        out_amount: 99000000,
+        out: { ...PEG_OUT_PAIR.out, amount_msat: 99000000, full_amount_msat: 100000000 },
+        in: { ...PEG_OUT_PAIR.in, amount_msat: 98000000, full_amount_msat: 98000000 },
+      },
+    ];
+    daemon.txs = {
+      "peg-out": tx("peg-out", { account: "Liquid Treasury", asset: "LBTC", chain: "liquid", paymentMethod: "Liquid", amountSat: -100000, feeSat: 1000 }),
+      "peg-in": tx("peg-in", { account: "Treasury 2020", asset: "BTC", chain: "bitcoin", amountSat: 98000, occurredAt: "2024-09-17T03:22:00Z" }),
+    };
+    mount();
+    await openTab(/^Unlinked by you/);
+    fireEvent.click(within(await screen.findByTestId("transfers-recently-unlinked")).getByRole("button", { name: /Link Liquid Treasury to Treasury 2020 again/ }));
+    const dialog = await screen.findByTestId("link-manually");
+    await within(dialog).findByTestId("preview-outcome");
+    // No part is named, so the core works out the same fee as before.
+    expect(calls("ui.review.plan").at(-1)?.args.operations).toEqual([
+      { type: "pair", out_transaction_id: "peg-out", in_transaction_id: "peg-in", pair_kind: "peg-out", policy: "taxable", reason: "Linked again after unlinking" },
+    ]);
+    expect(within(dialog).queryByText(/of the send was swapped/)).toBeNull();
   });
 
   it("refuses to link a swapped part again when it cannot be sent exactly, rather than link the whole send", async () => {

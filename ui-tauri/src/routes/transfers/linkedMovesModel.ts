@@ -41,6 +41,8 @@ export interface TransferPairLeg {
   fiat_value?: number | null;
   /** What no pair covers of this leg's transaction. */
   unlinked_msat?: Exact | null;
+  /** The transaction's amount as stored, beyond what this pair covers. */
+  full_amount_msat?: Exact | null;
 }
 
 export interface TransferPairSummary {
