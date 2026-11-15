@@ -302,3 +302,68 @@ fn dashboard_transfer_volume_counts_the_amount_a_pair_moved() {
         "the chart's transfer bars match the summary"
     );
 }
+
+#[test]
+fn dashboard_transfer_volume_counts_every_receipt_of_a_split_send() {
+    let tmp = tempfile::tempdir().unwrap();
+    let book = Book::create(tmp.path(), None).unwrap();
+    let conn = book.connection();
+    // A send of 1,000,000 sat from Cold, 600,000 to Lightning and 400,000 to
+    // Custom, each part a reviewed move of its own.
+    conn.execute_batch(include_str!("data/desktop.sql"))
+        .unwrap();
+    conn.execute_batch(
+        "DELETE FROM transaction_tags; DELETE FROM journal_quarantines;
+         DELETE FROM transactions WHERE id NOT IN ('g','b','e');
+         UPDATE transactions SET amount=1000000000,fee=0,fiat_rate=2 WHERE id='g';
+         UPDATE transactions SET amount=600000000,fee=0 WHERE id='b';
+         UPDATE transactions SET amount=400000000,fee=0,occurred_at='2025-02-01T00:00:01Z' WHERE id='e';
+         INSERT INTO journal_custody_decisions(decision_id,workspace_id,profile_id,source_transaction_id,target_transaction_id,source_observation_hash,source_start_msat,source_end_msat,target_observation_hash,target_start_msat,target_end_msat,source_network,target_network,source_rail,target_rail,source_asset,target_asset,state,basis_state,reason,occurred_at,created_at) VALUES
+           ('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','w','p','g','b','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',0,600000000,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',0,600000000,'main','main','onchain','onchain','BTC','BTC','internal_reviewed','eligible','test','2025','2025'),
+           ('cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc','w','p','g','e','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',600000000,1000000000,'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',0,400000000,'main','main','onchain','onchain','BTC','BTC','internal_reviewed','eligible','test','2025','2025');
+         UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=3,journal_input_version=2,last_processed_input_version=2 WHERE id='p';
+         UPDATE profiles SET journal_semantics_version=10 WHERE id='p';",
+    )
+    .unwrap();
+    let display = |key: &str| Ok(kassiber_pytext::zone::Zone::utc(key));
+    let book_zone = |_: Option<&str>| {
+        Ok::<_, kassiber_envelope::AppError>(kassiber_pytext::zone::Zone::utc("UTC"))
+    };
+    let transfers = |args: Value| {
+        let snapshot = desktop::dashboard(
+            conn,
+            &Scope {
+                workspace_id: "w",
+                profile_id: "p",
+            },
+            &args,
+            &[],
+            &desktop::Zones {
+                display: &display,
+                book: &book_zone,
+            },
+        )
+        .unwrap();
+        get(get(&snapshot, "summary").unwrap(), "transfers")
+            .unwrap()
+            .clone()
+    };
+    // The whole book: one row per pair, both parts counted once.
+    let all = transfers(kassiber_envelope::dict([("period", s("all"))]));
+    assert_eq!(get(&all, "count"), Some(&Value::Int(2.into())));
+    assert_eq!(get(&all, "btc"), Some(&Value::Float(0.01)));
+    // Only the sending wallet: its one row still carries both parts.
+    let sender = transfers(kassiber_envelope::dict([
+        ("period", s("all")),
+        ("wallet", s("Cold")),
+    ]));
+    assert_eq!(get(&sender, "count"), Some(&Value::Int(1.into())));
+    assert_eq!(get(&sender, "btc"), Some(&Value::Float(0.01)));
+    assert_eq!(get(&sender, "eur"), Some(&Value::Float(0.02)));
+    // Only one receiving wallet: just its part.
+    let receiver = transfers(kassiber_envelope::dict([
+        ("period", s("all")),
+        ("wallet", s("Lightning")),
+    ]));
+    assert_eq!(get(&receiver, "btc"), Some(&Value::Float(0.006)));
+}

@@ -308,9 +308,11 @@ fn flow(tx: &Value) -> &'static str {
 }
 /// A settled transfer pair's row books only its swap fee as `amountSat` (zero
 /// for same-asset moves), so transfer volume counts the amount the pair moved:
-/// `inAmountSat`, else `outAmountSat`, priced at the row's rate. Other rows,
-/// and every other segment, count as rendered.
-fn moved(tx: &Value) -> Cow<'_, Value> {
+/// `inAmountSat`, else `outAmountSat`, priced at the row's rate. `extra_msat`
+/// adds what the row's transaction moved in its other pairs that no row shows
+/// (a send split across receipts outside the wallet filter). Other rows, and
+/// every other segment, count as rendered.
+fn moved(tx: &Value, extra_msat: i64) -> Cow<'_, Value> {
     let pair = val(tx, "pair");
     if text(&pair, "type") != "transfer" {
         return Cow::Borrowed(tx);
@@ -322,6 +324,15 @@ fn moved(tx: &Value) -> Cow<'_, Value> {
     if amount == Value::Null {
         return Cow::Borrowed(tx);
     }
+    let amount = if extra_msat == 0 {
+        amount
+    } else {
+        let shown = match &amount {
+            Value::Int(n) => n.to_string().parse::<i64>().unwrap_or(0) * 1000,
+            other => (float(other) * 1000.0).round() as i64,
+        };
+        render::sat(shown + extra_msat)
+    };
     let mut counted = tx.clone();
     set(&mut counted, "amountSat", amount);
     set(&mut counted, "eur", Value::Null);
@@ -838,7 +849,7 @@ pub(super) fn execute(
         ),
         params_from_iter(bind),
     )?;
-    let transactions = activity(conn, scope, &raw, &wallet, &since, &until)?;
+    let (transactions, unshown) = activity(conn, scope, &raw, &wallet, &since, &until)?;
 
     let all_candidates = non_conflicted(candidates);
     let by_id: BTreeMap<String, &Value> = transactions
@@ -922,11 +933,11 @@ pub(super) fn execute(
         }
     }
     let mut external = 0;
-    for tx in &transactions {
+    for (index, tx) in transactions.iter().enumerate() {
         let id = py_str(&val(tx, "id"));
         let segment = candidate_flow.get(&id).copied().unwrap_or_else(|| flow(tx));
         let counted = if segment == "transfers" {
-            moved(tx)
+            moved(tx, unshown.get(&index).copied().unwrap_or(0))
         } else {
             Cow::Borrowed(tx)
         };
@@ -1109,6 +1120,10 @@ pub(super) fn execute(
 
 /// `_activity_transaction_rows_to_ui`: one untagged row per reviewed pair,
 /// rendered from the pair's last leg, with the filtered queue status.
+/// The rendered rows, and per row index the msat its transaction moved in
+/// same-asset pairs no row shows: one send linked to several receipts renders
+/// one pair per transaction, so with a wallet filter that hides the other
+/// receipts their part would drop out of transfer volume.
 fn activity(
     conn: &Connection,
     scope: &Scope<'_>,
@@ -1116,7 +1131,7 @@ fn activity(
     wallet: &str,
     since: &str,
     until: &str,
-) -> Result<Vec<Value>> {
+) -> Result<(Vec<Value>, BTreeMap<usize, i64>)> {
     let current = current(conn, scope)?;
     let mut pairs = BTreeMap::new();
     for chunk in raw.chunks(400) {
@@ -1128,7 +1143,9 @@ fn activity(
             last.insert(text(pair, "pair_id"), row);
         }
     }
-    let mut rendered = BTreeSet::new();
+    let mut rendered: BTreeMap<&str, usize> = BTreeMap::new();
+    // Each raw transaction's row: its own, or the one its pair folded into.
+    let mut row_of: BTreeMap<&str, usize> = BTreeMap::new();
     let mut output = Vec::new();
     let mut paired = Vec::new();
     for row in raw {
@@ -1136,15 +1153,52 @@ fn activity(
         let mut source = row;
         if let Some(pair) = pair {
             let id = text(pair, "pair_id");
-            if !rendered.insert(id) {
+            if let Some(&index) = rendered.get(id) {
+                row_of.insert(text(row, "id"), index);
                 continue;
             }
+            rendered.insert(id, output.len());
             source = last.get(id).copied().unwrap_or(row);
             if text(pair, "kind") != "journal-derived" {
                 paired.push(output.len());
             }
         }
+        row_of.insert(text(row, "id"), output.len());
         output.push(render::untagged(source, pair));
+    }
+    let mut unshown: BTreeMap<usize, i64> = BTreeMap::new();
+    if current {
+        let mut counted = BTreeSet::new();
+        for chunk in raw.chunks(400) {
+            let slots = vec!["?"; chunk.len()].join(",");
+            let ids: Vec<_> = chunk
+                .iter()
+                .map(|r| SqlValue::Text(text(r, "id").into()))
+                .collect();
+            let bindings: Vec<_> = ids.iter().chain(&ids).cloned().collect();
+            let relations = rows(
+                conn,
+                &format!("SELECT relation.id AS pair_id,relation.out_transaction_id,relation.in_transaction_id,relation.out_amount AS out_amount_msat,relation.in_amount AS in_amount_msat FROM journal_custody_projection_relations relation WHERE relation.relation_kind IN ('move','conversion') AND relation.out_asset=relation.in_asset AND (relation.out_transaction_id IN ({slots}) OR relation.in_transaction_id IN ({slots})) ORDER BY relation.occurred_at,relation.id"),
+                params_from_iter(bindings),
+            )?;
+            for relation in relations {
+                let id = text(&relation, "pair_id").to_owned();
+                if rendered.contains_key(id.as_str()) || !counted.insert(id) {
+                    continue;
+                }
+                let Some(&index) = row_of
+                    .get(text(&relation, "out_transaction_id"))
+                    .or_else(|| row_of.get(text(&relation, "in_transaction_id")))
+                else {
+                    continue;
+                };
+                let amount = match val(&relation, "in_amount_msat") {
+                    Value::Null => num(&relation, "out_amount_msat"),
+                    _ => num(&relation, "in_amount_msat"),
+                };
+                *unshown.entry(index).or_default() += amount;
+            }
+        }
     }
     if !paired.is_empty() {
         let ranks = rows(
@@ -1172,7 +1226,7 @@ fn activity(
             }
         }
     }
-    Ok(output)
+    Ok((output, unshown))
 }
 
 #[cfg(test)]
