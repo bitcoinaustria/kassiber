@@ -498,6 +498,31 @@ const INPUT_CHANGES: &[&str] = &[
     "source_overlap_repair",
 ];
 
+/// The `INPUT_CHANGES` fields a processing payload shows as changed. The
+/// overlap repair object also reports overlaps it left alone (skipped
+/// records, unresolved address lists); only its removal and exclusion
+/// counts mean the run changed inputs, or a book with an overlap no run
+/// can repair would read stale forever.
+fn input_changes(payload: &Value) -> Vec<&'static str> {
+    let nonzero = |value: &Value| match value {
+        Value::Null => false,
+        Value::Number(n) => n.as_i64() != Some(0),
+        _ => true,
+    };
+    INPUT_CHANGES
+        .iter()
+        .copied()
+        .filter(|field| match (*field, &payload[*field]) {
+            ("source_overlap_repair", Value::Object(repair)) => {
+                ["addresses_removed", "duplicates_excluded"]
+                    .iter()
+                    .any(|count| repair.get(*count).is_some_and(nonzero))
+            }
+            (_, value) => nonzero(value),
+        })
+        .collect()
+}
+
 enum Recomputed {
     Tables(Vec<Table>),
     Stale(String),
@@ -528,15 +553,7 @@ fn recompute(
         Ok(committed) => committed,
         Err(refusal) => return Ok(Recomputed::Refused(refusal)),
     };
-    let changes: Vec<&str> = INPUT_CHANGES
-        .iter()
-        .copied()
-        .filter(|field| match &committed.payload[*field] {
-            Value::Null => false,
-            Value::Number(n) => n.as_i64() != Some(0),
-            _ => true,
-        })
-        .collect();
+    let changes = input_changes(&committed.payload);
     committed.after_reply()?;
     if !changes.is_empty() {
         return Ok(Recomputed::Stale(format!(
@@ -645,6 +662,26 @@ mod tests {
             year: Some("2024".into()),
             columns: BTreeMap::from([("amount".into(), Cell::Int(value))]),
         }
+    }
+
+    #[test]
+    fn an_overlap_left_unrepaired_is_not_an_input_change() {
+        let unrepaired = json!({"source_overlap_repair": {
+            "addresses_removed": 0, "duplicates_excluded": 0,
+            "skipped_records": [{"id": "r"}], "unresolved_address_list_wallets": ["w"],
+        }});
+        assert!(input_changes(&unrepaired).is_empty());
+        for count in ["addresses_removed", "duplicates_excluded"] {
+            let mut repaired = unrepaired.clone();
+            repaired["source_overlap_repair"][count] = json!(1);
+            assert_eq!(
+                input_changes(&repaired),
+                ["source_overlap_repair"],
+                "{count}"
+            );
+        }
+        let other = json!({"auto_priced": 2, "custody_pair_evidence_repairs": 0});
+        assert_eq!(input_changes(&other), ["auto_priced"]);
     }
 
     #[test]

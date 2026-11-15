@@ -22,7 +22,7 @@ Status values:
 | --- | --- |
 | `identical` | Every compared row matches byte for byte (after dropping volatile columns). |
 | `different` | At least one row differs; `differences` lists the first `limit`. |
-| `stale` | The book's inputs changed since processing (input version, transaction count, calculation semantics), or processing now would first repair inputs or price transactions from the rates cache. Process first; this is not a diff. |
+| `stale` | The book's inputs changed since processing (input version, transaction count, calculation semantics), or processing now would first repair inputs (remove overlapping addresses, exclude duplicates) or price transactions from the rates cache. An overlap processing leaves for review does not make the book stale. Process first; this is not a diff. |
 | `not_processed` | Journals were never processed. |
 | `no_transactions` | Nothing to compare. |
 | `refused` | Recomputation refused (the same refusal `journals process` would give, e.g. a custody blocker); `error` carries its code and message. |
