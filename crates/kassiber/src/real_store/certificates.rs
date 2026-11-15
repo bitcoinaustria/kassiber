@@ -111,29 +111,31 @@ impl RealBook {
                     &SetupSources,
                 )
             });
-        let referenced = |path: &str| {
-            kassiber_setup::backends::certificate_referenced(conn, path).unwrap_or(true)
+        // Check and delete under the write lock: another trust of the same leaf
+        // holds that lock from its verify to its commit, so it either commits
+        // first (the file is referenced and stays) or verifies after the
+        // delete and refuses. A failed check keeps the file.
+        let remove_if_unreferenced = |path: &str| {
+            let Ok(tx) = kassiber_store::write_transaction(conn) else {
+                return;
+            };
+            let referenced =
+                kassiber_setup::backends::certificate_referenced(&tx, path).unwrap_or(true);
+            backend_certificates::remove_unreferenced(&data_root, Path::new(path), referenced);
+            let _ = tx.commit();
         };
         let previous = match outcome {
             Ok(previous) => previous,
             Err(error) => {
                 if pin.created {
-                    backend_certificates::remove_unreferenced(
-                        &data_root,
-                        &pin.path,
-                        referenced(&path_text),
-                    );
+                    remove_if_unreferenced(&path_text);
                 }
                 return Err(error);
             }
         };
         // Committed: a replaced managed pin no backend uses any more can go.
         if let Some(previous) = previous.filter(|p| *p != path_text) {
-            backend_certificates::remove_unreferenced(
-                &data_root,
-                Path::new(&previous),
-                referenced(&previous),
-            );
+            remove_if_unreferenced(&previous);
         }
         let mut result = fetched.payload();
         result["trusted"] = serde_json::Value::Bool(true);
