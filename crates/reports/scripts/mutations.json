@@ -314,8 +314,8 @@
   {
     "id": "market-value",
     "file": "crates/reports/src/holdings.rs",
-    "find": "quantity.mul(&rate, &DECIMAL)",
-    "replace": "quantity.div(&rate, &DECIMAL)",
+    "find": "quantity.mul(rate, &DECIMAL)",
+    "replace": "quantity.div(rate, &DECIMAL)",
     "expect_failing": [
       "holdings_vectors"
     ],
@@ -594,8 +594,8 @@
   {
     "id": "desktop-float-sum",
     "file": "crates/reports/src/desktop.rs",
-    "find": "} + number(row, key),",
-    "replace": "} - number(row, key),",
+    "find": "Value::Float(*n + number(row, key))",
+    "replace": "Value::Float(*n - number(row, key))",
     "expect_failing": [
       "desktop_vectors"
     ],
@@ -664,8 +664,8 @@
   {
     "id": "summary-text-fiat-places",
     "file": "crates/reports/src/summary_text.rs",
-    "find": "number(value(value(report, section), key), 2)",
-    "replace": "number(value(value(report, section), key), 3)",
+    "find": "total => number(total, 2),",
+    "replace": "total => number(total, 3),",
     "expect_failing": [
       "summary_text_vectors"
     ],
@@ -3734,10 +3734,10 @@
   {
     "id": "artifact-quantity-float-sum",
     "file": "crates/reports/src/full_csv.rs",
-    "find": "let sum = number(&grouped[index], key) + number(row, key);",
-    "replace": "let sum = number(row, key);",
+    "find": "Value::Float(number(&grouped[index], key) + number(row, key))",
+    "replace": "Value::Float(number(row, key))",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "aggregate_sums_each_bucket_and_keeps_unknown_values_unknown"
     ],
     "rule": "Full-report balances aggregate wallet floats in encounter order."
   },

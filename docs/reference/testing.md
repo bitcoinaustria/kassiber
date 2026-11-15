@@ -1424,8 +1424,9 @@ could is tagged `archive/python-backend`. For a deliberate change:
 1. Make the change and run the failing tests.
 2. Rewrite the affected goldens from the current code. Tests with a write
    mode take `KASSIBER_GOLDEN_WRITE=1` (the custody recordings, the routing
-   replays, the `kassiber` crate's golden helper, the wallet analysis
-   recovery goldens, the freshness daemon replays' recorded rows); black-box transcripts take `KASSIBER_BLESS=1`; recorded
+   replays, the `kassiber` crate's golden helper, the report vectors in
+   `crates/reports/tests/vectors.rs`, the wallet analysis recovery goldens,
+   the freshness daemon replays' recorded rows); black-box transcripts take `KASSIBER_BLESS=1`; recorded
    sessions take `scripts/replay-sessions.sh --update`. All three refuse
    to run under `CI`. A golden without a write mode is edited by hand. A golden that
    needs new network traffic is re-taped against a regtest stack with

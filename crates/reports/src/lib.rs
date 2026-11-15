@@ -38,6 +38,7 @@ mod gains_desktop;
 pub mod gb_tax;
 mod history;
 mod holdings;
+pub use holdings::holding_rates;
 pub mod ie_tax;
 mod journal;
 pub mod jp_tax;

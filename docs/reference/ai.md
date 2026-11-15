@@ -1431,7 +1431,10 @@ boundary between read-only information and mutating actions. It also carries
 one hard figure rule: when an overview's `fiat.completeness.costBasisComplete`
 is false, the model must call cost basis and unrealized/realized gains
 incomplete and name the blockers, never state them as exact (see
-[the daemon overview contract](daemon.md)). Its evidence rules answer failure
+[the daemon overview contract](daemon.md)). Another crypto asset's basis
+that covers only part of its quantity (`otherAssets[].basisComplete` false)
+reaches the model as `partialCostBasis`, with `costBasis` null, so it cannot
+be read as the full basis. Its evidence rules answer failure
 modes seen in a real repair session: name only ids a tool returned in the
 chat, take totals from tools rather than summing sampled pages, check value
 against the wallets' own rows or `ui.transactions.verify` instead of the

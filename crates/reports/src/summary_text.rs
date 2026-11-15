@@ -150,10 +150,15 @@ pub fn render(report: &Value) -> String {
         ("Realized cost basis", "realized", "cost_basis"),
         ("Realized gain/loss", "realized", "gain_loss"),
     ] {
+        // A total a holding without a value in the book leaves unknown.
+        let total = value(value(report, section), key);
         kv(
             &mut lines,
             label,
-            number(value(value(report, section), key), 2),
+            match total {
+                Value::Null => "unknown".into(),
+                total => number(total, 2),
+            },
         );
     }
     lines.extend([String::new(), "Asset Flow".into(), "----------".into()]);

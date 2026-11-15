@@ -43,6 +43,12 @@ fn pairs(conn: &Connection, profile: &str, wallet: Option<&Value>) -> Result<Val
         .chain(direct.into_iter().map(|r| (r, true)))
     {
         let swap = int(&row, "swap_fee_msat");
+        // A pair between two different assets has no fee in raw units: the
+        // difference of its legs is meaningless (plan 24), so it is null.
+        let comparable = kassiber_store::assets::units_comparable(
+            &text(&row, "out_asset"),
+            &text(&row, if direct { "payout_asset" } else { "in_asset" }),
+        );
         let out = int(&row, "out_amount");
         let out_fee = int(&row, "out_fee");
         let amount = int(&row, if direct { "payout_amount" } else { "in_amount" });
@@ -68,8 +74,22 @@ fn pairs(conn: &Connection, profile: &str, wallet: Option<&Value>) -> Result<Val
             ),
             ("kind", value(&row, "kind").clone()),
             ("policy", value(&row, "policy").clone()),
-            ("swap_fee", float(&btc(swap)?)?),
-            ("swap_fee_msat", Value::Int(swap.into())),
+            (
+                "swap_fee",
+                if comparable {
+                    float(&btc(swap)?)?
+                } else {
+                    Value::Null
+                },
+            ),
+            (
+                "swap_fee_msat",
+                if comparable {
+                    Value::Int(swap.into())
+                } else {
+                    Value::Null
+                },
+            ),
             ("swap_fee_kind", value(&row, "swap_fee_kind").clone()),
             ("out_occurred_at", value(&row, "out_occurred_at").clone()),
             ("out_wallet", value(&row, "out_wallet").clone()),
@@ -246,7 +266,16 @@ pub fn report(
     // Python first groups wallet floats into account buckets, then sums sorted
     // buckets. Preserve both rounding stages and the iteration order.
     let mut buckets: Vec<((Value, Value), [f64; 3])> = Vec::new();
+    // A holding without a value in the book (another asset with no price)
+    // leaves the totals it would add to unknown, never understated.
+    let mut unknown = [false; 3];
     for row in holdings {
+        for (flag, key) in unknown
+            .iter_mut()
+            .zip(["cost_basis", "market_value", "unrealized_pnl"])
+        {
+            *flag |= matches!(value(&row, key), Value::Null);
+        }
         let key = (value(&row, "account").clone(), value(&row, "asset").clone());
         let index = match buckets.iter().position(|(k, _)| *k == key) {
             Some(index) => index,
@@ -275,10 +304,17 @@ pub fn report(
             totals[i] += b[i];
         }
     }
+    let total = |i: usize| {
+        if unknown[i] {
+            Value::Null
+        } else {
+            Value::Float(totals[i])
+        }
+    };
     let holdings = dict([
-        ("cost_basis", Value::Float(totals[0])),
-        ("market_value", Value::Float(totals[1])),
-        ("unrealized_pnl", Value::Float(totals[2])),
+        ("cost_basis", total(0)),
+        ("market_value", total(1)),
+        ("unrealized_pnl", total(2)),
     ]);
     let realized = dict(
         ["proceeds", "cost_basis", "gain_loss"]

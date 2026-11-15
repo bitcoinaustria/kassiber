@@ -1949,6 +1949,11 @@ See [tax countries](docs/reference/tax-countries.md) and
   row holds at most about 92 million units at 10^-11, so one such row stops a
   sync. Designed, not built, in [plan 24](docs/plan/24-crypto-assets.md#per-asset-scale-design-not-implemented);
   needs the owner's decision on the released-Python exception.
+- [ ] Keep historical valuations of an unpriced asset unknown: the balance
+  history (`crates/reports/src/history.rs`) still falls back to a zero rate
+  where the portfolio and summary now report `null`.
+- [ ] Describe per-asset quantities in the AI catalog's amount fields
+  (`crates/ai/src/data/catalog.json`), keeping sat/msat labels to Bitcoin.
 
 - [ ] Extend [exact exchange withdrawals](docs/reference/custody-resolution.md#exchange-withdrawals-that-name-their-txid)
   past Strike and River. Coinbase and Binance API rows name the txid, but the
