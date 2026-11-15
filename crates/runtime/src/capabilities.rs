@@ -48,7 +48,7 @@ const CLI_READ_PATHS: &str = "
     metadata.records.history.activity metadata.records.history.stale
     imports.list
     review.cases review.plan review.receipt
-    journals.list journals.quarantined journals.transfers.list
+    journals.list journals.quarantined journals.transfers.list journals.verify
     journals.events.list journals.events.get journals.quarantine.show journals.quarantine.groups loans.list
     transfers.list transfers.gaps.list transfers.gaps.history transfers.gaps.plan
     transfers.components.list transfers.components.show transfers.components.plan
@@ -165,7 +165,7 @@ const DAEMON_READ_KINDS: &str = "
     ui.source_funds.evidence.list ui.source_funds.coverage
     ui.source_funds.recipients.list ui.btcpay.provenance.list
     ui.btcpay.provenance.links ui.transactions.commercial_context
-    ui.documents.list ui.journals.snapshot ui.journals.events.list
+    ui.documents.list ui.journals.snapshot ui.journals.events.list ui.journals.verify
     ui.journals.quarantine ui.journals.transfers.list ui.transfers.suggest ui.transfers.dismissals.list
     ui.transfers.list ui.transfers.pair_options ui.transfers.payouts.list
     ui.transfers.components.list ui.transfers.components.get

@@ -1397,6 +1397,20 @@ redacted before they enter AI/UI tool metadata; exact backend URLs are not sent
 to the provider. If any source refresh row fails, the maintenance/report-blocker
 path returns a blocking `sync_failed` item instead of saying reports are ready.
 
+`ui_journals_verify` is a read tool over the [reproducibility check](replay-bundle.md):
+it recomputes the journals in a private in-memory copy and returns statuses,
+counts per table, wallet and year, and each listed difference as its table,
+change kind and changed column names (`journal_verify_for_ai`): no cell values,
+amounts, row keys, transaction ids, labels or refusal messages. Lists and the
+wallet and year count maps are capped at 50 entries (the largest counts, keys
+cut to 64 characters, at most 20 column names per difference); the rest is
+summarized as `by_wallet_omitted` / `by_year_omitted` with its entry and row
+counts, and a cut table or difference list as `tables_omitted` /
+`differences_omitted` with `truncated` set. When the check fails before producing a report, the assistant gets the
+error code and a fixed message, never the error text, which can quote book
+values. It does not refresh journals first, since a stale book is one of
+the answers it gives, and it is not an automatic context read.
+
 Quoted or search-like questions can trigger `ui.transactions.search` before the
 provider is called. Matching transaction notes, descriptions, counterparties,
 tags, and values may then be included in the provider context; keep inference
@@ -2052,6 +2066,20 @@ learned from health/report-blocker tools. Denied calls never count as executed
 or as cross-book disclosure. The GUI uses that object and the exact tool payloads to render source
 chips beside the assistant answer, making the result traceable to
 program-derived facts.
+
+### Backend certificate errors
+
+A sync or connection failure `tls_certificate_untrusted` means the user's own
+server presents a certificate no trusted authority signed (often self-signed);
+`tls_certificate_changed` means a backend's pinned certificate no longer
+matches the server. Trusting a certificate is the user's decision, not an
+assistant tool: the assistant points them to **Check certificate…** in the
+backend's settings or on the wallet page, or to
+`kassiber backends trust-certificate <name>`, which shows the SHA-256
+fingerprint to compare first ([self-signed certificates](backends.md#self-signed-certificates)).
+
+The `wallets-backends` skill reference does not say this yet: recorded
+sessions read it verbatim, so its text waits for a reviewed re-record.
 
 ### Visuals in chat
 

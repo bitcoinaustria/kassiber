@@ -66,7 +66,7 @@ fn digest(path: &std::path::Path) -> std::io::Result<Option<bitcoin_hashes::sha2
 
 /// Resolve selectors using the same ID/label/context rules as other services,
 /// retaining every stored profile value through the loader's checked adapter.
-fn profile(
+pub(crate) fn profile(
     conn: &Connection,
     workspace: Option<&Value>,
     profile: Option<&Value>,

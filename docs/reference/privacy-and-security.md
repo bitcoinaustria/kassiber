@@ -840,6 +840,10 @@ rows, and stack locals. `--save` writes the artifact under
 `exports/diagnostics/` in the active Kassiber state root.
 `--diagnostics-out auto` writes the same public report when a command fails.
 
+`kassiber journals verify` (`ui.journals.verify`, assistant tool
+`ui_journals_verify`) recomputes journals in an in-memory copy of the book; it
+writes nothing and performs no network I/O.
+
 ## Caveats
 
 - **Secrets on the command line still end up in shell history if you

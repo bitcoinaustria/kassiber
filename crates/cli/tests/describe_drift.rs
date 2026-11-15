@@ -80,6 +80,22 @@ fn python_catalog() -> Value {
         }
         *field(command, "arguments") = Value::List(arguments);
     }
+    // Rust-only leaves without a Python sibling are described by their own
+    // reviewed entry (`data/rust_only_describe.jsonl`), placed after the last
+    // Python leaf of their command group, where the grammar appends them.
+    for line in include_str!("data/rust_only_describe.jsonl").lines() {
+        let entry = kassiber_pytext::loads(line).unwrap();
+        let Some(Value::List(path)) = get(&entry, "path").cloned() else {
+            panic!("rust-only path")
+        };
+        let at = commands
+            .iter()
+            .rposition(
+                |c| matches!(get(c, "path"), Some(Value::List(p)) if p.first() == path.first()),
+            )
+            .expect("command group");
+        commands.insert(at + 1, entry);
+    }
     let added = kassiber_cli::spec::RUST_ONLY_LEAVES.len();
     let Value::Int(count) = field(data, "count") else {
         panic!("count")

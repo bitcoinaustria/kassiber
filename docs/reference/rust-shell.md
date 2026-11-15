@@ -18464,10 +18464,10 @@ that allows loopback.
 ## Rust-only commands
 
 Some sources exist only in the Rust backend; Python's grammar and registries
-never learn them. `crates/cli/scripts/gen_parser_spec.py` grafts them onto
-Python's argparse tree (`RUST_ONLY_LEAVES`, `RUST_ONLY_BACKEND_KINDS`, kept
-in step with `crates/cli/src/spec.rs`) and writes the Rust-only parsers last,
-so every Python parser keeps its index. The parity tests compare everything
+never learn them. The hand-edited grammar (`crates/cli/src/spec_data.rs`)
+appends their parsers after Python's, so every Python parser keeps its index;
+`RUST_ONLY_LEAVES` and `RUST_ONLY_BACKEND_KINDS` in `crates/cli/src/spec.rs`
+name them for the parity tests. The parity tests compare everything
 else byte for byte.
 
 | Difference | Why | Pinned by |
@@ -18478,6 +18478,8 @@ else byte for byte.
 | Wallet kind `bitpanda` (`wallets kinds`, `ui.connections.sources`, `wallets create`), classified as an exchange API source and custodial export; Python refuses `wallets create --kind bitpanda` but lists such a wallet and syncs it as sourceless | the sync creates its provider wallet | `tests/test_connection_catalog_drift.py`, `crates/wallets/src/completeness.rs` tests, `tests/test_python_rust_only_bitpanda.py` |
 
 | `ui.connections.exchange.status`, `.test`, `.create` and `.sync` set up and sync exchange API connections in the desktop ([exchange connections in the desktop](exchange-desktop.md)); Python does not advertise them and answers each with `daemon_unavailable` without writing; the Rust daemon advertises them after Python's kinds | the desktop flow is new in Rust | `exchange_api/tests/desktop_api.rs`, `tests/test_rust_exchange_desktop.py`, `tests/test_python_rust_only_exchange_desktop.py`, `crates/runtime/tests/capabilities.rs`, `tests/test_connection_catalog_drift.py` |
+| `journals verify` ([journal reproducibility](replay-bundle.md#reproducibility-check)); `journals` usage lists it after Python's choices; `commands describe` adds it from its own reviewed entry, placed after the group's last Python leaf (capability `read`) | the check is new in Rust | `crates/cli/tests/argparse_parity.rs` (`rust_only`), `crates/cli/tests/describe_drift.rs` (`data/rust_only_describe.jsonl`), `crates/runtime/tests/capabilities.rs`, `crates/kassiber/tests/journals_verify.rs` |
+| `ui.journals.verify` (read) | the check for the desktop and the assistant; the assistant and MCP (`journals_verify`, a read at every grant) get it, appended last to the tool catalog | `crates/runtime/tests/capabilities.rs`, `crates/kassiber/tests/journals_verify.rs`, `crates/ai/tests/python_vectors.rs`, `crates/mcp/tests/registry.rs` |
 
 | `backends trust-certificate NAME [--fingerprint SHA256]` and the desktop kinds `ui.backends.certificate.fetch` / `ui.backends.certificate.trust` fetch a saved backend's TLS certificate and pin it after the user confirms its fingerprint ([self-signed certificates](backends.md#self-signed-certificates)); Python has neither | confirmed trust on first use is new in Rust | `crates/kassiber/tests/backend_certificates.rs`, `crates/chain/src/certificates/tests.rs`, `crates/cli/tests/argparse_parity.rs` (`rust_only`), `crates/cli/tests/describe_drift.rs` (pinned description), `crates/runtime/tests/capabilities.rs` (`admin` like `backends reveal-token` and `ui.backends.delete`; the fetch kind `operator` like the connection tests), `crates/cli/tests/certificate_trust_reachability.rs` |
 

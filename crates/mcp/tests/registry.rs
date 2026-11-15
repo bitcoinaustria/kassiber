@@ -32,6 +32,14 @@ fn list(value: &Value) -> &[Value] {
     }
 }
 
+/// Tools only the Rust runtime serves (`docs/reference/rust-shell.md#rust-only-commands`);
+/// Python's frozen registry never names them, so they are checked on their own.
+const RUST_ONLY: &[&str] = &["journals_verify"];
+
+fn python_only(tool: &&kassiber_mcp::tools::McpTool) -> bool {
+    !RUST_ONLY.contains(&tool.name.as_str())
+}
+
 const GRANTS: [&str; 3] = ["read", "operator", "accounting_decisions"];
 const ACCESS: [&str; 2] = ["full", "restricted"];
 
@@ -40,6 +48,7 @@ fn every_tool_is_classified_as_python_classifies_it() {
     let vectors = vectors();
     let have: Vec<Value> = mcp_tools()
         .iter()
+        .filter(python_only)
         .map(|tool| {
             dict([
                 ("name", s(tool.name.as_str())),
@@ -61,6 +70,7 @@ fn listings_and_definitions_follow_the_grant() {
     for grant in GRANTS {
         for access in ACCESS {
             let names: Vec<Value> = available_tools(grant, access)
+                .filter(python_only)
                 .map(|tool| s(tool.name.as_str()))
                 .collect();
             let key = format!("{grant}/{access}");
@@ -71,10 +81,15 @@ fn listings_and_definitions_follow_the_grant() {
             );
         }
     }
-    assert_eq!(
-        tool_definitions("accounting_decisions", "full"),
-        list(field(&vectors, "definitions"))
-    );
+    let definitions: Vec<Value> = tool_definitions("accounting_decisions", "full")
+        .into_iter()
+        .filter(|definition| {
+            !RUST_ONLY
+                .iter()
+                .any(|name| get(definition, "name") == Some(&s(*name)))
+        })
+        .collect();
+    assert_eq!(definitions, list(field(&vectors, "definitions")));
 }
 
 #[test]
@@ -137,5 +152,26 @@ fn instructions_capabilities_and_client_names_match_python() {
     for case in list(field(&vectors, "client_labels")) {
         let have = client_label(Some(field(case, "value"))).map_or(Value::Null, s);
         assert_eq!(&have, field(case, "label"), "{case:?}");
+    }
+}
+
+/// The reproducibility check is a read: every grant and access mode lists it,
+/// it never egresses and never writes.
+#[test]
+fn the_journal_check_is_a_read_for_every_grant() {
+    let tool = mcp_tools()
+        .iter()
+        .find(|tool| tool.name.as_str() == "journals_verify")
+        .expect("journals_verify");
+    assert_eq!(tool.entry.name.as_str(), "ui.journals.verify");
+    assert_eq!(tool.required.as_str(), "read");
+    assert!(!tool.egress && !tool.destructive && !tool.full_access_only);
+    for grant in GRANTS {
+        for access in ACCESS {
+            assert!(
+                available_tools(grant, access).any(|t| t.name.as_str() == "journals_verify"),
+                "{grant}/{access}"
+            );
+        }
     }
 }

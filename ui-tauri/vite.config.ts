@@ -166,6 +166,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.transactions.export_platform_csv",
   "ui.transactions.ledger_template",
   "ui.journals.snapshot",
+  "ui.journals.verify",
   "ui.journals.events.list",
   "ui.journals.quarantine",
   "ui.journals.transfers.list",

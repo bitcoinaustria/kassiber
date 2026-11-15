@@ -106,7 +106,11 @@ pub struct DaemonConfig {
 /// recorded sessions drop these from `daemon.ready` before comparing, so a
 /// new Rust-only kind is listed here instead of rewriting frozen recordings;
 /// every Python kind is still compared.
-pub const RUST_ONLY_KINDS: &[&str] = &["ui.transfers.pair_options"];
+pub const RUST_ONLY_KINDS: &[&str] = &[
+    "ui.transfers.pair_options",
+    "ui.backends.certificate.fetch",
+    "ui.backends.certificate.trust",
+];
 
 /// Every kind `daemon.ready` advertises.
 pub fn supported_kinds() -> Vec<&'static str> {
@@ -2031,9 +2035,13 @@ mod diagnostic_tests {
             .map(|kind| format!("\"{kind}\""))
             .collect::<Vec<_>>()
             .join(", ");
+        // Compared without whitespace: rustfmt wraps a longer list.
+        let squeeze = |text: &str| text.split_whitespace().collect::<String>();
         assert!(
-            include_str!("../../session-replay/src/compare.rs").contains(&format!(
-                "pub const RUST_ONLY_KINDS: &[&str] = &[{listed}];"
+            squeeze(include_str!("../../session-replay/src/compare.rs")).contains(&squeeze(
+                &format!("pub const RUST_ONLY_KINDS: &[&str] = &[{listed},];")
+            )) || squeeze(include_str!("../../session-replay/src/compare.rs")).contains(&squeeze(
+                &format!("pub const RUST_ONLY_KINDS: &[&str] = &[{listed}];")
             )),
             "crates/session-replay/src/compare.rs must list exactly {listed}"
         );

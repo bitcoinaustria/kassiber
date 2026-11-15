@@ -5,12 +5,14 @@ import type { TFunction } from "i18next";
 import {
   BookOpen,
   FileText,
+  ListChecks,
   Loader2,
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
 
 import { JournalReportableEntries } from "@/components/kb/JournalReportableEntries";
+import { JournalVerifyDialog } from "@/components/kb/JournalVerifyDialog";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -94,6 +96,7 @@ export function Journals() {
   );
   const [entryTypeFilter, setEntryTypeFilter] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("state");
+  const [verifyOpen, setVerifyOpen] = useState(false);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
@@ -152,6 +155,7 @@ export function Journals() {
   };
   return (
     <div className={screenShellClassName}>
+      <JournalVerifyDialog open={verifyOpen} onOpenChange={setVerifyOpen} />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
         <div className={pageHeaderClassName}>
           <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
@@ -188,6 +192,16 @@ export function Journals() {
                   <RefreshCw className="size-4" aria-hidden="true" />
                 )}
                 {t("ledger.actions.processJournals")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={pageHeaderActionClassName}
+                onClick={() => setVerifyOpen(true)}
+                disabled={isProcessingJournals}
+              >
+                <ListChecks className="size-4" aria-hidden="true" />
+                {t("ledger.actions.verifyJournals")}
               </Button>
             </div>
           ) : null}

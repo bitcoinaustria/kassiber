@@ -29,7 +29,8 @@
     },
     "actions": {
       "processJournals": "Journale verarbeiten",
-      "viewLedgerEntries": "Hauptbuch-Einträge anzeigen"
+      "viewLedgerEntries": "Hauptbuch-Einträge anzeigen",
+      "verifyJournals": "Reproduzierbarkeit prüfen"
     },
     "unavailable": {
       "title": "Hauptbuch nicht verfügbar",
@@ -90,6 +91,24 @@
       "transferIn": "Transfer ein",
       "transferOut": "Transfer aus",
       "neutralSwap": "Neutraler Tausch"
+    },
+    "verify": {
+      "title": "Reproduzierbarkeit der Journale prüfen",
+      "description": "Kassiber berechnet die Journale aus den aktuellen Daten dieses Buchs in einer privaten Kopie im Arbeitsspeicher neu und vergleicht sie mit den gespeicherten Journalen. Es wird nichts geschrieben und nichts verlässt dieses Gerät.",
+      "running": "Journale werden neu berechnet…",
+      "status": {
+        "identical": "Die gespeicherten Journale entsprechen genau dem, was die aktuellen Daten ergeben.",
+        "different_one": "{{count}} gespeicherte Zeile weicht von der Neuberechnung ab.",
+        "different_other": "{{count}} gespeicherte Zeilen weichen von der Neuberechnung ab.",
+        "stale": "Die Daten haben sich seit der Verarbeitung der Journale geändert. Verarbeite zuerst die Journale; das ist kein Hinweis auf falsche Zahlen.",
+        "noTransactions": "Dieses Buch hat keine Transaktionen zum Prüfen.",
+        "refused": "Die Neuberechnung der Journale wurde abgelehnt: {{message}}"
+      },
+      "nondeterministic": "Auch zwei Neuberechnungen stimmen nicht überein. Das deutet auf einen Fehler in Kassiber hin, nicht auf deine Daten.",
+      "byWallet": "Wallets: {{wallets}}",
+      "byYear": "Jahre: {{years}}",
+      "truncated": "Die ersten {{count}} Abweichungen werden angezeigt.",
+      "nextStep": "Eine erneute Verarbeitung ersetzt die gespeicherten Zeilen."
     }
   },
   "reportable": {
