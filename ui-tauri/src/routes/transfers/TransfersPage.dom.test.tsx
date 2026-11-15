@@ -850,6 +850,8 @@ describe("Transfers overview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show older transfers" }));
     await waitFor(() => expect(within(list).getByText("Hot early 2024")).toBeTruthy());
     expect(calls("ui.custody.lineage.snapshot").some((call) => call.args.cursor === "older")).toBe(true);
+    // Every page asks for the prices and fees the rows show.
+    expect(calls("ui.custody.lineage.snapshot").every((call) => call.args.priced === true)).toBe(true);
     // Everything is loaded: nothing more to offer.
     expect(screen.queryByRole("button", { name: "Show older transfers" })).toBeNull();
   });

@@ -385,7 +385,8 @@ export function TransfersOverview({
   }, [moreHeld, fetchingHeld, heldFailed, fetchMoreHeld]);
   const lineageQuery = useDaemonInfinite<CustodyLineageSnapshot>(
     "ui.custody.lineage.snapshot",
-    { limit: 100 },
+    // `priced` adds each move's fiat value and its send's network fee.
+    { limit: 100, priced: true },
     (lastPage) => lastPage.data?.next_cursor ?? undefined,
   );
   const transferViews = useDaemon<SavedViewsEnvelope>("ui.saved_views.list", { surface: "transfer_candidates" }, { enabled: Boolean(savedViewId) });
