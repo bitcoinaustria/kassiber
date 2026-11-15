@@ -86,6 +86,7 @@ export function ReviewTransfers({
   filterLabel,
   onClearFilter,
   onLinkManually,
+  onUndoChange,
 }: {
   onDecided: () => void;
   /** The journals are recalculating, or about to. */
@@ -105,6 +106,11 @@ export function ReviewTransfers({
    * receipt). Without it the buttons go to the Transfers screen.
    */
   onLinkManually?: (transactionId?: string) => void;
+  /**
+   * Whether a decision's Undo is on offer, so a page that would put
+   * something else in this list's place keeps it until the Undo has gone.
+   */
+  onUndoChange?: (showing: boolean) => void;
 }) {
   const { t } = useTranslation("review");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -145,6 +151,12 @@ export function ReviewTransfers({
     const timer = window.setTimeout(() => setUndo(null), Math.max(0, undo.deadline - Date.now()));
     return () => window.clearTimeout(timer);
   }, [undo]);
+  const undoShowing = undo !== null;
+  React.useEffect(() => {
+    if (!onUndoChange || !undoShowing) return;
+    onUndoChange(true);
+    return () => onUndoChange(false);
+  }, [onUndoChange, undoShowing]);
 
   // While the journals recalculate, the list stays as it was read before the
   // decision, less what was decided: a read of stale journals lists more

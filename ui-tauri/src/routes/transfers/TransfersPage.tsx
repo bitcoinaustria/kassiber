@@ -478,6 +478,8 @@ export function TransfersOverview({
   useRoomBelow(panelElement);
 
   const [tab, setTab] = React.useState<StatusTab | null>(null);
+  // A suggestion's Undo is on offer: its list stays, though nothing is left in it.
+  const [suggestionUndo, setSuggestionUndo] = React.useState(false);
   const needsCount = waiting + candidates.length;
   const tabCounts: Record<StatusTab, number> = {
     needs: needsCount,
@@ -722,11 +724,16 @@ export function TransfersOverview({
                   />
                 ) : null}
                 <div ref={suggestionsRef} className="scroll-mt-4 empty:hidden">
-                  {noSuggestions && !savedView ? (
+                  {noSuggestions && !savedView && !suggestionUndo ? (
                     waiting || heldUnavailable ? null : <SuggestionsEmpty updating={updating} onCheckAgain={requestRefresh} />
                   ) : (
                     <ReviewTransfers
-                      onDecided={requestRefresh}
+                      onDecided={() => {
+                        // The list in view stays, though the decision may empty it.
+                        setTab("needs");
+                        requestRefresh();
+                      }}
+                      onUndoChange={setSuggestionUndo}
                       refreshing={updating}
                       framed
                       filter={suggestionFilter}

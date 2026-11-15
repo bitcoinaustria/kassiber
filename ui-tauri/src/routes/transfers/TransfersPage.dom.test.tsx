@@ -33,6 +33,8 @@ const daemon = vi.hoisted(() => ({
   items: [] as unknown[],
   /** Older lineage moves, answered as a second page after `items`. */
   olderItems: [] as unknown[],
+  /** What the matcher suggests; setting one aside takes it off. */
+  suggestions: [] as Array<Record<string, unknown>>,
   dismissals: [] as unknown[],
   held: [] as string[],
   heldItems: [] as unknown[],
@@ -100,7 +102,7 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
           case "ui.transfers.dismissals.list":
             return ok(kind, { dismissals: daemon.dismissals, has_more: false });
           case "ui.transfers.suggest":
-            return ok(kind, { candidates: [] });
+            return ok(kind, { candidates: daemon.suggestions });
           case "ui.review.badges":
             return ok(kind, { quarantine: daemon.held.length, journals_needs_processing: false, swaps: 0 });
           case "ui.journals.quarantine":
@@ -112,6 +114,7 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
             if (daemon.failDismiss) {
               return { kind: "error", schema_version: 1, error: { code: "not_found", message: "Transaction not found", retryable: false } };
             }
+            daemon.suggestions = daemon.suggestions.filter((candidate) => candidate.out_id !== args.tx_out);
             return ok(kind, { id: "dismissal-7" });
           case "ui.transfers.dismissals.delete":
             return ok(kind, { deleted: true });
@@ -290,6 +293,7 @@ beforeEach(async () => {
   useUiStore.setState({ developerToolsEnabled: false });
   daemon.items = [lineageItem()];
   daemon.olderItems = [];
+  daemon.suggestions = [];
   daemon.dismissals = [];
   daemon.held = [];
   daemon.heldItems = [];
@@ -731,6 +735,30 @@ describe("Transfers overview", () => {
     mount({ savedViewId: "view-swaps" });
     expect(await screen.findByText("View: Liquid swaps")).toBeTruthy();
     expect(within(screen.getByTestId("transfers-tabs")).getByRole("button", { name: /^Needs you/ }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("keeps the Undo of the last suggestion decided, and its list, after the journals refresh", async () => {
+    daemon.suggestions = [
+      {
+        out_id: "out-s", in_id: "in-s", out_asset: "BTC", in_asset: "BTC", out_amount_msat: 5_000_000_000, in_amount_msat: 4_990_000_000,
+        out_wallet_label: "Hot", in_wallet_label: "Cold", out_occurred_at: "2024-05-24T09:51:00Z", in_occurred_at: "2024-05-24T10:01:00Z",
+        confidence: "strong", method: "heuristic", swap_fee_msat: 10_000_000, default_kind: "manual", default_policy: "carrying-value",
+        candidate_type: "transfer", conflict_set_id: "s", conflict_size: 1,
+      },
+    ];
+    mount();
+    const trigger = await screen.findByRole("button", { name: "More for Hot to Cold" });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "Not my transfer: Hot to Cold" }));
+    expect(await screen.findByText("Set aside Hot to Cold.")).toBeTruthy();
+    // The recalculation runs and the suggestions are read again: none is left.
+    await waitFor(() => expect(calls("ui.transfers.suggest").length).toBeGreaterThan(1), { timeout: 3000 });
+    await waitFor(() => expect(within(screen.getByTestId("transfers-tabs")).getByRole("button", { name: /^Needs you/ }).textContent).toContain("0"));
+    // The list in view stays, with its Undo.
+    expect(within(screen.getByTestId("transfers-tabs")).getByRole("button", { name: /^Needs you/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByTestId("transfers-suggestions-empty")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(calls("ui.transfers.dismissals.delete").map((call) => call.args)).toEqual([{ dismissal_id: "dismissal-7" }]));
   });
 
   it("says what Kassiber checks when there is nothing to confirm", async () => {
