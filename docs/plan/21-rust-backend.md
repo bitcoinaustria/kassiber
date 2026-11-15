@@ -33,7 +33,7 @@ sections below as each stage starts.
 - Python leaves the product at retirement (stage 7): no interpreter, no
   PyInstaller, no PyO3 binding.
 - The TypeScript provider broker (`ui-tauri/provider-broker`) stays; it is not
-  Python.
+  Python. ([Plan 23](23-rust-provider-broker.md) later moved it to Rust.)
 - One toolchain: a `rust-toolchain.toml` at the repository root pins a current
   stable Rust for the tax engine, the new crates, and `ui-tauri/src-tauri`, and
   CI and release builds both read it.

@@ -2,8 +2,8 @@
   {
     "id": "RVC-raw-admission",
     "file": "crates/journals/src/pipeline.rs",
-    "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",
-    "replace": "let typed = snapshot.typed().map_err(|message| Refusal::new(\"RuntimeError\", message))?; typed.validate().map_err(|message| Refusal::new(\"RuntimeError\", message))?; Self::from_snapshot(typed)",
+    "find": "    review_state(conn, &snapshot, then)\n",
+    "replace": "    let typed = snapshot.typed().map_err(|message| Refusal::new(\"RuntimeError\", message))?;\n    typed.validate().map_err(|message| Refusal::new(\"RuntimeError\", message))?;\n    review_state(conn, &snapshot, then)\n",
     "expect_failing": [
       "review_assembler_preserves_raw_admission_and_refusal_ownership"
     ],
@@ -11,9 +11,9 @@
   },
   {
     "id": "RVC-stage-refusal",
-    "file": "crates/journals/src/pipeline.rs",
-    "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",
-    "replace": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(|error| Refusal::new(\"RuntimeError\", error.message))?)",
+    "file": "crates/journals/src/process.rs",
+    "find": "let stages = kassiber_custody::run_loaded(snapshot, true).map_err(custody_error)?;",
+    "replace": "let stages = kassiber_custody::run_loaded(snapshot, true).map_err(|error| Refusal::new(\"RuntimeError\", error.message))?;",
     "expect_failing": [
       "review_assembler_preserves_raw_admission_and_refusal_ownership"
     ],
@@ -21,9 +21,9 @@
   },
   {
     "id": "RVC-loaded-finalization",
-    "file": "crates/journals/src/compute.rs",
-    "find": "let stages = kassiber_custody::run_loaded(&snapshot, finalized)?;",
-    "replace": "let stages = kassiber_custody::run_loaded(&snapshot, false)?;",
+    "file": "crates/journals/src/process.rs",
+    "find": "let stages = kassiber_custody::run_loaded(snapshot, true).map_err(custody_error)?;",
+    "replace": "let stages = kassiber_custody::run_loaded(snapshot, false).map_err(custody_error)?;",
     "expect_failing": [
       "review_plans_preserve_raw_loader_scalars_and_downstream_serialization_refusals"
     ],

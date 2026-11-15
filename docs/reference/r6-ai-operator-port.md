@@ -212,7 +212,9 @@ full environment plus `KASSIBER_AI_BROKER_TMPDIR`, in a new session. Each
 process takes exactly one JSONL request on the first stdin line; there is no
 handshake. The overrides `KASSIBER_AI_BROKER_NODE` and
 `KASSIBER_AI_PROVIDER_BROKER` select Node and the script, and the Python tests
-use them to install fake brokers.
+use them to install fake brokers. [Plan 23](../plan/23-rust-provider-broker.md)
+later replaced the TypeScript broker with `kassiber --provider-broker`; the
+protocol below is unchanged.
 
 | Message | Direction | Python | Notes |
 | --- | --- | --- | --- |
@@ -1148,7 +1150,8 @@ Parity that is impossible or undesirable, with the recommendation for each:
    - Recommendation: default to `<executable dir>/provider_broker/index.mjs`,
      with `KASSIBER_AI_PROVIDER_BROKER` still overriding. Settle it with R7
      packaging.
-   - **Owner decision** together with packaging.
+   - **Owner decision** together with packaging. Superseded by
+     [plan 23](../plan/23-rust-provider-broker.md): the binary is the broker.
 9. **Skill references and the catalog are embedded** in the binary. Python
    reads them from disk, never from the working directory. Nothing visible
    changes. At retirement the generated catalog file becomes the source of

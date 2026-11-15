@@ -3,7 +3,8 @@
 //! prints every chunk, and each leg's outcome, as one JSON line, in the
 //! shape `tests/rust_port/ai_broker_reference.py` prints for Python's
 //! `BrokerAIClient`. The broker is found as the product finds it (the
-//! environment overrides); the armed observer admits only that script.
+//! `KASSIBER_AI_PROVIDER_BROKER` override); the armed observer admits only
+//! that program.
 
 use std::io::{Read, Write};
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use std::time::Duration;
 use kassiber_ai::broker::{default_locate, BrokerChat, BrokerClient};
 use kassiber_ai::transport::{ChatDelta, RequestContext};
 use kassiber_envelope::{dict, get, s, AppError};
-use kassiber_net::{Gate, Ledger, Offline};
+use kassiber_net::{BrokerProgram, Gate, Ledger, Offline};
 use kassiber_pyjson::Value;
 
 fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
@@ -76,8 +77,9 @@ fn main() {
         Ledger::default(),
     )
     .with_test_observer(false);
-    if let Some(script) = std::env::var_os("KASSIBER_AI_PROVIDER_BROKER") {
-        gate = gate.with_broker_fixture(script.into());
+    // The fake broker the scenario names is the one program admitted.
+    if let Some(program) = std::env::var_os("KASSIBER_AI_PROVIDER_BROKER") {
+        gate = gate.with_broker_fixture(BrokerProgram::new(Some(program.into()), Vec::new()));
     }
     let timeout = match field(&scenario, "timeout") {
         Value::Int(seconds) => Duration::from_secs(u64::try_from(seconds.clone()).unwrap()),

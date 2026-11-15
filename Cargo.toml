@@ -24,6 +24,7 @@ members = [
   "crates/release",
   "crates/paths",
   "crates/pdf",
+  "crates/provider-broker",
   "crates/ownership",
   "crates/ipc",
   "crates/operator",

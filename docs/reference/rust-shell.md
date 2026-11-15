@@ -17597,6 +17597,8 @@ attempt observer. With it, `ai.provider_runtime.status` probes,
 the R6-6b scope of the
 [R6 design](r6-ai-operator-port.md#r6-6-providers-http-streaming-broker-client-and-discovery).
 No schema or Python product file changes, and no new crate in the lockfile.
+[Plan 23](../plan/23-rust-provider-broker.md) later replaced the Node broker,
+its program lookup and `KASSIBER_AI_BROKER_NODE` with `kassiber --provider-broker`.
 
 | Surface | Native | Notes |
 | --- | --- | --- |

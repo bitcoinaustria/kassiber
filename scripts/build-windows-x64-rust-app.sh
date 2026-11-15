@@ -77,29 +77,21 @@ run "$release_tool" build-info --output "$work/BUILD_INFO.json" \
   --run-id local --channel "$channel"
 
 run pnpm --dir ui-tauri install --frozen-lockfile
-run pnpm --dir ui-tauri run broker:build
-broker="$ROOT/ui-tauri/provider-broker/dist/index.mjs"
-test -s "$broker"
 
 run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$binary" --scratch "$work/smoke" \
   --expect-commit "$short_commit" --operator-unlock
 
-run "$ROOT/scripts/package-cli-archive.sh" --binary "$binary" --broker "$broker" \
+run "$ROOT/scripts/package-cli-archive.sh" --binary "$binary" \
   --build-info "$work/BUILD_INFO.json" --name "kassiber-cli-$TARGET" --format zip \
   --output-dir "$output"
 
-# Flat sidecar with the broker and build record beside it, plus the copy the
-# installers put on PATH (bin/kassiber.exe), which finds the broker beside
-# itself as well.
+# Flat sidecar with the build record beside it, plus the copy the installers
+# put on PATH (bin/kassiber.exe).
 binaries="$ROOT/ui-tauri/src-tauri/binaries"
 find "$binaries" -mindepth 1 -maxdepth 1 ! -name .gitignore ! -name .gitkeep -exec rm -rf -- {} +
-mkdir -p "$binaries/provider_broker"
 cp "$binary" "$binaries/kassiber-cli-$TRIPLE.exe"
-cp "$broker" "$binaries/provider_broker/index.mjs"
 cp "$work/BUILD_INFO.json" "$binaries/BUILD_INFO.json"
 cp "$binary" "$ROOT/ui-tauri/src-tauri/bin/kassiber.exe"
-mkdir -p "$ROOT/ui-tauri/src-tauri/bin/provider_broker"
-cp "$broker" "$ROOT/ui-tauri/src-tauri/bin/provider_broker/index.mjs"
 
 tauri_config="$work/tauri-build.json"
 printf '{ "version": "%s" }\n' "$version" > "$tauri_config"
@@ -120,4 +112,4 @@ echo "Windows x86_64 artifacts ($channel, commit $short_commit):"
 echo
 echo "Install the MSI or the NSIS setup, then check in a new terminal:"
 echo "  kassiber --version     (must name commit $short_commit)"
-echo "and that Settings -> AI lists the CLI-backed providers (the broker is found)."
+echo "and that Settings -> AI lists the CLI-backed providers (the provider broker answers)."

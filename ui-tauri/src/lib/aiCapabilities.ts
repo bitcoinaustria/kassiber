@@ -256,7 +256,8 @@ export interface AiModelRow {
 
 /**
  * What the broker advertises for native CLI runtimes whose answer does not
- * depend on the model (provider-broker `CLAUDE_MODELS` and Copilot's
+ * depend on the model (the Claude model list in
+ * `crates/provider-broker/src/claude.rs` and Copilot's
  * `efforts`). Used only when the selected model's row is not known yet —
  * before **Check models**, the picker holds just the stored default id — so
  * the reasoning column still offers the real levels without contacting anything.
