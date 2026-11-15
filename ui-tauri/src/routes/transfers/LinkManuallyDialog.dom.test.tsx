@@ -73,7 +73,8 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
               workspace_id: "w1",
               profile_id: "p1",
               base_input_version: daemon.version,
-              digest: "a".repeat(64),
+              // One digest per plan, so a test can tell which plan was applied.
+              digest: String(daemon.calls.filter((call) => call.kind === "ui.review.plan").length).padStart(64, "0"),
               operations: args.operations,
               before: effects([]),
               after: { ...effects(daemon.heldAfter), tax: { fiat_currency: "EUR", jurisdiction: null, years: [] } },
@@ -851,6 +852,23 @@ describe("Link manually: when the core is slow, refuses or the book changes", ()
     await within(root).findByTestId("preview-outcome");
     fireEvent.click(confirmButton(root, "Link these two"));
     await waitFor(() => expect(onLinked).toHaveBeenCalledTimes(1));
+  });
+
+  it("plans again when the core calls the check stale though the book's version did not change", async () => {
+    // A dismissal ran out since the check: the same version, the same link, a stale plan.
+    daemon.applyFails = [{ code: "review_plan_stale", message: "Review plan is stale" }];
+    mount({ sendId: "send", receiptId: "near" });
+    const root = await dialog();
+    await within(root).findByTestId("preview-outcome");
+    fireEvent.click(confirmButton(root, "Link these two"));
+    expect((await within(root).findByRole("alert")).textContent).toBe("Your book changed since this check, so nothing was linked. Kassiber is checking again.");
+    await waitFor(() => expect(calls("ui.review.plan")).toHaveLength(2));
+    await within(root).findByTestId("preview-outcome");
+    fireEvent.click(confirmButton(root, "Link these two"));
+    await waitFor(() => expect(onLinked).toHaveBeenCalledTimes(1));
+    // The second confirmation sent the new plan, not the one refused.
+    const applied = calls("ui.review.apply").map((call) => (call.args.artifact as { digest: string }).digest);
+    expect(applied).toEqual(["1".padStart(64, "0"), "2".padStart(64, "0")]);
   });
 
   it("keeps the dialog open with the reason when the core rejects the link itself", async () => {

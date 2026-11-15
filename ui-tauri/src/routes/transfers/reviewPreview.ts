@@ -65,6 +65,11 @@ export function forgetFinishedPreviews() {
   running.clear();
 }
 
+/** Drops a plan the core refused as stale, so checking again plans afresh. */
+function forget(artifact: ReviewArtifact) {
+  for (const [cacheKey, cached] of finished) if (cached === artifact) finished.delete(cacheKey);
+}
+
 function remember(cacheKey: string, artifact: ReviewArtifact) {
   finished.delete(cacheKey);
   finished.set(cacheKey, artifact);
@@ -167,12 +172,19 @@ export function useReviewPreview(operations: ReviewOperation[] | null, failedTex
   const apply = React.useCallback(async (): Promise<ApplyResult | null> => {
     if (state.status !== "ready") return null;
     const { artifact, key: idempotency_key } = state;
-    const envelope = await applyMutation.mutateAsync({
-      artifact,
-      idempotency_key,
-      expected_scope: { workspace_id: artifact.workspace_id, profile_id: artifact.profile_id },
-    });
-    return envelope.data ?? null;
+    try {
+      const envelope = await applyMutation.mutateAsync({
+        artifact,
+        idempotency_key,
+        expected_scope: { workspace_id: artifact.workspace_id, profile_id: artifact.profile_id },
+      });
+      return envelope.data ?? null;
+    } catch (cause) {
+      // The book changed in a way its version does not show (a dismissal ran
+      // out): the same version and change would find this plan again.
+      if (daemonErrorCode(cause) === "review_plan_stale") forget(artifact);
+      throw cause;
+    }
   }, [applyMutation, state]);
 
   return { state, apply, retry, applying: applyMutation.isPending };
