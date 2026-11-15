@@ -182,7 +182,10 @@ pub fn rerecorded(
         let bytes = scan.get(hash).map_err(|e| e.to_string())?;
         blobs.put(&bytes).map_err(|e| e.to_string())
     };
-    session.stdout = blobs.put(&replayed.stdout).map_err(|e| e.to_string())?;
+    let daemon = session.argv.iter().any(|a| a == "daemon");
+    session.stdout = blobs
+        .put(&rerecorded_stdout(daemon, &replayed.stdout))
+        .map_err(|e| e.to_string())?;
     session.stderr = blobs.put(&replayed.stderr).map_err(|e| e.to_string())?;
     session.exit = replayed.exit.clone();
     // Ids the replay printed and the test sent back (a document token)
@@ -234,6 +237,35 @@ pub fn rerecorded(
         root.after = after;
     }
     Ok(session)
+}
+
+/// A re-recorded session's stdout. A daemon session keeps the recordings'
+/// shape: its `daemon.ready` lists no Rust-only kind, since the comparison
+/// drops them from every replay, so a recording that kept them could never
+/// replay clean again.
+fn rerecorded_stdout(daemon: bool, stdout: &[u8]) -> Vec<u8> {
+    match std::str::from_utf8(stdout) {
+        Ok(text) if daemon => crate::compare::without_rust_only_kinds(text).into_bytes(),
+        _ => stdout.to_vec(),
+    }
+}
+
+#[cfg(test)]
+mod rerecorded_stdout_tests {
+    use super::rerecorded_stdout;
+
+    #[test]
+    fn a_daemon_recording_lists_no_rust_only_kind() {
+        let kind = crate::compare::RUST_ONLY_KINDS[0];
+        let ready = format!(
+            "{{\"kind\":\"daemon.ready\",\"data\":{{\"supported_kinds\":[\"status\",\"{kind}\"]}}}}\n"
+        );
+        let kept = String::from_utf8(rerecorded_stdout(true, ready.as_bytes())).unwrap();
+        assert!(!kept.contains(kind), "{kept}");
+        assert!(kept.contains("\"status\""), "{kept}");
+        // Only daemon sessions are shaped; other output is kept as replayed.
+        assert_eq!(rerecorded_stdout(false, ready.as_bytes()), ready.as_bytes());
+    }
 }
 
 /// One root's entries with replayed paths mapped back (see
