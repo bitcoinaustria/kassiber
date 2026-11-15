@@ -345,6 +345,9 @@ into one "+N more" leg. Widths are drawing only. The graph is drawn in 3D,
 inline and in the expanded dialog, as that bowtie in glass after the Bitcoin
 Austria artwork lab: one ribbon per input and output, as thick as mempool's
 strand, with a block for the coin at its outer end (the fee has none). The
+glass piece folds sooner, past 60 legs a side, so a large transaction keeps the
+same shape instead of growing into a tall column of hairlines; the list below
+keeps every leg. It is seen from one fixed angle and does not turn. The
 ribbons meet in one slim glass collar, since a transaction spends its inputs
 together; their order does not say which input paid which output. Frosted
 ribbons carry no known amount, and hidden values give every leg an equal share
@@ -354,8 +357,10 @@ created, and an output this book later spent, open that row in place: the book's
 own history can be walked back and forth like an explorer, without a request,
 and the header's Back button returns along the coins followed. Pointing at a
 leg in the drawing lights it, shows its card and marks its row in the list;
-pointing at a row lights its leg, and clicking an input or output leg brings
-its row into view, unfolding its column if needed.
+pointing at a row lights its leg (or the "+N more" strand it is folded
+into), and clicking an input or output leg brings
+its row into view, unfolding its column if needed (the fee and a folded
+"+N more" leg have no row to bring).
 The view loads three.js only when a graph is shown or loading,
 renders only on change, needs no network, and falls back to the flat bowtie
 without WebGL. Every glass view draws through one shared renderer, which keeps

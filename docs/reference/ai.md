@@ -2113,7 +2113,7 @@ The desktop renders each visual as a card under the work log, above the answer
 draws it. Cards animate in: figures count up and lines and bars draw from their
 baseline; the global reduced-motion rule stops all of it. A transaction flow
 is drawn with the transaction detail panel's flat bowtie
-(`TransactionFlowDiagram`), never the panel's draggable 3D view. The desktop
+(`TransactionFlowDiagram`), never the panel's 3D glass view. The desktop
 reads that graph itself with the panel's own local read (`ui.transactions.graph`
 without public lookup), so the chat and the panel draw the same data while the model only
 ever receives the redacted summary without outpoints or addresses. Every card has a table view, "Copy as CSV"

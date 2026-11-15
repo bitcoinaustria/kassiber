@@ -1,5 +1,4 @@
 import {
-  BOWTIE_LINE_LIMIT,
   bowtieLines,
   bowtieMinimumSpan,
   bowtieTotal,
@@ -33,6 +32,22 @@ const UNIT = 1 / 100;
 const ZERO_STUB_LENGTH = 60;
 const ZERO_THICKNESS = 4;
 const CURVE_SAMPLES = 40;
+
+/**
+ * The glass piece keeps mempool's shape only while its legs fit the canvas
+ * height at minimum spacing; past that it grows into a tall, narrow column of
+ * hairlines. So it folds legs sooner than mempool's 250: a side shows this many
+ * legs and one more strand for the rest. The list below the drawing keeps them all.
+ */
+export const GLASS_LINE_LIMIT = 60;
+
+/**
+ * The part a folded side's "+N more" strand answers to. Not the row's own id:
+ * that is the server's overflow row's id too, a list row of its own.
+ */
+export function glassFoldPart(side: "input" | "output") {
+  return `${side}:glass-fold`;
+}
 
 export const RIBBON_DEPTH = 0.07;
 export const BLOCK_WIDTH = 0.42;
@@ -110,7 +125,7 @@ function mirrored(points: Array<[number, number]>): Array<[number, number]> {
 export function ribbonLayout(
   graph: DrawableGraph,
   hideSensitive: boolean,
-  maxRows = BOWTIE_LINE_LIMIT,
+  maxRows = GLASS_LINE_LIMIT,
 ): RibbonLayout {
   // mempool keeps `lineLimit` legs and folds the rest into one more-leg.
   const { layoutInputRows, layoutDestinationRows, totalInputRows, totalDestinationRows } =
@@ -137,10 +152,12 @@ export function ribbonLayout(
   ];
   const legs: RibbonLeg[] = [];
   const ribbons: RibbonPath[] = [];
-  const place = (rows: GraphRow[], side: "input" | "output") => {
+  const place = (rows: GraphRow[], side: "input" | "output", folded: boolean) => {
     bowtieLines(rows, total, options).forEach((line, index) => {
       const row = rows[index];
-      const id = `${side}:${row.id}`;
+      // Once this side folds, its only overflow row is the fold: any overflow
+      // row the server sent lies past the limit, inside it.
+      const id = folded && row.overflow ? glassFoldPart(side) : `${side}:${row.id}`;
       const fee = row.side === "fee";
       const outer: Array<[number, number]> = line.zeroValue
         ? [
@@ -177,8 +194,12 @@ export function ribbonLayout(
       });
     });
   };
-  place(layoutInputRows, "input");
-  place(layoutDestinationRows, "output");
+  place(layoutInputRows, "input", layoutInputRows.length < totalInputRows.length);
+  place(
+    layoutDestinationRows,
+    "output",
+    layoutDestinationRows.length < totalDestinationRows.length,
+  );
   return {
     legs,
     ribbons,
