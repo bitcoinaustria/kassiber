@@ -706,8 +706,8 @@ pub fn mask_durations(text: &str) -> String {
 }
 
 /// Advertised daemon kinds the Python recordings never had: the same list as
-/// `kassiber_daemon::RUST_ONLY_KINDS` (the kassiber replay tests check they
-/// agree). A new Rust-only kind is listed there instead of re-recording.
+/// `kassiber_daemon::RUST_ONLY_KINDS` (a daemon test checks they agree). A
+/// new Rust-only kind is listed there instead of re-recording.
 pub const RUST_ONLY_KINDS: &[&str] = &["ui.transfers.pair_options"];
 
 /// Replayed daemon output without the Rust-only kinds in its `daemon.ready`

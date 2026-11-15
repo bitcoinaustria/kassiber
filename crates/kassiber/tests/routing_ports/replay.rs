@@ -1572,6 +1572,25 @@ fn write_mode() -> bool {
     }
 }
 
+/// Python never advertised the daemon's Rust-only kinds, so they leave the
+/// `daemon.ready` line before it is compared; every other kind still is.
+fn without_rust_only_kinds(stdout: &str) -> String {
+    stdout
+        .split_inclusive('\n')
+        .map(|line| {
+            if !line.contains("\"daemon.ready\"") {
+                return line.to_owned();
+            }
+            kassiber_daemon::RUST_ONLY_KINDS
+                .iter()
+                .fold(line.to_owned(), |line, kind| {
+                    line.replace(&format!(",\"{kind}\""), "")
+                        .replace(&format!("\"{kind}\","), "")
+                })
+        })
+        .collect()
+}
+
 fn stdout_value(text: &str) -> Value {
     if text.len() > 4 * BIG {
         big(text.as_bytes())
@@ -1716,9 +1735,8 @@ pub fn replay_pinned(name: &str, pinned: &[(&str, &str)], normalize: impl Fn(usi
                 ));
             }
         }
-        let stdout = kassiber_session_replay::compare::without_rust_only_kinds(&fixed_elapsed(
-            &paths.back(&String::from_utf8_lossy(&out)),
-        ));
+        let stdout =
+            without_rust_only_kinds(&fixed_elapsed(&paths.back(&String::from_utf8_lossy(&out))));
         let stderr = paths.back(&String::from_utf8_lossy(&err));
         let changed = changes(&before, &after, &paths, &windows);
         let mut actual = json!({

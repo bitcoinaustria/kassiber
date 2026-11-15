@@ -2503,7 +2503,6 @@ dependencies = [
  "kassiber-reports",
  "kassiber-runtime",
  "kassiber-secrets",
- "kassiber-session-replay",
  "kassiber-setup",
  "kassiber-store",
  "kassiber-transactions",

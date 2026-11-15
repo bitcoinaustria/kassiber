@@ -2021,6 +2021,23 @@ mod diagnostic_tests {
     }
 
     #[test]
+    fn the_session_replay_tool_drops_the_same_rust_only_kinds() {
+        // The replay tool cannot depend on the daemon, so it keeps its own
+        // copy of the list; it must stay this one.
+        let listed = RUST_ONLY_KINDS
+            .iter()
+            .map(|kind| format!("\"{kind}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        assert!(
+            include_str!("../../session-replay/src/compare.rs").contains(&format!(
+                "pub const RUST_ONLY_KINDS: &[&str] = &[{listed}];"
+            )),
+            "crates/session-replay/src/compare.rs must list exactly {listed}"
+        );
+    }
+
+    #[test]
     fn privacy_report_daemon_classifies_only_unhandled_failures() {
         for kind in [
             "ui.reports.privacy_hygiene",
