@@ -116,6 +116,7 @@ import {
   matchesTransactionDeepLink,
   resolveTransactionDeepLink,
   pairRailLabel,
+  pairedTransferRow,
   quickFilterLabel,
   readTransactionDetailParams,
   removeAttachmentRecord,
@@ -977,8 +978,12 @@ const TransactionsTable = ({
     const amountValue = (txn: Transaction) => {
       const flow = displayFlow(txn);
       const sign = flow === "outgoing" ? -1 : 1;
-      if (currency === "btc") return sign * transactionBtc(txn);
-      return txn.amount === null ? null : sign * txn.amount;
+      const paired = pairedTransferRow(txn);
+      if (currency === "btc") {
+        return sign * (paired ? paired.movedBtc : transactionBtc(txn));
+      }
+      const fiat = paired ? paired.movedFiat : txn.amount;
+      return fiat === null ? null : sign * fiat;
     };
 
     return [...filtered].sort((left, right) => {
@@ -1840,15 +1845,27 @@ const TransactionsTable = ({
                         t as (key: string, opts?: Record<string, unknown>) => string,
                       )
                     : txn.paymentMethod;
-                const amountBtc = transactionBtc(txn);
+                // A reviewed move shows what moved, not the pair's fee.
+                const pairedTransfer = pairedTransferRow(
+                  txn,
+                  // loose translator
+                  t as (key: string, opts?: Record<string, unknown>) => string,
+                );
+                const rowTitle = pairedTransfer?.title || txn.counterparty;
+                const amountBtc = pairedTransfer
+                  ? pairedTransfer.movedBtc
+                  : transactionBtc(txn);
+                const amountFiat = pairedTransfer
+                  ? pairedTransfer.movedFiat
+                  : txn.amount;
                 const signedAmountBtc =
                   flow === "outgoing" ? -amountBtc : amountBtc;
                 const signedAmountEur =
-                  txn.amount === null
+                  amountFiat === null
                     ? null
                     : flow === "outgoing"
-                      ? -txn.amount
-                      : txn.amount;
+                      ? -amountFiat
+                      : amountFiat;
                 const primaryAmount =
                   flow === "incoming" || flow === "outgoing"
                     ? formatSignedDisplayMoney(
@@ -1856,7 +1873,17 @@ const TransactionsTable = ({
                         signedAmountBtc,
                         currency,
                       )
-                    : formatDisplayMoney(txn.amount, amountBtc, currency);
+                    : formatDisplayMoney(amountFiat, amountBtc, currency);
+                const transferFeeLine =
+                  pairedTransfer && pairedTransfer.feeBtc > 0
+                    ? t("table.pairedTransfer.fee", {
+                        amount: formatDisplayMoney(
+                          pairedTransfer.feeFiat,
+                          pairedTransfer.feeBtc,
+                          currency,
+                        ),
+                      })
+                    : null;
                 const FlowIcon =
                   flow === "incoming"
                     ? ArrowDownRight
@@ -1897,11 +1924,11 @@ const TransactionsTable = ({
                             <span
                               className={cn(
                                 "truncate text-sm font-medium text-foreground",
-                                !txn.counterparty && "font-mono",
+                                !rowTitle && "font-mono",
                                 blurClass(hideSensitive),
                               )}
                             >
-                              {txn.counterparty || formatShortTxid(txn.txnId)}
+                              {rowTitle || formatShortTxid(txn.txnId)}
                             </span>
                             {showPrimaryLabel ? (
                               <Badge variant="secondary" className="rounded-md">
@@ -1936,7 +1963,7 @@ const TransactionsTable = ({
                             </span>
                             <span aria-hidden="true">·</span>
                             <span>{txn.date}</span>
-                            {txn.counterparty ? (
+                            {rowTitle ? (
                               <>
                                 <span aria-hidden="true">·</span>
                                 <span
@@ -1970,11 +1997,21 @@ const TransactionsTable = ({
                         )}
                       >
                         {formatCounterDisplayMoney(
-                          txn.amount,
+                          amountFiat,
                           amountBtc,
                           currency,
                         )}
                       </div>
+                      {transferFeeLine ? (
+                        <div
+                          className={cn(
+                            "mt-0.5 text-2xs text-muted-foreground tabular-nums sm:text-xs",
+                            blurClass(hideSensitive),
+                          )}
+                        >
+                          {transferFeeLine}
+                        </div>
+                      ) : null}
                     </TableCell>
                     <TableCell className="hidden overflow-hidden whitespace-normal md:table-cell">
                       <div className="flex min-w-0 max-w-full flex-wrap gap-1 overflow-hidden">
@@ -2537,12 +2574,7 @@ const TransactionsTable = ({
           const focus = detailTransaction?.id;
           setDetailTransaction(null);
           updateTransactionDetailParams(null);
-          void navigate({
-            to: "/swaps",
-            search: {
-              focus,
-            },
-          });
+          void navigate({ to: "/transfers", search: { link: focus ?? "new" } });
         }}
         onOpenMarketDataSettings={() => {
           setDetailTransaction(null);

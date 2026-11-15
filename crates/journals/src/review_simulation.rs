@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const COARSE_PRICE_REASON: &str = "pricing_review_required";
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct Cases {
     quarantined: BTreeSet<String>,
     /// Held because a coarse price waits for the owner.
@@ -59,6 +59,40 @@ impl Cases {
             && self
                 .suspense_components
                 .contains(&text(pair, "component_id"))
+    }
+}
+
+/// The cases a batch starts from, built only when an operation needs them. A
+/// plan builds them on its own copy of the book while the operations apply
+/// to another; apply has them already.
+pub(crate) struct Before<'a> {
+    pending: Option<Box<dyn FnOnce() -> Result<Cases, Error> + 'a>>,
+    cases: Option<Cases>,
+}
+
+impl<'a> Before<'a> {
+    pub(crate) fn ready(cases: Cases) -> Self {
+        Self {
+            pending: None,
+            cases: Some(cases),
+        }
+    }
+
+    pub(crate) fn later(build: impl FnOnce() -> Result<Cases, Error> + 'a) -> Self {
+        Self {
+            pending: Some(Box::new(build)),
+            cases: None,
+        }
+    }
+
+    fn get(&mut self) -> Result<&Cases, Error> {
+        if let Some(build) = self.pending.take() {
+            self.cases = Some(build()?);
+        }
+        Ok(self
+            .cases
+            .as_ref()
+            .expect("the batch's starting cases are built once"))
     }
 }
 
@@ -118,7 +152,7 @@ fn metadata_operation(
     conn: &Connection,
     scope: &Scope<'_>,
     operation: &Value,
-    cases: &Cases,
+    before: &mut Before<'_>,
     source: &str,
 ) -> Result<Value, Error> {
     let raw_id = value(operation, "transaction_id");
@@ -156,7 +190,7 @@ fn metadata_operation(
         }
         update.kind = Some(value(operation, "kind"));
     } else {
-        if !cases.quarantined.contains(&id) {
+        if !before.get()?.quarantined.contains(&id) {
             return Err(AppError::new(
                 "review_case_changed",
                 "Review transaction is not quarantined",
@@ -494,7 +528,9 @@ fn accept_coarse_prices(
 
 /// Apply normalized operations in order. With `resolve_acceptance` (planning)
 /// an `accept_coarse_prices` that names no transaction is filled in place
-/// with the current cases, so the artifact names each one.
+/// with the current cases, so the artifact names each one. `before` holds the
+/// cases the batch starts from; `rebuild` replaces them once earlier
+/// operations changed the book.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn apply(
     conn: &Connection,
@@ -503,13 +539,10 @@ pub(crate) fn apply(
     sources: &dyn Sources,
     source: &str,
     resolve_acceptance: bool,
-    mut state: Cases,
+    mut before: Before<'_>,
     mut rebuild: impl FnMut(&Connection) -> Result<Cases, Error>,
 ) -> Result<Value, Error> {
-    let case_ids = Cases {
-        quarantined: state.quarantined.clone(),
-        ..Default::default()
-    };
+    let mut rebuilt: Option<Cases> = None;
     let unpaired = operations
         .iter()
         .filter(|op| text(op, "type") == "unpair")
@@ -537,9 +570,13 @@ pub(crate) fn apply(
                 // Earlier operations can expose or clear coarse-price holds;
                 // target expansion and validation use this batch position.
                 if index > 0 {
-                    state = rebuild(conn)?;
+                    rebuilt = Some(rebuild(conn)?);
                 }
-                accept_coarse_prices(conn, scope, operation, &state, resolve_acceptance, source)?
+                let state = match &rebuilt {
+                    Some(cases) => cases,
+                    None => before.get()?,
+                };
+                accept_coarse_prices(conn, scope, operation, state, resolve_acceptance, source)?
             }
             "custody_component" => {
                 let mut request = value(operation, "request");
@@ -645,11 +682,15 @@ pub(crate) fn apply(
                     return Err(AppError::new("not_found", "Review pair was not found").into());
                 }
                 if changed {
-                    state = rebuild(conn)?;
+                    rebuilt = Some(rebuild(conn)?);
                     baseline = Baseline::read(conn, scope, &unpaired)?;
                     changed = false;
                 }
                 let pair = baseline.confirmed(operation)?;
+                let state = match &rebuilt {
+                    Some(cases) => cases,
+                    None => before.get()?,
+                };
                 if !state.holds_suspense(pair) {
                     return Err(AppError::new(
                         "review_case_changed",
@@ -678,7 +719,7 @@ pub(crate) fn apply(
                     ),
                 ])
             }
-            _ => metadata_operation(conn, scope, operation, &case_ids, source)?,
+            _ => metadata_operation(conn, scope, operation, &mut before, source)?,
         };
         results.push(dict([("type", s(kind.as_str())), ("result", result)]));
         if kind != "unpair" {
@@ -747,7 +788,7 @@ mod tests {
             &kassiber_transfers::SystemSources,
             "user",
             false,
-            cases,
+            Before::ready(cases),
             |_| {
                 builds += 1;
                 Ok(Cases::default())

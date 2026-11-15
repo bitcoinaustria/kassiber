@@ -22,8 +22,8 @@
   {
     "id": "stored-allocated-source",
     "file": "crates/transfers/src/records.rs",
-    "find": "\"allocated_source_amount_msat\",\n                \"reviewed_source_amount_msat\",",
-    "replace": "\"reviewed_source_amount_msat\",\n                \"allocated_source_amount_msat\",",
+    "find": "        );\n        let out = fallback(\n            &row,\n            &[\n                \"allocated_source_amount_msat\",\n                \"reviewed_source_amount_msat\",",
+    "replace": "        );\n        let out = fallback(\n            &row,\n            &[\n                \"reviewed_source_amount_msat\",\n                \"allocated_source_amount_msat\",",
     "expect_failing": [
       "stored_allocations_override_reviewed_amounts"
     ],

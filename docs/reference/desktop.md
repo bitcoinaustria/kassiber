@@ -472,11 +472,156 @@ link to the page that resolves it. Reports copy stays English under the
 deferred reporting-language policy in [i18n.md](i18n.md).
 
 Review sits in the main nav and collects what waits on the owner, each item
-decided where it is listed. The pages with the full tools behind it
-(Transfers & Custody, Journals, Reconcile and Source Funds) sit under
-Extras above the calculators; the fold opens and is marked whenever one of
-its pages is open, however you got there.
-**Moves between your wallets** comes first, because pairing a move often
+decided where it is listed. **Transfers** (`/transfers`; `/swaps` and
+`/custody-gaps` redirect to it) sits in the main nav too and is built from
+the same pieces as Overview, Transactions and Wallets: a first row with the
+status selector, Recalculate journals while the journals are stale, and the
+actions, Link manually first, a stat strip (linked
+transfers, and what moved between wallets in the display currency), and one
+card per status, picked with the status selector at the top left of the page
+(drawn like the period selector on Transactions, each status with its count): **Needs you** (held questions
+and open suggestions; it opens first while it holds anything), **Linked**,
+**Unlinked by you** and **Set aside**, the last two only while they hold
+anything. Clicking a linked transfer opens it in a panel beside the table
+when the page is wide enough, the row marked, and as a dialog otherwise. Link
+manually docks in the same place (one panel at a time; a transfer opened while
+a link is being made comes as a dialog that offers no link of its own, so the
+link is not lost), and the lists size themselves by the room beside the panel.
+The link is one tree that moves between the panel and the dialog, so its
+picks, search, answer and running check survive the page changing width; the
+panel takes focus when it opens and gives it back to where it was opened from. **To sort out** asks about each held move once: a send
+whose automatic link the owner removed and that the journals now hold reads
+as the question it leaves open ("You unlinked this ₿… send from A. The coins
+arrived in B, which you own, so Kassiber can't book it as a payment. What was
+it?") with the answers the core allows: link it back
+(`ui.transfers.dismissals.delete`), choose a different receipt with Link
+manually, or, with developer tools on, describe it as a custody component. The
+core has no decision that books such a send as a payment or its receipt as
+income, so none is offered. The part of a send the owner linked that no
+receipt covers yet is asked about the same way: the core's residual hold
+(`reviewed_residual_suspense`, named by the hold's `review_pair` action) on a
+pair with `shares_legs` whose send has more left than a fee could be, over 1%
+of the transaction and over 2,500 sats, the matcher's own fee limits. Its
+answers are linking the receipt the rest arrived in, which anyone can do, and
+the missing-wallet review the hold already had (developer tools; without them
+a line says where that is). A smaller shortfall on an ordinary link, such as
+an exchange fee taken off the amount, is not a part waiting for a receipt: it
+stays the missing-wallet hold it was, and the transfer's details name it as
+the fee between the two sides. A hold that names a pair for another reason
+(an old fee allocation to repair) is not read as a rest. A
+hold a missing-wallet review explains is shown there read-only; reviewing it
+stays in the developer-gated advanced tools. Needs you holds the open
+suggestions (the same list as Review's; with none, one line whose info icon
+says what Kassiber checks, with Check again; several suggestions can be ticked
+and set aside in one step, with one Undo); Set aside lists the suggestions the
+owner set aside, each with Restore; Unlinked by you lists the pairs the owner
+unlinked whose legs are free again (from `ui.transfers.list` with
+`include_unlinked`), each with Link again and Link differently; and Linked has
+one row per transfer linked automatically or by the owner. Every row's menu
+opens its send and its receipt on Transactions (`/transactions?tx=<id>`); for
+two sides that count on their own (unlinked or set aside) it also leads to
+each transaction's tax tab, where saying what it was (a payment, income) is
+decided with the core's preview. The page menu's Look for transfers again
+recalculates the journals, which runs the matching again. A row shows the date, the route with
+each wallet name cut in the middle so its last words stay, the amount (exact
+bitcoin with the leading zeros dimmed, or the value at the sending
+transaction's price when the display currency is fiat), the sending
+transaction's network fee in sats (or a swap's recorded fee), its type
+(Transfer, Peg-in, Peg-out, a Lightning or chain swap) with Taxable as the only
+coloured chip, and how it was linked: an icon for automatic, a coloured one
+for by you or by a rule, the reason behind an info icon aligned down the
+column. A link that is one transaction seen by two wallets cannot be unlinked;
+its menu has no Unlink. A transfer whose send is linked only in part reads
+Part linked in the Linked column, the amount left behind its hint, and its
+details say the same and offer Link the rest. While the journals recalculate, the
+suggestions and counts stay as they were before the decision and Unlink waits,
+so a read of stale journals never offers moves that are already linked.
+Narrow, the fee and the time give way first. Prices come from
+the core: `fiat_value` and `fee_fiat_value` on `ui.custody.lineage.snapshot`
+rows and per-leg `fiat_value` on `ui.transfers.list`; an unpriced move says
+Unpriced. Clicking a row opens the transfer: both legs with their transaction
+ids, the difference between them and how it was linked, with Unlink. Unlinking
+shows what changes first: the core's dry run for an automatic link, or what the
+core does to a pair, worded from its tax treatment (a taxable pair already
+counted as a sale and a purchase, so its tax figures stay). What happened is
+then said where it happened: on the Linked list, a strip at the transfer's row
+(or where the row was) with Undo that stays until it is closed, read out
+through the page's one live region; on any other
+list, a short toast with the same Undo, never both (Undo restores an unlinked
+pair with its terms at once; it waits while the journals are processed). After
+a link that leaves part of its send, the note offers Link the rest. Nothing is
+repeated as a banner after a reload. **Link manually** is one
+screen: the send and the receipt side by side on top, and under them either
+the list for the side that is still open or, once both are chosen, the check.
+It usually opens with one side known (a suggestion's Review… or Choose another
+receipt, a held question, Link differently, a `link=<transaction>` deep link
+from Transactions or Review), so the usual path is one pick and one
+confirmation; Link again opens on the check with both. A transaction that is
+not in the book says so and leaves both sides open. The list is a table (when,
+wallet, amount, difference to the chosen side, what the transaction is booked
+as today) read from `ui.transactions.list`, at most 200 rows and said so when
+there are more, with one search field (wallet, txid, note, or an amount, which
+brings the nearest amounts first) and one time choice (a window around the
+chosen side, three days at first, or a year when nothing is chosen yet). When
+the time leaves the list empty, or with nothing in it that fits the chosen
+side, it says what it looked through ("No receipt within 3 days of the send")
+and one button widens it a step: a week, 30 days, any time. Every row opens
+its transaction on Transactions. The
+matcher's suggestion and a transaction with the chosen side's own txid come
+first, then amounts and times that are close; an amount that is no fee (more
+arrived, over 10% missing, another asset), the same wallet and a receipt
+before its send are listed after them and coloured, never hidden. Linked and
+excluded transactions stay listed last and cannot be picked, except a
+transaction whose links leave part of it open (the same rule as above:
+`shares_legs`, and more left than a fee could be) when the other side makes an
+ordinary move within one asset with it; a swap, a peg or a Lightning hop
+cannot take the rest of a transfer, since the core keeps those one to one,
+and such a candidate is listed with that reason and cannot be picked. A send that arrived in several receipts, or a
+receipt fed by several sends, is linked part by part, each link an ordinary
+pair with its own dry run, and the list and the check are then about the part
+that is left ("₿0.4 of ₿1 still unlinked"). Selecting several candidates in
+one step is not offered. Arrow keys move
+between rows, Enter picks. The check names the difference in a sentence, says
+what the link counts as, and shows the core's dry run (`ui.review.plan`): holds
+it clears or creates, whether reports wait, and each tax year that moves as a
+sentence. Within one asset the core links only as the owner's own coins moving
+with their cost basis, so that is stated and nothing is asked. Between two
+assets (BTC and L-BTC, or a swap into another asset) the owner answers "Was
+this a sale?" with the two consequences spelled out; the answer starts from
+the pair's old terms on Link again or from the matcher's proposal for that
+exact pair, and otherwise nothing is assumed and the dry run waits for it.
+Which answers the book allows is read first (`ui.transfers.pair_options`):
+where it counts the move as a sale only, that is stated with the reason
+instead of asked; anything else the read says leaves both answers on offer
+and the dry run decides. The
+kind (peg, Lightning swap) is read from the two sides or taken from the
+matcher or the old pair; it is not a choice here. Everything worth a second
+look (more arrived than was sent, amounts that don't match, over 1% within one
+network, a receipt dated before its send, the same wallet, a side that is
+already linked or excluded) is listed once in one warning, and with any
+serious one, or when the link itself puts transactions on hold, the button
+reads Link anyway. A large shortfall within one asset is one warning that
+names both things it can mean (not the same coins, or the rest arrived in
+another transaction and can be linked next), and holds a link creates are
+said once. The dry run shows how long it has taken, waits while the
+journals recalculate, is reused for the same change and book version, and is
+joined instead of started again when the dialog is reopened while it runs. A
+refusal by the core is put in plain words above the core's own; another
+failure offers Try again. If the book changed between the check and the
+confirmation, nothing is linked and the check runs again. After linking the
+dialog or panel closes and the note at the row (or the toast) offers Undo
+(`ui.transfers.unpair`).
+The screen and its dialogs say link / Verknüpfung; the CLI keeps `pair`. With
+developer tools on, the advanced tools (missing wallets, components, scan
+coverage) are a secondary section of the same route; linking rules and saved
+views open in a sheet from the menu. A rule reads as one sentence (what it
+matches, then the kind and treatment it records), marks the suggestions it
+matches with a Rule chip and fills in its terms when they are linked; deleting
+one asks first. The
+pages with the remaining full tools (Journals, Reconcile and
+Source Funds) sit under Extras above the calculators; the fold opens and is
+marked whenever one of its pages is open, however you got there.
+**Moves between your wallets** comes first, because linking a move often
 clears a quarantine cause with it. **Can't be booked yet** holds the
 quarantine causes, as [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)
 describes, with the journal freshness warning above them. Each cause card
@@ -499,18 +644,20 @@ and swap candidates from `ui.transfers.suggest` as table rows with the same
 edges in every row: the date, the route between the two wallets with their
 rails' logos (chain, Lightning, Liquid), one amount with the fee under it
 (instead of the fee, what arrived, for a swap into another asset or when no
-positive fee is left, as when more came in than left), and what pairing records:
-a plain transfer quietly, a Bitcoin swap or swap as a chip with its default
+positive fee is left, as when more came in than left), and what linking records:
+a plain transfer quietly, a Bitcoin swap or a swap into another asset (Different asset) as a chip with its default
 treatment (tax-neutral carrying value or taxable), with how sure the match is.
 The rows size themselves by the list's width, not the window's, so a docked
 assistant gets the narrow layout: two lines, with the route and amount above
 the date, kind and buttons. A long wallet name is cut short with the full name
 on hover.
 The decision status masks wallet names while sensitive details are hidden.
-Each has Pair, which pairs it with its default kind and policy, and two icon
-buttons: Not a transfer, which dismisses it, and Details, which opens it in
-Transfers & Custody. Exact candidates with carrying-value policy, no competing
-match and no ownership proof can be paired in groups of up to 50.
+An exact match without competitors has Link, which links it with its default
+kind and policy, or a matching rule's; a likely match or one with competitors
+has Review…, which opens Link manually on its send with the alternatives as the
+choice. A menu holds Not my transfer, which sets it aside, and Choose another
+receipt. Exact candidates with carrying-value policy, no competing
+match and no ownership proof can be linked in groups of up to 50.
 `ui.review.plan` binds their exact transaction IDs, policies, input version and
 book to the confirmation; `ui.review.apply` refuses stale confirmations and
 applies the preview atomically. Taxable and ownership-graph candidates stay

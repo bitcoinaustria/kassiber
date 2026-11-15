@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeftRight, ArrowRight, ArrowUpRight, Check, Loader2, Repeat, Shuffle, X } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Check, Link2, Loader2, MoreHorizontal, Repeat, Shuffle, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { ReviewTaxDeltaView } from "@/components/ai/ReviewWorkflowCard";
@@ -9,7 +9,10 @@ import type { ProfilesSnapshot } from "@/mocks/profiles";
 import { RailIcon } from "@/components/kb/BitcoinRail";
 import { railForLeg, type SwapRail } from "@/lib/bitcoinRail";
 import { InfoNote } from "@/components/reports/InfoNote";
+import { SurfaceCardHeader, surfaceFilterChipClassName } from "@/components/kb/SurfaceCardHeader";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -23,16 +26,24 @@ import { formatShortDate } from "@/lib/date";
 import { formatBtc } from "@/lib/currency";
 import { formatSats, formatUiNumber } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
+import { TransactionsMenuItems } from "@/routes/transfers/RowMenu";
 import { useUiStore } from "@/store/ui";
 
+import { suggestionReason } from "./suggestionReason";
 import {
+  BITCOIN_ASSETS,
   bulkPairable,
   candidateKey,
+  candidateTerms,
   DISMISS_REASON,
   moveType,
+  needsReview,
   type TransferCandidate,
   type TransferSuggestions,
 } from "./transferModel";
+
+/** What a saved view selects among the suggestions (the matcher's own filters). */
+export type SuggestionFilter = Partial<Record<"confidence" | "method" | "asset_pair" | "route_pair" | "candidate_type", string>>;
 
 /** Candidates listed before the rest fold away. */
 const SHOWN = 6;
@@ -47,7 +58,6 @@ type Decision =
 type Undo = { decisions: Decision[]; label: string; deadline: number };
 
 const sats = (msat: number) => formatSats(Math.round(Math.abs(msat) / 1000));
-const BITCOIN_ASSETS = new Set(["BTC", "XBT", "XXBT", "LBTC", "L-BTC"]);
 /** A leg's amount: ₿ for bitcoin on any rail, the asset's own unit otherwise. */
 function legAmount(msat: number, asset: string) {
   // Every asset is stored at msat scale: 10^11 per whole unit.
@@ -59,8 +69,10 @@ function legAmount(msat: number, asset: string) {
 /**
  * Moves the matcher thinks went between the owner's own wallets. Each is
  * paired or set aside by the owner, one at a time or, for exact evidence
- * with no competing match, all at once after a confirmation. Every decision
- * can be undone for a short while, and the journals recalculate after.
+ * with no competing match, all at once after a confirmation. Several can be
+ * ticked and set aside in one step (rotki's "Ignore selected"). Every
+ * decision can be undone for a short while, and the journals recalculate
+ * after.
  *
  * Until they have, a decided candidate is only hidden here: the matcher
  * reads stale journals more widely, so the list is read again once the
@@ -69,14 +81,40 @@ function legAmount(msat: number, asset: string) {
 export function ReviewTransfers({
   onDecided,
   refreshing,
+  framed = false,
+  filter,
+  filterLabel,
+  onClearFilter,
+  onLinkManually,
+  onUndoChange,
 }: {
   onDecided: () => void;
   /** The journals are recalculating, or about to. */
   refreshing: boolean;
+  /**
+   * Drawn as a titled card with a header row, like the other lists on the
+   * Transfers screen. The Review page lists it bare, among its causes.
+   */
+  framed?: boolean;
+  /** Only the suggestions a saved view selects. */
+  filter?: SuggestionFilter;
+  /** The saved view's name, shown as a removable chip. */
+  filterLabel?: string;
+  onClearFilter?: () => void;
+  /**
+   * Opens "Link manually" in place (on a suggestion's send to pick another
+   * receipt). Without it the buttons go to the Transfers screen.
+   */
+  onLinkManually?: (transactionId?: string) => void;
+  /**
+   * Whether a decision's Undo is on offer, so a page that would put
+   * something else in this list's place keeps it until the Undo has gone.
+   */
+  onUndoChange?: (showing: boolean) => void;
 }) {
   const { t } = useTranslation("review");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
-  const suggest = useDaemon<TransferSuggestions>("ui.transfers.suggest", {});
+  const suggest = useDaemon<TransferSuggestions>("ui.transfers.suggest", filter ?? {});
   const quiet = { invalidateQueries: false };
   const pair = useDaemonMutation<{ id?: string }>("ui.transfers.pair", quiet);
   const dismiss = useDaemonMutation<{ id?: string }>("ui.transfers.dismiss", quiet);
@@ -98,18 +136,35 @@ export function ReviewTransfers({
   const bulkBusy = cases.isPending || plan.isPending || bulkPair.isPending;
   const [undo, setUndo] = React.useState<Undo | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  // Suggestions ticked to set aside together, by key.
+  const [selected, setSelected] = React.useState<ReadonlySet<string>>(() => new Set());
+  const toggleSelected = (key: string, on: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
 
   React.useEffect(() => {
     if (!undo) return;
     const timer = window.setTimeout(() => setUndo(null), Math.max(0, undo.deadline - Date.now()));
     return () => window.clearTimeout(timer);
   }, [undo]);
+  const undoShowing = undo !== null;
+  React.useEffect(() => {
+    if (!onUndoChange || !undoShowing) return;
+    onUndoChange(true);
+    return () => onUndoChange(false);
+  }, [onUndoChange, undoShowing]);
 
   // While the journals recalculate, the list stays as it was read before the
   // decision, less what was decided: a read of stale journals lists more
   // candidates than are open. It is read again once the run is done.
   const live = suggest.data?.data?.candidates;
-  const [frozen, setFrozen] = React.useState<TransferCandidate[] | null>(null);
+  // Mounted while a run is already going, it shows nothing until the run is
+  // done rather than a stale read.
+  const [frozen, setFrozen] = React.useState<TransferCandidate[] | null>(() => (refreshing ? [] : null));
   const { refetch } = suggest;
   const wasRefreshing = React.useRef(refreshing);
   // Counts runs, so a read that finishes after the next decision is not
@@ -175,7 +230,7 @@ export function ReviewTransfers({
     if (focusRow === null) return;
     const rows = listRef.current?.querySelectorAll<HTMLElement>("li") ?? [];
     const row = rows[Math.min(focusRow, rows.length - 1)];
-    (row?.querySelector<HTMLElement>("button") ?? headingRef.current)?.focus();
+    (row?.querySelector<HTMLElement>('button:not([role="checkbox"])') ?? headingRef.current)?.focus();
     setFocusRow(null);
   }, [focusRow]);
 
@@ -205,6 +260,8 @@ export function ReviewTransfers({
     // A paired leg is taken: the matches that competed for it go too.
     const keys = choice === "pair" ? withSiblings(candidate) : [candidateKey(candidate)];
     hide(keys, true);
+    // A decided row is no longer ticked, so an undo does not bring it back selected.
+    setSelected((current) => new Set([...current].filter((key) => !keys.includes(key))));
     setFocusRow(index);
     setSaving((count) => count + 1);
     try {
@@ -212,8 +269,7 @@ export function ReviewTransfers({
         const envelope = await pair.mutateAsync({
           tx_out: candidate.out_id,
           tx_in: candidate.in_id,
-          kind: candidate.default_kind,
-          policy: candidate.default_policy,
+          ...candidateTerms(candidate),
           pair_source: "manual",
           confidence_at_pair: candidate.confidence,
         });
@@ -246,6 +302,43 @@ export function ReviewTransfers({
     }
   };
 
+  // What is ticked and still listed: a decided suggestion drops out on its own.
+  const chosen = candidates.filter((candidate) => selected.has(candidateKey(candidate)));
+
+  /** Sets every ticked suggestion aside, with one Undo for all of them. */
+  const dismissSelected = async () => {
+    if (!chosen.length) return;
+    setError(null);
+    const keys = chosen.map(candidateKey);
+    // Focus goes to where the first of them was.
+    const place = candidates.indexOf(chosen[0]);
+    hide(keys, true);
+    setSelected(new Set());
+    setFocusRow(Math.max(place, 0));
+    setSaving((count) => count + 1);
+    const done: Decision[] = [];
+    let sent = 0;
+    try {
+      for (const candidate of chosen) {
+        const envelope = await dismiss.mutateAsync({ tx_out: candidate.out_id, tx_in: candidate.in_id, reason: DISMISS_REASON });
+        sent += 1;
+        const id = envelope.data?.id;
+        if (id) done.push({ kind: "dismiss", dismissalId: id, keys: [candidateKey(candidate)] });
+      }
+    } catch (cause) {
+      // The ones not set aside come back to the list.
+      hide(keys.slice(sent), false);
+      fail(cause);
+      void suggest.refetch();
+    } finally {
+      if (done.length) {
+        setUndo({ decisions: done, label: t("inbox.transfers.dismissedMany", { count: done.length }), deadline: Date.now() + UNDO_MS });
+      }
+      if (sent) onDecided();
+      setSaving((count) => count - 1);
+    }
+  };
+
   const prepareBulk = async () => {
     setError(null);
     setBulkPreview(null);
@@ -253,7 +346,7 @@ export function ReviewTransfers({
     // Capture the selected transactions before any asynchronous read.
     const operations = exact.map((candidate) => ({
       type: "pair", out_transaction_id: candidate.out_id, in_transaction_id: candidate.in_id,
-      pair_kind: candidate.default_kind, policy: candidate.default_policy,
+      pair_kind: candidateTerms(candidate).kind, policy: candidateTerms(candidate).policy,
       reason: t("inbox.transfers.bulk.reason"),
     }));
     const snapshot = profiles.data?.data;
@@ -324,6 +417,7 @@ export function ReviewTransfers({
     }
   };
 
+  if (suggest.isLoading && framed) return null;
   if (suggest.isLoading) {
     // Holds the place, so the causes below do not jump down when it loads.
     return (
@@ -337,13 +431,173 @@ export function ReviewTransfers({
   }
   if (suggest.isError || suggest.data?.error) {
     return (
-      <section className="kb-surface p-(--kb-card-padding)" role="alert">
+      <section className={cn("kb-surface", framed ? "px-3 py-3 sm:px-6 sm:py-3.5" : "p-(--kb-card-padding)")} role="alert">
         <h2 className="text-sm font-semibold">{t("inbox.transfers.title")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{t("inbox.transfers.unavailable")}</p>
       </section>
     );
   }
-  if (!candidates.length && !undo && !error) return null;
+  if (!candidates.length && !undo && !error && !filterLabel) return null;
+
+  const actions = (
+    <>
+      {chosen.length ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={framed ? "h-8" : undefined}
+          disabled={saving > 0 || bulkBusy}
+          onClick={() => void dismissSelected()}
+        >
+          {t("inbox.transfers.dismissSelected", { count: chosen.length })}
+        </Button>
+      ) : null}
+      {/* While the journals recalculate the daemon could pair more than
+          the list shows, so the bulk step waits for the fresh list. */}
+      {exact.length ? (
+        <Button type="button" size="sm" className={framed ? "h-8" : undefined} disabled={refreshing || saving > 0 || bulkBusy} onClick={() => void prepareBulk()}>
+          {t("inbox.transfers.pairExact", { count: exact.length })}
+        </Button>
+      ) : null}
+      {/* On Transfers "Link manually" sits in the page header. */}
+      {onLinkManually ? null : (
+        <Button asChild type="button" size="sm" variant="ghost" className={cn("gap-1.5", framed && "h-8")}>
+          <Link to="/transfers" search={{ link: "new" }}>
+            <Link2 className="size-3.5" aria-hidden="true" />
+            {t("inbox.transfers.linkManually")}
+          </Link>
+        </Button>
+      )}
+    </>
+  );
+  const about = (
+    // Beside the heading, not in it, so the heading's name stays its title.
+    <InfoNote
+      label={t("inbox.transfers.aboutLabel")}
+      notes={[t("inbox.transfers.why"), t("inbox.transfers.policyNote")]}
+    />
+  );
+  // Both live regions stay mounted, so a screen reader announces what
+  // appears in them.
+  const regions = (
+    <>
+      <div role="status" className={cn("flex flex-wrap items-center gap-2 text-xs text-muted-foreground empty:hidden", framed && "px-3 pb-3 sm:px-6")}>
+        {saving ? (
+          <span className="flex items-center gap-1.5">
+            <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            {t("inbox.transfers.saving")}
+          </span>
+        ) : undo ? (
+          <>
+            <span className={hideSensitive ? "sensitive" : undefined}>{undo.label}</span>
+            <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => void runUndo()}>
+              {t("inbox.transfers.undo")}
+            </Button>
+          </>
+        ) : null}
+      </div>
+      <p role="alert" className={cn("text-xs text-destructive empty:hidden", framed && "px-3 pb-3 sm:px-6")}>
+        {error ?? null}
+      </p>
+    </>
+  );
+  const list = candidates.length ? (
+    <ul
+      ref={listRef}
+      id="review-transfers-list"
+      className={cn("@container/moves divide-y overflow-hidden", framed ? "border-t" : "kb-surface")}
+    >
+      {shown.map((candidate) => (
+        <CandidateRow
+          key={candidateKey(candidate)}
+          candidate={candidate}
+          hideSensitive={hideSensitive}
+          routeLabel={route(candidate)}
+          framed={framed}
+          selected={selected.has(candidateKey(candidate))}
+          onSelect={(on) => toggleSelected(candidateKey(candidate), on)}
+          onPair={() => void decide(candidate, "pair")}
+          onDismiss={() => void decide(candidate, "dismiss")}
+          onLinkDifferently={onLinkManually ? () => onLinkManually(candidate.out_id) : undefined}
+        />
+      ))}
+    </ul>
+  ) : null;
+  const more =
+    candidates.length > SHOWN ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={framed ? "m-2" : undefined}
+        aria-expanded={expanded}
+        aria-controls="review-transfers-list"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {/* Worded like the causes' fold below, so one screen folds one way. */}
+        {expanded
+          ? t("inbox.transfers.showFewer")
+          : t("inbox.transfers.showMore", { count: candidates.length - SHOWN })}
+      </Button>
+    ) : null;
+  const dialog = (
+    <Dialog open={confirmBulk} onOpenChange={(open) => (bulkBusy ? null : setConfirmBulk(open))}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("inbox.transfers.bulk.title", { count: bulkPreview?.artifact.operations.length ?? exact.length })}</DialogTitle>
+          <DialogDescription>{t("inbox.transfers.bulk.body")}</DialogDescription>
+        </DialogHeader>
+        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+        {bulkPreview ? <div className={hideSensitive ? "sensitive" : undefined}>
+          <ReviewTaxDeltaView artifact={bulkPreview.artifact} />
+        </div> : <p role="status">{t("inbox.transfers.saving")}</p>}
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={bulkBusy} onClick={() => setConfirmBulk(false)}>
+            {t("inbox.transfers.bulk.cancel")}
+          </Button>
+          <Button type="button" disabled={bulkBusy || !bulkPreview} onClick={() => void pairAllExact()}>
+            {bulkPair.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            {t("inbox.transfers.bulk.confirm", { count: bulkPreview?.artifact.operations.length ?? exact.length })}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (framed) {
+    return (
+      <section className="kb-surface overflow-hidden" aria-labelledby="review-transfers-title">
+        <SurfaceCardHeader
+          title={t("inbox.transfers.title")}
+          titleId="review-transfers-title"
+          titleRef={headingRef}
+          count={candidates.length || undefined}
+          actions={actions}
+        >
+          {about}
+          {filterLabel ? (
+            <button
+              type="button"
+              className={surfaceFilterChipClassName}
+              onClick={onClearFilter}
+              aria-label={t("inbox.transfers.clearView", { name: filterLabel })}
+            >
+              {t("inbox.transfers.view", { name: filterLabel })}
+              <X className="size-2.5 sm:size-3" aria-hidden="true" />
+            </button>
+          ) : null}
+        </SurfaceCardHeader>
+        {filterLabel && !candidates.length ? (
+          <p className="border-t px-3 py-3 text-sm text-muted-foreground sm:px-6">{t("inbox.transfers.viewEmpty")}</p>
+        ) : null}
+        {regions}
+        {list}
+        {more}
+        {dialog}
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-3" aria-labelledby="review-transfers-title">
@@ -362,101 +616,14 @@ export function ReviewTransfers({
               </span>
             ) : null}
           </h2>
-          {/* Beside the heading, not in it, so the heading's name stays its title. */}
-          <InfoNote
-            label={t("inbox.transfers.aboutLabel")}
-            notes={[t("inbox.transfers.why"), t("inbox.transfers.policyNote")]}
-          />
+          {about}
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {/* While the journals recalculate the daemon could pair more than
-              the list shows, so the bulk step waits for the fresh list. */}
-          {exact.length ? (
-            <Button type="button" size="sm" disabled={refreshing || saving > 0 || bulkBusy} onClick={() => void prepareBulk()}>
-              {t("inbox.transfers.pairExact", { count: exact.length })}
-            </Button>
-          ) : null}
-          <Button asChild type="button" size="sm" variant="ghost">
-            <Link to="/swaps">
-              {t("inbox.transfers.tools")}
-              <ArrowUpRight className="size-3.5" aria-hidden="true" />
-            </Link>
-          </Button>
-        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
       </div>
-
-      {/* Both live regions stay mounted, so a screen reader announces what
-          appears in them. */}
-      <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground empty:hidden">
-        {saving ? (
-          <span className="flex items-center gap-1.5">
-            <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-            {t("inbox.transfers.saving")}
-          </span>
-        ) : undo ? (
-          <>
-            <span className={hideSensitive ? "sensitive" : undefined}>{undo.label}</span>
-            <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => void runUndo()}>
-              {t("inbox.transfers.undo")}
-            </Button>
-          </>
-        ) : null}
-      </div>
-      <p role="alert" className="text-xs text-destructive empty:hidden">
-        {error ?? null}
-      </p>
-
-      {candidates.length ? (
-        <ul ref={listRef} id="review-transfers-list" className="kb-surface @container/moves divide-y overflow-hidden">
-          {shown.map((candidate) => (
-            <CandidateRow
-              key={candidateKey(candidate)}
-              candidate={candidate}
-              hideSensitive={hideSensitive}
-              routeLabel={route(candidate)}
-              onPair={() => void decide(candidate, "pair")}
-              onDismiss={() => void decide(candidate, "dismiss")}
-            />
-          ))}
-        </ul>
-      ) : null}
-      {candidates.length > SHOWN ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-expanded={expanded}
-          aria-controls="review-transfers-list"
-          onClick={() => setExpanded((value) => !value)}
-        >
-          {/* Worded like the causes' fold below, so one screen folds one way. */}
-          {expanded
-            ? t("inbox.transfers.showFewer")
-            : t("inbox.transfers.showMore", { count: candidates.length - SHOWN })}
-        </Button>
-      ) : null}
-
-      <Dialog open={confirmBulk} onOpenChange={(open) => (bulkBusy ? null : setConfirmBulk(open))}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("inbox.transfers.bulk.title", { count: bulkPreview?.artifact.operations.length ?? exact.length })}</DialogTitle>
-            <DialogDescription>{t("inbox.transfers.bulk.body")}</DialogDescription>
-          </DialogHeader>
-          {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-          {bulkPreview ? <div className={hideSensitive ? "sensitive" : undefined}>
-            <ReviewTaxDeltaView artifact={bulkPreview.artifact} />
-          </div> : <p role="status">{t("inbox.transfers.saving")}</p>}
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={bulkBusy} onClick={() => setConfirmBulk(false)}>
-              {t("inbox.transfers.bulk.cancel")}
-            </Button>
-            <Button type="button" disabled={bulkBusy || !bulkPreview} onClick={() => void pairAllExact()}>
-              {bulkPair.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-              {t("inbox.transfers.bulk.confirm", { count: bulkPreview?.artifact.operations.length ?? exact.length })}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {regions}
+      {list}
+      {more}
+      {dialog}
     </section>
   );
 }
@@ -498,21 +665,31 @@ function CandidateRow({
   candidate,
   hideSensitive,
   routeLabel,
+  framed,
+  selected,
+  onSelect,
   onPair,
   onDismiss,
+  onLinkDifferently,
 }: {
   candidate: TransferCandidate;
   hideSensitive: boolean;
   routeLabel: string;
+  framed: boolean;
+  /** Ticked to be set aside with the others. */
+  selected: boolean;
+  onSelect: (selected: boolean) => void;
   onPair: () => void;
   onDismiss: () => void;
+  onLinkDifferently?: () => void;
 }) {
   const { t } = useTranslation("review");
   const type = moveType(candidate);
   const TypeIcon = TYPE_ICON[type];
   // Only a known treatment gets a chip; an unknown one is never shown as tax-neutral.
-  const policy =
-    candidate.default_policy === "carrying-value" ? "carrying" : candidate.default_policy === "taxable" ? "taxable" : null;
+  const terms = candidateTerms(candidate);
+  const policy = terms.policy === "carrying-value" ? "carrying" : terms.policy === "taxable" ? "taxable" : null;
+  const review = needsReview(candidate);
   const carries = policy === "carrying";
   const evidence =
     candidate.method === "ownership_graph" ? "ownership" : candidate.confidence === "exact" ? "exact" : "likely";
@@ -525,14 +702,22 @@ function CandidateRow({
     (bitcoin(candidate.out_asset) || candidate.out_asset.toUpperCase() === candidate.in_asset.toUpperCase());
   const showReceived = !sameAsset || candidate.swap_fee_msat <= 0;
   return (
-    <li className="grid grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)] items-center gap-x-3 gap-y-1 px-3 py-2 @min-[60rem]/moves:grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)_10rem_auto] @min-[60rem]/moves:gap-x-4">
-      <span
-        className={cn(
-          "col-start-1 row-start-2 text-2xs whitespace-nowrap text-muted-foreground tabular-nums @min-[60rem]/moves:row-start-1 @min-[60rem]/moves:text-xs",
-          hideSensitive && "sensitive",
-        )}
-      >
-        {formatShortDate(candidate.out_occurred_at)}
+    <li
+      className={cn(
+        "grid grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)] items-center gap-x-3 gap-y-1 px-3 py-2 @min-[60rem]/moves:grid-cols-[auto_minmax(0,1fr)_minmax(9rem,auto)_10rem_auto] @min-[60rem]/moves:gap-x-4",
+        // In a card it lines up with the card's header and the tables below.
+        framed && "py-3 sm:px-6",
+      )}
+    >
+      <span className="col-start-1 row-start-2 flex items-center gap-2.5 @min-[60rem]/moves:row-start-1">
+        <Checkbox
+          checked={selected}
+          onCheckedChange={(value) => onSelect(value === true)}
+          aria-label={t("inbox.transfers.selectLabel", { route: routeLabel })}
+        />
+        <span className={cn("text-2xs whitespace-nowrap text-muted-foreground tabular-nums @min-[60rem]/moves:text-xs", hideSensitive && "sensitive")}>
+          {formatShortDate(candidate.out_occurred_at)}
+        </span>
       </span>
       <span className="col-span-2 col-start-1 row-start-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 @min-[60rem]/moves:col-span-1 @min-[60rem]/moves:col-start-2">
         <RouteSide
@@ -608,6 +793,14 @@ function CandidateRow({
           />
           {t(`inbox.transfers.evidenceShort.${evidence}`)}
         </span>
+        <span className="text-muted-foreground" data-testid="suggestion-reason">
+          {suggestionReason(t, candidate)}
+        </span>
+        {candidate.rule_match ? (
+          <span className="rounded-md border px-1.5 leading-4 font-medium text-foreground">
+            {t("swap.table.ruleBadge", { name: candidate.rule_match.rule_name ?? t("swap.rules.unnamed") })}
+          </span>
+        ) : null}
         {candidate.conflict_size > 1 ? (
           <span className="text-amber-700 dark:text-amber-300">
             {t("inbox.transfers.competing", { count: candidate.conflict_size - 1 })}
@@ -615,38 +808,69 @@ function CandidateRow({
         ) : null}
       </span>
       <span className="col-start-3 row-start-2 flex items-center justify-end gap-0.5 @min-[60rem]/moves:col-start-5 @min-[60rem]/moves:row-start-1">
-        <Button
-          type="button"
-          size="sm"
-          className="h-7 gap-1 px-2.5 text-xs"
-          onClick={onPair}
-          aria-label={t("inbox.transfers.pairLabel", { route: routeLabel })}
-        >
-          <Check className="size-3.5" aria-hidden="true" />
-          {t("inbox.transfers.pair")}
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-7"
-          onClick={onDismiss}
-          title={t("inbox.transfers.dismiss")}
-          aria-label={t("inbox.transfers.dismissLabel", { route: routeLabel })}
-        >
-          <X className="size-3.5" aria-hidden="true" />
-        </Button>
-        <Button asChild type="button" size="icon" variant="ghost" className="size-7">
-          <Link
-            to="/swaps"
-            search={{ focus: candidate.out_id, mode: candidate.candidate_type === "swap" ? "swaps" : "transfers" }}
-            title={t("inbox.transfers.details")}
-            aria-label={t("inbox.transfers.detailsLabel", { route: routeLabel })}
+        {/* An exact match without competitors links in one click; anything less
+            opens the receipt picker, where the alternatives are the choice. */}
+        {review ? (
+          onLinkDifferently ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 px-2.5 text-xs"
+              onClick={onLinkDifferently}
+              aria-label={t("inbox.transfers.reviewLabel", { route: routeLabel })}
+            >
+              {t("inbox.transfers.review")}
+            </Button>
+          ) : (
+            <Button asChild type="button" size="sm" variant="outline" className="h-7 gap-1 px-2.5 text-xs">
+              <Link to="/transfers" search={{ link: candidate.out_id }} aria-label={t("inbox.transfers.reviewLabel", { route: routeLabel })}>
+                {t("inbox.transfers.review")}
+              </Link>
+            </Button>
+          )
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            className="h-7 gap-1 px-2.5 text-xs"
+            onClick={onPair}
+            aria-label={t("inbox.transfers.pairLabel", { route: routeLabel })}
           >
-            <ArrowUpRight className="size-3.5" aria-hidden="true" />
-          </Link>
-        </Button>
+            <Check className="size-3.5" aria-hidden="true" />
+            {t("inbox.transfers.pair")}
+          </Button>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" size="icon" variant="ghost" className="size-7" aria-label={t("inbox.transfers.moreLabel", { route: routeLabel })}>
+              <MoreHorizontal className="size-3.5" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onDismiss} aria-label={t("inbox.transfers.dismissLabel", { route: routeLabel })}>
+              <X className="size-4" aria-hidden="true" />
+              {t("inbox.transfers.dismiss")}
+            </DropdownMenuItem>
+            {onLinkDifferently ? (
+              <DropdownMenuItem onSelect={onLinkDifferently} aria-label={t("inbox.transfers.linkDifferentlyLabel", { route: routeLabel })}>
+                <Link2 className="size-4" aria-hidden="true" />
+                {t("inbox.transfers.linkDifferently")}
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem asChild>
+                <Link to="/transfers" search={{ link: candidate.out_id }} aria-label={t("inbox.transfers.linkDifferentlyLabel", { route: routeLabel })}>
+                  <Link2 className="size-4" aria-hidden="true" />
+                  {t("inbox.transfers.linkDifferently")}
+                </Link>
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <TransactionsMenuItems outId={candidate.out_id} inId={candidate.in_id} />
+          </DropdownMenuContent>
+        </DropdownMenu>
       </span>
     </li>
   );
 }
+

@@ -1,6 +1,10 @@
 import { SlidersHorizontal, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import {
+  SurfaceCardHeader,
+  surfaceFilterChipClassName,
+} from "@/components/kb/SurfaceCardHeader";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,8 +33,7 @@ const statusFilterOptions: ConnectionStatus[] = [
   "error",
 ];
 
-const filterChipClassName =
-  "inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted sm:text-xs";
+const filterChipClassName = surfaceFilterChipClassName;
 
 interface WalletsFiltersProps {
   filteredCount: number;
@@ -57,17 +60,10 @@ export function WalletsFilters({
 
   return (
     <>
-      <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
-        <div className="flex flex-1 items-center gap-2">
-          <span className="text-sm font-medium sm:text-base">
-            {t("filters.heading")}
-          </span>
-          <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-2xs font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
-            {filteredCount}
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+      <SurfaceCardHeader
+        title={t("filters.heading")}
+        count={filteredCount}
+        actions={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -141,8 +137,8 @@ export function WalletsFilters({
               </DropdownMenuSub>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </div>
+        }
+      />
 
       {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2 px-3 pb-3 sm:px-6">

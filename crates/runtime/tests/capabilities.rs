@@ -56,7 +56,8 @@ fn tables_match_python() {
     );
     // The desktop's exchange connection kinds are Rust only too
     // (docs/reference/exchange-desktop.md): the BTCPay connection kinds'
-    // capabilities, a read for the status and operator for the rest.
+    // capabilities, a read for the status and operator for the rest. So is
+    // the Transfers screen's pair-options read.
     let rust_only_kinds = [
         (
             "ui.connections.exchange.status",
@@ -68,6 +69,8 @@ fn tables_match_python() {
             "ui.connections.btcpay.create",
         ),
         ("ui.connections.exchange.sync", "ui.connections.btcpay.test"),
+        // Which ways two transactions may be linked: a read beside the pair list.
+        ("ui.transfers.pair_options", "ui.transfers.list"),
     ];
     for (kind, sibling) in rust_only_kinds {
         assert!(daemon_capability(kind).is_some(), "{kind}");

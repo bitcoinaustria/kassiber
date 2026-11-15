@@ -297,6 +297,8 @@ fn select(daemon: &mut Daemon, args: &Value, request_id: &RequestId) -> Handled 
             entry = daemon
                 .store
                 .project_catalog(ProjectCatalog::Select(&entry_id))?;
+            // A preview still planning on the old book must not outlive it.
+            daemon.previews.stop();
             let old_book = daemon.book.take();
             let old_owner = if transferred {
                 None

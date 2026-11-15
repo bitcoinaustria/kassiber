@@ -207,13 +207,13 @@ describe("quarantine cause panel", () => {
       snapshot({ groups: [PAIR_GROUP] }, [{ ...ROOT, evidence: PAIR_EVIDENCE, category: "needs_decision", actions: PAIR_GROUP.actions }]),
       { onOpenTransaction },
     );
-    expect(html).toContain("A transfer pair doesn&#x27;t add up");
+    expect(html).toContain("A linked transfer doesn&#x27;t add up");
     expect(html).toContain("The two sides are different on-chain transactions");
     // A hint, not a verdict: a hop through an untracked wallet also has two txids.
-    expect(html).toContain("this alone doesn&#x27;t make the pair wrong");
-    expect(html).toContain("The receipt is dated before the payment it is paired with.");
+    expect(html).toContain("this alone doesn&#x27;t make the link wrong");
+    expect(html).toContain("The receipt is dated before the payment it is linked to.");
     expect(html).toContain("3 transactions");
-    buttons.find((button) => button.label === "Review the pair")?.onClick?.();
+    buttons.find((button) => button.label === "Review the link")?.onClick?.();
     expect(onOpenTransaction).toHaveBeenCalledWith("out", "linked", {
       reason: "custody_quantity_unresolved",
       category: "needs_decision",
@@ -235,9 +235,9 @@ describe("quarantine cause panel", () => {
       snapshot({ groups: [group] }, [{ ...ROOT, evidence, category: "needs_decision", actions }]),
       { onOpenTransaction },
     );
-    expect(html).toContain("An older transfer pair needs its fee reviewed");
+    expect(html).toContain("An older transfer link needs its fee reviewed");
     expect(html).toContain("Excluding a leg does not answer this.");
-    buttons.find((button) => button.label === "Review the pair")?.onClick?.();
+    buttons.find((button) => button.label === "Review the link")?.onClick?.();
     expect(onOpenTransaction).toHaveBeenCalledWith("out", "linked", expect.objectContaining({ evidence }), group.key);
   });
 
@@ -283,7 +283,7 @@ describe("quarantine cause panel", () => {
     buttons.length = 0;
     render(snapshot());
     buttons.find((button) => button.label === "Review custody gap")?.onClick?.();
-    expect(navigate).toHaveBeenCalledWith({ to: "/swaps", search: { tab: "gaps", gap: "gap-1" } });
+    expect(navigate).toHaveBeenCalledWith({ to: "/transfers", search: { section: "advanced", tab: "gaps", gap: "gap-1" } });
   });
 
   it("says the list changed since its calculation, not that journals never ran", () => {

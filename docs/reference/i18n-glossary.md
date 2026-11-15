@@ -93,6 +93,10 @@ Key, Dashboard, Passphrase, on-chain/off-chain**.
 - **Delete = Löschen** (destructive) vs **Remove = Entfernen** (detach).
 - **Continue = Next = Weiter** (paired with **Back = Zurück**).
 - **Pending = Ausstehend** (generic) vs **unconfirmed on-chain = Unbestätigt**.
+- **Link (two transactions as one move) = verknüpfen / die Verknüpfung**, and
+  **unlink = die Verknüpfung aufheben** („aufgehoben" as the state). The desktop
+  says link, never pair / Paarung; the CLI keeps `transfers pair` and the
+  stored `pair` vocabulary.
 - State vs action: „Aktiviert/Deaktiviert" (state) vs „Aktivieren/Deaktivieren"
   (action); „Verborgen" (state) vs „Ausblenden" (action).
 
@@ -171,6 +175,10 @@ FIFO, KESt, ESt, Kz./KZ, **Formular E 1**, **Beilage E 1kv**, § 27 / § 27a /
 | address | Adresse | „Wallet-Adresse", „Empfangsadresse". |
 | transaction | Transaktion | txid stays as-is. |
 | fee | Gebühr | „Transaktionsgebühr"/„Netzwerkgebühr". |
+| transfer (between own wallets) | Übertragung | the Transfers screen is „Übertragungen"; one move is „Bewegung". |
+| link / linked move | Verknüpfung / verknüpfte Bewegung | not „Paarung"/„Paar". „Von dir verknüpft" for a reviewed link. |
+| to sort out | zu klären | a held move waiting on the owner's answer. |
+| different asset | anderes Asset | chip on a swap into another asset. |
 | balance | Guthaben / Saldo | Guthaben = available funds; Saldo = ledger net. |
 | sent / received | gesendet / erhalten | direction labels. |
 

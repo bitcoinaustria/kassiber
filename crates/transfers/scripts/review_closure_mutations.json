@@ -2,8 +2,8 @@
   {
     "id": "RVC-raw-admission",
     "file": "crates/journals/src/pipeline.rs",
-    "find": "    review_state(conn, &snapshot, then)\n",
-    "replace": "    let typed = snapshot.typed().map_err(|message| Refusal::new(\"RuntimeError\", message))?;\n    typed.validate().map_err(|message| Refusal::new(\"RuntimeError\", message))?;\n    review_state(conn, &snapshot, then)\n",
+    "find": "    Ok(review_state(conn, &snapshot, then)?)\n",
+    "replace": "    let typed = snapshot.typed().map_err(|message| Refusal::new(\"RuntimeError\", message))?;\n    typed.validate().map_err(|message| Refusal::new(\"RuntimeError\", message))?;\n    Ok(review_state(conn, &snapshot, then)?)\n",
     "expect_failing": [
       "review_assembler_preserves_raw_admission_and_refusal_ownership"
     ],

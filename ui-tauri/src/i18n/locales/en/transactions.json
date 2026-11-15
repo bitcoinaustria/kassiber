@@ -330,7 +330,8 @@
     },
     "meta": {
       "txCount": "{{count}} tx",
-      "moveCount": "{{count}} moves",
+      "moveCount_one": "{{count}} move",
+      "moveCount_other": "{{count}} moves",
       "inflow": "inflow",
       "outflow": "outflow",
       "unpairedUnknown": "unpaired unknown",
@@ -344,7 +345,7 @@
       "showOutgoing": "Show outgoing transactions",
       "showNetFlow": "Show external flow transactions",
       "showTransfers": "Show transfer transactions",
-      "openPairingCandidates": "Open pairing candidates",
+      "openPairingCandidates": "Open link suggestions",
       "showPairedSwaps": "Show paired swap transactions",
       "showReviewQueue": "Show review queue transactions"
     },
@@ -452,6 +453,10 @@
       "clearTransactionSet": "Clear selection"
     },
     "empty": "No transactions found matching your filters.",
+    "pairedTransfer": {
+      "title": "Transfer · {{from}} → {{to}}",
+      "fee": "Fee {{amount}}"
+    },
     "value": {
       "valuePending": "value pending",
       "perBtc": "{{value}} / BTC",
@@ -968,7 +973,7 @@
     "unknown": "Unknown",
     "noPairedMovement": "No paired movement",
     "noPairedMovementBody": "When this tx is the other leg of a transfer, swap, or peg-in/out, the matched leg shows up here. You can also create a manual pair from the swap candidate queue.",
-    "openPairingReview": "Open pairing review",
+    "openPairingReview": "Open matching tools",
     "loanLegs": "Loan legs",
     "loanId": "Loan {{id}}",
     "loanThisLeg": "This leg",

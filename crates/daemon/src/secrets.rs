@@ -112,6 +112,7 @@ pub(super) fn handle(
     // Authentication and owner validation precede connection retirement. A
     // failed close preserves the connection and its lease for a later retry.
     daemon.stop_watch_worker(true)?;
+    daemon.previews.stop();
     if let Some(mut book) = daemon.book.take() {
         if let Err(error) = book.close() {
             daemon.book = Some(book);
@@ -198,6 +199,7 @@ fn init(daemon: &mut Daemon, args: Option<&Value>, request_id: &RequestId) -> Ha
         // Exclusive maintenance precedes retiring the open connection.
         let maintenance = daemon.store.restore_maintenance(&daemon.data_root)?;
         daemon.reap_freshness(true)?;
+        daemon.previews.stop();
         if let Some(mut book) = daemon.book.take() {
             if let Err(error) = book.close() {
                 daemon.book = Some(book);

@@ -683,3 +683,366 @@ fn component_apply_rolls_back_late_failure_and_preserves_outer_transaction() {
 fn s_(text: &str) -> Value {
     s(text)
 }
+
+struct Counting {
+    next: std::cell::Cell<u32>,
+}
+impl Sources for Counting {
+    fn uuid(&self, _: &Connection) -> Result<String, kassiber_envelope::AppError> {
+        let n = self.next.get() + 1;
+        self.next.set(n);
+        Ok(format!("00000000-0000-4000-8000-{n:012}"))
+    }
+    fn now(&self, _: &Connection) -> Result<String, kassiber_envelope::AppError> {
+        Ok(format!("2025-06-01T00:00:{:02}Z", self.next.get()))
+    }
+}
+fn counted(
+    c: &Connection,
+    sources: &Counting,
+    operation: &str,
+    args: Value,
+) -> Result<Value, kassiber_envelope::AppError> {
+    execute_with_sources(
+        c,
+        &Scope {
+            workspace_id: "w",
+            profile_id: "p",
+        },
+        operation,
+        &args,
+        sources,
+    )
+}
+fn unlinked_legs(c: &Connection, sources: &Counting) -> Vec<(String, String)> {
+    list(&counted(c, sources, "transfers.unlinked", dict::<&str>([])).unwrap())
+        .iter()
+        .map(|pair| {
+            (
+                py_str(field(pair, "out_transaction_id")),
+                py_str(field(pair, "in_transaction_id")),
+            )
+        })
+        .collect()
+}
+#[test]
+fn unlinked_pairs_list_free_legs_with_their_terms_newest_first() {
+    let (_dir, book) = fresh();
+    let c = book.connection();
+    let sources = Counting {
+        next: std::cell::Cell::new(0),
+    };
+    let pair = |out: &str, inbound: &str| {
+        counted(
+            c,
+            &sources,
+            "transfers.pair",
+            dict([
+                ("tx_out", s(out)),
+                ("tx_in", s(inbound)),
+                ("notes", s("reviewed")),
+            ]),
+        )
+        .unwrap()
+    };
+    let unpair = |pair: &Value| {
+        counted(
+            c,
+            &sources,
+            "transfers.unpair",
+            dict([("pair_id", field(pair, "id").clone())]),
+        )
+        .unwrap()
+    };
+    assert!(unlinked_legs(c, &sources).is_empty());
+    let first = pair("d", "e");
+    // A revision supersedes the first component; the pair is still linked.
+    counted(
+        c,
+        &sources,
+        "transfers.update",
+        dict([
+            ("pair_id", field(&first, "id").clone()),
+            ("notes", s("revised")),
+        ]),
+    )
+    .unwrap();
+    assert!(unlinked_legs(c, &sources).is_empty());
+    unpair(&first);
+    let listed = counted(c, &sources, "transfers.unlinked", dict::<&str>([])).unwrap();
+    let only = &list(&listed)[0];
+    assert_eq!(list(&listed).len(), 1);
+    assert_eq!(field(only, "kind"), &s("manual"));
+    assert_eq!(field(only, "notes"), &s("revised"));
+    assert!(kassiber_envelope::truthy(field(only, "deleted_at")));
+    assert_eq!(
+        field(field(only, "out"), "amount_msat"),
+        &Value::Int(1000.into())
+    );
+    assert_eq!(field(field(only, "in"), "transaction_id"), &s("e"));
+    // Its send linked elsewhere: not free, so not offered again.
+    let other = pair("d", "k");
+    assert!(unlinked_legs(c, &sources).is_empty());
+    unpair(&other);
+    assert_eq!(
+        unlinked_legs(c, &sources),
+        vec![("d".into(), "k".into()), ("d".into(), "e".into())]
+    );
+    // Linked again: its send is taken, so neither unlinked pair is offered.
+    pair("d", "e");
+    assert!(unlinked_legs(c, &sources).is_empty());
+    assert_eq!(
+        counted(
+            c,
+            &sources,
+            "transfers.unlinked",
+            dict([("limit", 0.into())])
+        )
+        .unwrap_err()
+        .code,
+        "validation"
+    );
+}
+#[test]
+fn unlinked_pairs_of_a_shared_send_are_listed_once_the_send_is_free() {
+    let (_dir, book) = fresh();
+    let c = book.connection();
+    let sources = Counting {
+        next: std::cell::Cell::new(0),
+    };
+    let pair = |out: &str, inbound: &str| {
+        counted(
+            c,
+            &sources,
+            "transfers.pair",
+            dict([("tx_out", s(out)), ("tx_in", s(inbound))]),
+        )
+        .unwrap()
+    };
+    let unpair = |pair: &Value| {
+        counted(
+            c,
+            &sources,
+            "transfers.unpair",
+            dict([("pair_id", field(pair, "id").clone())]),
+        )
+        .unwrap()
+    };
+    // One send to two receipts shares a component; unlinking the later pair
+    // leaves a successor that keeps only the earlier one.
+    let first = pair("a", "b");
+    let second = pair("a", "c");
+    unpair(&second);
+    assert!(unlinked_legs(c, &sources).is_empty());
+    // Once the send is free, both are offered, the one unlinked last first
+    // although it was linked first.
+    unpair(&first);
+    assert_eq!(
+        unlinked_legs(c, &sources),
+        vec![("a".into(), "b".into()), ("a".into(), "c".into())]
+    );
+    // A limit of one keeps the pair just unlinked.
+    let limited = counted(
+        c,
+        &sources,
+        "transfers.unlinked",
+        dict([("limit", 1.into())]),
+    )
+    .unwrap();
+    assert_eq!(list(&limited).len(), 1);
+    assert_eq!(field(&list(&limited)[0], "in_transaction_id"), &s("b"));
+}
+#[test]
+fn the_desktop_pair_list_prices_each_leg_and_leaves_the_cli_list_alone() {
+    let (_dir, book) = fresh();
+    let c = book.connection();
+    call(
+        c,
+        "transfers.pair",
+        dict([("tx_out", s("d")), ("tx_in", s("e"))]),
+    )
+    .unwrap();
+    let plain = call(c, "transfers.list", dict::<&str>([])).unwrap();
+    let unpriced = call(c, "transfers.list-priced", dict::<&str>([])).unwrap();
+    // Unpriced legs say so; the CLI list carries no price fields at all.
+    assert_eq!(
+        field(field(&list(&unpriced)[0], "out"), "fiat_value"),
+        &Value::Null
+    );
+    assert!(get(field(&list(&plain)[0], "out"), "fiat_value").is_none());
+    assert!(get(&list(&plain)[0], "swap_fee_fiat_value").is_none());
+    c.execute(
+        "UPDATE transactions SET fiat_rate=50000.0, fiat_currency='EUR' WHERE id='d'",
+        [],
+    )
+    .unwrap();
+    let priced = call(c, "transfers.list-priced", dict::<&str>([])).unwrap();
+    let out = field(&list(&priced)[0], "out");
+    let msat = match field(out, "amount_msat") {
+        Value::Int(n) => n.to_string().parse::<f64>().unwrap(),
+        other => panic!("amount_msat {other:?}"),
+    };
+    assert_eq!(field(out, "fiat_currency"), &s("EUR"));
+    assert_eq!(
+        field(out, "fiat_value"),
+        &Value::Float(msat / 1e11 * 50000.0)
+    );
+    // Only the sending transaction was priced.
+    assert_eq!(
+        field(field(&list(&priced)[0], "in"), "fiat_value"),
+        &Value::Null
+    );
+    // Everything else matches the CLI list.
+    assert_eq!(
+        field(&list(&priced)[0], "id"),
+        field(&list(&plain)[0], "id")
+    );
+}
+#[test]
+fn the_desktop_pair_list_says_what_each_leg_has_left_to_link() {
+    let (_dir, book) = fresh();
+    let c = book.connection();
+    let sources = Counting {
+        next: std::cell::Cell::new(0),
+    };
+    let pair = |out: &str, inbound: &str| {
+        counted(
+            c,
+            &sources,
+            "transfers.pair",
+            dict([("tx_out", s(out)), ("tx_in", s(inbound))]),
+        )
+        .unwrap()
+    };
+    let left = |listed: &Value, id: &Value, side: &str| {
+        let row = list(listed)
+            .iter()
+            .find(|row| field(row, "id") == id)
+            .unwrap()
+            .clone();
+        field(field(&row, side), "unlinked_msat").clone()
+    };
+    // A send of 1000 (fee 10 on top) whose first receipt took 600.
+    let first = pair("a", "b");
+    let listed = counted(c, &sources, "transfers.list-priced", dict::<&str>([])).unwrap();
+    assert_eq!(
+        left(&listed, field(&first, "id"), "out"),
+        Value::Int(400.into())
+    );
+    assert_eq!(
+        left(&listed, field(&first, "id"), "in"),
+        Value::Int(0.into())
+    );
+    assert_eq!(field(&list(&listed)[0], "shares_legs"), &Value::Bool(true));
+    // The second receipt takes the rest; both pairs of the send say so.
+    let second = pair("a", "c");
+    let listed = counted(c, &sources, "transfers.list-priced", dict::<&str>([])).unwrap();
+    for id in [field(&first, "id"), field(&second, "id")] {
+        assert_eq!(left(&listed, id, "out"), Value::Int(0.into()));
+        assert_eq!(left(&listed, id, "in"), Value::Int(0.into()));
+    }
+    // A send whose amount includes its fee is measured without the fee.
+    let whole = pair("f", "e");
+    let listed = counted(c, &sources, "transfers.list-priced", dict::<&str>([])).unwrap();
+    assert_eq!(
+        left(&listed, field(&whole, "id"), "out"),
+        Value::Int(0.into())
+    );
+    // A swap into another asset stays one to one.
+    let swap = pair("d", "h");
+    let listed = counted(c, &sources, "transfers.list-priced", dict::<&str>([])).unwrap();
+    let row = list(&listed)
+        .iter()
+        .find(|row| field(row, "id") == field(&swap, "id"))
+        .unwrap();
+    assert_eq!(field(row, "shares_legs"), &Value::Bool(false));
+    // The CLI list carries neither field.
+    let plain = call(c, "transfers.list", dict::<&str>([])).unwrap();
+    assert!(get(&list(&plain)[0], "shares_legs").is_none());
+    assert!(get(field(&list(&plain)[0], "out"), "unlinked_msat").is_none());
+}
+#[test]
+fn pair_options_name_the_ways_the_book_allows_before_anything_is_written() {
+    let (_dir, book) = fresh();
+    let c = book.connection();
+    let options = |out: &str, inbound: &str| {
+        let answer = call(
+            c,
+            "transfers.pair-options",
+            dict([("tx_out", s(out)), ("tx_in", s(inbound))]),
+        )
+        .unwrap();
+        list(field(&answer, "policies"))
+            .iter()
+            .map(|row| {
+                (
+                    py_str(field(row, "policy")),
+                    field(row, "allowed") == &Value::Bool(true),
+                    field(row, "reason").clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let before = dump(c, "custody_components");
+    // One asset: only the owner's own coins moving.
+    assert_eq!(
+        options("a", "b"),
+        vec![
+            ("carrying-value".into(), true, Value::Null),
+            ("taxable".into(), false, s("same_asset")),
+        ]
+    );
+    // An Austrian book carries value across assets, or books the swap.
+    assert_eq!(
+        options("a", "h"),
+        vec![
+            ("carrying-value".into(), true, Value::Null),
+            ("taxable".into(), true, Value::Null),
+        ]
+    );
+    // Networks that contradict each other cannot carry value.
+    assert_eq!(options("a", "contradiction")[0].2, s("network_mismatch"));
+    c.execute("UPDATE profiles SET tax_country='de' WHERE id='p'", [])
+        .unwrap();
+    assert_eq!(
+        options("a", "h"),
+        vec![
+            ("carrying-value".into(), false, s("cross_asset")),
+            ("taxable".into(), true, Value::Null),
+        ]
+    );
+    // Bitcoin changing rails still may, in any country.
+    assert_eq!(
+        options("a", "g")[0],
+        ("carrying-value".into(), true, Value::Null)
+    );
+    // Each refusal is the one `transfers.pair` gives.
+    let refused = call(
+        c,
+        "transfers.pair",
+        dict([
+            ("tx_out", s("a")),
+            ("tx_in", s("h")),
+            ("policy", s("carrying-value")),
+        ]),
+    )
+    .unwrap_err();
+    let answer = call(
+        c,
+        "transfers.pair-options",
+        dict([("tx_out", s("a")), ("tx_in", s("h"))]),
+    )
+    .unwrap();
+    assert_eq!(
+        field(&list(field(&answer, "policies"))[0], "message"),
+        &s(refused.message)
+    );
+    // A read: nothing was written, and a wrong side is refused as for a pair.
+    assert_eq!(dump(c, "custody_components"), before);
+    assert!(call(
+        c,
+        "transfers.pair-options",
+        dict([("tx_out", s("b")), ("tx_in", s("a"))]),
+    )
+    .is_err());
+}

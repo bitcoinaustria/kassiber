@@ -102,8 +102,8 @@
   {
     "id": "RVA-operation-source",
     "file": "crates/journals/src/review_apply.rs",
-    "find": "            request.authored_source,\n            false,\n            cases,",
-    "replace": "            \"user\",\n            false,\n            cases,",
+    "find": "            request.authored_source,\n            false,\n            review_simulation::Before::ready(cases),",
+    "replace": "            \"user\",\n            false,\n            review_simulation::Before::ready(cases),",
     "expect_failing": [
       "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
     ],

@@ -225,3 +225,189 @@ fn execute(
         },
     )
 }
+
+/// A reviewed same-asset move of 600,000 sat whose send paid a 420 sat
+/// network fee, alone in the book so every total is the pair's.
+fn reviewed_move(conn: &kassiber_store::rusqlite::Connection) {
+    conn.execute_batch(include_str!("data/desktop.sql"))
+        .unwrap();
+    conn.execute_batch(
+        "DELETE FROM transaction_tags; DELETE FROM journal_quarantines;
+         DELETE FROM transactions WHERE id NOT IN ('g','b');
+         UPDATE transactions SET amount=600000000,fee=420000,fiat_rate=2 WHERE id='g';
+         UPDATE transactions SET amount=600000000,fee=0 WHERE id='b';
+         INSERT INTO journal_custody_decisions(decision_id,workspace_id,profile_id,source_transaction_id,target_transaction_id,source_observation_hash,source_start_msat,source_end_msat,target_observation_hash,target_start_msat,target_end_msat,source_network,target_network,source_rail,target_rail,source_asset,target_asset,state,basis_state,reason,occurred_at,created_at) VALUES('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','w','p','g','b','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',0,600000000,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',0,600000000,'main','main','onchain','onchain','BTC','BTC','internal_reviewed','eligible','test','2025','2025');
+         UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=2,journal_input_version=2,last_processed_input_version=2 WHERE id='p';
+         UPDATE profiles SET journal_semantics_version=10 WHERE id='p';",
+    )
+    .unwrap();
+}
+
+#[test]
+fn dashboard_transfer_volume_counts_the_amount_a_pair_moved() {
+    let tmp = tempfile::tempdir().unwrap();
+    let book = Book::create(tmp.path(), None).unwrap();
+    let conn = book.connection();
+    reviewed_move(conn);
+    let display = |key: &str| Ok(kassiber_pytext::zone::Zone::utc(key));
+    let book_zone = |_: Option<&str>| {
+        Ok::<_, kassiber_envelope::AppError>(kassiber_pytext::zone::Zone::utc("UTC"))
+    };
+    let snapshot = desktop::dashboard(
+        conn,
+        &Scope {
+            workspace_id: "w",
+            profile_id: "p",
+        },
+        &kassiber_envelope::dict([("period", s("all"))]),
+        &[],
+        &desktop::Zones {
+            display: &display,
+            book: &book_zone,
+        },
+    )
+    .unwrap();
+    let summary = get(&snapshot, "summary").unwrap();
+    let transfers = get(summary, "transfers").unwrap();
+    assert_eq!(get(transfers, "count"), Some(&Value::Int(1.into())));
+    // 600,000 sat moved, priced at the pair's display rate (the out leg's 2).
+    assert_eq!(get(transfers, "btc"), Some(&Value::Float(0.006)));
+    assert_eq!(get(transfers, "eur"), Some(&Value::Float(0.012)));
+    for segment in ["incoming", "outgoing", "swaps"] {
+        let stats = get(summary, segment).unwrap();
+        assert_eq!(
+            get(stats, "count"),
+            Some(&Value::Int(0.into())),
+            "{segment}"
+        );
+        assert_eq!(get(stats, "btc"), Some(&Value::Float(0.0)), "{segment}");
+    }
+    let Some(Value::List(buckets)) = get(&snapshot, "buckets") else {
+        panic!("buckets")
+    };
+    let charted: f64 = buckets
+        .iter()
+        .map(|bucket| {
+            match get(
+                get(get(bucket, "stats").unwrap(), "transfers").unwrap(),
+                "btc",
+            ) {
+                Some(Value::Float(n)) => *n,
+                other => panic!("btc {other:?}"),
+            }
+        })
+        .sum();
+    assert_eq!(
+        charted, 0.006,
+        "the chart's transfer bars match the summary"
+    );
+}
+
+#[test]
+fn dashboard_transfer_volume_counts_every_receipt_of_a_split_send() {
+    let tmp = tempfile::tempdir().unwrap();
+    let book = Book::create(tmp.path(), None).unwrap();
+    let conn = book.connection();
+    // A send of 1,000,000 sat from Cold, 600,000 to Lightning and 400,000 to
+    // Custom, each part a reviewed move of its own.
+    conn.execute_batch(include_str!("data/desktop.sql"))
+        .unwrap();
+    conn.execute_batch(
+        "DELETE FROM transaction_tags; DELETE FROM journal_quarantines;
+         DELETE FROM transactions WHERE id NOT IN ('g','b','e');
+         UPDATE transactions SET amount=1000000000,fee=0,fiat_rate=2 WHERE id='g';
+         UPDATE transactions SET amount=600000000,fee=0 WHERE id='b';
+         UPDATE transactions SET amount=400000000,fee=0,occurred_at='2025-02-01T00:00:01Z' WHERE id='e';
+         INSERT INTO journal_custody_decisions(decision_id,workspace_id,profile_id,source_transaction_id,target_transaction_id,source_observation_hash,source_start_msat,source_end_msat,target_observation_hash,target_start_msat,target_end_msat,source_network,target_network,source_rail,target_rail,source_asset,target_asset,state,basis_state,reason,occurred_at,created_at) VALUES
+           ('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','w','p','g','b','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',0,600000000,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',0,600000000,'main','main','onchain','onchain','BTC','BTC','internal_reviewed','eligible','test','2025','2025'),
+           ('cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc','w','p','g','e','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',600000000,1000000000,'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',0,400000000,'main','main','onchain','onchain','BTC','BTC','internal_reviewed','eligible','test','2025','2025');
+         UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=3,journal_input_version=2,last_processed_input_version=2 WHERE id='p';
+         UPDATE profiles SET journal_semantics_version=10 WHERE id='p';",
+    )
+    .unwrap();
+    let display = |key: &str| Ok(kassiber_pytext::zone::Zone::utc(key));
+    let book_zone = |_: Option<&str>| {
+        Ok::<_, kassiber_envelope::AppError>(kassiber_pytext::zone::Zone::utc("UTC"))
+    };
+    let transfers = |args: Value| {
+        let snapshot = desktop::dashboard(
+            conn,
+            &Scope {
+                workspace_id: "w",
+                profile_id: "p",
+            },
+            &args,
+            &[],
+            &desktop::Zones {
+                display: &display,
+                book: &book_zone,
+            },
+        )
+        .unwrap();
+        get(get(&snapshot, "summary").unwrap(), "transfers")
+            .unwrap()
+            .clone()
+    };
+    // The whole book: one row per pair, both parts counted once.
+    let all = transfers(kassiber_envelope::dict([("period", s("all"))]));
+    assert_eq!(get(&all, "count"), Some(&Value::Int(2.into())));
+    assert_eq!(get(&all, "btc"), Some(&Value::Float(0.01)));
+    // Only the sending wallet: its one row still carries both parts.
+    let sender = transfers(kassiber_envelope::dict([
+        ("period", s("all")),
+        ("wallet", s("Cold")),
+    ]));
+    assert_eq!(get(&sender, "count"), Some(&Value::Int(1.into())));
+    assert_eq!(get(&sender, "btc"), Some(&Value::Float(0.01)));
+    assert_eq!(get(&sender, "eur"), Some(&Value::Float(0.02)));
+    // Only one receiving wallet: just its part.
+    let receiver = transfers(kassiber_envelope::dict([
+        ("period", s("all")),
+        ("wallet", s("Lightning")),
+    ]));
+    assert_eq!(get(&receiver, "btc"), Some(&Value::Float(0.006)));
+}
+
+#[test]
+fn lineage_rows_carry_prices_and_the_send_fee_only_when_asked() {
+    let tmp = tempfile::tempdir().unwrap();
+    let book = Book::create(tmp.path(), None).unwrap();
+    let conn = book.connection();
+    reviewed_move(conn);
+    let scope = Scope {
+        workspace_id: "w",
+        profile_id: "p",
+    };
+    let item = |args: Value| {
+        let snapshot = execute(conn, &scope, "ui.custody.lineage.snapshot", Some(&args)).unwrap();
+        let Some(Value::List(items)) = get(&snapshot, "items") else {
+            panic!("items")
+        };
+        items[0].clone()
+    };
+    // The assistant and the recorded sessions read the plain shape.
+    let plain = item(kassiber_envelope::dict::<&str>([]));
+    for key in ["fiat_currency", "fiat_value", "fee_msat", "fee_fiat_value"] {
+        assert!(get(&plain, key).is_none(), "{key}");
+    }
+    // The desktop asks for the move's price and its send's network fee.
+    let priced = item(kassiber_envelope::dict([("priced", Value::Bool(true))]));
+    assert_eq!(get(&priced, "fee_msat"), Some(&s("420000")));
+    // 420 sat and 600,000 sat at the send's price of 2 a coin.
+    assert_eq!(
+        get(&priced, "fee_fiat_value"),
+        Some(&Value::Float(4.2e-6 * 2.0))
+    );
+    assert_eq!(get(&priced, "fiat_value"), Some(&Value::Float(0.006 * 2.0)));
+    assert_eq!(
+        execute(
+            conn,
+            &scope,
+            "ui.custody.lineage.snapshot",
+            Some(&kassiber_envelope::dict([("priced", s("yes"))]))
+        )
+        .unwrap_err()
+        .code,
+        "validation"
+    );
+}
