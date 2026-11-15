@@ -367,3 +367,47 @@ fn dashboard_transfer_volume_counts_every_receipt_of_a_split_send() {
     ]));
     assert_eq!(get(&receiver, "btc"), Some(&Value::Float(0.006)));
 }
+
+#[test]
+fn lineage_rows_carry_prices_and_the_send_fee_only_when_asked() {
+    let tmp = tempfile::tempdir().unwrap();
+    let book = Book::create(tmp.path(), None).unwrap();
+    let conn = book.connection();
+    reviewed_move(conn);
+    let scope = Scope {
+        workspace_id: "w",
+        profile_id: "p",
+    };
+    let item = |args: Value| {
+        let snapshot = execute(conn, &scope, "ui.custody.lineage.snapshot", Some(&args)).unwrap();
+        let Some(Value::List(items)) = get(&snapshot, "items") else {
+            panic!("items")
+        };
+        items[0].clone()
+    };
+    // The assistant and the recorded sessions read the plain shape.
+    let plain = item(kassiber_envelope::dict::<&str>([]));
+    for key in ["fiat_currency", "fiat_value", "fee_msat", "fee_fiat_value"] {
+        assert!(get(&plain, key).is_none(), "{key}");
+    }
+    // The desktop asks for the move's price and its send's network fee.
+    let priced = item(kassiber_envelope::dict([("priced", Value::Bool(true))]));
+    assert_eq!(get(&priced, "fee_msat"), Some(&s("420000")));
+    // 420 sat and 600,000 sat at the send's price of 2 a coin.
+    assert_eq!(
+        get(&priced, "fee_fiat_value"),
+        Some(&Value::Float(4.2e-6 * 2.0))
+    );
+    assert_eq!(get(&priced, "fiat_value"), Some(&Value::Float(0.006 * 2.0)));
+    assert_eq!(
+        execute(
+            conn,
+            &scope,
+            "ui.custody.lineage.snapshot",
+            Some(&kassiber_envelope::dict([("priced", s("yes"))]))
+        )
+        .unwrap_err()
+        .code,
+        "validation"
+    );
+}

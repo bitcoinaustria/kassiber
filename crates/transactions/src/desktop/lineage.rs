@@ -64,7 +64,7 @@ pub(super) fn snapshot(
         .iter()
         .filter_map(|(key, _)| match key {
             Key::Str(t)
-                if !["cursor", "limit", "transaction_id"]
+                if !["cursor", "limit", "transaction_id", "priced"]
                     .contains(&t.as_str().unwrap_or_default()) =>
             {
                 Some(Value::Str(t.clone()))
@@ -77,6 +77,13 @@ pub(super) fn snapshot(
         return Err(invalid(format!("{kind} received unsupported arguments"))
             .with_details(dict([("unknown", Value::List(extra))])));
     }
+    // The desktop asks for each move's price and its send's fee; without
+    // `priced` the rows keep the shape the assistant and recorded sessions read.
+    let priced = match get(args, "priced") {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(priced)) => *priced,
+        Some(_) => return Err(invalid(format!("{kind} priced must be a boolean"))),
+    };
     let limit = limit(args, 100, 500)?;
     let cursor = match get(args, "cursor") {
         None | Some(Value::Null) => None,
@@ -256,7 +263,7 @@ pub(super) fn snapshot(
             v if truthy(&v) && rate != Value::Null => v,
             _ => Value::Null,
         };
-        items.push(dict([
+        let mut fields = vec![
             ("out_transaction_id", val(record, "source_transaction_id")),
             ("in_transaction_id", val(record, "target_transaction_id")),
             ("occurred_at", val(record, "occurred_at")),
@@ -264,24 +271,30 @@ pub(super) fn snapshot(
             ("source_asset", val(record, "source_asset")),
             ("target_asset", val(record, "target_asset")),
             ("amount_msat", s(num(record, "amount_msat").to_string())),
-            ("fiat_currency", fiat_currency),
-            ("fiat_value", fiat_of(num(record, "amount_msat"), &rate)),
-            (
-                "fee_msat",
-                if fee_msat > 0 {
-                    s(fee_msat.to_string())
-                } else {
-                    Value::Null
-                },
-            ),
-            (
-                "fee_fiat_value",
-                if fee_msat > 0 {
-                    fiat_of(fee_msat, &rate)
-                } else {
-                    Value::Null
-                },
-            ),
+        ];
+        if priced {
+            fields.extend([
+                ("fiat_currency", fiat_currency),
+                ("fiat_value", fiat_of(num(record, "amount_msat"), &rate)),
+                (
+                    "fee_msat",
+                    if fee_msat > 0 {
+                        s(fee_msat.to_string())
+                    } else {
+                        Value::Null
+                    },
+                ),
+                (
+                    "fee_fiat_value",
+                    if fee_msat > 0 {
+                        fiat_of(fee_msat, &rate)
+                    } else {
+                        Value::Null
+                    },
+                ),
+            ]);
+        }
+        fields.extend([
             ("from_wallet_id", val(record, "source_wallet_id")),
             ("from_wallet_label", val(record, "source_wallet_label")),
             ("to_wallet_id", val(record, "target_wallet_id")),
@@ -298,7 +311,8 @@ pub(super) fn snapshot(
             ("target_rail", s(target_rail)),
             ("atomic_bundle_id", val(record, "atomic_group_id")),
             ("component_id", val(record, "component_id")),
-        ]));
+        ]);
+        items.push(dict(fields));
     }
     let returned = items.len() as i64;
     Ok(dict([

@@ -1781,9 +1781,11 @@ only same-asset manual, coinjoin or whirlpool pairs at carrying value). They
 describe pair coverage only: an uncovered amount is not a sale, a fee or
 income, and what the journals do with it is read from the quarantine. Each leg
 also has a `fiat_value` at its own transaction's price and each pair a
-`swap_fee_fiat_value` at the sending price (null when unpriced). Custody
-lineage rows carry the sending transaction's network fee, which covers the
-whole transaction rather than one edge, with fiat values at that price.
+`swap_fee_fiat_value` at the sending price (null when unpriced). The
+desktop's custody lineage read asks for `priced`, which adds each row's fiat
+value and the sending transaction's network fee (covering the whole
+transaction rather than one edge) at that price; the assistant's lineage tool
+does not pass it and reads the rows without them.
 
 The assistant's skill references do not say this yet: recorded sessions read
 them verbatim, so changing their text waits for a reviewed re-record of those
