@@ -224,7 +224,7 @@ impl Probes {
             } else if certificate.is_some() {
                 "TLS certificate verification: custom CA bundle."
             } else {
-                "TLS certificate verification: system trust store."
+                "TLS certificate verification: default roots (SSL_CERT_FILE, else the Linux host bundle, else bundled Mozilla roots)."
             }
             .into(),
         );
@@ -279,7 +279,7 @@ impl Probes {
         } else if let Some(cert) = certificate {
             format!("Certificate verification: pinned certificate {cert}.")
         } else {
-            "Certificate verification: system trust store.".into()
+            "Certificate verification: default roots (SSL_CERT_FILE, else the Linux host bundle, else bundled Mozilla roots).".into()
         });
         logs.push(
             proxy
