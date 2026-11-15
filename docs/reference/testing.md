@@ -279,9 +279,12 @@ swallows the failed request. A daemon session sends each stdin chunk once
 the output reached what the recording had seen, or once every earlier
 request has its final reply.
 
-After a reviewed behaviour change, `KASSIBER_GOLDEN_WRITE=1` rewrites the
-`expect` blocks from the current binary instead of comparing; it refuses to
-run under `CI`. Diff the goldens and explain every change; tax numbers,
+After a reviewed behaviour change, `KASSIBER_GOLDEN_WRITE=1` rewrites what
+differs in the `expect` blocks from the current binary instead of comparing;
+it refuses to run under `CI`. Values that compare equal, unchanged output
+lines, recorded identities, `recorded_us` and every other byte of the file
+stay as recorded, and a value it cannot rewrite in the file's layout is
+refused. Diff the goldens and explain every change; tax numbers,
 stored data and exports need the owner's sign-off.
 
 ## Tiers
