@@ -30,6 +30,11 @@ export function BtcFigure({ msat }: { msat: string | number | bigint }) {
   );
 }
 
+/** An exact amount in its own asset: bitcoin as {@link BtcFigure}, another asset by its code. */
+export function AssetFigure({ msat, asset }: { msat: string | number | bigint; asset: string }) {
+  return isBitcoinAsset(asset) ? <BtcFigure msat={msat} /> : <>{formatMsatAsAsset(msat, asset, false)}</>;
+}
+
 /**
  * A leg's amount: exact in its own asset, or its value in the display
  * currency when that is chosen and known for this leg (an unpriced leg says

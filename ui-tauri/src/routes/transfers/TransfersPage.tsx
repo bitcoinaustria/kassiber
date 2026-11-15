@@ -53,7 +53,7 @@ import {
 import type { QuarantineItem, QuarantineSnapshot } from "@/components/kb/quarantine/types";
 import { ReadinessPill } from "@/components/kb/ReadinessPill";
 import { ReviewTransfers, type SuggestionFilter } from "@/components/review/ReviewTransfers";
-import { differentAssetBadgeClassName, type TransferSuggestions } from "@/components/review/transferModel";
+import { differentAssetBadgeClassName, isBitcoinAsset, type TransferSuggestions } from "@/components/review/transferModel";
 import { useJournalRefreshAfterDecisions } from "@/components/review/useJournalRefreshAfterDecisions";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { blurClass, formatDisplayMoney } from "@/components/transactions/model";
@@ -99,7 +99,7 @@ import {
   type TransfersCustodySearch,
 } from "../transfers-custody/routeSearch";
 import { CustodyComponentResolver } from "./CustodyComponentResolver";
-import { BtcFigure } from "./figures";
+import { AssetFigure } from "./figures";
 import { LinkManuallyDialog, type LinkedResult, type LinkStart } from "./LinkManuallyDialog";
 import {
   buildLinkedMoves,
@@ -135,7 +135,7 @@ import { SetAsideCard } from "./SetAsideCard";
 import { useOpenParts } from "./useOpenParts";
 import { useSettledSuggestions } from "./useSettledSuggestions";
 import { RulesAndViewsSheet, type TransfersSavedView } from "./RulesSheet";
-import { formatMsatAsBtc, formatMsatAsSats, sumMsat } from "./satsFormat";
+import { formatMsatAsBtc, formatMsatAsSats, formatMsatIn, sumMsat } from "./satsFormat";
 import { UnlinkDialog, type MoveDialogIntent, type UnlinkResult } from "./UnlinkDialog";
 
 const LINKED_PAGE = 25;
@@ -1132,7 +1132,7 @@ function Caveat() {
 
 /** Bitcoin on both sides: the moves whose amounts add up to "moved". */
 function movedTotals(moves: readonly LinkedMove[]) {
-  const linked = moves.filter((move) => move.source !== "undone" && !move.differentAsset);
+  const linked = moves.filter((move) => move.source !== "undone" && !move.differentAsset && isBitcoinAsset(move.asset));
   const priced = linked.filter((move) => move.amountFiat !== null);
   return {
     amount: sumMsat(linked.map((move) => move.amountMsat)),
@@ -1370,7 +1370,7 @@ function HeldQuestion({
 }) {
   const { t } = useTranslation("review");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
-  const amount = formatMsatAsBtc(dismissal.out.amount_msat);
+  const amount = formatMsatIn(dismissal.out.amount_msat, dismissal.out.asset);
   return (
     <li className="px-3 py-4 sm:px-6" data-testid="transfers-held-move">
       <div className="flex items-start gap-3">
@@ -1906,7 +1906,7 @@ function LinkedMoveRow({
   // An automatic link shows only its icon, so its hint says it was automatic first.
   const automatic = move.source === "automatic" ? t("review:transfersPage.linked.automaticReason") : null;
   // Linked in part: the label says so and the hint says how much is left.
-  const restReason = rest !== null && !hideSensitive ? t("review:transfersPage.linked.rest", { left: formatMsatAsBtc(rest.toString()) }) : null;
+  const restReason = rest !== null && !hideSensitive ? t("review:transfersPage.linked.rest", { left: formatMsatIn(rest.toString(), move.asset) }) : null;
   const reason = [restReason?.replace(/\.$/, ""), automatic, evidence, ruleReason].filter(Boolean).join(". ") || null;
   const SourceIcon = SOURCE_ICON[move.source];
   const type = moveType(move);
@@ -1954,7 +1954,7 @@ function LinkedMoveRow({
             blurClass(hideSensitive),
           )}
         >
-          {currency === "btc" ? <BtcFigure msat={move.amountMsat} /> : fiat(move.amountFiat)}
+          {currency === "btc" ? <AssetFigure msat={move.amountMsat} asset={move.asset} /> : fiat(move.amountFiat)}
         </CurrencyToggleText>
       </TableCell>
       <TableCell className="hidden overflow-hidden py-1.5 text-right @6xl/list:table-cell">

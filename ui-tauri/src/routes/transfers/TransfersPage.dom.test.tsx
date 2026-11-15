@@ -690,6 +690,36 @@ describe("Transfers overview", () => {
     expect(within(list).getByText("By you")).toBeTruthy();
   });
 
+  it("writes a send of another asset in that asset on every list", async () => {
+    const usdtOut = { transaction_id: "o-usdt", wallet: "Liquid USDT", wallet_kind: "liquid", asset: "USDT", occurred_at: "2026-01-01T00:00:00Z", amount_msat: "10000000000000" };
+    const lbtcIn = { transaction_id: "i-lbtc", wallet: "Liquid hot", wallet_kind: "liquid", asset: "LBTC", occurred_at: "2026-01-01T00:01:00Z", amount_msat: "100000000" };
+    daemon.items = [];
+    daemon.pairs = [{ id: "pair-usdt", out_transaction_id: "o-usdt", in_transaction_id: "i-lbtc", kind: "manual", policy: "taxable", swap_fee_msat: null, out: usdtOut, in: lbtcIn }];
+    daemon.unlinked = [
+      {
+        id: "pair-old", out_transaction_id: "o-usdt-2", in_transaction_id: "i-lbtc-2", kind: "manual", policy: "taxable", swap_fee_msat: null, deleted_at: "2026-11-13T14:02:00Z",
+        out: { ...usdtOut, transaction_id: "o-usdt-2", amount_msat: "2500000000000" },
+        in: { ...lbtcIn, transaction_id: "i-lbtc-2" },
+      },
+    ];
+    daemon.dismissals = [
+      undone({
+        id: "dismissal-aside", reason: "user dismissed from review queue", out_transaction_id: "o9", in_transaction_id: "i9",
+        out: { transaction_id: "o9", wallet: "Liquid USDT", asset: "USDT", amount_msat: "750000000000", occurred_at: "2026-01-02T00:00:00Z" },
+      }),
+    ];
+    mount();
+    const list = await screen.findByTestId("transfers-linked-list");
+    await waitFor(() => expect(within(list).getByText("100 USDT")).toBeTruthy());
+    expect(list.textContent).not.toContain("₿100");
+    // Not bitcoin, so not counted as bitcoin moved.
+    expect(screen.getByRole("region", { name: "Transfers at a glance" }).textContent).toContain("₿0.00000000");
+    await openTab(/^Unlinked by you/);
+    expect(await screen.findByText("25 USDT")).toBeTruthy();
+    await openTab(/^Set aside/);
+    expect(within(await screen.findByTestId("transfers-set-aside")).getByText("7.5 USDT")).toBeTruthy();
+  });
+
   it("docks Link manually beside the lists when there is room, one panel at a time", async () => {
     const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
       width: 1300, height: 800, top: 0, left: 0, right: 1300, bottom: 800, x: 0, y: 0, toJSON: () => ({}),

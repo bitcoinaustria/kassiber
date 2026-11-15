@@ -23,7 +23,7 @@ import type { RecentlyUnlinked } from "./linkedMovesModel";
 import { RowMenu } from "./RowMenu";
 import { datePart, dateTime, kindKey } from "./linkModel";
 
-import { formatMsatAsBtc } from "./satsFormat";
+import { formatMsatIn } from "./satsFormat";
 
 export function RecentlyUnlinkedCard({
   rows,
@@ -111,7 +111,7 @@ function UnlinkedRow({
         </span>
       </span>
       <span className={cn("col-start-2 row-start-1 text-right text-sm font-medium tabular-nums @6xl/list:col-start-3", blurClass(hideSensitive))}>
-        {formatMsatAsBtc(row.amountMsat)}
+        {formatMsatIn(row.amountMsat, row.asset)}
       </span>
       <span className="col-span-2 row-start-3 flex flex-wrap justify-end gap-1.5 @6xl/list:col-span-1 @6xl/list:col-start-4 @6xl/list:row-start-1">
         <Button

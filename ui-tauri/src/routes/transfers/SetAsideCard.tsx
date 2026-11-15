@@ -20,7 +20,7 @@ import { useUiStore } from "@/store/ui";
 import type { TransferDismissal } from "./linkedMovesModel";
 import { RowMenu } from "./RowMenu";
 import { dateTime } from "./linkModel";
-import { formatMsatAsBtc } from "./satsFormat";
+import { formatMsatIn } from "./satsFormat";
 
 export function SetAsideCard({
   rows,
@@ -85,7 +85,7 @@ function SetAsideRow({ row, pending, onRestore }: { row: TransferDismissal; pend
         </span>
       </span>
       <span className={cn("col-start-2 row-start-1 text-right text-sm tabular-nums @6xl/list:col-start-3", blurClass(hideSensitive))}>
-        {formatMsatAsBtc(row.out.amount_msat)}
+        {formatMsatIn(row.out.amount_msat, row.out.asset)}
       </span>
       <span className="col-span-2 row-start-3 flex items-center justify-end gap-1 @6xl/list:col-span-1 @6xl/list:col-start-4 @6xl/list:row-start-1">
       <Button

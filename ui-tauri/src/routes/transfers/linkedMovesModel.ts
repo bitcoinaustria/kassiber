@@ -449,6 +449,8 @@ export interface RecentlyUnlinked {
   fromRail: SwapRail;
   toRail: SwapRail;
   occurredAt: string | null;
+  /** The sending side's asset, which its amount is in. */
+  asset: string;
   amountMsat: Exact;
   inAmountMsat: Exact | null;
   unlinkedAt: string | null;
@@ -488,6 +490,7 @@ export function recentlyUnlinked({
       fromRail: railForLeg(pair.out.asset, pair.out.wallet_kind),
       toRail: railForLeg(pair.in.asset, pair.in.wallet_kind),
       occurredAt: pair.out.occurred_at,
+      asset: pair.out.asset,
       amountMsat: pair.out.amount_msat,
       inAmountMsat: pair.in.amount_msat,
       unlinkedAt: pair.deleted_at ?? null,
@@ -509,6 +512,7 @@ export function recentlyUnlinked({
       fromRail: railForLeg(dismissal.out.asset, null),
       toRail: railForLeg(dismissal.in.asset, null),
       occurredAt: dismissal.out.occurred_at ?? dismissal.in.occurred_at,
+      asset: dismissal.out.asset,
       amountMsat: dismissal.out.amount_msat,
       inAmountMsat: dismissal.in.amount_msat,
       unlinkedAt: dismissal.created_at,

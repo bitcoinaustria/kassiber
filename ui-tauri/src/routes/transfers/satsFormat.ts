@@ -3,6 +3,7 @@
  * whole sats are formatted from a BigInt and a sub-sat remainder (Lightning)
  * is appended with the locale's decimal separator.
  */
+import { isBitcoinAsset } from "@/components/review/transferModel";
 import { localeForLanguage } from "@/i18n/config";
 import { currentUiLocale } from "@/lib/localeFormat";
 
@@ -65,6 +66,11 @@ export function formatMsatAsAsset(value: string | number | bigint, asset: string
   const whole = absolute / 100_000_000_000n;
   const fraction = (absolute % 100_000_000_000n).toString().padStart(11, "0").replace(/0+$/, "");
   return `${whole.toString()}${fraction ? `.${fraction}` : ""} ${asset}`;
+}
+
+/** An exact amount in its own asset: bitcoin on any rail as `₿0.00600000`, another asset by its code. */
+export function formatMsatIn(value: string | number | bigint, asset: string): string {
+  return formatMsatAsAsset(value, asset, isBitcoinAsset(asset));
 }
 
 /** The sum of exact millisatoshi amounts; unreadable ones are skipped. */
