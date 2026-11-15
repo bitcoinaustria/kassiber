@@ -1,7 +1,7 @@
 [
   {"id": "RVR-daemon-unknown-fields", "file": "crates/daemon/src/review.rs",
-   "find": "        return Err(AppError::new(\"validation\", \"Unsupported review arguments\"));",
-   "replace": "        let _ = \"Unsupported review arguments\";",
+   "find": "    {\n        return Err(AppError::new(\"validation\", \"Unsupported review arguments\"));",
+   "replace": "    {\n        let _ = \"Unsupported review arguments\";",
    "expect_failing": ["desktop_review_arguments_refuse_in_python_order_and_author_gui"],
    "rule": "Desktop review requests refuse fields outside each kind's Python allowlist."},
   {"id": "RVR-daemon-required-fields", "file": "crates/daemon/src/review.rs",
