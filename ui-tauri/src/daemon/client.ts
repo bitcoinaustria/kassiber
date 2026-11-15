@@ -357,6 +357,15 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
   "ui.backends.electrum.test": [],
   "ui.backends.http.test": [],
   "ui.backends.lightning.test": [],
+  // Reads a certificate for the user's decision; changes nothing.
+  "ui.backends.certificate.fetch": [],
+  "ui.backends.certificate.trust": [
+    "status",
+    "ui.backends.list",
+    "ui.backends.options",
+    "ui.backends.public_defaults",
+    "ui.backends.settings.list",
+  ],
   "ui.connections.exchange.test": [],
   "ui.wallets.document_import.preview": [],
   "ui.wallets.document_import.import": [

@@ -232,6 +232,23 @@ Resolve trust before minting consent:
   IP identities always require an IP SAN. Other certificates defer to webpki's
   chain verifier. Both paths always verify TLS 1.2/1.3 handshake signatures.
   Operator/host stores do not acquire the backend pin exception.
+- A failed chain is classified for the user only where that is unambiguous:
+  without backend roots, an unknown issuer (or a self-issued leaf webpki
+  refuses before an issuer search, such as a CA:TRUE self-signed certificate)
+  is `Error::CertificateUntrusted` (`tls_certificate_untrusted`); with backend
+  roots, a leaf that is not pinned and does not chain to them is
+  `Error::CertificateChanged` (`tls_certificate_changed`, not retryable).
+  Expiry, name and other faults stay `Error::Tls`. AI provider routes keep
+  reporting both as network errors.
+- `Route::fetch_certificate` serves the explicit
+  [certificate trust flow](backends.md#self-signed-certificates). It uses the
+  route's gate, proxy and SNI like any connection but its own capturing
+  verifier: it records the presented chain, verifies the server's TLS 1.2/1.3
+  handshake signature with it, and then aborts the handshake, so no
+  application data is written and the chain is never accepted for a
+  connection. The returned `PresentedCertificate` only describes the leaf,
+  whether a given trust already accepts it, and why a pin of it would not
+  verify. It is never served from a recorded tape.
 - `ExplicitInsecure` is refused by `Route::check` outside Sync (LND also uses
   Sync). It is a separately consent-bound backend setting, never a
   retry after verification failure. It skips certificate/name checks while
@@ -526,6 +543,7 @@ IDs. Core/Electrum methods that sign, spend or broadcast are not exposed.
 | Core read-only JSON-RPC POST | same; cookie reads occur after authorization | same; `watch_only_methods_and_expired_deadlines_refuse_before_connection` |
 | Electrum connect/version and call/batch TCP/TLS | explicit authorized connection; gate rechecks every write | same; `electrum_policy_change_stops_existing_session_and_write` |
 | HTTP, Electrum, Core and BTCPay daemon tests | `ProbeConsent`, exact kind/arguments/book | `every_probe_requires_exact_action_arguments_and_book_and_refuses_offline`; hybrid `test_offline_probes_cannot_touch_loopback` |
+| Backend certificate fetch / trust (`kassiber_chain::certificates`) | `CertificateConsent::explicit(<backend>)` at the CLI command or one desktop request; the grant names one saved backend | `refusals_before_any_connection`, `fetch_refuses_plaintext_offline_and_missing_consent_before_any_attempt`; end to end `cli_shows_the_fingerprint_then_pins_only_the_confirmed_certificate`, `daemon_fetch_and_trust_and_a_changed_certificate_is_never_repinned_alone`, `offline_mode_refuses_the_fetch_before_any_connection` (reads, status and settings listings make no connection) |
 | Core detection candidates | explicit detect action, local candidates only | same grant test; `detect_candidates_ignore_remote_configuration_and_refs_exclude_secrets`; hybrid detection fixture |
 
 The hybrid offline regression supplies a configured local Core candidate and

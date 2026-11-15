@@ -80,6 +80,7 @@ kassiber backends create core --kind bitcoinrpc --url http://127.0.0.1:8332 --co
 kassiber backends set-default myelectrum
 kassiber backends clear-default
 kassiber backends delete myelectrum
+kassiber backends trust-certificate myelectrum
 ```
 
 Point a wallet at a named backend:
@@ -304,8 +305,11 @@ for operator visibility; descriptor sync does not require `blockfilterindex=1`.
 The backend CLI now accepts the common backend-specific knobs directly:
 
 - `--insecure` for Electrum TLS bypass testing against servers you control
-- `--certificate` for a verified custom CA bundle on HTTPS/Electrum backends;
-  LND also accepts its `tls.cert` path or PEM contents
+- `--certificate` for a verified custom CA bundle, or a pinned server
+  certificate, on HTTPS/Electrum backends; LND also accepts its `tls.cert`
+  path or PEM contents. For your own server's self-signed certificate, prefer
+  [`backends trust-certificate`](#self-signed-certificates), which fetches it
+  and shows its fingerprint for you to confirm
 - `--cookiefile` or `--username` / `--password` for Bitcoin Core RPC auth
 - `--wallet-prefix` for Bitcoin Core watch-only wallet naming
 - `--lightning-cli`, `--lightning-dir`, and `--rpc-file` for Core
@@ -649,6 +653,8 @@ Use this for mempool-compatible HTTP APIs.
 - good for address and descriptor refresh
 - leaks queried scripts to the remote server
 - easiest option when you are not running your own node
+- an HTTPS endpoint with a self-signed certificate: trust it once with
+  [`backends trust-certificate`](#self-signed-certificates)
 - an HTTPS endpoint whose certificate chains to a root outside the public web
   PKI — a private or organizational CA, even one already installed in your system
   trust store — needs `CERTIFICATE` pointed at that root (or at the host bundle
@@ -665,8 +671,10 @@ Use this for Electrum/Fulcrum-style servers.
 - accepts clearnet hosts and `.onion` hosts, for example
   `tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001`
   or `ssl://...onion:50002` when the server's TLS setup matches
-- `CERTIFICATE=/path/to/ca.pem` uses that verified CA bundle as this backend's
-  trust store
+- a server with a self-signed certificate (a home Fulcrum or electrs behind
+  TLS): trust it once with [`backends trust-certificate`](#self-signed-certificates)
+- `CERTIFICATE=/path/to/ca.pem` uses that verified CA bundle, or that pinned
+  server certificate, as this backend's trust store
 - `INSECURE=1` disables all certificate and hostname verification; it does not
   pin a self-signed certificate and should only be used against servers you control
 
@@ -704,8 +712,101 @@ Use this when you run your own node.
   support, pruning, IBD, and BIP158 filter-index availability
 - this keeps refresh state isolated instead of mixing unrelated watch-only imports together
 - plain `http://` is only safe on localhost or over a trusted tunnel
-- HTTPS uses the host trust store by default; `CERTIFICATE` selects a custom CA
-  bundle, while `INSECURE=1` disables verification for that backend only
+- HTTPS verifies against `SSL_CERT_FILE` when that is set, else on Linux the
+  first readable host CA bundle file (for example
+  `/etc/ssl/certs/ca-certificates.crt`), else Kassiber's bundled Mozilla roots.
+  macOS and Windows therefore use the bundled roots: the macOS keychain and
+  the Windows certificate store are never read, so a CA you installed there is
+  not trusted. `CERTIFICATE` selects a custom CA bundle or a pinned server
+  certificate (see [self-signed certificates](#self-signed-certificates)),
+  while `INSECURE=1` disables verification for that backend only
+
+## Self-signed certificates
+
+A node you run yourself often serves TLS with a self-signed certificate.
+Kassiber does not trust it silently: you see its SHA-256 fingerprint once,
+compare it with the server, and confirm. The certificate is then pinned for
+that backend only. This works for Electrum `ssl://`, Esplora / Explorer API
+`https://`, and Bitcoin Core RPC `https://` backends that are already saved.
+
+```bash
+kassiber backends trust-certificate home
+# fails with confirmation_required and prints, for example:
+#   node.local:50002 presents a certificate with SHA-256 fingerprint 81:4C:...:6A
+kassiber backends trust-certificate home --fingerprint 81:4C:...:6A
+```
+
+Compare the fingerprint with the one the server itself reports, for example
+`openssl x509 -noout -fingerprint -sha256 -in <the server's certificate file>`
+on the node. Colons and case do not matter in `--fingerprint`.
+
+What happens:
+
+- Fetching is an explicit action only: the command above, or **Fetch
+  certificate** in the desktop dialog. Kassiber connects through the
+  backend's configured proxy, completes the TLS handshake far enough to check
+  the server's signature with the certificate, and stops: no request, no
+  backend credentials, and no application data are sent to the backend (a
+  configured proxy is negotiated as usual, with its own credentials). Launch, status, listing
+  backends, opening Settings, connection tests, and syncs never fetch a
+  certificate. Offline mode refuses it.
+- Confirming fetches again and pins the certificate only if the server still
+  presents the fingerprint you confirmed (`backend_certificate_mismatch`
+  otherwise, and nothing is written). The pin is the server's certificate as
+  one immutable PEM file named by its SHA-256,
+  `<data root>/certificates/<sha256>.pem`, owner-only (`0600` in a `0700`
+  directory owned by you; an existing directory is tightened, one owned by
+  someone else is refused). The backend's `CERTIFICATE` is then switched to
+  that file and `INSECURE` turned off in one write transaction, and only if
+  the backend still has the URL, kind, proxy, certificate and insecure
+  setting the certificate was fetched for
+  (`backend_certificate_config_changed` otherwise). Before committing,
+  Kassiber checks that the backend as it now resolves would connect with
+  exactly this pin and with verification on (`backend_certificate_not_effective`
+  otherwise). A refusal leaves the previous pin and setting in place; a
+  replaced pin file no backend refers to is removed after the commit. Only
+  files with that `<sha256>.pem` shape are ever removed: a CA bundle of your
+  own in the same folder stays.
+- The desktop binds its confirmation to what you reviewed: a fetch returns a
+  `revision` of the backend's kind, URL, proxy, certificate and insecure
+  setting, and trusting with a revision the backend no longer has is refused
+  before any connection (`backend_certificate_config_changed`).
+- A backend whose kind, URL, proxy, certificate or insecure setting is
+  overridden by an environment variable (`KASSIBER_BACKEND_<NAME>_<FIELD>`)
+  is refused before any connection (`backend_certificate_overridden`, naming
+  the variables but not their values): a stored pin could be silently unused.
+- There is nothing to pin, and the command says so
+  (`backend_certificate_already_trusted`), when the certificate already chains
+  to a trusted authority or already matches the backend's `CERTIFICATE`.
+- A pinned certificate has to be a well-formed TLS server certificate that is
+  in date (`backend_certificate_unpinnable` otherwise). Its host names are not
+  checked: the pin is that exact certificate, and only the server holding its
+  key can present it, so a self-signed `localhost` certificate keeps working
+  when the node is reached as `192.168.1.10` or `node.local`. This applies to
+  any `CERTIFICATE` file holding the server's own certificate; a CA
+  certificate still verifies the server's chain and host name as usual.
+- Plaintext URLs (`tcp://`, `http://`), BTCPay, and Lightning backends are
+  refused (`backend_certificate_plaintext`, `backend_certificate_unsupported`).
+  A `.onion` backend needs its Tor proxy as for any connection.
+
+Sync and connection errors name the problem so the desktop can offer this
+flow: `tls_certificate_untrusted` when no certificate is configured and the
+server's chain reaches no trusted authority, and `tls_certificate_changed`
+when the backend has a `CERTIFICATE` and the server presents another
+certificate. A changed certificate is never accepted or re-pinned on its own.
+If you replaced the server's certificate yourself, run the trust flow again;
+the dialog and the command show which pinned fingerprint it replaces. If you
+did not, treat the server as impersonated.
+
+In the desktop app, an edited backend in **Settings** has a **Server
+certificate** row with **Check certificate…**, highlighted when a connection
+test failed for one of these reasons. A wallet sync that fails for one of them
+offers the same dialog beside the error on the wallet's page. Neither is an
+AI or MCP tool: trusting a certificate is your decision.
+
+The pin lives in the data root, so a backup restored elsewhere, or a data root
+moved to another path, needs the certificate trusted again
+(`backend_tls_config_invalid` until then).
 
 ## Descriptor and Liquid notes
 

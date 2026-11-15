@@ -43,7 +43,11 @@ fn tables_match_python() {
     let document = kassiber_pytext::loads(include_str!("data/capabilities.json")).unwrap();
     // Rust-only commands (docs/reference/rust-shell.md#rust-only-commands)
     // carry their siblings' capability; Python has no entry for them.
-    let rust_only = [("wallets.sync-bitpanda", "wallets.sync-binance")];
+    let rust_only = [
+        ("wallets.sync-bitpanda", "wallets.sync-binance"),
+        // Pinning a certificate is a trust decision, admin like revealing a token.
+        ("backends.trust-certificate", "backends.reveal-token"),
+    ];
     for (leaf, sibling) in rust_only {
         assert_eq!(cli_capability(leaf), cli_capability(sibling), "{leaf}");
     }
@@ -68,6 +72,10 @@ fn tables_match_python() {
             "ui.connections.btcpay.create",
         ),
         ("ui.connections.exchange.sync", "ui.connections.btcpay.test"),
+        // Backend certificate trust (docs/reference/backends.md#self-signed-certificates):
+        // fetching is an explicit connection test, trusting is admin.
+        ("ui.backends.certificate.fetch", "ui.backends.electrum.test"),
+        ("ui.backends.certificate.trust", "ui.backends.delete"),
     ];
     for (kind, sibling) in rust_only_kinds {
         assert!(daemon_capability(kind).is_some(), "{kind}");

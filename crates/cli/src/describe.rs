@@ -58,6 +58,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "backends.set-default",
     "backends.clear-default",
     "backends.reveal-token",
+    "backends.trust-certificate",
     "secrets.init",
     "backup.export",
     "backup.import",

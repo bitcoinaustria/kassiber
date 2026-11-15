@@ -14,6 +14,8 @@ pub const KINDS: &[&str] = &[
     "ui.backends.electrum.test",
     "ui.backends.http.test",
     "ui.backends.lightning.test",
+    "ui.backends.certificate.fetch",
+    "ui.backends.certificate.trust",
     "backends.reveal_token",
 ];
 pub fn execute(

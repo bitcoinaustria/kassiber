@@ -132,7 +132,8 @@ const CLI_ADMIN_PATHS: &str = "
     secrets.init secrets.init-resume secrets.change-passphrase
     secrets.remember-unlock secrets.forget-unlock secrets.verify
     secrets.migrate-credentials backup.export backup.import
-    backends.delete backends.reveal-token wallets.delete imports.rollback
+    backends.delete backends.reveal-token backends.trust-certificate
+    wallets.delete imports.rollback
     maintenance.purge-legacy-ledger
     wallets.reveal-descriptor ai.providers.create ai.providers.update
     ai.providers.delete ai.providers.set-default ai.providers.clear-default
@@ -208,7 +209,7 @@ const DAEMON_OPERATOR_KINDS: &str = "
     ui.backends.create ui.backends.update ui.backends.set_default
     ui.backends.bitcoinrpc.test ui.backends.btcpay.test
     ui.backends.detect_core ui.backends.electrum.test ui.backends.http.test
-    ui.backends.lightning.test ui.reports.export_pdf
+    ui.backends.lightning.test ui.backends.certificate.fetch ui.reports.export_pdf
     ui.reports.export_summary_pdf ui.reports.export_csv ui.reports.export_xlsx
     ui.reports.export_capital_gains_csv ui.reports.export_austrian_e1kv_pdf
     ui.reports.export_austrian_e1kv_xlsx ui.reports.export_austrian_e1kv_csv
@@ -255,7 +256,7 @@ const DAEMON_ACCOUNTING_DECISION_KINDS: &str = "
 ";
 
 const DAEMON_ADMIN_KINDS: &str = "
-    ui.backends.delete
+    ui.backends.delete ui.backends.certificate.trust
     ui.workspace.delete ui.profiles.reset_data ui.projects.create
     ui.projects.select ui.backup.export ui.backup.preview ui.backup.apply ui.backup.cancel
     ui.secrets.init ui.secrets.change_passphrase
