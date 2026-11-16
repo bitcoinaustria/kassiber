@@ -1051,6 +1051,186 @@
     "rule": "An amount finer than 11 decimals is refused naming the ledger row."
   },
   {
+    "id": "binance-crypto-scope-reads",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "if client.scope == Scope::Crypto {",
+    "replace": "if false {",
+    "expect_failing": [
+      "binance_crypto_scope_reads_every_coin_in_bounded_windows_only_after_consent"
+    ],
+    "rule": "The crypto scope reads every coin, not BTC only."
+  },
+  {
+    "id": "binance-transfer-window",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "windows(end, 89 * DAY)",
+    "replace": "windows(end, 90 * DAY)",
+    "expect_failing": [
+      "binance_crypto_scope_reads_every_coin_in_bounded_windows_only_after_consent"
+    ],
+    "rule": "Deposit and withdrawal windows stay under 90 days."
+  },
+  {
+    "id": "binance-dividend-window",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "span: 179 * DAY,",
+    "replace": "span: 181 * DAY,",
+    "expect_failing": [
+      "binance_crypto_scope_reads_every_coin_in_bounded_windows_only_after_consent"
+    ],
+    "rule": "Dividend windows stay within 180 days."
+  },
+  {
+    "id": "binance-convert-window",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "span: 29 * DAY,",
+    "replace": "span: 31 * DAY,",
+    "expect_failing": [
+      "binance_crypto_scope_reads_every_coin_in_bounded_windows_only_after_consent"
+    ],
+    "rule": "Convert windows stay within 30 days."
+  },
+  {
+    "id": "binance-offset-paging",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "let short = page.len() < 1000;",
+    "replace": "let short = true;",
+    "expect_failing": [
+      "binance_full_windows_are_paged_or_split_and_fail_closed_when_they_cannot_be"
+    ],
+    "rule": "A full deposit or withdrawal page reads the next offset."
+  },
+  {
+    "id": "binance-split-more-data",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "if page.len() >= how.limit || at(&reply, \"moreData\") == &Py::Bool(true) {",
+    "replace": "if page.len() >= how.limit {",
+    "expect_failing": [
+      "binance_full_windows_are_paged_or_split_and_fail_closed_when_they_cannot_be"
+    ],
+    "rule": "A window with moreData is split until every part fits."
+  },
+  {
+    "id": "binance-split-floor",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "if stop - start < SPLIT_FLOOR {",
+    "replace": "if stop - start < 1 {",
+    "expect_failing": [
+      "binance_full_windows_are_paged_or_split_and_fail_closed_when_they_cannot_be"
+    ],
+    "rule": "A minute that is still full fails closed."
+  },
+  {
+    "id": "binance-other-coin-status",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "(true, \"1\" | \"6\") | (false, \"6\") => Some(true),",
+    "replace": "(true, \"1\" | \"6\") | (false, \"1\" | \"6\") => Some(true),",
+    "expect_failing": [
+      "binance_crypto_scope_reads_every_coin_in_bounded_windows_only_after_consent"
+    ],
+    "rule": "Another coin's withdrawal is final only at status 6; 1 is cancelled."
+  },
+  {
+    "id": "binance-unknown-status",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "(false, \"0\" | \"1\" | \"2\" | \"3\" | \"4\" | \"5\") => Some(false),\n        _ => None,",
+    "replace": "(false, \"0\" | \"1\" | \"2\" | \"3\" | \"4\" | \"5\") => Some(false),\n        _ => Some(false),",
+    "expect_failing": [
+      "binance_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "An unknown status on another coin's transfer is refused."
+  },
+  {
+    "id": "binance-other-coin-record-id",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "let record_id = str_or_none(at(row, \"id\")).filter(|_| !is_bitcoin(&currency));",
+    "replace": "let record_id: Option<PyStr> = None;",
+    "expect_failing": [
+      "binance_crypto_scope_reads_every_coin_in_bounded_windows_only_after_consent"
+    ],
+    "rule": "Another coin's deposit keys on Binance's record id, not the shared chain txid."
+  },
+  {
+    "id": "binance-dividend-id",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "if !is_bitcoin(&currency) && !truthy(id) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "binance_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "Another coin's dividend needs Binance's own id."
+  },
+  {
+    "id": "binance-convert-success-only",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "if folded(at(row, \"orderStatus\")) != \"success\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "binance_crypto_scope_reads_every_coin_in_bounded_windows_only_after_consent"
+    ],
+    "rule": "Only SUCCESS converts are imported."
+  },
+  {
+    "id": "binance-convert-swap-ref",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "vec![swap_leg(out, &reference)?, swap_leg(into, &reference)?]",
+    "replace": "vec![record(out)?, record(into)?]",
+    "expect_failing": [
+      "binance_crypto_scope_reads_every_coin_in_bounded_windows_only_after_consent"
+    ],
+    "rule": "A convert between coins is a swap pair sharing the order's swap_ref."
+  },
+  {
+    "id": "binance-convert-btc-swap-bitcoin-scope",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "(false, false) => vec![],",
+    "replace": "(false, _) | (_, false) => vec![],",
+    "expect_failing": [
+      "binance_converts_follow_the_scope"
+    ],
+    "rule": "A BTC swap in bitcoin scope is refused rather than drop a side."
+  },
+  {
+    "id": "binance-bitcoin-scope-tally",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "Ok(tally.admit(scope, &code, class).then_some(code))",
+    "replace": "Ok((scope == Scope::Crypto && class != assets::Class::Fiat).then_some(code))",
+    "expect_failing": [
+      "binance_bitcoin_scope_reads_btc_as_before_and_counts_other_assets"
+    ],
+    "rule": "The bitcoin scope counts every coin it leaves out."
+  },
+  {
+    "id": "binance-exact-units-named",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "    exact(&entry, what)?;\n    record(entry)",
+    "replace": "    record(entry)",
+    "expect_failing": [
+      "binance_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "An amount finer than 11 decimals is refused naming the row."
+  },
+  {
+    "id": "binance-other-coin-rail",
+    "file": "crates/wallets/src/network.rs",
+    "find": "&& raw.get(\"network\").is_some_and(Value::is_string)",
+    "replace": "&& false",
+    "expect_failing": [
+      "binance_crypto_scope_reads_every_coin_in_bounded_windows_only_after_consent"
+    ],
+    "rule": "Another coin's transfer rail is not Bitcoin network evidence."
+  },
+  {
+    "id": "binance-rail-in-wallet-history",
+    "file": "crates/wallets/src/network.rs",
+    "find": "let raw = provider_raw(kind, &raw, &asset);",
+    "replace": "let _ = kind;",
+    "expect_failing": [
+      "binance_bitcoin_scope_reads_btc_as_before_and_counts_other_assets"
+    ],
+    "rule": "A wallet update reads stored rows as the import read them."
+  },
+  {
     "id": "coinbase-bitcoin-scope-leaves-accounts-unread",
     "file": "crates/wallets/src/file_import/exchange_api/coinbase.rs",
     "find": "if !tally.admit(client.scope, &canonical, class) {",
@@ -1270,6 +1450,17 @@
       "coinbase_bitcoin_scope_counts_other_accounts_without_reading_them"
     ],
     "rule": "A fill on a fiat-quoted product stays a sale in the bitcoin scope."
+  },
+  {
+    "id": "binance-names-unread-histories",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "        tally.notice(unread);",
+    "replace": "        drop(unread);",
+    "expect_failing": [
+      "binance_bitcoin_scope_reads_btc_as_before_and_counts_other_assets",
+      "binance_crypto_scope_reads_every_coin_in_bounded_windows_only_after_consent"
+    ],
+    "rule": "A Binance sync names the histories it never reads (spot trades; Convert orders in the bitcoin scope) in next_step."
   },
   {
     "id": "kraken-cross-asset-hint-names-the-way",

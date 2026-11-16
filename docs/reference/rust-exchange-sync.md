@@ -106,6 +106,17 @@ changes the following, which Python never had:
 
 - **Kraken** sends the same requests and maps the ledger grouped by `refid`
   for every crypto asset ([mapping](imports.md#kraken-api)).
+- **Binance** sends the same fiat-payments request, then reads every coin
+  without `coin`/`asset`: deposit and withdrawal history in 89-day windows
+  paged by `offset` (`limit=1000`), dividends in 179-day windows
+  (`limit=500`), and `GET /sapi/v1/convert/tradeFlow` in 29-day windows
+  (`limit=1000`), all from `1498867200000` to now. Dividend and Convert
+  reads have no cursor: a full window, or one with `moreData`, is read again
+  as two halves down to one minute, and a minute that is still full is a
+  `protocol_error`. Convert reads are spaced 1.1 s apart and withdrawal reads
+  120 ms apart, inside Binance's weight limits. Every read is a signed `GET`
+  under the same consent and the shared page, row and time bounds
+  ([mapping](imports.md#binance-api-and-supplemental-csv)).
 
 In both scopes the mapper returns its asset tally, so the envelope gains
 `assets` (`scope`, `skipped` and `excluded` by ticker, and `next_step`) and

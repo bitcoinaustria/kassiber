@@ -126,7 +126,7 @@ pub fn execute(
         Ok(match kind.as_str() {
             "kraken" => kraken::fetch(&client)?,
             "coinbase" => coinbase::fetch(&client)?,
-            "binance" => binance::fetch(&client)?.into(),
+            "binance" => binance::fetch(&client)?,
             "bitpanda" => bitpanda::fetch(&client)?,
             _ => return Err(unknown_kind(&kind)),
         })
