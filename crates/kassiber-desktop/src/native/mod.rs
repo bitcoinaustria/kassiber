@@ -113,6 +113,7 @@ fn on_open_url(app: &mut App, url: &str, _tx: &mut Tx) {
 
 /// A later launch's arguments (macOS single instance): its links, then the window comes
 /// forward, as the single-instance callback does.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub fn relaunched(args: Vec<String>) {
     match HANDLE.get() {
         Some(h) => h.update(move |app: &mut App, _tx: &mut Tx| {

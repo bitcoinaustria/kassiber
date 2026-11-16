@@ -38,7 +38,8 @@ def walk(node, path, out):
 
 
 def check(path):
-    data = json.load(open(path))
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
     problems = []
     walk(data.get("accessibility") or {}, "", problems)
     elements = data.get("elements") or []

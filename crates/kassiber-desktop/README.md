@@ -51,7 +51,7 @@ packaging/ci/rune-checks.sh --kassiber-bin ../../target/debug/kassiber   # + the
 
 - `cargo fmt --check`, then `cargo clippy --all-targets -- -D warnings` with default features
   (agent tooling) and with `--no-default-features` (the shipped configuration).
-- `cargo test --release`: the unit tests. They use disposable roots and make no network calls.
+- `cargo test --release`: the unit tests. They use disposable roots and make no network calls. The redaction test reads the backend's scanner corpus, locked test data that `scripts/fetch-test-data.sh` (repository root) puts in place.
 - The scene check (`src/checks.rs`, `#[ignore]`d in plain test runs) renders every scene
   headless against a disposable book and fails on accessibility-tree problems and missing
   translations. It runs offline with `KASSIBER_NO_EGRESS=1` in a temporary `HOME`.

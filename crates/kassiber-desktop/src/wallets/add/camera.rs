@@ -22,6 +22,7 @@ use std::sync::{Arc, Mutex};
 /// qr-scanner's message when no camera can be opened.
 pub const NOT_FOUND: &str = "Camera not found.";
 /// WebKit's `NotAllowedError` text, as the web shows a refused camera.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub const DENIED: &str = "The request is not allowed by the user agent or the platform in the current context, possibly because the user denied permission.";
 
 /// A camera the user can switch to (`QrScanner.Camera`).
@@ -32,6 +33,7 @@ pub struct Device {
 }
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub enum Event {
     /// The camera runs; the cameras there are (`listCameras`).
     Started(Vec<Device>),
@@ -88,6 +90,7 @@ pub fn start(device: Option<String>, surface: rune::NativeSurface, inbox: Inbox)
 }
 
 /// `calculateScanRegion`: the centred square, 72 % of the short side.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub fn scan_region(w: f64, h: f64) -> (f64, f64, f64, f64) {
     let size = (w.min(h) * 0.72).round();
     (
@@ -100,6 +103,7 @@ pub fn scan_region(w: f64, h: f64) -> (f64, f64, f64, f64) {
 
 /// qr-scanner mirrors a user-facing camera's preview (`_getFacingMode`: front, user or face in
 /// the label).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub fn mirrored(label: &str) -> bool {
     let l = label.to_lowercase();
     ["front", "user", "face"].iter().any(|w| l.contains(w))

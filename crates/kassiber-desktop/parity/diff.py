@@ -457,8 +457,8 @@ def main():
 
 def write_md(reps, path):
     L = ["# Tauri vs Rune parity report", "",
-         "Pixel diff = share of pixels differing beyond an 8 % fuzz. Text offsets are matched-text distances in points "
-         "(left edge, vertical centre). Width ratio = Rune text width / Tauri text width. ΔE = CIE76 colour distance.", "",
+         ("Pixel diff = share of pixels differing beyond an 8 % fuzz. Text offsets are matched-text distances in points "
+          "(left edge, vertical centre). Width ratio = Rune text width / Tauri text width. ΔE = CIE76 colour distance."), "",
          "| Scene | Pixel diff | RMSE | Texts matched | Pos mean / p90 / max | Only Tauri texts | Only Rune texts | Missing controls | Extra controls |",
          "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for r in reps:

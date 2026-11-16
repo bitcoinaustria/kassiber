@@ -51,6 +51,7 @@ pub enum Gate {
 /// Where an item goes: Rune's app menu, or a named top-level menu.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Place {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
     App,
     Menu(&'static str),
 }

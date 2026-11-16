@@ -148,6 +148,7 @@ pub fn clear_held(tx: Option<&mut Tx>) {
 }
 
 /// A copy the macOS worker will clear: the change count its write produced, and when.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Held {
     pub count: isize,
@@ -157,6 +158,7 @@ pub struct Held {
 /// What the worker does with a held copy at `now` when the pasteboard's change count is
 /// `current`: (still held, clear now). A changed count means the user copied something else,
 /// which is never cleared.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub fn expire(held: Option<Held>, now: std::time::Instant, current: isize) -> (Option<Held>, bool) {
     match held {
         None => (None, false),

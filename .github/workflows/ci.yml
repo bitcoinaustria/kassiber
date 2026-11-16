@@ -374,6 +374,12 @@ jobs:
             sleep $((attempt * 30))
           done
 
+      # The redaction test compares the app's floor with the backend's scanner
+      # corpus, which is locked test data.
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
+
       # The desktop crate is its own Cargo workspace with its own target
       # directory, cached apart from the root workspace's.
       - name: Set up Rust

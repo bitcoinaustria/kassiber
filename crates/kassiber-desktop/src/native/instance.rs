@@ -31,11 +31,15 @@ pub fn claim() -> bool {
 }
 
 /// What a later launch sends: `MAGIC`, then its arguments separated by NUL.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 const MAGIC: &[u8] = b"kassiber-instance 1\0";
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 const ACCEPTED: u8 = b'A';
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 const MAX_MESSAGE: u64 = 1 << 20;
 
 /// The arguments in a message, or None for bytes that aren't one.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub fn decode(msg: &[u8]) -> Option<Vec<String>> {
     let body = msg.strip_prefix(MAGIC)?;
     let text = std::str::from_utf8(body).ok()?;
@@ -47,6 +51,7 @@ pub fn decode(msg: &[u8]) -> Option<Vec<String>> {
     )
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub fn encode(args: &[String]) -> Vec<u8> {
     let mut m = MAGIC.to_vec();
     m.extend_from_slice(args.join("\0").as_bytes());

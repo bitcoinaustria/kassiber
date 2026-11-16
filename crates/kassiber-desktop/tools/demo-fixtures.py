@@ -45,7 +45,8 @@ def stale_refs(db, fixture_ids):
         files += [os.path.join(dirpath, f) for f in names if f.endswith(".rs") and ("scene" in f or f in ("main.rs", "mod.rs"))]
     out = []
     for f in files:
-        text = open(f, encoding="utf-8").read()
+        with open(f, encoding="utf-8") as fh:
+            text = fh.read()
         if f.endswith(".rs"):
             # Only the scene tables: the code under `#[cfg(test)]` carries synthetic ids by design.
             text = re.split(r"#\[cfg\(test\)\]\s*mod tests", text)[0]
@@ -63,7 +64,8 @@ def main():
         return 2
     mode, path = sys.argv[1], sys.argv[2]
     db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    cfg = json.load(open(FIX, encoding="utf-8"))
+    with open(FIX, encoding="utf-8") as fh:
+        cfg = json.load(fh)
     bad = 0
     for name, fx in cfg["fixtures"].items():
         got = rows(db, fx["select"])

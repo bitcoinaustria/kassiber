@@ -27,10 +27,13 @@ pub enum ProtectedError {
     Unsupported,
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub const ERR_SEC_ITEM_NOT_FOUND: i32 = -25_300;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub const ERR_SEC_MISSING_ENTITLEMENT: i32 = -34_018;
 
 impl ProtectedError {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
     pub fn from_code(code: i32) -> ProtectedError {
         match code {
             ERR_SEC_MISSING_ENTITLEMENT => ProtectedError::MissingEntitlement,

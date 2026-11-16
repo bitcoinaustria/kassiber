@@ -85,11 +85,11 @@ fn sans_stack() -> &'static str {
     const UI_SYMBOLS: [char; 3] = ['⌘', '⇧', '₿'];
     let mut stack = SANS.to_owned();
     for ch in UI_SYMBOLS {
-        if let Some(family) = chromium_fallback(ch) {
-            if !stack.split(',').any(|f| f.trim() == family) {
-                stack.push_str(", ");
-                stack.push_str(&family);
-            }
+        if let Some(family) = chromium_fallback(ch)
+            && !stack.split(',').any(|f| f.trim() == family)
+        {
+            stack.push_str(", ");
+            stack.push_str(&family);
         }
     }
     Box::leak(stack.into_boxed_str())

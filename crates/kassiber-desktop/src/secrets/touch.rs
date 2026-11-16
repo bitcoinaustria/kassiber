@@ -25,13 +25,16 @@ pub const LEGACY_SHARED_PASSPHRASE_SERVICE: &str = "Kassiber Database Passphrase
 pub const CLI_REMEMBERED_PASSPHRASE_SERVICE: &str = "Kassiber CLI Database Passphrase";
 pub const DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE: &str = "Kassiber Desktop Biometric Passphrase";
 pub const DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE: &str = "Kassiber Desktop Biometric Invalidated";
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub const OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE: &str = "Kassiber Operator Biometric Passphrase";
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub const OPERATOR_BIOMETRIC_MARKER_SERVICE: &str = "Kassiber Operator Biometric Enrollment";
 pub const DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE: &str =
     "Kassiber Desktop Biometric Enrollment (Current Set)";
 pub const DESKTOP_APPLICATION_GATE_MARKER_SERVICE: &str =
     "Kassiber Desktop Biometric Enrollment (Application Gate)";
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 const OPERATOR_DESKTOP_ONLY: &str =
     "Touch ID operator unlock is only available in the macOS desktop app.";
 
@@ -410,6 +413,7 @@ impl Keychain<'_> {
     // ---- Operator Touch ID (the broker's helper) --------------------------------------------
 
     /// `operator_touch_id_store_passphrase`: no preview fallback, ever.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
     pub fn operator_store(&self, account: &str, passphrase: &[u8]) -> Result<(), String> {
         if !self.macos {
             return Err(OPERATOR_DESKTOP_ONLY.to_string());
@@ -433,6 +437,7 @@ impl Keychain<'_> {
     }
 
     /// `operator_touch_id_get_passphrase`.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
     pub fn operator_get(&self, account: &str) -> Result<Option<Zeroizing<Vec<u8>>>, String> {
         if !self.macos {
             return Err(OPERATOR_DESKTOP_ONLY.to_string());
@@ -450,6 +455,7 @@ impl Keychain<'_> {
     }
 
     /// `operator_touch_id_delete_passphrase`.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
     pub fn operator_delete(&self, account: &str) -> Result<(), String> {
         if !self.macos {
             return Err(OPERATOR_DESKTOP_ONLY.to_string());
@@ -467,6 +473,7 @@ impl Keychain<'_> {
     }
 
     /// `operator_touch_id_configured`: a non-prompting marker check.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
     pub fn operator_configured(&self, account: &str) -> Result<bool, String> {
         validate_operator_touch_id_account(account)?;
         if !self.macos {
@@ -500,6 +507,7 @@ pub fn validate_touch_id_account(account: &str) -> Result<(), String> {
 }
 
 /// The broker names an operator item by a lowercase SHA-256 digest.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // macOS-only path (and its tests)
 pub fn validate_operator_touch_id_account(account: &str) -> Result<(), String> {
     if account.len() != 64
         || !account
