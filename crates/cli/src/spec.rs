@@ -126,6 +126,10 @@ pub fn rust_only_new(dotted: &str) -> bool {
         .iter()
         .any(|c| dotted == *c || (c.ends_with('.') && dotted.starts_with(c)))
 }
+
+/// Command groups only the Rust backend serves; every leaf under them is
+/// Rust only too (docs/reference/rust-shell.md#rust-only-commands).
+pub const RUST_ONLY_GROUPS: &[&str] = &["wallets.checkpoints"];
 /// Backend kinds only the Rust backend accepts, extra `--kind` choices of
 /// `backends create` and `backends update`.
 pub const RUST_ONLY_BACKEND_KINDS: &[&str] = &["bitpanda"];

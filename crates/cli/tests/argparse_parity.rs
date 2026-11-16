@@ -95,6 +95,11 @@ fn rust_only(got: String, expected: String) -> (String, String) {
     let names: Vec<&str> = kassiber_cli::spec::RUST_ONLY_LEAVES
         .iter()
         .flat_map(|leaf| leaf.split('.').skip(1))
+        .chain(
+            kassiber_cli::spec::RUST_ONLY_GROUPS
+                .iter()
+                .map(|group| group.rsplit('.').next().unwrap()),
+        )
         .chain(kassiber_cli::spec::RUST_ONLY_BACKEND_KINDS.iter().copied())
         // New commands: their own name under their parent (`bank-lines` for
         // the `source-funds.bank-lines.` group).

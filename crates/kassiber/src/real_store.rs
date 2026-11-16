@@ -1558,6 +1558,37 @@ impl Book for RealBook {
         if let Some(result) = self.workspace_read(operation, args) {
             return result;
         }
+        // Balance checkpoints (docs/reference/balance-checkpoints.md): the
+        // CLI names its scope, the daemon uses the active book. Local only.
+        if let Some((leaf, cli)) = operation
+            .strip_prefix("wallets.checkpoints.")
+            .map(|leaf| (leaf, true))
+            .or_else(|| {
+                operation
+                    .strip_prefix("ui.wallets.checkpoints.")
+                    .map(|leaf| (leaf, false))
+            })
+            .filter(|(leaf, _)| kassiber_workspace::balance_checks::OPERATIONS.contains(leaf))
+        {
+            let conn = self.conn()?;
+            let scope = if cli {
+                dict(["workspace", "profile"].map(|key| {
+                    (
+                        key,
+                        kassiber_envelope::get(args, key)
+                            .cloned()
+                            .unwrap_or(Value::Null),
+                    )
+                }))
+            } else {
+                dict::<&str>([])
+            };
+            let (_, profile) = kassiber_setup::references::scope(conn, &scope)?;
+            let profile = kassiber_envelope::py_str(
+                kassiber_envelope::get(&profile, "id").unwrap_or(&Value::Null),
+            );
+            return kassiber_workspace::balance_checks::execute(conn, &profile, leaf, args, cli);
+        }
         if operation == "ui.secrets.migrate_credentials" {
             // `migrate_dotenv_credentials(conn, env_file)`, then reload and
             // merge the rewritten runtime configuration.

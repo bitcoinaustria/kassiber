@@ -8,6 +8,8 @@
 #[path = "black_box/support.rs"]
 mod support;
 
+#[path = "black_box/balance_checkpoints.rs"]
+mod balance_checkpoints;
 #[path = "black_box/cli_leaves.rs"]
 mod cli_leaves;
 

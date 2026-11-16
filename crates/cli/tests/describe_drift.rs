@@ -125,6 +125,10 @@ fn python_catalog() -> Value {
     let mut python_entries = std::mem::take(commands).into_iter();
     let mut added_new = 0;
     for leaf in leaves() {
+        // Rust-only groups are compared on their own (`without_rust_only_groups`).
+        if in_rust_only_group(&leaf.dotted()) {
+            continue;
+        }
         if kassiber_cli::spec::rust_only_new(&leaf.dotted()) {
             commands.push(describe_leaf(&leaf));
             added_new += 1;
@@ -184,7 +188,10 @@ fn every_leaf_describes_like_python() {
     let Some(Value::List(python)) = get(data, "commands") else {
         panic!("no commands");
     };
-    let rust = leaves();
+    let rust: Vec<_> = leaves()
+        .into_iter()
+        .filter(|leaf| !in_rust_only_group(&leaf.dotted()))
+        .collect();
     assert_eq!(rust.len(), python.len(), "leaf count");
     let mut unimplemented = Vec::new();
     for (leaf, expected) in rust.iter().zip(python) {
@@ -198,7 +205,14 @@ fn every_leaf_describes_like_python() {
             unimplemented.push(leaf.dotted());
         }
     }
-    assert_eq!(unimplemented.len(), rust.len() - IMPLEMENTED.len());
+    let grouped = IMPLEMENTED
+        .iter()
+        .filter(|path| in_rust_only_group(path))
+        .count();
+    assert_eq!(
+        unimplemented.len(),
+        rust.len() - (IMPLEMENTED.len() - grouped)
+    );
     println!(
         "{} leaves implemented, {} not yet: {}",
         IMPLEMENTED.len(),
@@ -211,7 +225,10 @@ fn every_leaf_describes_like_python() {
 fn the_complete_binary_catalog_is_python_s() {
     let catalog = python_catalog();
     let data = get(&catalog, "data").unwrap();
-    assert_eq!(compact(&describe(&[]).unwrap()), compact(data));
+    assert_eq!(
+        compact(&without_rust_only_groups(describe(&[]).unwrap())),
+        compact(data)
+    );
 }
 
 #[test]
@@ -233,7 +250,10 @@ fn every_prefix_selects_the_python_entries_in_order() {
     let Some(Value::List(python)) = get(data, "commands") else {
         panic!("no commands")
     };
-    for leaf in leaves() {
+    for leaf in leaves()
+        .into_iter()
+        .filter(|leaf| !in_rust_only_group(&leaf.dotted()))
+    {
         for length in 1..=leaf.path.len() {
             let query: Vec<String> = leaf.path[..length].iter().map(|p| (*p).into()).collect();
             let expected: Vec<Value> = python
@@ -250,12 +270,84 @@ fn every_prefix_selects_the_python_entries_in_order() {
                 })
                 .cloned()
                 .collect();
-            let actual = describe(&query).unwrap();
+            let actual = without_rust_only_groups(describe(&query).unwrap());
             assert_eq!(
                 get(&actual, "commands"),
                 Some(&Value::List(expected)),
                 "{query:?}"
             );
         }
+    }
+}
+
+/// Whether a leaf sits under a Rust-only group (`spec::RUST_ONLY_GROUPS`),
+/// which Python's catalog never had.
+fn in_rust_only_group(dotted: &str) -> bool {
+    kassiber_cli::spec::RUST_ONLY_GROUPS
+        .iter()
+        .any(|group| dotted.starts_with(&format!("{group}.")))
+}
+
+/// The binary's catalog without the Rust-only groups' leaves.
+fn without_rust_only_groups(mut data: Value) -> Value {
+    let Value::Dict(items) = &mut data else {
+        panic!("catalog")
+    };
+    let mut removed = 0usize;
+    for (key, value) in items.iter_mut() {
+        if *key == kassiber_pyjson::Key::Str("commands".into()) {
+            let Value::List(commands) = value else {
+                panic!("commands")
+            };
+            let before = commands.len();
+            commands.retain(|command| {
+                let Some(Value::List(path)) = get(command, "path") else {
+                    panic!("path")
+                };
+                let dotted = path
+                    .iter()
+                    .map(kassiber_envelope::py_str)
+                    .collect::<Vec<_>>()
+                    .join(".");
+                !in_rust_only_group(&dotted)
+            });
+            removed = before - commands.len();
+        }
+    }
+    for (key, value) in items.iter_mut() {
+        if *key == kassiber_pyjson::Key::Str("count".into()) {
+            let Value::Int(count) = value else {
+                panic!("count")
+            };
+            *count -= kassiber_pyjson::BigInt::from(removed);
+        }
+    }
+    data
+}
+
+#[test]
+fn rust_only_groups_are_described_and_implemented() {
+    let grouped: Vec<_> = leaves()
+        .into_iter()
+        .filter(|leaf| in_rust_only_group(&leaf.dotted()))
+        .collect();
+    assert_eq!(
+        grouped.iter().map(|l| l.dotted()).collect::<Vec<_>>(),
+        [
+            "wallets.checkpoints.list",
+            "wallets.checkpoints.add",
+            "wallets.checkpoints.remove",
+            "wallets.checkpoints.import",
+            "wallets.checkpoints.export"
+        ]
+    );
+    for leaf in grouped {
+        assert!(leaf.implemented(), "{}", leaf.dotted());
+        let described = describe_leaf(&leaf);
+        assert!(
+            get(&described, "capability").is_some_and(|c| *c != Value::Null),
+            "{}",
+            leaf.dotted()
+        );
     }
 }

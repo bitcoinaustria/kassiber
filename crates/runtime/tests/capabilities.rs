@@ -79,6 +79,8 @@ fn tables_match_python() {
         table(&document, "cli"),
         cli_capabilities()
             .filter(|(path, _)| !rust_only.iter().any(|(leaf, _)| leaf == path))
+            // Rust-only groups (`spec::RUST_ONLY_GROUPS`): balance checkpoints.
+            .filter(|(path, _)| !path.starts_with("wallets.checkpoints."))
             .collect(),
         cli_capability,
     );
@@ -149,10 +151,48 @@ fn tables_match_python() {
                     .iter()
                     .any(|(rust_only, _)| rust_only == kind)
             })
+            .filter(|(kind, _)| !kind.starts_with("ui.wallets.checkpoints."))
             .collect(),
         daemon_capability,
     );
     assert_eq!(cli_capability("status"), Some(Capability::Read));
     assert_eq!(daemon_capability("daemon.unlock"), Some(Capability::Admin));
     assert_eq!(daemon_capability("cancel"), None);
+}
+
+#[test]
+fn balance_checkpoints_read_with_read_and_write_with_operator() {
+    // Rust only (docs/reference/balance-checkpoints.md): listing is a read;
+    // adding, removing, importing and exporting are operator actions, like
+    // attachments and transaction exports.
+    for (cli, daemon, capability) in [
+        (
+            "wallets.checkpoints.list",
+            "ui.wallets.checkpoints.list",
+            Capability::Read,
+        ),
+        (
+            "wallets.checkpoints.add",
+            "ui.wallets.checkpoints.add",
+            Capability::Operator,
+        ),
+        (
+            "wallets.checkpoints.remove",
+            "ui.wallets.checkpoints.remove",
+            Capability::Operator,
+        ),
+        (
+            "wallets.checkpoints.import",
+            "ui.wallets.checkpoints.import",
+            Capability::Operator,
+        ),
+        (
+            "wallets.checkpoints.export",
+            "ui.wallets.checkpoints.export",
+            Capability::Operator,
+        ),
+    ] {
+        assert_eq!(cli_capability(cli), Some(capability), "{cli}");
+        assert_eq!(daemon_capability(daemon), Some(capability), "{daemon}");
+    }
 }
