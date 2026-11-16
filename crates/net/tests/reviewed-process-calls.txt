@@ -128,3 +128,4 @@ crates/kassiber/tests/provider_broker.rs|signal|let status = Command::new("/bin/
 crates/kassiber/tests/provider_broker_claude_codex.rs|broker|let mut child = Command::new(env!("CARGO_BIN_EXE_kassiber"))
 crates/kassiber/tests/overview_other_assets.rs|command|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/kassiber/tests/tax_platform_swaps.rs|kassiber|let output = Command::new(env!("CARGO_BIN_EXE_kassiber"))
+crates/kassiber/tests/exchange_swaps.rs|binary|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
