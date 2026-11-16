@@ -616,12 +616,12 @@
   {
     "id": "W-import-empty-batch",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "if !inserted_ids.is_empty() && !matches!(request.format, Format::Wasabi | Format::Document) {",
+    "find": "if created {",
     "replace": "if true {",
     "expect_failing": [
       "csv_import_dedupe_batch_membership_and_journal_invalidation"
     ],
-    "rule": "Reimports that create no rows create no rollback run."
+    "rule": "Reimports that create no rows expose no rollback run."
   },
   {
     "id": "W-import-atomic",
@@ -7585,8 +7585,8 @@
   {
     "id": "W-wasabi-no-run",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "if !inserted_ids.is_empty() && !matches!(request.format, Format::Wasabi | Format::Document) {",
-    "replace": "if !inserted_ids.is_empty() && request.format != Format::Document {",
+    "find": "if !matches!(request.format, Format::Wasabi | Format::Document) {",
+    "replace": "if request.format != Format::Document {",
     "expect_failing": [
       "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
     ],

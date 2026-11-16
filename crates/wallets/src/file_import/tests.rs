@@ -128,7 +128,13 @@ fn phoenix_metadata_is_idempotent_preserves_authored_notes_and_invalidates_once(
         ),
         2
     );
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
     conn.execute("UPDATE transactions SET note='authored'", [])
         .unwrap();
     import_format(&conn, content, true).unwrap();
@@ -192,7 +198,13 @@ fn csv_exchange_enrichment_respects_metadata_authorship_and_price_rank() {
         metadata(),
         ("buy".into(), "new fill".into(), "new exchange".into())
     );
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
 }
 
 #[test]
@@ -331,7 +343,15 @@ fn csv_import_dedupe_batch_membership_and_journal_invalidation() {
         kassiber_envelope::get(&result, "journal_invalidated"),
         Some(&Py::Bool(false))
     );
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    // The reimport is recorded as a run, but one with no rows to roll back.
+    assert_eq!(kassiber_envelope::get(&result, "import_batch_id"), None);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
     assert_eq!(
         scalar(
             &conn,
@@ -429,7 +449,13 @@ fn csv_enrichment_preserves_closed_observer_evidence() {
         .query_row("SELECT raw_json FROM transactions", [], |r| r.get(0))
         .unwrap();
     assert_eq!(stored, raw);
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
 }
 
 #[test]
@@ -743,7 +769,13 @@ fn json_import_identity_fee_relaxation_routing_and_atomicity() {
         kassiber_envelope::get(&result, "unchanged"),
         Some(&Py::from(3))
     );
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
     conn.execute(
         "UPDATE transactions SET external_id='' WHERE occurred_at='2025-01-01T00:00:00Z'",
         [],
@@ -901,7 +933,13 @@ fn json_metadata_binding_is_deferred_until_a_field_is_written() {
         ),
         version
     );
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
     let error =
         run(json!([{"date":"2025-01-02","txid":"new","amount":1,"description":[]}])).unwrap_err();
     assert_eq!(
@@ -1000,7 +1038,13 @@ fn river_metadata_preserves_authored_notes_and_invalidates_once() {
         ),
         1
     );
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
 }
 #[test]
@@ -1293,7 +1337,13 @@ fn bull_full_exclusion_reconciliation_dedupe_and_readiness() {
         Some(&Py::from(1)),
         "exclude destination wallet before insertion"
     );
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
     assert_eq!(
         scalar(
@@ -1653,7 +1703,13 @@ fn coinfinity_full_exclusion_reconciliation_dedupe_and_readiness() {
         Some(&Py::from(1)),
         "exclude destination wallet before insertion"
     );
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
     assert_eq!(
         scalar(
@@ -2027,10 +2083,19 @@ fn twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness() {
         );
         assert_eq!(scalar(&conn, "SELECT sum(excluded) FROM transactions"), 0);
         assert_eq!(
-            scalar(&conn, "SELECT sum(rows_updated) FROM import_batches"),
+            scalar(
+                &conn,
+                "SELECT sum(rows_updated) FROM import_batches WHERE rows_inserted > 0"
+            ),
             1
         );
-        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 2);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+            ),
+            2
+        );
         assert_eq!(
             scalar(
                 &conn,
@@ -2052,7 +2117,13 @@ fn twentyone_active_ledger_dedupe_updates_legacy_flags_runs_and_readiness() {
             kassiber_envelope::get(&result, "journal_invalidated"),
             Some(&Py::Bool(true))
         );
-        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 2);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+            ),
+            2
+        );
         assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE asset='BTC' AND direction='outbound' AND fee=1000000"),1);
     }
 }
@@ -2130,7 +2201,13 @@ fn twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness() 
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
     assert_eq!(scalar(&conn, "SELECT excluded FROM transactions"), 1);
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
     assert_eq!(
         scalar(
             &conn,
@@ -2337,7 +2414,13 @@ fn pocket_paired_economics_full_flags_dedupe_and_observation_authority() {
         kassiber_envelope::get(&repeat, "imported"),
         Some(&Py::from(0))
     );
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
     assert_eq!(
         scalar(&conn, "SELECT count(*) FROM import_batch_transactions"),
         1
@@ -2476,7 +2559,13 @@ fn pocket_reimport_matches_provider_identity_when_fee_changes() {
     );
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
     assert_eq!(scalar(&conn, "SELECT fee FROM transactions"), 1000000);
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
 }
 
 #[test]
@@ -2536,7 +2625,13 @@ fn ledgerlive_movement_dedupe_runs_updates_and_readiness() {
         kassiber_envelope::get(&repeated, "journal_invalidated"),
         Some(&Py::Bool(false))
     );
-    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+        ),
+        1
+    );
     assert_eq!(
         scalar(
             &conn,
@@ -2663,7 +2758,10 @@ fn strike_active_ledger_dedupe_updates_identity_runs_and_readiness() {
         );
     }
     assert_eq!(
-        scalar(&conn, "SELECT sum(rows_updated) FROM import_batches"),
+        scalar(
+            &conn,
+            "SELECT sum(rows_updated) FROM import_batches WHERE rows_inserted > 0"
+        ),
         1
     );
     assert_eq!(
@@ -2875,7 +2973,13 @@ fn twentyone_legacy_reactivation_rolls_back_when_invalidation_fails() {
             ),
             1
         );
-        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+            ),
+            1
+        );
     }
 }
 
@@ -2951,7 +3055,13 @@ fn cointracking_coordinator_reconciles_identity_economics_and_idless_collisions(
             kassiber_envelope::get(&repeated, "journal_invalidated"),
             Some(&Py::Bool(false))
         );
-        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+            ),
+            1
+        );
         conn.execute("DELETE FROM transactions WHERE wallet_id='chain'", [])
             .unwrap();
         conn.execute("UPDATE transactions SET description=NULL WHERE wallet_id='wallet' AND external_id IS NOT NULL",[]).unwrap();
@@ -3182,7 +3292,13 @@ fn blockpit_coordinator_reconciles_identity_economics_and_idless_collisions() {
             kassiber_envelope::get(&repeated, "journal_invalidated"),
             Some(&Py::Bool(false))
         );
-        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+            ),
+            1
+        );
         conn.execute("DELETE FROM transactions WHERE wallet_id='chain'", [])
             .unwrap();
         conn.execute("UPDATE transactions SET description=NULL WHERE wallet_id='wallet' AND external_id IS NOT NULL",[]).unwrap();
@@ -3461,7 +3577,7 @@ fn binance_full_coordinator_preserves_overlap_reference_ids_enrichment_and_reimp
             kassiber_envelope::get(&repeated, "imported"),
             Some(&Py::from(0))
         );
-        assert_eq!(scalar(&conn,"SELECT count(*) FROM import_batches WHERE source_format='binance_supplemental_csv'"),1);
+        assert_eq!(scalar(&conn,"SELECT count(*) FROM import_batches WHERE source_format='binance_supplemental_csv' AND rows_inserted > 0"),1);
         let enriched = binance_import(
             &conn,
             &BINANCE_AUTO.replace("100.00 EUR", "200.00 EUR"),
@@ -3628,10 +3744,19 @@ fn binance_late_failure_rolls_back_records_flags_runs_and_readiness() {
                 "SELECT journal_input_version FROM profiles WHERE id='p'",
             );
             let count = scalar(&conn, "SELECT count(*) FROM transactions");
-            let runs = scalar(&conn, "SELECT count(*) FROM import_batches");
+            let runs = scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0",
+            );
             assert!(binance_import(&conn, BINANCE_AUTO, mode, "Source").is_err());
             assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), count);
-            assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), runs);
+            assert_eq!(
+                scalar(
+                    &conn,
+                    "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+                ),
+                runs
+            );
             assert_eq!(
                 scalar(
                     &conn,
@@ -3830,7 +3955,13 @@ fn ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches() {
             kassiber_envelope::get(&second, "journal_invalidated"),
             Some(&Py::Bool(true))
         );
-        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+            ),
+            1
+        );
         assert_eq!(run("missing").unwrap_err().code, "not_found");
         conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('other','ws','p','Other','custom','2025-01-01')",[]).unwrap();
         assert_eq!(
@@ -3849,7 +3980,13 @@ fn ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches() {
             Some(&Py::from(1811))
         );
         assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
-        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 0);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+            ),
+            0
+        );
         assert_eq!(
             scalar(
                 &conn,
@@ -4030,7 +4167,13 @@ fn btcpay_late_failure_rolls_back_transactions_metadata_runs_and_readiness() {
         );
         assert_eq!(scalar(&conn, "SELECT count(*) FROM tags"), 0);
         assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 0);
-        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+            ),
+            1
+        );
         assert_eq!(
             scalar(
                 &conn,
@@ -4112,7 +4255,13 @@ fn btcpay_metadata_lookup_is_the_untrimmed_string_identity_and_scoped() {
             1
         );
         assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 7);
-        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 2);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+            ),
+            2
+        );
     }
 }
 
@@ -4295,7 +4444,13 @@ fn wasabi_coordinator_preserves_review_notes_inventory_and_identities() {
         );
         // A run that created nothing leaves no batch to roll back.
         assert!(kassiber_envelope::get(&repeated, "import_batch_id").is_none());
-        assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+        assert_eq!(
+            scalar(
+                &conn,
+                "SELECT count(*) FROM import_batches WHERE rows_inserted > 0"
+            ),
+            1
+        );
         conn.execute_batch("UPDATE transactions SET note='authored',review_status='completed'")
             .unwrap();
         import_kind(&conn, WASABI_HISTORY, Format::Wasabi).unwrap();

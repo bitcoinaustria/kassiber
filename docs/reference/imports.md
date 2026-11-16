@@ -776,10 +776,46 @@ has never synced. Warnings:
 These are bounds, not verdicts: a `scanned` wallet can still be one of several
 wallets you own that the book does not know about.
 
+An exchange API wallet stores the outcome of every sync, CLI or desktop
+(`config_json.exchange_sync`, plus `last_synced_at` on success), so a synced
+`provider-api` wallet no longer reports `never_synced` after a restart.
+
+These bounds feed [source coverage](desktop.md#sources-live-sync-and-file-snapshots):
+how far each source reaches for a period end, whether it is live or a file
+snapshot, and the one action that brings it current (`wallets coverage`,
+`ui.sources.coverage`). A file source covers the rows its files held, never the
+import time; a user statement such as "no activity after 2025-12-31"
+(`wallets attest-coverage`) closes a coverage gap only from the source's covered
+end onward and changes nothing else.
+
 ## Import runs and rolling one back
 
 File imports normally record a run (`import_batches`), so an import that
 mapped columns wrongly can be undone without deleting the connection.
+Each run also records what its file held: `first_row_at` and `last_row_at`
+(the first and last dated row, counting every row read, including rows the
+book already had), `rows_read`, the file's `file_sha256` (streamed, up to
+256 MiB, regular files only) and `file_size`. Coverage uses them for a file
+source's window. Every successful file import records its run, also one that
+added no rows (`rows_inserted` 0): such a run has no members, nothing to roll
+back, and `imports list` does not call it rolled back. Runs recorded before
+these columns have NULLs; coverage then uses only the rows those runs created.
+A run's range counts only as far as the rows that import runs of the same
+wallet and importer (`source_format`, its identity scheme) created still
+reach; rows entered by hand, synced from an API, or created by another
+importer never support it. Rolling a
+run back also clears `first_row_at`, `last_row_at` and `rows_read` of the
+runs of the same file (`file_sha256`) that created no rows of their own, since
+they only re-observed the rows just removed; `profiles reset` clears them on
+every run of the book. The runs themselves, their hash and size stay.
+Re-importing an identical file records a run with no new rows, and the desktop
+says "nothing new". Exchange API syncs
+record no run: the next sync re-imports any rolled-back row by its exchange ID,
+so a rollback could not stick; their outcome is stored on the wallet instead.
+Rows deduplicate within one wallet by external ID and fingerprint, so a CSV
+and an API sync into the same exchange wallet match only where both carry the
+same transaction ID scheme.
+
 Wasabi bundle and document OCR imports currently return before recording a run
 and therefore have no batch rollback token; the
 [Rust parity checkpoint](rust-shell.md#wasabi-core-and-cli-ingestion-r5-continuation)
@@ -803,7 +839,8 @@ What a rollback does and does not remove:
 
 - **Only rows the run created.** An import that *enriched* an existing
   transaction (added pricing, a note, a label) touched a row that predates the
-  run, so that row stays. An import that inserted nothing records no run at all.
+  run, so that row stays. An import that inserted nothing records a run with
+  no members, so its rollback removes nothing.
 - **Everything attached to the deleted rows goes with them** — tags,
   attachments, metadata history, pairs, custody components — via the schema's
   `ON DELETE CASCADE`. The plan reports those counts first, which is why

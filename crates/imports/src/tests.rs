@@ -12,7 +12,7 @@ fn fixture(rows: usize) -> Connection {
         CREATE TABLE wallets(id TEXT PRIMARY KEY,profile_id TEXT,account_id TEXT,label TEXT);
         INSERT INTO wallets VALUES('w','p',NULL,'Source'),('v','p',NULL,'Other');
         CREATE TABLE transactions(id TEXT PRIMARY KEY,profile_id TEXT,wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE);
-        CREATE TABLE import_batches(id TEXT PRIMARY KEY,profile_id TEXT,wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE,source_format TEXT,source_filename TEXT,column_map_json TEXT,imported_at TEXT,rows_inserted INTEGER,rows_updated INTEGER,rows_skipped INTEGER);
+        CREATE TABLE import_batches(id TEXT PRIMARY KEY,profile_id TEXT,wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE,source_format TEXT,source_filename TEXT,column_map_json TEXT,imported_at TEXT,rows_inserted INTEGER,rows_updated INTEGER,rows_skipped INTEGER,first_row_at TEXT,last_row_at TEXT,rows_read INTEGER,file_sha256 TEXT,file_size INTEGER);
         CREATE TABLE import_batch_transactions(batch_id TEXT REFERENCES import_batches(id) ON DELETE CASCADE,transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,PRIMARY KEY(batch_id,transaction_id));
         CREATE TABLE transaction_tags(transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,tag TEXT);
         CREATE TABLE loose_notes(transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,note TEXT);
@@ -24,7 +24,7 @@ fn fixture(rows: usize) -> Connection {
         CREATE TABLE pair_attachments(pair_id TEXT REFERENCES transaction_pairs(id) ON DELETE CASCADE,filename TEXT);
         CREATE INDEX attachment_pair ON pair_attachments(pair_id);
         INSERT INTO transactions VALUES('old','p','w'),('other','p','v');
-        INSERT INTO import_batches VALUES('b','p','w','csv','source.csv','{\"date\": \"Datum\"}','2024-01-01',1,1,1),('c','p','v','json','other.json',NULL,'2024-02-01',1,0,0);
+        INSERT INTO import_batches(id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES('b','p','w','csv','source.csv','{\"date\": \"Datum\"}','2024-01-01',1,1,1),('c','p','v','json','other.json',NULL,'2024-02-01',1,0,0);
         INSERT INTO import_batch_transactions VALUES('c','other');").unwrap();
     conn.execute_batch("BEGIN").unwrap();
     for index in 0..rows {
@@ -189,8 +189,8 @@ fn empty_run_does_not_invalidate_and_lists_actual_remaining_rows() {
 fn list_is_ordered_scoped_and_filters_wallet_without_exposing_config() {
     let conn = fixture(2);
     conn.execute_batch("UPDATE import_batches SET column_map_json='broken' WHERE id='c';
-        INSERT INTO import_batches VALUES('d','q',NULL,'csv',NULL,NULL,'2025-01-01',0,0,0);
-        INSERT INTO import_batches VALUES('z','p',NULL,'csv',NULL,'123456789012345678901234567890','2024-02-01',0,0,0);").unwrap();
+        INSERT INTO import_batches(id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES('d','q',NULL,'csv',NULL,NULL,'2025-01-01',0,0,0);
+        INSERT INTO import_batches(id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES('z','p',NULL,'csv',NULL,'123456789012345678901234567890','2024-02-01',0,0,0);").unwrap();
     let Value::List(all) = list(&conn, "p", None, 0).unwrap() else {
         panic!()
     };
@@ -291,4 +291,58 @@ fn column_map_decode_errors_are_null_but_recursion_errors_fail_closed() {
         "internal_error"
     );
     assert_eq!(count(&conn, "import_batches"), 2);
+}
+
+/// A re-import that added no rows records a run with no members
+/// (docs/reference/imports.md#import-runs-and-rolling-one-back): there was
+/// nothing to roll back, so the list must not call it rolled back.
+#[test]
+fn a_run_that_created_no_rows_is_not_listed_as_rolled_back() {
+    let conn = fixture(0);
+    conn.execute_batch(
+        "INSERT INTO import_batches(id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES('z','p','w','csv','again.csv',NULL,'2024-03-01',0,0,2)",
+    )
+    .unwrap();
+    let listed = list(&conn, "p", Some("w"), 50).unwrap();
+    let Value::List(runs) = listed else { panic!() };
+    let rerun = runs
+        .iter()
+        .find(|run| get(run, "id") == Some(&Value::from("z")))
+        .unwrap();
+    assert_eq!(get(rerun, "rows_present"), Some(&Value::from(0)));
+    assert_eq!(get(rerun, "rolled_back"), Some(&Value::Bool(false)));
+    // A run whose created rows are all gone still reads as rolled back.
+    let emptied = runs
+        .iter()
+        .find(|run| get(run, "id") == Some(&Value::from("b")))
+        .unwrap();
+    assert_eq!(get(emptied, "rolled_back"), Some(&Value::Bool(true)));
+}
+
+/// Second review, finding 1: rolling a run back also drops the file range
+/// of re-imports of the same file that created nothing, since they only
+/// re-observed the rows the rollback removed. Other files keep theirs.
+#[test]
+fn rollback_clears_the_ranges_of_re_imports_of_the_same_file() {
+    let conn = fixture(1);
+    conn.execute_batch(
+        "UPDATE import_batches SET first_row_at='2025-01-01',last_row_at='2025-12-31',rows_read=2,file_sha256='aa' WHERE id='b';
+         INSERT INTO import_batches(id,profile_id,wallet_id,source_format,imported_at,rows_inserted,rows_updated,rows_skipped,first_row_at,last_row_at,rows_read,file_sha256)
+           VALUES('again','p','w','csv','2025-02-01',0,0,2,'2025-01-01','2025-12-31',2,'aa'),
+                 ('other-file','p','w','csv','2025-02-02',0,0,1,'2024-01-01','2024-12-31',1,'bb'),
+                 ('other-wallet','p','v','csv','2025-02-03',0,0,1,'2025-01-01','2025-12-31',1,'aa');",
+    )
+    .unwrap();
+    rollback(&conn, "p", "b").unwrap();
+    let range = |id: &str| -> (Option<String>, Option<i64>) {
+        conn.query_row(
+            "SELECT last_row_at, rows_read FROM import_batches WHERE id=?",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap()
+    };
+    assert_eq!(range("again"), (None, None));
+    assert_eq!(range("other-file"), (Some("2024-12-31".into()), Some(1)));
+    assert_eq!(range("other-wallet"), (Some("2025-12-31".into()), Some(1)));
 }

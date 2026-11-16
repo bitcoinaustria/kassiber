@@ -404,3 +404,40 @@ fn profile_display_uses_the_stored_method_for_each_country() {
         assert_eq!(policy_method(&p), method.to_lowercase());
     }
 }
+
+/// Second review, finding 1: "Reset book data" removes every row an import
+/// run read, so it clears every run's file range; the runs and their file
+/// identity stay.
+#[test]
+fn profile_reset_clears_import_run_ranges() {
+    let f = Fixture::seed();
+    let p = f.profile();
+    let pid = text(&p, "id");
+    let wid = text(&p, "workspace_id");
+    f.book
+        .connection()
+        .execute(
+            "INSERT INTO import_batches(id,workspace_id,profile_id,source_format,imported_at,first_row_at,last_row_at,rows_read,file_sha256,file_size) \
+             VALUES('run',?,?,'csv','2025-04-01T00:00:00Z','2025-01-01T00:00:00Z','2025-12-31T00:00:00Z',2,'aa',10)",
+            [&wid, &pid],
+        )
+        .unwrap();
+    let attachments = f._root.path().join("attachments");
+    profile_reset::execute(
+        f.book.connection(),
+        &dict::<&str>([]),
+        &attachments,
+        &f.sources,
+    )
+    .unwrap();
+    let after: (Option<String>, Option<String>, Option<i64>, Option<String>) = f
+        .book
+        .connection()
+        .query_row(
+            "SELECT first_row_at,last_row_at,rows_read,file_sha256 FROM import_batches WHERE id='run'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .unwrap();
+    assert_eq!(after, (None, None, None, Some("aa".into())));
+}

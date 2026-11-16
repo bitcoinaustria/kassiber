@@ -2340,15 +2340,22 @@ fn apply_records(
             invalidated,
         )?;
     }
-    if !inserted_ids.is_empty() && !matches!(request.format, Format::Wasabi | Format::Document) {
+    // Every successful file import records its run, including one that added
+    // nothing: coverage reads what the file held (and that it was seen) from
+    // it. Only a run that created rows has members to roll back.
+    if !matches!(request.format, Format::Wasabi | Format::Document) {
         let batch = ids.next(conn)?;
-        conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,?,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),column_map.map(|map| config::stored_json(&map.raw)),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() || request.format.active() { updated_count } else { 0 },skipped]).map_err(database_error)?;
+        let run = RunCoverage::of(records, &request.file);
+        conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped,first_row_at,last_row_at,rows_read,file_sha256,file_size) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),column_map.map(|map| config::stored_json(&map.raw)),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() || request.format.active() { updated_count } else { 0 },skipped,run.first_row_at,run.last_row_at,run.rows_read,run.file_sha256,run.file_size]).map_err(database_error)?;
         // Each row's place among the run's created rows is its source
         // position among same-time rows (`kassiber_store::transaction_order`).
+        let created = !inserted_ids.is_empty();
         for (position, id) in (1_i64..).zip(inserted_ids) {
             conn.execute("INSERT OR IGNORE INTO import_batch_transactions(batch_id,transaction_id,source_position) VALUES(?,?,?)",params![batch,id,position]).map_err(database_error)?;
         }
-        result.push(("import_batch_id", s(batch)));
+        if created {
+            result.push(("import_batch_id", s(batch)));
+        }
     }
     if request.format.evidence() || request.format.active() {
         result.push((request.format.provider().2, Py::from(records.len() as i64)));
@@ -2368,6 +2375,109 @@ fn apply_records(
     }
     Ok(dict(result))
 }
+/// What an import run's file held, for source coverage
+/// (docs/reference/imports.md#import-runs): the first and last time of its
+/// dated rows, counting every row read including ones already present, how
+/// many rows it read, and the file's SHA-256. Local reads only.
+pub struct RunCoverage {
+    pub first_row_at: Option<String>,
+    pub last_row_at: Option<String>,
+    pub rows_read: i64,
+    pub file_sha256: Option<String>,
+    pub file_size: Option<i64>,
+}
+
+impl RunCoverage {
+    fn of(records: &[Record], file: &str) -> Self {
+        let mut dated: Vec<String> = records
+            .iter()
+            .map(|r| string(&r.fields, "occurred_at"))
+            .filter(|at| !at.trim().is_empty() && at != "1970-01-01T00:00:00Z")
+            .collect();
+        dated.sort();
+        let snapshot = file_snapshot(file);
+        Self {
+            first_row_at: dated.first().cloned(),
+            last_row_at: dated.last().cloned(),
+            rows_read: records.len() as i64,
+            file_sha256: snapshot.sha256,
+            file_size: snapshot.size,
+        }
+    }
+}
+
+/// The most an import hashes for coverage; a larger file keeps its size only.
+pub const SNAPSHOT_HASH_LIMIT: u64 = 256 * 1024 * 1024;
+
+/// What an import records about its file: its size and, up to
+/// [`SNAPSHOT_HASH_LIMIT`], its SHA-256. Only regular files count: an inline
+/// payload, a symlink, a FIFO or a device yields nothing, without waiting on
+/// it. Called during an explicit import only, never by a display read.
+pub struct FileSnapshot {
+    pub sha256: Option<String>,
+    pub size: Option<i64>,
+}
+
+pub fn file_snapshot(file: &str) -> FileSnapshot {
+    file_snapshot_bounded(file, SNAPSHOT_HASH_LIMIT)
+}
+
+pub(crate) fn file_snapshot_bounded(file: &str, limit: u64) -> FileSnapshot {
+    use std::io::Read;
+    let nothing = FileSnapshot {
+        sha256: None,
+        size: None,
+    };
+    if file.starts_with("inline:") {
+        return nothing;
+    }
+    let Ok(handle) = kassiber_paths::open_regular_nofollow(std::path::Path::new(file)) else {
+        return nothing;
+    };
+    let Ok(size) = handle.metadata().map(|meta| meta.len()) else {
+        return nothing;
+    };
+    let recorded = i64::try_from(size).ok();
+    if size > limit {
+        return FileSnapshot {
+            sha256: None,
+            size: recorded,
+        };
+    }
+    let mut hasher = Sha256::new();
+    let mut reader = handle.take(limit + 1);
+    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut read_total: u64 = 0;
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => {
+                read_total += count as u64;
+                hasher.update(&buffer[..count]);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => {
+                return FileSnapshot {
+                    sha256: None,
+                    size: recorded,
+                }
+            }
+        }
+    }
+    // The file grew past the limit while it was read: no hash.
+    let sha256 = (read_total <= limit).then(|| {
+        hasher
+            .finalize()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
+    });
+    FileSnapshot {
+        sha256,
+        size: recorded,
+    }
+}
+
 #[cfg(test)]
 mod tests;
 
