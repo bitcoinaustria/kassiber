@@ -51,6 +51,7 @@ pub fn probe(
         source: provider(&kind),
         // A key check maps no rows.
         scope: assets::Scope::Bitcoin,
+        wallet: "",
     };
     let read_only = match kind.as_str() {
         "kraken" => kraken::probe(&client),

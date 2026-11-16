@@ -118,12 +118,13 @@ pub fn execute(
         secret,
         source: label,
         scope,
+        wallet: &wallet.label,
     };
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
     let fetched = (|| -> Result<Fetched, AppError> {
         Ok(match kind.as_str() {
-            "kraken" => kraken::fetch(&client)?.into(),
+            "kraken" => kraken::fetch(&client)?,
             "coinbase" => coinbase::fetch(&client)?.into(),
             "binance" => binance::fetch(&client)?.into(),
             "bitpanda" => bitpanda::fetch(&client)?,
@@ -459,6 +460,8 @@ struct Client<'a> {
     source: &'static str,
     /// The wallet's asset scope: which non-Bitcoin rows a mapper may emit.
     scope: assets::Scope,
+    /// The wallet's label, for hints that name the scope command.
+    wallet: &'a str,
 }
 impl Client<'_> {
     fn authorize(&self) -> Result<(), AppError> {
@@ -661,6 +664,15 @@ fn normalized(value: &Py) -> String {
     } else {
         kassiber_pytext::upper(raw)
     }
+}
+/// Whether a canonical code is a plain exchange ticker (`ETH`, `1INCH`):
+/// ASCII capitals and digits, at most 20 characters. Anything else is not
+/// mapped to an asset by guesswork.
+fn ticker(code: &str) -> bool {
+    (1..=20).contains(&code.len())
+        && code
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
 }
 /// Refuses, naming the provider's row, a non-Bitcoin amount or fee finer
 /// than the 11 decimals the book stores (docs/plan/24-crypto-assets.md),
