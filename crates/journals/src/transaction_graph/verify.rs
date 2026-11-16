@@ -167,7 +167,14 @@ pub fn verify(conn: &Connection, profile_id: &str, reference: &str) -> Result<Va
     let row_raw = json_obj(g(&row, "raw_json"));
     // No runtime config and no public lookup: local observation, stored
     // references and cached references only.
-    let enriched = enrich(conn, profile_id, &row, row_raw.clone(), false, None)?;
+    let enriched = enrich(
+        conn,
+        profile_id,
+        &row,
+        row_raw.clone(),
+        LookupMode::Local,
+        None,
+    )?;
     let local = local_outpoint_amounts(conn, profile_id, &row, &enriched)?;
     let graph = parse_graph(&row, &enriched, &local)?;
     let (chain, network) = default_row_chain_network(&row);

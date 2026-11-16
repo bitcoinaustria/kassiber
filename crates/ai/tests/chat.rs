@@ -110,9 +110,12 @@ impl Book for FakeBook<'_> {
     fn read(
         &mut self,
         kind: &str,
-        _arguments: &Value,
+        arguments: &Value,
         _source: &'static str,
     ) -> Result<Value, ToolError> {
+        if kind == "ui.transactions.graph" {
+            self.log.push(format!("read:{kind}"), arguments.clone());
+        }
         Ok(dict([("read", s(kind))]))
     }
     fn mutate(
@@ -1077,6 +1080,54 @@ fn a_call_the_consent_card_cannot_describe_is_refused_before_any_card() {
         Some(&s("Custody component review action is unsupported"))
     );
     assert_eq!(get(host.terminal(), "finish_reason"), Some(&s("stop")));
+}
+
+#[test]
+fn the_assistant_graph_read_never_asks_for_a_backend_lookup() {
+    // The desktop's automatic wallet-backend lookup and the explicit public
+    // lookup are desktop-only: the AI tool refuses either flag before any
+    // read, and its plain read passes the transaction alone.
+    let provider = ScriptedProvider::new().unwrap();
+    let call = |id: &str, args: &str| function_call_with(id, "ui_transactions_graph", args);
+    provider.queue(
+        "POST",
+        "responses",
+        vec![
+            responses(
+                &[
+                    call(
+                        "auto",
+                        r#"{"transaction": "t1", "lookup": "wallet_backend"}"#,
+                    ),
+                    call(
+                        "explicit",
+                        r#"{"transaction": "t1", "allowPublicLookup": true}"#,
+                    ),
+                    call("plain", r#"{"transaction": "t1"}"#),
+                ],
+                None,
+            ),
+            answer("ok"),
+        ],
+    );
+    let registry = ActiveChats::default();
+    let mut host = Host::new();
+    Worker::new(turn(&provider, &registry, TOOLS)).run(&mut host);
+    for id in ["auto", "explicit"] {
+        assert_eq!(
+            get(&host.result(id), "reason"),
+            Some(&s("validation")),
+            "{id}"
+        );
+    }
+    let reads = host.reads.log.entries();
+    assert_eq!(
+        reads,
+        vec![(
+            "read:ui.transactions.graph".to_owned(),
+            dict([("transaction", s("t1"))])
+        )]
+    );
 }
 
 #[test]

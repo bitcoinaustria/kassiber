@@ -2133,7 +2133,9 @@ When the report truncated by row, the visual drops the oldest bucket, which may
 have lost some assets. A transaction flow names only the user's own wallets
 (from the graph's wallet field, also for a coin several of them share); other
 inputs and outputs are "Input n" and "Output n", with no address or outpoint,
-and the graph is read without public lookup. Amounts of different assets are
+and the graph is read without public lookup: the AI graph tool accepts only
+`transaction`, so it can ask for neither the explicit lookup nor the desktop's
+automatic wallet-backend lookup. Amounts of different assets are
 never added up as bitcoin. Cash-flow buckets are counted in UTC; the
 Transactions page counts them in the desktop's time zone, so a movement close
 to midnight can fall in a neighbouring bucket.
