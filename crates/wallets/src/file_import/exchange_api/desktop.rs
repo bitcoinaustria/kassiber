@@ -51,11 +51,14 @@ pub fn probe(
         source: provider(&kind),
     };
     let read_only = match kind.as_str() {
-        "kraken" => kraken::probe(&client)?,
-        "coinbase" => coinbase::probe(&client)?,
-        "bitpanda" => bitpanda::probe(&client)?,
-        _ => binance::probe(&client)?,
-    };
+        "kraken" => kraken::probe(&client),
+        "coinbase" => coinbase::probe(&client),
+        "binance" => binance::probe(&client),
+        "bitpanda" => bitpanda::probe(&client),
+        _ => Err(unknown_kind(&kind)),
+    }
+    // An echoed request credential (a signature, say) leaves every error.
+    .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
     Ok(dict([
         ("exchange", s(kind.as_str())),
         ("ok", Py::Bool(true)),

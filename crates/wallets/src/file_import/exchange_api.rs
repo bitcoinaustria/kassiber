@@ -30,6 +30,25 @@ const MAX_ROWS: usize = 1_000_000;
 /// Python has no overall budget; each read still has the backend timeout.
 const BUDGET: Duration = Duration::from_secs(3600);
 
+/// What one exchange's mapper returns.
+struct Fetched {
+    records: Vec<Py>,
+    /// Provider-specific counts of operations left out, in the envelope.
+    skipped: Option<Py>,
+    /// Rows left out by asset (docs/plan/24-crypto-assets.md); `None` for a
+    /// mapper that is still Bitcoin-only and does not count them yet.
+    tally: Option<assets::Tally>,
+}
+impl From<Vec<Py>> for Fetched {
+    fn from(records: Vec<Py>) -> Self {
+        Self {
+            records,
+            skipped: None,
+            tally: None,
+        }
+    }
+}
+
 /// Bitpanda is Rust only; Python knows the first three.
 pub const KINDS: [&str; 4] = ["kraken", "coinbase", "binance", "bitpanda"];
 
@@ -63,6 +82,8 @@ pub fn execute(
     let (name, kind) = backend_kind(&backend, expected)?;
     let mut ids = Ids { identity, at: 0 };
     let wallet = wallet(conn, profile, wallet_ref, &kind, &name, &mut ids)?;
+    // The wallet's `asset_scope` decides which non-Bitcoin rows are kept.
+    let scope = assets::Scope::of_wallet(conn, &wallet.id)?;
     let label = provider(&kind);
     let prepared = prepare(&backend, &kind, &name)?;
     let book = book_id(conn)?;
@@ -96,17 +117,30 @@ pub fn execute(
     };
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
-    let mut skipped = None;
-    let records = match kind.as_str() {
-        "kraken" => kraken::fetch(&client)?,
-        "coinbase" => coinbase::fetch(&client)?,
-        "bitpanda" => {
-            let fetched = bitpanda::fetch(&client)?;
-            skipped = Some(fetched.skipped);
-            fetched.records
-        }
-        _ => binance::fetch(&client)?,
-    };
+    let fetched = (|| -> Result<Fetched, AppError> {
+        Ok(match kind.as_str() {
+            "kraken" => kraken::fetch(&client)?.into(),
+            "coinbase" => coinbase::fetch(&client)?.into(),
+            "binance" => binance::fetch(&client)?.into(),
+            "bitpanda" => {
+                let fetched = bitpanda::fetch(&client)?;
+                Fetched {
+                    skipped: Some(fetched.skipped),
+                    ..fetched.records.into()
+                }
+            }
+            _ => return Err(unknown_kind(&kind)),
+        })
+    })();
+    // Every error leaves with every credential the reads carried withheld.
+    let Fetched {
+        records,
+        skipped,
+        tally,
+    } = fetched.map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
+    if client.http.echoed() {
+        return Err(echo_refusal(label));
+    }
     let fetched = records.len();
     let rows: Vec<csv::Row> = records
         .into_iter()
@@ -137,6 +171,15 @@ pub fn execute(
         Some(&format!("{kind}:api:{}", lossy(&name))),
     )
     // A revoked or offline route never publishes a book.
+    // Both legs of each swap are stored now; pair them in the same write.
+    .and_then(|mut result| {
+        let pairs = swaps::pair(conn, profile, &wallet.id, &rows, &normalized)?;
+        if tally.is_some() {
+            let pairs = pairs.unwrap_or(0);
+            kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs));
+        }
+        Ok(result)
+    })
     .and_then(|result| client.authorize().map(|()| result));
     match &result {
         Ok(_) => conn.execute_batch("RELEASE exchange_api_import"),
@@ -157,6 +200,10 @@ pub fn execute(
     }
     if let Some(skipped) = skipped {
         kassiber_envelope::set(&mut result, "skipped", skipped);
+    }
+    if let Some(tally) = &tally {
+        let assets = tally.envelope(scope, &wallet.label);
+        kassiber_envelope::set(&mut result, "assets", assets);
     }
     Ok(result)
 }
@@ -258,6 +305,7 @@ fn book_id(conn: &Connection) -> Result<String, AppError> {
         .unwrap_or_default())
 }
 
+/// Only kinds in [`KINDS`] get this far; [`backend_kind`] refuses the rest.
 fn provider(kind: &str) -> &'static str {
     match kind {
         "kraken" => "Kraken",
@@ -273,6 +321,14 @@ fn default_url(kind: &str) -> &'static str {
         "bitpanda" => "https://api.public.bitpanda.com",
         _ => "https://api.binance.com",
     }
+}
+/// A kind past [`backend_kind`] that a dispatch does not know: a bug, never
+/// a reason to read another exchange's API.
+fn unknown_kind(kind: &str) -> AppError {
+    AppError::new(
+        "internal_error",
+        format!("No exchange API reader for kind '{kind}'"),
+    )
 }
 
 /// `_get_or_create_exchange_api_wallet`: an explicit reference, else the
@@ -509,46 +565,58 @@ fn timeout(backend: &Py) -> Result<u64, AppError> {
         .ok_or_else(|| AppError::new("config_error", "Backend timeout must be positive"))
 }
 
-/// `_asset(value)`: `normalize_asset_code`, then exchange aliases.
+/// `_asset(value)`: `normalize_asset_code`, then exchange aliases. Kraken's
+/// `Z` fiat prefix applies to fiat fields only ([`fiat_code`]): a four-letter
+/// crypto code starting with Z (`ZETA`) is a ticker of its own.
 fn asset(value: &Py) -> String {
+    let code = normalized(value);
+    match code.as_str() {
+        "BTC" | "XBT" | "XXBT" => "BTC".into(),
+        "LBTC" | "L-BTC" => "LBTC".into(),
+        "XETH" => "ETH".into(),
+        _ => code,
+    }
+}
+/// A fiat field's code with Kraken's `Z` prefix dropped (`ZEUR`): Kraken's
+/// trade quotes, and the fiat fields the reference read through the same
+/// alias (Coinbase native amounts, Binance fiat payments). Never a crypto
+/// code's, and the result must still be a fiat currency.
+fn fiat_code(code: String) -> String {
+    match code.strip_prefix('Z') {
+        Some(rest) if code.chars().count() == 4 => rest.into(),
+        _ => code,
+    }
+}
+/// `normalize_asset_code(value)`: stripped and upper-cased, `l-btc` as
+/// `LBTC`, a 64-hex Liquid asset id lower-cased. Each exchange applies its
+/// own aliases on top.
+fn normalized(value: &Py) -> String {
     let raw = if truthy(value) {
         lossy(&text(value))
     } else {
         String::new()
     };
     let raw = kassiber_pytext::strip(&raw);
-    let code = if raw.is_empty() {
-        String::new()
+    if raw.is_empty() {
+        return String::new();
+    }
+    let lowered = kassiber_pytext::lower(raw);
+    if lowered.chars().count() == 64
+        && lowered
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+    {
+        lowered
+    } else if lowered == "l-btc" || lowered == "lbtc" {
+        "LBTC".into()
     } else {
-        let lowered = kassiber_pytext::lower(raw);
-        if lowered.chars().count() == 64
-            && lowered
-                .chars()
-                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
-        {
-            lowered
-        } else if lowered == "l-btc" || lowered == "lbtc" {
-            "LBTC".into()
-        } else {
-            kassiber_pytext::upper(raw)
-        }
-    };
-    match code.as_str() {
-        "BTC" | "XBT" | "XXBT" => "BTC".into(),
-        "LBTC" | "L-BTC" => "LBTC".into(),
-        _ if code.starts_with('Z') && code.chars().count() == 4 => code[1..].into(),
-        "XETH" => "ETH".into(),
-        _ => code,
+        kassiber_pytext::upper(raw)
     }
 }
 fn is_bitcoin(code: &str) -> bool {
     matches!(code, "BTC" | "LBTC")
 }
-const FIAT: [&str; 29] = [
-    "AED", "ARS", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD",
-    "HUF", "ILS", "INR", "JPY", "KRW", "MXN", "NOK", "NZD", "PLN", "RON", "SEK", "SGD", "THB",
-    "TRY", "USD", "ZAR",
-];
+use super::assets::FIAT;
 fn is_fiat(code: &str) -> bool {
     FIAT.contains(&code)
 }
@@ -714,8 +782,27 @@ fn record(entry: Entry) -> Result<Py, AppError> {
         kind,
         raw,
         description,
-        pricing,
+        mut pricing,
     } = entry;
+    // Another asset arriving with a fee in itself stores what the wallet
+    // gained; a price then covers the net quantity, so the provider's gross
+    // unit price gives way to value over amount.
+    let (amount, fee) = match inbound
+        .then(|| {
+            let row = format!("{provider} {}", lossy(&external_id));
+            assets::net_inbound(&asset, &amount, &fee, &row)
+        })
+        .transpose()?
+        .flatten()
+    {
+        Some(net_amount) => {
+            if let Some(pricing) = &mut pricing {
+                pricing.fiat_rate = None;
+            }
+            (net_amount, PriceNumber::Finite(Decimal::zero()))
+        }
+        None => (amount, fee),
+    };
     // A sell's amount is negative; its unit price is not. A value that is not
     // positive prices nothing, so the row stays unpriced.
     let rate = match &pricing {
@@ -819,4 +906,49 @@ fn key_text(key: &Key) -> PyStr {
         Key::Int(n) => n.to_string().into(),
         Key::Float(f) => kassiber_pyjson::float_repr(*f).into(),
     }
+}
+
+// Helpers every exchange adapter shares (docs/reference/rust-exchange-sync.md).
+
+/// A sync whose successful pages echoed a request credential stores nothing.
+fn echo_refusal(provider: &str) -> AppError {
+    AppError::new(
+        "credential_echo",
+        format!("{provider} returned an API credential in its response; nothing was imported"),
+    )
+    .with_hint("The exchange echoed the key, the secret or a request signature. Revoke and replace this key, then report the response shape.")
+}
+
+/// `error` with every one of `credentials` withheld, at any length, from its
+/// message and every detail string; a numeric detail equal to one is
+/// dropped. The hint is Kassiber's own text and stays whole. Strings are
+/// scrubbed over code points, so a provider's lone surrogate survives beside
+/// a withheld credential, as Python's `withhold_credentials` keeps it.
+fn scrub_error(mut error: AppError, credentials: &[String]) -> AppError {
+    use kassiber_credentials::{withhold, withhold_py, Forms};
+    fn walk(value: &mut Py, forms: &Forms, credentials: &[String]) {
+        match value {
+            Py::Str(text) => *text = withhold_py(text, forms),
+            Py::Int(number) if credentials.contains(&number.to_string()) => *value = Py::Null,
+            Py::List(items) => items
+                .iter_mut()
+                .for_each(|item| walk(item, forms, credentials)),
+            Py::Dict(items) => items
+                .iter_mut()
+                .for_each(|(_, item)| walk(item, forms, credentials)),
+            _ => {}
+        }
+    }
+    let forms = kassiber_credentials::credential_forms(credentials);
+    if forms.is_empty() {
+        return error;
+    }
+    error.message = withhold(&error.message, &forms);
+    if let Some(points) = &mut error.message_codepoints {
+        **points = withhold_py(points, &forms);
+    }
+    if let Some(details) = &mut error.details {
+        walk(details, &forms, credentials);
+    }
+    error
 }

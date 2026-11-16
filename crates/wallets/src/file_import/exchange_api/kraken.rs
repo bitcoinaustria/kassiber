@@ -349,7 +349,7 @@ pub(super) fn normalize(ledgers: &Py, trades: &Py) -> Result<Vec<Py>, AppError> 
             String::new()
         };
         let Some(fiat_currency) = quote(&pair, &currency)
-            .map(|quote| asset(&s(quote.as_str())))
+            .map(|quote| fiat_code(asset(&s(quote.as_str()))))
             .filter(|code| is_fiat(code))
         else {
             return Err(AppError::new("validation", "")

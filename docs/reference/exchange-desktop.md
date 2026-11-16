@@ -75,7 +75,7 @@ rest operator), and refuse unknown arguments before any work.
 
 | Kind | Arguments | Network | Answer |
 | --- | --- | --- | --- |
-| `ui.connections.exchange.status` | `wallet?` | none | `connections`: per exchange wallet of the active profile, `wallet_id`, `wallet`, `exchange`, `provider`, `backend`, `backend_configured`, `has_api_key`, `has_api_secret` (null for Bitpanda) and `last_sync` (`status`, `at`, `imported`, `fetched`, `skipped`, or the error envelope's `error`) |
+| `ui.connections.exchange.status` | `wallet?` | none | `connections`: per exchange wallet of the active profile, `wallet_id`, `wallet`, `exchange`, `provider`, `backend`, `backend_configured`, `has_api_key`, `has_api_secret` (null for Bitpanda), `asset_scope` (only once the wallet stores one; absent means `bitcoin`) and `last_sync` (`status`, `at`, `imported`, `fetched`, `skipped`, `assets`, `swap_pairs`, or the error envelope's `error`) |
 | `ui.connections.exchange.test` | `backend`, or `exchange`, `api_key`, `api_secret`, `url?` | the check above, once | `exchange`, `ok`, `read_only` (true when the exchange confirmed it, null when it does not say) |
 | `ui.connections.exchange.create` | `exchange`, `api_key`, `api_secret` (not for Bitpanda), `label?`, `url?` | none | `exchange`, `wallet` (`id`, `label`, `kind`), `backend` (the redacted backend row) |
 | `ui.connections.exchange.sync` | `wallet` | the CLI sync's reads | the CLI's `wallets.sync-<kind>` data |
@@ -111,6 +111,10 @@ proxies; the desktop never sends it.
   trading-key refusal), consent, offline and missing-key refusals before any
   request, echoed credentials withheld, and a new connection's wallet plus
   sync leaving exactly the CLI sync's rows.
+- `crates/kassiber/tests/desktop_asset_scope.rs`: `ui.wallets.update`
+  storing `asset_scope` behind the plaintext acknowledgement or the
+  passphrase, refusing other values, leaving imported rows unchanged when it
+  switches back, and the status naming the scope only once it is stored.
 - The recorded `test_rust_exchange_desktop` sessions
   (`scripts/replay-sessions.sh --only test_rust_exchange_desktop`): the
   daemon's create + sync against the CLI's `backends create` + `wallets
