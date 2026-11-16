@@ -44,8 +44,14 @@ fn legacy(sandbox: &Sandbox) -> PathBuf {
     sandbox.path("home/.kassiber")
 }
 
+/// The native state root: `$XDG_DATA_HOME/kassiber` on Linux, under the
+/// sandbox's home on macOS.
 fn native(sandbox: &Sandbox) -> PathBuf {
-    sandbox.path("xdg-data/kassiber")
+    sandbox.path(if cfg!(target_os = "macos") {
+        "home/Library/Application Support/at.bitcoinaustria.kassiber"
+    } else {
+        "xdg-data/kassiber"
+    })
 }
 
 /// Every entry under `root` with a file's bytes; a directory maps to None.

@@ -210,6 +210,14 @@ impl Desk {
             ),
             ("KASSIBER_AGENT_ACCESS_FILE", "preferences/agents.json"),
             (
+                "KASSIBER_WALLET_BACKEND_LOOKUP_FILE",
+                "preferences/wallet-backend-lookup.json",
+            ),
+            // The state root and `~` resolve here, never the developer's
+            // (macOS reads the state root from HOME, not KASSIBER_STATE_ROOT).
+            ("HOME", "home"),
+            ("USERPROFILE", "home"),
+            (
                 "KASSIBER_UPDATE_PREFERENCE_FILE",
                 "preferences/updates.json",
             ),
@@ -225,6 +233,7 @@ impl Desk {
         }
         fs::create_dir_all(path.join("owners")).unwrap();
         fs::create_dir_all(path.join("preferences")).unwrap();
+        fs::create_dir_all(path.join("home")).unwrap();
         for (key, value) in [
             ("COLUMNS", "80"),
             ("LINES", "24"),
