@@ -712,6 +712,7 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.transfers.pair_options",
     "ui.backends.certificate.fetch",
     "ui.backends.certificate.trust",
+    "ui.profiles.settings",
 ];
 
 /// Replayed daemon output without the Rust-only kinds in its `daemon.ready`
