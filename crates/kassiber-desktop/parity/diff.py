@@ -91,10 +91,12 @@ def parse_color(s):
         if fn == "oklch":
             L, C, H = _num(parts[0]), _num(parts[1], 0.4), _num(parts[2])
             a, b = C * math.cos(math.radians(H)), C * math.sin(math.radians(H))
-            return (*_oklab_to_srgb(L, a, b), alpha)
+            r, g, b = _oklab_to_srgb(L, a, b)
+            return (r, g, b, alpha)
         if fn == "oklab":
             L, a, b = _num(parts[0]), _num(parts[1], 0.4), _num(parts[2], 0.4)
-            return (*_oklab_to_srgb(L, a, b), alpha)
+            r, g, b = _oklab_to_srgb(L, a, b)
+            return (r, g, b, alpha)
     except (ValueError, IndexError):
         return None
     return None
