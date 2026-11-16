@@ -880,6 +880,7 @@
       "pocketbitcoinCsv": "Pocket Bitcoin CSV",
       "twentyonebitcoinCsv": "21bitcoin CSV",
       "strikeCsv": "Strike CSV",
+      "bitstampCsv": "Bitstamp CSV",
       "ledgerliveCsv": "Ledger Live CSV",
       "cointrackingCsv": "CoinTracking-Transaktionen (CSV)",
       "blockpitCsv": "Blockpit-Transaktionen (CSV)",

@@ -10,8 +10,8 @@ CLI's `wallets sync-<kind>` commands use ([Bitpanda](bitpanda.md),
 
 1. **Pick the exchange.** The Add connection dialog lists Kraken, Coinbase,
    Bitpanda, Bitvavo, Bitstamp API and Binance API under Exchanges (setup kind
-   `exchange-api`). The Binance supplemental CSV and Bitvavo CSV imports stay
-   separate cards.
+   `exchange-api`). The Binance supplemental CSV, Bitvavo CSV and Bitstamp CSV
+   imports stay separate cards.
 2. **Create a read-only key.** The setup shows where to create the key and
    which of the exchange's permissions to turn on and leave off. The scopes
    follow what each sync reads:

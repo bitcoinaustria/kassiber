@@ -607,6 +607,9 @@ function sourceFileFilters(
   if (source.sourceFormat === "strike_csv") {
     return [{ name: t("add.fileFilter.strikeCsv"), extensions: ["csv"] }];
   }
+  if (source.sourceFormat === "bitstamp_csv") {
+    return [{ name: t("add.fileFilter.bitstampCsv"), extensions: ["csv"] }];
+  }
   if (source.sourceFormat === "ledgerlive_csv") {
     return [{ name: t("add.fileFilter.ledgerliveCsv"), extensions: ["csv"] }];
   }

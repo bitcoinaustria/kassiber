@@ -80,6 +80,7 @@ export type ConnectionSourceFormat =
   | "21bitcoin_csv"
   | "pocketbitcoin_csv"
   | "strike_csv"
+  | "bitstamp_csv"
   | "ledgerlive_csv"
   | "binance_supplemental_csv"
   | "bitvavo_csv"
@@ -816,6 +817,27 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
       "Fiat BTC trades keep their exact value; deposits, withdrawals, account transfers and referral rewards import too",
       "Reads the whole transaction history, oldest first; the CSV export imports into the same wallet without duplicates",
       "Kassiber contacts Bitstamp only when you test the key or press Sync now",
+    ],
+  },
+  {
+    id: "bitstamp",
+    title: "Bitstamp CSV",
+    description: "Bitstamp transaction history export as an active custodial ledger.",
+    category: "exchanges",
+    image: bitstampIcon,
+    imageFrameClassName: lightLogoFrame,
+    imageClassName: "size-8 rounded-lg",
+    status: "ready",
+    pathLabel: "CSV import",
+    formatLabel: "bitstamp_csv",
+    docsHref: "https://www.bitstamp.net/",
+    setupKind: "file-wallet",
+    walletKind: "bitstamp",
+    sourceFormat: "bitstamp_csv",
+    details: [
+      "Import the transaction history exported in the RFC 4180 format; the legacy export has no transaction IDs and is refused",
+      "Rows share their IDs with the API, so the export and the API sync dedupe in one wallet",
+      "Fiat-only and other-asset rows are skipped; BTC traded against another coin is refused",
     ],
   },
   {

@@ -115,6 +115,7 @@ const sourceFormatLabels: Record<string, string> = {
   pocketbitcoin_csv: "Pocket Bitcoin CSV",
   "21bitcoin_csv": "21bitcoin CSV",
   strike_csv: "Strike CSV",
+  bitstamp_csv: "Bitstamp CSV",
   ledgerlive_csv: "Ledger Live CSV",
   binance_supplemental_csv: "Binance supplemental CSV",
   wasabi_bundle: "Wasabi export",

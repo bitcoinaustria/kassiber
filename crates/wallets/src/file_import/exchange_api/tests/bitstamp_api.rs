@@ -6,6 +6,7 @@
 //! errors `{"status": "error", "code", "reason"}`. Every value is synthetic.
 //! Kept out of rustfmt (tests.rs) so its fixture tables stay one row per line.
 use super::*;
+use crate::file_import::tests::{import_into, BITSTAMP_CSV as CSV};
 use serde_json::Value as J;
 use std::sync::Mutex;
 
@@ -173,6 +174,23 @@ fn bitstamp_reads_only_and_maps_every_btc_event() {
     // A second sync adds nothing.
     assert_eq!(at(&sync_into(&conn, &fake), "imported"), &Py::from(0));
     assert_eq!(count(&conn, "SELECT count(*) FROM wallets WHERE kind='bitstamp'"), 1);
+}
+
+/// The export and the API name one transaction alike, so importing both into
+/// one wallet, in either order, keeps one record per transaction.
+#[test]
+fn bitstamp_csv_and_api_dedupe_in_either_order() {
+    for csv_first in [true, false] {
+        let (conn, fake) = (book(), serve_script(Script::new()).0);
+        let file = || import_into(&conn, CSV, crate::file_import::Format::Bitstamp, "").unwrap();
+        let (first, second) = match csv_first {
+            true => (file(), sync_into(&conn, &fake)),
+            false => (sync_into(&conn, &fake), file()),
+        };
+        let added = if csv_first { (5, 3) } else { (8, 0) };
+        assert_eq!((at(&first, "imported"), at(&second, "imported")), (&Py::from(added.0), &Py::from(added.1)), "{csv_first}");
+        assert_eq!(rows(&conn), expected(), "csv first: {csv_first}");
+    }
 }
 
 /// One BTC row Kassiber cannot book exactly refuses the whole sync by name,
@@ -418,6 +436,12 @@ fn bitstamp_bitcoin_scope_counts_other_assets_and_names_the_scope_command() {
     assert_eq!(at(&result, "imported"), &Py::from(8));
     let skipped = |rows: i64| format!(r#"{{"scope": "bitcoin", "skipped": {{"ETH": {rows}}}, "excluded": {{}}, "next_step": "{}, then sync or import again to keep ETH"}}"#, KEEP.replace('"', "\\\""));
     assert_eq!(dumped(at(&result, "assets")), skipped(2));
+    let conn = book();
+    scoped(&conn, "bitcoin");
+    let unknown = format!("{CSV}60,Main Account,Deposit reverted,,2024-03-01T00:00:00Z,-1.00000000,ETH,,,,,,,\n");
+    let file = import_into(&conn, &unknown, crate::file_import::Format::Bitstamp, "").unwrap();
+    assert_eq!(at(&file, "imported"), &Py::from(5));
+    assert_eq!(dumped(at(&file, "assets")), skipped(3));
     let at = "2024-08-01 00:00:00";
     let mut rows = history();
     rows.push(tx(50, "2", at, &[("btc", json!("-0.10000000")), ("eth", json!("2.00000000")), ("eth_btc", json!("0.05"))]));
@@ -462,6 +486,33 @@ fn bitstamp_crypto_scope_maps_trades_swaps_and_movements_of_every_asset() {
 fn at_key<'a>(value: &'a Py, key: &str) -> &'a Py {
     at(value, key)
 }
+fn header() -> &'static str {
+    CSV.lines().next().unwrap()
+}
+
+/// The export states each fee's currency: a fee in a third crypto asset is a
+/// fee-only row, a swap's fee in its quote asset is placed as the API's is,
+/// and an unsigned transfer of any kept asset is refused.
+#[test]
+fn bitstamp_csv_crypto_scope_places_third_asset_and_swap_fees() {
+    let conn = book();
+    scoped(&conn, "crypto");
+    let csv = format!("{}\n70,Main Account,Market,Buy,2024-09-01T00:00:00Z,1.00000000,ETH,0.05000000,BTC,0.05000000,BTC,0.00010000,BTC,1
+71,Main Account,Market,Buy,2024-09-02T00:00:00Z,0.01000000,BTC,400.00,EUR,40000.00,EUR,0.00100000,ETH,2
+", header());
+    let result = import_into(&conn, &csv, crate::file_import::Format::Bitstamp, "").unwrap();
+    assert_eq!(at(&result, "swap_pairs"), &Py::from(1));
+    assert_eq!(stored(&conn), [
+        row("70:in", "ETH", "inbound", "swap", 100_000_000_000, 0, None),
+        row("70:out", "BTC", "outbound", "swap", 5_000_000_000, 10_000_000, None),
+        row("71", "BTC", "inbound", "buy", 1_000_000_000, 0, Some("400.00")),
+        row("71:fee", "ETH", "outbound", "fee", 0, 100_000_000, None),
+    ]);
+    let transfer = format!("{}\n72,Main Account,Inter Account Transfer,,2024-09-03T00:00:00Z,1.00000000,ETH,,,,,,,\n", header());
+    let error = import_into(&conn, &transfer, crate::file_import::Format::Bitstamp, "").unwrap_err();
+    assert_eq!(error.message, "Bitstamp CSV line 2 (Inter Account Transfer) does not say which way its ETH moved");
+}
+
 /// What `crypto` scope cannot book exactly still refuses the sync by name.
 #[test]
 fn bitstamp_crypto_scope_refuses_what_it_cannot_place() {
