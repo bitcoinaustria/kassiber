@@ -300,7 +300,11 @@ fn checks_withhold_an_echoed_key_and_secret() {
         let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
         assert!(!shown.contains(loopback::KEY), "{kind}: {shown}");
         assert!(!shown.contains(&secret), "{kind}: {shown}");
-        assert!(shown.contains("<redacted>"), "{kind}: {shown}");
+        // Bitpanda keeps only a known error code, so its free text (and the
+        // echo in it) is dropped rather than shown redacted.
+        if kind != "bitpanda" {
+            assert!(shown.contains("<redacted>"), "{kind}: {shown}");
+        }
     }
 }
 

@@ -57,6 +57,8 @@ proxy userinfo) at any length (`HttpClient::display_credentials`).
 - Error bodies (accepted 401/403 or raised) are display text: every request
   credential is withheld at any length on their decoded JSON strings, so an
   escape cannot hide one; numbers stay, so error codes survive.
+- Adapters show a provider's error code only from their own table
+  (`known_code`), never the provider's text.
 - Every error a sync or desktop key check returns is withheld once more with
   every request credential (`scrub_error`); a numeric detail equal to one is
   dropped.
@@ -101,10 +103,14 @@ Kraken API errors (`error` truthy) fail as `auth_error` when any entry mentions
 ## Stored rows
 
 Each exchange record is a Python import dict: `txid`, `occurred_at`,
-`direction`, `asset` (BTC or LBTC only), absolute `amount` and `fee`, the ten
+`direction`, `asset` (BTC or LBTC only in `bitcoin` scope; any crypto asset,
+stored exactly to 11 decimals, in `crypto` scope), absolute `amount` and `fee`, the ten
 pricing fields (exact `exchange_execution` pricing for fiat-quoted trades and
 Binance fiat buys, otherwise null), `kind`, `description`, `counterparty` and
-`raw_json` (the provider row, sorted keys). The coordinator writes the same
+`raw_json` (the provider row, sorted keys). Before a record is built, its
+amount and fee in an asset other than Bitcoin are checked as the provider
+gave them: finer than 11 decimals or too large to store refuses the sync,
+naming the transaction, before any rounding. The coordinator writes the same
 `transactions` rows, import runs, journal invalidation and update reports as
 a JSON file import with those dicts. Re-syncs deduplicate by external id and
 fingerprint. Changed pricing updates the existing row. Reviewed exclusions and

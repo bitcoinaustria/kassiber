@@ -110,10 +110,11 @@ consent for this exact route is minted, sends only these GETs, each with
    ("no trading limits configured for this API key") both mean the key holds
    `Trade (Write)`: the sync refuses with `auth_error` before reading any
    history. 401 and 403 mean it does not. Any other status fails.
-2. `/v1/assets?symbol=BTC&page_size=100` (paged): BTC's asset id. Several
-   assets may share the ticker (an ETF or stock), so several matches narrow to
-   the one whose `type` is `crypto` or `group` is `cryptocoin`; anything but
-   exactly one id fails `protocol_error`.
+2. `/v1/assets?page_size=100[&cursor=...]` (paged): every listed asset's id,
+   ticker and type. BTC's id is the one `BTC` asset whose `type` is `crypto`
+   or `group` is `cryptocoin` (an ETF or stock may share the ticker); anything
+   but exactly one id fails `protocol_error`. The other assets' tickers name
+   what the sync skips, and in `crypto` scope what it imports (below).
 3. `/v1/currencies`: fiat currency ids to codes.
 4. `/v1/operations?page_size=100[&cursor=...]` until `has_next_page` is
    false, over the whole history (no `from`/`to`).
@@ -136,13 +137,22 @@ endpoints, never sends anything but GET, and never sends a body.
 
 ## Event mapping
 
-Only operations that touch BTC (a leg, a transaction's asset or a fee in BTC)
-are read further; within them every transaction must parse strictly: an id,
-a plain non-negative decimal amount (`"0.01"`, no sign, exponent, NaN or
-number type), a BTC amount that is positive and whole msat (at most 11
-decimals), a flow of `INCOMING`/`OUTGOING`, a fee that is absent or a plain
-decimal, and a `credited_at` with an explicit offset (stored as UTC, whole
-seconds). One refused operation stops the whole sync; nothing is imported.
+**Asset scope** ([plan 24](../plan/24-crypto-assets.md)). BTC is always
+imported. Other crypto assets (an asset whose `type` is `crypto`, or whose
+`group` is `cryptocoin` or `stablecoin`) are imported only when the wallet's
+`asset_scope` is `crypto` (`kassiber wallets update --wallet Bitpanda
+--config '{"asset_scope": "crypto"}'`, or the desktop's toggle). Stocks,
+ETFs, ETCs, metals, indices and leveraged products are never imported. Below,
+an *imported asset* is BTC, plus every other crypto asset in `crypto` scope.
+
+Only operations that touch an imported asset (a leg, a transaction's asset or
+a fee) are read further; within them every transaction must parse strictly:
+an id, a plain non-negative decimal amount (`"0.01"`, no sign, exponent, NaN
+or number type), an imported asset's amount that is positive with at most 11
+decimals (whole msat for BTC), a flow of `INCOMING`/`OUTGOING`, a fee that is
+absent or a plain decimal, and a `credited_at` with an explicit offset
+(stored as UTC, whole seconds). One refused operation stops the whole sync;
+nothing is imported.
 
 | Bitpanda event | Recognised by | Kassiber record |
 | --- | --- | --- |
@@ -151,9 +161,12 @@ seconds). One refused operation stops the whole sync; nothing is imported.
 | BTC deposit | one BTC leg, no trade, no cash, `operation_type` `deposit`, `INCOMING`, no fee | `deposit` (wallet movement, unpriced) |
 | BTC withdrawal | one BTC leg, no trade, no cash, `operation_type` `withdrawal`, `OUTGOING` | `withdrawal`; a BTC fee is placed by the wallet's balances (below) |
 | BTC reward (cashback, bonus, referral, staking) | one BTC leg, `operation_type` `reward`, `INCOMING`, no fee | `income`, unpriced (`journals process` holds it as `missing_spot_price` until priced) |
-| Move between the user's own Bitpanda wallets | two or more BTC legs, no trade, no cash, no fees, incoming total = outgoing total | skipped (`internal_btc_moves`): the account's BTC does not change |
+| Move between the user's own Bitpanda wallets | two or more legs of one imported asset, no trade, no cash, no fees, incoming total = outgoing total | skipped (`internal_btc_moves`, which counts these moves for every imported asset): the account's holding does not change |
+| Buy, sell, deposit, withdrawal, reward of another crypto asset (`crypto` scope) | as the BTC rows above, with that asset's leg | the same records in that asset (`ETH`, `BEST`, ...); a withdrawal fee in the asset is placed by its wallet's balances |
+| Crypto swap (`crypto` scope) | two legs of different imported assets flowing opposite ways, one with `trade`, no cash | two `swap` rows sharing `swap_ref` `bitpanda:<trade_id>` (else the operation id), unpriced: Bitpanda states no exact fiat value for a swap. The import pairs them (pair source `provider`) with the policy the profile's country recommends: carrying value in Austria, where crypto-to-crypto swaps are tax-neutral, taxable elsewhere. Either way journals hold both legs in review (`at_swap_link` in Austria, `missing_spot_price` elsewhere) until the user prices them |
+| A trade or swap fee in a third imported asset (BEST, say) | `fee_amount` in an imported asset neither leg holds | its own `fee` row (`bitpanda:<transaction_id>:fee`), unpriced; a fee finer than 11 decimals is refused, naming that row, never rounded |
 | Fiat deposit, withdrawal, card payment | every leg in a fiat currency | skipped (`fiat_only_operations`) |
-| Other crypto, BEST, metals, stocks, ETFs, ETCs, indices without BTC | no BTC anywhere | skipped (`non_btc_operations`): Kassiber's exchange syncs import BTC only, like Kraken, Coinbase and Binance |
+| Operations with no imported asset: other crypto in `bitcoin` scope, metals, stocks, ETFs, ETCs, indices | no imported asset anywhere | skipped (`non_btc_operations`) and counted by ticker in `assets`: crypto under `skipped`, the rest under `excluded` |
 
 Type names compare case-insensitively after trimming. A buy or sell is
 recognised by its shape, whatever its `operation_type` (so savings plans and
@@ -173,8 +186,10 @@ the withdrawal is refused.
 cash leg is the exact amount paid or received; that follows Kassiber's rule
 that fiat fees raise a buy's cost and lower a sell's proceeds. `trade.fee`
 stays in the raw evidence. A separate `fee_amount` on either leg (in cash, in
-BTC, or in BEST) leaves it unknown whether the cash leg already includes it,
-so the trade is refused.
+BTC, or in the traded asset) leaves it unknown whether the cash leg already
+includes it, so the trade is refused. A fee in a third imported asset cannot
+be part of either leg, so in `crypto` scope it becomes its own `fee` row; in
+`bitcoin` scope a BEST fee is not an imported asset and the trade is refused.
 
 ### Refused (validation error, nothing imported)
 
@@ -187,16 +202,22 @@ through the generic ledger after checking it in Bitpanda.
 - a `transaction_type` naming another event (`deposit`, `withdrawal`,
   `reward`, `buy`, `sell`) than the operation's movement type;
 - reversals: any leg with `compensates`;
-- BTC against another asset: crypto swaps, crypto index trades (several
-  asset legs), BEST-paid fees, BTC that appears only as a fee;
-- a trade that is not one BTC leg against one fiat leg, both legs flowing the
-  same way, a cash leg of zero, or in a currency Kassiber does not price;
-- a trade with any separate `fee_amount`;
-- BTC moving against cash without trade details;
-- several BTC legs that do not balance;
+- an imported asset against an asset that is not imported: in `bitcoin`
+  scope a crypto swap or a BEST-paid fee (the hint names the `crypto` scope),
+  in any scope a trade against a metal, stock or index; an imported asset that
+  appears only as a fee;
+- in `crypto` scope, an asset id Bitpanda does not list (a delisted asset),
+  or a ticker two listed crypto assets share;
+- a trade that is not one asset leg against one fiat leg or one leg of
+  another imported asset (crypto index trades), legs flowing the same way, a
+  cash leg of zero, or a currency Kassiber does not price;
+- a trade or swap with a `fee_amount` in cash or in one of its legs' assets;
+- an asset moving against cash without trade details;
+- several legs that do not balance;
 - a deposit or reward with a fee, a withdrawal fee in another asset, or a
   withdrawal BTC fee the balances cannot place;
-- amounts that are negative, non-decimal, zero BTC or finer than a msat;
+- amounts that are negative, non-decimal, zero, finer than a msat (BTC) or
+  than 11 decimals (another imported asset);
   times without an offset; a transaction's asset disagreeing with its
   amount's; a transaction without an id; an operation without a transaction
   list.
@@ -209,8 +230,38 @@ external id and fingerprint, pricing updates, journal invalidation, import
 runs. `raw_json` is `{operation_id, operation_type, transaction}` plus
 `cash_transaction` for a trade, sorted. The envelope adds the framework's
 `backend`, `backend_kind`, `backend_url` (redacted), `wallet`, `fetched` and
-`input_format: "bitpanda_api"`, and `skipped`:
-`{"fiat_only_operations", "non_btc_operations", "internal_btc_moves"}` counts.
+`input_format: "bitpanda_api"`, `skipped`:
+`{"fiat_only_operations", "non_btc_operations", "internal_btc_moves"}` counts,
+`assets` (`{scope, skipped: {TICKER: operations}, excluded: {TICKER:
+operations}}`, plus `next_step` with the command that keeps the skipped
+crypto), `swap_pairs` (pairs this sync authored), and `provider_balance`
+(below; BTC only).
+
+### Balance check
+
+Each transaction's `asset_balance_after` is the Bitpanda wallet's balance
+after it, and the sync reads the whole history. So Bitpanda's current BTC
+balance is the sum, over its BTC wallets (`wallet_id`), of the balance after
+each wallet's latest BTC transaction. This uses the operations already read,
+with no request to `/v1/portfolio` and no `Balances` scope. Skipped internal
+moves count, because they change which Bitpanda wallet holds the BTC; refused
+operations stop the sync before any comparison.
+
+After the import, `provider_balance` compares that figure with the Kassiber
+wallet's book balance: its included BTC rows, inbound amounts less outbound
+amounts and fees, in msat.
+
+| `status` | Fields | When |
+| --- | --- | --- |
+| `matches` | `asset`, `provider_msat`, `book_msat`, `difference_msat` (`0`) | the two agree |
+| `mismatch` | same; `difference_msat` = book − Bitpanda | they differ |
+| `unavailable` | `asset`, `reason` | a BTC leg names no wallet; a wallet's latest BTC leg has no balance, a balance finer than a msat or in another asset; two legs at a wallet's latest time show different balances; or no BTC transaction at all |
+
+The check is informational. It never changes, adds or refuses rows, and it
+never guesses (no rounding, no earlier balance standing in for a missing
+one). A mismatch usually means excluded transactions, rows added to the same
+wallet from another source, or history the API did not return; it is
+reported, not corrected.
 
 ## Setup
 
@@ -245,8 +296,11 @@ mints a consent for this exact route (book, profile, wallet, kind, URL,
 timeout, proxy), every request and the publication recheck the gate, and
 offline mode stops it without writing. The key lives in the backend secret
 boundary, is never logged or printed, and is withheld (with its percent- and
-JSON-escaped spellings) from every error: the 401/403 `bitpanda_error`, the
-shared transport's non-2xx body prefix, and server text quoted in a refusal.
+JSON-escaped spellings) from every error: the shared transport's non-2xx
+body prefix and server text quoted in a refusal. The 401/403 `bitpanda_error`
+is never Bitpanda's string: a known code (`expired_api_key`, `forbidden`,
+`insufficient_scope`, `invalid_api_key`, `missing_api_key`,
+`rate_limit_exceeded`, `unauthorized`) or `"unknown"`.
 Saved Bitpanda backends are configuration, not consent: launch, status,
 desktop reads and freshness jobs never contact Bitpanda (exchange API wallets
 stay sourceless for `wallets sync` and `ui.wallets.sync`). Only the desktop's
@@ -281,7 +335,10 @@ import with explicit columns.
 - `crates/wallets/src/file_import/exchange_api/tests/bitpanda_api.rs`: a
   loopback fake built from the documented shapes: every mapped event, the
   request sequence and escaping, idempotent re-sync, both withdrawal-fee
-  readings, the write-scope refusal, auth errors and echoed keys, throttling
+  readings, the balance check (match, mismatch, each unavailable case),
+  the `bitcoin`-scope tally and its hint, the `crypto`-scope rows (a priced
+  ETH buy, a paired BTC -> ETH swap kept once across re-syncs, a BEST fee
+  row) and each `crypto`-scope refusal, the write-scope refusal, auth errors and echoed keys, throttling
   and its exhaustion, malformed pages, the BTC asset lookup, each refusal
   above, consent, offline and missing-key refusals before any request.
 - The recorded `test_rust_exchange_desktop` sessions

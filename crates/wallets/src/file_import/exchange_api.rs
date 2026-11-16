@@ -38,6 +38,8 @@ struct Fetched {
     /// Rows left out by asset (docs/plan/24-crypto-assets.md); `None` for a
     /// mapper that is still Bitcoin-only and does not count them yet.
     tally: Option<assets::Tally>,
+    /// The provider's own BTC balance, where it states one.
+    reported: Option<bitpanda::Reported>,
 }
 impl From<Vec<Py>> for Fetched {
     fn from(records: Vec<Py>) -> Self {
@@ -45,6 +47,7 @@ impl From<Vec<Py>> for Fetched {
             records,
             skipped: None,
             tally: None,
+            reported: None,
         }
     }
 }
@@ -114,6 +117,7 @@ pub fn execute(
         key,
         secret,
         source: label,
+        scope,
     };
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
@@ -122,13 +126,7 @@ pub fn execute(
             "kraken" => kraken::fetch(&client)?.into(),
             "coinbase" => coinbase::fetch(&client)?.into(),
             "binance" => binance::fetch(&client)?.into(),
-            "bitpanda" => {
-                let fetched = bitpanda::fetch(&client)?;
-                Fetched {
-                    skipped: Some(fetched.skipped),
-                    ..fetched.records.into()
-                }
-            }
+            "bitpanda" => bitpanda::fetch(&client)?,
             _ => return Err(unknown_kind(&kind)),
         })
     })();
@@ -137,6 +135,7 @@ pub fn execute(
         records,
         skipped,
         tally,
+        reported,
     } = fetched.map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
     if client.http.echoed() {
         return Err(echo_refusal(label));
@@ -205,7 +204,55 @@ pub fn execute(
         let assets = tally.envelope(scope, &wallet.label);
         kassiber_envelope::set(&mut result, "assets", assets);
     }
+    if let Some(reported) = reported {
+        let check = provider_balance(conn, profile, &wallet.id, reported)?;
+        kassiber_envelope::set(&mut result, "provider_balance", check);
+    }
     Ok(result)
+}
+
+/// The exchange's own BTC balance against the wallet's book balance after the
+/// import: what the wallet's included BTC rows add up to. Informational: a
+/// mismatch is reported, never corrected.
+fn provider_balance(
+    conn: &Connection,
+    profile: &str,
+    wallet: &str,
+    reported: bitpanda::Reported,
+) -> Result<Py, AppError> {
+    let provider = match reported {
+        bitpanda::Reported::Msat(msat) => msat,
+        bitpanda::Reported::Unavailable(reason) => {
+            return Ok(dict([
+                ("status", s("unavailable")),
+                ("asset", s("BTC")),
+                ("reason", s(reason)),
+            ]))
+        }
+    };
+    let book: i64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(CASE WHEN direction = 'inbound' THEN amount \
+             WHEN direction = 'outbound' THEN -amount - fee ELSE 0 END), 0) \
+             FROM transactions WHERE profile_id = ? AND wallet_id = ? AND excluded = 0 AND asset = 'BTC'",
+            [profile, wallet],
+            |row| row.get(0),
+        )
+        .map_err(database_error)?;
+    Ok(dict([
+        (
+            "status",
+            s(if book == provider {
+                "matches"
+            } else {
+                "mismatch"
+            }),
+        ),
+        ("asset", s("BTC")),
+        ("provider_msat", Py::from(provider)),
+        ("book_msat", Py::from(book)),
+        ("difference_msat", Py::from(book as i128 - provider as i128)),
+    ]))
 }
 
 /// The backend's name and its exchange kind, which must be `expected` when
@@ -410,6 +457,8 @@ struct Client<'a> {
     key: &'a str,
     secret: &'a str,
     source: &'static str,
+    /// The wallet's asset scope: which non-Bitcoin rows a mapper may emit.
+    scope: assets::Scope,
 }
 impl Client<'_> {
     fn authorize(&self) -> Result<(), AppError> {
@@ -613,6 +662,26 @@ fn normalized(value: &Py) -> String {
         kassiber_pytext::upper(raw)
     }
 }
+/// Refuses, naming the provider's row, a non-Bitcoin amount or fee finer
+/// than the 11 decimals the book stores (docs/plan/24-crypto-assets.md),
+/// before the coordinator would refuse it without the row's id.
+fn exact(entry: &Entry, row: &str) -> Result<(), AppError> {
+    if assets::class(&entry.asset) == assets::Class::Bitcoin {
+        return Ok(());
+    }
+    for (field, value) in [("amount", &entry.amount), ("fee", &entry.fee)] {
+        // Non-finite values keep the coordinator's own error. The check
+        // reads the value as given: a context-rounded `abs` could shorten it.
+        abs(value.clone())?;
+        if let PriceNumber::Finite(value) = value {
+            assets::exact_units(&entry.asset, field, &value.copy_abs()).map_err(|mut error| {
+                error.message = format!("{} {row}: {}", entry.provider, error.message);
+                error
+            })?;
+        }
+    }
+    Ok(())
+}
 fn is_bitcoin(code: &str) -> bool {
     matches!(code, "BTC" | "LBTC")
 }
@@ -770,7 +839,50 @@ struct Pricing {
     method: &'static str,
     external_ref: PyStr,
 }
+impl Entry {
+    /// A fee paid in a third asset: its own unpriced outbound `fee` row of
+    /// that asset, booked as a fee-only spend ([`assets::fee_only`]).
+    fn third_asset_fee(
+        provider: &'static str,
+        external_id: PyStr,
+        occurred_at: Option<PyStr>,
+        asset: String,
+        quantity: PriceNumber,
+        raw: Py,
+        description: PyStr,
+    ) -> Self {
+        let (amount, fee) = assets::fee_only(quantity);
+        Entry {
+            provider,
+            external_id,
+            occurred_at,
+            inbound: false,
+            asset,
+            amount,
+            fee,
+            kind: "fee",
+            raw,
+            description: Some(description),
+            pricing: None,
+        }
+    }
+}
+/// One leg of a crypto-to-crypto swap: the record plus the `swap_ref` both
+/// legs share, so the import pairs them (docs/plan/24-crypto-assets.md).
+fn swap_leg(entry: Entry, reference: &PyStr) -> Result<Py, AppError> {
+    let mut record = record(entry)?;
+    kassiber_envelope::set(&mut record, "swap_ref", Py::Str(reference.clone()));
+    Ok(record)
+}
 fn record(entry: Entry) -> Result<Py, AppError> {
+    // Every exchange's amount and fee is checked here, as parsed, before the
+    // net-of-fee sum and the `abs` below round them to the decimal context:
+    // a value finer than 11 decimals would otherwise be stored rounded
+    // (docs/plan/24-crypto-assets.md).
+    exact(
+        &entry,
+        &format!("transaction '{}'", lossy(&entry.external_id)),
+    )?;
     let Entry {
         provider,
         external_id,
@@ -951,4 +1063,13 @@ fn scrub_error(mut error: AppError, credentials: &[String]) -> AppError {
         walk(details, &forms, credentials);
     }
     error
+}
+
+/// A provider's error code as Kassiber's own value: the matching entry of
+/// `table`, else "unknown", never the provider's string.
+fn known_code(code: &str, table: &[&'static str]) -> Py {
+    table
+        .iter()
+        .find(|known| **known == code)
+        .map_or_else(|| s("unknown"), |known| s(*known))
 }
