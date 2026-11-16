@@ -150,6 +150,13 @@ pub fn build_request_rows<R: RequestRow>(
         // bytes.
         policy["pool_scope"] = json!(scope);
     }
+    if scope == "global_then_wallet" {
+        // The 2025 allocation fills wallets by when they were added, not by
+        // a label the user can rename.
+        if let Some(order) = config::wallet_order(profile)? {
+            policy["wallet_order"] = json!(order);
+        }
+    }
     let decimals = invariants(rows, intra_pairs, wallets)?;
     let book_currency = config::book_currency(profile).unwrap_or_default();
     let holds = holds(rows, &book_currency)?;
@@ -249,11 +256,12 @@ pub fn request_json(request: &Value) -> String {
                         "method_label",
                         "require_coarse_review",
                         "pool_scope",
+                        "wallet_order",
                     ]
                 } else if items.contains_key("long_term_days")
                     || items.get("kind").is_some_and(|v| v == "at" || v == "us")
                 {
-                    &["kind", "long_term_days"]
+                    &["kind", "long_term_days", "tax_year_start", "timezone"]
                 } else if items.get("kind").is_some_and(|v| v == "rules") {
                     // A registry country's engine rules
                     // (`config::rules_country`): every field of the engine's

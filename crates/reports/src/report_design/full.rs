@@ -111,7 +111,7 @@ pub fn full(model: &Value) -> Document {
         scope.push(fact(
             "long_term_days",
             t("scope.long_term_days"),
-            count(profile, "tax_long_term_days"),
+            count(&crate::country::taxed_days(profile), "tax_long_term_days"),
         ));
     }
     let processed = value(profile, "last_processed_at");
@@ -381,11 +381,13 @@ pub fn full(model: &Value) -> Document {
     sections.push(Section {
         id: "holdings",
         title: t("holdings.title").into(),
-        lead: t(if text(layer_data, "pool_scope") == "wallet" {
-            "holdings.current_lead_wallet"
-        } else {
-            "holdings.current_lead"
-        })
+        lead: t(
+            if super::per_wallet_scope(&text(layer_data, "pool_scope")) {
+                "holdings.current_lead_wallet"
+            } else {
+                "holdings.current_lead"
+            },
+        )
         .into(),
         page_break: false,
         landscape: false,

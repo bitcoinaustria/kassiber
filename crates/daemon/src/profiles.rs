@@ -1,6 +1,7 @@
 //! profiles daemon registration. Use the shared setup service.
 pub const KINDS: &[&str] = &[
     "ui.profiles.snapshot",
+    "ui.profiles.settings",
     "ui.profiles.create",
     "ui.profiles.rename",
     "ui.profiles.update",

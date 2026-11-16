@@ -183,6 +183,15 @@ fn ge(left: &Value, right: &Value) -> bool {
 }
 
 /// `int(profile[key] or 0)`, with Python's conversion of stored text/REAL.
+/// `profile` with the holding period the book is taxed with
+/// (`kassiber_setup::profiles::effective_long_term_days`).
+pub(crate) fn taxed_days(profile: &Value) -> Value {
+    dict([(
+        "tax_long_term_days",
+        kassiber_setup::profiles::effective_long_term_days(profile),
+    )])
+}
+
 pub(crate) fn stored_int(row: &Value, key: &str) -> Result<Value> {
     let raw = val(row, key);
     if !truthy(&raw) {
@@ -306,7 +315,7 @@ pub fn health(conn: &Connection, context: &Value, profile: Option<&Value>) -> Re
                 ("tax_country", val(profile, "tax_country")),
                 (
                     "tax_long_term_days",
-                    stored_int(profile, "tax_long_term_days")?,
+                    stored_int(&taxed_days(profile), "tax_long_term_days")?,
                 ),
                 ("gains_algorithm", val(profile, "gains_algorithm")),
             ]),

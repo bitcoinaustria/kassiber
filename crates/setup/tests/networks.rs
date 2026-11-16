@@ -531,6 +531,12 @@ fn partition_export_preserves_ids_encryption_attachments_and_source() {
         );
         assert!(!destination.exists());
         fs::write(attachments.join("document"), b"synthetic attachment").unwrap();
+        // The book's own tax calendar travels with it; another book's does not.
+        let calendar = r#"{"tax_year_start":"07-01","timezone":"Australia/Sydney"}"#;
+        conn.execute_batch(&format!(
+            "INSERT INTO settings(key,value) VALUES('tax.calendar.profile.profile-1','{calendar}'),('tax.calendar.profile.elsewhere','{calendar}')"
+        ))
+        .unwrap();
         let before = conn.total_changes();
         partition::export(conn, "profile-1", &args, options(), &f.sources).unwrap();
         assert_eq!(conn.total_changes(), before);
@@ -570,6 +576,18 @@ fn partition_export_preserves_ids_encryption_attachments_and_source() {
         )
         .unwrap();
         assert_eq!(target.encrypted(), encrypted);
+        let calendars: Vec<(String, String)> = target
+            .connection()
+            .prepare("SELECT key,value FROM settings WHERE key LIKE 'tax.calendar.%'")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            calendars,
+            [("tax.calendar.profile.profile-1".into(), calendar.into())]
+        );
         assert_eq!(
             target
                 .connection()

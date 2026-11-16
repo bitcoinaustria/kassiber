@@ -1273,9 +1273,9 @@
   },
   {
     "id": "TS-utc-year",
-    "file": "crates/reports/src/tax_summary.rs",
-    "find": "let year = if let Some(zone) = zone {\n        calendar::local(&at, zone)?.0",
-    "replace": "let year = if let Some(_zone) = zone {\n        at[..4].parse().unwrap()",
+    "file": "crates/reports/src/tax_years.rs",
+    "find": "return crate::calendar::local(raw, zone).map(|(year, _)| Some(year));",
+    "replace": "let _ = zone;\n            return Ok(raw.get(..4).and_then(|v| v.parse::<i64>().ok()));",
     "expect_failing": [
       "tax_summary_vectors"
     ],
@@ -4964,8 +4964,8 @@
   {
     "id": "capital-csv-year",
     "file": "crates/reports/src/capital_csv.rs",
-    "find": "    if let Some(year) = year {",
-    "replace": "    if let Some(year) = year.filter(|_| false) {",
+    "find": "    } else if let Some(year) = year {",
+    "replace": "    } else if let Some(year) = year.filter(|_| false) {",
     "expect_failing": [
       "managed_csv_export_requests_match_python"
     ],
@@ -6584,8 +6584,8 @@
   {
     "id": "cross-local-calendar",
     "file": "crates/reports/src/cross_check.rs",
-    "find": "let zone = crate::country::zone(&text(&profile, \"tax_country\").to_lowercase());",
-    "replace": "let zone: Option<&str> = None;",
+    "find": "let zone = crate::tax_years::Cut::of(conn, &profile)?;",
+    "replace": "let zone = crate::tax_years::Cut { zone: None, book: None };",
     "expect_failing": [
       "cross_check_vectors_pin_parsing_matching_totals_and_workbooks"
     ],

@@ -34,6 +34,10 @@ pub enum Country {
     Generic {
         /// Whole days a lot must be held for a long-term gain.
         long_term_days: i64,
+        /// The book's own tax year, when it is not the calendar year in the
+        /// timestamp's offset: its zone and first day. It changes only which
+        /// tax year an event belongs to, never the holding period.
+        year: Option<BookYear>,
     },
     /// Austria. Holding-period and Alt/Neu semantics live in its
     /// classification hooks, not in the lot engine.
@@ -43,6 +47,35 @@ pub enum Country {
     UnitedStates,
     /// A registry country's rules.
     Rules(Rules),
+}
+
+/// A generic book's own tax year: the zone whose local dates cut it, and
+/// its first day (month, day).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BookYear {
+    pub zone: Zone,
+    pub start: (u8, u8),
+}
+
+/// Reads a `MM-DD` tax-year start.
+fn tax_year_start(text: &str) -> EngineResult<(u8, u8)> {
+    calendar::Date::parse(&format!("2001-{text}"))
+        .filter(|_| text.len() == 5)
+        .map(|date| (date.month as u8, date.day as u8))
+        .ok_or_else(|| {
+            EngineError::request(format!(
+                "the tax year starts on {text:?}, which is not a MM-DD day of every year"
+            ))
+        })
+}
+
+/// The calendar a zone name refers to.
+fn calendar_zone(name: &str) -> EngineResult<Zone> {
+    calendar::zone(name).ok_or_else(|| {
+        EngineError::request(format!(
+            "the country rules name the time zone {name:?}, which has no calendar"
+        ))
+    })
 }
 
 /// A registry country's rules, read from its [`RulesSpec`].
@@ -94,22 +127,10 @@ impl Rules {
     /// Reads the request's rules; a zone the registry has no calendar for
     /// is a request error.
     pub fn from_spec(spec: &RulesSpec) -> EngineResult<Self> {
-        let zone = calendar::zone(&spec.timezone).ok_or_else(|| {
-            EngineError::request(format!(
-                "the country rules name the time zone {:?}, which has no calendar",
-                spec.timezone
-            ))
-        })?;
+        let zone = calendar_zone(&spec.timezone)?;
         let tax_year_start = match spec.tax_year_start.as_deref() {
             None => (1, 1),
-            Some(text) => calendar::Date::parse(&format!("2000-{text}"))
-                .filter(|_| text.len() == 5)
-                .map(|date| (date.month as u8, date.day as u8))
-                .ok_or_else(|| {
-                    EngineError::request(format!(
-                        "the country rules' tax year starts on {text:?}, which is not a MM-DD day"
-                    ))
-                })?,
+            Some(text) => tax_year_start(text)?,
         };
         Ok(Rules {
             zone,
@@ -141,8 +162,19 @@ impl Country {
     pub fn from_spec(spec: &CountrySpec) -> EngineResult<Self> {
         Ok(match spec {
             // Any period above i64::MAX days behaves identically.
-            CountrySpec::Generic { long_term_days } => Country::Generic {
+            CountrySpec::Generic {
+                long_term_days,
+                tax_year_start: start,
+                timezone,
+            } => Country::Generic {
                 long_term_days: i64::try_from(*long_term_days).unwrap_or(i64::MAX),
+                year: match (start.as_deref(), timezone.as_deref()) {
+                    (None, None) => None,
+                    (start, zone) => Some(BookYear {
+                        zone: calendar_zone(zone.unwrap_or("UTC"))?,
+                        start: start.map(tax_year_start).transpose()?.unwrap_or((1, 1)),
+                    }),
+                },
             },
             CountrySpec::At {} => Country::Austria,
             CountrySpec::Us {} => Country::UnitedStates,
@@ -154,7 +186,7 @@ impl Country {
     /// `sys.maxsize`, so it is never reached.
     pub fn long_term_days(self) -> i64 {
         match self {
-            Country::Generic { long_term_days } => long_term_days,
+            Country::Generic { long_term_days, .. } => long_term_days,
             Country::Austria
             | Country::Rules(Rules {
                 holding: Holding::Never,
@@ -189,14 +221,23 @@ impl Country {
     }
 
     /// The tax year of a taxable event: a rules country's, in its zone from
-    /// its start day; every other country's is the year in the timestamp's
-    /// own offset, as RP2 reads it.
+    /// its start day, and a generic book's own one likewise; every other
+    /// country's is the year in the timestamp's own offset, as RP2 reads it.
     pub fn tax_year(self, ts: &Timestamp) -> EngineResult<i32> {
         match self {
             Country::Rules(rules) => Ok(kassiber_tax_countries::years::tax_year(
                 rules.local_date(ts)?,
                 rules.tax_year_start,
             )),
+            Country::Generic {
+                year: Some(year), ..
+            } => {
+                let local = year
+                    .zone
+                    .local_date(ts.us)
+                    .map_err(|error| EngineError::value(format!("{error}: {}", ts.raw)))?;
+                Ok(kassiber_tax_countries::years::tax_year(local, year.start))
+            }
             _ => Ok(ts.year()),
         }
     }
@@ -408,8 +449,15 @@ pub(crate) fn compute_asset(
     country: Country,
     method: MethodName,
     scope: PoolScope,
+    wallet_order: &[String],
 ) -> EngineResult<AssetOutput> {
-    compute_parsed(ParsedAsset::new(input)?, country, method, scope)
+    compute_parsed(
+        ParsedAsset::new(input)?,
+        country,
+        method,
+        scope,
+        wallet_order,
+    )
 }
 
 /// The first day the United States identifies units per wallet or account
@@ -467,16 +515,46 @@ fn check_rules_scope(country: Country, scope: PoolScope) -> EngineResult<()> {
 }
 
 /// RP2's `compute_tax` for one asset whose entries are constructed and
-/// checked.
+/// checked. `wallet_order` (wallet labels) orders the wallets the United
+/// States' 2025 allocation fills (`global_then_wallet`); no other scope
+/// reads it.
 pub(crate) fn compute_parsed(
     parsed: ParsedAsset<'_>,
     country: Country,
     method: MethodName,
     scope: PoolScope,
+    wallet_order: &[String],
 ) -> EngineResult<AssetOutput> {
     let prepared = PreparedAsset::from_parsed(parsed)?;
     check_us_global_scope(&prepared, country, scope)?;
     check_rules_scope(country, scope)?;
+    if scope == PoolScope::GlobalThenWallet {
+        // Only the United States changes from the universal pool to the
+        // wallet pool within a book, and only its lot methods have a
+        // per-wallet form to change to.
+        if country != Country::UnitedStates {
+            return Err(EngineError::value(
+                "The global_then_wallet pool scope follows the United States' change to per-wallet identification on 2025-01-01; this country has no such change",
+            ));
+        }
+        let (fragments, holdings) = crate::wallets::transition_fragments(
+            &prepared.entries,
+            &prepared.lots,
+            &prepared.ins,
+            &prepared.events,
+            method,
+            US_WALLET_SCOPE_FROM * 86_400 * 1_000_000,
+            wallet_order,
+        )?;
+        let basis: Vec<Decimal> = prepared
+            .lots
+            .iter()
+            .map(|lot| lot.fiat_in_with_fee.clone())
+            .collect();
+        let mut output = finish(&prepared, &fragments, &basis, &basis, country)?;
+        output.wallet_holdings = Some(holdings);
+        return Ok(output);
+    }
     if let Some(matching) = crate::matching::method(method) {
         // A country method computes the asset as a whole; each lot's own
         // basis is its acquisition's and open position's.
@@ -492,8 +570,11 @@ pub(crate) fn compute_parsed(
         return Ok(output);
     }
     if scope == PoolScope::Wallet {
-        // Lot methods only: each lot's basis is its own, so the effective
-        // and open-position bases are the lots' (RP2's lot-method views).
+        // Lot methods and the plain moving average: each lot's basis is its
+        // own, so the effective and open-position bases are the lots'
+        // (RP2's lot-method views); under the moving average each wallet's
+        // remaining cost is its holdings' (as Germany's
+        // `moving_average_fifo_period`).
         let (fragments, holdings) = crate::wallets::fragments(
             &prepared.entries,
             &prepared.lots,

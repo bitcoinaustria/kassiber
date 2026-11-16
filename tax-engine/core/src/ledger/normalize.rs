@@ -1746,6 +1746,8 @@ mod tests {
         let mut generic = request.clone();
         generic.policy.country = crate::ledger::request::Country::Generic {
             long_term_days: 365,
+            tax_year_start: None,
+            timezone: None,
         };
         let normalized = run_pass(&generic).unwrap();
         assert!(normalized

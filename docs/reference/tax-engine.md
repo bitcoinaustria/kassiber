@@ -336,7 +336,7 @@ it:
 
 | Field | Meaning |
 |---|---|
-| `policy` | `country` is `{"kind": "generic", "long_term_days": N}` (capped at `sys.maxsize`), `{"kind": "at"}`, `{"kind": "us"}`, or `{"kind": "rules", ...}` for a registry country with shared engine rules ([rules countries](#rules-countries)); the [country registry](tax-countries.md) picks it. `method` is the profile's method (`fifo`, `lifo`, `hifo`, `lofo`, `moving_average`, `moving_average_at`, or the matching methods `moving_average_fifo_period` and `uk_share_matching`) when its country allows it, else `null`; `method_label` is the stored method text for the method gate's message. `require_coarse_review` is the profile's opt-in. `pool_scope` is `"wallet"` for a profile on the wallet pool scope and absent otherwise (global), so global requests keep their bytes |
+| `policy` | `country` is `{"kind": "generic", "long_term_days": N}` (capped at `sys.maxsize`), `{"kind": "at"}`, `{"kind": "us"}`, or `{"kind": "rules", ...}` for a registry country with shared engine rules ([rules countries](#rules-countries)); the [country registry](tax-countries.md) picks it. `method` is the profile's method (`fifo`, `lifo`, `hifo`, `lofo`, `moving_average`, `moving_average_at`, or the matching methods `moving_average_fifo_period` and `uk_share_matching`) when its country allows it, else `null`; `method_label` is the stored method text for the method gate's message. `require_coarse_review` is the profile's opt-in. `pool_scope` is `"wallet"` or `"global_then_wallet"` for a profile on that pool scope and absent otherwise (global), so global requests keep their bytes; a generic `country` may add the book's `tax_year_start` and `timezone` ([countries and pool scopes](#countries-and-pool-scopes)) |
 | `config` | The names the lot engine's membership checks accept: the assets, wallet labels, and profile label, sorted, stripped, and read as RP2 read its INI file |
 | `holder` | The profile label, unstripped, as entries carry it |
 | `wallets` | `{id, label}` per wallet reference, in order; account fields stay with the journal reader |
@@ -548,6 +548,18 @@ those tables.
 
 ## Countries and pool scopes
 
+A generic country may carry the book's own tax year:
+`{"kind": "generic", "long_term_days": N, "tax_year_start": "07-01",
+"timezone": "Australia/Sydney"}`. Each field is present only when it
+differs from the UTC calendar year (the journals send them only for a book
+that chose them, [book settings](tax.md#book-settings)), so other requests
+keep their bytes. They change which tax year an event's yearly totals and
+tax summary belong to (`Country::tax_year`, the year of the event's local
+date in the zone from the start day, named by the first day's year); they
+never change the holding period, which stays whole elapsed days. A start
+that is not a day of every year (`02-29`) or a zone without a calendar is a
+request error. `tests/book_settings.rs` pins them.
+
 The lot engine's country decides the holding period (`Country::is_long_term`):
 the generic country counts whole elapsed days against `long_term_days`
 (RP2's rule); Austria is never long-term; the United States is long-term
@@ -659,8 +671,27 @@ disposal takes its lots:
   composition read them unchanged, and the asset's output adds
   `wallet_holdings` (each wallet's remaining quantity and own basis), which
   composition books as holdings instead of an allocation at the average.
-  Only the lot methods have a wallet form; a moving average, an unpriced
-  move fee and a wallet that lacks the units fail.
+  The lot methods have a wallet form, and so does the plain moving
+  average: each wallet keeps its own average cost, a disposal takes the
+  wallet's FIFO portions (whose acquisitions date the holding period) at
+  that average, a move's fee leaves the source as a disposal at the
+  source's average, and the units that arrive carry the source's average
+  cost to the destination, whose average then blends it with its own
+  (Germany's `moving_average_fifo_period` is the same pass). Open positions
+  read each lot's own basis there, as under Germany's method; each wallet's
+  remaining cost is in `wallet_holdings`. Austria's moving average and the
+  country matching methods other than Germany's have no wallet form; they,
+  an unpriced move fee and a wallet that lacks the units fail.
+- **global_then_wallet** (`src/wallets.rs`, `transition_fragments`): the
+  United States' change on 2025-01-01 within one book, lot methods only.
+  Before the change one pool holds every wallet's lots (a move pays only its
+  fee from it, and each wallet's unit count is kept beside it); at the
+  change the pool's remaining lots are allocated to the wallets by the
+  method's order, wallets by label and holder, each up to the units it
+  holds (Rev. Proc. 2024-28's global allocation,
+  [the 2025 transition](tax-country-us.md#the-2025-transition)); from then
+  on the wallet pass. Another country, another method, or wallet counts
+  that do not add up to the pool fail.
 
 RP2's own per-wallet application is not the model: its per-wallet pass can
 dispose of a lot its transfer analysis already moved to another wallet
@@ -670,8 +701,8 @@ frozen `us_fixtures.json`).
 
 A US book on the global scope fails when it has a disposal on or after
 2025-01-01 UTC: from 2025 units are identified per wallet or account
-(Treas. Reg. § 1.1012-1(j)), and the Rev. Proc. 2024-28 transition is not
-modelled.
+(Treas. Reg. § 1.1012-1(j)); a book that spans the change uses
+`global_then_wallet`.
 
 ## Schema 1: the fixture API
 

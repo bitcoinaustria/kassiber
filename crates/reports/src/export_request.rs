@@ -58,8 +58,10 @@ pub(super) fn range(
     sources: &dyn Sources,
 ) -> Result<Option<export_range::Range>> {
     let tzpath = crate::zone::tzpath(std::env::var("PYTHONTZPATH").ok().as_deref());
-    export_range::resolve(
+    let book = crate::tax_years::book_cut(conn, profile)?;
+    export_range::resolve_for_book(
         profile,
+        book.as_ref(),
         value(args, "range"),
         value(args, "from"),
         value(args, "to"),

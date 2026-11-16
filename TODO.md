@@ -1674,7 +1674,46 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
   requires it. Current per-wallet basis allocation is not a physical-lot claim.
   The United States requires it from 2025 and Germany always: their books use
   the engine's wallet pool scope (`tax-engine/core/src/wallets.rs`, the lot
-  methods and DE's average); other countries keep the allocation.
+  methods, the plain moving average and DE's average; US books spanning
+  2025 may use `global_then_wallet`); other countries keep the allocation.
+- [ ] Offer generic books the per-wallet pool. The engine computes every
+  generic method per wallet (the lot methods and `MOVING_AVERAGE`), and
+  profiles, the request builder and the engine refuse a method without a
+  wallet form up front ([pool scopes](docs/reference/tax.md#pool-scopes)).
+  The switch is adding `wallet` to the generic entry's `pool_scopes`; it
+  changes two frozen fusion-builder vectors
+  (`tests/fixtures/custody_fusion_builder.json`:
+  `profile-cost_basis_pool_scope-0`, `ordering-pool-before-row`) that pin a
+  generic `wallet` profile as refused, so it needs the reviewed regeneration
+  flow and owner sign-off for the opted-in books' numbers.
+- [ ] Desktop book settings: a settings dialog on `ui.profiles.settings` and
+  `ui.profiles.update` (dry run first, then apply) for any book, including
+  currency, holding days, coarse review, the rail default, the tax year
+  start and the zone ([book settings](docs/reference/tax.md#book-settings));
+  add `ui.profiles.settings` to `ALLOWED_DAEMON_KINDS` and
+  `ALLOWED_BRIDGE_KINDS`; regenerate `ui-tauri/src/lib/taxCountries.generated.ts`
+  (`KASSIBER_UPDATE_TAX_COUNTRIES_TS=1 cargo test -p kassiber-tax-countries`,
+  stale until then: the registry gained four countries and the book-calendar
+  fields); year menus and export presets on the book's tax year and
+  `YYYY-YY` labels; the Overview's realized label as tax-year to date.
+- [ ] Give the assistant and MCP the book settings: `ui.profiles.settings`
+  as a read tool and `ui.profiles.update` as a mutating, non-reversible
+  policy tool (always asks) whose plan step is its own `dry_run` preview,
+  appended as Rust-only tools (`RUST_ONLY_TOOLS` in
+  `crates/ai/tests/python_vectors.rs`, `RUST_ONLY` in
+  `crates/mcp/tests/registry.rs`) with a skill-reference section. Adding a
+  tool changes the tool lists hashed in the black-box goldens
+  (`crates/kassiber/tests/black_box/golden/mcp/every_grant.txt`,
+  `ai_chat/writes_ask_apply_and_undo.txt`,
+  `ai_chat/broker_chat_tool_round_and_resumed_cursor.txt`), so it waits for a
+  reviewed `KASSIBER_BLESS` run.
+- [ ] Have Australian, New Zealand, Indian and South African tax
+  professionals review their preview entries and open questions
+  ([AU](docs/reference/tax-country-au.md), [NZ](docs/reference/tax-country-nz.md),
+  [IN](docs/reference/tax-country-in.md), [ZA](docs/reference/tax-country-za.md)),
+  write each country's vectors (`tax-country-<code>-vectors.json`), and add
+  country layers (AU discount, IN VDA rules, ZA exclusion and inclusion
+  rate) where the review asks for them.
 - [ ] Stop an Austrian Neu shortfall from aborting the whole report. The
   engine's regime tracker (`tax-engine/core/src/ledger/regimes.rs`) tags a
   sale Neu whenever the wallet holds any Neu, even when the sale needs more,
@@ -1809,9 +1848,11 @@ See [tax countries](docs/reference/tax-countries.md) and
   drop `preview` from its registry entry.
 - [ ] Answer the US open questions
   ([list](docs/reference/tax-country-us.md#open-questions-for-a-us-tax-reviewer)):
-  local time zone versus UTC, transfer-fee treatment, the 2024→2025
-  universal-to-wallet transition in one book (Rev. Proc. 2024-28
-  allocation), Schedule C for mining or staking as a business, airdrops,
+  local time zone versus UTC, transfer-fee treatment, a review of the
+  implemented 2024→2025 transition (`global_then_wallet`, the Rev. Proc.
+  2024-28 global allocation by the book's method order,
+  [the 2025 transition](docs/reference/tax-country-us.md#the-2025-transition)),
+  Schedule C for mining or staking as a business, airdrops,
   BTC↔L-BTC pegs, gifts received (§ 1015 basis), standing-order records,
   Form 1099-DA reconciliation (boxes G/H, J/K).
 - [ ] Spain and Japan follow-ups (preview countries,

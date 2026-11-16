@@ -131,6 +131,11 @@ pub struct Policy {
     /// left out when global, so existing requests read back unchanged).
     #[serde(default, skip_serializing_if = "crate::model::PoolScope::is_global")]
     pub pool_scope: crate::model::PoolScope,
+    /// The book's wallet ids in the order they were added, for the United
+    /// States' 2025 allocation (`global_then_wallet`); absent otherwise, so
+    /// every other request keeps its bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wallet_order: Vec<String>,
 }
 
 /// The country rules.
@@ -138,8 +143,15 @@ pub struct Policy {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Country {
     /// Kassiber's generic country: a holding period in whole days, capped at
-    /// `sys.maxsize`.
-    Generic { long_term_days: u64 },
+    /// `sys.maxsize`, and the book's own tax year when it is not the UTC
+    /// calendar year (absent otherwise, so such requests keep their bytes).
+    Generic {
+        long_term_days: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tax_year_start: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timezone: Option<String>,
+    },
     /// Austria.
     At {},
     /// The United States (`docs/reference/tax-country-us.md`).

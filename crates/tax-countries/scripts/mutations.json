@@ -259,5 +259,26 @@
       "japan_is_a_preview_jpy_country_with_its_averages"
     ],
     "rule": "Japan books a fork's coins at zero cost without income (FAQ 1-6)."
+  },
+  {
+    "id": "calendar-southern-summer-time",
+    "file": "crates/tax-countries/src/calendar.rs",
+    "find": "if summer {\n                    self.standard + 3600",
+    "replace": "if false {\n                    self.standard + 3600",
+    "expect_failing": [
+      "added_zones_match_zoneinfo",
+      "local_midnights_follow_the_zone"
+    ],
+    "rule": "A southern zone (Sydney, Auckland) is one hour ahead of its standard offset in its summer, across New Year."
+  },
+  {
+    "id": "book-calendar-locked-start",
+    "file": "crates/tax-countries/src/book.rs",
+    "find": "if start != self.tax_year_start && !self.tax_year_editable {",
+    "replace": "if false {",
+    "expect_failing": [
+      "only_a_country_that_lets_a_book_choose_accepts_its_choice"
+    ],
+    "rule": "A country with a legal tax year refuses a book's own start."
   }
 ]

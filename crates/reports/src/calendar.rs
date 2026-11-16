@@ -77,6 +77,11 @@ pub fn local(raw: &str, zone: &str) -> Result<(i64, String)> {
     Ok((i64::from(date.year), date.iso()))
 }
 
+/// A stored instant as µs since 1970-01-01 UTC, with its raw text.
+pub fn utc_us(raw: &str) -> Result<(i64, &str)> {
+    Ok((instant(raw)? - kassiber_rates::time::UNIX, raw))
+}
+
 /// The UTC instant (`YYYY-MM-DDTHH:MM:SSZ`) at which `year` begins in
 /// `zone`: local midnight of 1 January.
 pub fn year_start(year: i64, zone: &str) -> Result<String> {

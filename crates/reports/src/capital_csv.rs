@@ -33,8 +33,18 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
     let country = kassiber_pytext::lower(&text(profile, "tax_country"));
     let austria = crate::country::austrian(&country);
     let zone = crate::country::zone(&country);
+    let cut = crate::tax_years::Cut::of(conn, profile)?;
     let mut records = rows(conn, SQL, [text(profile, "id")])?;
-    if let Some(year) = year {
+    if let (Some(year), Some(_)) = (year, cut.book) {
+        // The book's own tax year (`tax_years::Cut`).
+        let mut selected = Vec::new();
+        for row in records {
+            if cut.year(&text(&row, "occurred_at"))? == Some(year) {
+                selected.push(row);
+            }
+        }
+        records = selected;
+    } else if let Some(year) = year {
         if let Some(zone) = zone {
             let (start, end) = calendar::window(year);
             records.retain(|r| {

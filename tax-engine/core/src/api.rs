@@ -133,7 +133,13 @@ fn compute_inner(request: &str) -> EngineResult<ComputeResponse> {
                     request.assets.len()
                 )));
             };
-            let output = compute_asset(asset, country, request.method, request.pool_scope)?;
+            let output = compute_asset(
+                asset,
+                country,
+                request.method,
+                request.pool_scope,
+                &request.wallet_order,
+            )?;
             Ok(response(None, Some(vec![output])))
         }
         Operation::Validate | Operation::ComputeMulti

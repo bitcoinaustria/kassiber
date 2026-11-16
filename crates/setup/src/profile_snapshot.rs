@@ -48,7 +48,7 @@ pub fn tax_policy_label(profile: &Value) -> String {
                 Some(entry) => entry.name_en.to_owned(),
                 None => upper,
             },
-            text(profile, "tax_long_term_days")
+            py_str(&profiles::effective_long_term_days(profile))
         ),
     }
 }
@@ -156,10 +156,7 @@ pub fn snapshot(conn: &Connection, sources: &dyn Sources) -> Result<Value> {
                 ("taxPolicy", s(tax_policy_label(p))),
                 ("fiatCurrency", get(p, "fiat_currency").unwrap().clone()),
                 ("taxCountry", get(p, "tax_country").unwrap().clone()),
-                (
-                    "taxLongTermDays",
-                    get(p, "tax_long_term_days").unwrap().clone(),
-                ),
+                ("taxLongTermDays", profiles::effective_long_term_days(p)),
                 ("gainsAlgorithm", get(p, "gains_algorithm").unwrap().clone()),
                 (
                     "costBasisPoolScope",
@@ -185,6 +182,15 @@ pub fn snapshot(conn: &Connection, sources: &dyn Sources) -> Result<Value> {
             // the reference's projection.
             if entry.preview {
                 kassiber_envelope::set(&mut child, "taxCountryPreview", Value::Bool(true));
+            }
+            // A book's own tax calendar, only when it chose one, so every
+            // other book keeps the reference's projection.
+            let (start, zone) = super::book_settings::stored_calendar(conn, &text(p, "id"))?;
+            if start.is_some() || zone.is_some() {
+                if let Ok(book) = entry.book_calendar(start.as_deref(), zone.as_deref()) {
+                    kassiber_envelope::set(&mut child, "taxYearStart", s(book.start_text()));
+                    kassiber_envelope::set(&mut child, "timezone", s(book.timezone));
+                }
             }
             children.push(child);
         }

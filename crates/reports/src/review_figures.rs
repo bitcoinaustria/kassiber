@@ -9,13 +9,13 @@ use std::collections::BTreeMap;
 pub fn year_totals(
     conn: &Connection,
     profile_id: &str,
-    zone: Option<&str>,
+    cut: crate::tax_years::Cut<'_>,
 ) -> Result<BTreeMap<i64, [Decimal; 2]>> {
     let query = "SELECT je.occurred_at,je.asset,je.entry_type,COALESCE(NULLIF(t.kind_override,''),t.kind) AS transaction_kind,COALESCE(je.capital_gains_type,'') AS capital_gains_type,ABS(je.quantity) AS quantity_msat,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.gain_loss,0) AS gain_loss FROM journal_entries je LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap'";
     // Buckets keep the reference's insertion order; their sums round there.
     let mut buckets: Vec<(tax_summary::Key, Decimal)> = Vec::new();
     for row in rows(conn, query, [profile_id])? {
-        let Some(key) = tax_summary::entry_key(&row, zone)? else {
+        let Some(key) = tax_summary::entry_key(&row, cut)? else {
             continue;
         };
         decimal(value(&row, "proceeds"))?;

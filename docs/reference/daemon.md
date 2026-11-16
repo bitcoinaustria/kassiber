@@ -434,8 +434,30 @@ names for book set and book. It inherits fiat currency, tax country, long-term
 period, and gains algorithm from the active book in that set when available;
 otherwise it uses the first book in the set, then generic EUR/FIFO defaults for
 empty sets. It can also accept `source_profile_id` to copy those settings from a
-specific book in the same set. Wallets, accounts/buckets, and transactions are
+specific book in the same set; a book of the same country also keeps the
+source's own tax calendar. Wallets, accounts/buckets, and transactions are
 not copied. The new book becomes active.
+
+`ui.profiles.settings` (read) accepts `{"profile_id":"..."}` (any book, not
+only the open one; the open book without it) and returns that book's
+settings and the choices its country allows: the projection in
+[book settings](tax.md#book-settings). `ui.profiles.update` accepts
+`profile_id` and any of `tax_country`, `gains_algorithm`,
+`cost_basis_pool_scope`, `fiat_currency` (strings), `tax_long_term_days`
+(an integer), `require_coarse_review` and `bitcoin_rail_carrying_value`
+(booleans), `tax_year_start` and `timezone` (strings; `"default"` for the
+country's), and `dry_run` (a boolean). Every value is validated against the
+country registry before anything is written; a dry run writes nothing and
+returns the preview (`changes`, `journals`, `filed_reports`, `readiness`,
+`price_currency_holds`, `tax_calendar_reset`, `settings`). Without
+`dry_run` the answer is `profiles get`'s projection of the book, with
+`price_currency_holds` when the currency changed and `tax_calendar_reset`
+when a region switch dropped the book's own tax calendar. Refusals carry
+the codes `validation`, `method_scope_unsupported`,
+`tax_year_start_invalid`, `tax_year_start_locked`, `timezone_unknown` and
+`timezone_locked`. Renaming stays `ui.profiles.rename`. The CLI's
+`profiles settings` and `profiles configure [--dry-run]` are the same
+reads and changes.
 
 `ui.workspace.create` accepts `{"label":"..."}` and creates an empty book set.
 `workspace` remains the daemon/API name. The daemon makes the new book set
