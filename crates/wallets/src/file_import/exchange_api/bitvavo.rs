@@ -769,7 +769,11 @@ fn swap(
 
 /// `amount - fee` in the book's unit (msat for BTC, the same 10^-11 for
 /// every other asset), never rounded; `None` when nothing is left.
-fn net_of_fee(amount: &Decimal, fee: &Decimal, refuse: &Refuse<'_>) -> Result<Option<Decimal>, AppError> {
+fn net_of_fee(
+    amount: &Decimal,
+    fee: &Decimal,
+    refuse: &Refuse<'_>,
+) -> Result<Option<Decimal>, AppError> {
     let (Some(amount), Some(fee)) = (exact_msat(amount), exact_msat(fee)) else {
         return Err(refuse(
             &"has an amount finer than 11 decimal places",
