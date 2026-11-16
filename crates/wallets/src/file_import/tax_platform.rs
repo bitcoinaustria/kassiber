@@ -73,11 +73,7 @@ fn platform(format: Format) -> &'static Platform {
         _ => &COINTRACKING,
     }
 }
-pub(super) const FIAT: &[&str] = &[
-    "AED", "ARS", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD",
-    "HUF", "ILS", "INR", "JPY", "KRW", "MXN", "NOK", "NZD", "PLN", "RON", "SEK", "SGD", "THB",
-    "TRY", "USD", "ZAR",
-];
+pub(super) const FIAT: &[&str] = kassiber_transactions::FIAT_CODES;
 fn fail(message: impl Into<String>, hint: &str) -> AppError {
     AppError::new("validation", message).with_hint(hint)
 }
