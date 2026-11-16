@@ -416,6 +416,10 @@ jobs:
 
       - name: Build unsigned desktop preview
         working-directory: ui-tauri
+        # `tsc -b` needs about 2.5 GB of heap, above Node's default limit on
+        # the macOS runner, where it intermittently ran out of memory.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm tauri build ${{ matrix.tauri_args }} --bundles ${{ matrix.bundles }} --ci
 
       - name: Use the host Wayland client in the AppImage
