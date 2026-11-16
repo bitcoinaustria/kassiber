@@ -1,16 +1,16 @@
 # Exchange API connections in the desktop
 
-The desktop connects Kraken, Coinbase, Binance and Bitpanda through a
-read-only API key and syncs their history on request. Each setup and sync runs
-the [exchange API framework](rust-exchange-sync.md) the CLI's
-`wallets sync-<kind>` commands use ([Bitpanda](bitpanda.md) has its own
-page).
+The desktop connects Kraken, Coinbase, Binance, Bitpanda and Bitvavo through
+a read-only API key and syncs their history on request. Each setup and sync
+runs the [exchange API framework](rust-exchange-sync.md) the CLI's
+`wallets sync-<kind>` commands use ([Bitpanda](bitpanda.md) and
+[Bitvavo](bitvavo.md) have their own pages).
 
 ## Flow
 
 1. **Pick the exchange.** The Add connection dialog lists Kraken, Coinbase,
-   Bitpanda and Binance API under Exchanges (setup kind `exchange-api`). The
-   Binance supplemental CSV import stays a separate card.
+   Bitpanda, Bitvavo and Binance API under Exchanges (setup kind
+   `exchange-api`). The Binance supplemental CSV import stays a separate card.
 2. **Create a read-only key.** The setup shows where to create the key and
    which of the exchange's permissions to turn on and leave off. The scopes
    follow what each sync reads:
@@ -21,6 +21,7 @@ page).
    | Coinbase | `wallet:accounts:read`, `wallet:transactions:read` (an API key and secret; Coinbase Developer Platform key files are not supported) | nothing more: the v2 API does not report them |
    | Binance | Enable Reading | `GET /sapi/v1/account/apiRestrictions`: reading must be on and every other `enable*`/`permits*` flag off, including flags Binance adds later |
    | Bitpanda | Transaction, Trade (Read) | `GET /v1/trading-limits`: a key that can trade is refused |
+   | Bitvavo | View access | nothing more: Bitvavo does not report a key's permissions, so the guide asks to leave Trade digital assets and Withdraw digital assets off |
 
 3. **Paste the key** (and secret; Bitpanda has none). The fields are password
    inputs; the values stay in the form until it saves or closes.
@@ -28,7 +29,8 @@ page).
    request to the exchange. It signs the fewest reads that prove the key reads
    what the sync needs: Kraken's first `TradesHistory` and `Ledgers` pages,
    Coinbase's first accounts page, Binance's API restrictions, and Bitpanda's
-   write-scope check, currencies and a one-row operations page. It writes
+   write-scope check, currencies and a one-row operations page, and Bitvavo's
+   BTC balance and a one-row history page. It writes
    nothing. The dialog saves only credentials that passed the test as they
    are; changing the key or secret asks for a new test.
 5. **Create connection** (`ui.connections.exchange.create`). No request. It
@@ -58,7 +60,7 @@ code, then the daemon's own message and hint:
 | `rate_limited` | the exchange is limiting requests |
 | `network_egress_disabled` | offline mode stopped the request |
 | `protocol_error` | an answer Kassiber cannot read safely; nothing imported |
-| `validation` | an entry Kassiber cannot book safely, such as Bitpanda's unrecognised types; nothing imported, please report it |
+| `validation` | an entry Kassiber cannot book safely, such as Bitpanda's unrecognised types or Bitvavo's stablecoin trades; nothing imported, please report it |
 | `config_error` | the saved key is incomplete |
 | `backend_timeout`, `network_error`, `app_error` | unreachable, slow, or an HTTP error |
 

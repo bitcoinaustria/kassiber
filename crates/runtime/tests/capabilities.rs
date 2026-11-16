@@ -45,6 +45,7 @@ fn tables_match_python() {
     // carry their siblings' capability; Python has no entry for them.
     let rust_only = [
         ("wallets.sync-bitpanda", "wallets.sync-binance"),
+        ("wallets.sync-bitvavo", "wallets.sync-binance"),
         ("journals.verify", "journals.list"),
         // Pinning a certificate is a trust decision, admin like revealing a token.
         ("backends.trust-certificate", "backends.reveal-token"),

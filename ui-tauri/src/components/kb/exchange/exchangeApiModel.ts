@@ -1,7 +1,13 @@
 import { DaemonRequestError } from "@/daemon/client";
 
 /** Exchanges whose history Kassiber reads through a read-only API key. */
-export const EXCHANGE_KINDS = ["kraken", "coinbase", "binance", "bitpanda"] as const;
+export const EXCHANGE_KINDS = [
+  "kraken",
+  "coinbase",
+  "binance",
+  "bitpanda",
+  "bitvavo",
+] as const;
 export type ExchangeKind = (typeof EXCHANGE_KINDS)[number];
 
 export function isExchangeKind(kind: string | null | undefined): kind is ExchangeKind {
@@ -18,6 +24,7 @@ export const EXCHANGE_PROVIDER_NAMES: Record<ExchangeKind, string> = {
   coinbase: "Coinbase",
   binance: "Binance",
   bitpanda: "Bitpanda",
+  bitvavo: "Bitvavo",
 };
 
 export interface ExchangeKeyGuide {
@@ -32,8 +39,9 @@ export interface ExchangeKeyGuide {
 /**
  * What each sync reads decides the scopes: Kraken's TradesHistory and Ledgers,
  * Coinbase's accounts and transactions, Binance's fiat payments, deposits,
- * withdrawals and dividends, Bitpanda's operations, assets and currencies
- * (docs/reference/rust-exchange-sync.md, docs/reference/bitpanda.md).
+ * withdrawals and dividends, Bitpanda's operations, assets and currencies,
+ * Bitvavo's transaction history and balance (docs/reference/rust-exchange-sync.md,
+ * docs/reference/bitpanda.md, docs/reference/bitvavo.md).
  */
 export const EXCHANGE_KEY_GUIDES: Record<ExchangeKind, ExchangeKeyGuide> = {
   kraken: {
@@ -70,6 +78,16 @@ export const EXCHANGE_KEY_GUIDES: Record<ExchangeKind, ExchangeKeyGuide> = {
     keyPageUrl: "https://app.bitpanda.com/my-account/apikey",
     grant: ["Transaction", "Trade (Read)"],
     deny: ["Trade (Write)", "Earn (Write)", "Balances"],
+  },
+  bitvavo: {
+    keyPageUrl: "https://account.bitvavo.com/user/api",
+    grant: ["View access"],
+    deny: [
+      "Trade digital assets",
+      "Withdraw digital assets",
+      "Internal Transfer",
+      "Administrative",
+    ],
   },
 };
 
@@ -128,7 +146,7 @@ export interface ExchangeTestResult {
   exchange: ExchangeKind;
   ok: boolean;
   /** True when the exchange confirmed the key cannot trade or withdraw;
-   *  null when the exchange does not say (Kraken, Coinbase). */
+   *  null when the exchange does not say (Kraken, Coinbase, Bitvavo). */
   read_only: boolean | null;
 }
 

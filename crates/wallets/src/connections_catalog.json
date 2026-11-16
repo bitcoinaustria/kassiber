@@ -126,6 +126,12 @@
     "config_fields": "backend"
   },
   {
+    "kind": "bitvavo",
+    "summary": "Bitvavo read-only API connection for BTC trades and wallet movements.",
+    "requires": "",
+    "config_fields": "backend"
+  },
+  {
     "kind": "wasabi",
     "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
     "requires": "",

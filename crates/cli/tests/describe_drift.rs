@@ -17,7 +17,10 @@ use kassiber_pyjson::{dumps, Options, Value};
 /// (`docs/reference/rust-shell.md#rust-only-commands`): every other byte
 /// must still be Python's.
 /// Each Rust-only leaf and the Python leaf it is described like.
-const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[("sync-bitpanda", "sync-binance")];
+const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[
+    ("sync-bitpanda", "sync-binance"),
+    ("sync-bitvavo", "sync-bitpanda"),
+];
 
 /// Rust-only leaves with no Python sibling to be described like, each with
 /// the leaf it follows and its reviewed description

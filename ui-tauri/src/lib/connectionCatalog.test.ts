@@ -54,6 +54,7 @@ describe("connection catalog", () => {
 
     expect(exchanges.map((source) => [source.id, source.exchange])).toEqual([
       ["bitpanda", "bitpanda"],
+      ["bitvavo-api", "bitvavo"],
       ["kraken", "kraken"],
       ["coinbase", "coinbase"],
       ["binance-api", "binance"],

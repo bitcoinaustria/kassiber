@@ -1374,6 +1374,7 @@
       "coinbase": "In Coinbase, open Settings → API and create a key for your BTC wallet. Copy the API key and its secret. Kassiber signs requests with that key and secret; key files from the Coinbase Developer Platform are not supported yet.",
       "binance": "In Binance, open Account → API Management, create a system-generated key and edit its restrictions. Copy the API key and the secret key; Binance shows the secret only once. Kassiber refuses a key that can do more than read.",
       "bitpanda": "In Bitpanda, open Account settings → API Keys → New API key. Bitpanda shows the key only once, and it expires after at most a year. Kassiber refuses a key that can trade.",
+      "bitvavo": "In Bitvavo, open Settings → API → Add new API key. Turn on only View access, optionally add this computer's IP address to the IP whitelist, and confirm with your 2FA code. Copy the API key and the secret; Bitvavo shows them only once. Bitvavo does not tell Kassiber what a key may do, so leave trading and withdrawals off yourself.",
       "grant": "Turn on only",
       "deny": "Leave off",
       "open": "Open the {{provider}} API key page"

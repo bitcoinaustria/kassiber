@@ -108,6 +108,18 @@ describe("ExchangeApiSetupPanel", () => {
     expect(screen.getByRole("list", { name: "Turn on only" }).textContent).toContain("Trade (Read)");
     expect(screen.queryByLabelText(/secret/i)).toBeNull();
     expect(screen.getByText(/refuses a key that can trade/)).toBeTruthy();
+    cleanup();
+
+    // Bitvavo signs with a secret and cannot tell what a key may do.
+    mount("bitvavo");
+    expect(screen.getByRole("list", { name: "Turn on only" }).textContent).toBe("View access");
+    const deny = screen.getByRole("list", { name: "Leave off" }).textContent;
+    expect(deny).toContain("Trade digital assets");
+    expect(deny).toContain("Withdraw digital assets");
+    expect(screen.getByLabelText("API secret")).toBeTruthy();
+    expect(screen.getByText(/leave trading and withdrawals off yourself/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open the Bitvavo API key page" }));
+    expect(mocks.openExternalUrl).toHaveBeenCalledWith("https://account.bitvavo.com/user/api");
   });
 
   it("tests only complete credentials, sends exactly them, and never shows them", async () => {

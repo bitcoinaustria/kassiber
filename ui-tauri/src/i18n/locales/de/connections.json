@@ -1374,6 +1374,7 @@
       "coinbase": "Öffne in Coinbase Einstellungen → API und erstelle einen Key für deine BTC-Wallet. Kopiere den API-Key und sein Secret. Kassiber signiert mit diesem Key und Secret; Key-Dateien der Coinbase Developer Platform werden noch nicht unterstützt.",
       "binance": "Öffne in Binance Konto → API-Verwaltung, erstelle einen systemgenerierten Key und bearbeite seine Beschränkungen. Kopiere den API-Key und den Secret Key; Binance zeigt das Secret nur einmal an. Kassiber lehnt einen Key ab, der mehr als lesen darf.",
       "bitpanda": "Öffne in Bitpanda Kontoeinstellungen → API-Keys → Neuer API-Key. Bitpanda zeigt den Key nur einmal an, und er läuft spätestens nach einem Jahr ab. Kassiber lehnt einen Key ab, der handeln darf.",
+      "bitvavo": "Öffne in Bitvavo Einstellungen → API → Neuen API-Key hinzufügen. Aktiviere nur View access, trage bei Bedarf die IP-Adresse dieses Computers in die IP-Whitelist ein und bestätige mit deinem 2FA-Code. Kopiere den API-Key und das Secret; Bitvavo zeigt beide nur einmal an. Bitvavo verrät Kassiber nicht, was ein Key darf, also lass Handel und Auszahlungen selbst ausgeschaltet.",
       "grant": "Nur einschalten",
       "deny": "Ausgeschaltet lassen",
       "open": "API-Key-Seite von {{provider}} öffnen"

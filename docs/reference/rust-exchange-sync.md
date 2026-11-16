@@ -28,8 +28,9 @@ kind, desktop action or AI tool calls an exchange API:
   backend addresses configured"}` without I/O.
 
 The Rust backend keeps these boundaries. The three CLI commands run natively.
-A fourth, `wallets sync-bitpanda`, exists only in Rust and follows the same
-framework; [Bitpanda](bitpanda.md) records its API, mapping and refusals.
+Two more, `wallets sync-bitpanda` and `wallets sync-bitvavo`, exist only in
+Rust and follow the same framework; [Bitpanda](bitpanda.md) and
+[Bitvavo](bitvavo.md) record their APIs, mappings and refusals.
 `ui.wallets.sync` and the AI tool now answer the direct path natively when
 every selected wallet is sourceless (exchange API wallets and empty manual
 wallets). They still return `native_fallback_required` for any other direct-path
@@ -58,12 +59,17 @@ proxy userinfo) at any length (`HttpClient::display_credentials`).
   credential is withheld at any length on their decoded JSON strings, so an
   escape cannot hide one; numbers stay, so error codes survive.
 - Adapters show a provider's error code only from their own table
-  (`known_code`), never the provider's text.
+  (`known_code`, `known_number`), never the provider's text.
 - Every error a sync or desktop key check returns is withheld once more with
   every request credential (`scrub_error`); a numeric detail equal to one is
   dropped.
 
-See [credential echoes](credential-echo.md).
+`exchange_api.rs` also holds the helpers the adapters share:
+`exact_msat`/`btc_decimal` (whole msat by the amount's own digits, never
+rounded), `strict_decimal`, `canonical`, `asset_code`, the `malformed` and
+`refusal` error builders, and `tag_same_second` (tags rows whose order
+within one second across imports is uncertain). See
+[credential echoes](credential-echo.md).
 
 ## Request sequences
 
@@ -96,6 +102,7 @@ All three share these rules:
 | Kraken | `POST /0/private/TradesHistory`, then `POST /0/private/Ledgers`, form body `nonce=<ns>&ofs=<offset>` | `ofs` advances by the page's entry count until a page is empty or the merged row count reaches `result.count`; a non-integer `count` falls back to the row count | `API-Key`, `API-Sign` = base64 HMAC-SHA512(base64-decoded secret, path ‖ SHA-256(nonce ‖ body)) |
 | Coinbase | `GET /v2/accounts`, then `GET /v2/accounts/<quoted id>/transactions` for each BTC/LBTC account with an id, and in the `crypto` asset scope each other crypto account | follows `pagination.next_uri` until absent | `CB-ACCESS-KEY`, `CB-ACCESS-SIGN` = hex HMAC-SHA256(secret, timestamp ‖ `GET` ‖ path), `CB-ACCESS-TIMESTAMP`, `CB-VERSION: 2017-11-27` |
 | Binance | `GET /sapi/v1/fiat/payments` (`transactionType=0`), `/sapi/v1/capital/deposit/hisrec` (`coin=BTC`), `/sapi/v1/capital/withdraw/history` (`coin=BTC`), `/sapi/v1/asset/assetDividend` (`asset=BTC`, `limit=500`), all from `1498867200000` to now | none (single request each) | `X-MBX-APIKEY`, query `...&timestamp=<ms>&signature=` hex HMAC-SHA256(secret, query) |
+| Bitvavo (Rust only) | `GET /v2/account/history?fromDate=0&toDate=<ms>&page=<n>&maxItems=100`, then `GET /v2/balance?symbol=BTC` for the reported balance | `page` from 1 to the first page's `totalPages`; a page that is not the one asked for, or a moving count, fails closed | `Bitvavo-Access-Key`, `Bitvavo-Access-Signature` = hex HMAC-SHA256(secret, timestamp ‖ `GET` ‖ path with `/v2` and query), `Bitvavo-Access-Timestamp` (ms), `Bitvavo-Access-Window: 10000`; re-signed on each retry |
 
 Kraken API errors (`error` truthy) fail as `auth_error` when any entry mentions
 `permission`, otherwise `protocol_error`, with `details.kraken_errors`.
