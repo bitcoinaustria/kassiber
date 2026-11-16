@@ -7,6 +7,7 @@ export const EXCHANGE_KINDS = [
   "binance",
   "bitpanda",
   "bitvavo",
+  "bitstamp",
 ] as const;
 export type ExchangeKind = (typeof EXCHANGE_KINDS)[number];
 
@@ -39,6 +40,7 @@ export const EXCHANGE_PROVIDER_NAMES: Record<ExchangeKind, string> = {
   binance: "Binance",
   bitpanda: "Bitpanda",
   bitvavo: "Bitvavo",
+  bitstamp: "Bitstamp",
 };
 
 export interface ExchangeKeyGuide {
@@ -54,8 +56,9 @@ export interface ExchangeKeyGuide {
  * What each sync reads decides the scopes: Kraken's TradesHistory and Ledgers,
  * Coinbase's accounts and transactions, Binance's fiat payments, deposits,
  * withdrawals and dividends, Bitpanda's operations, assets and currencies,
- * Bitvavo's transaction history and balance (docs/reference/rust-exchange-sync.md,
- * docs/reference/bitpanda.md, docs/reference/bitvavo.md).
+ * Bitvavo's transaction history and balance, Bitstamp's user transactions and
+ * BTC balance (docs/reference/rust-exchange-sync.md, docs/reference/bitpanda.md,
+ * docs/reference/bitvavo.md, docs/reference/bitstamp.md).
  */
 export const EXCHANGE_KEY_GUIDES: Record<ExchangeKind, ExchangeKeyGuide> = {
   kraken: {
@@ -102,6 +105,13 @@ export const EXCHANGE_KEY_GUIDES: Record<ExchangeKind, ExchangeKeyGuide> = {
       "Internal Transfer",
       "Administrative",
     ],
+  },
+  // Bitstamp has no read that reveals write scope; the guide is the only
+  // safeguard, so every non-read section is named.
+  bitstamp: {
+    keyPageUrl: "https://www.bitstamp.net/settings/access-control/api/",
+    grant: ["Account balance", "User transactions"],
+    deny: ["Orders", "Withdrawals", "Deposits", "Transfers"],
   },
 };
 

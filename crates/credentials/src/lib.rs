@@ -53,7 +53,7 @@ const SENSITIVE_KEY_PARTS: [&str; 26] = [
 ];
 
 /// Request headers whose whole value authenticates the request.
-const CREDENTIAL_HEADERS: [&str; 13] = [
+const CREDENTIAL_HEADERS: [&str; 16] = [
     "authorization",
     "proxy-authorization",
     "cookie",
@@ -69,6 +69,11 @@ const CREDENTIAL_HEADERS: [&str; 13] = [
     "bitvavo-access-key",
     "bitvavo-access-signature",
     "rune",
+    // Bitstamp v2: `BITSTAMP <key>`, the request's signature and its
+    // single-use nonce.
+    "x-auth",
+    "x-auth-nonce",
+    "x-auth-signature",
 ];
 const QUERY_CREDENTIAL_PARTS: [&str; 4] = ["key", "auth", "sig", "access"];
 const USERNAME_FIELDS: [&str; 3] = ["username", "rpcuser", "rpc_user"];

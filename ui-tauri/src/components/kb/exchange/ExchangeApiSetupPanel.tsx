@@ -32,6 +32,7 @@ const GUIDE_KEYS = {
   binance: "exchange.guide.binance",
   bitpanda: "exchange.guide.bitpanda",
   bitvavo: "exchange.guide.bitvavo",
+  bitstamp: "exchange.guide.bitstamp",
 } as const satisfies Record<ExchangeKind, string>;
 const SECRET_LABEL_KEYS = {
   kraken: "exchange.field.secret.kraken",
@@ -39,6 +40,7 @@ const SECRET_LABEL_KEYS = {
   binance: "exchange.field.secret.binance",
   bitpanda: "exchange.field.secret.coinbase",
   bitvavo: "exchange.field.secret.coinbase",
+  bitstamp: "exchange.field.secret.bitstamp",
 } as const satisfies Record<ExchangeKind, string>;
 
 interface TestOutcome {

@@ -127,6 +127,9 @@ bdk_chain = { version = "=0.23.3", default-features = false, features = ["std"] 
 bdk_core = { version = "=0.6.3", default-features = false, features = ["std"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 sha2 = "0.11"
+# Single-use Bitstamp request nonces; the standard library has no portable
+# cryptographic random-byte API.
+getrandom = "=0.4.3"
 regex = "1"
 flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 # Match the lwk 0.18.0 Python binding's wollet, update and store semantics.
