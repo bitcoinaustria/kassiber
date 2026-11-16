@@ -17,7 +17,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 
 SATOSHIS = Decimal("100000000")
-DEFAULT_BTC_EUR_PRICE = Decimal("58968.90")
+# The full-accounting demo's last synthetic BTC-EUR close (latest_time), so the
+# local "live" quote continues its price path instead of jumping back.
+DEFAULT_BTC_EUR_PRICE = Decimal("78121.80")
 DEFAULT_BTC_USD_PRICE = Decimal("63500.00")
 BLECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 

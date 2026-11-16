@@ -479,6 +479,12 @@ until that process stops. `kassiber status` reports the effective root.
   contain passphrases, verifier hashes, wrapped keys, descriptors, xpubs,
   backend tokens, accounting rows, or chat content. Project ids/names and
   last-opened timestamps are still local metadata: choose labels accordingly.
+- `<state-root>/demo/<stamp>-<hex>/` — disposable copies of the bundled
+  [demo book](demo.md), written only by an explicit **Try the demo** or
+  `kassiber projects demo`, outside the project catalog. Each carries its own
+  `config/offline-mode.json` and `config/agent-access.json`, seeded from the
+  user's and used only by the demo. The book has no sync backend, so creating
+  and opening it contacts nothing. **Leave demo** deletes the copy.
 - `<state-root>/.state-root-migration.json` — owner-only migration marker. It is
   prepared inside the legacy root and travels with the atomic rename; its
   location under the native root proves cutover completed. It contains only a

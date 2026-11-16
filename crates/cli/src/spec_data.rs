@@ -4,7 +4,7 @@
 use crate::spec::*;
 
 /// Every parser `build_parser()` builds, depth first; index 0 is `kassiber`.
-pub(crate) static PARSERS: [Parser; 386] = [
+pub(crate) static PARSERS: [Parser; 389] = [
     Parser {
         prog: "kassiber",
         description: Some("Open-source, local-first Bitcoin accounting with wallet buckets and multi-wallet support. CLI surface of the Kassiber suite; a desktop GUI is also available."),
@@ -437,7 +437,7 @@ pub(crate) static PARSERS: [Parser; 386] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("projects_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 35), ("show", 36), ("create", 37), ("select", 38)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("projects_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 35), ("show", 36), ("create", 37), ("select", 38), ("demo", 386)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -1922,7 +1922,7 @@ pub(crate) static PARSERS: [Parser; 386] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("profiles_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 135), ("create", 136), ("get", 137), ("set", 138)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("profiles_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 135), ("create", 136), ("get", 137), ("set", 138), ("settings", 387), ("configure", 388)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5805,6 +5805,55 @@ pub(crate) static PARSERS: [Parser; 386] = [
         options: &[("-h", 0), ("--help", 0), ("--fingerprint", 2)],
         mutex_groups: &[],
         sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0, 2] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber projects demo",
+        description: Some("Write a fresh copy of the bundled demo book into a new directory under PATH, remove earlier demo copies there, and build its local analysis index. Contacts nothing; the book has no sync backend."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--path"], dest: Some("path"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Directory that holds demo copies; defaults to demo/ under the state root"), metavar: Some("PATH"), choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--path", 1)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber profiles settings",
+        description: Some("Show every setting of a book and the choices its country allows: method, pool scope, currency, holding period, tax year start, time zone, pricing and rail defaults. Read-only."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber profiles configure",
+        description: Some("Change any setting of a book, validated against its country; --dry-run shows what would change first. A change the journals read invalidates them, as profiles set does."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--label"], dest: Some("label"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Rename the book"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--fiat-currency"], dest: Some("fiat_currency"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("The book's ISO 4217 currency (a country with its own currency fixes it)"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--tax-country"], dest: Some("tax_country"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::TaxCountries, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--tax-long-term-days"], dest: Some("tax_long_term_days"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Text("Days held for a long-term gain (countries whose holding period is a day count)"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--gains-algorithm"], dest: Some("gains_algorithm"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Accounting method; the country decides which (see profiles settings)"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--cost-basis-pool-scope"], dest: Some("cost_basis_pool_scope"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::PoolScopes, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--tax-year-start"], dest: Some("tax_year_start"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("The tax year's first day: MM-DD (not 02-29) or calendar, uk, april, july, march; default for the country's. Only where the country lets a book choose"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--timezone"], dest: Some("timezone"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("The IANA zone whose local dates cut the book's tax years and report periods; default for the country's. Only zones the country allows"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::BooleanOptional, option_strings: &["--bitcoin-rail-carrying-value", "--no-bitcoin-rail-carrying-value"], dest: Some("bitcoin_rail_carrying_value"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Default BTC/LBTC rail-change suggestions to carrying-value treatment."), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::BooleanOptional, option_strings: &["--require-coarse-review", "--no-require-coarse-review"], dest: Some("require_coarse_review"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Quarantine coarse (daily/monthly) priced events for manual review instead of accepting them at the coarse spot price."), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::StoreTrue, option_strings: &["--dry-run"], dest: Some("dry_run"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Show what the change would do (fields, journals to reprocess, rows a currency change holds, readiness effects) without applying it"), metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--label", 3), ("--fiat-currency", 4), ("--tax-country", 5), ("--tax-long-term-days", 6), ("--gains-algorithm", 7), ("--cost-basis-pool-scope", 8), ("--tax-year-start", 9), ("--timezone", 10), ("--bitcoin-rail-carrying-value", 11), ("--no-bitcoin-rail-carrying-value", 11), ("--require-coarse-review", 12), ("--no-require-coarse-review", 12), ("--dry-run", 13)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] }],
         defaults: &[],
     },
 ];

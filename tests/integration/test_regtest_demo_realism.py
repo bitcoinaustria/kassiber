@@ -46,17 +46,70 @@ class RegtestDemoRealismTests(unittest.TestCase):
         skipped = [cycle for cycle in cycles if regtest_demo._cycle_activity_mode(cycle) == "skip"]
         doubled = [cycle for cycle in cycles if regtest_demo._cycle_activity_mode(cycle) == "double"]
 
-        self.assertEqual(skipped, [46, 56])
-        self.assertEqual(doubled, [26, 36, 45, 55, 81])
+        self.assertEqual(skipped, [46, 56, 91])
+        self.assertEqual(doubled, [26, 36, 45, 55, 81, 90])
         self.assertEqual(regtest_demo._cycle_activity_mode(1), "normal")
 
         first_target = regtest_demo._parse_iso_to_ts(self.scenario["base_time"])
         timestamps = [
             regtest_demo._cycle_timestamp(first_target, cycle, 30)
-            for cycle in range(1, 85)
+            for cycle in cycles
         ]
         self.assertEqual(timestamps, sorted(timestamps))
         self.assertGreater(len({timestamp % regtest_demo.SECONDS_PER_DAY for timestamp in timestamps}), 12)
+
+    def test_timeline_reaches_every_month_through_november_2026(self) -> None:
+        stress = self.scenario["stress"]
+        # The stress clock starts two days after the pre-cycle setup mines.
+        first_target = regtest_demo._parse_iso_to_ts(self.scenario["base_time"]) + 3 * 600
+        first_target += sum(1 for op in self.scenario["operations"] if op.get("cycle") is None) * 600
+        first_target += 2 * regtest_demo.SECONDS_PER_DAY
+        months = {
+            regtest_demo._iso_from_ts(
+                regtest_demo._cycle_timestamp(first_target, cycle, int(stress["days_between_cycles"]))
+            )[:7]
+            for cycle in range(1, int(stress["cycles"]) + 1)
+        }
+        expected_months = self.scenario["expected"]["activity_months"]
+        self.assertEqual(expected_months["through"], "2026-11")
+        for month in range(1, 12):
+            self.assertIn(f"2026-{month:02d}", months)
+        self.assertLessEqual(
+            regtest_demo.estimate_scenario_end_ts(self.scenario),
+            regtest_demo._parse_iso_to_ts(self.scenario["latest_time"]),
+        )
+        self.assertLessEqual(self.scenario["latest_time"], "2026-11-16T00:00:00Z")
+        self.assertIn(2026, self.scenario["expected"]["realized_gain_years"])
+        sale = next(op for op in self.scenario["operations"] if op["id"] == "treasury_exchange_sale_2026")
+        self.assertEqual((sale["kind"], sale["to"]), ("payment", "external"))
+
+    def test_synthetic_rate_continuation_is_labelled_deterministic_and_bounded(self) -> None:
+        spec = self.scenario["pricing"]["synthetic_continuation"]
+        self.assertNotEqual(spec["source"], "kraken-csv")
+        self.assertIn("SYNTHETIC", spec["note"])
+        history = regtest_demo._load_bundled_daily_rates("BTC-EUR")
+        rows = regtest_demo._synthetic_continuation_rows(self.scenario, history)
+        self.assertEqual(rows, regtest_demo._synthetic_continuation_rows(self.scenario, history))
+        self.assertEqual(rows[0][0], history[-1][0] + regtest_demo.SECONDS_PER_DAY)
+        self.assertEqual(rows[-1][0], regtest_demo._parse_iso_to_ts(self.scenario["latest_time"]))
+        self.assertEqual(
+            [b[0] - a[0] for a, b in zip(rows, rows[1:])],
+            [regtest_demo.SECONDS_PER_DAY] * (len(rows) - 1),
+        )
+        rates = [rate for _ts, rate in rows]
+        waypoint_rates = [Decimal(row["rate"]) for row in spec["waypoints"]]
+        jitter = Decimal(spec["daily_jitter_bp"]) / Decimal(10_000)
+        self.assertGreaterEqual(min(rates), min([history[-1][1], *waypoint_rates]) * (1 - jitter))
+        self.assertLessEqual(max(rates), max([history[-1][1], *waypoint_rates]) * (1 + jitter))
+        # The local mempool-compatible stack's "live" quote continues the path.
+        backend_stack = Path("dev/regtest/backend_stack.py").read_text(encoding="utf-8")
+        self.assertIn(f'DEFAULT_BTC_EUR_PRICE = Decimal("{rows[-1][1]:.2f}")', backend_stack)
+        combined = regtest_demo._scenario_daily_rates(self.scenario)
+        late_ts = regtest_demo._parse_iso_to_ts("2026-11-03T12:00:00Z")
+        self.assertEqual(
+            regtest_demo._cached_rate_at_or_before(combined, late_ts),
+            dict(rows)[regtest_demo._parse_iso_to_ts("2026-11-03T00:00:00Z")],
+        )
 
     def test_manifest_covers_realism_contract(self) -> None:
         stress = self.scenario["stress"]
@@ -76,7 +129,7 @@ class RegtestDemoRealismTests(unittest.TestCase):
             for operation in self.scenario["operations"]
             if operation["kind"] == "many_input_consolidation"
         ]
-        self.assertEqual(len(consolidations), 3)
+        self.assertEqual(len(consolidations), 4)
         self.assertTrue(all(operation["fee_curve"] for operation in consolidations))
         self.assertEqual(self.scenario["expected"]["deprecated_wallet_max_utxos"], 1)
 
@@ -374,8 +427,8 @@ class RegtestDemoRealismTests(unittest.TestCase):
         truth = regtest_demo.DemoTruth("native")
         with patch.object(regtest_demo, "run_cli", return_value={"data": {}}) as cli:
             pairs = regtest_demo._pair_transfers(Path("/unused"), self.scenario, txids, truth)
-        self.assertEqual(len(pairs), 3)
-        self.assertEqual(cli.call_count, 3)
+        self.assertEqual(len(pairs), 4)
+        self.assertEqual(cli.call_count, 4)
         self.assertTrue(all(row["out_external_id"] != row["in_external_id"] for row in truth.transfer_pairs))
 
 

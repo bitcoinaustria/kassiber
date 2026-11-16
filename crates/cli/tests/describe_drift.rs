@@ -84,7 +84,18 @@ fn python_catalog() -> Value {
     // reviewed entry (`data/rust_only_describe.jsonl`), placed after the last
     // Python leaf of their command group, where the grammar appends them.
     for line in include_str!("data/rust_only_describe.jsonl").lines() {
-        let entry = kassiber_pytext::loads(line).unwrap();
+        // Their registry flag texts are written as Python's and replaced as
+        // the Python catalog's are.
+        let line = line
+            .replace(
+                "Tax country for the book (CLI profile; currently supported: generic, at)",
+                kassiber_cli::spec::tax_countries_help(),
+            )
+            .replace(
+                "Country-policy-controlled cost-basis pool scope (currently: global).",
+                kassiber_cli::spec::pool_scopes_help(),
+            );
+        let entry = kassiber_pytext::loads(&line).unwrap();
         let Some(Value::List(path)) = get(&entry, "path").cloned() else {
             panic!("rust-only path")
         };

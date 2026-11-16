@@ -2276,3 +2276,26 @@ on the CLI, daemon, desktop and assistant.
   remaining work needs bounded acquisition/storage/scale proof.
 - [ ] Revisit optional server/REST operation only through an explicit future
   design. It is outside the accepted desktop/local CLI scope.
+
+## Demo book
+
+The bundled demo shipped as `kassiber projects demo` and desktop **Try the
+demo** ([demo book](docs/reference/demo.md)).
+
+- [ ] Regenerate `crates/kassiber/assets/demo-book.sql.gz` from a harness book
+      whose wallets were synced until `transaction_graph_cache` holds the
+      outside prevouts, so the graphs show every input amount offline
+      (`scripts/build-demo-payload.sh`, steps in the reference).
+- [ ] Live regtest demo with Docker (owner idea, deferred): on an explicit
+      press, detect `docker` on `PATH` and a running engine, start a shipped
+      compose file (bitcoind, electrs or esplora, elementsd; pinned images,
+      ports bound to loopback only), replay the demo scenario onto that chain
+      (the payload's transactions exist only on the generator's chain), add
+      the loopback backends to the demo copy and sync. The harness driver
+      (`dev/regtest/backend_stack.py`, `tests/integration/regtest_demo.py`) is
+      Python and stays dev-only; the product needs a Rust supervisor for
+      `docker compose up/down`, a stop on **Leave demo**, and a no-egress
+      regression for launch and display paths.
+- [ ] `kassiber projects demo` leaves an older copy that is still open on
+      Windows for the next start to remove; add a startup sweep if copies
+      pile up.
