@@ -562,8 +562,8 @@
   {
     "id": "W-import-fee",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "dec(&text(row, \"fee\"))?.abs(&CTX)",
-    "replace": "dec(\"0\")?.abs(&CTX)",
+    "find": "dec(&text(row, \"fee\"))?.copy_abs()",
+    "replace": "dec(\"0\")?.copy_abs()",
     "expect_failing": [
       "python_file_import_vectors"
     ],
@@ -2361,8 +2361,8 @@
   {
     "id": "W-coinfinity-unknown-type",
     "file": "crates/wallets/src/file_import/coinfinity.rs",
-    "find": "_ => return Ok(None),",
-    "replace": "_ => (\"inbound\", \"buy\"),",
+    "find": "        _ if scope.is_none() => return Ok(None),",
+    "replace": "        _ if scope.is_none() => (\"inbound\", \"buy\"),",
     "expect_failing": [
       "python_coinfinity_import_vectors"
     ],
@@ -2641,8 +2641,8 @@
   {
     "id": "W-coinfinity-bom",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "Self::Coinfinity => coinfinity::parse(csv::rows(&csv::read_sig(file)?)?),",
-    "replace": "Self::Coinfinity => coinfinity::parse(csv::rows(&csv::read_text(file)?)?),",
+    "find": "Self::Coinfinity => coinfinity::parse(\n                csv::rows(&csv::read_sig(file)?)?,",
+    "replace": "Self::Coinfinity => coinfinity::parse(\n                csv::rows(&csv::read_text(file)?)?,",
     "expect_failing": [
       "python_coinfinity_import_vectors"
     ],
@@ -4735,12 +4735,12 @@
   {
     "id": "W-ledgerlive-row-index",
     "file": "crates/wallets/src/file_import/ledgerlive.rs",
-    "find": "record(row, index + 1)",
-    "replace": "record(row, index)",
+    "find": "record(row, index + 1, scope, tally)",
+    "replace": "record(row, index, scope, tally)",
     "expect_failing": [
-      "python_ledgerlive_import_vectors"
+      "supplemental_csvs_refuse_rows_they_cannot_book_by_row"
     ],
-    "rule": "Include skipped rows in the one-based generated transaction identity."
+    "rule": "A wallet import's refusal names the one-based data row."
   },
   {
     "id": "W-ledgerlive-redact-account-xpub",
@@ -4785,8 +4785,8 @@
   {
     "id": "W-ledgerlive-bitcoin-scope",
     "file": "crates/wallets/src/file_import/ledgerlive.rs",
-    "find": "    ) else {\n        return Ok(None);\n    };",
-    "replace": "    ) else {\n        return Err(AppError::new(\"validation\", \"unsupported asset\"));\n    };",
+    "find": "    let Some(asset) = asset else {\n        return Ok(None);\n    };",
+    "replace": "    let Some(asset) = asset else {\n        return Err(AppError::new(\"validation\", \"unsupported asset\"));\n    };",
     "expect_failing": [
       "python_ledgerlive_import_vectors"
     ],
@@ -4885,8 +4885,8 @@
   {
     "id": "W-ledgerlive-unsupported-code",
     "file": "crates/wallets/src/file_import/ledgerlive.rs",
-    "find": "\"validation\",\n                format!(",
-    "replace": "\"app_error\",\n                format!(",
+    "find": "\"validation\",\n                match scope {\n                    Some(_) => format!(\"{name} has unsupported operation type",
+    "replace": "\"app_error\",\n                match scope {\n                    Some(_) => format!(\"{name} has unsupported operation type",
     "expect_failing": [
       "python_ledgerlive_import_vectors"
     ],
@@ -4935,8 +4935,8 @@
   {
     "id": "W-ledgerlive-empty-code",
     "file": "crates/wallets/src/file_import/ledgerlive.rs",
-    "find": "\"validation\",\n            \"Ledger Live CSV has a BTC row with an empty amount\"",
-    "replace": "\"app_error\",\n            \"Ledger Live CSV has a BTC row with an empty amount\"",
+    "find": "\"validation\",\n            match scope {\n                Some(_) => format!(\"{name} has no {asset} amount\"),",
+    "replace": "\"app_error\",\n            match scope {\n                Some(_) => format!(\"{name} has no {asset} amount\"),",
     "expect_failing": [
       "python_ledgerlive_import_vectors"
     ],
@@ -5045,8 +5045,8 @@
   {
     "id": "W-ledgerlive-bom",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "Self::LedgerLive => ledgerlive::parse(csv::rows(&csv::read_sig(file)?)?),",
-    "replace": "Self::LedgerLive => ledgerlive::parse(csv::load(file)?),",
+    "find": "Self::LedgerLive => ledgerlive::parse(\n                csv::rows(&csv::read_sig(file)?)?,",
+    "replace": "Self::LedgerLive => ledgerlive::parse(\n                csv::load(file)?,",
     "expect_failing": [
       "python_ledgerlive_import_vectors"
     ],
@@ -6155,8 +6155,8 @@
   {
     "id": "W-binance-fallback",
     "file": "crates/wallets/src/file_import/binance.rs",
-    "find": "exchange::bitcoin(base.as_deref()).or_else(|| exchange::bitcoin(parsed.as_deref()))",
-    "replace": "exchange::bitcoin(base.as_deref())",
+    "find": "    .or(parsed.as_deref());",
+    "replace": "    .or(None);",
     "expect_failing": [
       "python_binance_import_vectors"
     ],
@@ -6165,8 +6165,8 @@
   {
     "id": "W-binance-base-precedence",
     "file": "crates/wallets/src/file_import/binance.rs",
-    "find": "exchange::bitcoin(base.as_deref()).or_else(|| exchange::bitcoin(parsed.as_deref()))",
-    "replace": "exchange::bitcoin(parsed.as_deref()).or_else(|| exchange::bitcoin(base.as_deref()))",
+    "find": "        None => base\n            .as_deref()\n            .and_then(|code| exchange::bitcoin(Some(code))),",
+    "replace": "        None => parsed\n            .as_deref()\n            .and_then(|code| exchange::bitcoin(Some(code)))\n            .or(base.as_deref()),",
     "expect_failing": [
       "python_binance_import_vectors"
     ],
@@ -6265,18 +6265,18 @@
   {
     "id": "W-binance-index",
     "file": "crates/wallets/src/file_import/binance.rs",
-    "find": "investment(&columns, index + 1)",
-    "replace": "investment(&columns, index)",
+    "find": "investment(&columns, index + 1, scope, tally)",
+    "replace": "investment(&columns, index, scope, tally)",
     "expect_failing": [
-      "python_binance_import_vectors"
+      "supplemental_csvs_refuse_rows_they_cannot_book_by_row"
     ],
-    "rule": "Use one-based source occurrence identities."
+    "rule": "A wallet import's refusal names the one-based data row."
   },
   {
     "id": "W-binance-reference-scale",
     "file": "crates/wallets/src/file_import/binance.rs",
-    "find": "            \"binance-supplemental:autoinvest\",\n            &[\n                Text(occurred.as_deref()),\n                Text(Some(base)),\n                Number(&abs(amount.clone())?),",
-    "replace": "            \"binance-supplemental:autoinvest\",\n            &[\n                Text(occurred.as_deref()),\n                Text(Some(base)),\n                Number(&amount),",
+    "find": "                Text(Some(&base)),\n                Number(&abs(amount.clone())?),",
+    "replace": "                Text(Some(&base)),\n                Number(&amount),",
     "expect_failing": [
       "python_binance_import_vectors"
     ],
@@ -6335,8 +6335,8 @@
   {
     "id": "W-binance-dividend-scope",
     "file": "crates/wallets/src/file_import/binance.rs",
-    "find": "exchange::bitcoin(currency.as_deref())",
-    "replace": "Some(\"BTC\")",
+    "find": "        None => Ok(exchange::bitcoin(code).map(str::to_owned)),",
+    "replace": "        None => Ok(Some(\"BTC\".to_owned())),",
     "expect_failing": [
       "python_binance_import_vectors"
     ],
@@ -6405,8 +6405,8 @@
   {
     "id": "W-binance-bom",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "Self::Binance => binance::parse(csv::rows(&csv::read_sig(file)?)?),",
-    "replace": "Self::Binance => binance::parse(csv::rows(&csv::read_text(file)?)?),",
+    "find": "Self::Binance => binance::parse(\n                csv::rows(&csv::read_sig(file)?)?,",
+    "replace": "Self::Binance => binance::parse(\n                csv::rows(&csv::read_text(file)?)?,",
     "expect_failing": [
       "python_binance_import_vectors"
     ],
@@ -9332,8 +9332,8 @@
   {
     "id": "W-r58a-binance-conflict",
     "file": "crates/wallets/src/file_import/binance.rs",
-    "find": "        if (declared_bitcoin.is_some() || suffix_bitcoin.is_some())",
-    "replace": "        if false && (declared_bitcoin.is_some() || suffix_bitcoin.is_some())",
+    "find": "        if (declared_bitcoin.is_some() || suffix_bitcoin.is_some() || scope.is_some())",
+    "replace": "        if false && (declared_bitcoin.is_some() || suffix_bitcoin.is_some() || scope.is_some())",
     "expect_failing": [
       "python_binance_import_vectors"
     ],
@@ -9680,5 +9680,106 @@
       "the_bark_import_savepoint_waits_for_another_writer"
     ],
     "rule": "The Bark import and a BTC-ARK ledger's switch reserve the writer before they read."
+  },
+  {
+    "id": "W-scope-supplemental-csvs-read-the-scope",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "matches!(self, Self::Binance | Self::Coinfinity | Self::LedgerLive)",
+    "replace": "false",
+    "expect_failing": [
+      "supplemental_csvs_count_other_assets_in_the_bitcoin_scope_and_keep_them_in_crypto"
+    ],
+    "rule": "Binance supplemental, Ledger Live and Coinfinity imports read the wallet's asset scope and report the rows it leaves out."
+  },
+  {
+    "id": "W-scope-file-row-keeps-crypto",
+    "file": "crates/wallets/src/file_import/assets.rs",
+    "find": "Ok(tally.admit(scope, code, Class::Crypto).then(|| code.into()))",
+    "replace": "Ok(None)",
+    "expect_failing": [
+      "supplemental_csvs_count_other_assets_in_the_bitcoin_scope_and_keep_them_in_crypto"
+    ],
+    "rule": "The crypto scope keeps another crypto asset's file row; the bitcoin scope counts it."
+  },
+  {
+    "id": "W-scope-binance-names-the-row",
+    "file": "crates/wallets/src/file_import/binance.rs",
+    "find": "        Some(_) => row(),",
+    "replace": "        Some(_) => reference.into(),",
+    "expect_failing": [
+      "supplemental_csvs_refuse_rows_they_cannot_book_by_row"
+    ],
+    "rule": "A Binance supplemental refusal in a wallet import names its row."
+  },
+  {
+    "id": "W-scope-ledgerlive-refuses-other-asset-fee",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "if !bitcoin && direction == \"outbound\" && positive(&fee)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "supplemental_csvs_refuse_rows_they_cannot_book_by_row"
+    ],
+    "rule": "A Ledger Live send of another asset with a fee is refused: the export does not say which asset pays it."
+  },
+  {
+    "id": "W-scope-coinfinity-refuses-unknown-type",
+    "file": "crates/wallets/src/file_import/coinfinity.rs",
+    "find": "        _ if scope.is_none() => return Ok(None),",
+    "replace": "        _ => return Ok(None),",
+    "expect_failing": [
+      "supplemental_csvs_refuse_rows_they_cannot_book_by_row"
+    ],
+    "rule": "A Coinfinity row of an unknown Type is refused by row in a wallet import, never dropped."
+  },
+  {
+    "id": "W-scope-untallied-formats-screened",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if let (None, Some(wallet)) = (&tally, &wallet) {",
+    "replace": "if let (Some(_), Some(wallet)) = (&tally, &wallet) {",
+    "expect_failing": [
+      "untallied_formats_refuse_assets_their_wallet_does_not_hold"
+    ],
+    "rule": "Generic CSV/JSON and BTCPay rows are screened against the wallet's asset scope before they are stored."
+  },
+  {
+    "id": "W-scope-untallied-crypto-scope-keeps",
+    "file": "crates/wallets/src/file_import/assets.rs",
+    "find": "tax_platform::Ticker::Crypto if scope == Scope::Crypto => Ok(()),",
+    "replace": "tax_platform::Ticker::Crypto if false => Ok(()),",
+    "expect_failing": [
+      "untallied_formats_refuse_assets_their_wallet_does_not_hold",
+      "provider_swaps_pair_once_and_other_assets_store_exactly"
+    ],
+    "rule": "A crypto-scope wallet keeps another crypto asset's generic row."
+  },
+  {
+    "id": "W-scope-untallied-keeps-liquid-ids",
+    "file": "crates/wallets/src/file_import/assets.rs",
+    "find": "if liquid || class(code) == Class::Bitcoin {",
+    "replace": "if class(code) == Class::Bitcoin {",
+    "expect_failing": [
+      "untallied_formats_refuse_assets_their_wallet_does_not_hold"
+    ],
+    "rule": "A Liquid asset id imports in any scope, as before."
+  },
+  {
+    "id": "W-scope-ledgerlive-refuses-fee-only-other-asset",
+    "file": "crates/wallets/src/file_import/ledgerlive.rs",
+    "find": "            if bitcoin {\n                return Ok(None);",
+    "replace": "            if true {\n                return Ok(None);",
+    "expect_failing": [
+      "supplemental_csvs_refuse_rows_they_cannot_book_by_row"
+    ],
+    "rule": "A Ledger Live row of another asset with no amount but a fee is refused by row, never dropped; a BTC one is skipped as before."
+  },
+  {
+    "id": "W-scope-untallied-bitcoin-alias",
+    "file": "crates/wallets/src/file_import/assets.rs",
+    "find": "        tax_platform::Ticker::Bitcoin => Err(AppError::new(",
+    "replace": "        tax_platform::Ticker::Fiat => Err(AppError::new(",
+    "expect_failing": [
+      "untallied_formats_refuse_assets_their_wallet_does_not_hold"
+    ],
+    "rule": "A generic row's Bitcoin alias (XBT) is refused as an alias of BTC, not as a non-crypto asset."
   }
 ]

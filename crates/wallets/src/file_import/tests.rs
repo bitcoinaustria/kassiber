@@ -38,6 +38,15 @@ fn import_format(conn: &Connection, content: &str, phoenix: bool) -> Result<Py, 
     )
 }
 fn import_kind(conn: &Connection, content: &str, format: Format) -> Result<Py, AppError> {
+    import_into(conn, content, format, "Source")
+}
+/// One file import of `content` into `wallet` (empty: the provider default).
+pub(super) fn import_into(
+    conn: &Connection,
+    content: &str,
+    format: Format,
+    wallet: &str,
+) -> Result<Py, AppError> {
     let file = std::env::temp_dir().join(format!(
         "kassiber-import-{}-{:?}.csv",
         std::process::id(),
@@ -48,7 +57,7 @@ fn import_kind(conn: &Connection, content: &str, format: Format) -> Result<Py, A
         conn,
         Request {
             profile_id: "p".into(),
-            wallet: "Source".into(),
+            wallet: wallet.into(),
             file: file.to_str().unwrap().into(),
             format,
             mode: None,
@@ -1578,7 +1587,7 @@ fn bull_relevant_preserves_reference_error_order_and_rollback() {
 }
 
 fn coinfinity(conn: &Connection, mode: &str) -> Py {
-    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,0,match\n").unwrap()).unwrap();
+    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,0,match\n").unwrap(), None, &mut Default::default()).unwrap();
     let records = rows
         .iter()
         .map(normalize)
@@ -1751,7 +1760,7 @@ fn coinfinity_economic_matching_window_scope_exclusion_and_ambiguity() {
         "date,txid,amount,fee\n2025-01-02,observed,0.002,0.00001\n",
     )
     .unwrap();
-    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap()).unwrap();
+    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap(), None, &mut Default::default()).unwrap();
     let record = normalize(&rows[0]).unwrap();
     let find = |exclude| exchange::find_profile(&conn, "p", &record, exclude).unwrap();
     assert_eq!(find(None).1, "matched");
@@ -1891,7 +1900,7 @@ fn coinfinity_default_wallet_admission_precedes_entropy_and_commits_before_file_
 #[test]
 fn coinfinity_economic_window_preserves_datetime_overflow() {
     let conn = fixture();
-    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap()).unwrap();
+    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap(), None, &mut Default::default()).unwrap();
     let mut r = normalize(&rows[0]).unwrap();
     for date in ["0001-01-01T00:00:00Z", "9999-12-31T23:59:59Z"] {
         r.fields
@@ -1922,7 +1931,8 @@ fn coinfinity_declared_references_disable_economic_matching() {
         ("declared", "lnbc1declared"),
     ] {
         let input=format!("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction,LN Invoice\norder,sell,2025-01-02,100,0.002,BTC,,0,1,{transaction},{invoice}\n");
-        let rows = coinfinity::parse(csv::rows(&input).unwrap()).unwrap();
+        let rows =
+            coinfinity::parse(csv::rows(&input).unwrap(), None, &mut Default::default()).unwrap();
         let r = normalize(&rows[0]).unwrap();
         assert!(!r.economics);
         assert_eq!(
@@ -1953,7 +1963,7 @@ fn coinfinity_economic_matching_preserves_closed_observation() {
         .0;
     let quantity = kassiber_custody::evidence::observed_hash(&value).unwrap().0;
     conn.execute("INSERT INTO chain_observation_provenance(transaction_id,workspace_id,profile_id,wallet_id,authority_version,observer_ids_json,observer_kinds_json,chain,network,application_revision,graph_hash,quantity_hash,fee_attribution,observed_at,updated_at) VALUES(?,'ws','p','wallet',1,'[]','[]','bitcoin','main','r',?,?,'exact','2025-01-01','2025-01-01')",params![id,graph,quantity]).unwrap();
-    let rows=coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap()).unwrap();
+    let rows=coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap(), None, &mut Default::default()).unwrap();
     let request = Request {
         profile_id: "p".into(),
         wallet: String::new(),
@@ -3430,6 +3440,37 @@ fn binance_import(
     std::fs::remove_file(file).unwrap();
     result
 }
+/// A BTC autoinvest row keeps the identity the Python reference gave it now
+/// that the identity reads every row in the `crypto` scope: the current id
+/// and a legacy file-position id resolve to the frozen economic key.
+#[test]
+fn binance_autoinvest_identity_stays_byte_identical_for_btc_rows() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    binance_import(&conn, BINANCE_AUTO, "full", "Source").unwrap();
+    let (external, raw): (String, String) = conn
+        .query_row(
+            "SELECT external_id,raw_json FROM transactions WHERE wallet_id='wallet'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(external, BINANCE_REF);
+    let economic = BINANCE_REF.strip_suffix(":1").unwrap().to_owned();
+    assert_eq!(
+        synthetic_csv_identity(&external, &raw),
+        Some((economic.clone(), 1, false))
+    );
+    assert_eq!(
+        synthetic_csv_identity(
+            "binance-supplemental:2025-01-02 03:04:05:autoinvest:BTC:0.002:3",
+            &raw
+        ),
+        Some((economic, 3, true))
+    );
+}
+
 #[test]
 fn binance_full_coordinator_preserves_overlap_reference_ids_enrichment_and_reimports() {
     for encrypted in [false, true] {
@@ -6055,3 +6096,130 @@ fn bisq_imports_only_into_a_bisq_wallet() {
     assert_eq!(bisq_get(&result, "wallet"), "\"My escrow\"");
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// docs/plan/24-crypto-assets.md: a provider-reported swap is paired once,
+/// with the country's policy, and other assets are stored exactly or refused.
+#[test]
+fn provider_swaps_pair_once_and_other_assets_store_exactly() {
+    let conn = fixture();
+    conn.execute_batch("UPDATE profiles SET tax_country='at', fiat_currency='EUR' WHERE id='p'")
+        .unwrap();
+    assets::Scope::Crypto.store(&conn, "p", "wallet").unwrap();
+    let leg = |txid: &str, direction: &str, asset: &str, amount: &str, swap: Option<&str>| {
+        let mut row = json!({"txid": txid, "occurred_at": "2025-04-01T10:00:00Z", "direction": direction,
+            "asset": asset, "amount": amount, "kind": "swap", "fiat_value": "4000", "fiat_currency": "EUR"});
+        if let Some(swap) = swap {
+            row["swap_ref"] = json!(swap);
+        }
+        row
+    };
+    let rows = json!([
+        {"txid": "b", "occurred_at": "2025-01-02T10:00:00Z", "direction": "inbound", "asset": "BTC",
+         "amount": "0.1", "kind": "buy", "fiat_value": "9000", "fiat_currency": "EUR"},
+        leg("s-out", "outbound", "BTC", "0.05", Some("trade-1")),
+        leg("s-in", "inbound", "ETH", "1.12345678901", Some("trade-1")),
+    ]);
+    let first = import_kind(&conn, &rows.to_string(), Format::Json).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&first, "swap_pairs"),
+        Some(&Py::from(1))
+    );
+    // 11 decimals are stored exactly, in the same unit as msat.
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT amount FROM transactions WHERE external_id='s-in'"
+        ),
+        112_345_678_901
+    );
+    let scope = kassiber_transfers::Scope {
+        workspace_id: "ws",
+        profile_id: "p",
+    };
+    let pairs = kassiber_transfers::execute(
+        &conn,
+        &scope,
+        "transfers.list",
+        &dict(Vec::<(&str, Py)>::new()),
+    )
+    .unwrap();
+    let listed = kassiber_pyjson::dumps(&pairs, &Default::default()).unwrap();
+    assert!(listed.contains(r#""policy": "carrying-value""#), "{listed}");
+    assert!(listed.contains(r#""pair_source": "provider""#), "{listed}");
+    // A re-run keeps the pair and authors no second one.
+    let again = import_kind(&conn, &rows.to_string(), Format::Json).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "swap_pairs"),
+        Some(&Py::from(0))
+    );
+    // An import without swaps reports none.
+    let plain = json!([{"txid": "c", "occurred_at": "2025-05-01T10:00:00Z", "direction": "inbound",
+        "asset": "BTC", "amount": "0.01", "kind": "deposit"}]);
+    let plain = import_kind(&conn, &plain.to_string(), Format::Json).unwrap();
+    assert_eq!(kassiber_envelope::get(&plain, "swap_pairs"), None);
+
+    // Finer than 11 decimals, or too large: refused, never rounded.
+    for amount in ["0.000000000001", "100000000"] {
+        let finer = json!([leg("x", "inbound", "ETH", amount, None)]);
+        let error = import_kind(&conn, &finer.to_string(), Format::Json).unwrap_err();
+        assert_eq!(error.code, "validation", "{amount}: {error:?}");
+    }
+    // A swap needs exactly one leg each way.
+    let lopsided = json!([
+        leg("y-1", "outbound", "BTC", "0.01", Some("trade-2")),
+        leg("y-2", "outbound", "BTC", "0.01", Some("trade-2")),
+    ]);
+    let error = import_kind(&conn, &lopsided.to_string(), Format::Json).unwrap_err();
+    assert_eq!(error.code, "protocol_error", "{error:?}");
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT COUNT(*) FROM transactions WHERE external_id LIKE 'y-%'"
+        ),
+        0
+    );
+}
+
+#[test]
+fn asset_scope_is_validated_and_defaults_to_bitcoin() {
+    let conn = fixture();
+    assert_eq!(
+        assets::Scope::of_wallet(&conn, "wallet").unwrap(),
+        assets::Scope::Bitcoin
+    );
+    assets::Scope::Crypto.store(&conn, "p", "wallet").unwrap();
+    assert_eq!(
+        assets::Scope::of_wallet(&conn, "wallet").unwrap(),
+        assets::Scope::Crypto
+    );
+    let error = lifecycle::execute(
+        &conn,
+        lifecycle::Operation::Update {
+            profile_id: "p".into(),
+            wallet: "wallet".into(),
+            label: None,
+            account: None,
+            config: json!({"asset_scope": "stocks"}),
+            clear: vec![],
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "validation");
+    let mut tally = assets::Tally::default();
+    assert!(tally.admit(assets::Scope::Bitcoin, "BTC", assets::Class::Bitcoin));
+    assert!(!tally.admit(assets::Scope::Bitcoin, "ETH", assets::Class::Crypto));
+    assert!(!tally.admit(assets::Scope::Bitcoin, "ETH", assets::Class::Crypto));
+    assert!(!tally.admit(assets::Scope::Crypto, "AAPL", assets::Class::Excluded));
+    assert!(!tally.admit(assets::Scope::Bitcoin, "EUR", assets::Class::Fiat));
+    assert!(tally.admit(assets::Scope::Crypto, "SOL", assets::Class::Crypto));
+    assert_eq!(
+        kassiber_pyjson::dumps(
+            &tally.envelope(assets::Scope::Bitcoin, "Tom's Ex"),
+            &Default::default()
+        )
+        .unwrap(),
+        r#"{"scope": "bitcoin", "skipped": {"ETH": 2}, "excluded": {"AAPL": 1}, "next_step": "kassiber wallets update --wallet 'Tom'\\''s Ex' --config '{\"asset_scope\": \"crypto\"}', then sync or import again to keep ETH"}"#
+    );
+}
+
+mod supplemental_assets;

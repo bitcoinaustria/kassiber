@@ -114,6 +114,8 @@ kassiber-transactions = { path = "../transactions" }
 kassiber-tax-countries = { path = "../tax-countries" }
 # Pair Bisq escrow legs with the on-chain rows their txids name, through the
 # shared pair authoring (wallets has no pairing of its own).
+# Imports pair the two legs of a provider-reported swap through reviewed
+# pair authoring (docs/plan/24-crypto-assets.md).
 kassiber-transfers = { path = "../transfers" }
 # The generic-ledger template workbook, through the shared renderer.
 kassiber-xlsx = { path = "../xlsx" }

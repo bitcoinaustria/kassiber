@@ -37,6 +37,7 @@ pub const KINDS: &[&str] = &[
 ];
 const SAFE: &[&str] = &[
     "addresses",
+    "asset_scope",
     "backend",
     "chain",
     "network",
@@ -483,6 +484,18 @@ pub fn validate(kind: &str, input: &Value) -> Result<Value, AppError> {
     }
     if config.get("deprecated").is_some() {
         config["deprecated"] = json!(boolean(config.get("deprecated"))?);
+    }
+    if let Some(value) = config.get("asset_scope") {
+        // docs/plan/24-crypto-assets.md: which assets an import may keep.
+        let scope = value
+            .as_str()
+            .map(|s| kassiber_pytext::lower(kassiber_pytext::strip(s)))
+            .filter(|s| s == "bitcoin" || s == "crypto")
+            .ok_or_else(|| {
+                AppError::new("validation", "asset_scope must be 'bitcoin' or 'crypto'")
+                    .with_hint("'bitcoin' imports BTC only; 'crypto' also keeps other crypto assets from exchange syncs and provider exports.")
+            })?;
+        config["asset_scope"] = json!(scope);
     }
     if kind == "silent-payment" {
         for key in ["descriptor", "change_descriptor"] {

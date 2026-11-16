@@ -859,7 +859,9 @@ edits at least one of `label`, the same wallet config fields the create
 endpoint takes (`backend`, `chain`, `network`, `descriptor`,
 `change_descriptor`, `wallet_material`, `source_file`, `source_format`,
 `store_id`, `payment_method_id`, `gap_limit`, `addresses`, `policy_asset`),
-or `clear` — a list of config field names to remove. `wallet_material`
+`asset_scope` (`bitcoin` or `crypto`, update only; see
+[plan 24](../plan/24-crypto-assets.md)), or `clear` — a list of config field
+names to remove. `wallet_material`
 overwrites the receive/change descriptors when present so users can paste a
 fresh export to fix a typo. `ui.wallets.delete` accepts
 `{"wallet":"...","confirm":"DELETE","confirm_wallet":"...","cascade":true|false}`.

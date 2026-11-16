@@ -1,3 +1,4 @@
+use super::assets::{self, Scope, Tally};
 use super::exchange::Columns;
 use super::river::{abs, arithmetic, number, repr, truth, zero};
 use super::*;
@@ -12,7 +13,15 @@ const AUTOINVEST: &[&str] = &[
 const DIVIDENDS: &[&str] = &["id", "amount", "asset", "divtime"];
 const FIAT: &[&str] = kassiber_transactions::FIAT_CODES;
 
-pub(super) fn parse(rows: Vec<csv::Row>) -> Result<Vec<csv::Row>, AppError> {
+/// The rows a wallet import keeps. Without a `scope` (no target wallet),
+/// the reference's reading: Bitcoin rows only, others left out uncounted.
+/// With one, every other row is kept or counted (`assets::file_row`) and a
+/// refusal names its row.
+pub(super) fn parse(
+    rows: Vec<csv::Row>,
+    scope: Option<Scope>,
+    tally: &mut Tally,
+) -> Result<Vec<csv::Row>, AppError> {
     let Some(first) = rows.first() else {
         return Ok(rows);
     };
@@ -36,9 +45,9 @@ pub(super) fn parse(rows: Vec<csv::Row>) -> Result<Vec<csv::Row>, AppError> {
         .filter_map(|(index, row)| {
             let columns = Columns::new(&row);
             if autoinvest {
-                investment(&columns, index + 1)
+                investment(&columns, index + 1, scope, tally)
             } else {
-                dividend(&columns, index + 1)
+                dividend(&columns, index + 1, scope, tally)
             }
             .transpose()
         })
@@ -71,7 +80,37 @@ fn split(
         currency(Some(parts[1].into())),
     ))
 }
-pub(super) fn investment(c: &Columns, index: usize) -> Result<Option<csv::Row>, AppError> {
+/// A refusal's message: the reference's text, or with a `scope` its own,
+/// naming the row.
+fn named(scope: Option<Scope>, reference: &str, row: impl FnOnce() -> String) -> String {
+    match scope {
+        Some(_) => row(),
+        None => reference.into(),
+    }
+}
+/// The asset a row keeps: without a scope only Bitcoin, uncounted.
+fn kept(
+    code: Option<&str>,
+    scope: Option<Scope>,
+    tally: &mut Tally,
+    index: usize,
+) -> Result<Option<String>, AppError> {
+    match scope {
+        None => Ok(exchange::bitcoin(code).map(str::to_owned)),
+        Some(scope) => assets::file_row(
+            code,
+            scope,
+            tally,
+            &format!("Binance supplemental row {index}"),
+        ),
+    }
+}
+pub(super) fn investment(
+    c: &Columns,
+    index: usize,
+    scope: Option<Scope>,
+    tally: &mut Tally,
+) -> Result<Option<csv::Row>, AppError> {
     let base = currency(c.opt(&["base asset symbol", "Base Asset Symbol"]));
     let (quote, fiat) = split(
         c.get(&["quote asset amount + symbol", "Quote Asset Amount + Symbol"]),
@@ -89,12 +128,18 @@ pub(super) fn investment(c: &Columns, index: usize) -> Result<Option<csv::Row>, 
     ) {
         let declared_bitcoin = exchange::bitcoin(Some(declared));
         let suffix_bitcoin = exchange::bitcoin(Some(suffix));
-        if (declared_bitcoin.is_some() || suffix_bitcoin.is_some())
+        if (declared_bitcoin.is_some() || suffix_bitcoin.is_some() || scope.is_some())
             && declared_bitcoin.unwrap_or(declared) != suffix_bitcoin.unwrap_or(suffix)
         {
             return Err(AppError::new(
                 "validation",
-                "Binance supplemental base asset symbols conflict",
+                named(
+                    scope,
+                    "Binance supplemental base asset symbols conflict",
+                    || {
+                        format!("Binance supplemental row {index} names base asset {declared} but an amount in {suffix}")
+                    },
+                ),
             ));
         }
     }
@@ -103,30 +148,55 @@ pub(super) fn investment(c: &Columns, index: usize) -> Result<Option<csv::Row>, 
         None | Some("--" | "-") => (Some(zero()), None),
         _ => split(fee_text, "trading fee")?,
     };
-    let Some(base) =
-        exchange::bitcoin(base.as_deref()).or_else(|| exchange::bitcoin(parsed.as_deref()))
-    else {
+    let base = match scope {
+        None => base
+            .as_deref()
+            .and_then(|code| exchange::bitcoin(Some(code))),
+        Some(_) => base.as_deref().filter(|code| !code.is_empty()),
+    }
+    .or(parsed.as_deref());
+    let Some(base) = kept(base, scope, tally, index)? else {
         return Ok(None);
     };
     let (Some(amount), Some(quote)) = (amount, quote) else {
         return Err(AppError::new(
             "app_error",
-            "Binance supplemental CSV has a BTC autoinvest row with an empty amount",
+            named(
+                scope,
+                "Binance supplemental CSV has a BTC autoinvest row with an empty amount",
+                || {
+                    format!("Binance supplemental row {index} has an autoinvest buy of {base} with an empty amount")
+                },
+            ),
         ));
     };
     if !fiat.as_deref().is_some_and(|f| FIAT.contains(&f)) {
-        return Err(AppError::new("validation", "Binance supplemental BTC autoinvest rows must be funded by fiat for exact import")
-            .with_hint("Crypto-funded Binance autoinvest rows are cross-asset trades; use the generic ledger with explicit review instead."));
+        return Err(AppError::new("validation", named(scope,
+            "Binance supplemental BTC autoinvest rows must be funded by fiat for exact import",
+            || format!("Binance supplemental row {index} buys {base} with {}, not fiat", fiat.as_deref().unwrap_or("an unnamed asset"))))
+            .with_hint(match scope {
+                None => "Crypto-funded Binance autoinvest rows are cross-asset trades; use the generic ledger with explicit review instead.",
+                Some(_) => "A crypto-funded autoinvest buy is a swap. Record both legs yourself in a wallet whose asset_scope is crypto: a generic CSV/JSON import with a shared swap_ref.",
+            }));
     }
     if fee_asset.is_some() && fee_asset != fiat {
         return Err(AppError::new(
             "validation",
-            "Binance supplemental BTC autoinvest fee asset does not match the quote asset",
+            named(
+                scope,
+                "Binance supplemental BTC autoinvest fee asset does not match the quote asset",
+                || {
+                    format!(
+                        "Binance supplemental row {index} pays its fee in {}, not in {}",
+                        fee_asset.as_deref().unwrap_or_default(),
+                        fiat.as_deref().unwrap_or_default()
+                    )
+                },
+            ),
         ));
     }
     let occurred = c.get(&["timestamp utc", "Timestamp UTC"]);
     let source = c.opt(&["source of funds", "Source of Funds"]);
-    let _ = index;
     let fee = abs(fee.filter(truth).unwrap_or_else(zero))?;
     let quote = abs(quote)?;
     let value = arithmetic(&quote, &fee, '+')?;
@@ -136,7 +206,7 @@ pub(super) fn investment(c: &Columns, index: usize) -> Result<Option<csv::Row>, 
             "binance-supplemental:autoinvest",
             &[
                 Text(occurred.as_deref()),
-                Text(Some(base)),
+                Text(Some(&base)),
                 Number(&abs(amount.clone())?),
                 Text(fiat.as_deref()),
                 Number(&quote),
@@ -216,9 +286,14 @@ fn epoch(value: Option<String>) -> Result<Option<String>, AppError> {
     }
     crate::time::shifted("1970-01-01T00:00:00Z", seconds).map(Some)
 }
-pub(super) fn dividend(c: &Columns, index: usize) -> Result<Option<csv::Row>, AppError> {
+pub(super) fn dividend(
+    c: &Columns,
+    index: usize,
+    scope: Option<Scope>,
+    tally: &mut Tally,
+) -> Result<Option<csv::Row>, AppError> {
     let currency = currency(c.opt(&["asset", "Asset"]));
-    let Some(asset) = exchange::bitcoin(currency.as_deref()) else {
+    let Some(asset) = kept(currency.as_deref(), scope, tally, index)? else {
         return Ok(None);
     };
     let Some(amount) = number(c.get(&["amount", "Amount"]))? else {
@@ -230,7 +305,6 @@ pub(super) fn dividend(c: &Columns, index: usize) -> Result<Option<csv::Row>, Ap
     if !truth(&amount) {
         return Ok(None);
     }
-    let _ = index;
     let provided = c.opt(&["id", "tranId", "tran id"]);
     let synthetic_id = provided.is_none();
     let occurred = epoch(c.get(&["divTime", "divtime", "time"]))?
@@ -252,7 +326,7 @@ pub(super) fn dividend(c: &Columns, index: usize) -> Result<Option<csv::Row>, Ap
                 "binance:dividend",
                 &[
                     Text(occurred.as_deref()),
-                    Text(Some(asset)),
+                    Text(Some(&asset)),
                     Number(&abs(amount.clone())?),
                     Text(Some(kind)),
                 ],
