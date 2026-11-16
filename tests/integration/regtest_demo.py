@@ -4819,7 +4819,6 @@ def run_demo(
                     # asynchronous relative to the broadcast.
                     time.sleep(0.25)
 
-        transactions = _list_transactions(data_root, scope)
         _refresh_truth_wallet_ids(truth, wallets)
         _collect_native_transfer_truth(
             truth, url=url, username=username, password=password, wallets=wallets,
