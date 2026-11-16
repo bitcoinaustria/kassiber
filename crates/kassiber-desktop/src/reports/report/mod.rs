@@ -26,7 +26,7 @@ use rune::{Cx, El, FileDialogOptions, KeyEvent, Tx};
 use serde_json::{Value, json};
 
 use crate::app::{App, Load, Reply, ToastTone};
-use crate::i18n::t;
+use crate::i18n::{t, tc, tr};
 use crate::theme::Tk;
 
 /// Which Reports popup is open (one at a time).
@@ -78,12 +78,13 @@ impl Default for Audit {
     }
 }
 
+/// The audit package's parts (translation keys), in `Audit::include` order.
 pub const AUDIT_PARTS: [&str; 5] = [
-    "Copied files",
-    "URL references",
-    "Journal state",
-    "Review state",
-    "Edit history",
+    "reports:files.audit.part.copiedAttachments",
+    "reports:files.audit.part.urlReferences",
+    "reports:files.audit.part.journalState",
+    "reports:files.audit.part.reviewState",
+    "reports:files.audit.part.editHistory",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -363,7 +364,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             let next = match (&r.error, r.data.is_object()) {
                 (Some(e), _) => Load::Failed(e.clone()),
                 (None, true) => Load::Ready(r.data.clone()),
-                (None, false) => Load::Failed("The daemon did not return report data.".into()),
+                (None, false) => Load::Failed(t("reports:page.noData")),
             };
             // A failed refetch keeps the shown read, as React Query does.
             if !(matches!(next, Load::Failed(_))
@@ -560,32 +561,33 @@ fn basename(path: &str) -> String {
         .to_owned()
 }
 
-fn plural(n: u64, word: &str) -> String {
-    format!("{n} {word}{}", if n == 1 { "" } else { "s" })
+/// `{count} <unit>` in the UI language (`reports:files.written.<unit>`).
+fn plural(n: usize, unit: &str) -> String {
+    tc(&format!("reports:files.written.{unit}"), n, &[])
 }
 
 /// What a written export holds, as the notification says it.
 fn detail(p: &Value) -> String {
     let f = p["format"].as_str().unwrap_or("");
-    let n = |k: &str| p[k].as_u64().unwrap_or(0);
-    let len = |k: &str| p[k].as_array().map(|s| s.len() as u64).unwrap_or(0);
+    let n = |k: &str| p[k].as_u64().unwrap_or(0) as usize;
+    let len = |k: &str| p[k].as_array().map(Vec::len).unwrap_or(0);
     if p["scope"].as_str() == Some("audit_package") {
         format!(
             "{} · {} · {}",
-            plural(n("transaction_count"), "transaction"),
-            plural(n("evidence_file_count"), "file"),
-            plural(n("url_reference_count"), "link")
+            plural(n("transaction_count"), "transactions"),
+            plural(n("evidence_file_count"), "files"),
+            plural(n("url_reference_count"), "links")
         )
     } else if f == "pdf" && n("pages") > 0 {
-        plural(n("pages"), "page")
+        plural(n("pages"), "pages")
     } else if f == "xlsx" && len("sheets") > 0 {
-        plural(len("sheets"), "sheet")
+        plural(len("sheets"), "sheets")
     } else if f == "csv" && len("files") > 0 {
-        plural(len("files"), "file")
+        plural(len("files"), "files")
     } else if (f == "xlsx" || f == "csv") && p["rows"].is_u64() {
-        plural(n("rows"), "row")
+        plural(n("rows"), "rows")
     } else {
-        "Export written".into()
+        t("reports:files.written.fallback")
     }
 }
 
@@ -614,7 +616,7 @@ fn on_export(app: &mut App, r: &Reply) {
             "chrome:notifications.feedback.reportExportFailed"
         });
         let message = if message.is_empty() {
-            "Report export failed".to_owned()
+            t("chrome:notifications.feedback.reportExportFailed")
         } else {
             message.clone()
         };
@@ -668,7 +670,7 @@ fn ask_save(w: Written, tx: &mut Tx) {
         .unwrap_or("")
         .to_owned();
     let mut options = FileDialogOptions {
-        title: "Save Kassiber report export".into(),
+        title: t("reports:files.saveDialogTitle"),
         file_name: Some(name),
         ..Default::default()
     };
@@ -680,7 +682,9 @@ fn ask_save(w: Written, tx: &mut Tx) {
             .as_deref()
         {
             Some("pdf") => options.filter("PDF", &["pdf"]),
-            Some("xlsx") => options.filter("Excel workbook", &["xlsx"]),
+            Some("xlsx") => {
+                options.filter(t("transactions:dashboard.export.formats.xlsx"), &["xlsx"])
+            }
             Some("csv") => options.filter("CSV", &["csv"]),
             _ => options,
         };
@@ -707,26 +711,31 @@ fn state_root(app: &App) -> Option<PathBuf> {
     )
 }
 
+/// A managed-export error in the UI language, with the OS error appended where it has one.
+fn err(key: &str, e: impl std::fmt::Display) -> String {
+    tr(
+        &format!("reports:files.error.{key}"),
+        &[("error", &e.to_string())],
+    )
+}
+
 /// `validated_report_export_target`: an absolute path directly in the book's
 /// `exports/reports` folder, naming a PDF/XLSX/CSV file, an Austrian CSV bundle folder or an
 /// audit package folder (Reports and the exit-tax handoff share it).
 pub(crate) fn managed(app: &App, path: &Path) -> Result<PathBuf, String> {
     if !path.is_absolute() {
-        return Err("Report export paths must be absolute.".into());
+        return Err(t("reports:files.error.notAbsolute"));
     }
-    let root = state_root(app).ok_or("Managed report export folder could not be found.")?;
+    let root = state_root(app).ok_or_else(|| t("reports:files.error.noManagedFolder"))?;
     let managed = std::fs::canonicalize(root.join("exports").join("reports"))
-        .map_err(|e| format!("Managed report export folder could not be found: {e}"))?;
-    let canonical = std::fs::canonicalize(path)
-        .map_err(|e| format!("Report export file could not be found: {e}"))?;
+        .map_err(|e| err("noManagedFolderDetail", e))?;
+    let canonical = std::fs::canonicalize(path).map_err(|e| err("notFound", e))?;
     if canonical.parent() != Some(managed.as_path()) {
-        return Err("Only exports from the active Kassiber project can be opened or saved.".into());
+        return Err(t("reports:files.error.otherProject"));
     }
-    let meta = canonical
-        .metadata()
-        .map_err(|e| format!("Report export file could not be inspected: {e}"))?;
+    let meta = canonical.metadata().map_err(|e| err("inspect", e))?;
     if !supported_target(&canonical, meta.is_file(), meta.is_dir()) {
-        return Err("Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be opened or saved.".into());
+        return Err(t("reports:files.error.unsupported"));
     }
     Ok(canonical)
 }
@@ -751,24 +760,20 @@ fn copy_dir(src: &Path, dest: &Path) -> Result<(), String> {
     if dest.exists()
         && dest
             .read_dir()
-            .map_err(|e| format!("Could not inspect report export destination: {e}"))?
+            .map_err(|e| err("inspectDestination", e))?
             .next()
             .is_some()
     {
-        return Err("Choose a new or empty folder for the report export.".into());
+        return Err(t("reports:files.error.destinationNotEmpty"));
     }
-    std::fs::create_dir_all(dest)
-        .map_err(|e| format!("Could not create report export destination: {e}"))?;
-    for entry in
-        std::fs::read_dir(src).map_err(|e| format!("Could not read managed report export: {e}"))?
-    {
-        let entry = entry.map_err(|e| format!("Could not read report export entry: {e}"))?;
+    std::fs::create_dir_all(dest).map_err(|e| err("createDestination", e))?;
+    for entry in std::fs::read_dir(src).map_err(|e| err("readSource", e))? {
+        let entry = entry.map_err(|e| err("readEntry", e))?;
         let to = dest.join(entry.file_name());
         if entry.path().is_dir() {
             copy_dir(&entry.path(), &to)?;
         } else {
-            std::fs::copy(entry.path(), &to)
-                .map_err(|e| format!("Could not save report export entry: {e}"))?;
+            std::fs::copy(entry.path(), &to).map_err(|e| err("saveEntry", e))?;
         }
     }
     Ok(())
@@ -780,13 +785,11 @@ pub(crate) fn save_copy(app: &App, source: &Path, dest: &Path) -> Result<String,
     let source = managed(app, source)?;
     let parent = dest
         .parent()
-        .ok_or("Report export destination must include a parent folder.")?;
-    std::fs::create_dir_all(parent)
-        .map_err(|e| format!("Could not create report export destination folder: {e}"))?;
-    let parent = std::fs::canonicalize(parent)
-        .map_err(|e| format!("Could not inspect report export destination folder: {e}"))?;
+        .ok_or_else(|| t("reports:files.error.noParent"))?;
+    std::fs::create_dir_all(parent).map_err(|e| err("createParent", e))?;
+    let parent = std::fs::canonicalize(parent).map_err(|e| err("inspectParent", e))?;
     if source.parent().is_some_and(|m| parent.starts_with(m)) {
-        return Err("Choose a destination outside Kassiber's managed exports folder.".into());
+        return Err(t("reports:files.error.insideManaged"));
     }
     if source.is_file() {
         let ext = dest
@@ -794,9 +797,9 @@ pub(crate) fn save_copy(app: &App, source: &Path, dest: &Path) -> Result<String,
             .and_then(|e| e.to_str())
             .map(str::to_ascii_lowercase);
         if !matches!(ext.as_deref(), Some("pdf" | "xlsx" | "csv")) {
-            return Err("Report export destination must use .pdf, .xlsx, or .csv.".into());
+            return Err(t("reports:files.error.extension"));
         }
-        std::fs::copy(&source, dest).map_err(|e| format!("Could not save report export: {e}"))?;
+        std::fs::copy(&source, dest).map_err(|e| err("save", e))?;
     } else {
         copy_dir(&source, dest)?;
     }
@@ -863,11 +866,14 @@ pub fn finish(app: &mut App, w: Written, answer: Result<Option<String>, String>)
             } else {
                 StatusTone::Success
             },
-            message: if flagged {
-                format!("{filename} saved with notes.")
-            } else {
-                format!("{filename} saved.")
-            },
+            message: tr(
+                if flagged {
+                    "reports:files.savedWithNotes"
+                } else {
+                    "reports:files.saved"
+                },
+                &[("file", &filename)],
+            ),
             notes: if flagged { warnings.clone() } else { vec![] },
             path: Some(saved.clone()).filter(|s| !s.is_empty()),
             open_path: kept.then(|| w.path.clone()).filter(|s| !s.is_empty()),

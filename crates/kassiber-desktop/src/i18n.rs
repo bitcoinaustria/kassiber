@@ -43,8 +43,8 @@ macro_rules! bundles {
     };
 }
 
-const EN: &[(&str, &str)] = bundles!("en": "assistant", "chainAnalysis", "chrome", "common", "connections", "custodyGaps", "journals", "nav", "onboarding", "overview", "privacyMirror", "review", "search", "settings", "sourceFunds", "transactions");
-const DE: &[(&str, &str)] = bundles!("de": "assistant", "chainAnalysis", "chrome", "common", "connections", "custodyGaps", "journals", "nav", "onboarding", "overview", "privacyMirror", "review", "search", "settings", "sourceFunds", "transactions");
+const EN: &[(&str, &str)] = bundles!("en": "assistant", "chainAnalysis", "chrome", "common", "connections", "custodyGaps", "journals", "nav", "onboarding", "overview", "privacyMirror", "reports", "review", "search", "settings", "sourceFunds", "transactions");
+const DE: &[(&str, &str)] = bundles!("de": "assistant", "chainAnalysis", "chrome", "common", "connections", "custodyGaps", "journals", "nav", "onboarding", "overview", "privacyMirror", "reports", "review", "search", "settings", "sourceFunds", "transactions");
 
 type Table = HashMap<String, String>;
 

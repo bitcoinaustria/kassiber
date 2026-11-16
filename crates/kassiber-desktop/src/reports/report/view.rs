@@ -10,7 +10,7 @@ use super::widgets::{arrow_link, card, info_note, select_menu, select_trigger, t
 use super::{Popup, files};
 use crate::app::{App, Load};
 use crate::format;
-use crate::i18n::t;
+use crate::i18n::{t, tc, tr};
 use crate::icons as I;
 use crate::reports::ledger::common::{self as lc, Col, ColW, avail, column_widths, tw};
 use crate::theme::Tk;
@@ -83,9 +83,12 @@ pub fn page(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     {
         return unavailable(
             tk,
-            &format!(
-                "The daemon returned {} while the selected tax year is {y}.",
-                report.year
+            &tr(
+                "reports:page.yearMismatch",
+                &[
+                    ("returned", &report.year.to_string()),
+                    ("year", &y.to_string()),
+                ],
             ),
         );
     }
@@ -157,7 +160,7 @@ fn unavailable(tk: &Tk, message: &str) -> El {
                 .gap(tk.r(0.25))
                 .role("alert")
                 .child(
-                    text("Reports unavailable")
+                    text(t("reports:page.unavailable"))
                         .font(tk.tbase(600.0))
                         .color(tk.fg),
                 )
@@ -200,7 +203,7 @@ fn header(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, report: &Report
     let trigger = select_trigger(
         tk,
         "rep-year",
-        Some("Tax year"),
+        Some(&t("reports:page.taxYear")),
         &report.period_of(year),
         false,
         false,
@@ -245,7 +248,7 @@ fn header(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, report: &Report
     }
     let mut left = row().min_w(0.0).gap(tk.r(0.75)).center_y().child(trigger);
     if locked {
-        left = left.child(lc::inline_status(tk, "Exporting…".into()));
+        left = left.child(lc::inline_status(tk, t("reports:page.exporting")));
     }
     lc::page_header(tk, left, None)
 }
@@ -286,9 +289,6 @@ fn preview_notice(tk: &Tk, country: &str) -> Option<El> {
 
 // ---- Stat tiles -----------------------------------------------------------------------------
 
-const PROVISIONAL_HELP: &str =
-    "Quarantined rows, custody gaps, missing prices, or stale journals are not reflected yet.";
-
 /// The headline figures as the home screen's stat tiles (an owner request, as on Wallets,
 /// Transactions, Transfers and Journals): the readiness tile only while something stands
 /// between the book and its reports (it links to the fix), then proceeds, cost basis, the
@@ -307,11 +307,18 @@ fn metrics(
     let cur = &r.fiat;
     let money = |v: f64| format::fiat(v, cur);
     let amber = hexc(if tk.dark { "#fcd34d" } else { "#b45309" });
+    let provisional_label = t("reports:metrics.provisional");
+    let provisional_help = t("reports:metrics.provisionalHelp");
     let mut stats = Vec::new();
     if let Some((glyph, ink)) = readiness_signal(tk, readiness) {
-        let mut s = Stat::new("rep-readiness", glyph, "Readiness", readiness.title.clone())
-            .line(readiness.detail.clone())
-            .help(readiness.detail.clone());
+        let mut s = Stat::new(
+            "rep-readiness",
+            glyph,
+            t("overview:birdsEye.metric.readiness"),
+            readiness.title.clone(),
+        )
+        .line(readiness.detail.clone())
+        .help(readiness.detail.clone());
         if let Some(c) = ink {
             s = s.ink(c).glyph_ink(c);
         }
@@ -326,52 +333,62 @@ fn metrics(
     // The line under a basis figure: "Provisional" (a signal) or what the figure covers.
     let basis_line = |s: Stat, quiet: String| {
         if provisional {
-            s.line_with("Provisional", Some(amber), false)
-                .help(PROVISIONAL_HELP)
+            s.line_with(provisional_label.clone(), Some(amber), false)
+                .help(provisional_help.clone())
         } else {
             s.line(quiet)
         }
     };
     stats.push(
-        Stat::new("rep-metric-0", &I::BANKNOTE, "Proceeds", money(r.proceeds))
-            .sensitive(true)
-            .line(format!("Disposals in {}", r.year)),
+        Stat::new(
+            "rep-metric-0",
+            &I::BANKNOTE,
+            t("transactions:tax.proceeds"),
+            money(r.proceeds),
+        )
+        .sensitive(true)
+        .line(tr(
+            "reports:metrics.disposalsIn",
+            &[("year", &r.year.to_string())],
+        )),
     );
     stats.push(basis_line(
-        Stat::new("rep-metric-1", &I::COINS, "Cost basis", money(r.cost)).sensitive(true),
+        Stat::new(
+            "rep-metric-1",
+            &I::COINS,
+            t("transactions:tax.costBasis"),
+            money(r.cost),
+        )
+        .sensitive(true),
         model::method_short(&r.method),
     ));
     let mut parts = vec![];
     if r.income > 0.0 {
-        parts.push(format!(
-            "{} income",
-            if hidden {
-                "—".into()
-            } else {
-                money(r.income)
-            }
-        ));
+        let amount = if hidden {
+            "—".into()
+        } else {
+            money(r.income)
+        };
+        parts.push(tr("reports:metrics.income", &[("amount", &amount)]));
     }
     let tf = r.tax_free_gain();
     if tf.abs() >= 0.005 {
-        parts.push(format!(
-            "{} tax-free (Altbestand)",
-            if hidden {
-                "—".into()
-            } else {
-                model::signed_fiat(tf, cur)
-            }
-        ));
+        let amount = if hidden {
+            "—".into()
+        } else {
+            model::signed_fiat(tf, cur)
+        };
+        parts.push(tr("reports:metrics.taxFree", &[("amount", &amount)]));
     }
     let includes = if parts.is_empty() {
-        "Realised in the period".to_owned()
+        t("reports:metrics.realised")
     } else {
-        format!("Includes {}", parts.join(" · "))
+        tr("reports:metrics.includes", &[("parts", &parts.join(" · "))])
     };
     let mut gain = Stat::new(
         "rep-metric-2",
         &I::TRENDING_UP,
-        "Gain / loss",
+        t("transactions:tax.gainLoss"),
         model::signed_fiat(r.gain, cur),
     )
     .sensitive(true);
@@ -379,8 +396,8 @@ fn metrics(
         gain = gain.ink(gain_ink(tk, r.gain, true));
     }
     gain = if provisional {
-        gain.line_with("Provisional", Some(amber), false)
-            .help(format!("{PROVISIONAL_HELP} {includes}."))
+        gain.line_with(provisional_label.clone(), Some(amber), false)
+            .help(format!("{provisional_help} {includes}."))
     } else {
         gain.line(includes)
     };
@@ -389,38 +406,45 @@ fn metrics(
         let value = amount
             .map(|c| money(c / 100.0))
             .unwrap_or_else(|| "—".into());
-        let sub = if (progressive / 100.0).abs() >= 0.005 {
-            "KZ 172 + 174 − 176, without KZ 801"
+        let sub = t(if (progressive / 100.0).abs() >= 0.005 {
+            "reports:metrics.taxSubWithout801"
         } else {
-            "KZ 172 + 174 − 176"
-        };
+            "reports:metrics.taxSub"
+        });
         let mut s = Stat::new(
             "rep-metric-3",
             &I::LANDMARK,
             {
                 let rate = model::tax_rate(r.tax_rate.as_deref());
                 if rate.is_empty() {
-                    "Indicative tax".to_owned()
+                    t("assistant:review.tax.indicative")
                 } else {
-                    format!("Indicative tax · {rate}")
+                    tr("reports:metrics.indicativeTaxRate", &[("rate", &rate)])
                 }
             },
             value,
         )
         .sensitive(amount.is_some());
         s = if provisional {
-            s.line_with("Provisional", Some(amber), false)
+            s.line_with(provisional_label.clone(), Some(amber), false)
         } else {
-            s.line(sub)
+            s.line(sub.clone())
         };
-        let mut help = vec![sub.to_owned()];
+        let mut help = vec![sub];
         if provisional {
-            help.push(PROVISIONAL_HELP.to_owned());
+            help.push(provisional_help.clone());
         }
         help.extend(notes.iter().cloned());
         stats.push(s.help(help.join("\n")));
     }
-    row_of(app, cx, tk, "rep-metrics", "Report figures".into(), stats)
+    row_of(
+        app,
+        cx,
+        tk,
+        "rep-metrics",
+        t("reports:metrics.label"),
+        stats,
+    )
 }
 
 // ---- Breakdown ------------------------------------------------------------------------------
@@ -430,11 +454,14 @@ fn transactions_link(tk: &Tk, key: String, row_: &model::BreakdownRow) -> El {
     let Some(href) = row_.href.clone() else {
         return text(count).font(tnum(tk.tsm(400.0))).color(tk.muted_fg);
     };
-    let label = if row_.exact {
-        format!("Show these {count} in Transactions")
-    } else {
-        format!("Open the year in Transactions; {count} is too many to list one by one")
-    };
+    let label = tr(
+        if row_.exact {
+            "reports:breakdown.showExact"
+        } else {
+            "reports:breakdown.showYear"
+        },
+        &[("n", &count)],
+    );
     let name = format!(
         "{}{}: {label}",
         row_.code
@@ -471,29 +498,25 @@ fn breakdown(
     let austrian = r.region() == Region::At;
     let groups = model::breakdown(r);
     let cur = &r.fiat;
-    let title = if austrian {
-        "Tax fields"
+    let title = t(if austrian {
+        "reports:breakdown.titleAt"
     } else {
-        "Gains and income"
-    };
+        "reports:breakdown.titleGeneric"
+    });
     let head = lc::card_head(
         tk,
-        title.into(),
+        title.clone(),
         None,
         Some(arrow_link(
             tk,
             "rep-year-link",
-            &format!("All of {year} in Transactions"),
+            &tr("reports:breakdown.yearLink", &[("year", &year.to_string())]),
             model::transactions_href(year, &[]),
         )),
     );
     let card = card(tk, "rep-breakdown")
         .role("region")
-        .label(if austrian {
-            "Tax fields"
-        } else {
-            "Gains and income"
-        })
+        .label(title.clone())
         .child(head);
     if groups.is_empty() {
         return card.child(
@@ -505,9 +528,12 @@ fn breakdown(
                 .border_sides([1.0, 0.0, 0.0, 0.0], tk.border)
                 .border_layout()
                 .child(
-                    text(format!("No disposals or income in {year}."))
-                        .font(tk.tsm(400.0))
-                        .color(tk.muted_fg),
+                    text(tr(
+                        "reports:breakdown.empty",
+                        &[("year", &year.to_string())],
+                    ))
+                    .font(tk.tsm(400.0))
+                    .color(tk.muted_fg),
                 ),
         );
     }
@@ -515,7 +541,10 @@ fn breakdown(
     let smm = |s: &str| tw(s, tnum(tk.tsm(500.0)));
     let wide_cols = width >= tk.r(42.0);
     // Columns and the widest cell per column (padding added below).
-    let (cols, heads): (Vec<Col>, Vec<&str>) = if austrian {
+    let h_transactions = t("reports:breakdown.column.transactions");
+    let h_kind = t("reports:breakdown.column.kind");
+    let h_gain = t("transactions:tax.gainLoss");
+    let (cols, heads): (Vec<Col>, Vec<String>) = if austrian {
         (
             vec![
                 Col {
@@ -535,7 +564,12 @@ fn breakdown(
                     right: true,
                 },
             ],
-            vec!["Field", "Description", "Transactions", "Amount"],
+            vec![
+                t("reports:breakdown.column.field"),
+                t("reports:breakdown.column.description"),
+                h_transactions,
+                t("common:field.amount"),
+            ],
         )
     } else if wide_cols {
         (
@@ -562,11 +596,11 @@ fn breakdown(
                 },
             ],
             vec![
-                "Kind",
-                "Transactions",
-                "Proceeds",
-                "Cost basis",
-                "Gain / loss",
+                h_kind,
+                h_transactions,
+                t("transactions:tax.proceeds"),
+                t("transactions:tax.costBasis"),
+                h_gain,
             ],
         )
     } else {
@@ -585,7 +619,7 @@ fn breakdown(
                     right: true,
                 },
             ],
-            vec!["Kind", "Transactions", "Gain / loss"],
+            vec![h_kind, h_transactions, h_gain],
         )
     };
     let n = cols.len();
@@ -690,7 +724,7 @@ fn breakdown(
         head_row = head_row.child(cell(
             i,
             tk.r(crate::ui::table::HEAD_H),
-            crate::ui::table::th_text(tk, (*h).to_owned()),
+            crate::ui::table::th_text(tk, h.clone()),
         ));
     }
     let mut body = col().w_full();
@@ -744,7 +778,7 @@ fn breakdown(
                         tk,
                         layer,
                         &format!("{key}-note"),
-                        &format!("About {}", row_.label),
+                        &tr("reports:breakdown.about", &[("label", &row_.label)]),
                         std::slice::from_ref(note),
                     )
                 {
@@ -829,7 +863,7 @@ fn breakdown(
     let grid = col().w(table_w).role("table").child(head_row).child(body);
     card.child(crate::ui::table::hscroll_if(
         "rep-breakdown-scroll",
-        title.to_owned(),
+        title,
         overflow,
         grid,
     ))
@@ -840,48 +874,42 @@ fn breakdown(
 fn rules(tk: &Tk, r: &Report, year: i32) -> El {
     let _ = year;
     let rate = model::tax_rate(r.tax_rate.as_deref());
-    let facts: Vec<(&str, String)> = if r.region() == Region::At {
+    let facts: Vec<(String, String)> = if r.region() == Region::At {
         vec![
-            ("Region", "Austria".into()),
-            ("Method", model::method_label(&r.method)),
+            (t("reports:rules.region"), t("reports:rules.austria")),
+            (t("reports:rules.method"), model::method_label(&r.method)),
             (
-                "Tax",
-                if r.e1kv_applies() {
-                    format!(
-                        "E 1kv{} · KZ 801 income-tax rate",
-                        if rate.is_empty() {
-                            String::new()
-                        } else {
-                            format!(" {rate}")
-                        }
+                t("reports:rules.tax"),
+                if !r.e1kv_applies() {
+                    tr(
+                        "reports:rules.taxBeforeE1kv",
+                        &[("year", &model::E1KV_FIRST_TAX_YEAR.to_string())],
                     )
+                } else if rate.is_empty() {
+                    t("reports:rules.taxE1kv")
                 } else {
-                    "KZ 801 income-tax rate · no crypto Kennzahlen before 2022".into()
+                    tr("reports:rules.taxE1kvRate", &[("rate", &rate)])
                 },
             ),
             (
-                "Altbestand",
-                "Bought before 1 Mar 2021 · tax-free after a year".into(),
+                t("reports:rules.altbestand"),
+                t("reports:rules.altbestandRule"),
             ),
-            ("Tax year", "Calendar year, Vienna time".into()),
+            (t("reports:rules.taxYear"), t("reports:rules.taxYearAt")),
         ]
     } else {
         let mut v = vec![
-            ("Region", "Generic".to_owned()),
-            ("Method", model::method_label(&r.method)),
+            (t("reports:rules.region"), t("reports:rules.generic")),
+            (t("reports:rules.method"), model::method_label(&r.method)),
         ];
         if let Some(days) = r.long_term_days {
             v.push((
-                "Long-term after",
-                format!(
-                    "{} day{}",
-                    format::count(days.max(0.0) as usize),
-                    if days == 1.0 { "" } else { "s" }
-                ),
+                t("reports:rules.longTermAfter"),
+                tc("reports:rules.days", days.max(0.0) as usize, &[]),
             ));
         }
-        v.push(("Tax", "No rate applied".into()));
-        v.push(("Tax year", r.tax_year_rule()));
+        v.push((t("reports:rules.tax"), t("reports:rules.noRate")));
+        v.push((t("reports:rules.taxYear"), r.tax_year_rule()));
         v
     };
     // The indicative tax's notes (its stat tile shows them on hover; here they stay readable).
@@ -890,9 +918,10 @@ fn rules(tk: &Tk, r: &Report, year: i32) -> El {
         .as_ref()
         .map(|(_, _, n)| n.clone())
         .unwrap_or_default();
-    let facts: Vec<(&str, String)> = facts
+    let note = t("reports:rules.note");
+    let facts: Vec<(String, String)> = facts
         .into_iter()
-        .chain(notes.into_iter().map(|n| ("Note", n)))
+        .chain(notes.into_iter().map(|n| (note.clone(), n)))
         .collect();
     // `grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 px-3 py-3 sm:px-4 text-xs`.
     let mut dl = col()
@@ -908,7 +937,7 @@ fn rules(tk: &Tk, r: &Report, year: i32) -> El {
                 .gap(tk.r(0.75))
                 .items_start()
                 .child(
-                    text(label.to_owned())
+                    text(label)
                         .font(tk.tsm(400.0))
                         .color(tk.muted_fg)
                         .wrap()
@@ -926,17 +955,18 @@ fn rules(tk: &Tk, r: &Report, year: i32) -> El {
                 ),
         );
     }
+    let title = t("reports:rules.title");
     card(tk, "rep-rules")
         .role("region")
-        .label("Rules")
+        .label(title.clone())
         .child(lc::card_head(
             tk,
-            "Rules".into(),
+            title,
             None,
             Some(arrow_link(
                 tk,
                 "rep-books-link",
-                "Change in Books",
+                &t("reports:rules.changeInBooks"),
                 "/books".into(),
             )),
         ))

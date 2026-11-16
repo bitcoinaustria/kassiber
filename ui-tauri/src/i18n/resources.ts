@@ -26,6 +26,7 @@ import deNav from "@shared/i18n/locales/de/nav.json";
 import deOnboarding from "@shared/i18n/locales/de/onboarding.json";
 import deOverview from "@shared/i18n/locales/de/overview.json";
 import dePrivacyMirror from "@shared/i18n/locales/de/privacyMirror.json";
+import deReports from "@shared/i18n/locales/de/reports.json";
 import deReview from "@shared/i18n/locales/de/review.json";
 import deSearch from "@shared/i18n/locales/de/search.json";
 import deSettings from "@shared/i18n/locales/de/settings.json";
@@ -41,6 +42,7 @@ import enNav from "@shared/i18n/locales/en/nav.json";
 import enOnboarding from "@shared/i18n/locales/en/onboarding.json";
 import enOverview from "@shared/i18n/locales/en/overview.json";
 import enPrivacyMirror from "@shared/i18n/locales/en/privacyMirror.json";
+import enReports from "@shared/i18n/locales/en/reports.json";
 import enReview from "@shared/i18n/locales/en/review.json";
 import enSearch from "@shared/i18n/locales/en/search.json";
 import enSettings from "@shared/i18n/locales/en/settings.json";
@@ -66,6 +68,7 @@ export const resources = {
     onboarding: enOnboarding,
     assistant: enAssistant,
     sourceFunds: enSourceFunds,
+    reports: enReports,
     review: enReview,
     search: enSearch,
   },
@@ -84,6 +87,7 @@ export const resources = {
     onboarding: deOnboarding,
     assistant: deAssistant,
     sourceFunds: deSourceFunds,
+    reports: deReports,
     review: deReview,
     search: deSearch,
   },

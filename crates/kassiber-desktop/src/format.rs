@@ -268,6 +268,15 @@ const MONTHS_DE: [&str; 12] = [
     "Jän.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez.",
 ];
 
+/// The UI language's short month name (1-based): en `Jan`, de `Jän.`.
+pub fn short_month_ui(m: u32) -> &'static str {
+    let i = m.clamp(1, 12) as usize - 1;
+    match crate::i18n::lang() {
+        crate::i18n::Lang::En => MONTHS[i],
+        crate::i18n::Lang::De => MONTHS_DE[i],
+    }
+}
+
 /// A civil UTC date.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Day {

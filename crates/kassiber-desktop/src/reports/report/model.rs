@@ -1,11 +1,12 @@
 //! What the Reports screen reads out of `ui.reports.capital_gains` (components/reports/
 //! reportModel.ts) plus the page's readiness and provisional checks (routes/Reports.tsx). Every
-//! figure comes from the daemon; this module only picks and labels them. The web hard-codes the
-//! report copy in English, and so does this port.
+//! figure comes from the daemon; this module only picks and labels them, in the UI language
+//! (the `reports` namespace).
 
 use serde_json::Value;
 
 use crate::format;
+use crate::i18n::{t, tc, tr};
 
 /// The book regions the core supports; anything else reads as generic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,14 +26,12 @@ pub fn region(code: &str) -> Region {
 /// `methodLabel`: the book's gains algorithm as the report used it, never substituted.
 pub fn method_label(method: &str) -> String {
     match method.to_lowercase().as_str() {
-        "fifo" => "FIFO · first in, first out".into(),
-        "lifo" => "LIFO · last in, first out".into(),
-        "hifo" => "HIFO · highest cost first".into(),
-        "lofo" => "LOFO · lowest cost first".into(),
-        "moving_average" => "Moving average cost".into(),
-        "moving_average_at" => {
-            "Austrian method · FIFO for Altbestand, moving average for Neubestand".into()
-        }
+        "fifo" => t("reports:method.fifo"),
+        "lifo" => t("reports:method.lifo"),
+        "hifo" => t("reports:method.hifo"),
+        "lofo" => t("reports:method.lofo"),
+        "moving_average" => t("reports:method.movingAverage"),
+        "moving_average_at" => t("reports:method.movingAverageAt"),
         _ if method.is_empty() => "—".into(),
         _ => method.to_uppercase(),
     }
@@ -41,10 +40,13 @@ pub fn method_label(method: &str) -> String {
 /// The method's short name for a stat tile's line ("By FIFO"); the Rules card keeps the long one.
 pub fn method_short(method: &str) -> String {
     match method.to_lowercase().as_str() {
-        "moving_average" => "By moving average".into(),
-        "moving_average_at" => "By the Austrian method".into(),
-        _ if method.is_empty() => "Method not set".into(),
-        m => format!("By {}", m.to_uppercase()),
+        "moving_average" => t("reports:methodShort.movingAverage"),
+        "moving_average_at" => t("reports:methodShort.movingAverageAt"),
+        _ if method.is_empty() => t("reports:methodShort.notSet"),
+        m => tr(
+            "reports:methodShort.other",
+            &[("method", &m.to_uppercase())],
+        ),
     }
 }
 
@@ -244,10 +246,10 @@ impl Report {
         let e1kv = self.e1kv_applies();
         AUSTRIAN_FIELDS
             .iter()
-            .filter(|(_, _, form, _)| e1kv || *form != "E 1kv")
-            .map(|(code, label, form, _)| Field {
+            .filter(|(_, form, _)| e1kv || *form != "E 1kv")
+            .map(|(code, form, _)| Field {
                 code: (*code).into(),
-                label: (*label).into(),
+                label: field_label(code),
                 form: (*form).into(),
                 amount: None,
                 row_count: 0.0,
@@ -280,21 +282,22 @@ impl Report {
             .epoch_days()
                 - 1,
         );
-        format!(
-            "{} {} {} – {} {} {}",
-            first.d,
-            MONTHS[first.m as usize - 1],
-            first.y,
-            last.d,
-            MONTHS[last.m as usize - 1],
-            last.y
+        tr(
+            "reports:date.range",
+            &[
+                ("start", &day_month_year(first)),
+                ("end", &day_month_year(last)),
+            ],
         )
     }
 
     /// The rules row's tax year: the registry's for the country, the book's own when it has one.
     pub fn tax_year_rule(&self) -> String {
         match &self.tax_year {
-            Some(((m, d), zone)) => format!("Starts {d} {}, {zone}", MONTHS[*m as usize - 1]),
+            Some(((m, d), zone)) => tr(
+                "reports:taxYear.starts",
+                &[("start", &day_month(*m, *d)), ("zone", zone)],
+            ),
             None => describe_tax_year(&self.jurisdiction),
         }
     }
@@ -315,34 +318,27 @@ impl Report {
     }
 }
 
-/// `AUSTRIAN_FIELD_COPY`: (code, label, form, note).
-pub const AUSTRIAN_FIELDS: [(&str, &str, &str, Option<&str>); 4] = [
-    ("172", "Foreign ongoing crypto income", "E 1kv", None),
-    ("174", "Foreign realized crypto gains", "E 1kv", None),
-    ("176", "Foreign realized crypto losses", "E 1kv", None),
-    (
-        "801",
-        "Altbestand speculation gains",
-        "E 1",
-        Some("Taxed at your income-tax rate"),
-    ),
+/// `AUSTRIAN_FIELD_COPY`: (code, form, note key); the label is `reports:field.<code>`.
+pub const AUSTRIAN_FIELDS: [(&str, &str, Option<&str>); 4] = [
+    ("172", "E 1kv", None),
+    ("174", "E 1kv", None),
+    ("176", "E 1kv", None),
+    ("801", "E 1", Some("reports:field.801Note")),
 ];
 
-fn field_copy(
-    code: &str,
-) -> Option<&'static (
-    &'static str,
-    &'static str,
-    &'static str,
-    Option<&'static str>,
-)> {
+fn field_copy(code: &str) -> Option<&'static (&'static str, &'static str, Option<&'static str>)> {
     AUSTRIAN_FIELDS.iter().find(|f| f.0 == code)
+}
+
+/// A known Austrian field's label in the UI language.
+fn field_label(code: &str) -> String {
+    t(&format!("reports:field.{code}"))
 }
 
 /// First tax year with the crypto Kennzahlen; the core decides, this names it.
 pub const E1KV_FIRST_TAX_YEAR: i32 = 2022;
 
-/// `formatTaxRate`: `27.5 %` from the core's decimal rate string.
+/// `formatTaxRate`: `27.5 %` (de `27,5 %`) from the core's decimal rate string.
 pub fn tax_rate(rate: Option<&str>) -> String {
     let Some(v) = rate
         .and_then(|r| r.trim().parse::<f64>().ok())
@@ -355,17 +351,52 @@ pub fn tax_rate(rate: Option<&str>) -> String {
     if s.ends_with(".0") {
         s.truncate(s.len() - 2);
     }
+    if crate::i18n::lang() == crate::i18n::Lang::De {
+        s = s.replace('.', ",");
+    }
     format!("{s} %")
 }
 
-/// `formatReportPeriod`.
-pub fn period(year: i32) -> String {
-    format!("1 Jan – 31 Dec {year}")
+/// `1 Jan` (de `1. Jän.`).
+fn day_month(m: u32, d: u32) -> String {
+    tr(
+        "reports:date.dayMonth",
+        &[
+            ("day", &d.to_string()),
+            ("month", format::short_month_ui(m)),
+        ],
+    )
 }
 
-const MONTHS: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+/// `1 Jan 2025` (de `1. Jän. 2025`).
+fn day_month_year(day: format::Day) -> String {
+    tr(
+        "reports:date.dayMonthYear",
+        &[
+            ("day", &day.d.to_string()),
+            ("month", format::short_month_ui(day.m)),
+            ("year", &day.y.to_string()),
+        ],
+    )
+}
+
+/// `formatReportPeriod`: `1 Jan – 31 Dec 2025`.
+pub fn period(year: i32) -> String {
+    tr(
+        "reports:date.range",
+        &[
+            ("start", &day_month(1, 1)),
+            (
+                "end",
+                &day_month_year(format::Day {
+                    y: year,
+                    m: 12,
+                    d: 31,
+                }),
+            ),
+        ],
+    )
+}
 
 /// (timezone, tax-year start (month, day)) from the tax country registry.
 fn country_zone(code: &str) -> Option<(&'static str, (u32, u32))> {
@@ -387,11 +418,11 @@ fn country_zone(code: &str) -> Option<(&'static str, (u32, u32))> {
 pub fn describe_tax_year(jurisdiction: &str) -> String {
     let (zone, (m, d)) = country_zone(jurisdiction).unwrap_or(("UTC", (1, 1)));
     if m == 1 && d == 1 {
-        format!("Calendar year, {zone}")
+        tr("reports:taxYear.calendar", &[("zone", zone)])
     } else {
-        format!(
-            "Calendar year, {zone} · {d} {} tax year not applied yet",
-            MONTHS[(m - 1) as usize]
+        tr(
+            "reports:taxYear.calendarNotApplied",
+            &[("zone", zone), ("start", &day_month(m, d))],
         )
     }
 }
@@ -456,9 +487,9 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
     if r.region() != Region::At {
         let mut rows = vec![];
         for (key, label) in [
-            ("short_term", "Short-term gains"),
-            ("long_term", "Long-term gains"),
-            ("income", "Income"),
+            ("short_term", "reports:breakdown.row.shortTerm"),
+            ("long_term", "reports:breakdown.row.longTerm"),
+            ("income", "reports:breakdown.row.income"),
         ] {
             let Some(b) = r.bucket(key).filter(|b| b.row_count != 0.0) else {
                 continue;
@@ -467,7 +498,7 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
             rows.push(BreakdownRow {
                 key: key.into(),
                 code: None,
-                label: label.into(),
+                label: t(label),
                 note: None,
                 form: String::new(),
                 transaction_count: n,
@@ -499,9 +530,9 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
             BreakdownRow {
                 key: f.code.clone(),
                 code: Some(format!("KZ {}", f.code)),
-                label: copy.map(|c| c.1.to_owned()).unwrap_or(f.label.clone()),
-                note: copy.and_then(|c| c.3).map(str::to_owned),
-                form: copy.map(|c| c.2.to_owned()).unwrap_or_else(|| {
+                label: copy.map(|c| field_label(c.0)).unwrap_or(f.label.clone()),
+                note: copy.and_then(|c| c.2).map(t),
+                form: copy.map(|c| c.1.to_owned()).unwrap_or_else(|| {
                     if f.form.is_empty() {
                         "E 1kv".into()
                     } else {
@@ -538,7 +569,7 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
     }
     if !e1.is_empty() {
         groups.push(Group {
-            title: "E 1 · outside the E 1kv".into(),
+            title: t("reports:breakdown.group.outsideE1kv"),
             reported: true,
             rows: e1,
         });
@@ -546,18 +577,18 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
     let extra: [(&str, &str, &str); 3] = [
         (
             "tax_free",
-            "Tax-free Altbestand",
-            "Bought before 1 March 2021 and held over a year",
+            "reports:breakdown.row.taxFree",
+            "reports:breakdown.row.taxFreeNote",
         ),
         (
             "swaps",
-            "Tax-neutral swaps",
-            "Basis carried into the asset received",
+            "reports:breakdown.row.swaps",
+            "reports:breakdown.row.swapsNote",
         ),
         (
             "unassigned",
-            "Without a field",
-            "Rows in no field: those before 1 March 2022, which followed the old rules, and any the tax engine could not assign. Check them before filing: they may be taxable.",
+            "reports:breakdown.row.unassigned",
+            "reports:breakdown.row.unassignedNote",
         ),
     ];
     let mut off = vec![];
@@ -569,8 +600,8 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
         off.push(BreakdownRow {
             key: key.into(),
             code: None,
-            label: label.into(),
-            note: Some(note.into()),
+            label: t(label),
+            note: Some(t(note)),
             form: String::new(),
             transaction_count: n,
             href,
@@ -583,7 +614,7 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
     }
     if !off.is_empty() {
         groups.push(Group {
-            title: "Not reported".into(),
+            title: t("reports:breakdown.group.notReported"),
             reported: false,
             rows: off,
         });
@@ -627,16 +658,8 @@ pub struct Completeness {
     pub missing_prices: usize,
 }
 
-fn plural(n: f64, one: &str, many: &str) -> String {
-    if n == 1.0 {
-        one.to_owned()
-    } else {
-        many.to_owned()
-    }
-}
-
-fn n(v: f64) -> String {
-    format::count(v.max(0.0) as usize)
+fn n(v: f64) -> usize {
+    v.max(0.0) as usize
 }
 
 /// `buildReportReadiness`.
@@ -659,15 +682,9 @@ pub fn readiness(
             }
         };
     if blocking > 0 {
-        let b = blocking as f64;
         return ready(
-            "Sources block reports".into(),
-            format!(
-                "{} source{} could not refresh; reports wait until {}.",
-                n(b),
-                plural(b, "", "s"),
-                plural(b, "it does", "they do")
-            ),
+            t("overview:readiness.sourcesBlocking.title"),
+            tc("reports:readiness.sourcesBlocking", blocking, &[]),
             Tone::Alert,
             Glyph::WalletCards,
             Some("/connections"),
@@ -679,22 +696,17 @@ pub fn readiness(
         .any(|f| f.row_count > 0.0 || f.amount.unwrap_or(0.0).abs() > 0.005);
     if r.needs_journals {
         return ready(
-            "Process ledger".into(),
-            "Report totals need fresh journal processing before export.".into(),
+            t("reports:readiness.processLedger.title"),
+            t("reports:readiness.processLedger.detail"),
             Tone::Warning,
             Glyph::RefreshCw,
             Some("/journals"),
         );
     }
     if r.quarantines > 0.0 {
-        let q = r.quarantines;
         return ready(
-            "Review queue open".into(),
-            format!(
-                "{} quarantined item{} should be resolved before filing.",
-                n(q),
-                plural(q, "", "s")
-            ),
+            t("overview:readiness.reviewQueueOpen.title"),
+            tc("reports:readiness.reviewQueue", n(r.quarantines), &[]),
             Tone::Alert,
             Glyph::ShieldAlert,
             Some("/review"),
@@ -702,8 +714,8 @@ pub fn readiness(
     }
     if pending {
         return ready(
-            "Checking completeness".into(),
-            "Kassiber is still reading whether the cost basis is complete.".into(),
+            t("reports:readiness.checking.title"),
+            t("reports:readiness.checking.detail"),
             Tone::Neutral,
             Glyph::Loader,
             None,
@@ -712,22 +724,18 @@ pub fn readiness(
     let has = |reason: &str| completeness.is_some_and(|c| c.reasons.iter().any(|x| x == reason));
     if has("custody_unresolved") {
         return ready(
-            "Custody gaps open".into(),
-            "Unresolved custody gaps block final cost basis; figures are provisional.".into(),
+            t("overview:readiness.custodyUnresolved.title"),
+            t("reports:readiness.custody"),
             Tone::Alert,
             Glyph::ShieldAlert,
             Some("/journals"),
         );
     }
     if has("missing_prices") {
-        let c = completeness.map(|c| c.missing_prices).unwrap_or(0) as f64;
+        let c = completeness.map(|c| c.missing_prices).unwrap_or(0);
         return ready(
-            "Prices missing".into(),
-            format!(
-                "{} transaction{} no price; figures are provisional.",
-                n(c),
-                plural(c, " has", "s have")
-            ),
+            t("overview:readiness.missingPrices.title"),
+            tc("reports:readiness.missingPrices", c, &[]),
             Tone::Warning,
             Glyph::Alert,
             Some("/review"),
@@ -735,9 +743,8 @@ pub fn readiness(
     }
     if !completeness.is_some_and(|c| c.cost_basis_complete) {
         return ready(
-            "Completeness unknown".into(),
-            "Kassiber could not confirm that the cost basis is complete; figures are provisional."
-                .into(),
+            t("reports:readiness.unknown.title"),
+            t("reports:readiness.unknown.detail"),
             Tone::Warning,
             Glyph::Alert,
             Some("/journals"),
@@ -746,21 +753,18 @@ pub fn readiness(
     let austrian = r.region() == Region::At;
     let unassigned = r.unassigned_rows();
     if austrian && !r.e1kv_applies() {
-        let tail = if unassigned > 0.0 {
-            format!(
-                " {} row{} no field that year; have a Steuerberater state {}.",
-                n(unassigned),
-                plural(unassigned, " has", "s have"),
-                plural(unassigned, "it", "them")
-            )
-        } else {
-            String::new()
-        };
+        let first = E1KV_FIRST_TAX_YEAR.to_string();
+        let mut detail = tr(
+            "reports:readiness.noFields.detail",
+            &[("first", &first), ("year", &year.to_string())],
+        );
+        if unassigned > 0.0 {
+            detail.push(' ');
+            detail.push_str(&tc("reports:readiness.noFields.tail", n(unassigned), &[]));
+        }
         return ready(
-            format!("No crypto fields before {E1KV_FIRST_TAX_YEAR}"),
-            format!(
-                "Austria's crypto Kennzahlen (KZ 172, 174, 176) start on 1 March {E1KV_FIRST_TAX_YEAR}, so {year} states only KZ 801 and no 27.5 % estimate.{tail}"
-            ),
+            tr("reports:readiness.noFields.title", &[("year", &first)]),
+            detail,
             Tone::Warning,
             Glyph::Alert,
             None,
@@ -769,13 +773,14 @@ pub fn readiness(
     let before = r.rows_before_fields;
     if austrian && before > 0.0 {
         return ready(
-            "Rows before 1 March 2022".into(),
-            format!(
-                "{} row{} from January or February {year} followed the old rules unless you opted for the new ones. {} no field, so there is no E 1kv or estimate for {year}; have a Steuerberater state {}.",
+            tr(
+                "reports:readiness.rowsBefore.title",
+                &[("year", &E1KV_FIRST_TAX_YEAR.to_string())],
+            ),
+            tc(
+                "reports:readiness.rowsBefore.detail",
                 n(before),
-                plural(before, "", "s"),
-                plural(before, "It has", "They have"),
-                plural(before, "it", "them")
+                &[("year", &year.to_string())],
             ),
             Tone::Warning,
             Glyph::Alert,
@@ -784,13 +789,8 @@ pub fn readiness(
     }
     if unassigned > 0.0 {
         return ready(
-            "Rows without a field".into(),
-            format!(
-                "{} row{} in no field of the return; check {} before filing.",
-                n(unassigned),
-                plural(unassigned, " is", "s are"),
-                plural(unassigned, "it", "them")
-            ),
+            t("reports:readiness.unassigned.title"),
+            tc("reports:readiness.unassigned.detail", n(unassigned), &[]),
             Tone::Warning,
             Glyph::Alert,
             None,
@@ -798,19 +798,19 @@ pub fn readiness(
     }
     if row_count == 0.0 && !has_filing_rows {
         return ready(
-            "No taxable rows".into(),
-            format!(
-                "No disposal or filing-field rows are currently included in the {year} package."
+            t("reports:readiness.noRows.title"),
+            tr(
+                "reports:readiness.noRows.detail",
+                &[("year", &year.to_string())],
             ),
             Tone::Neutral,
             Glyph::Alert,
             None,
         );
     }
-    // The title has a bundle key (Reports.tsx hard-codes the same English); the detail has none.
     ready(
-        crate::i18n::t("journals:review.nextAction.ready"),
-        "The ledger is current and the review queue is clear.".into(),
+        t("journals:review.nextAction.ready"),
+        t("reports:readiness.ready"),
         Tone::Good,
         Glyph::Check,
         None,
@@ -1013,5 +1013,50 @@ mod tests {
         assert_eq!(year_from_route("/reports?year=2022"), Some(2022));
         assert_eq!(year_from_route("/reports"), None);
         assert_eq!(decode(&encode("{\"a\":1}")), "{\"a\":1}");
+    }
+
+    /// The page's own copy follows the UI language: Austrian months, decimal comma, plurals.
+    #[test]
+    fn german_copy() {
+        crate::i18n::set_lang(crate::i18n::Lang::De);
+        let r = Report::parse(
+            &serde_json::json!({"year": 2025, "taxYear": {"taxYearStart": "07-01", "timezone": "UTC"}}),
+        );
+        let got = (
+            tax_rate(Some("0.275")),
+            period(2025),
+            r.period_of(2025),
+            r.tax_year_rule(),
+            describe_tax_year("GB"),
+            method_short("fifo"),
+        );
+        let mut at = generic();
+        at.jurisdiction = "AT".into();
+        at.e1kv_applies = Some(true);
+        let groups = breakdown(&at);
+        let mut q = generic();
+        q.quarantines = 1.0;
+        let detail = readiness(&q, 2.0, 2025, Some(&complete()), false, 0).detail;
+        crate::i18n::set_lang(crate::i18n::Lang::En);
+        assert_eq!(
+            got,
+            (
+                "27,5 %".into(),
+                "1. Jän. – 31. Dez. 2025".into(),
+                "1. Juli 2025 – 30. Juni 2026".into(),
+                "Beginnt am 1. Juli, UTC".into(),
+                "Kalenderjahr, Europe/London · Steuerjahr ab 6. Apr. noch nicht angewendet".into(),
+                "Nach FIFO".into(),
+            )
+        );
+        assert_eq!(groups[1].title, "E 1 · außerhalb der E 1kv");
+        assert_eq!(
+            groups[1].rows[0].label,
+            "Einkünfte aus Spekulationsgeschäften (Altbestand)"
+        );
+        assert_eq!(
+            detail,
+            "1 Eintrag in Quarantäne sollte vor der Einreichung geklärt werden."
+        );
     }
 }

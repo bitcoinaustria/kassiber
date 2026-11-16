@@ -1,0 +1,241 @@
+{
+  "page": {
+    "unavailable": "Reports unavailable",
+    "noData": "The daemon did not return report data.",
+    "yearMismatch": "The daemon returned {{returned}} while the selected tax year is {{year}}.",
+    "taxYear": "Tax year",
+    "exporting": "Exporting…"
+  },
+  "date": {
+    "dayMonth": "{{day}} {{month}}",
+    "dayMonthYear": "{{day}} {{month}} {{year}}",
+    "range": "{{start}} – {{end}}"
+  },
+  "taxYear": {
+    "calendar": "Calendar year, {{zone}}",
+    "calendarNotApplied": "Calendar year, {{zone}} · {{start}} tax year not applied yet",
+    "starts": "Starts {{start}}, {{zone}}"
+  },
+  "method": {
+    "fifo": "FIFO · first in, first out",
+    "lifo": "LIFO · last in, first out",
+    "hifo": "HIFO · highest cost first",
+    "lofo": "LOFO · lowest cost first",
+    "movingAverage": "Moving average cost",
+    "movingAverageAt": "Austrian method · FIFO for Altbestand, moving average for Neubestand"
+  },
+  "methodShort": {
+    "movingAverage": "By moving average",
+    "movingAverageAt": "By the Austrian method",
+    "notSet": "Method not set",
+    "other": "By {{method}}"
+  },
+  "field": {
+    "172": "Foreign ongoing crypto income",
+    "174": "Foreign realized crypto gains",
+    "176": "Foreign realized crypto losses",
+    "801": "Altbestand speculation gains",
+    "801Note": "Taxed at your income-tax rate"
+  },
+  "breakdown": {
+    "titleAt": "Tax fields",
+    "titleGeneric": "Gains and income",
+    "yearLink": "All of {{year}} in Transactions",
+    "empty": "No disposals or income in {{year}}.",
+    "showExact": "Show these {{n}} in Transactions",
+    "showYear": "Open the year in Transactions; {{n}} is too many to list one by one",
+    "about": "About {{label}}",
+    "column": {
+      "field": "Field",
+      "description": "Description",
+      "transactions": "Transactions",
+      "kind": "Kind"
+    },
+    "group": {
+      "outsideE1kv": "E 1 · outside the E 1kv",
+      "notReported": "Not reported"
+    },
+    "row": {
+      "shortTerm": "Short-term gains",
+      "longTerm": "Long-term gains",
+      "income": "Income",
+      "taxFree": "Tax-free Altbestand",
+      "taxFreeNote": "Bought before 1 March 2021 and held over a year",
+      "swaps": "Tax-neutral swaps",
+      "swapsNote": "Basis carried into the asset received",
+      "unassigned": "Without a field",
+      "unassignedNote": "Rows in no field: those before 1 March 2022, which followed the old rules, and any the tax engine could not assign. Check them before filing: they may be taxable."
+    }
+  },
+  "readiness": {
+    "sourcesBlocking_one": "{{count}} source could not refresh; reports wait until it does.",
+    "sourcesBlocking_other": "{{count}} sources could not refresh; reports wait until they do.",
+    "processLedger": {
+      "title": "Process ledger",
+      "detail": "Report totals need fresh journal processing before export."
+    },
+    "reviewQueue_one": "{{count}} quarantined item should be resolved before filing.",
+    "reviewQueue_other": "{{count}} quarantined items should be resolved before filing.",
+    "checking": {
+      "title": "Checking completeness",
+      "detail": "Kassiber is still reading whether the cost basis is complete."
+    },
+    "custody": "Unresolved custody gaps block final cost basis; figures are provisional.",
+    "missingPrices_one": "{{count}} transaction has no price; figures are provisional.",
+    "missingPrices_other": "{{count}} transactions have no price; figures are provisional.",
+    "unknown": {
+      "title": "Completeness unknown",
+      "detail": "Kassiber could not confirm that the cost basis is complete; figures are provisional."
+    },
+    "noFields": {
+      "title": "No crypto fields before {{year}}",
+      "detail": "Austria's crypto Kennzahlen (KZ 172, 174, 176) start on 1 March {{first}}, so {{year}} states only KZ 801 and no 27.5 % estimate.",
+      "tail_one": "{{count}} row has no field that year; have a Steuerberater state it.",
+      "tail_other": "{{count}} rows have no field that year; have a Steuerberater state them."
+    },
+    "rowsBefore": {
+      "title": "Rows before 1 March {{year}}",
+      "detail_one": "{{count}} row from January or February {{year}} followed the old rules unless you opted for the new ones. It has no field, so there is no E 1kv or estimate for {{year}}; have a Steuerberater state it.",
+      "detail_other": "{{count}} rows from January or February {{year}} followed the old rules unless you opted for the new ones. They have no field, so there is no E 1kv or estimate for {{year}}; have a Steuerberater state them."
+    },
+    "unassigned": {
+      "title": "Rows without a field",
+      "detail_one": "{{count}} row is in no field of the return; check it before filing.",
+      "detail_other": "{{count}} rows are in no field of the return; check them before filing."
+    },
+    "noRows": {
+      "title": "No taxable rows",
+      "detail": "No disposal or filing-field rows are currently included in the {{year}} package."
+    },
+    "ready": "The ledger is current and the review queue is clear."
+  },
+  "metrics": {
+    "label": "Report figures",
+    "provisional": "Provisional",
+    "provisionalHelp": "Quarantined rows, custody gaps, missing prices, or stale journals are not reflected yet.",
+    "disposalsIn": "Disposals in {{year}}",
+    "income": "{{amount}} income",
+    "taxFree": "{{amount}} tax-free (Altbestand)",
+    "realised": "Realised in the period",
+    "includes": "Includes {{parts}}",
+    "indicativeTaxRate": "Indicative tax · {{rate}}",
+    "taxSub": "KZ 172 + 174 − 176",
+    "taxSubWithout801": "KZ 172 + 174 − 176, without KZ 801"
+  },
+  "rules": {
+    "title": "Rules",
+    "changeInBooks": "Change in Books",
+    "region": "Region",
+    "austria": "Austria",
+    "generic": "Generic",
+    "method": "Method",
+    "tax": "Tax",
+    "taxE1kv": "E 1kv · KZ 801 income-tax rate",
+    "taxE1kvRate": "E 1kv {{rate}} · KZ 801 income-tax rate",
+    "taxBeforeE1kv": "KZ 801 income-tax rate · no crypto Kennzahlen before {{year}}",
+    "altbestand": "Altbestand",
+    "altbestandRule": "Bought before 1 Mar 2021 · tax-free after a year",
+    "taxYear": "Tax year",
+    "taxYearAt": "Calendar year, Vienna time",
+    "longTermAfter": "Long-term after",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "noRate": "No rate applied",
+    "note": "Note"
+  },
+  "files": {
+    "title": "Files",
+    "noSecrets": "No keys or credentials in any file",
+    "exclusions": "No file includes wallet descriptors, xpubs, backend credentials, raw wallet config, AI settings, logs, or unrelated books.",
+    "export": "Export",
+    "exportFile": "Export {{file}}",
+    "exportFileAs": "Export {{file}} as {{format}}",
+    "formats": {
+      "pdf": "The report to file or print",
+      "xlsx": "Every row, for a spreadsheet",
+      "csv": "Every row, plain text"
+    },
+    "tax": {
+      "title": "Tax report",
+      "everyYear": "Every year in the book",
+      "noKennzahlen": "No crypto Kennzahlen before {{year}} · the bookkeeping handoff lists every row",
+      "rowsBefore": "No E 1kv {{year}}: rows before 1 March · the bookkeeping handoff lists every row",
+      "e1kv": "E 1kv {{year}} with every row"
+    },
+    "handoff": {
+      "title": "Bookkeeping handoff",
+      "detail": "EA / Jahresabschluss {{year}} · XLSX"
+    },
+    "summary": {
+      "title": "Summary",
+      "detail": "Portfolio {{year}}, no tax tables · PDF",
+      "someWallets": "{{selected}} of {{total}} wallets",
+      "oneWallet": "1 wallet",
+      "allWallets": "All wallets",
+      "noCover": "no cover page",
+      "cover": "balance cover page",
+      "coverToggle": "Cover page with today's balances",
+      "wallets": "Wallets",
+      "selectAll": "Select all"
+    },
+    "audit": {
+      "title": "Audit package",
+      "detail": "Book evidence for an auditor",
+      "scope": "Scope",
+      "scopeLabel": "Audit package scope",
+      "wholeBook": "Whole book",
+      "savedCase": "A saved source-of-funds case",
+      "oneCase": "One source-of-funds case",
+      "case": "Source-of-funds case",
+      "chooseCase": "Choose a saved case",
+      "include": "Include",
+      "parts": "{{included}} of {{total}} parts",
+      "part": {
+        "copiedAttachments": "Copied files",
+        "urlReferences": "URL references",
+        "journalState": "Journal state",
+        "reviewState": "Review state",
+        "editHistory": "Edit history"
+      }
+    },
+    "saved": "{{file}} saved.",
+    "savedWithNotes": "{{file}} saved with notes.",
+    "saveDialogTitle": "Save Kassiber report export",
+    "written": {
+      "transactions_one": "{{count}} transaction",
+      "transactions_other": "{{count}} transactions",
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "links_one": "{{count}} link",
+      "links_other": "{{count}} links",
+      "pages_one": "{{count}} page",
+      "pages_other": "{{count}} pages",
+      "sheets_one": "{{count}} sheet",
+      "sheets_other": "{{count}} sheets",
+      "rows_one": "{{count}} row",
+      "rows_other": "{{count}} rows",
+      "fallback": "Export written"
+    },
+    "error": {
+      "notAbsolute": "Report export paths must be absolute.",
+      "noManagedFolder": "Managed report export folder could not be found.",
+      "noManagedFolderDetail": "Managed report export folder could not be found: {{error}}",
+      "notFound": "Report export file could not be found: {{error}}",
+      "otherProject": "Only exports from the active Kassiber project can be opened or saved.",
+      "inspect": "Report export file could not be inspected: {{error}}",
+      "unsupported": "Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be opened or saved.",
+      "inspectDestination": "Could not inspect report export destination: {{error}}",
+      "destinationNotEmpty": "Choose a new or empty folder for the report export.",
+      "createDestination": "Could not create report export destination: {{error}}",
+      "readSource": "Could not read managed report export: {{error}}",
+      "readEntry": "Could not read report export entry: {{error}}",
+      "saveEntry": "Could not save report export entry: {{error}}",
+      "noParent": "Report export destination must include a parent folder.",
+      "createParent": "Could not create report export destination folder: {{error}}",
+      "inspectParent": "Could not inspect report export destination folder: {{error}}",
+      "insideManaged": "Choose a destination outside Kassiber's managed exports folder.",
+      "extension": "Report export destination must use .pdf, .xlsx, or .csv.",
+      "save": "Could not save report export: {{error}}"
+    }
+  }
+}

@@ -10,7 +10,7 @@ use super::widgets::{card, checkbox, select_menu, select_trigger, toggle};
 use super::{AUDIT_PARTS, Fmt, Fold, Popup, Status, StatusTone};
 use crate::app::App;
 use crate::format;
-use crate::i18n::{t, tc};
+use crate::i18n::{t, tc, tr};
 use crate::icons as I;
 use crate::reports::ledger::common as lc;
 use crate::theme::Tk;
@@ -18,9 +18,6 @@ use crate::txdetail::widgets::{self as w, Size, Variant};
 use crate::ui::ic;
 use crate::ui::table::EDGE;
 use rune_kit::Placement;
-
-/// `NORMAL_HANDOFF_EXCLUSIONS`, joined with "or".
-const EXCLUSIONS: &str = "No file includes wallet descriptors, xpubs, backend credentials, raw wallet config, AI settings, logs, or unrelated books.";
 
 /// A file row's one action (owner rule: one visible action per row): an outline `h-8` Export
 /// button, its glyph the spinner while one of `fmts` runs and a green check for 5 s after it
@@ -70,7 +67,7 @@ fn export_button(
     .disabled(!enabled)
     .child(glyph)
     .child(
-        text("Export")
+        text(t("reports:files.export"))
             .font(tk.tsm(500.0))
             .color(tk.fg)
             .single_line(),
@@ -98,29 +95,23 @@ fn export_button(
 /// The tax report's formats menu under its Export button.
 fn tax_formats_menu(tk: &Tk, layer: &mut Vec<El>) {
     use crate::ui::kit_menu::{Entry, Item};
-    let item =
-        |label: &str, desc: &str, glyph: &'static rune::Icon, f: Fmt| {
-            Entry::Item(Item::new(label).description(desc).icon(glyph).on_select(
-                move |a: &mut App| {
-                    a.reports.report.popup = None;
-                    super::export(a, f);
-                },
-            ))
-        };
+    let item = |label: &str, desc: &str, glyph: &'static rune::Icon, f: Fmt| {
+        Entry::Item(Item::new(label).description(t(desc)).icon(glyph).on_select(
+            move |a: &mut App| {
+                a.reports.report.popup = None;
+                super::export(a, f);
+            },
+        ))
+    };
     let entries = vec![
-        item(
-            "PDF",
-            "The report to file or print",
-            &I::FILE_TEXT,
-            Fmt::Pdf,
-        ),
+        item("PDF", "reports:files.formats.pdf", &I::FILE_TEXT, Fmt::Pdf),
         item(
             "XLSX",
-            "Every row, for a spreadsheet",
+            "reports:files.formats.xlsx",
             &I::FILE_SPREADSHEET,
             Fmt::Xlsx,
         ),
-        item("CSV", "Every row, plain text", &I::TABLE_2, Fmt::Csv),
+        item("CSV", "reports:files.formats.csv", &I::TABLE_2, Fmt::Csv),
     ];
     crate::ui::kit_menu::mount(
         tk,
@@ -287,7 +278,8 @@ fn check_row(
 fn summary_options(app: &App, tk: &Tk, picker: bool, all_selected: bool) -> El {
     let ui = &app.reports.report;
     let cover = !ui.no_cover;
-    let label = "Cover page with today's balances";
+    let label = t("reports:files.summary.coverToggle");
+    let label = label.as_str();
     let mut body = col().w_full().gap(tk.r(0.75)).child(
         row()
             .w_full()
@@ -306,13 +298,18 @@ fn summary_options(app: &App, tk: &Tk, picker: bool, all_selected: bool) -> El {
             .gap(tk.r(0.75))
             .center_y()
             .justify_between()
-            .child(text("Wallets").font(tk.txs(400.0)).color(tk.muted_fg));
+            .child(
+                text(t("reports:files.summary.wallets"))
+                    .font(tk.txs(400.0))
+                    .color(tk.muted_fg),
+            );
         if !all_selected {
+            let select_all = t("reports:files.summary.selectAll");
             headr = headr.child(
                 row()
                     .key("rep-wallets-all")
                     .role("button")
-                    .label("Select all")
+                    .label(select_all.clone())
                     .focusable(true)
                     .on_press(|a: &mut App| {
                         let all: Vec<String> = a
@@ -325,7 +322,7 @@ fn summary_options(app: &App, tk: &Tk, picker: bool, all_selected: bool) -> El {
                             .collect();
                         a.reports.report.summary_wallets = all;
                     })
-                    .child(text("Select all").font(tk.txs(400.0)).color(tk.fg)),
+                    .child(text(select_all).font(tk.txs(400.0)).color(tk.fg)),
             );
         }
         let mut list = col().w_full().gap(tk.r(0.125)).role("list");
@@ -358,17 +355,19 @@ fn summary_options(app: &App, tk: &Tk, picker: bool, all_selected: bool) -> El {
 
 fn audit_options(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     let ui = &app.reports.report;
+    let whole_book = t("reports:files.audit.wholeBook");
+    let saved_case = t("reports:files.audit.savedCase");
     let scope_label = if ui.audit.case_scope {
-        "A saved source-of-funds case"
+        saved_case.as_str()
     } else {
-        "Whole book"
+        whole_book.as_str()
     };
     let open = app.reports.report.popup == Some(Popup::AuditScope);
     let scope = crate::ui::popup::trigger(
         select_trigger(
             tk,
             "rep-audit-scope",
-            Some("Audit package scope"),
+            Some(&t("reports:files.audit.scopeLabel")),
             scope_label,
             false,
             true,
@@ -386,10 +385,10 @@ fn audit_options(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
             .map(|[w, _]| w)
             .unwrap_or(tk.r(8.0));
         let options = vec![
-            ("active_profile".to_owned(), "Whole book".to_owned(), false),
+            ("active_profile".to_owned(), whole_book.clone(), false),
             (
                 "source_funds_case".to_owned(),
-                "A saved source-of-funds case".to_owned(),
+                saved_case.clone(),
                 ui.cases.is_empty(),
             ),
         ];
@@ -412,7 +411,11 @@ fn audit_options(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     let mut scope_box = col()
         .w_full()
         .gap(tk.r(0.375))
-        .child(text("Scope").font(tk.txs(400.0)).color(tk.muted_fg))
+        .child(
+            text(t("reports:files.audit.scope"))
+                .font(tk.txs(400.0))
+                .color(tk.muted_fg),
+        )
         .child(row().child(scope));
     if ui.audit.case_scope {
         let open = app.reports.report.popup == Some(Popup::AuditCase);
@@ -424,8 +427,10 @@ fn audit_options(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         let trigger = select_trigger(
             tk,
             "rep-audit-case",
-            Some("Source-of-funds case"),
-            current.as_deref().unwrap_or("Choose a saved case"),
+            Some(&t("reports:files.audit.case")),
+            &current
+                .clone()
+                .unwrap_or_else(|| t("reports:files.audit.chooseCase")),
             current.is_none(),
             true,
             true,
@@ -467,7 +472,7 @@ fn audit_options(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         list = list.child(check_row(
             tk,
             format!("rep-audit-part-{i}"),
-            part,
+            &t(part),
             None,
             on,
             move |a: &mut App| {
@@ -479,7 +484,11 @@ fn audit_options(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         col()
             .w_full()
             .gap(tk.r(0.25))
-            .child(text("Include").font(tk.txs(400.0)).color(tk.muted_fg))
+            .child(
+                text(t("reports:files.audit.include"))
+                    .font(tk.txs(400.0))
+                    .color(tk.muted_fg),
+            )
             .child(list),
     )
 }
@@ -494,15 +503,7 @@ fn medium_date(s: &str) -> String {
             let iso = day.iso();
             format!("{}.{}.{}", &iso[8..10], &iso[5..7], &iso[0..4])
         }
-        crate::i18n::Lang::En => {
-            const M: [&str; 12] = [
-                "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-            ];
-            let iso = day.iso();
-            let m: usize = iso[5..7].parse().unwrap_or(1);
-            let d: u32 = iso[8..10].parse().unwrap_or(1);
-            format!("{} {d}, {}", M[m.clamp(1, 12) - 1], &iso[0..4])
-        }
+        crate::i18n::Lang::En => day.long(),
     }
 }
 
@@ -738,11 +739,15 @@ fn export_status(app: &App, tk: &Tk, s: &Status) -> El {
         )
         .fill(tk.background)
         .role("button")
-        .label("Open")
+        .label(t("common:actions.open"))
         .focusable(true)
         .on_press(move |a: &mut App| super::open_export(a, &path))
         .child(ic(&I::EXTERNAL_LINK, tk.r(0.875), tk.fg))
-        .child(text("Open").font(tk.txs(500.0)).color(tk.fg));
+        .child(
+            text(t("common:actions.open"))
+                .font(tk.txs(500.0))
+                .color(tk.fg),
+        );
         strip = strip.child(b);
     }
     let _ = app;
@@ -782,16 +787,12 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
     let case_missing = ui.audit.case_scope && ui.audit.case_id.is_empty();
 
     // What no file holds: the card's one muted line (its hover lists every exclusion).
-    let head = lc::card_head(
-        tk,
-        "Files".into(),
-        Some("No keys or credentials in any file".into()),
-        None,
-    )
-    .help(EXCLUSIONS.to_owned());
+    let title = t("reports:files.title");
+    let head = lc::card_head(tk, title.clone(), Some(t("reports:files.noSecrets")), None)
+        .help(t("reports:files.exclusions"));
     let mut card = card(tk, "rep-files")
         .role("region")
-        .label("Files")
+        .label(title)
         .child(head);
     match &ui.status {
         Some(s) if s.year == year => {
@@ -809,44 +810,55 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
         }
         _ => {}
     }
+    let y = year.to_string();
     let tax_detail = if region != Region::At {
-        "Every year in the book".to_owned()
+        t("reports:files.tax.everyYear")
     } else if !e1kv {
-        "No crypto Kennzahlen before 2022 · the bookkeeping handoff lists every row".to_owned()
+        tr(
+            "reports:files.tax.noKennzahlen",
+            &[("year", &super::model::E1KV_FIRST_TAX_YEAR.to_string())],
+        )
     } else if before > 0.0 {
-        format!("No E 1kv {year}: rows before 1 March · the bookkeeping handoff lists every row")
+        tr("reports:files.tax.rowsBefore", &[("year", &y)])
     } else {
-        format!("E 1kv {year} with every row")
+        tr("reports:files.tax.e1kv", &[("year", &y)])
     };
     let fold = ui.fold;
     let summary_label = format!(
         "{} · {}",
         if picker && selected < wallets.len() {
-            format!(
-                "{} of {} wallets",
-                format::count(selected),
-                format::count(wallets.len())
+            tr(
+                "reports:files.summary.someWallets",
+                &[
+                    ("selected", &format::count(selected)),
+                    ("total", &format::count(wallets.len())),
+                ],
             )
         } else if wallets.len() == 1 {
-            "1 wallet".to_owned()
+            t("reports:files.summary.oneWallet")
         } else {
-            "All wallets".to_owned()
+            t("reports:files.summary.allWallets")
         },
-        if ui.no_cover {
-            "no cover page"
+        t(if ui.no_cover {
+            "reports:files.summary.noCover"
         } else {
-            "balance cover page"
-        }
+            "reports:files.summary.cover"
+        })
     );
     let audit_label = format!(
-        "{} · {} of {} parts",
-        if ui.audit.case_scope {
-            "One source-of-funds case"
+        "{} · {}",
+        t(if ui.audit.case_scope {
+            "reports:files.audit.oneCase"
         } else {
-            "Whole book"
-        },
-        format::count(included),
-        format::count(AUDIT_PARTS.len())
+            "reports:files.audit.wholeBook"
+        }),
+        tr(
+            "reports:files.audit.parts",
+            &[
+                ("included", &format::count(included)),
+                ("total", &format::count(AUDIT_PARTS.len())),
+            ],
+        )
     );
     let summary_body = if fold == Some(Fold::Summary) {
         summary_options(app, tk, picker, selected >= wallets.len())
@@ -862,6 +874,12 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
         tax_formats_menu(tk, layer);
     }
     let tax_open = ui.popup == Some(Popup::TaxFormats);
+    let export_as = |file: &str, format: &str| {
+        tr(
+            "reports:files.exportFileAs",
+            &[("file", &t(file)), ("format", format)],
+        )
+    };
     let list = col()
         .w_full()
         .role("list")
@@ -870,14 +888,17 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
         .child(file_row(
             tk,
             "rep-file-tax",
-            "Tax report",
+            &t("reports:files.tax.title"),
             tax_detail,
             export_button(
                 app,
                 tk,
                 "rep-fmt-tax",
                 &[Fmt::Pdf, Fmt::Xlsx, Fmt::Csv],
-                "Export Tax report".into(),
+                tr(
+                    "reports:files.exportFile",
+                    &[("file", &t("reports:files.tax.title"))],
+                ),
                 refused,
                 year,
                 Some(tax_open),
@@ -888,14 +909,14 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
         .child(file_row(
             tk,
             "rep-file-handoff",
-            "Bookkeeping handoff",
-            format!("EA / Jahresabschluss {year} · XLSX"),
+            &t("reports:files.handoff.title"),
+            tr("reports:files.handoff.detail", &[("year", &y)]),
             export_button(
                 app,
                 tk,
                 "rep-fmt-year_handoff",
                 &[Fmt::YearHandoff],
-                "Export Bookkeeping handoff as XLSX".into(),
+                export_as("reports:files.handoff.title", "XLSX"),
                 false,
                 year,
                 None,
@@ -906,14 +927,14 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
         .child(file_row(
             tk,
             "rep-file-summary",
-            "Summary",
-            format!("Portfolio {year}, no tax tables · PDF"),
+            &t("reports:files.summary.title"),
+            tr("reports:files.summary.detail", &[("year", &y)]),
             export_button(
                 app,
                 tk,
                 "rep-fmt-summary_pdf",
                 &[Fmt::SummaryPdf],
-                "Export Summary as PDF".into(),
+                export_as("reports:files.summary.title", "PDF"),
                 picker && ui.summary_wallets.is_empty(),
                 year,
                 None,
@@ -929,14 +950,17 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
         .child(file_row(
             tk,
             "rep-file-audit",
-            "Audit package",
-            "Book evidence for an auditor".into(),
+            &t("reports:files.audit.title"),
+            t("reports:files.audit.detail"),
             export_button(
                 app,
                 tk,
                 "rep-fmt-audit_package",
                 &[Fmt::AuditPackage],
-                "Export Audit package".into(),
+                tr(
+                    "reports:files.exportFile",
+                    &[("file", &t("reports:files.audit.title"))],
+                ),
                 case_missing,
                 year,
                 None,
