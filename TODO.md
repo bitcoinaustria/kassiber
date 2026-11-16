@@ -801,6 +801,18 @@ projections stay Python. Progress and remaining work for this slice:
   tagging yet; other crypto assets (a `crypto` asset scope is refused: the
   sync reads only the BTC ledger and movements, and the ledger cross-checks
   are BTC-only; both sources name what they leave out in `assets.next_step`).
+- [x] Add the Rust-only Bitcoin.de API sync (`wallets sync-bitcoinde`, a key
+  refused unless granted only reads; BTC statement plus BTC/EUR trades) and
+  BTC statement CSV import (`wallets import-bitcoinde`) on one mapping,
+  append-only and chained from zero; other coins and unmapped types refused
+  by name. See [Bitcoin.de](docs/reference/bitcoinde.md).
+- [ ] Bitcoin.de follow-ups: confirm with a real account that the API
+  statement and the CSV give the same balances and times; other coins (a
+  `crypto` asset scope is refused: the mapping chains the BTC balance, the
+  sync reads only BTC endpoints, and an append-only bind per wallet cannot
+  mix coins; the CSV names other-coin statements and rows it skips); a cross-process
+  nonce lock if concurrent CLI and desktop syncs of one key turn out common
+  (a refused nonce asks to sync again meanwhile).
 - [ ] Exchange error display: a very short request credential (a one- to
   three-character proxy password) is withheld wherever it occurs, Kassiber's
   own message text included, which garbles the error; consider refusing such

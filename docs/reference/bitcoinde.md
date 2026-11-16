@@ -26,6 +26,7 @@ but reads.
 kassiber backends create bitcoinde-main --kind bitcoinde \
   --url https://api.bitcoin.de --token-stdin --auth-header-stdin
 kassiber wallets sync-bitcoinde --backend bitcoinde-main
+kassiber wallets import-bitcoinde --file kontoauszug-btc.csv
 ```
 
 ## API sync
@@ -65,6 +66,21 @@ method, 12/13 a retryable `upstream_error`, the key codes and plain 401/403
 statement lists bookings up to the previous day) and `reported_balance`
 (scope `account_statement_balance_after_last_booking`). The desktop key check
 reads the permissions and one statement page and reports `read_only: true`.
+
+## CSV export
+
+mein Bitcoin.de → Kontoauszug → BTC, type all, whole period → "Kontoauszug als
+CSV herunterladen". `;`-separated UTF-8, dot decimals, `Datum` as
+`YYYY-MM-DD HH:MM:SS` German wall time (a time the summer-time change skips
+or repeats is refused). German and English headings are read; required:
+date, type, currency (`BTC`), reference, BTC before fee, BTC after the
+Bitcoin.de fee, amount and unit after the fee, incoming / outgoing, balance.
+`EUR nach Bitcoin.de- und Fidor-Gebühr` (older express trades), when filled,
+is the cash that changed hands. A trade's `Einheit (Kurs)` must be
+`BTC / <its cash unit>`. An unknown or repeated heading, a row with extra
+fields are refused by name. Another coin's statement (`ETH-Adresse`, `ETH
+vor Gebühr`) or a row in another coin is skipped and named (see below). An
+active custodial ledger, imported in `full` mode.
 
 ## Mapping
 

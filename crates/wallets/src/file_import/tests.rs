@@ -4946,3 +4946,7 @@ fn bitstamp_csv_tags_same_second_rows_across_imports() {
     let tagged = "SELECT count(*) FROM transaction_tags x JOIN tags g ON g.id=x.tag_id WHERE g.code='same-second-order-uncertain'";
     assert_eq!(scalar(&conn, tagged), 2);
 }
+
+#[rustfmt::skip]
+mod bitcoinde_csv;
+pub(super) use bitcoinde_csv::{import_bitcoinde, BITCOINDE_CSV};
