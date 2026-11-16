@@ -314,11 +314,16 @@ fn create(c: &Connection, scope: &Scope<'_>, args: &Value, sources: &dyn Sources
     let source = present(args, "pair_source")
         .cloned()
         .unwrap_or_else(|| s("manual"));
-    validate_choice(
-        &source,
-        "pair_source",
-        &["manual", "bulk_exact", "bulk_selected", "rule_auto"],
-    )?;
+    // `provider` is set only by an import pairing the two legs of a swap the
+    // provider reported as one trade (docs/plan/24-crypto-assets.md); it is
+    // not a user choice, so the choices users see stay as they were.
+    if source != s("provider") {
+        validate_choice(
+            &source,
+            "pair_source",
+            &["manual", "bulk_exact", "bulk_selected", "rule_auto"],
+        )?;
+    }
     if value(&out, "id") == value(&inbound, "id") {
         return Err(AppError::new(
             "validation",

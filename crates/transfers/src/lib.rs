@@ -55,6 +55,29 @@ fn parse_json(text: &str) -> Result<Value> {
     kassiber_pytext::loads(text).map_err(|e| AppError::new("internal_error", e.to_string()))
 }
 
+/// The `(outbound, inbound)` transaction ids of every active transaction
+/// pair, swaps included.
+pub fn transaction_pairs(conn: &Connection, scope: &Scope<'_>) -> Result<Vec<(String, String)>> {
+    Ok(pair_authoring::active_refs(conn, scope)?
+        .iter()
+        .filter(|r| text(r, "term_kind") == "transaction_pair")
+        .map(|r| (text(r, "out_transaction_id"), text(r, "in_transaction_id")))
+        .collect())
+}
+
+/// Every transaction already in an active pair or component, so a caller
+/// that authors pairs on each run (an import re-sync) authors each only once.
+pub fn paired_transaction_ids(
+    conn: &Connection,
+    scope: &Scope<'_>,
+) -> Result<std::collections::BTreeSet<String>> {
+    Ok(pair_authoring::active_refs(conn, scope)?
+        .iter()
+        .flat_map(|r| [text(r, "out_transaction_id"), text(r, "in_transaction_id")])
+        .filter(|id| !id.is_empty())
+        .collect())
+}
+
 pub fn execute(
     conn: &Connection,
     scope: &Scope<'_>,
