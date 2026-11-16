@@ -712,6 +712,7 @@ pub fn summary(model: &Value) -> Document {
             note: t("issues.reasons_note").into(),
         }));
     }
+    blocks.extend(source_coverage(lang, report));
     sections.push(Section {
         id: "issues",
         title: t("issues.title").into(),

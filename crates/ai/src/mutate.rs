@@ -548,7 +548,7 @@ fn mutate(
                 Ok(envelope(kind, book.mutate(kind, &args, "ai_tool")?))
             })
         }
-        "ui.loans.mark" | "ui.loans.link" | "ui.loans.unmark" => {
+        "ui.loans.mark" | "ui.loans.link" | "ui.loans.unmark" | "ui.sources.attest_coverage" => {
             scoped(runtime, host, &mut |book, _| {
                 Ok(envelope(kind, book.mutate(kind, arguments, "gui")?))
             })

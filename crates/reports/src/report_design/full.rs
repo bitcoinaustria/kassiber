@@ -778,13 +778,15 @@ pub fn full(model: &Value) -> Document {
             )
         })
     };
+    let mut issue_blocks = vec![issues];
+    issue_blocks.extend(source_coverage(lang, model));
     sections.push(Section {
         id: "issues",
         title: t("issues.title").into(),
         lead: String::new(),
         page_break: false,
         landscape: false,
-        blocks: vec![issues],
+        blocks: issue_blocks,
     });
 
     // 9. Method and provenance

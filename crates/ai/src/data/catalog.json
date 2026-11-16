@@ -8339,6 +8339,72 @@
    "summary_template": "Reject bank-line matches",
    "egresses": false,
    "reversible": false
+  },
+  {
+   "name": "ui.sources.coverage",
+   "wire_name": "ui_sources_coverage",
+   "description": "Read how current each source (wallet) is for a period end: source_mode (live sync, file snapshot, hybrid exchange API plus CSV, manual), covered_from/covered_through, freshness_state (current, behind, never_imported, sync_failed, unknown), the reason and the one action that fixes it (sync, import_newer_file, sync_or_import, review_sync_error). File sources cover the rows their files held, not the import time. Pass period_end (YYYY-MM-DD) for a report period; default today. An attestation is the user's statement that nothing happened after a date: it closes a coverage gap only when its date is on or before the covered end (attestation_gap names what a later date leaves open) and is never evidence of balances or tax facts. Local read; never syncs.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "period_end": {
+      "type": "string",
+      "description": "Period end as YYYY-MM-DD; today when omitted."
+     },
+     "wallet": {
+      "type": "string",
+      "description": "One wallet id or label."
+     }
+    }
+   },
+   "kind_class": "read_only",
+   "daemon_kind": "ui.sources.coverage",
+   "summary_template": "Read source coverage",
+   "egresses": false,
+   "reversible": false
+  },
+  {
+   "name": "ui.sources.attest_coverage",
+   "wire_name": "ui_sources_attest_coverage",
+   "description": "Record, after explicit consent, the user's own statement that a source had no activity after a date (no_activity_after) or that the account was closed on a date (closed_on), or clear it with clear=true. Only state what the user told you; never infer it. It closes a coverage gap only when the date is on or before the source's covered_through day, so use that day unless the user says otherwise; it creates no transactions, balances or tax facts.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "wallet"
+    ],
+    "properties": {
+     "wallet": {
+      "type": "string",
+      "description": "Wallet id or label."
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "no_activity_after",
+       "closed_on"
+      ]
+     },
+     "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD, not in the future."
+     },
+     "note": {
+      "type": "string",
+      "description": "The user's reason, in their words."
+     },
+     "clear": {
+      "type": "boolean",
+      "description": "Remove the stored statement instead of setting one."
+     }
+    }
+   },
+   "kind_class": "mutating",
+   "daemon_kind": "ui.sources.attest_coverage",
+   "summary_template": "Record source coverage statement",
+   "egresses": false,
+   "reversible": false
   }
  ],
  "aliases": {

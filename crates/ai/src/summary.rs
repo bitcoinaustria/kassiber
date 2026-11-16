@@ -391,6 +391,29 @@ pub fn summarize_tool_call(tool: &ToolEntry, arguments: &Value) -> Result<PyStr,
                 .done(),
             _ => text("Mark loan transaction"),
         },
+        "ui.sources.attest_coverage" => match (
+            stripped(arguments, "wallet"),
+            string(arguments, "kind"),
+            string(arguments, "date"),
+        ) {
+            (Some(target), _, _) if get(arguments, "clear") == Some(&Value::Bool(true)) => {
+                Text::default()
+                    .push("Clear the coverage statement of ")
+                    .py(&target)
+                    .done()
+            }
+            (Some(target), Some(kind), Some(date)) => Text::default()
+                .push("Record for ")
+                .py(&target)
+                .push(if kind.as_str() == Some("closed_on") {
+                    ": account closed on "
+                } else {
+                    ": no activity after "
+                })
+                .py(date)
+                .done(),
+            _ => text("Record source coverage statement"),
+        },
         "ui.loans.link" => match list_len(get(arguments, "txids")) {
             0 => text("Link loan transactions"),
             count => text(&format!("Link {count} loan transactions")),

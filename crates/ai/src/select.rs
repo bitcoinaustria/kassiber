@@ -470,6 +470,7 @@ pub fn tool_capabilities(tool: &ToolEntry) -> BTreeSet<&'static str> {
         capabilities.insert("wallets");
     } else if name.starts_with("ui.wallets.")
         || name.starts_with("ui.backends.")
+        || name.starts_with("ui.sources.")
         || [
             "ui.maintenance.settings",
             "ui.maintenance.configure",

@@ -32,12 +32,45 @@ fn list(value: &Value) -> &[Value] {
     }
 }
 
-/// Tools only the Rust runtime serves (`docs/reference/rust-shell.md#rust-only-commands`);
-/// Python's frozen registry never names them, so they are checked on their own.
-const RUST_ONLY: &[&str] = &["journals_verify"];
+/// Rust-only tools (docs/reference/desktop.md#sources-live-sync-and-file-snapshots):
+/// Python's registry lacks them, so they are compared to their own
+/// classification here and left out of the Python comparison.
+const RUST_ONLY: [(&str, &str); 2] = [
+    ("ui.sources.coverage", "read"),
+    ("ui.sources.attest_coverage", "accounting_decisions"),
+];
 
-fn python_only(tool: &&kassiber_mcp::tools::McpTool) -> bool {
-    !RUST_ONLY.contains(&tool.name.as_str()) && !rust_only(tool.entry.name.as_str())
+/// The reproducibility check, also Rust only (`docs/reference/rust-shell.md#rust-only-commands`),
+/// is checked on its own in `the_journal_check_is_a_read_for_every_grant`.
+const JOURNAL_CHECK: &str = "ui.journals.verify";
+
+fn rust_only(entry: &str) -> bool {
+    entry == JOURNAL_CHECK
+        || RUST_ONLY.iter().any(|(name, _)| *name == entry)
+        || bank_statement_tool(entry)
+}
+
+fn rust_only_names() -> Vec<String> {
+    mcp_tools()
+        .iter()
+        .filter(|tool| rust_only(tool.entry.name.as_str()))
+        .map(|tool| tool.name.clone())
+        .collect()
+}
+
+#[test]
+fn rust_only_tools_are_exposed_at_their_grant() {
+    for (entry, required) in RUST_ONLY {
+        let tool = mcp_tools()
+            .iter()
+            .find(|tool| tool.entry.name == entry)
+            .unwrap_or_else(|| panic!("{entry} not exposed"));
+        assert_eq!(tool.required.as_str(), required, "{entry}");
+        assert!(
+            !tool.egress && !tool.destructive && tool.idempotent,
+            "{entry}"
+        );
+    }
 }
 
 const GRANTS: [&str; 3] = ["read", "operator", "accounting_decisions"];
@@ -48,7 +81,7 @@ fn every_tool_is_classified_as_python_classifies_it() {
     let vectors = vectors();
     let have: Vec<Value> = mcp_tools()
         .iter()
-        .filter(python_only)
+        .filter(|tool| !rust_only(tool.entry.name.as_str()))
         .map(|tool| {
             dict([
                 ("name", s(tool.name.as_str())),
@@ -70,7 +103,7 @@ fn listings_and_definitions_follow_the_grant() {
     for grant in GRANTS {
         for access in ACCESS {
             let names: Vec<Value> = available_tools(grant, access)
-                .filter(python_only)
+                .filter(|tool| !rust_only(tool.entry.name.as_str()))
                 .map(|tool| s(tool.name.as_str()))
                 .collect();
             let key = format!("{grant}/{access}");
@@ -81,14 +114,13 @@ fn listings_and_definitions_follow_the_grant() {
             );
         }
     }
-    let rust_names: Vec<Value> = mcp_tools()
-        .iter()
-        .filter(|tool| !python_only(tool))
-        .map(|tool| s(tool.name.as_str()))
-        .collect();
+    let skipped = rust_only_names();
     let definitions: Vec<Value> = tool_definitions("accounting_decisions", "full")
         .into_iter()
-        .filter(|d| !get(d, "name").is_some_and(|n| rust_names.contains(n)))
+        .filter(|definition| match get(definition, "name") {
+            Some(Value::Str(name)) => !skipped.iter().any(|n| Some(n.as_str()) == name.as_str()),
+            _ => true,
+        })
         .collect();
     assert_eq!(definitions, list(field(&vectors, "definitions")));
 }
@@ -159,9 +191,9 @@ fn instructions_capabilities_and_client_names_match_python() {
     }
 }
 
-/// Tools new in Rust (`kassiber_ai::catalog::RUST_ONLY_TOOLS`), absent from
-/// Python's vectors; compared separately below.
-fn rust_only(entry: &str) -> bool {
+/// The bank-statement tools new in Rust (`kassiber_ai::catalog::RUST_ONLY_TOOLS`),
+/// absent from Python's vectors; compared separately below.
+fn bank_statement_tool(entry: &str) -> bool {
     kassiber_ai::catalog::RUST_ONLY_TOOLS.contains(&entry)
 }
 
@@ -169,7 +201,7 @@ fn rust_only(entry: &str) -> bool {
 fn rust_only_bank_statement_tools_follow_the_grant() {
     let tools: Vec<_> = mcp_tools()
         .iter()
-        .filter(|tool| rust_only(tool.entry.name.as_str()))
+        .filter(|tool| bank_statement_tool(tool.entry.name.as_str()))
         .collect();
     assert_eq!(tools.len(), 3);
     for tool in &tools {

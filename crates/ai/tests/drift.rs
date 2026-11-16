@@ -126,12 +126,16 @@ fn constants_match_python() {
 
 #[test]
 fn embedded_catalog_has_every_definition() {
-    assert_eq!(tools().len(), 180);
+    // Python's 176, ui.journals.verify, the three bank-line tools and the two
+    // source coverage tools.
+    assert_eq!(tools().len(), 182);
     let reads = tools()
         .iter()
         .filter(|tool| tool.kind_class == KindClass::ReadOnly)
         .count();
-    assert_eq!(reads, 112);
+    // Python's 110, ui.journals.verify, the bank-line suggestions and
+    // ui.sources.coverage.
+    assert_eq!(reads, 113);
     let egressing: Vec<&str> = tools()
         .iter()
         .filter(|tool| tool.egresses)
