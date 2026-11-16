@@ -39,7 +39,7 @@ const CLI_READ_PATHS: &str = "
     chats.list chats.show secrets.status
     networks.inventory networks.plan networks.split-plan
     backends.list backends.kinds backends.get context.show context.current
-    workspaces.list profiles.list profiles.get accounts.list wallets.list
+    workspaces.list profiles.list profiles.get profiles.settings accounts.list wallets.list
     wallets.kinds wallets.get wallets.preview-document wallets.identify
     wallets.analyze-file
     transactions.list transactions.verify transfers.dismissals.list attachments.list attachments.verify metadata.tags.list
@@ -111,7 +111,7 @@ const CLI_OPERATOR_PATHS: &str = "
 
 const CLI_ACCOUNTING_DECISION_PATHS: &str = "
     review.apply
-    profiles.set metadata.exclude metadata.include metadata.records.excluded.set
+    profiles.set profiles.configure metadata.exclude metadata.include metadata.records.excluded.set
     metadata.records.excluded.clear metadata.records.kind.set
     metadata.records.kind.clear metadata.records.history.revert
     journals.quarantine.clear journals.quarantine.resolve.price-override
@@ -126,7 +126,7 @@ const CLI_ACCOUNTING_DECISION_PATHS: &str = "
 ";
 
 const CLI_ADMIN_PATHS: &str = "
-    daemon init projects.create chats.delete chats.clear chats.config mcp.enable
+    daemon init projects.create projects.demo chats.delete chats.clear chats.config mcp.enable
     operator.unlock operator.lock operator.stop operator.mode operator.operation.cancel
     operator.touch-id.enroll operator.touch-id.forget
     secrets.init secrets.init-resume secrets.change-passphrase
@@ -174,7 +174,7 @@ const DAEMON_READ_KINDS: &str = "
     ui.custody.gaps.review_context ui.custody.gaps.history
     ui.custody.review.plan ui.transfers.rules.list ui.saved_views.list
     ui.networks.binding ui.networks.inventory ui.networks.plan ui.networks.partition_plan
-    ui.profiles.snapshot ui.rates.summary ui.rates.coverage
+    ui.profiles.snapshot ui.profiles.settings ui.rates.summary ui.rates.coverage
     ui.audit.changes_since_last_answer
     ui.audit.evidence.summary ui.review.worklist ui.maintenance.settings
     ui.review.cases ui.review.request_input ui.review.plan ui.review.receipt

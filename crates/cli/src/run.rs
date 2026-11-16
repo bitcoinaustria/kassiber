@@ -659,6 +659,55 @@ pub fn run(
             crate::projects::execute(store.as_ref(), command, &namespace)
                 .and_then(|payload| emit(&mut sink, format, command, payload))
         }
+        command if crate::demo::COMMANDS.contains(&command) => {
+            if globals.selection.data_root.is_some() || globals.selection.project.is_some() {
+                Err(AppError::new(
+                    "invalid_flag_combination",
+                    "projects demo writes its own book; --data-root and --project select an existing one",
+                )
+                .with_hint("Use `kassiber projects demo --path <directory>` to choose where demo copies live."))
+            } else {
+                crate::demo::create(store.as_ref(), &namespace).and_then(|payload| {
+                    // Open the copy like any book (schema migrations), then
+                    // publish its local analysis index so the first
+                    // investigation does not pay for it. Both stay local.
+                    let demo = Globals {
+                        selection: Selection {
+                            project: None,
+                            data_root: Some(crate::demo::data_root(&payload)?),
+                            env_file: None,
+                        },
+                        format: None,
+                        machine: globals.machine,
+                        non_interactive: true,
+                        output: None,
+                        diagnostics_out: None,
+                        db_passphrase_fd: None,
+                    };
+                    let mut index = Value::Null;
+                    with_book(
+                        env,
+                        store.as_ref(),
+                        &demo,
+                        false,
+                        None,
+                        (&namespace, build.version, &mut diagnostics),
+                        |book, _| {
+                            index = book.chain_analysis_ops(
+                                None,
+                                None,
+                                "index.revision",
+                                &Value::Null,
+                            )?;
+                            Ok(())
+                        },
+                    )?;
+                    let mut payload = payload;
+                    kassiber_envelope::set(&mut payload, "index", index);
+                    emit(&mut sink, format, command, payload)
+                })
+            }
+        }
         "commands.describe" => describe_command(&namespace, &globals.selection)
             .and_then(|catalog| emit(&mut sink, format, &kind, catalog)),
         // Static catalogs on no-database paths: the runtime layout is

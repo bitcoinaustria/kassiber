@@ -668,6 +668,59 @@ def _cached_rate_at_or_before(history: list[tuple[int, Decimal]], timestamp: int
     return history[index][1]
 
 
+def _synthetic_continuation_rows(
+    scenario: dict[str, Any],
+    history: list[tuple[int, Decimal]],
+) -> list[tuple[int, Decimal]]:
+    """Deterministic, explicitly synthetic daily closes after the bundled history.
+
+    The bundled Kraken archive ends before the scenario's latest_time. Rather
+    than fetching live rates, the manifest's ``pricing.synthetic_continuation``
+    interpolates from the last bundled close through dated waypoints and adds a
+    small seeded per-day wobble. Rows land on daily close timestamps (UTC
+    midnight), exactly like the bundled history. Days the bundled history
+    already covers are never overridden.
+    """
+    spec = (scenario.get("pricing") or {}).get("synthetic_continuation") or {}
+    if not spec or not history:
+        return []
+    last_ts, last_rate = history[-1]
+    end_ts = _parse_iso_to_ts(str(scenario["latest_time"]))
+    anchors = [(last_ts, last_rate)]
+    for waypoint in sorted(spec.get("waypoints") or [], key=lambda row: str(row["date"])):
+        waypoint_ts = _parse_iso_to_ts(f"{waypoint['date']}T00:00:00Z")
+        rate = Decimal(str(waypoint["rate"]))
+        if rate <= 0:
+            raise ValueError(f"Synthetic continuation waypoint {waypoint['date']} needs a positive rate")
+        if waypoint_ts > last_ts:
+            anchors.append((waypoint_ts, rate))
+    if anchors[-1][0] < end_ts:
+        raise ValueError(
+            "Synthetic continuation waypoints must reach the scenario latest_time "
+            f"({_iso_from_ts(end_ts)}); the last one is {_iso_from_ts(anchors[-1][0])}"
+        )
+    jitter_bp = int(spec.get("daily_jitter_bp") or 0)
+    rows: list[tuple[int, Decimal]] = []
+    day_ts = last_ts + SECONDS_PER_DAY
+    segment = 1
+    while day_ts <= end_ts:
+        while anchors[segment][0] < day_ts:
+            segment += 1
+        (start_ts, start_rate), (stop_ts, stop_rate) = anchors[segment - 1], anchors[segment]
+        fraction = Decimal(day_ts - start_ts) / Decimal(stop_ts - start_ts)
+        trend = start_rate + (stop_rate - start_rate) * fraction
+        wobble = Decimal(_stress_jitter_bp(day_ts // SECONDS_PER_DAY, 211, jitter_bp)) / Decimal(10_000)
+        rows.append((day_ts, (trend * (1 + wobble)).quantize(Decimal("0.1"))))
+        day_ts += SECONDS_PER_DAY
+    return rows
+
+
+def _scenario_daily_rates(scenario: dict[str, Any]) -> list[tuple[int, Decimal]]:
+    """Bundled Kraken closes plus the scenario's synthetic continuation."""
+    history = _load_bundled_daily_rates(str(scenario["pricing"]["pair"]))
+    return history + _synthetic_continuation_rows(scenario, history)
+
+
 def _recurring_btc(value: Any, *, rate: Decimal, label: str) -> Decimal:
     denomination, amount = _recurring_amount_spec(value, label=label)
     if denomination == "btc":
@@ -1090,6 +1143,32 @@ def run_cli(data_root: Path, *args: str, pass_fds: tuple[int, ...] = ()) -> dict
             f"kassiber {' '.join(args)} failed\nstdout={result.stdout}\nstderr={result.stderr}"
         )
     return json.loads(result.stdout)
+
+
+def _list_transactions(data_root: Path, scope: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Every scoped transaction in ascending order, across CLI pages.
+
+    The CLI caps a page at 1000 rows and the full scenario is larger, so a
+    single page would silently drop the newest rows (including the pending one).
+    """
+    rows: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while True:
+        page = run_cli(
+            data_root,
+            "transactions",
+            "list",
+            *scope,
+            "--order",
+            "asc",
+            "--limit",
+            TRANSACTION_LIST_LIMIT,
+            *(("--cursor", cursor) if cursor else ()),
+        )
+        rows.extend(page["data"])
+        cursor = page.get("next_cursor")
+        if not page.get("has_more") or not cursor:
+            return rows
 
 
 def _local_backend_specs(*, silent_payment_scan_file: str | None = None) -> list[dict[str, Any]]:
@@ -1955,7 +2034,7 @@ def _generate_stress_history(
     receipt_plan = dict(sorted(stress["receipt_btc"].items()))
     payment_plan = list(sorted(stress["payment_btc"].items()))
     fee = _btc(stress["fee_btc"])
-    rate_history = _load_bundled_daily_rates(str(scenario["pricing"]["pair"]))
+    rate_history = _scenario_daily_rates(scenario)
     variation_bp = int(stress.get("variation_bp") or 0)
     fee_spread_bp = 4000 if variation_bp else 0
     regimes = stress.get("economic_regimes") or []
@@ -2939,6 +3018,30 @@ def _seed_real_price_cache(
         "pair": pair,
         "transaction_times": len(unique_times),
     }
+    continuation = _synthetic_continuation_rows(scenario, _load_bundled_daily_rates(pair))
+    if continuation:
+        spec = pricing["synthetic_continuation"]
+        for close_ts, rate in continuation:
+            run_cli(
+                data_root,
+                "rates",
+                "set",
+                pair,
+                _iso_from_ts(close_ts),
+                format(rate, "f"),
+                "--source",
+                str(spec["source"]),
+                "--granularity",
+                str(spec.get("granularity") or "daily"),
+                "--method",
+                str(spec.get("method") or f"{scenario['id']}-synthetic-continuation"),
+            )
+        result["synthetic_continuation"] = {
+            "source": spec["source"],
+            "samples": len(continuation),
+            "first": _iso_from_ts(continuation[0][0]),
+            "last": _iso_from_ts(continuation[-1][0]),
+        }
 
     live_env = str(pricing.get("live_source_env") or "KASSIBER_REGTEST_DEMO_LIVE_RATES")
     live_source = str(
@@ -2990,29 +3093,11 @@ def _seed_real_price_cache(
 
 def _seed_rates_and_process(data_root: Path, scenario: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
     scope = _scope(scenario)
-    transactions = run_cli(
-        data_root,
-        "transactions",
-        "list",
-        *scope,
-        "--order",
-        "asc",
-        "--limit",
-        TRANSACTION_LIST_LIMIT,
-    )["data"]
+    transactions = _list_transactions(data_root, scope)
     unique_times = sorted({row["occurred_at"] for row in transactions})
     rate_seed = _seed_real_price_cache(data_root, scenario, unique_times)
     journal = run_cli(data_root, "journals", "process", *scope)["data"]
-    transactions = run_cli(
-        data_root,
-        "transactions",
-        "list",
-        *scope,
-        "--order",
-        "asc",
-        "--limit",
-        TRANSACTION_LIST_LIMIT,
-    )["data"]
+    transactions = _list_transactions(data_root, scope)
     return journal, transactions, rate_seed
 
 
@@ -3915,6 +4000,7 @@ def _assert_expected(
     wallet_listing: list[dict[str, Any]],
     summary: dict[str, Any],
     exports: dict[str, Any],
+    tax_summary: list[dict[str, Any]] | None = None,
 ) -> None:
     expected = scenario["expected"]
     if expected.get("wallets") is not None and len(wallet_listing) != int(expected["wallets"]):
@@ -3986,6 +4072,35 @@ def _assert_expected(
             raise RuntimeError(
                 f"Expected at least {expected_pending} unconfirmed BTC rows, got {pending_count}"
             )
+    activity_months = expected.get("activity_months")
+    if activity_months:
+        observed_months = {
+            str(row.get("occurred_at") or "")[:7]
+            for row in transactions
+            if row.get("confirmed_at") and row.get("excluded") not in {True, 1, "1", "true", "True"}
+        }
+        year, month = (int(part) for part in str(activity_months["from"]).split("-"))
+        last = str(activity_months["through"])
+        missing_months = []
+        while f"{year:04d}-{month:02d}" <= last:
+            if f"{year:04d}-{month:02d}" not in observed_months:
+                missing_months.append(f"{year:04d}-{month:02d}")
+            year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+        if missing_months:
+            raise RuntimeError(f"Expected confirmed activity in every scenario month, missing {missing_months}")
+    gain_years = [int(year) for year in expected.get("realized_gain_years") or []]
+    if gain_years:
+        if tax_summary is None:
+            raise RuntimeError("realized_gain_years needs the tax summary report")
+        disposal_years = {
+            int(row["year"])
+            for row in tax_summary
+            if row.get("row_type") == "detail" and row.get("year") is not None
+            and Decimal(str(row.get("proceeds") or 0)) > 0 and Decimal(str(row.get("gain_loss") or 0)) != 0
+        }
+        missing_years = sorted(set(gain_years).difference(disposal_years))
+        if missing_years:
+            raise RuntimeError(f"Expected realized gains or losses in tax years {missing_years}")
     produced = {Path(item["path"]).name for item in exports.values()}
     for filename in expected["export_files"]:
         # The shared design writes a `.csv` full report as its `.zip` bundle.
@@ -4696,16 +4811,7 @@ def run_demo(
             pending_txids = {txids[operation["id"]] for operation in scenario["pending_operations"]}
             for attempt in range(10):
                 pending_sync = run_cli(data_root, "wallets", "sync", *scope, "--all")["data"]
-                pending_rows = run_cli(
-                    data_root,
-                    "transactions",
-                    "list",
-                    *scope,
-                    "--limit",
-                    TRANSACTION_LIST_LIMIT,
-                    "--order",
-                    "asc",
-                )["data"]
+                pending_rows = _list_transactions(data_root, scope)
                 if pending_txids.issubset({row["external_id"] for row in pending_rows}):
                     break
                 if attempt < 9:
@@ -4713,16 +4819,7 @@ def run_demo(
                     # asynchronous relative to the broadcast.
                     time.sleep(0.25)
 
-        transactions = run_cli(
-            data_root,
-            "transactions",
-            "list",
-            *scope,
-            "--limit",
-            TRANSACTION_LIST_LIMIT,
-            "--order",
-            "asc",
-        )["data"]
+        transactions = _list_transactions(data_root, scope)
         _refresh_truth_wallet_ids(truth, wallets)
         _collect_native_transfer_truth(
             truth, url=url, username=username, password=password, wallets=wallets,
@@ -4739,6 +4836,7 @@ def run_demo(
         transfer_listing = run_cli(data_root, "transfers", "list", *scope)["data"]
         quarantines = run_cli(data_root, "journals", "quarantined", *scope)["data"]
         summary = run_cli(data_root, "reports", "summary", *scope)["data"]
+        tax_summary = run_cli(data_root, "reports", "tax-summary", *scope)["data"]
         exports = _export_reports(data_root, export_dir, scenario)
         _refresh_truth_wallet_ids(truth, wallets)
         _collect_core_utxo_truth(truth, url=url, username=username, password=password, wallets=wallets)
@@ -4762,6 +4860,7 @@ def run_demo(
             wallet_listing=wallet_listing,
             summary=summary,
             exports=exports,
+            tax_summary=tax_summary,
         )
 
         # Prove the incremental resync path does real work: after the book is
@@ -4799,16 +4898,7 @@ def run_demo(
             resync_rows = resync_sync if isinstance(resync_sync, list) else [resync_sync]
             imported = sum(int(row.get("imported") or 0) for row in resync_rows)
             modes = sorted({str(row.get("bitcoinrpc_sync_mode")) for row in resync_rows if row.get("bitcoinrpc_sync_mode")})
-            transactions = run_cli(
-                data_root,
-                "transactions",
-                "list",
-                *scope,
-                "--limit",
-                TRANSACTION_LIST_LIMIT,
-                "--order",
-                "asc",
-            )["data"]
+            transactions = _list_transactions(data_root, scope)
             if imported <= 0:
                 raise RuntimeError(
                     f"Resync after a {tick_result['count']}-op business tick imported nothing (modes={modes})"

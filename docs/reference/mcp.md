@@ -332,6 +332,11 @@ For Claude Code: `claude mcp add kassiber -- kassiber mcp serve --workspace
 for local stdio servers by default and opt into `2026-07-28` separately; both
 eras work.
 
+The [demo book](demo.md) has its own agent setting: its command and JSON
+config carry `KASSIBER_AGENT_ACCESS_FILE` and `KASSIBER_OFFLINE_PREFERENCE_FILE`
+for the demo copy, so enabling agents in the demo changes nothing for the
+user's books.
+
 For an encrypted book, the user runs `kassiber operator unlock --capability
 <grant>` (the grant they chose for agents) in their own terminal for each work
 session, or uses *Unlock for agents* in the desktop. A successful unlock also

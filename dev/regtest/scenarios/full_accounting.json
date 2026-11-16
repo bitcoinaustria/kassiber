@@ -4,7 +4,7 @@
   "title": "Full accounting regtest demo",
   "description": "Disposable Bitcoin Core regtest scenario covering fiat-denominated monthly business activity converted through bundled Kraken history, deterministic clock and volume variation, multiple external counterparty clusters, script-type wallet rotations, scheduled edge cases, pool-style mining payouts, self-transfers, collaborative transactions, RBF replacement, dust, pending activity, closed and open Bitcoin-backed loans, volatile fees, and real Bitcoin/Liquid sync paths.",
   "base_time": "2019-01-15T09:00:00Z",
-  "latest_time": "2026-07-01T00:00:00Z",
+  "latest_time": "2026-11-14T00:00:00Z",
   "workspace": "Regtest Demo",
   "profile": {
     "label": "Full Accounting",
@@ -22,7 +22,24 @@
     "source": "kraken-bundled",
     "live_source": "mempool",
     "live_source_env": "KASSIBER_REGTEST_DEMO_LIVE_RATES",
-    "description": "Seed Kassiber's bundled Kraken BTC-EUR daily history and let transaction auto-pricing use the cached real Bitcoin price at or before each backdated transaction. LBTC rows use Kassiber's LBTC->BTC rate-pair alias.",
+    "description": "Seed Kassiber's bundled Kraken BTC-EUR daily history and let transaction auto-pricing use the cached real Bitcoin price at or before each backdated transaction. LBTC rows use Kassiber's LBTC->BTC rate-pair alias. Days after the bundled history ends use the synthetic continuation below.",
+    "synthetic_continuation": {
+      "source": "regtest-demo-synthetic",
+      "granularity": "daily",
+      "method": "full-accounting-v1-synthetic-continuation",
+      "daily_jitter_bp": 150,
+      "note": "SYNTHETIC regtest-only BTC-EUR daily closes, not market data. They start the day after the bundled Kraken history ends, interpolate linearly from its last close through these waypoints, and add deterministic per-day jitter so the demo has prices up to latest_time without fetching live rates.",
+      "waypoints": [
+        {"date": "2026-05-01", "rate": "62400"},
+        {"date": "2026-06-01", "rate": "67100"},
+        {"date": "2026-07-01", "rate": "64300"},
+        {"date": "2026-08-01", "rate": "70800"},
+        {"date": "2026-09-01", "rate": "66200"},
+        {"date": "2026-10-01", "rate": "73500"},
+        {"date": "2026-11-01", "rate": "76900"},
+        {"date": "2026-11-14", "rate": "78200"}
+      ]
+    },
     "fallback": {
       "base_rate": "42000",
       "step_rate": "25",
@@ -45,7 +62,7 @@
   },
   "stress": {
     "enabled": true,
-    "cycles": 84,
+    "cycles": 96,
     "days_between_cycles": 30,
     "variation_bp": 2200,
     "economic_regimes": [
@@ -90,6 +107,13 @@
         "receipt_scale": "0.85",
         "spend_scale": "0.95",
         "note": "Mature, slightly cash-negative steady state; gentle drawdown."
+      },
+      {
+        "label": "2026 renewed accumulation",
+        "cycles": 12,
+        "receipt_scale": "1.20",
+        "spend_scale": "1.00",
+        "note": "Revenue picks up again through November 2026; the treasury rebuilds its stack while still selling a slice of old reserves."
       }
     ],
     "receipt_btc": {
@@ -323,6 +347,24 @@
         "pair_policy": "taxable",
         "out_external_id": "liquid_pegout_2024_lbtc_out",
         "note": "Liquid treasury liquidity is pegged back out to on-chain treasury."
+      },
+      {
+        "id": "liquid_chain_swap_2026",
+        "cycle": 95,
+        "from_role": "spending",
+        "to_role": "liquid_operations",
+        "out_btc": "0.02400000",
+        "in_btc": "0.02338000",
+        "fee_btc": "0.00001000",
+        "pair_kind": "chain-swap",
+        "pair_policy": "taxable",
+        "provider": "boltz",
+        "boltz_flow": "chain-swap",
+        "boltz_api": "/v2/swap/chain",
+        "boltz_from": "BTC",
+        "boltz_to": "L-BTC",
+        "in_external_id": "liquid_chain_swap_2026_lbtc_in",
+        "note": "A second Boltz BTC to L-BTC chain swap tops up Liquid operations in autumn 2026."
       }
     ]
   },
@@ -756,6 +798,49 @@
       "loan_id": "regtest-loan-2",
       "counterparty": "lender",
       "note": "Principal for the still-open second collateralized loan."
+    },
+    {
+      "id": "cold_reserve_purchase_2026",
+      "kind": "external_receipt",
+      "cycle": 89,
+      "from": "external",
+      "to": "cold",
+      "amount_btc": "0.31457290",
+      "counterparty": "exchange",
+      "note": "A sizeable exchange purchase settles into cold storage during the spring 2026 dip."
+    },
+    {
+      "id": "cold_small_utxo_consolidation_2026",
+      "kind": "many_input_consolidation",
+      "cycle": 92,
+      "wallet": "cold",
+      "count": 12,
+      "min_count": 6,
+      "max_input_btc": "0.25000000",
+      "fee_btc": "0.00001500",
+      "fee_curve": true,
+      "note": "Cold storage consolidates its small monthly reserve deposits in the quiet summer 2026 fee market."
+    },
+    {
+      "id": "treasury_exchange_sale_2026",
+      "kind": "payment",
+      "cycle": 93,
+      "from": "treasury",
+      "to": "external",
+      "amount_btc": "0.18736420",
+      "fee_btc": "0.00001350",
+      "counterparty": "exchange",
+      "note": "Treasury sells a slice of its long-held reserve through an exchange deposit, realizing 2026 gains."
+    },
+    {
+      "id": "cold_to_treasury_2026",
+      "kind": "self_transfer",
+      "cycle": 94,
+      "from": "cold",
+      "to": "treasury",
+      "amount_btc": "0.12483150",
+      "fee_btc": "0.00000940",
+      "note": "Cold storage tops up treasury ahead of the fourth-quarter payroll runs."
     }
   ],
   "pending_operations": [
@@ -780,9 +865,11 @@
       "BTC",
       "LBTC"
     ],
-    "min_transactions": 990,
-    "min_active_transactions": 985,
+    "min_transactions": 1100,
+    "min_active_transactions": 1095,
     "pending_transactions": 1,
+    "activity_months": {"from": "2025-01", "through": "2026-11"},
+    "realized_gain_years": [2024, 2025, 2026],
     "min_transfer_pairs": 3,
     "ownership_derived_transfer_pairs": 2,
     "loan_marks": 6,

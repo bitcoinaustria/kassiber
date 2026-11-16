@@ -42,6 +42,7 @@ mod accounts;
 mod backends;
 mod backup;
 mod context;
+mod demo;
 mod networks;
 mod offline;
 pub mod operator;

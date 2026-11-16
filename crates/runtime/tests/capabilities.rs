@@ -48,6 +48,12 @@ fn tables_match_python() {
         ("journals.verify", "journals.list"),
         // Pinning a certificate is a trust decision, admin like revealing a token.
         ("backends.trust-certificate", "backends.reveal-token"),
+        // A disposable demo book outside the catalog: admin like creating a project.
+        ("projects.demo", "projects.create"),
+        // Book settings (docs/reference/tax.md#book-settings): a read beside
+        // profiles get, a change as profiles set (an accounting decision).
+        ("profiles.settings", "profiles.get"),
+        ("profiles.configure", "profiles.set"),
     ];
     for (leaf, sibling) in rust_only {
         assert_eq!(cli_capability(leaf), cli_capability(sibling), "{leaf}");
@@ -81,6 +87,8 @@ fn tables_match_python() {
         ("ui.backends.certificate.trust", "ui.backends.delete"),
         // Which ways two transactions may be linked: a read beside the pair list.
         ("ui.transfers.pair_options", "ui.transfers.list"),
+        // Any book's settings and choices: a read beside the books snapshot.
+        ("ui.profiles.settings", "ui.profiles.snapshot"),
     ];
     for (kind, sibling) in rust_only_kinds {
         assert!(daemon_capability(kind).is_some(), "{kind}");
