@@ -81,6 +81,7 @@ fn assets_follow_normalize_asset_code_and_exchange_aliases() {
             (other.to_owned(), kraken.to_owned()),
             "{raw}"
         );
+        assert_eq!(asset_code(raw), other);
     }
     assert_eq!(asset(&s("A".repeat(64))), "a".repeat(64));
 }

@@ -3,6 +3,7 @@ pub mod analysis;
 pub mod assets;
 pub mod attachment;
 mod binance;
+mod bitvavo;
 mod btcpay;
 mod bull;
 mod bull_wallet;
@@ -67,6 +68,7 @@ pub enum Format {
     CoinTracking,
     Blockpit,
     Binance,
+    Bitvavo,
     BtcpayCsv,
     BtcpayJson,
     Ledger,
@@ -91,6 +93,7 @@ impl Format {
             "strike_csv" => Self::Strike,
             "ledgerlive_csv" => Self::LedgerLive,
             "binance_supplemental_csv" => Self::Binance,
+            "bitvavo_csv" => Self::Bitvavo,
             "cointracking_csv" => Self::CoinTracking,
             "blockpit_csv" => Self::Blockpit,
             "wasabi_bundle" => Self::Wasabi,
@@ -118,6 +121,7 @@ impl Format {
             Self::CoinTracking => "cointracking_csv",
             Self::Blockpit => "blockpit_csv",
             Self::Binance => "binance_supplemental_csv",
+            Self::Bitvavo => "bitvavo_csv",
             Self::Ledger => "generic_ledger",
         }
     }
@@ -137,6 +141,7 @@ impl Format {
                 None,
                 &mut Default::default(),
             ),
+            Self::Bitvavo => bitvavo::parse(csv::rows(&csv::read_sig(file)?)?, None).map(|r| r.0),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
             Self::River => river::parse(csv::load(file)?),
             Self::Bull => bull::parse(csv::load(file)?),
@@ -184,6 +189,8 @@ impl Format {
                 )?;
                 Ok((rows, Some(tally)))
             }
+            Self::Bitvavo => bitvavo::parse(csv::rows(&csv::read_sig(file)?)?, Some(target))
+                .map(|(rows, tally)| (rows, Some(tally))),
             _ => self.load(file).map(|rows| (rows, None)),
         }
     }
@@ -196,6 +203,7 @@ impl Format {
                 | Self::Binance
                 | Self::Coinfinity
                 | Self::LedgerLive
+                | Self::Bitvavo
         )
     }
     fn evidence(self) -> bool {
@@ -214,11 +222,12 @@ impl Format {
         }
     }
     fn active(self) -> bool {
-        matches!(self, Self::TwentyOne | Self::Strike)
+        matches!(self, Self::TwentyOne | Self::Strike) || self == Self::Bitvavo
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
             Self::Binance => ("Binance", "binance", "binance_rows"),
+            Self::Bitvavo => ("Bitvavo", "bitvavo", "bitvavo_rows"),
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),
@@ -2050,6 +2059,9 @@ fn apply_records(
         ids,
         false,
     )?;
+    if request.format == Format::Bitvavo {
+        exchange_api::tag_same_second(conn, profile, &wallet.id, &inserted_ids, ids)?;
+    }
     let invalidated = !imported.is_empty() || !updated.is_empty();
     if invalidated {
         invalidate_journals(conn, profile)?;

@@ -120,6 +120,7 @@ pub fn execute(
         | "import-pocket"
         | "import-pocketbitcoin"
         | "import-strike"
+        | "import-bitvavo"
         | "import-ledger-live"
         | "import-cointracking"
         | "import-blockpit"
@@ -141,6 +142,7 @@ pub fn execute(
                     Some("import-coinfinity") => kassiber_wallets::file_import::Format::Coinfinity,
                     Some("import-21bitcoin") => kassiber_wallets::file_import::Format::TwentyOne,
                     Some("import-strike") => kassiber_wallets::file_import::Format::Strike,
+                    Some("import-bitvavo") => kassiber_wallets::file_import::Format::Bitvavo,
                     Some("import-cointracking") => {
                         kassiber_wallets::file_import::Format::CoinTracking
                     }

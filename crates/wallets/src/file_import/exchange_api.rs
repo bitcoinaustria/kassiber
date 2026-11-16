@@ -1342,3 +1342,7 @@ pub(super) fn tag_same_second(
     }
     Ok(uncertain.len() as i64)
 }
+/// An asset code as a file export writes it, normalized as API rows are.
+pub(super) fn asset_code(text: &str) -> String {
+    asset(&s(text))
+}

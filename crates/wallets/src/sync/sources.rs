@@ -10,7 +10,7 @@ use kassiber_store::rusqlite::Connection;
 
 type Result<T> = std::result::Result<T, AppError>;
 
-const ACTIVE_FORMATS: &[&str] = &["21bitcoin_csv", "strike_csv"];
+const ACTIVE_FORMATS: &[&str] = &["21bitcoin_csv", "strike_csv", "bitvavo_csv"];
 const EVIDENCE_FORMATS: &[&str] = &[
     "bullbitcoin_csv",
     "coinfinity_csv",

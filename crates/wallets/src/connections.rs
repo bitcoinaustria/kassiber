@@ -19,6 +19,7 @@ pub const SOURCE_FORMATS: &[&str] = &[
     "strike_csv",
     "ledgerlive_csv",
     "binance_supplemental_csv",
+    "bitvavo_csv",
     "cointracking_csv",
     "blockpit_csv",
     "wasabi_bundle",

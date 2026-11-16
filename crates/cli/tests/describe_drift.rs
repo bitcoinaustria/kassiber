@@ -20,6 +20,7 @@ use kassiber_pyjson::{dumps, Options, Value};
 const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[
     ("sync-bitpanda", "sync-binance"),
     ("sync-bitvavo", "sync-bitpanda"),
+    ("import-bitvavo", "import-strike"),
 ];
 
 /// Rust-only leaves with no Python sibling to be described like, each with

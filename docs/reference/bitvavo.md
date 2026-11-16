@@ -54,6 +54,24 @@ text; 311 (no View access), 307 (IP whitelist) and 305/306 (inactive key)
 get their own hint. The desktop key check reads the balance and one history
 row and reports `read_only: null`.
 
+## CSV export
+
+Transaction history → Export. Comma-separated UTF-8, optional BOM, header
+`Timezone,Date,Time,Type,Currency,Amount,Quote Currency,Quote Price,Received / Paid Currency,Received / Paid Amount,Fee currency,Fee amount,Status,Transaction ID,Address`
+(all but `Address` required). An active custodial ledger, imported in
+`full` mode like Strike.
+
+- `Date` `YYYY-MM-DD` and `Time` `HH:MM:SS[.fff]` are wall time in
+  `Timezone`: `Europe/Amsterdam` or `UTC`. Other zones, and wall times the
+  summer-time change skips or repeats, are refused.
+- `Amount` is signed (negative when the row's currency leaves), `Received /
+  Paid Amount` is the trade's quote side, after the fee, rounded to cents.
+  Exponents (`1e-05`) are read exactly.
+- A withdrawal's `Amount` includes the fee; Kassiber stores `|Amount| − fee`
+  (in integer msat) as sent and the fee apart, as the API states them.
+- `Status` `Completed`/`Distributed` import, `Pending`/`Canceled` rows are
+  left out, any other status refuses the file.
+
 ## Mapping
 
 The wallet's `asset_scope` ([other crypto assets](../plan/24-crypto-assets.md))

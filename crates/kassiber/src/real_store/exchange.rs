@@ -24,7 +24,14 @@ fn allowed(operation: &str) -> &'static [&'static str] {
     match operation {
         "ui.connections.exchange.status" => &["wallet"],
         "ui.connections.exchange.test" => &["backend", "exchange", "api_key", "api_secret", "url"],
-        "ui.connections.exchange.create" => &["exchange", "label", "api_key", "api_secret", "url"],
+        "ui.connections.exchange.create" => &[
+            "exchange",
+            "label",
+            "wallet",
+            "api_key",
+            "api_secret",
+            "url",
+        ],
         _ => &["wallet"],
     }
 }
@@ -279,10 +286,19 @@ impl RealBook {
 
     /// `ui.connections.exchange.create`: the backend `backends create` stores
     /// and the provider wallet `wallets sync-<kind>` creates. No network.
+    /// With `wallet`, the backend is attached to that existing wallet of the
+    /// same exchange instead (a CSV-imported one), which keeps its file source.
     fn exchange_create(&mut self, args: &Value) -> Result<Value, AppError> {
         let kind = exchange(args)?;
         let credentials = credentials(&kind, args)?;
         let url = url(&kind, args)?;
+        let attach = text(args, "wallet")?;
+        if attach.is_some() && text(args, "label")?.is_some() {
+            return Err(AppError::new(
+                "validation",
+                "Name a new connection or attach to an existing wallet, not both",
+            ));
+        }
         let label =
             text(args, "label")?.unwrap_or_else(|| desktop::provider_name(&kind).to_owned());
         let profile = self.exchange_profile()?;
@@ -302,7 +318,7 @@ impl RealBook {
             .optional()
             .map_err(|e| error(map_sqlite_error(e)))?
             .unwrap_or(false);
-        if taken {
+        if taken && attach.is_none() {
             return Err(AppError::new(
                 "conflict",
                 format!("A wallet named '{label}' already exists in this book"),
@@ -341,16 +357,19 @@ impl RealBook {
             });
         #[cfg(not(feature = "test-harness"))]
         let identity = None;
-        let wallet =
-            match desktop::create_wallet(conn, &profile, &label, &kind, &name, identity.as_ref()) {
-                Ok(wallet) => wallet,
-                Err(error) => {
-                    // Leave no key behind for a connection that does not exist.
-                    let _ = conn.execute("DELETE FROM backends WHERE name=?", [&name]);
-                    self.backends = before;
-                    return Err(error);
-                }
-            };
+        let created = match &attach {
+            Some(reference) => desktop::attach_backend(conn, &profile, reference, &kind, &name),
+            None => desktop::create_wallet(conn, &profile, &label, &kind, &name, identity.as_ref()),
+        };
+        let wallet = match created {
+            Ok(wallet) => wallet,
+            Err(error) => {
+                // Leave no key behind for a connection that does not exist.
+                let _ = conn.execute("DELETE FROM backends WHERE name=?", [&name]);
+                self.backends = before;
+                return Err(error);
+            }
+        };
         Ok(dict([
             ("exchange", s(kind.as_str())),
             (

@@ -436,6 +436,12 @@ fn sync_targets_are_the_profiles_exchange_wallets() {
     for (kind, label) in [("bitpanda", "Bitpanda"), ("kraken", "Kraken 2")] {
         desktop::create_wallet(&conn, "p", label, kind, &format!("{kind}-b"), None).unwrap();
     }
+    // A chain wallet that names a backend is no exchange connection either.
+    conn.execute_batch(
+        r#"INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES
+            ('chain-backend','ws','p','Chain','descriptor','{"backend": "kraken-b"}','2025-01-01');"#,
+    )
+    .unwrap();
     let listed: Vec<_> = desktop::targets(&conn, "p")
         .unwrap()
         .into_iter()
@@ -458,14 +464,17 @@ fn sync_targets_are_the_profiles_exchange_wallets() {
         (target.kind.as_str(), target.label.as_str()),
         ("kraken", "Kraken 2")
     );
-    // The fixture's custom wallet is not an exchange connection.
-    assert_eq!(
-        desktop::sync_target(&conn, "p", "Source")
-            .err()
-            .unwrap()
-            .code,
-        "validation"
-    );
+    // Neither the fixture's custom wallet nor the chain wallet with a
+    // backend is an exchange connection.
+    for label in ["Source", "Chain"] {
+        let error = desktop::sync_target(&conn, "p", label).err().unwrap();
+        assert_eq!(error.code, "validation", "{label}");
+        assert!(
+            error.message.ends_with("is not an exchange API connection"),
+            "{}",
+            error.message
+        );
+    }
     assert_eq!(
         desktop::create_wallet(&conn, "p", "X", "esplora", "b", None)
             .err()
@@ -473,4 +482,65 @@ fn sync_targets_are_the_profiles_exchange_wallets() {
             .code,
         "validation"
     );
+}
+
+/// A wallet of an exchange kind that imports a file (the Bitvavo or Binance
+/// CSV, or a Kraken wallet with a source file) is not an API connection
+/// until the user attaches a backend to it: its sync stays the file's.
+#[test]
+fn file_wallets_of_an_exchange_kind_are_api_connections_only_once_attached() {
+    let conn = book();
+    conn.execute_batch(
+        r#"INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES
+            ('csv-bitvavo','ws','p','Bitvavo','bitvavo','{"source_format": "bitvavo_csv"}','2025-01-01'),
+            ('csv-binance','ws','p','Binance','binance','{"source_format": "binance_supplemental_csv"}','2025-01-01'),
+            ('file-kraken','ws','p','Kraken file','kraken','{"source_file": "k.csv", "source_format": "csv"}','2025-01-01'),
+            ('hybrid-kraken','ws','p','Kraken both','kraken','{"backend": "kraken-b", "source_file": "k.csv", "source_format": "csv"}','2025-01-01'),
+            ('custom-backend','ws','p','Custom','custom','{"backend": "kraken-b"}','2025-01-01');"#,
+    )
+    .unwrap();
+    // The configured source decides, for any exchange kind: a backend makes
+    // an API connection (beside a file, too); a file alone does not, and a
+    // backend on a non-exchange kind does not either.
+    let listed: Vec<String> = desktop::targets(&conn, "p")
+        .unwrap()
+        .into_iter()
+        .map(|t| t.label)
+        .collect();
+    assert_eq!(listed, ["Kraken both"]);
+    for label in ["Bitvavo", "Binance", "Kraken file"] {
+        let error = desktop::sync_target(&conn, "p", label).err().unwrap();
+        assert_eq!(error.code, "validation", "{label}");
+        assert!(
+            error.message.contains("no exchange API key attached"),
+            "{}",
+            error.message
+        );
+    }
+    // Attaching keeps the file source and adds the backend.
+    let wallet = desktop::attach_backend(&conn, "p", "Bitvavo", "bitvavo", "bitvavo-main").unwrap();
+    assert_eq!(wallet.label, "Bitvavo");
+    let config: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id='csv-bitvavo'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let config: Json = serde_json::from_str(&config).unwrap();
+    assert_eq!(config["backend"], json!("bitvavo-main"));
+    assert_eq!(config["source_format"], json!("bitvavo_csv"));
+    let target = desktop::sync_target(&conn, "p", "Bitvavo").unwrap();
+    assert_eq!(target.backend.as_deref(), Some("bitvavo-main"));
+    // Only a wallet of the same exchange, without a backend yet.
+    for (wallet, kind, code) in [
+        ("Binance", "bitvavo", "validation"),
+        ("Bitvavo", "bitvavo", "conflict"),
+        ("Source", "bitvavo", "validation"),
+    ] {
+        let error = desktop::attach_backend(&conn, "p", wallet, kind, "x")
+            .err()
+            .unwrap();
+        assert_eq!(error.code, code, "{wallet}");
+    }
 }
