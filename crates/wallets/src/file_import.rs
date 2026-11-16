@@ -3,6 +3,7 @@ pub mod analysis;
 pub mod assets;
 pub mod attachment;
 mod binance;
+mod bitcoinde;
 mod bitfinex;
 mod bitstamp;
 mod bitvavo;
@@ -73,6 +74,7 @@ pub enum Format {
     Bitvavo,
     Bitstamp,
     Bitfinex,
+    Bitcoinde,
     BtcpayCsv,
     BtcpayJson,
     Ledger,
@@ -100,6 +102,7 @@ impl Format {
             "bitvavo_csv" => Self::Bitvavo,
             "bitstamp_csv" => Self::Bitstamp,
             "bitfinex_csv" => Self::Bitfinex,
+            "bitcoinde_csv" => Self::Bitcoinde,
             "cointracking_csv" => Self::CoinTracking,
             "blockpit_csv" => Self::Blockpit,
             "wasabi_bundle" => Self::Wasabi,
@@ -130,6 +133,7 @@ impl Format {
             Self::Bitvavo => "bitvavo_csv",
             Self::Bitstamp => "bitstamp_csv",
             Self::Bitfinex => "bitfinex_csv",
+            Self::Bitcoinde => "bitcoinde_csv",
             Self::Ledger => "generic_ledger",
         }
     }
@@ -152,6 +156,7 @@ impl Format {
             Self::Bitvavo => bitvavo::parse(csv::rows(&csv::read_sig(file)?)?, None).map(|r| r.0),
             Self::Bitstamp => bitstamp::parse(csv::rows(&csv::read_sig(file)?)?, None).map(|r| r.0),
             Self::Bitfinex => bitfinex::load(file, assets::Scope::Bitcoin).map(|r| r.0),
+            Self::Bitcoinde => bitcoinde::load(file, assets::Scope::Bitcoin).map(|r| r.0),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
             Self::River => river::parse(csv::load(file)?),
             Self::Bull => bull::parse(csv::load(file)?),
@@ -206,6 +211,9 @@ impl Format {
             Self::Bitfinex => {
                 bitfinex::load(file, target.scope).map(|(rows, tally)| (rows, Some(tally)))
             }
+            Self::Bitcoinde => {
+                bitcoinde::load(file, target.scope).map(|(rows, tally)| (rows, Some(tally)))
+            }
             _ => self.load(file).map(|rows| (rows, None)),
         }
     }
@@ -221,6 +229,7 @@ impl Format {
                 | Self::Bitvavo
                 | Self::Bitstamp
                 | Self::Bitfinex
+                | Self::Bitcoinde
         )
     }
     fn evidence(self) -> bool {
@@ -243,6 +252,7 @@ impl Format {
             || self == Self::Bitvavo
             || self == Self::Bitstamp
             || self == Self::Bitfinex
+            || self == Self::Bitcoinde
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
@@ -250,6 +260,7 @@ impl Format {
             Self::Bitvavo => ("Bitvavo", "bitvavo", "bitvavo_rows"),
             Self::Bitstamp => ("Bitstamp", "bitstamp", "bitstamp_rows"),
             Self::Bitfinex => ("Bitfinex", "bitfinex", "bitfinex_rows"),
+            Self::Bitcoinde => ("Bitcoin.de", "bitcoinde", "bitcoinde_rows"),
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),
@@ -2066,7 +2077,9 @@ fn apply_records(
     } else {
         None
     };
-    if api_source.is_some_and(|s| s.starts_with("bitcoinde:")) {
+    if request.format == Format::Bitcoinde
+        || api_source.is_some_and(|s| s.starts_with("bitcoinde:"))
+    {
         exchange_api::bitcoinde::bind(conn, &wallet.id, records)?;
     }
     let Inserted {

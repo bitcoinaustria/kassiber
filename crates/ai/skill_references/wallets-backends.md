@@ -420,6 +420,26 @@ first row (or with no ledgers file at all), keeps its movement fee, tagged
 `bitfinex-fee-unchecked` for review. The user's own
 `wallets sync-bitfinex` shares the ids; the assistant cannot run it.
 
+Bitcoin.de BTC account statement (custodial ledger, `;`-separated, German or
+English export of mein Bitcoin.de → Kontoauszug → BTC, type all, whole period):
+
+```bash
+kassiber wallets import-bitcoinde --file /path/to/kontoauszug-btc.csv
+```
+
+The statement imports in full into the `Bitcoin.de` wallet, or `--wallet`.
+BTC/EUR trades keep exact `exchange_execution` pricing from provider
+`Bitcoin.de`; deposits, payouts with their network fee and affiliate,
+kickback and welcome credits import as BTC activity. It must cover the whole
+history from a zero balance and later imports may only add newer bookings.
+Another coin's statement or row is skipped and named in `assets.unread`
+(Kassiber reads only BTC from Bitcoin.de, so a wallet whose `asset_scope` is
+`crypto` is refused). An unmapped type, or a booking Kassiber cannot book
+exactly, refuses the whole file by name: record it through the generic
+ledger. The user's own `wallets sync-bitcoinde` (a read-only key in a
+`bitcoinde` backend) maps the same bookings to the same records. The
+assistant cannot run exchange API syncs.
+
 CoinTracking / Blockpit migration history:
 
 ```bash

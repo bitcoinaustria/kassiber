@@ -184,6 +184,23 @@ fn bitcoinde_reads_only_and_maps_every_btc_booking() {
     assert_eq!(order, expected_rows().into_iter().map(|r| r.0).collect::<Vec<_>>().join(" "));
 }
 
+/// The statement CSV and the API map one booking to one row: importing both,
+/// in either order and again, stores each booking once.
+#[test]
+fn bitcoinde_csv_and_api_store_each_booking_once() {
+    use crate::file_import::tests::{import_bitcoinde, BITCOINDE_CSV};
+    for csv_first in [true, false] {
+        let conn = eur_book();
+        let file = || import_bitcoinde(&conn, BITCOINDE_CSV).unwrap();
+        let api = || sync_into(&conn, Script::new()).unwrap();
+        let runs = if csv_first { [file(), api(), api()] } else { [api(), file(), api()] };
+        let imported: Vec<&Py> = runs.iter().map(|r| at(r, "imported")).collect();
+        assert_eq!(imported, [&Py::from(7), &Py::from(0), &Py::from(0)], "csv first: {csv_first}");
+        assert_eq!(rows(&conn), expected_rows(), "csv first: {csv_first}");
+        assert_eq!(count(&conn, "SELECT count(*) FROM wallets WHERE kind='bitcoinde'"), 1);
+    }
+}
+
 #[test]
 fn bitcoinde_refuses_keys_that_can_write() {
     for write in ["createOrder", "executeTrade", "createWithdrawal", "requestDepositAddress", "someNewMethod"] {
@@ -485,3 +502,16 @@ fn bitcoinde_waits_for_credits_without_holding_the_nonce_lock() {
     assert!(free, "the nonce lock was held through the credit wait");
 }
 
+/// Importing the CSV and the API into one wallet never changes a stored
+/// trade's price: a different fiat value refuses the import, naming the
+/// booking.
+#[test]
+fn bitcoinde_reimport_refuses_a_changed_fiat_value() {
+    use crate::file_import::tests::{import_bitcoinde, BITCOINDE_CSV};
+    let conn = eur_book();
+    sync_into(&conn, Script::new()).unwrap();
+    let repriced = BITCOINDE_CSV.replace(";398.00;EUR;", ";397.00;EUR;");
+    let error = import_bitcoinde(&conn, &repriced).unwrap_err();
+    assert_eq!(error.message, "Bitcoin.de booking 'bitcoinde:TRADE1' has a fiat value of 397.00 where Kassiber imported 398.00 earlier");
+    assert_eq!(rows(&conn), expected_rows());
+}

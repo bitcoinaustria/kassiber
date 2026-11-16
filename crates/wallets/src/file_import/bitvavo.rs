@@ -172,10 +172,12 @@ fn event(columns: &exchange::Columns) -> Result<Option<Event>, AppError> {
 /// `Date` and `Time` (`YYYY-MM-DD`, `HH:MM:SS[.fff]`), wall time in `zone`,
 /// as Unix milliseconds. A wall time the clock change skips or repeats has
 /// no single instant and is refused.
-fn time(zone: &str, date: &str, clock: &str) -> Result<i64, String> {
+pub(super) fn time(zone: &str, date: &str, clock: &str) -> Result<i64, String> {
     use kassiber_pytext::zone::{civil_from_days, days_from_civil};
     let zone = match zone {
         "Europe/Amsterdam" => Zone::eu("Europe/Amsterdam", 3600),
+        // Bitcoin.de's statement (file_import/bitcoinde.rs).
+        "Europe/Berlin" => Zone::eu("Europe/Berlin", 3600),
         "UTC" | "Etc/UTC" => Zone::utc("UTC"),
         _ => {
             let zone: String = zone.chars().take(40).collect();

@@ -87,6 +87,7 @@ export type ConnectionSourceFormat =
   | "ledgerlive_csv"
   | "binance_supplemental_csv"
   | "bitvavo_csv"
+  | "bitcoinde_csv"
   | "cointracking_csv"
   | "blockpit_csv"
   | "wasabi_bundle"
@@ -728,6 +729,26 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
       "BTC buys and sells against EUR keep exact execution pricing; deposits, withdrawals and staking import as BTC activity",
       "Trades against altcoins or stablecoins (USDC) are refused by name; fiat-only rows are skipped",
       "Shares transaction ids with the Bitvavo API connection, so importing both keeps one record each",
+    ],
+  },
+  {
+    id: "bitcoinde",
+    title: "Bitcoin.de",
+    description: "Bitcoin.de BTC account statement (Kontoauszug) CSV import.",
+    category: "exchanges",
+    image: bitcoindeIcon,
+    imageClassName: "size-8",
+    status: "ready",
+    pathLabel: "Custodial platform",
+    formatLabel: "bitcoinde_csv",
+    docsHref: "https://www.bitcoin.de/de/faq/wo-kann-ich-meine-letzten-transaktionen-einsehen/183.html",
+    setupKind: "file-wallet",
+    walletKind: "bitcoinde",
+    sourceFormat: "bitcoinde_csv",
+    details: [
+      "Download the BTC statement for the whole period and import it unchanged; later imports may only add newer bookings",
+      "Buys and sells store the exact euros that changed hands; payouts carry their network fee",
+      "Other coins' statements are refused; bookings the API also returns are stored once",
     ],
   },
   {

@@ -84,7 +84,7 @@ const CLI_OPERATOR_PATHS: &str = "
     wallets.import-bitfinex
     wallets.import-ledger-live
     wallets.import-cointracking wallets.import-blockpit
-    wallets.import-binance-supplemental wallets.sync-kraken
+    wallets.import-binance-supplemental wallets.import-bitcoinde wallets.sync-kraken
     wallets.sync-coinbase wallets.sync-binance wallets.sync-bitpanda wallets.sync-bitvavo
     wallets.sync-bitstamp wallets.sync-bitfinex wallets.sync-bitcoinde
     wallets.import-ledger
