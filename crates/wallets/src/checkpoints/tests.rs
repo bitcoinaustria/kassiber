@@ -263,6 +263,103 @@ fn records_deduplicate_validate_and_stay_in_their_profile() {
 }
 
 #[test]
+fn manual_entries_parse_user_text_and_compare_at_once() {
+    let conn = book();
+    movement(&conn, "a", "2025-01-01T00:00:00Z", 100_000_000_000);
+    processed(&conn);
+    let added = add_manual(
+        &conn,
+        "p",
+        &Manual {
+            wallet: "exchange",
+            btc: "1.0",
+            as_of: "2025-01-31",
+            asset: None,
+            note: Some(" January statement "),
+            attachment: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(get(&added, "status"), Some(&s("matches")));
+    assert_eq!(
+        get(&added, "as_of"),
+        Some(&s("2025-01-31T23:59:59.999999Z"))
+    );
+    assert_eq!(get(&added, "note"), Some(&s("January statement")));
+    let refused = add_manual(
+        &conn,
+        "p",
+        &Manual {
+            wallet: "exchange",
+            btc: "1",
+            as_of: "2025-01-31",
+            asset: Some("USDT"),
+            note: None,
+            attachment: None,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(refused.code, "validation");
+    let missing = add_manual(
+        &conn,
+        "p",
+        &Manual {
+            wallet: "exchange",
+            btc: "1",
+            as_of: "2025-01-31",
+            asset: None,
+            note: None,
+            attachment: Some("nope"),
+        },
+    )
+    .unwrap_err();
+    assert_eq!(missing.code, "not_found");
+}
+
+#[test]
+fn csv_round_trips_and_refuses_a_bad_row_as_a_whole() {
+    let conn = book();
+    let text = "date,wallet,btc_amount,asset,origin,note\n\
+                2025-01-31,Exchange,0.5,BTC,manual,\"statement, page 2\"\n\
+                2025-02-28T12:00:00Z,w,0.00000000001,,api,\"=SUM(A1)\"\n";
+    let imported = import_csv(&conn, "p", text, "statements.csv").unwrap();
+    assert_eq!(get(&imported, "created"), Some(&Value::from(2)));
+    let exported = export_csv(&conn, "p", None).unwrap();
+    // The last column is each stored row's id.
+    let ids: Vec<&str> = exported
+        .lines()
+        .map(|line| line.rsplit_once(',').unwrap().1)
+        .collect();
+    assert_eq!(ids[0], "checkpoint_id");
+    assert!(ids[1..].iter().all(|id| id.len() == 36), "{ids:?}");
+    let without_ids: String = exported
+        .lines()
+        .map(|line| format!("{}\n", line.rsplit_once(',').unwrap().0))
+        .collect();
+    assert_eq!(
+        without_ids,
+        "date,wallet_id,wallet,btc_amount,asset,origin,note\n\
+         2025-01-31T23:59:59.999999Z,w,Exchange,0.50000000,BTC,manual,\"statement, page 2\"\n\
+         2025-02-28T12:00:00Z,w,Exchange,0.00000000001,BTC,manual,imported api checkpoint: =SUM(A1)\n"
+    );
+    // Re-importing the export adds nothing.
+    let again = import_csv(&conn, "p", &exported, "export.csv").unwrap();
+    assert_eq!(get(&again, "created"), Some(&Value::from(0)));
+    assert_eq!(get(&again, "unchanged"), Some(&Value::from(2)));
+    // One bad row stores nothing.
+    let bad = "date,wallet,btc_amount\n2025-03-01,Exchange,1\n2025-03-02,Exchange,-1\n";
+    let error = import_csv(&conn, "p", bad, "bad.csv").unwrap_err();
+    assert!(error.message.starts_with("Row 3:"), "{}", error.message);
+    assert_eq!(stored(&conn, "p", None).unwrap().len(), 2);
+    assert_eq!(
+        import_csv(&conn, "p", "when,amount\n", "x.csv")
+            .unwrap_err()
+            .code,
+        "validation"
+    );
+}
+
+#[test]
 fn node_checkpoints_read_the_last_successful_sync_only() {
     let conn = book();
     assert_eq!(node_checkpoint(&conn, "p", "n").unwrap(), None);
@@ -369,6 +466,124 @@ fn a_date_includes_fractional_seconds_up_to_the_next_utc_midnight() {
     assert_eq!(compared(&conn, &instant, 4_123).status, "matches");
 }
 
+/// An exported API checkpoint coming back next to manual rows is the same
+/// balance: it adds nothing and never becomes a manual copy of itself.
+#[test]
+fn reimporting_an_exported_api_checkpoint_adds_nothing() {
+    let conn = book();
+    let api = New {
+        wallet_id: "w".into(),
+        asset: "BTC".into(),
+        as_of: "2025-03-01T10:00:00Z".into(),
+        amount_msat: 42,
+        origin: "api",
+        scope: Some("kraken_spot".into()),
+        origin_ref: Some("kraken:api:main".into()),
+        attachment_id: None,
+        note: None,
+    };
+    record(&conn, "p", &api).unwrap();
+    import_csv(
+        &conn,
+        "p",
+        "date,wallet,btc_amount\n2025-01-31,Exchange,0.5\n",
+        "manual.csv",
+    )
+    .unwrap();
+    let exported = export_csv(&conn, "p", None).unwrap();
+    assert!(exported.contains(",api,"), "{exported}");
+    let again = import_csv(&conn, "p", &exported, "export.csv").unwrap();
+    assert_eq!(get(&again, "created"), Some(&Value::from(0)), "{again:?}");
+    assert_eq!(get(&again, "unchanged"), Some(&Value::from(2)));
+    let rows = stored(&conn, "p", None).unwrap();
+    assert_eq!(rows.len(), 2);
+    let api_rows: Vec<_> = rows.iter().filter(|c| c.origin == "api").collect();
+    assert_eq!(api_rows.len(), 1);
+    assert_eq!(api_rows[0].scope.as_deref(), Some("kraken_spot"));
+    // A different amount at the same time is a new, manual statement.
+    let changed = exported.replace("0.00000000042", "0.00000000043");
+    let changed = import_csv(&conn, "p", &changed, "edited.csv").unwrap();
+    assert_eq!(get(&changed, "created"), Some(&Value::from(1)));
+    let added = stored(&conn, "p", None).unwrap();
+    assert!(added
+        .iter()
+        .any(|c| c.amount_msat == 43 && c.origin == "manual" && c.scope.is_none()));
+}
+
+/// Labels that need formula escaping or differ only in case still round
+/// trip: the export names each wallet by id first.
+#[test]
+fn csv_round_trips_formula_and_case_ambiguous_labels() {
+    let conn = book();
+    conn.execute_batch(
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES
+           ('formula','ws','p','=Vault','custom','{}','2025-01-01'),
+           ('upper','ws','p','Cold','custom','{}','2025-01-01'),
+           ('lower','ws','p','cold','custom','{}','2025-01-01');",
+    )
+    .unwrap();
+    for (wallet, amount) in [("formula", 1), ("upper", 2), ("lower", 3)] {
+        record(
+            &conn,
+            "p",
+            &New {
+                wallet_id: wallet.into(),
+                asset: "BTC".into(),
+                as_of: "2025-03-01T00:00:00Z".into(),
+                amount_msat: amount,
+                origin: "manual",
+                scope: None,
+                origin_ref: None,
+                attachment_id: None,
+                note: None,
+            },
+        )
+        .unwrap();
+    }
+    let exported = export_csv(&conn, "p", None).unwrap();
+    assert!(exported.contains(",formula,'=Vault,"), "{exported}");
+    // Into a fresh copy of the book: every row lands on its own wallet.
+    conn.execute_batch("DELETE FROM balance_checkpoints")
+        .unwrap();
+    let imported = import_csv(&conn, "p", &exported, "export.csv").unwrap();
+    assert_eq!(
+        get(&imported, "created"),
+        Some(&Value::from(3)),
+        "{imported:?}"
+    );
+    let mut placed: Vec<(String, i64)> = stored(&conn, "p", None)
+        .unwrap()
+        .into_iter()
+        .map(|c| (c.wallet_id, c.amount_msat))
+        .collect();
+    placed.sort();
+    assert_eq!(
+        placed,
+        [
+            ("formula".into(), 1),
+            ("lower".into(), 3),
+            ("upper".into(), 2)
+        ]
+    );
+    // Without ids (another book): the escaped label still resolves, and an
+    // ambiguous label is refused instead of guessed.
+    conn.execute_batch("DELETE FROM balance_checkpoints")
+        .unwrap();
+    let by_label = "date,wallet,btc_amount\n2025-03-01T00:00:00Z,'=Vault,0.00000000001\n";
+    assert_eq!(
+        get(
+            &import_csv(&conn, "p", by_label, "x.csv").unwrap(),
+            "created"
+        ),
+        Some(&Value::from(1))
+    );
+    let ambiguous = "date,wallet,btc_amount\n2025-03-01T00:00:00Z,COLD,0.00000000002\n";
+    assert_eq!(
+        import_csv(&conn, "p", ambiguous, "x.csv").unwrap_err().code,
+        "validation"
+    );
+}
+
 /// A chain checkpoint is as of its sync's refresh; a transaction of the
 /// same sync dated after it (a block time ahead of the clock) makes the
 /// comparison unknown until the next sync, not a missing history.
@@ -406,6 +621,88 @@ fn a_chain_checkpoint_with_later_dated_transactions_is_unknown() {
         compare(&conn, "p", &matching, journals).unwrap().status,
         "matches"
     );
+}
+
+/// Only a recognizably exported Kassiber checkpoint (its id, origin, time
+/// and amount all match the stored row) is skipped on import; a manual row
+/// someone supplies with the same time and amount is its own evidence.
+#[test]
+fn independent_manual_rows_are_kept_next_to_an_api_checkpoint() {
+    let conn = book();
+    let api = New {
+        wallet_id: "w".into(),
+        asset: "BTC".into(),
+        as_of: "2025-03-01T10:00:00Z".into(),
+        amount_msat: 42,
+        origin: "api",
+        scope: Some("kraken_spot".into()),
+        origin_ref: Some("kraken:api:main".into()),
+        attachment_id: None,
+        note: None,
+    };
+    let (api_id, _) = record(&conn, "p", &api).unwrap();
+    let independent = "date,wallet,btc_amount,note\n\
+                       2025-03-01T10:00:00Z,Exchange,0.00000000042,March statement\n\
+                       2025-03-01T10:00:00Z,Exchange,0.00000000042,Auditor's copy\n";
+    let imported = import_csv(&conn, "p", independent, "statements.csv").unwrap();
+    assert_eq!(
+        get(&imported, "created"),
+        Some(&Value::from(2)),
+        "{imported:?}"
+    );
+    let rows = stored(&conn, "p", None).unwrap();
+    assert_eq!(rows.iter().filter(|c| c.origin == "manual").count(), 2);
+    // The export carries each row's id; its exact rows come back unchanged.
+    let exported = export_csv(&conn, "p", None).unwrap();
+    assert!(
+        exported.lines().next().unwrap().ends_with(",checkpoint_id"),
+        "{exported}"
+    );
+    assert!(exported.contains(&api_id), "{exported}");
+    let again = import_csv(&conn, "p", &exported, "export.csv").unwrap();
+    assert_eq!(get(&again, "created"), Some(&Value::from(0)), "{again:?}");
+    assert_eq!(get(&again, "unchanged"), Some(&Value::from(3)));
+    // An exported id whose row no longer matches is a new manual statement.
+    let edited = exported.replace(",0.00000000042,BTC,api,", ",0.00000000044,BTC,api,");
+    let edited = import_csv(&conn, "p", &edited, "edited.csv").unwrap();
+    assert_eq!(get(&edited, "created"), Some(&Value::from(1)));
+    assert_eq!(stored(&conn, "p", None).unwrap().len(), 4);
+}
+
+/// A row that keeps an exported checkpoint_id but changes its note is new
+/// evidence: the id alone never makes an import skip a different statement.
+/// A formula-like note comes back behind its export escape and still counts
+/// as the same row.
+#[test]
+fn an_exported_id_with_an_edited_note_is_new_manual_evidence() {
+    let conn = book();
+    let statement = "date,wallet,btc_amount,note\n\
+                     2025-03-01T10:00:00Z,Exchange,0.00000000042,March statement\n\
+                     2025-03-02T10:00:00Z,Exchange,0.00000000043,=SUM(A1)\n";
+    let first = import_csv(&conn, "p", statement, "statements.csv").unwrap();
+    assert_eq!(get(&first, "created"), Some(&Value::from(2)), "{first:?}");
+    let exported = export_csv(&conn, "p", None).unwrap();
+    // Unchanged rows, including the escaped formula-like note, replay.
+    let again = import_csv(&conn, "p", &exported, "export.csv").unwrap();
+    assert_eq!(get(&again, "created"), Some(&Value::from(0)), "{again:?}");
+    assert_eq!(get(&again, "unchanged"), Some(&Value::from(2)));
+    // The same id with a different note is the user's new statement.
+    let edited = exported.replace("March statement", "Auditor's independent confirmation");
+    assert_ne!(edited, exported);
+    let edited = import_csv(&conn, "p", &edited, "edited.csv").unwrap();
+    assert_eq!(get(&edited, "created"), Some(&Value::from(1)), "{edited:?}");
+    let notes: Vec<_> = stored(&conn, "p", None)
+        .unwrap()
+        .into_iter()
+        .filter_map(|c| c.note)
+        .collect();
+    assert!(
+        notes
+            .iter()
+            .any(|n| n == "Auditor's independent confirmation"),
+        "{notes:?}"
+    );
+    assert!(notes.iter().any(|n| n == "March statement"), "{notes:?}");
 }
 
 /// A later-dated transaction defers a chain comparison only while it could

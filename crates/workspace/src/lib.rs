@@ -2,6 +2,7 @@
 //! readiness, next actions, review badges and the book/book-set overviews.
 //! Every read is local: none processes journals, runs a matcher, infers
 //! custody, writes the book or initiates network traffic.
+pub mod balance_checks;
 pub mod overview;
 pub mod readiness;
 

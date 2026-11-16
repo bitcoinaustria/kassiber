@@ -24,6 +24,19 @@ pub const ASSETS: [&str; 2] = ["BTC", "LBTC"];
 const MSAT_PER_BTC: i128 = 100_000_000_000;
 /// BTC amounts are whole msat: at most 11 fractional digits.
 const BTC_DECIMALS: usize = 11;
+/// The CSV columns `export` writes and `import` reads.
+pub const CSV_HEADER: [&str; 8] = [
+    "date",
+    "wallet_id",
+    "wallet",
+    "btc_amount",
+    "asset",
+    "origin",
+    "note",
+    "checkpoint_id",
+];
+/// One import is bounded so a hostile file cannot grow the book without end.
+const MAX_IMPORT_ROWS: usize = 100_000;
 
 type Result<T> = std::result::Result<T, AppError>;
 
@@ -768,6 +781,401 @@ pub fn report(
         ("wallets", Value::List(wallet_rows)),
         ("checkpoints", Value::List(entries)),
     ]))
+}
+
+/// A manual checkpoint from user-entered text.
+pub struct Manual<'a> {
+    pub wallet: &'a str,
+    pub btc: &'a str,
+    pub as_of: &'a str,
+    pub asset: Option<&'a str>,
+    pub note: Option<&'a str>,
+    pub attachment: Option<&'a str>,
+}
+
+fn amount(text: &str) -> Result<i64> {
+    parse_btc_msat(kassiber_pytext::strip(text)).ok_or_else(|| {
+        AppError::new("validation", format!("Invalid BTC amount '{text}'")).with_hint(
+            "Give the balance in BTC as a plain decimal with at most 11 decimals, e.g. 0.12345678.",
+        )
+    })
+}
+
+fn asset(raw: Option<&str>) -> Result<String> {
+    let code = kassiber_pytext::upper(kassiber_pytext::strip(raw.unwrap_or("BTC")));
+    let code = if code.is_empty() {
+        "BTC".to_owned()
+    } else if code == "L-BTC" {
+        "LBTC".to_owned()
+    } else {
+        code
+    };
+    if !ASSETS.contains(&code.as_str()) {
+        return Err(AppError::new(
+            "validation",
+            format!("Balance checkpoints track BTC or LBTC, not '{code}'"),
+        )
+        .with_hint("Kassiber keeps Bitcoin only; altcoin and stablecoin balances are refused."));
+    }
+    Ok(code)
+}
+
+fn note(raw: Option<&str>) -> Option<String> {
+    raw.map(|n| kassiber_pytext::strip(n).to_owned())
+        .filter(|n| !n.is_empty())
+}
+
+/// `checkpoints add`: the user's own "this wallet held N BTC on <date>".
+pub fn add_manual(conn: &Connection, profile_id: &str, manual: &Manual<'_>) -> Result<Value> {
+    let wallet = crate::resolve(conn, profile_id, manual.wallet)?;
+    let amount_msat = amount(manual.btc)?;
+    let as_of = iso(parse_as_of(manual.as_of)?)?;
+    let new = New {
+        wallet_id: wallet.id.clone(),
+        asset: asset(manual.asset)?,
+        as_of,
+        amount_msat,
+        origin: "manual",
+        scope: None,
+        origin_ref: None,
+        attachment_id: manual
+            .attachment
+            .map(|a| kassiber_pytext::strip(a).to_owned())
+            .filter(|a| !a.is_empty()),
+        note: note(manual.note),
+    };
+    let (id, created) = record(conn, profile_id, &new)?;
+    let checkpoint = stored(conn, profile_id, Some(&wallet.id))?
+        .into_iter()
+        .find(|c| c.id.as_deref() == Some(id.as_str()))
+        .expect("recorded checkpoint");
+    let journals = journal_status(conn, profile_id)?;
+    let comparison = compare(conn, profile_id, &checkpoint, journals)?;
+    let mut value = entry(&checkpoint, &wallet.label, &comparison);
+    kassiber_envelope::set(&mut value, "created", Value::Bool(created));
+    Ok(value)
+}
+
+/// One CSV field, quoted when it holds a separator, quote or line break.
+fn csv_field(text: &str) -> String {
+    if text.contains([',', '"', '\n', '\r']) || text.starts_with([' ', '\t']) {
+        format!("\"{}\"", text.replace('"', "\"\""))
+    } else {
+        text.to_owned()
+    }
+}
+
+/// Stored checkpoints as CSV (`date,wallet,btc_amount,asset,origin,note`),
+/// oldest first. Wallets are named by label for a readable handoff.
+pub fn export_csv(conn: &Connection, profile_id: &str, wallet_id: Option<&str>) -> Result<String> {
+    let labels: std::collections::BTreeMap<String, String> = {
+        let mut statement = conn
+            .prepare("SELECT id,label FROM wallets WHERE profile_id=?")
+            .map_err(database_error)?;
+        let rows = statement
+            .query_map([profile_id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(database_error)?;
+        rows.collect::<std::result::Result<_, _>>()
+            .map_err(database_error)?
+    };
+    let mut out = CSV_HEADER.join(",");
+    out.push('\n');
+    for checkpoint in stored(conn, profile_id, wallet_id)? {
+        let label = labels
+            .get(&checkpoint.wallet_id)
+            .cloned()
+            .unwrap_or_default();
+        // A leading formula character would run in a spreadsheet.
+        let safe = |text: &str| {
+            if text.starts_with(['=', '+', '-', '@']) {
+                format!("'{text}")
+            } else {
+                text.to_owned()
+            }
+        };
+        let fields = [
+            checkpoint.as_of.clone(),
+            checkpoint.wallet_id.clone(),
+            safe(&label),
+            format_btc(checkpoint.amount_msat.into()),
+            checkpoint.asset.clone(),
+            checkpoint.origin.clone(),
+            safe(checkpoint.note.as_deref().unwrap_or("")),
+            checkpoint.id.clone().unwrap_or_default(),
+        ];
+        out.push_str(
+            &fields
+                .iter()
+                .map(|f| csv_field(f))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+/// RFC 4180 records: quoted fields may hold separators, quotes and breaks.
+fn csv_records(text: &str) -> Result<Vec<Vec<String>>> {
+    let mut records = vec![];
+    let mut record = vec![];
+    let mut field = String::new();
+    let mut chars = text.trim_start_matches('\u{feff}').chars().peekable();
+    let mut quoted = false;
+    let mut started = false;
+    while let Some(c) = chars.next() {
+        if quoted {
+            match c {
+                '"' if chars.peek() == Some(&'"') => {
+                    chars.next();
+                    field.push('"');
+                }
+                '"' => quoted = false,
+                other => field.push(other),
+            }
+            continue;
+        }
+        match c {
+            '"' if field.is_empty() => {
+                quoted = true;
+                started = true;
+            }
+            ',' => {
+                record.push(std::mem::take(&mut field));
+                started = true;
+            }
+            '\r' if chars.peek() == Some(&'\n') => {}
+            '\n' | '\r' => {
+                record.push(std::mem::take(&mut field));
+                if !(record.len() == 1 && record[0].is_empty() && !started) {
+                    records.push(std::mem::take(&mut record));
+                } else {
+                    record.clear();
+                }
+                started = false;
+            }
+            other => {
+                field.push(other);
+                started = true;
+            }
+        }
+        if records.len() > MAX_IMPORT_ROWS {
+            return Err(AppError::new(
+                "validation",
+                format!("Checkpoint CSV has more than {MAX_IMPORT_ROWS} rows"),
+            ));
+        }
+    }
+    if quoted {
+        return Err(AppError::new(
+            "validation",
+            "Checkpoint CSV ends inside a quoted field",
+        ));
+    }
+    if started || !field.is_empty() {
+        record.push(field);
+        records.push(record);
+    }
+    Ok(records)
+}
+
+/// `checkpoints import`: CSV rows (`date,wallet,btc_amount[,asset][,origin][,note]`)
+/// become manual checkpoints. Every row is checked before any is stored;
+/// one bad row refuses the file. An `origin` column is kept only as a note:
+/// a balance read from a file is the user's entry, not an API or chain fact.
+pub fn import_csv(conn: &Connection, profile_id: &str, text: &str, source: &str) -> Result<Value> {
+    let records = csv_records(text)?;
+    let Some((header, rows)) = records.split_first() else {
+        return Err(AppError::new("validation", "Checkpoint CSV is empty"));
+    };
+    let header: Vec<String> = header
+        .iter()
+        .map(|h| kassiber_pytext::lower(kassiber_pytext::strip(h)))
+        .collect();
+    let column = |name: &str| header.iter().position(|h| h == name);
+    let (wallet, wallet_id_at) = (column("wallet"), column("wallet_id"));
+    let (Some(date), Some(btc), true) = (
+        column("date"),
+        column("btc_amount"),
+        wallet.is_some() || wallet_id_at.is_some(),
+    ) else {
+        return Err(AppError::new(
+            "validation",
+            "Checkpoint CSV needs date, wallet (or wallet_id) and btc_amount columns",
+        )
+        .with_hint("Use the header date,wallet_id,wallet,btc_amount,asset,origin,note (wallet_id, asset, origin and note are optional)."));
+    };
+    let (asset_at, origin_at, note_at) = (column("asset"), column("origin"), column("note"));
+    let id_at = column("checkpoint_id");
+    let mut prepared = vec![];
+    for (index, row) in rows.iter().enumerate() {
+        let line = index + 2;
+        if row.iter().all(|f| kassiber_pytext::strip(f).is_empty()) {
+            continue;
+        }
+        let at = |i: Option<usize>| i.and_then(|i| row.get(i)).map(String::as_str);
+        let fail = |error: AppError| {
+            let message = format!("Row {line}: {}", error.message);
+            let mut refused = AppError::new(error.code.clone(), message);
+            if let Some(hint) = error.hint.as_deref() {
+                refused = refused.with_hint(hint.to_owned());
+            }
+            refused
+        };
+        let wallet = import_wallet(conn, profile_id, at(wallet_id_at), at(wallet)).map_err(fail)?;
+        let amount_msat = amount(at(Some(btc)).unwrap_or("")).map_err(fail)?;
+        let as_of = parse_as_of(at(Some(date)).unwrap_or(""))
+            .and_then(iso)
+            .map_err(fail)?;
+        let asset = asset(at(asset_at)).map_err(fail)?;
+        // A row this book exported names its checkpoint: when that row is
+        // still stored exactly as exported, the import leaves it alone.
+        let origin = note(at(origin_at)).unwrap_or_else(|| "manual".into());
+        let known = match note(at(id_at)) {
+            Some(id) => exported_known(
+                conn,
+                profile_id,
+                &id,
+                &wallet.id,
+                &asset,
+                &as_of,
+                amount_msat,
+                &origin,
+                note(at(note_at)).as_deref(),
+            )?,
+            None => false,
+        };
+        let mut note_text = note(at(note_at)).unwrap_or_default();
+        if let Some(origin) = Some(origin.clone()).filter(|o| o != "manual") {
+            if !ORIGINS.contains(&origin.as_str()) {
+                return Err(fail(AppError::new(
+                    "validation",
+                    format!("Unknown origin '{origin}'"),
+                )));
+            }
+            let prefix = format!("imported {origin} checkpoint");
+            note_text = if note_text.is_empty() {
+                prefix
+            } else {
+                format!("{prefix}: {note_text}")
+            };
+        }
+        prepared.push((
+            known,
+            New {
+                wallet_id: wallet.id,
+                asset,
+                as_of,
+                amount_msat,
+                origin: "manual",
+                scope: None,
+                origin_ref: Some(format!("csv:{source}")),
+                attachment_id: None,
+                note: (!note_text.is_empty()).then_some(note_text),
+            },
+        ));
+    }
+    let (mut created, mut unchanged) = (0i64, 0i64);
+    kassiber_store::begin_write_savepoint(conn, "checkpoint_import").map_err(database_error)?;
+    let result = prepared.iter().try_for_each(|(known, new)| {
+        // An exported row coming back adds nothing; any other row is the
+        // user's own statement, never gaining another origin's authority.
+        let written = !known && record(conn, profile_id, new)?.1;
+        if written {
+            created += 1;
+        } else {
+            unchanged += 1;
+        }
+        Ok::<(), AppError>(())
+    });
+    match &result {
+        Ok(()) => conn.execute_batch("RELEASE checkpoint_import"),
+        Err(_) => conn.execute_batch("ROLLBACK TO checkpoint_import;RELEASE checkpoint_import"),
+    }
+    .map_err(database_error)?;
+    result?;
+    Ok(dict([
+        ("rows", Value::Int((prepared.len() as i64).into())),
+        ("created", Value::Int(created.into())),
+        ("unchanged", Value::Int(unchanged.into())),
+    ]))
+}
+
+/// The wallet an import row names: its `wallet_id` in this book first, then
+/// the label, then the label without the `'` export added in front of a
+/// formula character.
+fn import_wallet(
+    conn: &Connection,
+    profile_id: &str,
+    wallet_id: Option<&str>,
+    label: Option<&str>,
+) -> Result<crate::Wallet> {
+    if let Some(id) = wallet_id
+        .map(kassiber_pytext::strip)
+        .filter(|id| !id.is_empty())
+    {
+        let found: Option<String> = conn
+            .query_row(
+                "SELECT id FROM wallets WHERE profile_id=? AND id=?",
+                [profile_id, id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(database_error)?;
+        if let Some(found) = found {
+            return crate::resolve(conn, profile_id, &found);
+        }
+    }
+    let label = label.unwrap_or("");
+    match crate::resolve(conn, profile_id, label) {
+        Err(error) if error.code == "not_found" => match label.strip_prefix('\'') {
+            Some(rest) if rest.starts_with(['=', '+', '-', '@']) => {
+                crate::resolve(conn, profile_id, rest)
+            }
+            _ => Err(error),
+        },
+        other => other,
+    }
+}
+
+/// Whether an import row is a checkpoint this book exported and still holds
+/// exactly: the same id, wallet, asset, time, amount, origin and note. The
+/// note is compared with its exported form too (a formula-like note is
+/// exported behind a `'`), so an edited note is new evidence, never a replay.
+#[allow(clippy::too_many_arguments)]
+fn exported_known(
+    conn: &Connection,
+    profile_id: &str,
+    id: &str,
+    wallet_id: &str,
+    asset: &str,
+    as_of: &str,
+    amount_msat: i64,
+    origin: &str,
+    imported_note: Option<&str>,
+) -> Result<bool> {
+    let stored: Option<Option<String>> = conn
+        .query_row(
+            "SELECT note FROM balance_checkpoints WHERE profile_id=? AND id=? AND wallet_id=? \
+             AND asset=? AND as_of=? AND amount_msat=? AND origin=?",
+            params![profile_id, id, wallet_id, asset, as_of, amount_msat, origin],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(database_error)?;
+    let Some(stored) = stored else {
+        return Ok(false);
+    };
+    let stored = note(stored.as_deref());
+    Ok(match (stored.as_deref(), imported_note) {
+        (None, None) => true,
+        (Some(kept), Some(imported)) => {
+            imported == kept
+                || (kept.starts_with(['=', '+', '-', '@'])
+                    && imported.strip_prefix('\'') == Some(kept))
+        }
+        _ => false,
+    })
 }
 
 #[cfg(test)]
