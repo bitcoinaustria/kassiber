@@ -70,7 +70,9 @@ file source.
 
 An exchange wallet's page shows an exchange card instead of the chain refresh:
 whether its key is stored, the last sync of this session (time, new and read
-rows, skipped Bitpanda operations) or its error, and **Sync now**. The header
+rows, skipped Bitpanda operations, Bitpanda's BTC balance against the book's)
+or its error, and **Sync now**. The balance is masked when amounts are hidden;
+a mismatch adds a note naming the usual causes. The header
 Refresh runs the same sync; Full rescan is hidden. Errors are explained by
 code, then the daemon's own message and hint:
 
@@ -83,6 +85,32 @@ code, then the daemon's own message and hint:
 | `validation` | an entry Kassiber cannot book safely, such as Bitpanda's unrecognised types, Bitvavo's stablecoin trades or Bitfinex's margin and unknown ledger entries; nothing imported, please report it |
 | `config_error` | the saved key is incomplete |
 | `backend_timeout`, `network_error`, `app_error` | unreachable, slow, or an HTTP error |
+
+### Other crypto assets
+
+A wallet's `asset_scope` ([plan 24](../plan/24-crypto-assets.md)) decides
+whether a sync keeps crypto assets other than Bitcoin. When the last sync
+reports `assets.skipped` and the wallet's scope is `bitcoin`, the card names
+them ("Also found ETH, SOL, BEST: 42 entries") with **Also track these
+assets**. That stores `asset_scope: crypto` through `ui.wallets.update`, then
+runs Sync now; rows already imported deduplicate by external id. A `crypto`
+wallet says so and offers **Track Bitcoin only**. Switching back only stops
+later syncs and imports from keeping other assets: the rows already imported
+stay in the book, and the confirmation says so (exclude them on the
+Transactions page to keep them out of reports). Both directions are a wallet
+change, so they ask for the database passphrase, or in a plaintext book for
+the typed `CHANGE LOCAL DATA`, like any other wallet edit; nothing is sent
+until Sync now runs. `assets.excluded` (stocks, ETFs, metals) is named as not
+imported, without a toggle; so is `assets.unread`, the other coins of an
+exchange Kassiber reads only Bitcoin from (Bitfinex, Bitcoin.de), named as
+not imported with the generic CSV/JSON import as the way to record them.
+`swap_pairs` above zero is named as the paired crypto-to-crypto swaps.
+
+The provider import result in the Add connection dialog shows the same
+prompt. Turning other assets on there imports the same file again with the
+arguments of the import the user just ran; when the dialog kept no path
+(a bundle import), it asks the user to choose the file again. Kassiber never
+re-reads a file the user did not choose for that import.
 
 The last sync result lives in the open book's memory only
 (`ui.connections.exchange.status`), so it resets when Kassiber restarts or the
@@ -148,6 +176,9 @@ proxies; the desktop never sends it.
 - `ui-tauri/src/components/kb/exchange/*.dom.test.tsx`: the setup panel
   (guides, exact test arguments, retest after a change, explained errors,
   German), the dialog flow (no request before Test connection, create without
-  sync unless opted in) and the wallet card.
+  sync unless opted in) and the wallet card, including the asset scope prompt
+  (store then sync, re-auth, switching back without a sync, excluded
+  holdings). `ui-tauri/src/components/kb/assets/ImportAssetsSummary.dom.test.tsx`
+  covers the import result's prompt (same file again, or pick it again).
 - `crates/wallets/scripts/exchange_mutations.json`: the desktop entries, each
   killed by named tests.

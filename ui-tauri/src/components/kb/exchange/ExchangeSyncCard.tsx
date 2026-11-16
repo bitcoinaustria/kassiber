@@ -4,11 +4,15 @@ import { KeyRound, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { currentUiLocale, formatCount } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
+import { useUiStore } from "@/store/ui";
 
+import { AssetScopeNotice } from "../assets/AssetScopeNotice";
+import { isAssetScope, readImportAssets } from "../assets/importAssets";
 import { ExchangeErrorNotice } from "./ExchangeErrorNotice";
 import {
   EXCHANGE_PROVIDER_NAMES,
   exchangeErrorKind,
+  formatMsatAsBtc,
   type ExchangeKind,
 } from "./exchangeApiModel";
 import type { useExchangeSync } from "./useExchangeSync";
@@ -38,6 +42,10 @@ export function ExchangeSyncCard({
   const needsRust = statusError && exchangeErrorKind(statusError.code) === "needsRust";
   const error = lastError ?? (lastSync?.status === "error" ? lastSync.error ?? null : null);
   const keyStored = row ? row.backend_configured && row.has_api_key : null;
+  const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const balance = lastSync?.status === "ok" ? lastSync.provider_balance ?? null : null;
+  const assets = lastSync?.status === "ok" ? readImportAssets(lastSync.assets) : null;
+  const scope = isAssetScope(row?.asset_scope) ? row.asset_scope : "bitcoin";
   const skipped = lastSync?.skipped
     ? Object.values(lastSync.skipped).reduce((total, value) => total + (value ?? 0), 0)
     : 0;
@@ -102,12 +110,56 @@ export function ExchangeSyncCard({
                   : t("exchange.sync.failed", { time: formatTime(lastSync.at) })}
             </dd>
           </div>
+          {balance ? (
+            <div className="flex justify-between gap-3 border-b border-border/60 py-1.5">
+              <dt className="text-muted-foreground">
+                {t("exchange.sync.balance", { provider })}
+              </dt>
+              <dd
+                className={cn(
+                  "m-0 text-right font-medium",
+                  balance.status !== "unavailable" && hideSensitive && "sensitive",
+                )}
+              >
+                {balance.status === "unavailable"
+                  ? t("exchange.sync.balanceUnavailable")
+                  : balance.status === "matches"
+                    ? t("exchange.sync.balanceMatches", {
+                        amount: `₿ ${formatMsatAsBtc(balance.provider_msat ?? 0)}`,
+                      })
+                    : t("exchange.sync.balanceMismatch", {
+                        amount: `₿ ${formatMsatAsBtc(balance.provider_msat ?? 0)}`,
+                        book: `₿ ${formatMsatAsBtc(balance.book_msat ?? 0)}`,
+                      })}
+              </dd>
+            </div>
+          ) : null}
         </dl>
       )}
+      {balance?.status === "mismatch" ? (
+        <p className="m-0 text-xs text-amber-700 dark:text-amber-400">
+          {t("exchange.sync.balanceMismatchNote", { provider })}
+        </p>
+      ) : null}
       {lastSync?.status === "ok" && skipped > 0 ? (
         <p className="m-0 text-xs text-muted-foreground">
           {t("exchange.sync.skipped", { count: skipped })}
         </p>
+      ) : null}
+      {row && !needsRust ? (
+        <AssetScopeNotice
+          wallet={row.wallet_id}
+          scope={scope}
+          assets={assets}
+          swapPairs={lastSync?.status === "ok" ? lastSync.swap_pairs : null}
+          rerun="sync"
+          disabled={disabled || state.isPending}
+          onScopeChanged={async (next) => {
+            // Turning other assets on syncs again so the skipped rows arrive;
+            // turning them off only affects later syncs.
+            if (next === "crypto") await state.sync();
+          }}
+        />
       ) : null}
       {error && !needsRust ? <ExchangeErrorNotice provider={provider} error={error} /> : null}
       <p className="m-0 text-2xs text-muted-foreground">{t("exchange.sync.sessionNote")}</p>

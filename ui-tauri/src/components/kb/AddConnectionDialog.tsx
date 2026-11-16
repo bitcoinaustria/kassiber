@@ -102,6 +102,8 @@ import {
   type BtcpayWalletOption,
 } from "./btcpay/btcpaySetupModel";
 import { knownWalletImportSource, isHistoryImportSource, sourceForConnectionCategory } from "./connectionImportSource";
+import { ImportAssetsSummary, type ImportReplay } from "./assets/ImportAssetsSummary";
+import { readImportAssets } from "./assets/importAssets";
 import { ExchangeApiSetupPanel } from "./exchange/ExchangeApiSetupPanel";
 import {
   EXCHANGE_PROVIDER_NAMES,
@@ -197,6 +199,9 @@ interface SyncResult {
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
+  /** What the wallet's asset scope left out (docs/plan/24-crypto-assets.md). */
+  assets?: unknown;
+  swap_pairs?: number;
 }
 
 type GenericLedgerPreviewSource = {
@@ -378,6 +383,11 @@ interface ImportFileResult {
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
+  /** What the wallet's asset scope left out (docs/plan/24-crypto-assets.md). */
+  assets?: unknown;
+  swap_pairs?: number;
+  /** The import's own arguments, kept on this client to import it again. */
+  localReplay?: ImportReplay | null;
 }
 
 type Bip329MatchStatus = "exact" | "ambiguous" | "unmatched" | "preserved";
@@ -2126,7 +2136,8 @@ function AddConnectionDialogContent({
                 walletInfo: form.wasabiWalletInfo, additional: form.wasabiAdditional }).bundle : null;
           const envelope = await importFile.mutateAsync({ wallet: historyTarget.id, source_format: sourceFormat,
             ...(bundle ? { source_bundle: bundle } : { source_file: form.sourceFile.trim() }) });
-          setLastImportResult(envelope.data ?? null);
+          setLastImportResult(withReplay(envelope.data, bundle ? null : {
+            wallet: historyTarget.id, source_format: sourceFormat, source_file: form.sourceFile.trim() }));
         } else if (
           selected.sourceFormat === "btcpay_csv" &&
           form.btcpayCsvImportMode === "existing_wallet"
@@ -2175,7 +2186,13 @@ function AddConnectionDialogContent({
             );
             const importSummary = importResultFromSyncResult(result);
             if (importSummary) {
-              setLastImportResult(importSummary);
+              setLastImportResult(
+                withReplay(importSummary, {
+                  wallet: label,
+                  source_format: sourceFormat,
+                  source_file: form.sourceFile.trim(),
+                }),
+              );
             }
           }
           notifyAdded(
@@ -4632,7 +4649,21 @@ function AddConnectionDialogContent({
       inserted_records: result.inserted_records,
       updated_records: result.updated_records,
       reconciliation_records: result.reconciliation_records,
+      assets: result.assets,
+      swap_pairs: result.swap_pairs,
     };
+  };
+
+  // A wallet import read from a path the user chose here: kept so that
+  // tracking other crypto assets can import the same file again.
+  const withReplay = (
+    result: ImportFileResult | null | undefined,
+    replay: ImportReplay | null,
+  ): ImportFileResult | null => (result ? { ...result, localReplay: replay } : null);
+
+  const reimportForAssets = async (replay: ImportReplay) => {
+    const envelope = await importFile.mutateAsync({ ...replay });
+    setLastImportResult(withReplay(envelope.data, replay));
   };
 
   const renderImportSummary = () => {
@@ -4739,6 +4770,22 @@ function AddConnectionDialogContent({
             </div>
           ))}
         </div>
+        <ImportAssetsSummary
+          wallet={lastImportResult.wallet}
+          assets={lastImportResult.assets}
+          swapPairs={lastImportResult.swap_pairs}
+          replay={lastImportResult.localReplay ?? null}
+          disabled={importFile.isPending}
+          onScopeStored={(scope) =>
+            setLastImportResult((current) => {
+              const assets = readImportAssets(current?.assets);
+              return current && assets
+                ? { ...current, assets: { ...assets, scope } }
+                : current;
+            })
+          }
+          onReimport={reimportForAssets}
+        />
         {shownRecords.length > 0 ? (
           <div className="rounded-md border border-border/60">
             {shownRecords.map((record) => (

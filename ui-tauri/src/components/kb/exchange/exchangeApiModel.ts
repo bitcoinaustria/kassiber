@@ -1,5 +1,7 @@
 import { DaemonRequestError } from "@/daemon/client";
 
+import type { AssetScope, ImportAssets } from "../assets/importAssets";
+
 /** Exchanges whose history Kassiber reads through a read-only API key. */
 export const EXCHANGE_KINDS = [
   "kraken",
@@ -207,11 +209,27 @@ export interface ExchangeCreateResult {
   backend: { name: string };
 }
 
+/** The exchange's own BTC balance against the wallet's book balance after a
+ *  sync (Bitpanda only, read from the history already fetched). */
+export interface ExchangeProviderBalance {
+  status: "matches" | "mismatch" | "unavailable";
+  asset: "BTC";
+  provider_msat?: number;
+  book_msat?: number;
+  difference_msat?: number;
+  reason?: string;
+}
+
 export interface ExchangeSyncResult {
   imported?: number;
   updated?: number;
   fetched?: number;
   skipped?: Record<string, number>;
+  provider_balance?: ExchangeProviderBalance;
+  /** What the wallet's asset scope left out (docs/plan/24-crypto-assets.md). */
+  assets?: ImportAssets;
+  /** Crypto-to-crypto swaps the sync paired. */
+  swap_pairs?: number;
   wallet?: string;
 }
 
@@ -230,6 +248,9 @@ export interface ExchangeLastSync {
   updated?: number;
   fetched?: number;
   skipped?: Record<string, number>;
+  provider_balance?: ExchangeProviderBalance;
+  assets?: ImportAssets;
+  swap_pairs?: number;
   error?: ExchangeErrorInfo | null;
 }
 
@@ -243,6 +264,8 @@ export interface ExchangeConnectionStatus {
   has_api_key: boolean;
   has_api_secret: boolean | null;
   last_sync: ExchangeLastSync | null;
+  /** Present once the wallet stores a scope; absent means `bitcoin`. */
+  asset_scope?: AssetScope;
 }
 
 /** Error explanations by daemon error code; each is a key under
@@ -282,6 +305,11 @@ const CODE_KINDS: Record<string, ExchangeErrorKind> = {
   kind_not_allowed: "needsRust",
   not_implemented: "needsRust",
 };
+
+/** Msat as BTC text: eight decimals, or eleven when not whole sats. */
+export function formatMsatAsBtc(msat: number): string {
+  return (msat / 1e11).toFixed(msat % 1000 === 0 ? 8 : 11);
+}
 
 export function exchangeErrorKind(code: string | undefined): ExchangeErrorKind {
   return (code && CODE_KINDS[code]) || "unknown";
