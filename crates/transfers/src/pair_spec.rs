@@ -175,7 +175,17 @@ pub(super) fn allocation(id: String, source: &str, sink: &str, a: i128, b: i128)
 }
 pub(super) fn group(rows: &[Value], full: bool) -> Result<Value> {
     let mut ordered = rows.to_vec();
-    ordered.sort_by_key(|r| (text(r, "created_at"), text(r, "id")));
+    // Pairs authored in one apply share `created_at` and carry random ids, so the transaction
+    // ids break that tie first: the slice that carries the shared fee (and the group's id) must
+    // not depend on uuid luck, or a review plan's preview and its apply disagree.
+    ordered.sort_by_key(|r| {
+        (
+            text(r, "created_at"),
+            text(r, "out_transaction_id"),
+            text(r, "in_transaction_id"),
+            text(r, "id"),
+        )
+    });
     let hashes = ordered
         .iter()
         .map(|r| hash(&project(r, FIELDS), false))

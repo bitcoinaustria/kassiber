@@ -185,6 +185,14 @@ pub(super) fn python_int_or_zero(raw: &Value) -> RefreshResult<BigInt> {
 /// `_pair_group_spec(rows, require_full_source=full)`.
 pub(super) fn group_spec(group: &[Value], full: bool) -> RefreshResult<Value> {
     let mut ordered = group.to_vec();
+    // Deliberately Python's `(created_at, id)`, not `pair_spec::group`'s
+    // transaction-id tie-break: the legacy migration and its drift repair
+    // must reproduce the components the frozen Python migration authored
+    // (`pair_sequences_match_python_*`). Stored components are never
+    // re-derived on read, and consolidation skips an active component whose
+    // terms already match, so the two orders do not fight; a later edit of
+    // such a group goes through `pair_spec::group` and may move its fee
+    // slice to another receipt, as any re-authored group may.
     ordered.sort_by_key(|r| (text(r, "created_at"), text(r, "id")));
     let hashes = ordered
         .iter()
