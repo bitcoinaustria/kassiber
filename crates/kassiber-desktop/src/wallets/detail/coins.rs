@@ -562,44 +562,9 @@ pub fn date_label(iso: &str) -> String {
     }
 }
 
-#[repr(C)]
-struct Tm {
-    tm_sec: i32,
-    tm_min: i32,
-    tm_hour: i32,
-    tm_mday: i32,
-    tm_mon: i32,
-    tm_year: i32,
-    tm_wday: i32,
-    tm_yday: i32,
-    tm_isdst: i32,
-    tm_gmtoff: std::ffi::c_long,
-    tm_zone: *const std::ffi::c_char,
-}
-
-unsafe extern "C" {
-    fn localtime_r(t: *const i64, out: *mut Tm) -> *mut Tm;
-}
-
 /// The local timezone's UTC offset (seconds) at `secs`, as the webview's `Date` applies it.
 fn local_offset(secs: f64) -> i64 {
-    let t = secs as i64;
-    let mut tm = Tm {
-        tm_sec: 0,
-        tm_min: 0,
-        tm_hour: 0,
-        tm_mday: 0,
-        tm_mon: 0,
-        tm_year: 0,
-        tm_wday: 0,
-        tm_yday: 0,
-        tm_isdst: 0,
-        tm_gmtoff: 0,
-        tm_zone: std::ptr::null(),
-    };
-    // SAFETY: `localtime_r` writes only into `tm`, a properly laid-out `struct tm`.
-    let ok = unsafe { !localtime_r(&t, &mut tm).is_null() };
-    if ok { tm.tm_gmtoff as i64 } else { 0 }
+    crate::localtime::offset_secs(secs as i64)
 }
 
 fn utxo_amount_text(r: &Value) -> String {

@@ -21,6 +21,7 @@ mod format;
 mod i18n;
 mod icons;
 mod kinds;
+mod localtime;
 mod logos;
 mod model;
 mod native;

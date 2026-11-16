@@ -298,49 +298,9 @@ pub fn display_balance_btc(s: &Snapshot, x: &Extras) -> f64 {
 
 // ---- Local calendar months (the webview's `Date`) ---------------------------------------------------
 
-#[repr(C)]
-struct Tm {
-    tm_sec: i32,
-    tm_min: i32,
-    tm_hour: i32,
-    tm_mday: i32,
-    tm_mon: i32,
-    tm_year: i32,
-    tm_wday: i32,
-    tm_yday: i32,
-    tm_isdst: i32,
-    tm_gmtoff: std::ffi::c_long,
-    tm_zone: *const std::ffi::c_char,
-}
-
-unsafe extern "C" {
-    fn localtime_r(t: *const i64, out: *mut Tm) -> *mut Tm;
-}
-
 /// The local (year, month 1–12) of an epoch second, as `Date#getFullYear/getMonth` read it.
 pub fn local_month(secs: f64) -> (i32, u32) {
-    let t = secs.floor() as i64;
-    let mut tm = Tm {
-        tm_sec: 0,
-        tm_min: 0,
-        tm_hour: 0,
-        tm_mday: 0,
-        tm_mon: 0,
-        tm_year: 0,
-        tm_wday: 0,
-        tm_yday: 0,
-        tm_isdst: 0,
-        tm_gmtoff: 0,
-        tm_zone: std::ptr::null(),
-    };
-    // SAFETY: `localtime_r` writes only into `tm`, a properly laid-out `struct tm`.
-    let ok = unsafe { !localtime_r(&t, &mut tm).is_null() };
-    if ok {
-        (tm.tm_year + 1900, tm.tm_mon as u32 + 1)
-    } else {
-        let d = format::Day::from_epoch_days((secs / 86_400.0).floor() as i64);
-        (d.y, d.m)
-    }
+    crate::localtime::year_month(secs.floor() as i64)
 }
 
 /// The UTC year of an epoch second (the daemon's tax year).

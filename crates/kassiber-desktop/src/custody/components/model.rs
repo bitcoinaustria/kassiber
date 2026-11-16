@@ -191,43 +191,9 @@ pub fn format_exact_integer(v: &Value) -> String {
 
 // ---- Time ------------------------------------------------------------------------------------
 
-#[repr(C)]
-struct Tm {
-    sec: i32,
-    min: i32,
-    hour: i32,
-    mday: i32,
-    mon: i32,
-    year: i32,
-    wday: i32,
-    yday: i32,
-    isdst: i32,
-    gmtoff: std::ffi::c_long,
-    zone: *const std::ffi::c_char,
-}
-
-unsafe extern "C" {
-    fn localtime_r(t: *const i64, out: *mut Tm) -> *mut Tm;
-}
-
 /// The local zone's offset from UTC (seconds) at a UTC instant, as the web's `Date` uses.
 fn local_offset(utc_secs: i64) -> i64 {
-    let mut tm = Tm {
-        sec: 0,
-        min: 0,
-        hour: 0,
-        mday: 0,
-        mon: 0,
-        year: 0,
-        wday: 0,
-        yday: 0,
-        isdst: 0,
-        gmtoff: 0,
-        zone: std::ptr::null(),
-    };
-    // SAFETY: localtime_r writes only into `tm`, a properly laid out `struct tm`.
-    let ok = unsafe { !localtime_r(&utc_secs, &mut tm).is_null() };
-    if ok { tm.gmtoff as i64 } else { 0 }
+    crate::localtime::offset_secs(utc_secs)
 }
 
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
