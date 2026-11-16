@@ -795,11 +795,11 @@ fn record(entry: Entry) -> Result<Py, AppError> {
         .transpose()?
         .flatten()
     {
-        Some(net) => {
+        Some(net_amount) => {
             if let Some(pricing) = &mut pricing {
                 pricing.fiat_rate = None;
             }
-            (net, PriceNumber::Finite(Decimal::zero()))
+            (net_amount, PriceNumber::Finite(Decimal::zero()))
         }
         None => (amount, fee),
     };
