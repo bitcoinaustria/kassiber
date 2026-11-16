@@ -1183,6 +1183,39 @@ fn marked(mut marker: Vec<(Key, Value)>, rest: Vec<(&str, Value)>) -> Value {
     Value::Dict(marker)
 }
 
+/// Another crypto asset's booked cost basis that does not cover its whole
+/// quantity (`basisComplete` false) reaches the assistant as
+/// `partialCostBasis` beside `basisQuantity`, and its `costBasis` as `null`,
+/// so a partial basis is never read as the full one
+/// (docs/plan/24-crypto-assets.md). The book overview carries the list
+/// itself, the book-set overview once per book.
+pub fn partial_basis_for_ai(kind: &str, mut payload: Value) -> Value {
+    fn assets(book: &mut Value) {
+        let Some(Value::List(mut items)) = get(book, "otherAssets").cloned() else {
+            return;
+        };
+        for item in &mut items {
+            if get(item, "basisComplete") != Some(&Value::Bool(true)) {
+                let basis = field(item, "costBasis");
+                set(item, "costBasis", Value::Null);
+                set(item, "partialCostBasis", basis);
+            }
+        }
+        set(book, "otherAssets", Value::List(items));
+    }
+    match kind {
+        "ui.overview.snapshot" => assets(&mut payload),
+        "ui.workspace.overview.snapshot" => {
+            if let Some(Value::List(mut books)) = get(&payload, "books").cloned() {
+                books.iter_mut().for_each(assets);
+                set(&mut payload, "books", Value::List(books));
+            }
+        }
+        _ => {}
+    }
+    payload
+}
+
 /// `_project_stale_journal_figures_for_ai(kind, payload)` (#681): stale
 /// journal-derived figures in an AI read become `null` with an explicit
 /// state. The desktop pages read the same builders and show their own stale
@@ -1632,6 +1665,41 @@ mod journal_verify_bound_tests {
         assert_eq!(
             get(&journal_verify_for_ai(&within), "truncated"),
             Some(&Value::Bool(false))
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dumped(value: &Value) -> String {
+        dumps(value, &Options::new()).unwrap()
+    }
+
+    #[test]
+    fn a_partial_basis_of_another_asset_never_reads_as_the_full_one() {
+        let assets = r#"[{"asset": "ETH", "costBasis": 2000.0, "basisQuantity": "1", "basisComplete": false, "unrealized": null}, {"asset": "SOL", "costBasis": 50.0, "basisQuantity": "2", "basisComplete": true, "unrealized": 10.0}]"#;
+        let book = kassiber_pytext::loads(&format!(r#"{{"otherAssets": {assets}}}"#)).unwrap();
+        let expected = r#"{"otherAssets": [{"asset": "ETH", "costBasis": null, "basisQuantity": "1", "basisComplete": false, "unrealized": null, "partialCostBasis": 2000.0}, {"asset": "SOL", "costBasis": 50.0, "basisQuantity": "2", "basisComplete": true, "unrealized": 10.0}]}"#;
+        assert_eq!(
+            dumped(&partial_basis_for_ai("ui.overview.snapshot", book.clone())),
+            expected
+        );
+        let set = kassiber_pytext::loads(&format!(r#"{{"books": [{expected}]}}"#)).unwrap();
+        let books =
+            kassiber_pytext::loads(&format!(r#"{{"books": [{}]}}"#, dumped(&book))).unwrap();
+        assert_eq!(
+            dumped(&partial_basis_for_ai(
+                "ui.workspace.overview.snapshot",
+                books
+            )),
+            dumped(&set)
+        );
+        // Other reads pass through.
+        assert_eq!(
+            dumped(&partial_basis_for_ai("ui.reports.summary", book.clone())),
+            dumped(&book)
         );
     }
 }

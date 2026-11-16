@@ -46,6 +46,29 @@ fn rates(
     Ok(rates)
 }
 
+/// The book's own value of one whole unit of each asset, in its currency:
+/// the newest transaction priced in the book currency (its rate, or value
+/// over amount), else a cached market rate for a pair the rates crate knows.
+/// The same lookup `reports portfolio-summary` values its holdings with; an
+/// asset absent from the map has no value in the book (unknown, not zero).
+pub fn holding_rates(
+    conn: &Connection,
+    profile: &Value,
+    assets: &[&str],
+) -> Result<BTreeMap<String, f64>> {
+    let assets: Vec<Value> = assets
+        .iter()
+        .map(|asset| dict([("asset", Value::from(*asset))]))
+        .collect();
+    let mut output = BTreeMap::new();
+    for (asset, rate) in rates(conn, profile, &assets)? {
+        if let Value::Float(rate) = float(&rate)? {
+            output.insert(asset, rate);
+        }
+    }
+    Ok(output)
+}
+
 pub fn report(conn: &Connection, profile: &Value, wallet: bool) -> Result<Value> {
     report_with(conn, profile, wallet, false)
 }
@@ -73,11 +96,15 @@ pub fn report_with(
         }
         let quantity = btc(quantity_msat)?;
         let basis = decimal(value(&row, "cost_basis"))?;
-        let rate = rates
-            .get(&text(&row, "asset"))
-            .cloned()
-            .unwrap_or_else(Decimal::zero);
-        let market = quantity.mul(&rate, &DECIMAL).map_err(arithmetic)?;
+        // Bitcoin without a price keeps its zero valuation; another asset
+        // without one has no value in the book, so its market value and
+        // unrealized result stay unknown (`null`), never zero (plan 24).
+        let bitcoin = kassiber_store::assets::is_bitcoin(&text(&row, "asset"));
+        let market = match rates.get(&text(&row, "asset")) {
+            Some(rate) => Some(quantity.mul(rate, &DECIMAL).map_err(arithmetic)?),
+            None if bitcoin => Some(Decimal::zero()),
+            None => None,
+        };
         let mut fields = Vec::new();
         if wallet {
             fields.push(("wallet", value(&row, "wallet_label").clone()));
@@ -93,9 +120,20 @@ pub fn report_with(
             ),
             ("asset", value(&row, "asset").clone()),
             ("quantity", float(&quantity)?),
-            ("quantity_sat", Value::Float(quantity_msat as f64 / 1000.0)),
-            ("quantity_msat", Value::Int(quantity_msat.into())),
         ]);
+        // Sats and msat name Bitcoin units: another asset (ETH) keeps its
+        // exact `quantity` and leaves both empty (plan 24).
+        if bitcoin {
+            fields.extend([
+                ("quantity_sat", Value::Float(quantity_msat as f64 / 1000.0)),
+                ("quantity_msat", Value::Int(quantity_msat.into())),
+            ]);
+        } else {
+            fields.extend([
+                ("quantity_sat", Value::Null),
+                ("quantity_msat", Value::Null),
+            ]);
+        }
         if wallet {
             fields.push((
                 "avg_cost",
@@ -104,10 +142,16 @@ pub fn report_with(
         }
         fields.extend([
             ("cost_basis", float(&basis)?),
-            ("market_value", float(&market)?),
+            (
+                "market_value",
+                market.as_ref().map_or(Ok(Value::Null), float)?,
+            ),
             (
                 "unrealized_pnl",
-                float(&market.sub(&basis, &DECIMAL).map_err(arithmetic)?)?,
+                match &market {
+                    Some(market) => float(&market.sub(&basis, &DECIMAL).map_err(arithmetic)?)?,
+                    None => Value::Null,
+                },
             ),
         ]);
         if wallet && include_wallet_id {
@@ -142,5 +186,60 @@ mod same_time_tests {
         conn.execute("UPDATE transactions SET fiat_currency='EUR'", [])
             .unwrap();
         assert!(!rates(&conn, &profile, &[]).unwrap().contains_key("BTC"));
+    }
+}
+
+#[cfg(test)]
+mod unpriced_asset_tests {
+    use super::*;
+
+    /// Priced BTC beside ETH the book has no price for: the ETH value stays
+    /// unknown in the portfolio, and the summary totals it would add to are
+    /// unknown too instead of reading as complete. BTC keeps its valuation.
+    #[test]
+    fn an_unpriced_asset_has_no_value_and_leaves_totals_unknown() {
+        let conn = crate::same_time_rate_book();
+        conn.execute_batch(
+            "INSERT INTO journal_wallet_holdings(id,workspace_id,profile_id,wallet_id,wallet_label,account_code,asset,quantity,cost_basis,created_at) VALUES
+             ('h1','ws','p','w','Cold','treasury','BTC',100000000000,5000,'t'),
+             ('h2','ws','p','w','Cold','treasury','ETH',200000000000,300,'t');",
+        )
+        .unwrap();
+        let profile = crate::sql::rows(&conn, "SELECT * FROM profiles WHERE id='p'", [])
+            .unwrap()
+            .remove(0);
+        let Value::List(rows) = report(&conn, &profile, true).unwrap() else {
+            panic!("a list")
+        };
+        let row = |asset: &str| {
+            rows.iter()
+                .find(|row| text(row, "asset") == asset)
+                .unwrap_or_else(|| panic!("{asset}: {rows:?}"))
+                .clone()
+        };
+        let btc = row("BTC");
+        assert_eq!(value(&btc, "market_value"), &Value::Float(10_000.0));
+        assert_eq!(value(&btc, "unrealized_pnl"), &Value::Float(5_000.0));
+        let eth = row("ETH");
+        assert_eq!(value(&eth, "cost_basis"), &Value::Float(300.0));
+        assert_eq!(value(&eth, "market_value"), &Value::Null);
+        assert_eq!(value(&eth, "unrealized_pnl"), &Value::Null);
+
+        let workspace = crate::sql::rows(&conn, "SELECT * FROM workspaces WHERE id='ws'", [])
+            .unwrap()
+            .remove(0);
+        let summary =
+            crate::summary::report(&conn, &workspace, &profile, &dict::<&str>([])).unwrap();
+        let totals = value(&summary, "holdings");
+        assert_eq!(value(totals, "cost_basis"), &Value::Float(5_300.0));
+        assert_eq!(value(totals, "market_value"), &Value::Null);
+        assert_eq!(value(totals, "unrealized_pnl"), &Value::Null);
+        // The balances bucket of the full report keeps it unknown as well.
+        let balances = crate::full_csv::aggregate(&rows).unwrap();
+        let eth = balances
+            .iter()
+            .find(|row| text(row, "asset") == "ETH")
+            .unwrap();
+        assert_eq!(value(eth, "market_value"), &Value::Null);
     }
 }

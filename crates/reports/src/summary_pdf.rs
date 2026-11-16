@@ -319,12 +319,21 @@ fn historical_portfolio(conn: &Connection, profile: &Value, as_of: i64) -> Resul
             .map(|(_, v)| v.clone())
             .unwrap_or_else(Decimal::zero);
         let basis = mul(quantity, &avg)?;
-        let rate = market
+        // Bitcoin without a rate keeps its zero valuation; another asset
+        // without one has no value in the book, so its market value and
+        // unrealized result stay unknown (`null`) and the wallet and PDF
+        // totals read as incomplete, never understated (plan 24).
+        let value_ = match market
             .iter()
             .find(|(a, _)| s(a.as_str()) == *asset)
             .map(|(_, r)| r.clone())
-            .unwrap_or_else(Decimal::zero);
-        let value_ = mul(quantity, &rate)?;
+        {
+            Some(rate) => Some(mul(quantity, &rate)?),
+            None if kassiber_store::assets::is_bitcoin(&py_str_or_empty(asset)) => {
+                Some(mul(quantity, &Decimal::zero())?)
+            }
+            None => None,
+        };
         let msat = quantity
             .mul(&Decimal::from(100_000_000_000_i64), &DECIMAL)
             .map_err(arithmetic)?
@@ -337,19 +346,35 @@ fn historical_portfolio(conn: &Connection, profile: &Value, as_of: i64) -> Resul
             .parse::<f64>()
             .map_err(|_| AppError::new("internal_error", "invalid portfolio quantity"))?
             / 1000.0;
+        // Sats and msat name Bitcoin units: another asset leaves both empty,
+        // as the holdings report does (plan 24).
+        let (sat, msat) = if kassiber_store::assets::is_bitcoin(&py_str_or_empty(asset)) {
+            (Value::Float(sat), Value::Int(msat))
+        } else {
+            (Value::Null, Value::Null)
+        };
         results.push(dict([
             ("wallet", wallet.clone()),
             ("account", account.clone()),
             ("asset", asset.clone()),
             ("quantity", float(quantity)?),
-            ("quantity_sat", Value::Float(sat)),
-            ("quantity_msat", Value::Int(msat)),
+            ("quantity_sat", sat),
+            ("quantity_msat", msat),
             ("avg_cost", float(&avg)?),
             ("cost_basis", float(&basis)?),
-            ("market_value", float(&value_)?),
+            (
+                "market_value",
+                match &value_ {
+                    Some(value_) => float(value_)?,
+                    None => Value::Null,
+                },
+            ),
             (
                 "unrealized_pnl",
-                float(&value_.sub(&basis, &DECIMAL).map_err(arithmetic)?)?,
+                match &value_ {
+                    Some(value_) => float(&value_.sub(&basis, &DECIMAL).map_err(arithmetic)?)?,
+                    None => Value::Null,
+                },
             ),
             ("wallet_id", wallet_id.clone()),
         ]));
@@ -424,6 +449,9 @@ fn wallet_holdings(
         let mut asset_set = BTreeSet::new();
         let (mut quantity, mut basis, mut market) =
             (Decimal::zero(), Decimal::zero(), Decimal::zero());
+        // A holding without a value in the book leaves the wallet's value
+        // unknown (`null`), never understated.
+        let mut unvalued = false;
         for row in portfolio
             .iter()
             .filter(|r| text(r, "wallet_id") == wallet.id)
@@ -436,6 +464,7 @@ fn wallet_holdings(
             quantity = add(&quantity, &q)?;
             basis = add(&basis, &dec(row, "cost_basis")?)?;
             market = add(&market, &dec(row, "market_value")?)?;
+            unvalued |= matches!(value(row, "market_value"), Value::Null);
         }
         let chain = if wallet.chain.is_empty() {
             "chain".to_owned()
@@ -462,7 +491,14 @@ fn wallet_holdings(
             ("asset_quantities", Value::List(asset_quantities)),
             ("quantity", float(&quantity)?),
             ("cost_basis", float(&basis)?),
-            ("market_value", float(&market)?),
+            (
+                "market_value",
+                if unvalued {
+                    Value::Null
+                } else {
+                    float(&market)?
+                },
+            ),
             (
                 "tx_count",
                 Value::Int(tx_counts.get(&wallet.id).copied().unwrap_or(0).into()),
@@ -506,7 +542,18 @@ fn holdings_totals(rows: &[Value]) -> Result<Value> {
     Ok(dict([
         ("total_quantity", total(rows, "quantity")?),
         ("asset_quantities", total_assets(rows)?),
-        ("total_market_value", total(rows, "market_value")?),
+        // Unknown (`null`) when a holding has no value in the book.
+        (
+            "total_market_value",
+            if rows
+                .iter()
+                .any(|row| matches!(value(row, "market_value"), Value::Null))
+            {
+                Value::Null
+            } else {
+                total(rows, "market_value")?
+            },
+        ),
     ]))
 }
 
@@ -613,7 +660,7 @@ fn flow_periods(
     let (filter, params) = bounds(profile, wallets, "t.wallet_id", start, end)?;
     // A price in another currency than the book's reads as no price.
     let book = kassiber_store::price_currency::price_in_book_currency_sql("t");
-    let rows = query(conn, &format!("SELECT t.occurred_at,t.direction,t.amount,t.fee,CASE WHEN {book} THEN t.fiat_rate END AS fiat_rate,CASE WHEN {book} THEN t.fiat_value END AS fiat_value FROM transactions t WHERE t.profile_id=? AND {filter} AND t.excluded=0 AND t.occurred_at>=? AND t.occurred_at<=? ORDER BY t.occurred_at ASC,t.created_at ASC,t.id ASC"), params)?;
+    let rows = query(conn, &format!("SELECT t.occurred_at,t.direction,t.asset,t.amount,t.fee,CASE WHEN {book} THEN t.fiat_rate END AS fiat_rate,CASE WHEN {book} THEN t.fiat_value END AS fiat_value FROM transactions t WHERE t.profile_id=? AND {filter} AND t.excluded=0 AND t.occurred_at>=? AND t.occurred_at<=? ORDER BY t.occurred_at ASC,t.created_at ASC,t.id ASC"), params)?;
     let zero = || {
         [
             Decimal::zero(),
@@ -649,6 +696,12 @@ fn flow_periods(
         };
         bucket[side] = add(&bucket[side], &volume)?;
         totals[side] = add(&totals[side], &volume)?;
+        // The fiat columns cover every asset; the BTC fee only Bitcoin's.
+        let fee = if kassiber_store::assets::is_bitcoin(&text(row, "asset")) {
+            fee
+        } else {
+            Decimal::zero()
+        };
         bucket[2] = add(&bucket[2], &fee)?;
         bucket[3] = add(&bucket[3], &fee_fiat)?;
         totals[2] = add(&totals[2], &fee)?;
@@ -833,7 +886,7 @@ fn internal_transfers(
     end: i64,
 ) -> Result<Value> {
     let (filter, params) = bounds(profile, wallets, "tout.wallet_id", start, end)?;
-    let found = query(conn, &format!("SELECT COUNT(*) AS count,COALESCE(SUM(COALESCE(fiat_value,0)),0) AS fiat_volume,COALESCE(SUM(amount),0) AS amount_msat FROM (SELECT DISTINCT tout.id,tout.fiat_value,tout.amount FROM journal_custody_decisions decision JOIN transactions tout ON tout.id=decision.source_transaction_id WHERE decision.profile_id=? AND decision.source_asset=decision.target_asset AND {filter} AND tout.occurred_at>=? AND tout.occurred_at<=?)"), params)?;
+    let found = query(conn, &format!("SELECT COUNT(*) AS count,COALESCE(SUM(COALESCE(fiat_value,0)),0) AS fiat_volume,COALESCE(SUM(CASE WHEN UPPER(TRIM(asset)) IN ('BTC','LBTC','L-BTC') THEN amount ELSE 0 END),0) AS amount_msat FROM (SELECT DISTINCT tout.id,tout.fiat_value,tout.amount,tout.asset FROM journal_custody_decisions decision JOIN transactions tout ON tout.id=decision.source_transaction_id WHERE decision.profile_id=? AND decision.source_asset=decision.target_asset AND {filter} AND tout.occurred_at>=? AND tout.occurred_at<=?)"), params)?;
     let row = &found[0];
     Ok(dict([
         ("count", Value::Int(int_or_zero(value(row, "count")).into())),
@@ -1159,6 +1212,138 @@ mod same_time_tests {
                 .1
                 .to_string(),
             "10000"
+        );
+    }
+}
+
+#[cfg(test)]
+mod unpriced_asset_tests {
+    use super::*;
+
+    fn as_of() -> i64 {
+        kassiber_rates::time::parse("2025-01-01T00:00:00Z").unwrap()
+    }
+
+    fn book() -> (Connection, Value) {
+        let conn = crate::same_time_rate_book();
+        conn.execute_batch("INSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,account_id,occurred_at,entry_type,asset,quantity,fiat_value,cost_basis,created_at) VALUES
+            ('btc','ws','p','x','w',NULL,'2024-06-01T00:00:00Z','acquisition','BTC',100000000000,5000,0,'t'),
+            ('eth','ws','p','y','w',NULL,'2024-06-02T00:00:00Z','acquisition','ETH',200000000000,300,0,'t');")
+            .unwrap();
+        let profile = crate::sql::rows(&conn, "SELECT * FROM profiles WHERE id='p'", [])
+            .unwrap()
+            .remove(0);
+        (conn, profile)
+    }
+
+    fn row(rows: &[Value], asset: &str) -> Value {
+        rows.iter()
+            .find(|row| text(row, "asset") == asset)
+            .unwrap_or_else(|| panic!("{asset}: {rows:?}"))
+            .clone()
+    }
+
+    fn totals(rows: &[Value]) -> Value {
+        let wallet = Wallet {
+            id: "w".into(),
+            label: s("Cold"),
+            kind: s("custom"),
+            chain: String::new(),
+        };
+        let holdings = wallet_holdings(&[wallet], rows, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            value(&holdings[0], "market_value"),
+            value(&holdings_totals(&holdings).unwrap(), "total_market_value")
+        );
+        holdings_totals(&holdings).unwrap()
+    }
+
+    /// An as-of summary with ETH the book has no price for: the ETH value
+    /// stays unknown, so the wallet and PDF totals read as incomplete rather
+    /// than understated. BTC keeps its valuation (docs/plan/24-crypto-assets.md).
+    #[test]
+    fn an_unpriced_asset_leaves_the_historical_value_unknown() {
+        let (conn, profile) = book();
+        let rows = historical_portfolio(&conn, &profile, as_of()).unwrap();
+        let btc = row(&rows, "BTC");
+        assert_eq!(value(&btc, "market_value"), &Value::Float(30_000.0));
+        assert_eq!(value(&btc, "unrealized_pnl"), &Value::Float(25_000.0));
+        let eth = row(&rows, "ETH");
+        assert_eq!(value(&eth, "cost_basis"), &Value::Float(300.0));
+        assert_eq!(value(&eth, "market_value"), &Value::Null);
+        assert_eq!(value(&eth, "unrealized_pnl"), &Value::Null);
+        assert_eq!(value(&totals(&rows), "total_market_value"), &Value::Null);
+    }
+
+    /// A mixed book: the BTC fee total and the internal transfers' BTC
+    /// volume count Bitcoin rows only (5 ETH of raw units are not 5 BTC),
+    /// and an as-of ETH holding has no sat or msat quantity, as in the
+    /// holdings report. The fiat columns still cover every asset.
+    #[test]
+    fn bitcoin_totals_leave_other_assets_out() {
+        let (conn, profile) = book();
+        let hash = "a".repeat(64);
+        conn.execute_batch(&format!(
+            "UPDATE transactions SET fee=1000 WHERE id='x';
+             UPDATE transactions SET asset='ETH',direction='outbound',fee=500000000000 WHERE id='y';
+             UPDATE transactions SET asset='ETH' WHERE id='z';
+             INSERT INTO journal_custody_decisions(decision_id,workspace_id,profile_id,source_transaction_id,target_transaction_id,source_observation_hash,source_start_msat,source_end_msat,target_observation_hash,target_start_msat,target_end_msat,source_network,target_network,source_rail,target_rail,source_asset,target_asset,state,basis_state,reason,created_at)
+             VALUES('{hash}','ws','p','y','z','{hash}',0,1,'{hash}',0,1,'n','n','r','r','ETH','ETH','internal_reviewed','eligible','test','t');"
+        ))
+        .unwrap();
+        let wallet = Wallet {
+            id: "w".into(),
+            label: s("Cold"),
+            kind: s("custom"),
+            chain: String::new(),
+        };
+        let start = kassiber_rates::time::parse("2024-01-01T00:00:00Z").unwrap();
+        let end = kassiber_rates::time::parse("2024-12-31T00:00:00Z").unwrap();
+        let (_, flows) =
+            flow_periods(&conn, &profile, std::slice::from_ref(&wallet), start, end).unwrap();
+        assert_eq!(float(&flows.fees_btc).unwrap(), Value::Float(1e-8));
+        assert_eq!(
+            float(&flows.fees_fiat).unwrap(),
+            Value::Float(100_000.000_1)
+        );
+        let transfers = internal_transfers(&conn, &profile, &[wallet], start, end).unwrap();
+        assert_eq!(value(&transfers, "count"), &Value::Int(1.into()));
+        assert_eq!(value(&transfers, "btc_volume"), &Value::Float(0.0));
+        let rows = historical_portfolio(&conn, &profile, as_of()).unwrap();
+        let (btc, eth) = (row(&rows, "BTC"), row(&rows, "ETH"));
+        assert_eq!(
+            value(&btc, "quantity_msat"),
+            &Value::Int(100_000_000_000_i64.into())
+        );
+        assert_eq!(value(&btc, "quantity_sat"), &Value::Float(100_000_000.0));
+        assert_eq!(value(&eth, "quantity_msat"), &Value::Null);
+        assert_eq!(value(&eth, "quantity_sat"), &Value::Null);
+    }
+
+    /// Bitcoin alone keeps today's valuation, priced or not: no rate still
+    /// values BTC at zero.
+    #[test]
+    fn bitcoin_keeps_its_historical_valuation() {
+        let (conn, profile) = book();
+        conn.execute("DELETE FROM journal_entries WHERE asset='ETH'", [])
+            .unwrap();
+        let rows = historical_portfolio(&conn, &profile, as_of()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            value(&totals(&rows), "total_market_value"),
+            &Value::Float(30_000.0)
+        );
+        conn.execute_batch(
+            "UPDATE transactions SET fiat_rate=NULL, fiat_rate_exact=NULL, fiat_value=NULL",
+        )
+        .unwrap();
+        let rows = historical_portfolio(&conn, &profile, as_of()).unwrap();
+        let btc = row(&rows, "BTC");
+        assert_eq!(value(&btc, "market_value"), &Value::Float(0.0));
+        assert_eq!(value(&btc, "unrealized_pnl"), &Value::Float(-5_000.0));
+        assert_eq!(
+            value(&totals(&rows), "total_market_value"),
+            &Value::Float(0.0)
         );
     }
 }
