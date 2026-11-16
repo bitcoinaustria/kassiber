@@ -183,7 +183,7 @@
   "coverageMissing": "Missing observations",
   "coverageCompleteTx": "Complete transaction shapes",
   "coverageConflict": "Conflicting observations",
-  "coverageFresh": "Custody projection current",
+  "coverageFresh": "Custody data current",
   "coverageSources": "Local source coverage",
   "coveragePruning": "Filtered boundaries",
   "observationStatus": {

@@ -355,7 +355,7 @@ describe("NotificationCenter actions and scope", () => {
     useNotificationStore.getState().raiseCondition(refreshFailure(A));
     openBell({ pendingOperations: { "refresh-book": true } });
     expect(
-      (screen.getByRole("button", { name: "Refreshing..." }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: "Refreshing…" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
   });

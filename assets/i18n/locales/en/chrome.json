@@ -4,12 +4,12 @@
     "reload": "Reload",
     "copy": "Copy diagnostics",
     "copied": "Diagnostics copied",
-    "copyFailed": "Could not copy diagnostics. Open Developer tools → Logs after reloading.",
-    "details": "The error and recent redacted logs are available through Copy diagnostics."
+    "copyFailed": "Could not copy diagnostics. Reload, then open Developer tools → Logs.",
+    "details": "Copy diagnostics copies the error and recent redacted logs."
   },
   "notFound": {
     "title": "Page not found",
-    "message": "There is nothing at {{path}}. The link may be stale, or it may point at a page that was renamed.",
+    "message": "There is nothing at {{path}}. The link may be old, or the page was renamed.",
     "backToOverview": "Back to overview"
   },
   "shell": {
@@ -35,7 +35,7 @@
     "fallbackTitle": "Kassiber",
     "fallback": {
       "label": "Search Kassiber",
-      "placeholder": "Search pages, actions, transactions..."
+      "placeholder": "Search pages, actions, transactions…"
     },
     "searchLabel": "Search",
     "searchPrompt": "Search pages, actions, settings, wallets, and transactions.",
@@ -68,8 +68,8 @@
       "updateTitle": "Kassiber v{{current}} → v{{latest}} is available on GitHub",
       "updateLabel": "Update available · v{{version}}",
       "updateDismiss": "Dismiss until next launch",
-      "disabled": "Update checks are disabled. Enable them in Settings → Privacy before Kassiber contacts GitHub.",
-      "checkFailed": "Kassiber could not check GitHub for updates. Please try again later.",
+      "disabled": "Update checks are off. Turn them on in Settings → Privacy to let Kassiber contact GitHub.",
+      "checkFailed": "Kassiber could not reach GitHub to check for updates. Try again later.",
       "availablePrompt": "Kassiber v{{version}} is available. Open the release page on GitHub?",
       "current": "Kassiber v{{version}} is up to date.",
       "openGitHub": "Open GitHub",
@@ -94,93 +94,93 @@
   "projects": {
     "menuLabel": "Book sets",
     "switchFailedTitle": "Could not switch book set",
-    "switchFailedBody": "Kassiber could not open that project container."
+    "switchFailedBody": "Kassiber could not open that book set."
   },
   "routeMeta": {
     "activity": {
       "label": "Search activity",
-      "placeholder": "Search transactions, wallets..."
+      "placeholder": "Search transactions, wallets…"
     },
     "walletDetail": {
       "title": "Wallet Detail",
       "label": "Search wallets",
-      "placeholder": "Search wallets, books..."
+      "placeholder": "Search wallets, books…"
     },
     "wallets": {
       "label": "Search wallets",
-      "placeholder": "Search wallets, imports, backends..."
+      "placeholder": "Search wallets, imports, backends…"
     },
     "booksOverview": {
-      "title": "Book Set Overview",
+      "title": "Book set overview",
       "label": "Search books",
-      "placeholder": "Search books, wallets, reports..."
+      "placeholder": "Search books, wallets, reports…"
     },
     "books": {
       "title": "Books",
       "label": "Search books",
-      "placeholder": "Search books, countries..."
+      "placeholder": "Search books, countries…"
     },
     "ledger": {
       "label": "Search ledger",
-      "placeholder": "Search entries, wallets, assets..."
+      "placeholder": "Search entries, wallets, assets…"
     },
     "imports": {
       "title": "Imports",
       "label": "Search imports",
-      "placeholder": "Search wallets, file formats..."
+      "placeholder": "Search wallets, file formats…"
     },
     "egress": {
       "label": "Search network monitor",
-      "placeholder": "Search hosts, subsystems..."
+      "placeholder": "Search hosts, subsystems…"
     },
     "logs": {
       "label": "Search logs",
-      "placeholder": "Search daemon errors, logs..."
+      "placeholder": "Search logs and errors…"
     },
     "settings": {
       "label": "Search settings",
-      "placeholder": "Search settings, backends..."
+      "placeholder": "Search settings, backends…"
     },
     "reports": {
       "label": "Search reports",
-      "placeholder": "Search reports, exports..."
+      "placeholder": "Search reports, exports…"
     },
     "privacyMirror": {
       "label": "Search Privacy Mirror",
-      "placeholder": "Search linkage, adversaries, evidence..."
+      "placeholder": "Search linkage, adversaries, evidence…"
     },
     "exitTax": {
       "label": "Search exit tax",
-      "placeholder": "Search departure date, destination..."
+      "placeholder": "Search departure date, destination…"
     },
     "sourceOfFunds": {
       "title": "Source of Funds",
       "label": "Search source of funds",
-      "placeholder": "Search sources, wallets..."
+      "placeholder": "Search sources, wallets…"
     },
     "reconcile": {
       "label": "Search reconcile",
-      "placeholder": "Paste addresses or transaction ids..."
+      "placeholder": "Paste addresses or transaction ids…"
     },
     "swaps": {
       "label": "Search swaps and transfers",
-      "placeholder": "Search wallet, asset pair, txid..."
+      "placeholder": "Search wallet, asset pair, txid…"
     },
     "custodyGaps": {
       "label": "Search custody gaps",
-      "placeholder": "Search missing wallets and possible returns..."
+      "placeholder": "Search missing wallets and possible returns…"
     },
     "transactions": {
       "label": "Search transactions",
-      "placeholder": "Search counterparty, tag, account..."
+      "placeholder": "Search counterparty, tag, account…"
     },
     "assistant": {
       "label": "Search assistant",
-      "placeholder": "Search conversation..."
+      "placeholder": "Search conversation…"
     },
     "overview": {
       "label": "Search overview",
-      "placeholder": "Search transactions, reports..."
+      "placeholder": "Search transactions, reports…"
     },
     "chainAnalysis": {
       "label": "Chain analysis",
@@ -188,7 +188,7 @@
     },
     "review": {
       "label": "Search review",
-      "placeholder": "Search cause, wallet, transfer..."
+      "placeholder": "Search cause, wallet, transfer…"
     }
   },
   "search": {
@@ -224,8 +224,8 @@
     "repeatBadge": "×{{count}}",
     "repeated_one": "Arrived {{count}} time",
     "repeated_other": "Arrived {{count}} times",
-    "processing": "Processing...",
-    "refreshing": "Refreshing...",
+    "processing": "Processing…",
+    "refreshing": "Refreshing…",
     "otherBook": "Started in another book",
     "bookUnknown": "Kassiber is still opening this book. Try again in a moment.",
     "staleBook": "Another book is open now, so nothing ran. Return to that book to try again.",
@@ -295,16 +295,16 @@
       },
       "touchIdOff": {
         "title": "Touch ID unlock is off",
-        "body": "Kassiber asks for the database passphrase until Touch ID is enabled again.",
+        "body": "Kassiber asks for your passphrase until you turn Touch ID on again.",
         "action": "Enable Touch ID"
       },
       "unlockCredentialRemains": {
         "title": "A saved unlock method remains",
-        "body": "The OS credential store did not confirm the removal, so it may still unlock these books."
+        "body": "The system keychain did not confirm the removal, so it may still unlock these books."
       },
       "backupRestoreFailed": {
         "title": "Backup restore did not finish",
-        "body": "Your books may not match the backup. The details say what happened and where the recovery copy from before the restore is.",
+        "body": "Your books may not match the backup. Details shows what happened and where the recovery copy is.",
         "action": "Open backups"
       },
       "backupRestoreWarning": {
@@ -313,8 +313,8 @@
       },
       "sourceFundsRescan": {
         "title": "A wallet needs a full rescan",
-        "body_one": "{{count}} transaction was synced before Kassiber recorded which inputs were its own, so its source of funds cannot be traced. Rescan its wallet.",
-        "body_other": "{{count}} transactions were synced before Kassiber recorded which inputs were their own, so their source of funds cannot be traced. Rescan their wallet."
+        "body_one": "{{count}} transaction was synced before Kassiber recorded which inputs were yours, so its source of funds cannot be traced. Rescan its wallet.",
+        "body_other": "{{count}} transactions were synced before Kassiber recorded which inputs were yours, so their source of funds cannot be traced. Rescan their wallets."
       },
       "pricingRebuildFailed": {
         "title": "Price rebuild failed",
@@ -400,6 +400,9 @@
         "walletCount_other": "{{count}} new",
         "moreWallets_one": "+{{count}} more wallet",
         "moreWallets_other": "+{{count}} more wallets"
+      },
+      "fileSaved": {
+        "title": "File saved"
       }
     },
     "job": {
@@ -418,7 +421,14 @@
       "openMarketData": "Open market data",
       "openAllBooks": "Open all books",
       "openTransactions": "Open transactions",
-      "openConnection": "Open connection"
+      "openConnection": "Open connection",
+      "openFileLabel": "Open {{name}}",
+      "showInFinder": "Show in Finder",
+      "showInExplorer": "Show in Explorer",
+      "showInFolder": "Show in folder",
+      "showInFinderLabel": "Show {{name}} in Finder",
+      "showInExplorerLabel": "Show {{name}} in Explorer",
+      "showInFolderLabel": "Show {{name}} in its folder"
     },
     "feedback": {
       "reportSaveFailed": "Could not save the report export",
@@ -427,7 +437,9 @@
       "reportOpenFailed": "Could not open the report",
       "btcPriceRefreshed": "BTC price refreshed",
       "btcPriceUnchanged": "No newer BTC price; the cached one stays",
-      "btcPriceFailed": "Could not refresh the BTC price"
+      "btcPriceFailed": "Could not refresh the BTC price",
+      "fileOpenFailed": "Could not open the file",
+      "fileRevealFailed": "Could not show the file"
     },
     "causeCount": "{{cause}} ({{count}})",
     "technicalRepeated": "{{message}} (×{{count}})",
@@ -485,29 +497,29 @@
   },
   "lock": {
     "touchIdNotSavedReason": "Touch ID unlock is not set up: {{reason}}",
-    "touchIdNotSavedKeychain": "macOS Keychain did not report the saved passphrase.",
-    "touchIdNotAcceptedKeychain": "macOS Keychain did not accept the saved passphrase.",
+    "touchIdNotSavedKeychain": "The macOS Keychain did not return the saved passphrase.",
+    "touchIdNotAcceptedKeychain": "The macOS Keychain did not accept the passphrase.",
     "importRootOpening": "Kassiber is still opening the selected local books folder.",
-    "passphraseRequiredError": "Database passphrase is required.",
-    "touchIdNotFound": "No Touch ID passphrase was found for these books. Unlock once with the passphrase to save it again.",
+    "passphraseRequiredError": "Enter your passphrase.",
+    "touchIdNotFound": "No passphrase is saved for Touch ID. Unlock once with the passphrase to save it again.",
     "title": "Unlock your books",
     "sessionTitle": "Your books are locked",
     "lead": {
       "encrypted": "Enter the passphrase to decrypt them on this device.",
-      "daemon-auth": "Kassiber needs the passphrase again before it can show them.",
+      "daemon-auth": "Enter the passphrase again to show them.",
       "session": "Nothing from your books shows while Kassiber is locked."
     },
     "passphrase": "Passphrase",
     "touchIdUnavailableReason": "Touch ID unlock is unavailable: {{reason}}",
-    "touchIdUnavailable": "Touch ID unlock is unavailable for this desktop session.",
+    "touchIdUnavailable": "Touch ID unlock is not available right now.",
     "touchIdNotSetUpReason": "Touch ID unlock is not set up: {{reason}}",
-    "touchIdNotSetUp": "No Touch ID passphrase is saved for these books. Unlock once with the passphrase to save it again.",
+    "touchIdNotSetUp": "No passphrase is saved for Touch ID. Unlock once with the passphrase to save it again.",
     "useTouchIdNextTime": "Use Touch ID next time",
-    "useTouchIdNextTimeBody": "Save a desktop-only Keychain entry that Kassiber can use after Touch ID. CLI remembered unlock stays separate.",
-    "waitingForTouchId": "Waiting for Touch ID...",
+    "useTouchIdNextTimeBody": "Saves your passphrase in the macOS Keychain for this app, readable only after Touch ID. The CLI's saved unlock is separate.",
+    "waitingForTouchId": "Waiting for Touch ID…",
     "touchIdLead": "Confirm with Touch ID in the macOS prompt.",
     "unlockWithTouchId": "Unlock with Touch ID",
-    "unlocking": "Unlocking...",
+    "unlocking": "Unlocking…",
     "unlock": "Unlock",
     "openBooks": "Open books",
     "openOtherBooks": "Open other books",
@@ -519,7 +531,7 @@
   },
   "importRoot": {
     "title": "Opening local books",
-    "body": "Restoring the selected Kassiber data root.",
+    "body": "Opening the selected Kassiber data folder.",
     "backToSetup": "Back to setup",
     "couldNotOpen": "Could not open the selected local books folder."
   },
@@ -534,7 +546,7 @@
   "network": {
     "outboundConnections": "Outbound connections",
     "checkConnections": "Check connections",
-    "loading": "Loading connections...",
+    "loading": "Loading connections…",
     "loadError": "Could not load configured connections.",
     "noneConfigured": "Nothing is connected.",
     "addConnection": "Add a connection",
@@ -544,8 +556,8 @@
     "route": {
       "tor": "Tor",
       "proxy": "Proxy",
-      "torVia": ".onion endpoint routed through {{proxy}} for this backend only.",
-      "torOnion": ".onion endpoint; configure a backend proxy so Tor can resolve it.",
+      "torVia": ".onion address routed through {{proxy}} for this backend only.",
+      "torOnion": ".onion address; set a proxy on this backend so Tor can reach it.",
       "proxyVia": "This backend is routed through {{proxy}} only."
     },
     "indicator": {
@@ -565,7 +577,7 @@
       "skipped": "Check skipped",
       "offline": "Offline"
     },
-    "unsupportedTitle": "Saved HTTP explorer endpoints are listed here but not actively probed from the shell. The health checker probes Electrum / Fulcrum backends and approved display-only HTTP checks.",
+    "unsupportedTitle": "HTTP explorer backends are listed but not checked from here. Connection checks cover Electrum / Fulcrum backends.",
     "checkPassed": "Connection check passed.",
     "checkFailed": "Connection check failed.",
     "coreReachable": "Bitcoin Core reachable.",
@@ -574,21 +586,21 @@
     "corePruned": "Bitcoin Core is reachable but pruned.",
     "offlineMode": {
       "label": "Online",
-      "on": "Offline mode is on. Kassiber connects to nothing off this device until you turn it off.",
-      "environment": "KASSIBER_NO_EGRESS blocks wallet and backend connections for this process. Turn on offline mode to also block AI providers and update checks.",
-      "failed": "Offline mode could not be changed."
+      "on": "Offline mode is on. Kassiber connects to nothing outside this device until you turn it off.",
+      "environment": "An environment variable (KASSIBER_NO_EGRESS) blocks wallet and backend connections. Turn on offline mode to also block AI providers and update checks.",
+      "failed": "Could not change offline mode. Try again."
     }
   },
   "bookSwitcher": {
     "title": "Switch books",
     "searchPlaceholder": "Switch to a book…",
-    "loading": "Loading books...",
+    "loading": "Loading books…",
     "loadError": "Could not load books.",
     "noMatches": "No books match.",
-    "empty": "No books were found in this data root.",
+    "empty": "No books in this data folder.",
     "manageBooks": "Manage books",
     "switchError": "Could not switch books.",
-    "bookSetOverview": "Book Set Overview",
+    "bookSetOverview": "Book set overview",
     "wallets_one": "{{count}} wallet",
     "wallets_other": "{{count}} wallets"
   },
@@ -631,13 +643,13 @@
   "firstSync": {
     "defaultTitle": "Setting up your book",
     "defaultTitleRefresh": "Refreshing your book",
-    "body": "First sync — building your history from your configured sources. This runs once and can take a few minutes.",
-    "bodyRefresh": "Refreshing from your configured sources.",
+    "body": "First sync: building your history from your wallets and imports. This runs once and can take a few minutes.",
+    "bodyRefresh": "Refreshing your wallets and imports.",
     "bodyFailed": "The refresh stopped before every source could finish.",
     "preparing": "Preparing source refresh",
     "working": "Working…",
     "keepUsing": "You can keep using Kassiber while this finishes.",
-    "failedHint": "The failed source and phase remain visible until you close this message.",
+    "failedHint": "The failed source stays listed until you close this message.",
     "closeFailure": "Close",
     "continueInBackground": "Continue in background"
   },
@@ -681,5 +693,20 @@
     "label": "Messages",
     "region": "Messages ({hotkey})",
     "dismiss": "Dismiss"
+  },
+  "demo": {
+    "badge": "Demo",
+    "region": "Demo book",
+    "body": "Sample data on regtest, separate from your own books. It has no sync server; Reset demo starts over.",
+    "leave": "Leave demo",
+    "reset": "Reset demo",
+    "more": "More demo actions",
+    "connectAgent": "Connect an agent",
+    "preparing": "Preparing the demo book…",
+    "startFailed": "The demo book could not be started.",
+    "leaveFailed": "Could not leave the demo.",
+    "resetDone": "The demo book was reset.",
+    "tryEntry": "Try the demo book",
+    "mcpHint": "In the demo, the agent command opens only the demo book and uses the demo's own agent settings."
   }
 }

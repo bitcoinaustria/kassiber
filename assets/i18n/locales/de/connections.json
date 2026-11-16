@@ -113,7 +113,7 @@
       "groupFallback": "Samourai-Gruppe",
       "toxicChange": "Toxic-Change-Ausgaben bleiben meldepflichtig und brauchen normale Bewertungsnachweise.",
       "postmixNote": "Postmix-Zeilen ohne exakte Whirlpool-Metadaten werden mit mindestens einem Mix angezeigt; Kassiber beansprucht keine exakte Sat-Herkunft über andere Teilnehmer.",
-      "stale": "Der Samourai-Bestand ist veraltet. Aktualisiere, bevor du dich auf Wallet-Details, Berichte oder die Source-of-Funds-Bereitschaft verlässt.",
+      "stale": "Die Samourai-Daten sind veraltet. Aktualisiere, bevor du dich auf Wallet-Details, Berichte oder Mittelherkunft verlässt.",
       "refreshSource": "Samourai-Quelle aktualisieren",
       "sectionLabel": {
         "deposit": "Deposit",
@@ -129,7 +129,7 @@
     },
     "btcpayProvenance": {
       "title": "BTCPay-Herkunft",
-      "description": "BTCPay-Kommentare und -Labels reichern passende Transaktionen während des Sync an. Descriptor- oder Datei-Sync bleibt die Guthaben-Quelle.",
+      "description": "BTCPay-Kommentare und -Labels werden beim Sync zu passenden Transaktionen ergänzt. Guthaben kommen weiterhin aus der Wallet selbst.",
       "instance": "Instanz",
       "store": "Store",
       "paymentMethod": "Zahlungsmethode",
@@ -219,13 +219,13 @@
       "descriptionPlaintext": "Dieses Buch ist nicht verschlüsselt. Bestätige das Kopieren des für {{label}} gespeicherten Wallet-Export-Materials.",
       "descriptorWithChange": "Empfang + Wechsel",
       "descriptorOnly": "Watch-only-Material",
-      "includesChange": "Die Zwischenablage enthält das gespeicherte Wechsel-Material in der nächsten Zeile.",
+      "includesChange": "Der Change-Descriptor wird in der nächsten Zeile mitkopiert.",
       "passphrase": "Datenbank-Passphrase",
       "helper": "Kassiber kopiert das rohe gespeicherte Wallet-Export-Material, ohne Feldnamen oder Tabellenformatierung.",
       "plaintextChallenge": "Tippe COPY LOCAL SECRET zur Bestätigung",
-      "plaintextHelper": "Unverschlüsselte Bücher haben keine Datenbank-Passphrase. Dieser Schritt verhindert versehentliches Kopieren in die Zwischenablage.",
+      "plaintextHelper": "Diese Bücher haben keine Passphrase. Dieser Zusatzschritt verhindert, dass du den Descriptor versehentlich kopierst.",
       "copy": "Kopieren",
-      "copying": "Wird kopiert...",
+      "copying": "Wird kopiert…",
       "copied": "Kopiert",
       "copiedInline": "In die Zwischenablage kopiert.",
       "copiedTitle": "Wallet-Export kopiert",
@@ -249,7 +249,7 @@
     "edit": {
       "title": "Verbindung bearbeiten",
       "descriptionEncrypted": "Bestätige diese Änderung mit der lokalen Datenbank-Passphrase.",
-      "descriptionPlaintext": "Diese Klartext-Bücher haben keine Datenbank-Passphrase; tippe die ausdrückliche Challenge für lokale Änderungen, um fortzufahren.",
+      "descriptionPlaintext": "Diese Bücher sind nicht verschlüsselt. Tippe das Bestätigungswort ein, um fortzufahren.",
       "label": "Label",
       "syncBackend": "Sync-Backend",
       "keepCurrentBackend": "Aktuelles Backend behalten",
@@ -264,13 +264,13 @@
       "detectedWithHint": "Erkannt: {{label}} — {{hint}}",
       "materialHelper": "Lass das Feld leer, außer du musst das gespeicherte Wallet-Material ändern.",
       "scriptTypesLabel": "Zu beobachtende Adresstypen",
-      "scriptTypesHelper": "Kassiber leitet pro gewähltem Typ eine Empfangs- und eine Wechsel-Kette ab. Einen Typ hinzuzufügen, scannt diese Wallet neu.",
+      "scriptTypesHelper": "Kassiber beobachtet Empfangs- und Wechseladressen für jeden gewählten Typ. Ein neuer Typ scannt diese Wallet neu.",
       "errorSelectScriptType": "Wähle mindestens einen Adresstyp zum Beobachten.",
       "gapLimit": "Gap Limit",
-      "gapLimitHelper": "Erhöhe das für Wallets mit langen Folgen ungenutzter Adressen. Große Werte bis 5.000 können länger dauern, aber Aktualisierungen laufen weiter, bis der Daemon antwortet.",
+      "gapLimitHelper": "Erhöhe das für Wallets mit langen Folgen ungenutzter Adressen, bis 5.000. Größere Werte brauchen länger zum Synchronisieren.",
       "birthday": "Wallet-Geburtstag",
       "birthdayHelper": "Das echte erste Nutzungsdatum der Wallet, wenn ein Backend historische Abdeckung benötigt.",
-      "birthdayCoreHelper": "Verwende das echte erste Nutzungsdatum. Die normale Aktualisierung bleibt verfügbar, aber eine geprunte Node kann nur die noch vorhandene Historie erneut scannen.",
+      "birthdayCoreHelper": "Verwende das echte erste Nutzungsdatum. Eine geprunte Node kann nur die noch vorhandene Historie neu scannen.",
       "btcpayInstance": "BTCPay-Instanz",
       "keepCurrentInstance": "Aktuelle Instanz behalten",
       "btcpayStoreId": "BTCPay-Store-ID",
@@ -285,12 +285,12 @@
       "provenanceRoutesHelper": "Entferne nur bei den Store-/Zahlungsmethode-Verknüpfungen das Häkchen, die diese Wallet nicht mehr anreichern soll.",
       "keepProvenanceRoute": "Route behalten",
       "clearProvenance": "BTCPay-Herkunftsrouten leeren",
-      "clearProvenanceHelper": "Entfernt alle {{count}} gespeicherten Route(n). Descriptor-/Datei-Sync bleibt die Guthaben-Quelle. Füge Routen über Wallet hinzufügen erneut hinzu.",
+      "clearProvenanceHelper": "Entfernt alle {{count}} gespeicherten Routen. Guthaben kommen weiterhin aus der Wallet selbst. Routen fügst du über „Wallet hinzufügen“ erneut hinzu.",
       "deprecated": "Veraltete Wallet",
-      "deprecatedHelper": "Importierte Historie behalten, aber diese Wallet von Alle aktualisieren und Hintergrund-Aktualisierung ausschließen. Manuelle Aktualisierung funktioniert weiter.",
+      "deprecatedHelper": "Behält die Historie, überspringt diese Wallet aber bei „Alle aktualisieren“ und der Hintergrund-Aktualisierung. Manuell aktualisieren geht weiterhin.",
       "passphrase": "Passphrase",
       "plaintextChallenge": "Challenge für Klartext-Änderung",
-      "saving": "Wird gespeichert...",
+      "saving": "Wird gespeichert…",
       "errorEnterLabel": "Gib ein Verbindungslabel ein.",
       "errorChangeNothing": "Ändere das Label oder aktualisiere mindestens ein Feld.",
       "errorGapPositive": "Das Gap Limit muss eine positive Ganzzahl sein.",
@@ -303,13 +303,13 @@
     },
     "delete": {
       "title": "Verbindung entfernen",
-      "description": "Das entfernt {{label}} und die lokal importierten Transaktionen. Bestätige mit {{challenge}} und dem exakten Verbindungslabel.",
+      "description": "Entfernt {{label}} und die damit importierten Transaktionen. Tippe zur Bestätigung {{challenge}} und den genauen Namen der Verbindung.",
       "challengePassphrase": "der Datenbank-Passphrase",
       "challengePlaintext": "der Klartext-Challenge für lokales Löschen",
       "passphrase": "Passphrase",
       "plaintextChallenge": "Challenge für Klartext-Löschung",
       "connectionLabel": "Verbindungslabel",
-      "removing": "Wird entfernt...",
+      "removing": "Wird entfernt…",
       "errorConfirmLabel": "Tippe {{label}}, um das Entfernen zu bestätigen.",
       "errorPlaintextAck": "Tippe {{ack}}, um die lokale Löschung zu bestätigen.",
       "removedTitle": "Verbindung entfernt",
@@ -327,7 +327,7 @@
       "addBackend": "Backend hinzufügen",
       "rescanCoverageFailed": "Es konnte nicht geprüft werden, ob Bitcoin Core diese Wallet erneut scannen kann.",
       "rescanBirthdayRequired": "Gib das echte erste Nutzungsdatum der Wallet ein, bevor du mit dieser geprunten Node erneut scannst.",
-      "rescanPrunedBlocked": "Diese Wallet beginnt am {{birthday}}, aber die Node bewahrt Blöcke nur ungefähr ab {{retained}} auf. Die normale Aktualisierung bleibt verfügbar; verwende für einen vollständigen Rescan eine ungeprunte Core-Node oder ein Archiv-Backend.",
+      "rescanPrunedBlocked": "Diese Wallet beginnt am {{birthday}}, aber die Node hat Blöcke nur ab etwa {{retained}}. Die normale Aktualisierung funktioniert; ein vollständiger Rescan braucht eine ungeprunte Node oder ein anderes Backend.",
       "retainedDateUnknown": "einem unbekannten Datum"
     },
     "utxoTransaction": {
@@ -352,7 +352,7 @@
       "alsoRemoved": "Ebenfalls gelöscht: {{items}}.",
       "cancel": "Abbrechen",
       "confirmAction": "Transaktionen löschen",
-      "loadingPlan": "Wird geprüft …"
+      "loadingPlan": "Wird geprüft…"
     }
   },
   "node": {
@@ -364,7 +364,7 @@
     },
     "noSnapshot": {
       "title": "Noch kein Node-Snapshot",
-      "description": "Der Lightning-Node-Sync hat für diese Verbindung noch keinen Snapshot erzeugt. Führe eine Aktualisierung aus, um Channels, Guthaben und die Routing-Zusammenfassung abzurufen.",
+      "description": "Noch keine Node-Daten. Aktualisiere, um Channels, Guthaben und Routing zu laden.",
       "errorDescription": "Kassiber konnte keinen Node-Snapshot laden: {{message}}"
     },
     "loadingSnapshot": {
@@ -445,12 +445,12 @@
     },
     "profitabilityReport": {
       "title": "Lightning-Routing-Rentabilität",
-      "description": "Routing-Einnahmen abzüglich Zahlungs-, Rebalance- und On-chain-Kosten pro Lightning-Verbindung. Die Spalte pro Channel zeigt, ob das verdiente Routing eine grobe Standardannahme von {{cost}} sat Öffnungskosten deckt; Adapter mit exakter Funding-Gebühr können den Schwellenwert verfeinern.",
+      "description": "Routing-Einnahmen abzüglich Zahlungs-, Rebalance- und On-chain-Kosten, pro Lightning-Verbindung. Die Channel-Spalte zeigt, ob das Routing angenommene Öffnungskosten von {{cost}} sat wieder eingespielt hat.",
       "unsupported": "Keine konfigurierte Lightning-Verbindung meldet Unterstützung für Routing-Rentabilität.",
       "connection": "Verbindung",
       "run": "Bericht ausführen",
       "idle": "Noch nicht ausgeführt. Dies kontaktiert die Node.",
-      "loading": "Routing-Rentabilität wird gelesen...",
+      "loading": "Routing-Rentabilität wird gelesen…",
       "errorFallback": "Routing-Rentabilität ist für diese Verbindung noch nicht verfügbar.",
       "empty": "Keine Routing-Daten verfügbar.",
       "windowSummary": "{{window}} · {{forwards}} Forwards · {{payments}} Zahlungen · {{rebalances}} Rebalances",
@@ -484,7 +484,7 @@
       "title": "Channels",
       "showClosed": "Geschlossene anzeigen ({{value}})",
       "hideClosed": "Geschlossene ausblenden ({{value}})",
-      "description": "Kapazität, lokales/remote Guthaben und Routing-Gebührenpolitik pro Channel. Klicke eine Zeile für die vollständigen Channel-Details.",
+      "description": "Kapazität, lokales und entferntes Guthaben sowie Gebühren pro Channel. Wähle eine Zeile für Details.",
       "empty": "Der Node meldet keine Channels.",
       "peer": "Peer",
       "balance": "Guthaben",
@@ -531,7 +531,7 @@
       "publicKey": "Public Key",
       "publicKeyHidden": "Verborgen für unangekündigten Channel",
       "visibility": "Sichtbarkeit",
-      "privateVisibility": "Privat / unangekündigt. Der verbundene Peer wird als Alias angezeigt; der Public Key bleibt in dieser UI-Oberfläche verborgen.",
+      "privateVisibility": "Privat (nicht angekündigt). Der Peer erscheint als Alias; sein Public Key wird nicht angezeigt.",
       "channel": "Channel",
       "shortChannelId": "Short Channel ID",
       "shortChannelIdPending": "Bestätigung ausstehend",
@@ -571,7 +571,7 @@
     },
     "forwards": {
       "title": "Letzte Forwards",
-      "description": "Durch diesen Node geroutete HTLCs, neueste zuerst. Fehlgeschlagene und laufende Forwards bleiben gelistet, damit du Liquiditätsengpässe siehst.",
+      "description": "Durch diesen Node geroutete Zahlungen, neueste zuerst, auch fehlgeschlagene und laufende.",
       "time": "Zeit",
       "route": "Route",
       "amount": "Betrag",
@@ -586,7 +586,7 @@
       "offered": "In Bearbeitung"
     },
     "sync": {
-      "stillScanning": "{{label}} ruft noch Node-Daten ab. Große Channel-Historien können einen Moment dauern; Kassiber aktualisiert, sobald der Daemon antwortet.",
+      "stillScanning": "{{label}} lädt noch Node-Daten. Große Channel-Historien brauchen einen Moment.",
       "failedFallback": "Node-Aktualisierung fehlgeschlagen."
     }
   },
@@ -633,7 +633,7 @@
       "title": "UTXO-Transaktion im Browser öffnen?",
       "description": "Das öffnet {{explorer}} außerhalb von Kassiber. Der Explorer kann deine IP-Adresse und die angefragte Transaktions-ID sehen.",
       "explorerFallback": "den konfigurierten Explorer",
-      "opening": "Wird geöffnet...",
+      "opening": "Wird geöffnet…",
       "openExplorer": "Explorer öffnen",
       "couldNotOpen": "Der Explorer konnte nicht im Standardbrowser geöffnet werden."
     }
@@ -679,8 +679,8 @@
   "add": {
     "title": "Verbindung hinzufügen",
     "setupTitle": "{{title}} einrichten",
-    "description": "Wähle eine Watch-only-Wallet, einen Node, eine Börse oder eine lokale Dateiquelle.",
-    "setupDescription": "Gib die lokalen Details ein, die Kassiber für diese Verbindung benötigt.",
+    "description": "Wähle eine Watch-only-Wallet, einen Node, eine Börse oder eine Datei.",
+    "setupDescription": "Gib ein, was Kassiber braucht, um diese Verbindung zu lesen.",
     "openingScanner": "Scanner wird geöffnet",
     "plannedLabel": "Geplant",
     "docs": "Doku",
@@ -716,7 +716,7 @@
       "noBackendConfigured": "Es ist kein passendes Backend konfiguriert.",
       "openBackendSettings": "Backend-Einstellungen öffnen",
       "browse": "Durchsuchen…",
-      "browseDots": "Durchsuchen...",
+      "browseDots": "Durchsuchen…",
       "selectExportFileTitle": "Exportdatei von {{title}} auswählen",
       "chooseExportTitle": "Export von {{title}} wählen",
       "filePickerUnavailableTitle": "Dateiauswahl nicht verfügbar",
@@ -728,10 +728,10 @@
       "scanHint": "Füge einen Output-Descriptor, einen xpub-Familien-Export oder eine BBQR-Sequenz ein oder scanne sie.",
       "scan": "Scannen",
       "gapLimit": "Gap Limit",
-      "gapLimitHelper": "Standard sind 40 ungenutzte Adressen pro Branch. Erhöhe es für ältere oder stark genutzte Wallets, bis 5.000; lange Scans laufen weiter, bis der Daemon fertig ist.",
+      "gapLimitHelper": "Standard: 40 ungenutzte Adressen pro Branch. Erhöhe ihn für ältere oder stark genutzte Wallets, bis 5.000; größere Werte brauchen länger zum Scannen.",
       "birthday": "Wallet-Geburtstag",
       "birthdayHelper": "Optional. Speichert das erste Nutzungsdatum der Wallet für spätere Aktualisierungen.",
-      "birthdayHelperCore": "Bitcoin Core startet Descriptor-Rescans ab diesem Datum statt bei Genesis. Bei einer geprunten Node ist das echte erste Nutzungsdatum erforderlich.",
+      "birthdayHelperCore": "Bitcoin Core scannt ab diesem Datum statt ab dem ersten Block. Pflicht, wenn die Node geprunt ist.",
       "scanAfter": "Wallet nach dem Setup scannen",
       "deriving": "Wird abgeleitet…",
       "previewAddresses": "Adressen-Vorschau",
@@ -785,7 +785,7 @@
       "candidateMeta": "{{status}} · {{blocks}}/{{headers}} · {{peers}} Peers · {{auth}}",
       "credentialUnknown": "RPC-Zugangsdaten",
       "walletRpcUnavailable": "Wallet-RPC ist nicht verfügbar; Kassiber braucht es für Watch-only-Descriptor-Sync.",
-      "blockFiltersUnavailable": "BIP158-Filter sind nicht verfügbar. Descriptor-Sync funktioniert trotzdem; aktiviere blockfilterindex=1 nur, wenn du später filterbasierte Werkzeuge nutzen willst.",
+      "blockFiltersUnavailable": "Block-Filter (BIP158) sind auf dieser Node aus. Der Sync funktioniert auch ohne sie.",
       "prunedWarning": "Diese Node ist gepruned; Wallet-Geburtstage müssen innerhalb des Prune-Horizonts liegen.",
       "prunedWarningWithDate": "Diese Node ist gepruned und bewahrt Blöcke ungefähr ab {{retained}} auf. Die Wallet-spezifische Abdeckung wird vor dem Scan geprüft.",
       "coverageProbeFailed": "Die historische Abdeckung von Bitcoin Core konnte nicht geprüft werden.",
@@ -816,7 +816,7 @@
     },
     "addressList": {
       "addresses": "Adressen",
-      "helper": "Füge Adressen ein oder lade eine .txt/.csv-Datei, eine pro Zeile. Ein Bitcoin-Core-Schlüsselpool aus der Zeit vor HD hat keinen xpub, daher wird jede Adresse einzeln gescannt – es gibt kein Gap Limit.",
+      "helper": "Füge Adressen ein oder lade eine .txt/.csv-Datei, eine pro Zeile. Jede Adresse wird gescannt; es gibt kein Gap Limit.",
       "placeholder": "bc1q…\n1…\n3…",
       "loadFile": "Datei laden…",
       "summary_one": "{{count}} Adresse erkannt",
@@ -838,7 +838,7 @@
     },
     "silentPayments": {
       "backend": "SP-fähiges Backend",
-      "backendHelper": "Kassiber kann das nicht aus einem normalen Endpunkt erkennen. Wähle nur ein Backend, wenn Betreiber/Doku BIP352-Silent-Payments-Scanning ausdrücklich unterstützen oder wenn du in den Backend-Einstellungen eine lokale Scanner-Datei/einen Scanner-Pfad konfiguriert hast. Normale Esplora-, Electrum- und Bitcoin-Core-History-Syncs reichen nicht aus.",
+      "backendHelper": "Kassiber kann diese Unterstützung nicht erkennen. Wähle ein Backend nur, wenn sein Betreiber Silent-Payments-Scanning (BIP352) zusagt oder du in den Backend-Einstellungen einen lokalen Scanner dafür eingerichtet hast. Normale Esplora-, Electrum- und Bitcoin-Core-Backends können das nicht.",
       "material": "Silent-Payments-Material",
       "materialHelper": "Füge watch-only BIP392-sp()-Material ein, z. B. sp(spscan1q...) oder Scan-Privatschlüssel plus öffentlichen Spend-Schlüssel. Spend-private-Formen werden abgelehnt.",
       "scanMode": "Scan-Modus",
@@ -897,7 +897,7 @@
       "taxYear": "Steuerjahr",
       "taxYearHelper": "Optional. Das sind Nachweis-Metadaten, kein importiertes Steuerergebnis.",
       "fileLabel": "Pfad zur Steuerberichtsdatei",
-      "fileHelper": "Kassiber kopiert das Original in den verwalteten Anhangsspeicher und übernimmt weder Summen noch Tranchenzuordnungen.",
+      "fileHelper": "Kassiber legt eine Kopie als Anhang ab und übernimmt weder Summen noch Tranchenzuordnungen des Berichts.",
       "errorProvider": "Gib den Berichtsanbieter ein.",
       "errorFile": "Wähle die Datei des früheren Steuerberichts.",
       "errorYear": "Das Steuerjahr muss vierstellig sein.",
@@ -1269,7 +1269,7 @@
       "labelFileFilter": "BIP329 JSONL",
       "errorPickFile": "Wähle die BIP329-Label-Datei.",
       "labelsImportedTitle": "Labels importiert",
-      "labelsImportedBody": "{{count}} Label-Datensätze verarbeitet. {{added}} Transaktions-Tags hinzugefügt; {{skipped}} mehrdeutige Tag-Projektionen übersprungen.",
+      "labelsImportedBody": "{{count}} Labels verarbeitet. {{added}} Transaktions-Tags hinzugefügt; {{skipped}} mehrdeutige übersprungen.",
       "exportModeLabel": "Exportmodus",
       "exportModeStored": "Gespeicherte Labels",
       "exportModeSynthesized": "Kassiber-Labels",
@@ -1277,7 +1277,7 @@
       "exportWalletLabel": "Exportumfang",
       "exportWalletProfile": "Gesamtes Profil",
       "exportButton": "Labels exportieren",
-      "exporting": "Labels werden exportiert...",
+      "exporting": "Labels werden exportiert…",
       "exportSaveTitle": "BIP329-Labels speichern",
       "exportReadyTitle": "Labels exportiert",
       "exportReadyBody": "{{count}} Label-Datensätze nach {{path}} geschrieben.",
@@ -1293,12 +1293,12 @@
       }
     },
     "backendSettings": {
-      "line1": "Diese Verbindung ist als Backend-Endpunkt in den Einstellungen konfiguriert.",
-      "line2": "Das Wallet-Setup kann dieses Backend dann namentlich auswählen, ohne Endpunkt-URLs oder Zugangsdaten im Verbindungsdialog offenzulegen.",
-      "loading": "Konfigurierte Backends werden geladen...",
+      "line1": "Diese Verbindung wird in den Einstellungen als Backend eingerichtet.",
+      "line2": "Wallets können dieses Backend dann namentlich verwenden, ohne dass Adresse oder Zugangsdaten hier erscheinen.",
+      "loading": "Backends werden geladen…",
       "localTitle": "Lokale Regtest-Infrastruktur"
     },
-    "notWired": "Das dedizierte Setup ist noch nicht verdrahtet.",
+    "notWired": "Das Setup für diese Quelle ist noch nicht verfügbar.",
     "validation": {
       "labelRequired": "Das Verbindungslabel ist erforderlich.",
       "pasteWalletMaterial": "Füge einen Wallet-Export, einen Descriptor oder einen Extended Public Key ein.",
@@ -1345,7 +1345,7 @@
       "changedMetadata": "Metadaten geändert",
       "moreUpdated_one": "{{count}} weitere aktualisierte Transaktion",
       "moreUpdated_other": "{{count}} weitere aktualisierte Transaktionen",
-      "noChange": "Es wurden keine gespeicherten Transaktionsdaten geändert. Zeilen haben eventuell bereits eine passende Bewertung oder waren nicht zugeordnet bzw. mehrdeutig."
+      "noChange": "Nichts geändert. Die Zeilen sind vielleicht schon bewertet, oder sie passten zu keiner oder zu mehreren Transaktionen."
     },
     "progress": {
       "importing": "{{wallet}} wird importiert…",
@@ -1385,7 +1385,7 @@
         "coinbase": "API-Secret",
         "binance": "Secret Key"
       },
-      "stored": "Wenn du die Verbindung hinzufügst, speichert Kassiber den Key in den Backend-Einstellungen dieses Buchs — verschlüsselt mit dem Buch, wenn das Buch verschlüsselt ist — und zeigt ihn nie wieder an."
+      "stored": "Kassiber speichert den Key mit diesem Buch (verschlüsselt, wenn das Buch es ist) und zeigt ihn nie wieder an."
     },
     "test": {
       "button": "Verbindung testen",
@@ -1413,13 +1413,13 @@
       "offline": "Der Offline-Modus ist an, daher hat Kassiber {{provider}} nicht kontaktiert. Schalte den Offline-Modus aus, um zu testen oder zu synchronisieren.",
       "consent": "Kassiber hat für diese Anfrage keine Freigabe erhalten. Starte die Aktion erneut.",
       "protocol": "{{provider}} hat so geantwortet, dass Kassiber die Antwort nicht sicher lesen kann. Es wurde nichts importiert.",
-      "refused": "Kassiber hat angehalten, weil ein Eintrag nicht sicher verbucht werden kann, und nichts importiert. Wenn die Details sagen, dass ein Typ nicht erkannt wird, melde ihn bitte, damit er unterstützt werden kann; bis dahin kannst du den Eintrag über das generische Ledger erfassen.",
+      "refused": "Nichts wurde importiert: Ein Eintrag ließ sich nicht sicher verbuchen. Wenn die Details sagen, dass ein Typ nicht erkannt wird, melde ihn bitte; bis dahin kannst du ihn über den Import „Generic ledger“ erfassen.",
       "config": "Der gespeicherte Key dieser Verbindung ist unvollständig. Entferne die Verbindung und füge die Börse mit einem Key nur zum Lesen erneut hinzu.",
       "timeout": "{{provider}} hat nicht rechtzeitig geantwortet. Versuche es später erneut.",
       "network": "Kassiber konnte {{provider}} nicht erreichen. Prüfe die Netzwerkverbindung und etwaige Proxy-Einstellungen.",
       "http": "{{provider}} hat mit einem Fehler geantwortet.",
       "conflict": "In diesem Buch gibt es schon eine Wallet mit diesem Namen. Wähle einen anderen Namen.",
-      "needsRust": "Börsen-API-Verbindungen brauchen ein neueres Kassiber-Backend als das, mit dem diese App spricht. Aktualisiere Kassiber oder synchronisiere über die Kommandozeile.",
+      "needsRust": "Börsenverbindungen brauchen eine neuere Kassiber-Version. Aktualisiere Kassiber oder synchronisiere über die Kommandozeile.",
       "unknown": "Die Anfrage ist fehlgeschlagen.",
       "permissions": "Noch eingeschaltete Rechte: {{list}}",
       "serverSaid": "Details: {{message}}"

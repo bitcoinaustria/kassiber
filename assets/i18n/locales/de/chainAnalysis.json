@@ -183,7 +183,7 @@
   "coverageMissing": "Fehlende Beobachtungen",
   "coverageCompleteTx": "Vollständige Transaktionsformen",
   "coverageConflict": "Widersprüchliche Beobachtungen",
-  "coverageFresh": "Verwahrungsprojektion aktuell",
+  "coverageFresh": "Verwahrungsdaten aktuell",
   "coverageSources": "Abdeckung lokaler Quellen",
   "coveragePruning": "Gefilterte Grenzen",
   "observationStatus": {
@@ -326,7 +326,7 @@
     "discardHelp": "Entfernt nur die gespeicherten Zeilen dieses unvollständigen Imports.",
     "progressDeleted": "{{count}} Zeilen entfernt",
     "assistantDataset": "Prüfe den lokalen Zuordnungsdatensatz {{id}} mit den Datensatzwerkzeugen. Erkläre Herkunft, Version, Sichtbarkeit und Grenzen. Labels bleiben Quellenbehauptungen und belegen weder Eigentum noch Taint.",
-    "assistantSource": "Hilf bei der Prüfung der ausgewählten lokalen Zuordnungsquelle mit dem opaken Token {{token}}. Verwende einen lokalen Provider für Dateivorschau und Import. Verlange validierten Inhalt und ausdrückliche Zustimmung vor dem Import; rufe keine externen Daten ab."
+    "assistantSource": "Hilf bei der Prüfung der ausgewählten lokalen Zuordnungsquelle mit dem opaken Token {{token}}. Verwende einen lokalen Anbieter für Dateivorschau und Import. Verlange validierten Inhalt und ausdrückliche Zustimmung vor dem Import; rufe keine externen Daten ab."
   },
   "resultView": "Ergebnisse",
   "backToInvestigation": "Zurück zur Untersuchung",

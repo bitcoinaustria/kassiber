@@ -49,7 +49,7 @@
         "manual_bridge": "Manual bridge"
       },
       "serverPreviewVerified": "Rollback verified",
-      "serverPreviewFailed": "Daemon preview failed",
+      "serverPreviewFailed": "Preview failed",
       "editDraft": "Edit draft",
       "revise": "Create revision",
       "retireDraft": "Retire draft",
@@ -202,11 +202,11 @@
         "custody_component_scope_mismatch": "The component does not belong to the active book.",
         "custody_component_state_conflict": "The component changed before this action completed. Reload and try again.",
         "custody_component_superseded": "A superseded revision cannot be activated directly. Restore it as a new draft first.",
-        "custody_component_validation": "The daemon rejected a custody-component field.",
+        "custody_component_validation": "Kassiber rejected a custody-component field.",
         "conflict": "The custody-component request conflicts with existing data.",
         "not_found": "The custody component, transaction, or wallet was not found in this book.",
-        "validation": "The daemon rejected the custody-component request.",
-        "unknown": "The daemon rejected the request ({{code}}).",
+        "validation": "Kassiber rejected this custody component.",
+        "unknown": "Kassiber rejected the request ({{code}}).",
         "unexpected": "The custody-component request failed unexpectedly."
       },
       "form": {
@@ -818,9 +818,9 @@
     "staleReports": "Stale reports",
     "loadedEdits_one": "loaded edit",
     "loadedEdits_other": "loaded edits",
-    "refreshing": "Refreshing...",
+    "refreshing": "Refreshing…",
     "emptyLabel": "No metadata activity matches these filters",
-    "loadingMore": "Loading...",
+    "loadingMore": "Loading…",
     "loadMore": "Load more",
     "revert": {
       "reasonField": "Reverted {{label}} from Activity",
@@ -833,7 +833,7 @@
   },
   "egress": {
     "subtitle": "Live RAM-only outbound ledger",
-    "notMonitored": "This page records requests Kassiber makes in the daemon process. Work Kassiber hands to a separate program — the release check, the AI CLI broker, and lightning-cli — is not listed here, because that traffic leaves from a process this ledger cannot see.",
+    "notMonitored": "This page lists requests Kassiber's main process makes. Work handed to a separate program (the release check, the AI CLI broker and lightning-cli) is not listed, because that traffic leaves from a process this page cannot see.",
     "refresh": "Refresh",
     "loadFailed": "Failed to load egress ledger: {{error}}",
     "empty": "No outbound egress recorded",
@@ -940,7 +940,7 @@
     "recordsLine": "{{count}} records · RAM buffer {{size}} ({{percent}}%)",
     "renderingNewest": "rendering {{count}} newest",
     "noMatching": "No matching log records",
-    "waiting": "Waiting for daemon traffic…",
+    "waiting": "Waiting for activity…",
     "filterLevel": "level {{level}}",
     "filterModule": "module {{module}}",
     "filterSearch": "search \"{{query}}\"",
@@ -1185,7 +1185,7 @@
       },
       "chip": {
         "automatic": "Automatic",
-        "reviewed": "By you",
+        "reviewed": "Manually",
         "undone": "Unlinked",
         "rule": "By a rule",
         "part": "Part linked"
@@ -1204,7 +1204,7 @@
       "linkedByYouReason": "You linked these two transactions yourself.",
       "taxable": "Taxable",
       "how": {
-        "sameTransaction": "Same transaction",
+        "sameTransaction": "On-chain",
         "fanout": "Paid to several",
         "consolidation": "Consolidation",
         "channel": "Lightning channel",

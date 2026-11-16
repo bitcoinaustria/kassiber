@@ -123,7 +123,7 @@ describe("Book Set Overview rendering", () => {
       />,
     );
 
-    expect(html).toContain("Book Set Overview");
+    expect(html).toContain("Book set overview");
     expect(html).toContain(`data-testid="birds-eye-${workspace.id}"`);
   });
 

@@ -1,12 +1,12 @@
 {
   "shell": {
     "finishError": "Onboarding konnte nicht abgeschlossen werden.",
-    "passphraseRequired": "Datenbank-Passphrase ist erforderlich.",
-    "errorInitSqlcipher": "SQLCipher-Datenbank konnte nicht initialisiert werden.",
+    "passphraseRequired": "Gib eine Passphrase ein.",
+    "errorInitSqlcipher": "Die verschlüsselte Datenbank konnte nicht angelegt werden.",
     "errorLoadBooks": "Bücher konnten nicht geladen werden.",
-    "errorOpenProject": "Projekt konnte nicht geöffnet werden.",
-    "errorImportProject": "Projekt konnte nicht importiert werden.",
-    "errorReturnDefaultRoot": "Rückkehr zum Standard-Projektordner nicht möglich."
+    "errorOpenProject": "Diese Bücher konnten nicht geöffnet werden.",
+    "errorImportProject": "Diese Bücher konnten nicht importiert werden.",
+    "errorReturnDefaultRoot": "Rückkehr zum Standard-Datenordner nicht möglich."
   },
   "books": {
     "intro": "Jedes Buch hat eigene Steuer- und Währungseinstellungen. Nutze getrennte Bücher für private und geschäftliche Aktivität; nutze getrennte Kassiber-Dateien für verschiedene Klient:innen.",
@@ -18,13 +18,16 @@
       "overview": "Bücher-Set-Übersicht",
       "newBook": "Neues Buch",
       "actions": "Aktionen für {{name}}",
-      "rename": "Buchsatz umbenennen",
-      "empty": "In diesem Buchsatz gibt es noch keine Bücher.",
+      "rename": "Bücher-Set umbenennen",
+      "empty": "In diesem Bücher-Set gibt es noch keine Bücher.",
       "newBookIn": "Neues Buch in {{name}}"
     },
     "row": {
       "open": "Öffnen",
-      "lastOpened": "Zuletzt geöffnet"
+      "lastOpened": "Zuletzt geöffnet",
+      "settings": "Bucheinstellungen…",
+      "copy": "Neues Buch mit diesen Einstellungen",
+      "actions": "Weitere Aktionen für {{name}}"
     },
     "filter": {
       "placeholder": "Bücher filtern",
@@ -44,7 +47,7 @@
       "descriptionDefault": "Lege ein eigenes Buch mit Standardeinstellungen an.",
       "startFrom": "Ausgehen von",
       "defaultSettings": "Standardeinstellungen",
-      "copyHint": "Beim Kopieren der Einstellungen werden nur Steuerprofil, Währung, Behaltedauer und Tranchen-Auswahl übernommen. Wallets, Accounts und Transaktionen bleiben in den ursprünglichen Büchern.",
+      "copyHint": "Übernimmt nur Steuerregeln, Währung, Behaltedauer und Tranchen-Auswahl. Wallets, Accounts und Transaktionen bleiben im ursprünglichen Buch.",
       "nameLabel": "Buchname",
       "namePlaceholder": "Buchname",
       "regionLabel": "Region",
@@ -56,7 +59,7 @@
     },
     "renameProfile": {
       "title": "Bucheinstellungen",
-      "description": "Benenne das Buch um oder ändere Region, Buchhaltungsmethode und den unterstützten Kostenbasis-Pool. Richtlinienänderungen verarbeiten die Journale neu, damit Berichte neu berechnet werden.",
+      "description": "Benenne das Buch um oder ändere Region, Buchhaltungsmethode und Pool-Bereich der Anschaffungskosten. Geänderte Steuereinstellungen verarbeiten die Journale neu, damit Berichte neu berechnet werden.",
       "nameLabel": "Buchname",
       "regionLabel": "Region",
       "methodLabel": "Buchhaltungsmethode",
@@ -105,7 +108,7 @@
     },
     "createWorkspace": {
       "title": "Neues Bücher-Set",
-      "description": "Lege ein eigenes Set auf oberster Ebene in dieser lokalen Datenbank an und füge dann das erste Buch hinzu. Die meisten brauchen nur eines.",
+      "description": "Ein eigenes Bücher-Set in diesem Datenordner. Die meisten brauchen nur eines.",
       "nameLabel": "Bücher-Set-Name",
       "namePlaceholder": "Bücher-Set-Name",
       "submit": "Set erstellen",
@@ -114,6 +117,125 @@
     },
     "switch": {
       "errorGeneric": "Bücher konnten nicht gewechselt werden."
+    },
+    "table": {
+      "label": "Bücher in {{name}}",
+      "book": "Buch",
+      "currency": "Währung",
+      "status": "Status",
+      "actions": "Aktionen",
+      "taxYearFrom": "Steuerjahr ab {{start}}"
+    },
+    "status": {
+      "reprocess": "Journale neu verarbeiten",
+      "reprocessOnOpen": "Nach dem Öffnen neu verarbeiten",
+      "review_one": "{{count}} zu prüfen",
+      "review_other": "{{count}} zu prüfen"
+    },
+    "settings": {
+      "description": "Änderungen gelten nur für dieses Buch. Du siehst vor dem Speichern, was sich ändert.",
+      "loadError": "Die Einstellungen dieses Buchs konnten nicht geladen werden.",
+      "reviewChanges": "Änderungen prüfen",
+      "afterSwitch": "Speichere zuerst die Region; danach kannst du das ändern.",
+      "on": "Ein",
+      "off": "Aus",
+      "sections": {
+        "book": "Buch",
+        "country": "Land und Währung",
+        "taxYear": "Steuerjahr",
+        "costBasis": "Anschaffungskosten",
+        "holding": "Haltedauer",
+        "review": "Prüfoptionen"
+      },
+      "currency": {
+        "locked": "Bücher für {{country}} verwenden immer {{currency}}.",
+        "note": "Die Währung, in der Gewinne, Verluste und Anschaffungskosten ausgewiesen werden.",
+        "invalid": "Gib einen dreistelligen Währungscode ein, zum Beispiel EUR oder USD."
+      },
+      "taxYear": {
+        "startLabel": "Steuerjahr beginnt am",
+        "custom": "Eigenes Datum",
+        "customLabel": "Beginn (MM-TT)",
+        "customPlaceholder": "MM-TT",
+        "customHint": "Monat und Tag, zum Beispiel 10-01 für den 1. Oktober.",
+        "customInvalid": "Gib ein Datum als MM-TT ein, zum Beispiel 07-01. Der 29. Februar ist nicht möglich.",
+        "zoneLabel": "Zeitzone",
+        "zoneNote": "Steuerjahre und Tage beginnen um Mitternacht in dieser Zeitzone.",
+        "example": "Aktuelles Steuerjahr {{label}}: {{from}} bis {{to}}",
+        "span": "{{from}} bis {{to}}",
+        "locked": "Bücher für {{country}} folgen dem gesetzlichen Steuerjahr, deshalb lässt es sich nicht ändern.",
+        "presets": {
+          "calendar": "1. Jänner (Kalenderjahr)",
+          "uk": "6. April (wie im Vereinigten Königreich)",
+          "april": "1. April (wie in Indien und Neuseeland)",
+          "july": "1. Juli (wie in Australien)",
+          "march": "1. März (wie in Südafrika)"
+        }
+      },
+      "pool": {
+        "label": "Pool der Anschaffungskosten",
+        "global": {
+          "label": "Gesamtes Buch (gesamt)",
+          "help": "Ein Pool pro Coin über alle Wallets: Ein Verkauf nutzt die Anschaffungskosten des Buchs, egal aus welcher Wallet."
+        },
+        "wallet": {
+          "label": "Pro Wallet",
+          "help": "Jede Wallet hat ihren eigenen Pool: Ein Verkauf nutzt nur die Anschaffungskosten dieser Wallet, und verschobene Coins nehmen ihre Anschaffungskosten mit."
+        },
+        "global_then_wallet": {
+          "label": "Gesamtes Buch, ab 2025 pro Wallet",
+          "help": "Ein Pool bis Ende 2024; am 1. Jänner 2025 werden die verbleibenden Anschaffungskosten auf die Wallets aufgeteilt."
+        },
+        "unsupported": "Mit {{method}} nicht verfügbar.",
+        "only": "Bücher für {{country}} können nur diesen Pool verwenden.",
+        "perCoin": "Jeder Coin hat seinen eigenen Pool: BTC und L-BTC teilen sich nie einen. Anschaffungskosten wandern zwischen ihnen nur wie unter Prüfoptionen eingestellt."
+      },
+      "holding": {
+        "note": "Coins, die länger gehalten werden, gelten als langfristig.",
+        "invalid": "Gib eine ganze Zahl an Tagen ein, 0 oder mehr.",
+        "oneYear": "{{country}}: Coins, die länger als ein Jahr gehalten werden, gelten als langfristig.",
+        "never": "Bücher für {{country}} verwenden keine langfristige Haltedauer.",
+        "days_one": "{{count}} Tag",
+        "days_other": "{{count}} Tage"
+      },
+      "fields": {
+        "label": "Name",
+        "tax_country": "Region",
+        "fiat_currency": "Währung",
+        "tax_long_term_days": "Langfristige Haltedauer",
+        "gains_algorithm": "Bewertungsmethode",
+        "cost_basis_pool_scope": "Pool der Anschaffungskosten",
+        "require_coarse_review": "Tageskurs-Preise prüfen",
+        "bitcoin_rail_carrying_value": "Anschaffungskosten zwischen BTC und L-BTC übertragen",
+        "tax_year_start": "Steuerjahr beginnt am",
+        "timezone": "Zeitzone"
+      },
+      "preview": {
+        "title": "Änderungen prüfen",
+        "description": "{{name}}: Erst mit „Übernehmen“ wird gespeichert.",
+        "changesHeading": "Was sich ändert",
+        "changeA11y": "{{field}}: {{from}} zu {{to}}",
+        "consequencesHeading": "Was danach passiert",
+        "nothingElse": "Sonst ändert sich nichts.",
+        "reprocess_one": "Die Journale werden für {{count}} Transaktion neu verarbeitet, bevor die Berichte wieder aktuell sind.",
+        "reprocess_other": "Die Journale werden für {{count}} Transaktionen neu verarbeitet, bevor die Berichte wieder aktuell sind.",
+        "firstRun": "Die Journale verwenden die neuen Einstellungen, sobald sie zum ersten Mal verarbeitet werden.",
+        "regrouped": "Gewinne und Einkünfte werden in Steuerjahre ab {{start}} neu gruppiert.",
+        "held_one": "{{count}} Transaktion ist in {{from}} bewertet und wartet auf Prüfung, bis sie einen Preis in {{to}} hat.",
+        "held_other": "{{count}} Transaktionen sind in {{from}} bewertet und warten auf Prüfung, bis sie einen Preis in {{to}} haben.",
+        "filed_one": "{{count}} eingereichter Bericht stimmt danach eventuell nicht mehr. Er bleibt so, wie er eingereicht wurde.",
+        "filed_other": "{{count}} eingereichte Berichte stimmen danach eventuell nicht mehr. Sie bleiben so, wie sie eingereicht wurden.",
+        "calendarReset": "Das eigene Steuerjahr des Buchs wird auf das von {{country}} zurückgesetzt.",
+        "apply": "Übernehmen"
+      },
+      "errors": {
+        "methodScopeUnsupported": "Diese Bewertungsmethode passt nicht zu diesem Pool. Wähle eine andere Methode oder einen anderen Pool.",
+        "taxYearStartInvalid": "Dieses Startdatum ist ungültig. Verwende MM-TT; der 29. Februar ist nicht möglich.",
+        "taxYearStartLocked": "Das Steuerjahr dieser Region lässt sich nicht ändern.",
+        "timezoneUnknown": "Diese Zeitzone wird nicht unterstützt.",
+        "timezoneLocked": "Die Zeitzone dieser Region lässt sich nicht ändern.",
+        "bookSwitched": "Das geöffnete Buch hat sich inzwischen geändert. Schließe den Dialog und versuche es erneut."
+      }
     }
   },
   "frame": {
@@ -136,7 +258,7 @@
   "steps": {
     "essentials": "Deine Bücher",
     "sync": "Sync",
-    "ai": "AI",
+    "ai": "KI",
     "security": "Sicherheit",
     "review": "Prüfen"
   },
@@ -156,7 +278,12 @@
     "regtest": {
       "titleOpening": "Regtest-Demo wird geöffnet…",
       "title": "Regtest-Demo öffnen",
-      "body": "Setup überspringen und das generierte Regtest-Buch mit lokalem Docker-Stack öffnen."
+      "body": "Setup überspringen und das Demo-Buch auf dem lokalen Regtest-Docker-Stack öffnen."
+    },
+    "tryDemo": {
+      "title": "Demo ausprobieren",
+      "titleOpening": "Demo wird vorbereitet…",
+      "tooltip": "Ein Beispielbuch mit Wallets, Berichten und Belegen öffnen. Getrennt von deinen eigenen Büchern; nichts wird heruntergeladen."
     },
     "quickStart": "Oder mit empfohlenen Standardwerten erstellen",
     "highlights": {
@@ -174,22 +301,22 @@
   "import": {
     "title": "Bestehende Bücher öffnen",
     "selectedBooks": "Ausgewählte lokale Bücher",
-    "encrypted": "SQLCipher",
-    "plaintext": "Klartext",
+    "encrypted": "Verschlüsselt",
+    "plaintext": "Nicht verschlüsselt",
     "bookCount_one": "{{count}} Buch",
     "bookCount_other": "{{count}} Bücher",
-    "passphraseLabel": "Bücher-Passphrase",
+    "passphraseLabel": "Passphrase",
     "unlock": "Bücher entsperren",
     "backToSetup": "Zurück zum neuen Setup",
-    "rightBody": "Der Desktop-Daemon zeigt jetzt auf diesen gewählten Datenordner. Sobald ein Buch geöffnet ist, betreibt dieselbe lokale Datenbank den Rest der App.",
+    "rightBody": "Kassiber verwendet jetzt den gewählten Datenordner. Sobald ein Buch geöffnet ist, arbeitet die ganze App damit.",
     "loading": "Lokale Bücher werden geladen…",
-    "empty": "In diesem lokalen Datenordner wurden keine Bücher gefunden.",
+    "empty": "In diesem Datenordner gibt es keine Bücher.",
     "accountsWallets": "{{accounts}} Accounts · {{wallets}} Wallets",
     "opening": "Wird geöffnet",
     "active": "Aktiv",
-    "errorUnlock": "Datenbank konnte nicht entsperrt werden.",
+    "errorUnlock": "Diese Bücher konnten nicht entsperrt werden.",
     "errorOpenBooks": "Bücher konnten nicht geöffnet werden.",
-    "passphraseRequired": "Datenbank-Passphrase ist erforderlich."
+    "passphraseRequired": "Gib die Passphrase ein."
   },
   "connections": {
     "default": {
@@ -206,7 +333,7 @@
     },
     "skip": {
       "title": "Offline",
-      "description": "Kein Sync, keine AI, keine Update-Prüfung. Importe und Berichte funktionieren weiter."
+      "description": "Kein Sync, keine KI, keine Update-Prüfung. Importe und Berichte funktionieren weiter."
     },
     "protocolLabel": "Sync-Protokoll",
     "displayName": "Anzeigename",
@@ -231,7 +358,7 @@
     "proxyPortPlaceholder": "9050",
     "testConnection": "Verbindung testen",
     "testing": "Wird getestet",
-    "testHint": "Optional — prüfe, ob der Endpunkt erreichbar ist.",
+    "testHint": "Optional: prüft, ob der Server erreichbar ist.",
     "testLogLabel": "Protokoll des Electrum-Verbindungstests",
     "validationFailed": "Validierung fehlgeschlagen",
     "endpointRequired": "Endpunkt ist erforderlich.",
@@ -243,27 +370,27 @@
   "ai": {
     "local": {
       "title": "Lokales Modell",
-      "description": "Ollama, oMLX oder ein anderer OpenAI-Responses-kompatibler Server auf diesem Gerät."
+      "description": "Ollama, oMLX oder ein anderer OpenAI-kompatibler Server auf diesem Gerät."
     },
     "remote": {
-      "title": "Remote-Provider",
-      "description": "Eine OpenAI-Responses-kompatible API oder ein CLI-Agent (Codex, Claude, OpenCode, GitHub Copilot). Prompts und Buchkontext verlassen dieses Gerät."
+      "title": "Remote-Anbieter",
+      "description": "Eine OpenAI-kompatible API oder eine Abo-App (Codex, Claude, OpenCode, GitHub Copilot). Prompts und Buchkontext verlassen dieses Gerät."
     },
     "disabled": {
-      "title": "Keine AI",
+      "title": "Keine KI",
       "description": "Blendet den Assistenten und den Chat aus."
     },
-    "providerPrivacy": "Provider-Privatsphäre",
-    "providerPrivacyDescription": "TEE-Provider geben an, in einer vertrauenswürdigen Ausführungsumgebung zu laufen. Kassiber behandelt sie trotzdem als extern.",
-    "providerName": "Providername",
+    "providerPrivacy": "Anbieter-Privatsphäre",
+    "providerPrivacyDescription": "TEE-Anbieter geben an, in einer vertrauenswürdigen Ausführungsumgebung zu laufen. Kassiber behandelt sie trotzdem als extern.",
+    "providerName": "Anbietername",
     "providerNamePlaceholderLocal": "ollama oder omlx",
     "providerNamePlaceholderRemote": "openai oder maple",
     "baseUrl": "Basis-URL",
     "baseUrlPlaceholderRemote": "https://…/v1 oder claude-cli://default",
-    "baseUrlDescription": "Verwende einen /v1-Endpunkt mit kompatibler OpenAI Responses API oder einen unterstützten CLI-Locator.",
+    "baseUrlDescription": "Eine OpenAI-Responses-kompatible /v1-Adresse oder ein CLI-Locator wie claude-cli://default.",
     "remoteAck": "Mir ist klar, dass Prompts dieses Gerät verlassen können.",
     "remoteAckDescription": "Labels, Notizen, Hostnamen und Berichtsdetails können sensibel sein.",
-    "offlineNote": "AI ist offline aus."
+    "offlineNote": "KI ist offline aus."
   },
   "essentials": {
     "title": "Richte deine Bücher ein",
@@ -306,14 +433,14 @@
       "weak": "Leicht zu erraten. Mehrere zufällige Wörter ergeben eine stärkere Passphrase.",
       "fair": "Geht noch stärker. Füge ein paar Zeichen oder ein weiteres Wort hinzu."
     },
-    "passphraseNote": "Wird nur an den lokalen Daemon gesendet, um die Datenbank zu entsperren — nie in der Oberfläche gespeichert.",
+    "passphraseNote": "Wird nur auf diesem Gerät zum Entsperren der Datenbank verwendet; die App speichert sie nie.",
     "recoveryAck": "Ich habe diese Passphrase sicher aufbewahrt, zum Beispiel in einem Passwort-Manager.",
     "recoveryAckDescription": "Kassiber kann sie nicht zurücksetzen. Ohne sie lassen sich diese Bücher nicht öffnen.",
     "touchId": "Mit Touch ID entsperren",
-    "touchIdDescription": "Mit Touch ID über einen Keychain-Eintrag entsperren. Die CLI wird separat eingerichtet.",
+    "touchIdDescription": "Speichert deine Passphrase im macOS-Schlüsselbund, lesbar erst nach Touch ID. Die CLI wird separat eingerichtet.",
     "existingCredentials": "Bestehende Backend-Zugangsdaten",
-    "migrateCredentials": "Zugangsdaten aus backends.env in die verschlüsselte DB übernehmen.",
-    "migrateCredentialsDescription": "Für ein bestehendes CLI-Setup.",
+    "migrateCredentials": "Gespeicherte Backend-Zugangsdaten in die verschlüsselte Datenbank übernehmen.",
+    "migrateCredentialsDescription": "Für ein bestehendes CLI-Setup: liest sie aus backends.env.",
     "plaintextAck": "Mir ist klar, dass der Klartextmodus nicht für echte Wallet-Daten gedacht ist.",
     "plaintextAckDescription": "Salden, Adressen und Labels sind von der Festplatte lesbar."
   },
@@ -324,7 +451,7 @@
     "updateChecksDescription": "GitHub sieht deine IP-Adresse, die Kassiber-Version und die Uhrzeit."
   },
   "aiStep": {
-    "title": "AI-Unterstützung wählen"
+    "title": "KI-Unterstützung wählen"
   },
   "review": {
     "title": "Setup prüfen",
@@ -336,7 +463,7 @@
       "books": "Bücher",
       "tax": "Steuer",
       "sync": "Sync",
-      "ai": "AI",
+      "ai": "KI",
       "updates": "Updates",
       "storage": "Speicherung",
       "secrets": "Geheimnisse",
@@ -370,9 +497,9 @@
       "noteEnabled": "GitHub sieht deine IP-Adresse, die Kassiber-Version und die Uhrzeit."
     },
     "storage": {
-      "valueEncrypted": "SQLCipher-verschlüsselte Datenbank",
-      "valuePlaintext": "Klartext-Datenbank",
-      "noteEncrypted": "Passphrase erforderlich. Touch ID {{touchId}}. Kein Wiederherstellungspfad.",
+      "valueEncrypted": "Verschlüsselte Datenbank",
+      "valuePlaintext": "Unverschlüsselte Datenbank",
+      "noteEncrypted": "Passphrase erforderlich. Touch ID {{touchId}}. Eine verlorene Passphrase lässt sich nicht wiederherstellen.",
       "touchIdEnabled": "aktiviert",
       "touchIdNotEnabled": "nicht aktiviert",
       "notePlaintext": "Für jeden mit Zugriff auf die Festplatte lesbar."
@@ -380,7 +507,7 @@
     "secrets": {
       "valueEncrypted": "Verschlüsselte Speicherung von Zugangsdaten",
       "valueNone": "Während des Setups keine Zugangsdaten erfasst",
-      "noteEncrypted": "Vorhandene backends.env-Zugangsdaten wandern in die verschlüsselte Datenbank."
+      "noteEncrypted": "Zugangsdaten aus backends.env wandern in die verschlüsselte Datenbank."
     },
     "group": {
       "local": {
@@ -412,6 +539,6 @@
     "loadingServers": "Serverliste wird geladen…",
     "customPending": "Der Server, den du einträgst",
     "localPending": "Ein Server auf diesem Gerät",
-    "remotePending": "Der Provider, den du wählst"
+    "remotePending": "Der Anbieter, den du wählst"
   }
 }

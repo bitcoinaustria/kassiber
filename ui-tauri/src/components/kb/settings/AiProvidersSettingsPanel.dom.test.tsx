@@ -535,7 +535,7 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     expect(probes()).toEqual([]);
     expect(
       within(card("claude")).getByText(
-        "Offline mode is on. Only providers marked local can be checked.",
+        "Offline mode is on. Only local providers can be checked.",
       ),
     ).toBeTruthy();
   });
@@ -911,7 +911,7 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     ] as const) {
       const check = within(card(name)).getByRole("button", { name: label });
       expect((check as HTMLButtonElement).disabled).toBe(true);
-      expect(check.getAttribute("title")).toBe("Disabled. Turn it on to check it.");
+      expect(check.getAttribute("title")).toBe("Off. Turn it on to check it.");
       await act(async () => {
         fireEvent.click(check);
       });

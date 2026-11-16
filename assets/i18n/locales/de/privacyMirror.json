@@ -106,7 +106,7 @@
   },
   "unavailable": {
     "title": "Privacy Mirror nicht verfügbar",
-    "body": "Der Daemon hat keinen aktuellen lokalen Bericht geliefert. Aktualisiere die Ansicht nach dem Neustart des Daemons."
+    "body": "Der Bericht konnte nicht geladen werden. Versuche, die Ansicht zu aktualisieren."
   },
   "assistantPrompt": "Lies ui_reports_privacy_mirror für dieses Buch. Erkläre die wichtigsten Befunde aus Sicht eines öffentlichen Beobachters, trenne meine Aktivitäten vom umliegenden Kontext, nenne fehlende Nachweise und bedingte Annahmen und schlage konkrete nächste Schritte vor. Nutze nur lokale Nachweise; frage vor jedem Netzwerkabruf.",
   "statement": {
