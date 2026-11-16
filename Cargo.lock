@@ -3100,6 +3100,7 @@ dependencies = [
  "kassiber-setup",
  "kassiber-store",
  "kassiber-transactions",
+ "kassiber-transfers",
  "kassiber-xlsx",
  "lwk_common",
  "lwk_wollet",

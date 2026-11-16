@@ -1,5 +1,6 @@
 //! User-triggered ingestion. Document OCR requires an exact local-provider grant.
 pub mod analysis;
+pub mod assets;
 pub mod attachment;
 mod binance;
 mod btcpay;
@@ -20,6 +21,7 @@ mod pocket;
 mod river;
 pub mod samourai;
 mod strike;
+mod swaps;
 mod synthetic;
 pub use synthetic::synthetic_csv_identity;
 mod tax_platform;
@@ -130,18 +132,61 @@ impl Format {
             Self::Json => generic_json::load(file),
             Self::BtcpayCsv | Self::BtcpayJson => btcpay::load(file, self == Self::BtcpayJson),
             Self::Csv => csv::load(file),
-            Self::Binance => binance::parse(csv::rows(&csv::read_sig(file)?)?),
+            Self::Binance => binance::parse(
+                csv::rows(&csv::read_sig(file)?)?,
+                None,
+                &mut Default::default(),
+            ),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
             Self::River => river::parse(csv::load(file)?),
             Self::Bull => bull::parse(csv::load(file)?),
             Self::BullWallet => bull_wallet::parse(csv::load(file)?),
-            Self::Coinfinity => coinfinity::parse(csv::rows(&csv::read_sig(file)?)?),
+            Self::Coinfinity => coinfinity::parse(
+                csv::rows(&csv::read_sig(file)?)?,
+                None,
+                &mut Default::default(),
+            ),
             Self::TwentyOne => twentyone::parse(csv::load(file)?),
             Self::Strike => strike::parse(csv::load(file)?),
             Self::Pocket => pocket::parse(csv::load(file)?),
-            Self::LedgerLive => ledgerlive::parse(csv::rows(&csv::read_sig(file)?)?),
+            Self::LedgerLive => ledgerlive::parse(
+                csv::rows(&csv::read_sig(file)?)?,
+                None,
+                &mut Default::default(),
+            ),
             Self::Ledger => ledger::load(file, None),
         }
+    }
+    /// The rows a wallet import keeps under the wallet's asset scope, and,
+    /// for a format converted to docs/plan/24-crypto-assets.md, the rows the
+    /// scope left out. Other formats are still Bitcoin-only and return no
+    /// tally.
+    fn load_for(
+        self,
+        file: &str,
+        target: tax_platform::Target<'_>,
+    ) -> Result<(Vec<csv::Row>, Option<assets::Tally>), AppError> {
+        match self {
+            Self::Binance | Self::Coinfinity | Self::LedgerLive => {
+                let parse = match self {
+                    Self::Binance => binance::parse,
+                    Self::Coinfinity => coinfinity::parse,
+                    _ => ledgerlive::parse,
+                };
+                let mut tally = assets::Tally::default();
+                let rows = parse(
+                    csv::rows(&csv::read_sig(file)?)?,
+                    Some(target.scope),
+                    &mut tally,
+                )?;
+                Ok((rows, Some(tally)))
+            }
+            _ => self.load(file).map(|rows| (rows, None)),
+        }
+    }
+    /// Whether the format reads the wallet's asset scope (`load_for`).
+    fn scoped(self) -> bool {
+        matches!(self, Self::Binance | Self::Coinfinity | Self::LedgerLive)
     }
     fn evidence(self) -> bool {
         matches!(
@@ -535,6 +580,9 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
             }
         }
     };
+    // Another asset's exactness is checked on the value as parsed, before
+    // the context-rounded `abs` could shorten it.
+    let parsed_amount = amount.copy_abs();
     let amount = amount.abs(&CTX).map_err(decimal_error)?;
     let fee_special = special(&text(row, "fee"));
     if amount_special
@@ -545,11 +593,12 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
     {
         return Err(decimal_error(DecimalError::InvalidOperation));
     }
-    let fee = if fee_special.is_some() {
+    let parsed_fee = if fee_special.is_some() {
         dec("0")?
     } else {
-        dec(&text(row, "fee"))?.abs(&CTX).map_err(decimal_error)?
+        dec(&text(row, "fee"))?.copy_abs()
     };
+    let fee = parsed_fee.abs(&CTX).map_err(decimal_error)?;
     let rate = (!text(row, "fiat_rate").is_empty())
         .then(|| PriceNumber::import_price(&text(row, "fiat_rate"), "fiat_rate"))
         .transpose()?;
@@ -697,10 +746,8 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
     fields.insert("occurred_at".into(), Sql::Text(occurred));
     fields.insert("confirmed_at".into(), sql(confirmed));
     fields.insert("direction".into(), Sql::Text(direction.into()));
-    fields.insert(
-        "asset".into(),
-        Sql::Text(asset(text(row, "asset").if_empty("BTC"))),
-    );
+    let code = asset(text(row, "asset").if_empty("BTC"));
+    fields.insert("asset".into(), Sql::Text(code.clone()));
     let integer_error = |v: &String| {
         AppError::new(
             "internal_error",
@@ -734,8 +781,16 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
     // Python keeps a non-finite fee Decimal until the row's fingerprint
     // converts it to msat, after the network guard.
     let deferred = fee_special.as_ref().map(integer_error);
-    fields.insert("amount".into(), Sql::Integer(msat(&amount)?));
-    fields.insert("fee".into(), Sql::Integer(msat(&fee)?));
+    // Bitcoin keeps its msat conversion; other assets must be exact.
+    let units = |field: &str, value: &Decimal, parsed: &Decimal| match assets::class(&code) {
+        assets::Class::Bitcoin => msat(value),
+        _ => assets::exact_units(&code, field, parsed),
+    };
+    fields.insert(
+        "amount".into(),
+        Sql::Integer(units("amount", &amount, &parsed_amount)?),
+    );
+    fields.insert("fee".into(), Sql::Integer(units("fee", &fee, &parsed_fee)?));
     fields.insert(
         "amount_includes_fee".into(),
         Sql::Integer(i64::from(!text(row, "amount_includes_fee").is_empty())),
@@ -1457,12 +1512,25 @@ fn run(
         None if request.format == Format::Wasabi => Some(wasabi::load(&request.file)?),
         None => None,
     };
-    let rows = if let Some(bundle) = &bundle {
-        wasabi::rows(&bundle.records)?
+    // The wallet's asset scope, for formats that keep other crypto assets.
+    let scope = match &wallet {
+        Some(wallet) if request.format.scoped() => {
+            Some(assets::Scope::of_wallet(conn, &wallet.id)?)
+        }
+        _ => None,
+    };
+    let (rows, tally) = if let Some(bundle) = &bundle {
+        (wasabi::rows(&bundle.records)?, None)
     } else if request.format == Format::Ledger {
-        ledger::load(&request.file, column_map)?
+        (ledger::load(&request.file, column_map)?, None)
+    } else if let (Some(scope), Some(wallet)) = (scope, &wallet) {
+        let target = tax_platform::Target {
+            scope,
+            wallet: &wallet.label,
+        };
+        request.format.load_for(&request.file, target)?
     } else {
-        request.format.load(&request.file)?
+        (request.format.load(&request.file)?, None)
     };
     // A Bull Bitcoin wallet imports only the rows of its configured network.
     let (rows, bull_wallet) = if request.format == Format::BullWallet {
@@ -1482,6 +1550,18 @@ fn run(
     } else {
         rows.iter().map(normalize).collect::<Result<Vec<_>, _>>()?
     };
+    // A format without its own asset tally stores the asset each row names.
+    if let (None, Some(wallet)) = (&tally, &wallet) {
+        let scope = assets::Scope::of_wallet(conn, &wallet.id)?;
+        for (index, record) in records.iter().enumerate() {
+            // A row that cannot be stored at all keeps its own error.
+            if record.deferred.is_some() || record.insert_binding_error().is_some() {
+                continue;
+            }
+            let row = format!("{} row {}", request.format.name(), index + 1);
+            assets::screen_stored(&string(&record.fields, "asset"), scope, &wallet.label, &row)?;
+        }
+    }
     kassiber_store::begin_write_savepoint(conn, "wallet_file_import").map_err(database_error)?;
     let result = if mode == Some("relevant") {
         exchange::enrich(conn, &request, &rows)
@@ -1495,6 +1575,22 @@ fn run(
             &mut ids,
             column_map,
         )
+        .and_then(|mut result| {
+            // Both legs of each provider-reported swap are stored; pair them.
+            let wallet = wallet.as_ref().expect("wallet import");
+            let pairs = swaps::pair(conn, &request.profile_id, &wallet.id, &rows, &records)?;
+            // A converted format always reports its pairs and what its
+            // scope left out.
+            if let (Some(tally), Some(scope)) = (&tally, scope) {
+                let pairs = pairs.unwrap_or(0);
+                kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs));
+                let assets = tally.envelope(scope, &wallet.label);
+                kassiber_envelope::set(&mut result, "assets", assets);
+            } else if let Some(pairs) = pairs {
+                kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs));
+            }
+            Ok(result)
+        })
         .and_then(|result| {
             if let Some(bundle) = &bundle {
                 let wallet = wallet.as_ref().expect("wallet import");
