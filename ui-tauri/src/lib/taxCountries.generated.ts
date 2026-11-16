@@ -21,6 +21,23 @@ export const TAX_COUNTRY_REGISTRY = [
       "default_days": 365,
       "kind": "profile_days"
     },
+    "method_pool_scopes": {
+      "FIFO": [
+        "global"
+      ],
+      "HIFO": [
+        "global"
+      ],
+      "LIFO": [
+        "global"
+      ],
+      "LOFO": [
+        "global"
+      ],
+      "MOVING_AVERAGE": [
+        "global"
+      ]
+    },
     "methods": [
       "FIFO",
       "HIFO",
@@ -43,8 +60,56 @@ export const TAX_COUNTRY_REGISTRY = [
     ],
     "rules": "generic",
     "sources": [],
+    "tax_year_editable": true,
+    "tax_year_presets": [
+      {
+        "id": "calendar",
+        "name": "1 January (calendar year)",
+        "start": "01-01"
+      },
+      {
+        "id": "uk",
+        "name": "6 April (UK-style)",
+        "start": "04-06"
+      },
+      {
+        "id": "april",
+        "name": "1 April (India and New Zealand style)",
+        "start": "04-01"
+      },
+      {
+        "id": "july",
+        "name": "1 July (Australia-style)",
+        "start": "07-01"
+      },
+      {
+        "id": "march",
+        "name": "1 March (South Africa-style)",
+        "start": "03-01"
+      }
+    ],
     "tax_year_start": "01-01",
-    "timezone": "UTC"
+    "timezone": "UTC",
+    "zones": [
+      "UTC",
+      "Europe/Vienna",
+      "Europe/Berlin",
+      "Europe/Zurich",
+      "Europe/Dublin",
+      "Europe/London",
+      "Europe/Madrid",
+      "Asia/Tokyo",
+      "Asia/Kolkata",
+      "Africa/Johannesburg",
+      "Australia/Adelaide",
+      "Australia/Brisbane",
+      "Australia/Darwin",
+      "Australia/Hobart",
+      "Australia/Melbourne",
+      "Australia/Perth",
+      "Australia/Sydney",
+      "Pacific/Auckland"
+    ]
   },
   {
     "code": "at",
@@ -64,6 +129,26 @@ export const TAX_COUNTRY_REGISTRY = [
     "locale": "de-AT",
     "long_term": {
       "kind": "never"
+    },
+    "method_pool_scopes": {
+      "FIFO": [
+        "global"
+      ],
+      "HIFO": [
+        "global"
+      ],
+      "LIFO": [
+        "global"
+      ],
+      "LOFO": [
+        "global"
+      ],
+      "MOVING_AVERAGE": [
+        "global"
+      ],
+      "MOVING_AVERAGE_AT": [
+        "global"
+      ]
     },
     "methods": [
       "FIFO",
@@ -95,8 +180,13 @@ export const TAX_COUNTRY_REGISTRY = [
         "url": "https://www.bmf.gv.at/themen/steuern/sparen-veranlagen/steuerliche-behandlung-von-kryptowaehrungen.html"
       }
     ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
     "tax_year_start": "01-01",
-    "timezone": "Europe/Vienna"
+    "timezone": "Europe/Vienna",
+    "zones": [
+      "Europe/Vienna"
+    ]
   },
   {
     "code": "us",
@@ -117,6 +207,28 @@ export const TAX_COUNTRY_REGISTRY = [
     "long_term": {
       "kind": "more_than_one_year"
     },
+    "method_pool_scopes": {
+      "FIFO": [
+        "global",
+        "global_then_wallet",
+        "wallet"
+      ],
+      "HIFO": [
+        "global",
+        "global_then_wallet",
+        "wallet"
+      ],
+      "LIFO": [
+        "global",
+        "global_then_wallet",
+        "wallet"
+      ],
+      "LOFO": [
+        "global",
+        "global_then_wallet",
+        "wallet"
+      ]
+    },
     "methods": [
       "FIFO",
       "HIFO",
@@ -129,6 +241,7 @@ export const TAX_COUNTRY_REGISTRY = [
     },
     "pool_scopes": [
       "global",
+      "global_then_wallet",
       "wallet"
     ],
     "preview": true,
@@ -178,8 +291,13 @@ export const TAX_COUNTRY_REGISTRY = [
         "url": "https://www.irs.gov/instructions/i1040sd"
       }
     ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
     "tax_year_start": "01-01",
-    "timezone": "UTC"
+    "timezone": "UTC",
+    "zones": [
+      "UTC"
+    ]
   },
   {
     "code": "de",
@@ -219,6 +337,14 @@ export const TAX_COUNTRY_REGISTRY = [
     "locale": "de-DE",
     "long_term": {
       "kind": "more_than_one_year"
+    },
+    "method_pool_scopes": {
+      "FIFO": [
+        "wallet"
+      ],
+      "MOVING_AVERAGE_FIFO_PERIOD": [
+        "wallet"
+      ]
     },
     "methods": [
       "FIFO",
@@ -279,8 +405,13 @@ export const TAX_COUNTRY_REGISTRY = [
         "url": "https://www.elster.de/eportal/helpGlobal?themaGlobal=help_est_ufa_10_2024"
       }
     ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
     "tax_year_start": "01-01",
-    "timezone": "Europe/Berlin"
+    "timezone": "Europe/Berlin",
+    "zones": [
+      "Europe/Berlin"
+    ]
   },
   {
     "code": "ch",
@@ -311,6 +442,14 @@ export const TAX_COUNTRY_REGISTRY = [
     "locale": "de-CH",
     "long_term": {
       "kind": "never"
+    },
+    "method_pool_scopes": {
+      "FIFO": [
+        "global"
+      ],
+      "MOVING_AVERAGE": [
+        "global"
+      ]
     },
     "methods": [
       "FIFO",
@@ -365,8 +504,13 @@ export const TAX_COUNTRY_REGISTRY = [
         "url": "https://www.ictax.admin.ch/extern/de.html"
       }
     ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
     "tax_year_start": "01-01",
-    "timezone": "Europe/Zurich"
+    "timezone": "Europe/Zurich",
+    "zones": [
+      "Europe/Zurich"
+    ]
   },
   {
     "code": "ie",
@@ -421,6 +565,11 @@ export const TAX_COUNTRY_REGISTRY = [
     "locale": "en",
     "long_term": {
       "kind": "never"
+    },
+    "method_pool_scopes": {
+      "FIFO": [
+        "global"
+      ]
     },
     "methods": [
       "FIFO"
@@ -484,8 +633,13 @@ export const TAX_COUNTRY_REGISTRY = [
         "url": "https://www.revenue.ie/en/companies-and-charities/financial-services/cryptocurrencies/index.aspx"
       }
     ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
     "tax_year_start": "01-01",
-    "timezone": "Europe/Dublin"
+    "timezone": "Europe/Dublin",
+    "zones": [
+      "Europe/Dublin"
+    ]
   },
   {
     "code": "gb",
@@ -533,6 +687,11 @@ export const TAX_COUNTRY_REGISTRY = [
     "locale": "en",
     "long_term": {
       "kind": "never"
+    },
+    "method_pool_scopes": {
+      "UK_SHARE_MATCHING": [
+        "global"
+      ]
     },
     "methods": [
       "UK_SHARE_MATCHING"
@@ -617,8 +776,13 @@ export const TAX_COUNTRY_REGISTRY = [
         "url": "https://www.gov.uk/government/publications/other-taxable-income-hs325-self-assessment-helpsheet/other-taxable-income-2026-hs325"
       }
     ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
     "tax_year_start": "04-06",
-    "timezone": "Europe/London"
+    "timezone": "Europe/London",
+    "zones": [
+      "Europe/London"
+    ]
   },
   {
     "code": "es",
@@ -687,6 +851,11 @@ export const TAX_COUNTRY_REGISTRY = [
     "long_term": {
       "kind": "never"
     },
+    "method_pool_scopes": {
+      "FIFO": [
+        "global"
+      ]
+    },
     "methods": [
       "FIFO"
     ],
@@ -730,8 +899,13 @@ export const TAX_COUNTRY_REGISTRY = [
         "url": "https://sede.agenciatributaria.gob.es/Sede/Ayuda/25Presentacion/100/7_6_6_2/ganancias_perdidas_monedas_virtuales.html"
       }
     ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
     "tax_year_start": "01-01",
-    "timezone": "Europe/Madrid"
+    "timezone": "Europe/Madrid",
+    "zones": [
+      "Europe/Madrid"
+    ]
   },
   {
     "code": "jp",
@@ -793,6 +967,14 @@ export const TAX_COUNTRY_REGISTRY = [
     "locale": "ja-JP",
     "long_term": {
       "kind": "never"
+    },
+    "method_pool_scopes": {
+      "JP_MOVING_AVERAGE": [
+        "global"
+      ],
+      "JP_TOTAL_AVERAGE": [
+        "global"
+      ]
     },
     "methods": [
       "JP_MOVING_AVERAGE",
@@ -858,8 +1040,289 @@ export const TAX_COUNTRY_REGISTRY = [
         "url": "https://www.mof.go.jp/tax_policy/tax_reform/outline/fy2026/08taikou_01.htm"
       }
     ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
     "tax_year_start": "01-01",
-    "timezone": "Asia/Tokyo"
+    "timezone": "Asia/Tokyo",
+    "zones": [
+      "Asia/Tokyo"
+    ]
+  },
+  {
+    "code": "au",
+    "cross_asset_carry": false,
+    "default_method": "FIFO",
+    "default_pool_scope": "global",
+    "engine": {},
+    "fiat_currency": "AUD",
+    "income_categories": [
+      "airdrop",
+      "hardfork",
+      "income",
+      "interest",
+      "mining",
+      "staking"
+    ],
+    "iso": "AU",
+    "locale": "en",
+    "long_term": {
+      "kind": "more_than_one_year"
+    },
+    "method_pool_scopes": {
+      "FIFO": [
+        "global"
+      ]
+    },
+    "methods": [
+      "FIFO"
+    ],
+    "name": {
+      "de": "Australien",
+      "en": "Australia"
+    },
+    "pool_scopes": [
+      "global"
+    ],
+    "preview": true,
+    "preview_notice": {
+      "de": "Noch nicht von einer Steuerberaterin oder einem Steuerberater für dieses Land geprüft — Ergebnisse vor der Einreichung kontrollieren.",
+      "en": "Not yet reviewed by a tax professional for this country — check results before filing."
+    },
+    "report_generators": [
+      "open_positions",
+      "rp2_full_report"
+    ],
+    "rules": "australia",
+    "sources": [
+      {
+        "retrieved": "2026-11-16",
+        "title": "ATO: Preparing your tax return (the income year from 1 July to 30 June)",
+        "url": "https://www.ato.gov.au/individuals-and-families/your-tax-return/before-you-prepare-your-tax-return/preparing-your-tax-return"
+      },
+      {
+        "retrieved": "2026-11-16",
+        "title": "ATO: CGT discount (owned for at least 12 months, excluding the days of acquisition and of the CGT event)",
+        "url": "https://www.ato.gov.au/individuals-and-families/investments-and-assets/capital-gains-tax/cgt-discount"
+      },
+      {
+        "retrieved": "2026-11-16",
+        "title": "ATO: How to work out and report CGT on crypto",
+        "url": "https://www.ato.gov.au/individuals-and-families/investments-and-assets/crypto-asset-investments/how-to-work-out-and-report-cgt-on-crypto"
+      }
+    ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
+    "tax_year_start": "07-01",
+    "timezone": "Australia/Sydney",
+    "zones": [
+      "Australia/Sydney",
+      "Australia/Adelaide",
+      "Australia/Brisbane",
+      "Australia/Darwin",
+      "Australia/Hobart",
+      "Australia/Melbourne",
+      "Australia/Perth"
+    ]
+  },
+  {
+    "code": "nz",
+    "cross_asset_carry": false,
+    "default_method": "FIFO",
+    "default_pool_scope": "global",
+    "engine": {},
+    "fiat_currency": "NZD",
+    "income_categories": [
+      "airdrop",
+      "hardfork",
+      "income",
+      "interest",
+      "mining",
+      "staking"
+    ],
+    "iso": "NZ",
+    "locale": "en",
+    "long_term": {
+      "kind": "never"
+    },
+    "method_pool_scopes": {
+      "FIFO": [
+        "global"
+      ]
+    },
+    "methods": [
+      "FIFO"
+    ],
+    "name": {
+      "de": "Neuseeland",
+      "en": "New Zealand"
+    },
+    "pool_scopes": [
+      "global"
+    ],
+    "preview": true,
+    "preview_notice": {
+      "de": "Noch nicht von einer Steuerberaterin oder einem Steuerberater für dieses Land geprüft — Ergebnisse vor der Einreichung kontrollieren.",
+      "en": "Not yet reviewed by a tax professional for this country — check results before filing."
+    },
+    "report_generators": [
+      "open_positions",
+      "rp2_full_report"
+    ],
+    "rules": "new_zealand",
+    "sources": [
+      {
+        "retrieved": "2026-11-16",
+        "title": "Inland Revenue: What happens at the end of the tax year (1 April to 31 March)",
+        "url": "https://www.ird.govt.nz/income-tax/income-tax-for-individuals/what-happens-at-the-end-of-the-tax-year"
+      },
+      {
+        "retrieved": "2026-11-16",
+        "title": "Inland Revenue: Calculating cryptoasset income (FIFO or weighted average cost)",
+        "url": "https://www.ird.govt.nz/cryptoassets/taxing/income-expenses/calculating-cryptoasset-income"
+      }
+    ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
+    "tax_year_start": "04-01",
+    "timezone": "Pacific/Auckland",
+    "zones": [
+      "Pacific/Auckland"
+    ]
+  },
+  {
+    "code": "in",
+    "cross_asset_carry": false,
+    "default_method": "FIFO",
+    "default_pool_scope": "global",
+    "engine": {},
+    "fiat_currency": "INR",
+    "income_categories": [
+      "airdrop",
+      "hardfork",
+      "income",
+      "interest",
+      "mining",
+      "staking"
+    ],
+    "iso": "IN",
+    "locale": "en",
+    "long_term": {
+      "kind": "never"
+    },
+    "method_pool_scopes": {
+      "FIFO": [
+        "global"
+      ]
+    },
+    "methods": [
+      "FIFO"
+    ],
+    "name": {
+      "de": "Indien",
+      "en": "India"
+    },
+    "pool_scopes": [
+      "global"
+    ],
+    "preview": true,
+    "preview_notice": {
+      "de": "Noch nicht von einer Steuerberaterin oder einem Steuerberater für dieses Land geprüft — Ergebnisse vor der Einreichung kontrollieren.",
+      "en": "Not yet reviewed by a tax professional for this country — check results before filing."
+    },
+    "report_generators": [
+      "open_positions",
+      "rp2_full_report"
+    ],
+    "rules": "india",
+    "sources": [
+      {
+        "retrieved": "2026-11-16",
+        "title": "Income Tax Department: Section 115BBH, tax on income from virtual digital assets",
+        "url": "https://www.incometaxindia.gov.in/w/section-115bbh"
+      },
+      {
+        "retrieved": "2026-11-16",
+        "title": "Income Tax Department: Section 3 of the Income-tax Act, 2025 (tax year from 1 April)",
+        "url": "https://www.incometaxindia.gov.in/w/section-3-1"
+      },
+      {
+        "retrieved": "2026-11-16",
+        "title": "Income Tax Department: FAQs on the transition to the Income-tax Act, 2025",
+        "url": "https://www.incometaxindia.gov.in/documents/d/guest/income-tax-document-faqs-on-interplay-and-transition"
+      }
+    ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
+    "tax_year_start": "04-01",
+    "timezone": "Asia/Kolkata",
+    "zones": [
+      "Asia/Kolkata"
+    ]
+  },
+  {
+    "code": "za",
+    "cross_asset_carry": false,
+    "default_method": "FIFO",
+    "default_pool_scope": "global",
+    "engine": {},
+    "fiat_currency": "ZAR",
+    "income_categories": [
+      "airdrop",
+      "hardfork",
+      "income",
+      "interest",
+      "mining",
+      "staking"
+    ],
+    "iso": "ZA",
+    "locale": "en",
+    "long_term": {
+      "kind": "never"
+    },
+    "method_pool_scopes": {
+      "FIFO": [
+        "global"
+      ]
+    },
+    "methods": [
+      "FIFO"
+    ],
+    "name": {
+      "de": "Südafrika",
+      "en": "South Africa"
+    },
+    "pool_scopes": [
+      "global"
+    ],
+    "preview": true,
+    "preview_notice": {
+      "de": "Noch nicht von einer Steuerberaterin oder einem Steuerberater für dieses Land geprüft — Ergebnisse vor der Einreichung kontrollieren.",
+      "en": "Not yet reviewed by a tax professional for this country — check results before filing."
+    },
+    "report_generators": [
+      "open_positions",
+      "rp2_full_report"
+    ],
+    "rules": "south_africa",
+    "sources": [
+      {
+        "retrieved": "2026-11-16",
+        "title": "SARS: Comprehensive Guide to the ITR12 Income Tax Return for Individuals (year of assessment from 1 March)",
+        "url": "https://www.sars.gov.za/wp-content/uploads/Ops/Guides/IT-AE-36-G05-Comprehensive-Guide-to-the-ITR12-Income-Tax-Return-for-Individuals-External-Guide.pdf"
+      },
+      {
+        "retrieved": "2026-11-16",
+        "title": "SARS: ABC of Capital Gains Tax for Individuals",
+        "url": "https://www.sars.gov.za/wp-content/uploads/Ops/Guides/Legal-Pub-Guide-CGT02-ABC-Guide-on-CGT-for-Individuals.pdf"
+      }
+    ],
+    "tax_year_editable": false,
+    "tax_year_presets": [],
+    "tax_year_start": "03-01",
+    "timezone": "Africa/Johannesburg",
+    "zones": [
+      "Africa/Johannesburg"
+    ]
   }
 ] as const;
 
