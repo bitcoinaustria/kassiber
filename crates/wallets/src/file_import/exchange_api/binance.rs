@@ -202,7 +202,7 @@ fn fiat_payment(row: &Py) -> Result<Option<Py>, AppError> {
     if !is_bitcoin(&currency) {
         return Ok(None);
     }
-    let fiat_currency = asset(at(row, "fiatCurrency"));
+    let fiat_currency = fiat_code(asset(at(row, "fiatCurrency")));
     if !is_fiat(&fiat_currency) {
         return Err(AppError::new(
             "validation",

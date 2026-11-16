@@ -59,17 +59,28 @@ fn assets_follow_normalize_asset_code_and_exchange_aliases() {
         (s(" XXBT "), "BTC"),
         (s("l-btc"), "LBTC"),
         (s("L-BTC"), "LBTC"),
-        (s("zeur"), "EUR"),
         (s("XETH"), "ETH"),
         (s("xeth"), "ETH"),
         (s("uſd"), "USD"),
         (s("BTCs"), "BTCS"),
-        (s("Zé12"), "É12"),
         (s(""), ""),
         (Py::Null, ""),
         (Py::from(0), ""),
     ] {
         assert_eq!(asset(&raw), expected, "{raw:?}");
+        assert_eq!(fiat_code(asset(&raw)), expected, "{raw:?}");
+    }
+    // Kraken's `Z` prefix applies to fiat fields only: ZETA is a ticker.
+    for (raw, other, kraken) in [
+        ("zeur", "ZEUR", "EUR"),
+        ("Zé12", "ZÉ12", "É12"),
+        ("ZETA", "ZETA", "ETA"),
+    ] {
+        assert_eq!(
+            (asset(&s(raw)), fiat_code(asset(&s(raw)))),
+            (other.to_owned(), kraken.to_owned()),
+            "{raw}"
+        );
     }
     assert_eq!(asset(&s("A".repeat(64))), "a".repeat(64));
 }
@@ -364,6 +375,16 @@ mod loopback {
         kind: &'static str,
         reply: impl Fn(usize, &str, &str) -> (u16, String) + Send + 'static,
     ) -> Fake {
+        serve_seeing(kind, move |ordinal, method, target, _| {
+            reply(ordinal, method, target)
+        })
+    }
+
+    /// As [`serve`], with the request headers, for a server that echoes them.
+    pub fn serve_seeing(
+        kind: &'static str,
+        reply: impl Fn(usize, &str, &str, &[(String, String)]) -> (u16, String) + Send + 'static,
+    ) -> Fake {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let log = seen.clone();
         let server = HandledProvider::start(move |request| {
@@ -391,7 +412,7 @@ mod loopback {
                 log.len() - 1
             };
             if is_signed {
-                reply(ordinal, method, &shown)
+                reply(ordinal, method, &shown, &request.headers)
             } else {
                 (401, "{\"error\":[\"EAPI:Invalid key\"]}".into())
             }
@@ -445,6 +466,19 @@ mod loopback {
         conn.execute_batch("UPDATE profiles SET fiat_currency='EUR';
             INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,asset,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','BTC','fixed');").unwrap();
         prepare(&conn);
+        let result = sync(&conn, backend, expected, wallet, consent, offline);
+        Run { result, conn }
+    }
+
+    /// One `execute` on an existing book, as a re-sync.
+    pub fn sync(
+        conn: &Connection,
+        backend: &Json,
+        expected: &str,
+        wallet: &str,
+        consent: bool,
+        offline: Arc<AtomicBool>,
+    ) -> Result<Py, AppError> {
         let flag = offline.clone();
         let gate = Gate::new(
             move || {
@@ -456,8 +490,8 @@ mod loopback {
             },
             Ledger::default(),
         );
-        let result = execute(
-            &conn,
+        execute(
+            conn,
             "p",
             wallet,
             backend,
@@ -466,8 +500,7 @@ mod loopback {
             "test",
             &mut |route| consent.then(|| Consent::explicit_trigger(route.request())),
             None,
-        );
-        Run { result, conn }
+        )
     }
 }
 
@@ -857,8 +890,13 @@ fn non_finite_amounts_report_before_the_rows_price_currency_check() {
         let (status, body) = kraken_page(ordinal, target);
         (
             status,
-            body.replace("\"amount\":\"0.01\"", "\"amount\":\"Infinity\"")
-                .replace("XXBTZEUR", "XXBTZUSD"),
+            // The sell's fee stays a non-finite Decimal until its
+            // fingerprint; the sell is also priced in USD in an EUR book.
+            body.replace(
+                "\"amount\":\"-0.001\",\"fee\":\"0.000001\"",
+                "\"amount\":\"-0.001\",\"fee\":\"Infinity\"",
+            )
+            .replace("\"pair\":\"XBTEUR\"", "\"pair\":\"XBTUSD\""),
         )
     });
     let error = run(
@@ -931,4 +969,100 @@ fn http_error_bodies_withhold_credentials_before_truncation() {
         .starts_with("HTTP 400 from backend for http://<redacted-host>: "));
     assert!(error.message.ends_with("x<reda"), "{}", error.message);
     assert!(!error.message.contains("synth"), "{}", error.message);
+}
+
+/// The stored secret each exchange's requests carry (Kraken's is base64).
+fn stored_secret(kind: &str) -> String {
+    backend(kind, "http://127.0.0.1:9")["auth_header"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+/// A successful page, in each exchange's documented shape, that echoes the
+/// key and secret in a field Kassiber maps (the row's id) or one it keeps
+/// only as evidence refuses the whole sync: nothing is stored, and the
+/// error names no value.
+#[test]
+fn every_exchange_refuses_a_page_that_echoes_a_credential() {
+    for kind in ["kraken", "coinbase", "binance"] {
+        for mapped in [true, false] {
+            let echo = format!("{} {}", loopback::KEY, stored_secret(kind));
+            let id = if mapped { loopback::KEY } else { "row-1" };
+            let fake = serve(kind, move |_, _, target| {
+                let body = match (kind, target.split('?').next().unwrap()) {
+                    ("kraken", "/0/private/Ledgers") => {
+                        json!({"error": [], "result": {"count": 1, "ledger": {
+                        id: {"time": "1700000200", "type": "withdrawal", "asset": "BTC", "amount": "-0.002", "fee": "0.00001", "echo": echo}}}})
+                    }
+                    ("kraken", _) => json!({"error": [], "result": {"count": 0, "trades": {}}}),
+                    ("coinbase", "/v2/accounts") => {
+                        json!({"data": [{"id": "btc", "currency": {"code": "BTC"}}], "pagination": {}})
+                    }
+                    ("coinbase", _) => {
+                        json!({"data": [{"id": id, "type": "send", "created_at": "2024-01-03T03:04:05Z",
+                        "amount": {"amount": "-0.001", "currency": "BTC"}, "echo": echo}], "pagination": {}})
+                    }
+                    ("binance", "/sapi/v1/capital/deposit/hisrec") => {
+                        json!([{"coin": "BTC", "network": "BTC", "status": 1,
+                        "amount": "0.005", "insertTime": 1700000100000_i64, "txId": id, "echo": echo}])
+                    }
+                    ("binance", "/sapi/v1/fiat/payments") => json!({"data": []}),
+                    ("binance", "/sapi/v1/capital/withdraw/history") => json!([]),
+                    _ => json!({"rows": []}),
+                };
+                (200, body.to_string())
+            });
+            let run = run(&backend(kind, &fake.url), kind, "", true, online());
+            let error = run.result.unwrap_err();
+            assert_eq!(error.code, "credential_echo", "{kind}: {}", error.message);
+            let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+            assert!(!shown.contains(loopback::KEY), "{kind}: {shown}");
+            assert!(!shown.contains(&stored_secret(kind)), "{kind}: {shown}");
+            assert_eq!(count(&run.conn, "SELECT count(*) FROM transactions"), 0);
+        }
+    }
+}
+
+/// Kraken answers errors in a 200 body; one that echoes the request's
+/// `API-Sign` (a credential only the request carried) shows it withheld.
+#[test]
+fn a_kraken_error_echoing_its_signature_withholds_it() {
+    let fake = loopback::serve_seeing("kraken", |_, _, _, headers| {
+        let sign = headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("API-Sign"))
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default();
+        let body = json!({"error": [format!("EAPI:Invalid signature {sign}")]});
+        (200, body.to_string())
+    });
+    let error = run(&backend("kraken", &fake.url), "kraken", "", true, online())
+        .result
+        .unwrap_err();
+    let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+    assert!(
+        shown.contains("EAPI:Invalid signature <redacted>"),
+        "{shown}"
+    );
+}
+
+/// Every sync error is shown with every request credential withheld at any
+/// length; a numeric detail equal to one is dropped; the hint is Kassiber's.
+#[test]
+fn sync_errors_withhold_every_request_credential() {
+    let error = AppError::new("auth_error", "refused pw7 here")
+        .with_hint("keep pw7")
+        .with_details(dict([
+            ("http_status", Py::from(401)),
+            ("code", Py::from(305)),
+            ("text", Py::List(vec![s("echo pw7")])),
+        ]));
+    let error = scrub_error(error, &["pw7".into(), "305".into()]);
+    assert_eq!(error.message, "refused <redacted> here");
+    assert_eq!(error.hint.as_deref(), Some("keep pw7"));
+    assert_eq!(
+        kassiber_pyjson::dumps(error.details.as_ref().unwrap(), &Default::default()).unwrap(),
+        r#"{"http_status": 401, "code": null, "text": ["echo <redacted>"]}"#
+    );
 }

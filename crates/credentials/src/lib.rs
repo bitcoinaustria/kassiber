@@ -53,7 +53,7 @@ const SENSITIVE_KEY_PARTS: [&str; 26] = [
 ];
 
 /// Request headers whose whole value authenticates the request.
-const CREDENTIAL_HEADERS: [&str; 9] = [
+const CREDENTIAL_HEADERS: [&str; 13] = [
     "authorization",
     "proxy-authorization",
     "cookie",
@@ -62,6 +62,12 @@ const CREDENTIAL_HEADERS: [&str; 9] = [
     "x-api-key",
     "x-mbx-apikey",
     "cb-access-key",
+    // Computed signatures a server could echo back: Kraken, Coinbase.
+    "api-sign",
+    "cb-access-sign",
+    // Bitvavo: the key, and the HMAC a server could echo back.
+    "bitvavo-access-key",
+    "bitvavo-access-signature",
     "rune",
 ];
 const QUERY_CREDENTIAL_PARTS: [&str; 4] = ["key", "auth", "sig", "access"];
@@ -87,6 +93,17 @@ impl Forms {
 
     pub fn as_slice(&self) -> &[String] {
         &self.0
+    }
+
+    /// The forms of at least `chars` code points, still longest first.
+    pub fn at_least(&self, chars: usize) -> Forms {
+        Forms(
+            self.0
+                .iter()
+                .filter(|form| form.chars().count() >= chars)
+                .cloned()
+                .collect(),
+        )
     }
 }
 
@@ -120,6 +137,28 @@ where
             .then_with(|| a.cmp(b))
     });
     Forms(forms)
+}
+
+/// The shortest credential value an exchange read looks for in a response
+/// (`exact_forms`): shorter values are not secrets worth matching, and
+/// matching them would rewrite ordinary data.
+pub const MIN_EXACT_CREDENTIAL_CHARS: usize = 16;
+
+/// The spellings of one credential a decoded response can carry, matched
+/// exactly and case-sensitively: as sent, `quote` and `quote_plus`.
+/// Empty for a value shorter than [`MIN_EXACT_CREDENTIAL_CHARS`].
+pub fn exact_forms(credential: &str) -> Vec<String> {
+    if credential.chars().count() < MIN_EXACT_CREDENTIAL_CHARS {
+        return vec![];
+    }
+    let mut forms = vec![
+        credential.to_owned(),
+        quote(credential, false),
+        quote(credential, true),
+    ];
+    forms.sort();
+    forms.dedup();
+    forms
 }
 
 fn json_escaped(text: &str) -> String {
@@ -621,6 +660,39 @@ fn b64decode_validate(text: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Exchange keys and the signatures a server could echo back.
+    #[test]
+    fn exchange_key_and_signature_headers_are_request_credentials() {
+        let headers = [
+            ("API-Sign", "kraken-signature"),
+            ("CB-ACCESS-SIGN", "coinbase-signature"),
+            ("CB-ACCESS-TIMESTAMP", "1700000000"),
+            ("Bitvavo-Access-Key", "bitvavo-key"),
+            ("Bitvavo-Access-Signature", "bitvavo-signature"),
+            ("Bitvavo-Access-Timestamp", "1700000000000"),
+        ];
+        assert_eq!(
+            request_credentials(None, &headers, None),
+            [
+                "kraken-signature",
+                "coinbase-signature",
+                "bitvavo-key",
+                "bitvavo-signature"
+            ]
+        );
+    }
+
+    #[test]
+    fn exact_forms_skip_short_values_and_keep_case() {
+        for short in ["1", "a", "deadbeef", "fifteen-chars15"] {
+            assert!(exact_forms(short).is_empty(), "{short}");
+        }
+        assert_eq!(
+            exact_forms("DeadBeef/0123456789"),
+            ["DeadBeef%2F0123456789", "DeadBeef/0123456789"]
+        );
+    }
 
     #[test]
     fn hex_forms_match_either_case_and_sort_deterministically() {

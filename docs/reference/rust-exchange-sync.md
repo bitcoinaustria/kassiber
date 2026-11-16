@@ -42,6 +42,27 @@ the CLI command for the wallet's own backend, so its rows are the CLI's.
 `ui.wallets.sync`, freshness and the assistant still leave exchange wallets
 sourceless.
 
+## Echoed credentials and shared helpers
+
+Every exchange read goes through `HttpClient::authenticated_json` or
+`authenticated_response` (`StatusPolicy::Exchange`), which keeps every
+credential each request carried (key, secret, computed signature, URL and
+proxy userinfo) at any length (`HttpClient::display_credentials`).
+
+- A successful body is data and is never rewritten. If it carries a request
+  credential of at least 16 characters, exactly or behind JSON escapes, the
+  client notes it (`HttpClient::echoed`) and `execute` refuses the sync with
+  `credential_echo` before anything is stored. Shorter values are ordinary
+  data and never match.
+- Error bodies (accepted 401/403 or raised) are display text: every request
+  credential is withheld at any length on their decoded JSON strings, so an
+  escape cannot hide one; numbers stay, so error codes survive.
+- Every error a sync or desktop key check returns is withheld once more with
+  every request credential (`scrub_error`); a numeric detail equal to one is
+  dropped.
+
+See [credential echoes](credential-echo.md).
+
 ## Request sequences
 
 All three share these rules:
