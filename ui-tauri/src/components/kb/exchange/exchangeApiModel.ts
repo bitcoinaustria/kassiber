@@ -9,6 +9,7 @@ export const EXCHANGE_KINDS = [
   "bitvavo",
   "bitstamp",
   "bitfinex",
+  "bitcoinde",
 ] as const;
 export type ExchangeKind = (typeof EXCHANGE_KINDS)[number];
 
@@ -43,6 +44,7 @@ export const EXCHANGE_PROVIDER_NAMES: Record<ExchangeKind, string> = {
   bitvavo: "Bitvavo",
   bitstamp: "Bitstamp",
   bitfinex: "Bitfinex",
+  bitcoinde: "Bitcoin.de",
 };
 
 export interface ExchangeKeyGuide {
@@ -62,7 +64,8 @@ export interface ExchangeKeyGuide {
  * BTC balance, Bitfinex's ledger, trades, movements and wallets
  * (docs/reference/rust-exchange-sync.md, docs/reference/bitpanda.md,
  * docs/reference/bitvavo.md, docs/reference/bitstamp.md,
- * docs/reference/bitfinex.md).
+ * docs/reference/bitfinex.md); Bitcoin.de's permissions, statement and trades
+ * (docs/reference/bitcoinde.md).
  */
 export const EXCHANGE_KEY_GUIDES: Record<ExchangeKind, ExchangeKeyGuide> = {
   kraken: {
@@ -131,6 +134,11 @@ export const EXCHANGE_KEY_GUIDES: Record<ExchangeKind, ExchangeKeyGuide> = {
       "Withdraw: Create a new withdrawal",
       "Settings: Write account settings",
     ],
+  },
+  bitcoinde: {
+    keyPageUrl: "https://www.bitcoin.de/de/userprofile/tapi",
+    grant: ["showPermissions", "showAccountLedger", "showMyTrades"],
+    deny: ["createOrder", "executeTrade", "createWithdrawal", "requestDepositAddress"],
   },
 };
 

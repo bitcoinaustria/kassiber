@@ -1379,6 +1379,7 @@
       "bitvavo": "Öffne in Bitvavo Einstellungen → API → Neuen API-Key hinzufügen. Aktiviere nur View access, trage bei Bedarf die IP-Adresse dieses Computers in die IP-Whitelist ein und bestätige mit deinem 2FA-Code. Kopiere den API-Key und das Secret; Bitvavo zeigt beide nur einmal an. Bitvavo verrät Kassiber nicht, was ein Key darf, also lass Handel und Auszahlungen selbst ausgeschaltet.",
       "bitstamp": "Öffne in Bitstamp Einstellungen → API-Zugang und erstelle einen neuen Key. Schalte nur die unten genannten Leseberechtigungen ein, bestätige mit deinem Zwei-Faktor-Code, kopiere den API-Key und das Secret (Bitstamp zeigt das Secret nur einmal an) und aktiviere den Key über die Bestätigungs-E-Mail. Bitstamp verrät Kassiber nicht, was ein Key sonst noch darf, also lass alle Berechtigungen für Handel, Auszahlungen, Einzahlungen und Überträge ausgeschaltet.",
       "bitfinex": "Öffne in Bitfinex Konto → API Keys → Create New Key und wähle nur Leserechte. Bitfinex schickt einen Bestätigungslink per E-Mail; danach kopierst du den API-Key und das API-Key-Secret, das Bitfinex nur einmal anzeigt. Optional beschränkst du den Key auf deine IP-Adresse. Kassiber lehnt einen Key mit Schreibrechten ab.",
+      "bitcoinde": "Öffne in Bitcoin.de mein Bitcoin.de → Trading-API und erstelle einen neuen Key. Hake nur die unten genannten Methoden an und lass alle Order-, Handels- und Auszahlungsmethoden aus; optional beschränkst du den Key auf deine IP-Adresse. Kopiere den API-Key und das API-Secret; Bitcoin.de zeigt das Secret nur einmal an. Kassiber lehnt einen Key ab, der mehr als lesen darf.",
       "grant": "Nur einschalten",
       "deny": "Ausgeschaltet lassen",
       "open": "API-Key-Seite von {{provider}} öffnen"
@@ -1390,7 +1391,8 @@
         "coinbase": "API-Secret",
         "binance": "Secret Key",
         "bitstamp": "API-Secret",
-        "bitfinex": "API-Key-Secret"
+        "bitfinex": "API-Key-Secret",
+        "bitcoinde": "API-Secret"
       },
       "stored": "Wenn du die Verbindung hinzufügst, speichert Kassiber den Key in den Backend-Einstellungen dieses Buchs — verschlüsselt mit dem Buch, wenn das Buch verschlüsselt ist — und zeigt ihn nie wieder an."
     },

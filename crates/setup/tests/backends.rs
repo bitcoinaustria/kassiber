@@ -82,6 +82,8 @@ fn create(f: &Fixture, c: &mut Config, name: &str, kind: &str, chain: &str) -> V
 /// The backend kinds only the Rust backend accepts, in catalog order; they
 /// sort right after `bitcoinrpc`.
 const RUST_ONLY: [&str; 4] = ["bitfinex", "bitpanda", "bitstamp", "bitvavo"];
+/// The one that sorts right before `bitcoinrpc`.
+const RUST_ONLY_BEFORE: &str = "bitcoinde";
 
 fn with_rust_only_kinds(value: &mut Value) {
     match value {
@@ -93,6 +95,7 @@ fn with_rust_only_kinds(value: &mut Value) {
                 for (offset, kind) in RUST_ONLY.iter().enumerate() {
                     items.insert(at + 1 + offset, dict([("kind", s(*kind))]));
                 }
+                items.insert(at, dict([("kind", s(RUST_ONLY_BEFORE))]));
             }
             items.iter_mut().for_each(with_rust_only_kinds);
         }
@@ -105,7 +108,10 @@ fn with_rust_only_kinds(value: &mut Value) {
                     *text = plain
                         .replace(
                             "binance, bitcoinrpc, btcpay",
-                            &format!("binance, bitcoinrpc, {}, btcpay", RUST_ONLY.join(", ")),
+                            &format!(
+                                "binance, {RUST_ONLY_BEFORE}, bitcoinrpc, {}, btcpay",
+                                RUST_ONLY.join(", ")
+                            ),
                         )
                         .into();
                 }

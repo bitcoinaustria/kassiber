@@ -516,6 +516,8 @@ export function txNetwork(row: TransactionRow): string {
     account.includes("bitpanda") ||
     account.includes("bitvavo") ||
     account.includes("bitfinex") ||
+    account.includes("bitcoinde") ||
+    account.includes("bitcoin.de") ||
     account.includes("bitstamp") ||
     account.includes("coinbase") ||
     account.includes("river")

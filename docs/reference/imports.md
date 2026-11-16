@@ -1813,7 +1813,7 @@ depending on DALI at runtime. Exchange/order evidence stays separate from later
 self-custody wallet sync evidence.
 
 In the desktop (Rust backend), Add connection → Exchanges sets up Kraken,
-Coinbase, Binance, Bitpanda, Bitvavo, Bitstamp and Bitfinex with a read-only key, a Test connection and
+Coinbase, Binance, Bitpanda, Bitvavo, Bitstamp, Bitfinex and Bitcoin.de with a read-only key, a Test connection and
 Sync now, storing the same backend and wallet the commands below do; see
 [exchange connections in the desktop](exchange-desktop.md).
 

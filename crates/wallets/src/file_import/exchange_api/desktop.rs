@@ -61,6 +61,7 @@ pub fn probe(
         "bitvavo" => bitvavo::probe(&client),
         "bitstamp" => bitstamp::probe(&client),
         "bitfinex" => bitfinex::probe(&client),
+        "bitcoinde" => bitcoinde::probe(&client),
         _ => Err(unknown_kind(&kind)),
     }
     // An echoed request credential (a signature, say) leaves every error.

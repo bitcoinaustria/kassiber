@@ -12,6 +12,7 @@ import {
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import binanceIcon from "@/assets/integrations/binance.svg";
 import bitfinexIcon from "@/assets/integrations/bitfinex.svg";
+import bitcoindeIcon from "@/assets/integrations/bitcoinde.svg";
 import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
 import bitstampIcon from "@/assets/integrations/bitstamp.svg";
 import bitboxIcon from "@/assets/integrations/bitbox.svg";
@@ -109,7 +110,15 @@ export interface ConnectionSource {
   forwardTo?: string;
   walletKind?: string;
   /** Exchange whose history an `exchange-api` setup reads with a read-only key. */
-  exchange?: "kraken" | "coinbase" | "binance" | "bitpanda" | "bitvavo" | "bitstamp" | "bitfinex";
+  exchange?:
+    | "kraken"
+    | "coinbase"
+    | "binance"
+    | "bitpanda"
+    | "bitvavo"
+    | "bitstamp"
+    | "bitfinex"
+    | "bitcoinde";
   sourceFormat?: ConnectionSourceFormat;
   chain?: "bitcoin" | "liquid";
   network?: string;
@@ -880,6 +889,26 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
       "Export Trades, Movements and Ledgers from Bitfinex Reports with the YYYY-MM-DD date format and UTC",
       "Uses the same ids as the API, so a CSV import and an API sync never duplicate rows",
       "Import the Reports zip with all three exports: a trade is accepted only when the ledger shows it in the exchange wallet (not margin)",
+    ],
+  },
+  {
+    id: "bitcoinde-api",
+    title: "Bitcoin.de",
+    description: "Bitcoin.de BTC statement and BTC/EUR trades through a read-only API key.",
+    category: "exchanges",
+    image: bitcoindeIcon,
+    imageClassName: "size-8",
+    status: "ready",
+    pathLabel: "API import",
+    formatLabel: "read-only API key",
+    docsHref: "https://www.bitcoin.de/de/userprofile/tapi",
+    setupKind: "exchange-api",
+    exchange: "bitcoinde",
+    details: [
+      "Needs a key with only showPermissions, showAccountLedger and showMyTrades; a key that can trade or withdraw is refused",
+      "BTC/EUR trades keep the exact euros that changed hands; deposits, payouts with their network fee and credits import too",
+      "The statement lists bookings up to the previous day; today's bookings arrive with the next sync",
+      "Kassiber contacts Bitcoin.de only when you test the key or press Sync now",
     ],
   },
   {

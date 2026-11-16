@@ -145,6 +145,14 @@ describe("ExchangeApiSetupPanel", () => {
     expect(screen.getByText(/refuses a key with any write permission/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open the Bitfinex API key page" }));
     expect(mocks.openExternalUrl).toHaveBeenCalledWith("https://setting.bitfinex.com/api");
+    cleanup();
+
+    // Bitcoin.de grants per API method and signs with key and secret.
+    mount("bitcoinde");
+    expect(screen.getByRole("list", { name: "Turn on only" }).textContent).toContain("showAccountLedger");
+    expect(screen.getByRole("list", { name: "Leave off" }).textContent).toContain("createWithdrawal");
+    expect(screen.getByLabelText("API secret")).toBeTruthy();
+    expect(screen.getByText(/mein Bitcoin.de → Trading-API/)).toBeTruthy();
   });
 
   it("tests only complete credentials, sends exactly them, and never shows them", async () => {

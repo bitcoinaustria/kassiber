@@ -286,7 +286,14 @@ fn bitvavo_check_reads_the_balance_and_one_history_row_and_cannot_tell_the_scope
 
 #[test]
 fn checks_need_consent_an_open_gate_and_credentials() {
-    for kind in ["kraken", "coinbase", "binance", "bitpanda", "bitvavo"] {
+    for kind in [
+        "kraken",
+        "coinbase",
+        "binance",
+        "bitpanda",
+        "bitvavo",
+        "bitcoinde",
+    ] {
         let fake = serve(kind, |_, _, _| (500, "{}".into()));
         let refused = check(&backend(kind, &fake.url), false, false)
             .0
@@ -311,7 +318,14 @@ fn checks_need_consent_an_open_gate_and_credentials() {
 
 #[test]
 fn checks_withhold_an_echoed_key_and_secret() {
-    for kind in ["kraken", "coinbase", "binance", "bitpanda", "bitvavo"] {
+    for kind in [
+        "kraken",
+        "coinbase",
+        "binance",
+        "bitpanda",
+        "bitvavo",
+        "bitcoinde",
+    ] {
         let stored = backend(kind, "http://127.0.0.1:9");
         // The secret as the backend stores it (Kraken's is base64).
         // Bitpanda has none: it authenticates with the key alone.
@@ -336,9 +350,9 @@ fn checks_withhold_an_echoed_key_and_secret() {
         let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
         assert!(!shown.contains(loopback::KEY), "{kind}: {shown}");
         assert!(!shown.contains(&secret), "{kind}: {shown}");
-        // Bitpanda and Bitvavo keep only a known error code, so their free
+        // Bitpanda, Bitvavo and Bitcoin.de keep only a known error code, so their free
         // text (and the echo in it) is dropped rather than shown redacted.
-        if !matches!(kind, "bitpanda" | "bitvavo") {
+        if !matches!(kind, "bitpanda" | "bitvavo" | "bitcoinde") {
             assert!(shown.contains("<redacted>"), "{kind}: {shown}");
         }
     }

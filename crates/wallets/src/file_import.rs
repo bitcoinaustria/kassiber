@@ -2066,6 +2066,9 @@ fn apply_records(
     } else {
         None
     };
+    if api_source.is_some_and(|s| s.starts_with("bitcoinde:")) {
+        exchange_api::bitcoinde::bind(conn, &wallet.id, records)?;
+    }
     let Inserted {
         imported,
         updated,
