@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::{BTreeMap, BTreeSet};
 
 struct Transaction {
     id: String,
@@ -440,7 +441,9 @@ pub(super) fn run(conn: &Connection, scope: &PricingScope<'_>) -> Result<usize, 
         .collect::<rusqlite::Result<Vec<_>>>()?;
     drop(statement);
     if transactions.is_empty() {
-        return Ok(0);
+        // Counter legs follow their pairs on every pass, even one that
+        // prices nothing else.
+        return counter_legs(conn, scope, &transactions, &BTreeSet::new());
     }
     let registered: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM pragma_function_list WHERE name='kassiber_timestamp_us')",
@@ -472,7 +475,8 @@ pub(super) fn run(conn: &Connection, scope: &PricingScope<'_>) -> Result<usize, 
         "UPDATE transactions SET pricing_method='unsupported_price_range', pricing_quality='missing' WHERE id=?",
     )?;
     let mut count = 0;
-    for row in transactions {
+    let mut priced = BTreeSet::new();
+    for row in &transactions {
         let missing = [&row.rate, &row.value, &row.rate_exact, &row.value_exact]
             .iter()
             .all(|v| matches!(v, Sql::Null));
@@ -507,7 +511,7 @@ pub(super) fn run(conn: &Connection, scope: &PricingScope<'_>) -> Result<usize, 
         drop(cached_rows);
         // Round 5 (f823b4729): a cached valuation outside the shared price
         // bounds stores no price; the row is marked for a later valid cache.
-        let Some((rate, value)) = valuation(&row, &cached, scope.decimal_context)? else {
+        let Some((rate, value)) = valuation(row, &cached, scope.decimal_context)? else {
             unsupported.execute([&row.id])?;
             continue;
         };
@@ -546,7 +550,179 @@ pub(super) fn run(conn: &Connection, scope: &PricingScope<'_>) -> Result<usize, 
             quality,
             row.id
         ])?;
+        priced.insert(row.id.as_str());
         if missing {
+            count += 1;
+        }
+    }
+    Ok(count + counter_legs(conn, scope, &transactions, &priced)?)
+}
+
+/// Prices the unpriced other-asset leg of a swap from its other leg once the
+/// rates cache priced that one, which today only a Bitcoin leg can be
+/// (docs/plan/24-crypto-assets.md): one trade, so both legs carry that
+/// value. A swap without a Bitcoin leg, or whose Bitcoin leg has no cached
+/// rate, stays unpriced, and a Bitcoin row (a transfer between own wallets
+/// included) is never priced from its pair. The leg keeps the priced leg's
+/// provenance, so repricing that pair clears both legs.
+///
+/// A counter-leg price is derived, never a stored fact: each pass clears
+/// every one and prices again only from the pairs that exist now, whose
+/// Bitcoin leg is included and still priced by the rates cache. An unpaired
+/// or re-paired swap, an excluded Bitcoin leg or one the user priced by
+/// hand leaves no stale value behind; the leg is unpriced (and back in
+/// review) or takes its current pair's value. Only a leg that had no price
+/// before the pass counts as newly priced.
+fn counter_legs(
+    conn: &Connection,
+    scope: &PricingScope<'_>,
+    transactions: &[Transaction],
+    priced: &BTreeSet<&str>,
+) -> Result<usize, Refusal> {
+    let mut derived = conn.prepare_cached(
+        "SELECT id,occurred_at,confirmed_at,asset,amount,fiat_currency,excluded=0
+         FROM transactions WHERE profile_id=? AND pricing_method='swap_counter_leg'
+            AND fiat_price_source='rates_cache'
+         ORDER BY occurred_at ASC,created_at ASC,id ASC",
+    )?;
+    let earlier = derived
+        .query_map([scope.profile_id], |r| {
+            Ok((
+                Transaction {
+                    id: r.get(0)?,
+                    occurred_at: r.get(1)?,
+                    confirmed_at: r.get(2)?,
+                    asset: r.get(3)?,
+                    amount: r.get(4)?,
+                    currency: r.get(5)?,
+                    rate: Sql::Null,
+                    value: Sql::Null,
+                    rate_exact: Sql::Null,
+                    value_exact: Sql::Null,
+                },
+                r.get::<_, bool>(6)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(derived);
+    if !earlier.is_empty() {
+        conn.execute(
+            "UPDATE transactions SET fiat_rate=NULL,fiat_value=NULL,fiat_price_source=NULL,fiat_rate_exact=NULL,fiat_value_exact=NULL,
+                pricing_source_kind=NULL,pricing_provider=NULL,pricing_pair=NULL,pricing_timestamp=NULL,pricing_fetched_at=NULL,
+                pricing_granularity=NULL,pricing_method=NULL,pricing_external_ref=NULL,pricing_quality=NULL
+             WHERE profile_id=? AND pricing_method='swap_counter_leg' AND fiat_price_source='rates_cache'",
+            [scope.profile_id],
+        )?;
+    }
+    let repriced: BTreeSet<&str> = earlier.iter().map(|(row, _)| row.id.as_str()).collect();
+    let unpriced: BTreeMap<&str, &Transaction> = transactions
+        .iter()
+        .filter(|row| {
+            !priced.contains(row.id.as_str())
+                && !kassiber_store::assets::is_bitcoin(&row.asset)
+                && [&row.rate, &row.value, &row.rate_exact, &row.value_exact]
+                    .iter()
+                    .all(|v| matches!(v, Sql::Null))
+        })
+        .chain(
+            earlier
+                .iter()
+                .filter(|(_, included)| *included)
+                .map(|(row, _)| row),
+        )
+        .map(|row| (row.id.as_str(), row))
+        .collect();
+    // No other-asset row could take a price: skip reading the pairs.
+    if unpriced.is_empty() {
+        return Ok(0);
+    }
+    let workspace: String = conn.query_row(
+        "SELECT workspace_id FROM profiles WHERE id=?",
+        [scope.profile_id],
+        |r| r.get(0),
+    )?;
+    let pairs = kassiber_transfers::transaction_pairs(
+        conn,
+        &kassiber_transfers::Scope {
+            workspace_id: &workspace,
+            profile_id: scope.profile_id,
+        },
+    )?;
+    let mut cached = conn.prepare_cached(
+        "SELECT fiat_value_exact,fiat_currency,pricing_source_kind,pricing_provider,pricing_pair,
+            pricing_timestamp,pricing_fetched_at,pricing_granularity,pricing_quality
+         FROM transactions WHERE id=? AND profile_id=? AND excluded=0 AND fiat_price_source='rates_cache'
+            AND pricing_source_kind IN ('fmv_provider','manual_rate_cache')",
+    )?;
+    let mut update = conn.prepare_cached("UPDATE transactions SET fiat_rate=?,fiat_value=?,fiat_price_source='rates_cache',fiat_rate_exact=?,fiat_value_exact=?,
+        pricing_source_kind=?,pricing_provider=?,pricing_pair=?,pricing_timestamp=?,pricing_fetched_at=?,
+        pricing_granularity=?,pricing_method='swap_counter_leg',pricing_external_ref=NULL,pricing_quality=? WHERE id=?")?;
+    let currency = |code: Option<&str>| {
+        kassiber_pytext::upper(kassiber_pytext::strip(
+            code.filter(|c| !c.is_empty())
+                .unwrap_or(scope.fiat_currency),
+        ))
+    };
+    let mut count = 0;
+    for (out, into) in pairs {
+        let (row, other) = match (unpriced.get(out.as_str()), unpriced.get(into.as_str())) {
+            (Some(row), None) => (*row, into),
+            (None, Some(row)) => (*row, out),
+            _ => continue,
+        };
+        let mut found = cached.query(params![other, scope.profile_id])?;
+        let Some(leg) = found.next()? else {
+            continue;
+        };
+        let other_currency: Option<String> = leg.get(1)?;
+        if currency(other_currency.as_deref()) != currency(row.currency.as_deref()) {
+            continue;
+        }
+        let valued = Transaction {
+            id: row.id.clone(),
+            occurred_at: row.occurred_at.clone(),
+            confirmed_at: row.confirmed_at.clone(),
+            asset: row.asset.clone(),
+            amount: row.amount.clone(),
+            currency: row.currency.clone(),
+            rate: Sql::Null,
+            value: Sql::Null,
+            rate_exact: Sql::Null,
+            value_exact: leg.get(0)?,
+        };
+        let provenance = (2..9)
+            .map(|i| leg.get::<_, Option<String>>(i))
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        drop(found);
+        let no_rate = CachedRate {
+            pair: String::new(),
+            timestamp: String::new(),
+            rate: Sql::Null,
+            rate_exact: Sql::Null,
+            source: String::new(),
+            fetched_at: String::new(),
+            granularity: None,
+            method: None,
+        };
+        let Some((rate, value @ Some(_))) = valuation(&valued, &no_rate, scope.decimal_context)?
+        else {
+            continue;
+        };
+        update.execute(params![
+            real(&rate)?,
+            real(&value)?,
+            exact(&rate)?,
+            exact(&value)?,
+            provenance[0],
+            provenance[1],
+            provenance[2],
+            provenance[3],
+            provenance[4],
+            provenance[5],
+            provenance[6],
+            row.id
+        ])?;
+        if !repriced.contains(row.id.as_str()) {
             count += 1;
         }
     }

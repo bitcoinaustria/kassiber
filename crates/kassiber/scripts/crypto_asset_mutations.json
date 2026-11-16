@@ -1,0 +1,52 @@
+[
+  {
+    "id": "swap-counter-leg-priced",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "    Ok(count + counter_legs(conn, scope, &transactions, &priced)?)\n",
+    "replace": "    Ok(count)\n",
+    "expect_failing": [
+      "a_cached_btc_rate_prices_both_legs_of_a_btc_swap_and_no_other_swap"
+    ],
+    "rule": "Once the rates cache prices a swap's Bitcoin leg, the other leg of the same trade takes its value."
+  },
+  {
+    "id": "swap-counter-leg-provenance",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "pricing_granularity=?,pricing_method='swap_counter_leg',pricing_external_ref=NULL",
+    "replace": "pricing_granularity=?,pricing_method=NULL,pricing_external_ref=NULL",
+    "expect_failing": [
+      "a_cached_btc_rate_prices_both_legs_of_a_btc_swap_and_no_other_swap"
+    ],
+    "rule": "A counter-leg price says it came from the swap's other leg."
+  },
+  {
+    "id": "swap-counter-leg-derived-each-pass",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "    if !earlier.is_empty() {\n        conn.execute(",
+    "replace": "    if false {\n        conn.execute(",
+    "expect_failing": [
+      "a_counter_leg_price_follows_its_pair_on_every_pass"
+    ],
+    "rule": "A counter-leg price is derived on every pass: unpairing, excluding or hand-pricing its Bitcoin leg leaves it unpriced, never stale."
+  },
+  {
+    "id": "swap-counter-leg-quiet-pass",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "        return counter_legs(conn, scope, &transactions, &BTreeSet::new());",
+    "replace": "        return Ok(0);",
+    "expect_failing": [
+      "a_counter_leg_price_follows_its_pair_on_every_pass"
+    ],
+    "rule": "A pass that prices nothing else still re-derives the counter legs."
+  },
+  {
+    "id": "untracked-retained-custody-sink",
+    "file": "crates/custody/src/quantity/reviewed.rs",
+    "find": "                && l[\"notes\"] == \"reviewed_residual:retained_custody\"\n",
+    "replace": "                && l[\"notes\"] == \"reviewed_residual:never\"\n",
+    "expect_failing": [
+      "an_eth_withdrawal_to_an_untracked_own_wallet_is_no_disposal"
+    ],
+    "rule": "A retained leg in an untracked wallet marked as reviewed retained custody keeps the value owned, for any asset: the withdrawal is no disposal."
+  }
+]

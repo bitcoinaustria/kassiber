@@ -276,7 +276,11 @@ an explicit custody component when the route is incomplete.
 
 Use `transfers components plan --action create` for 1:N, N:1, N:M,
 multi-hop migrations, or missing intermediate wallets. Represent missing owned
-custody with `untracked_wallet`; genuine N:M requires explicit allocations.
+custody with `untracked_wallet`; genuine N:M requires explicit allocations. When the owner says
+a withdrawal of any asset (ETH as well as BTC) went to an own wallet
+Kassiber does not track, the value stays there: source leg = the complete
+debit, a `fee` leg, and a `retained` leg with `untracked_wallet`, the asset
+and `notes: "reviewed_residual:retained_custody"`. That is no disposal.
 Activate only after exact anchor coverage and conservation pass atomically.
 In chat, use `ui.transfers.components.list` to avoid duplicating reviewed state,
 then `ui.transfers.components.plan` before asking

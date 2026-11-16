@@ -88,3 +88,7 @@ required-features = ["test-harness"]
 name = "routing_ports"
 path = "tests/routing_ports/main.rs"
 required-features = ["test-harness"]
+
+[[test]]
+name = "exchange_swaps"
+required-features = ["test-harness"]
