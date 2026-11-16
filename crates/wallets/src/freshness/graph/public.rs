@@ -142,18 +142,30 @@ pub fn now_iso() -> String {
     kassiber_chain::format_unix_time(seconds).unwrap_or_default()
 }
 
-/// One explicitly requested public lookup's transport: the user asked for
-/// this graph's references, so each selected backend gets an explicit grant.
+/// One public lookup's transport. An explicit lookup (the user asked for
+/// this graph's references) gives each selected backend an explicit grant; the
+/// desktop's automatic lookup from a wallet's own sync backend, under its
+/// narrowly scoped setting, gives that one backend a narrowly scoped grant.
 pub struct Network<'a> {
     pub gate: &'a Gate,
     pub version: &'a str,
+    /// The automatic wallet-backend lookup rather than an explicit press.
+    pub scoped: bool,
 }
 
 impl Network<'_> {
+    fn consent(&self, request: &kassiber_net::Request) -> Consent {
+        if self.scoped {
+            Consent::narrowly_scoped(request)
+        } else {
+            Consent::explicit_trigger(request)
+        }
+    }
+
     /// `_fetch_graph_esplora_transaction(backend, txid)`.
     pub fn esplora(&self, backend: &Json, txid: &str, deadline: Instant) -> Result<Py> {
         let (transport, _) = selected(backend)?;
-        let consent = Consent::explicit_trigger(transport.request());
+        let consent = self.consent(transport.request());
         let client = HttpClient::new(transport, self.gate.clone(), self.version);
         let raw = client.get_json(&format!("tx/{txid}"), Some(&consent), deadline)?;
         Ok(kassiber_pytext::loads(&raw.to_string()).expect("JSON value"))
@@ -170,7 +182,7 @@ impl Network<'_> {
             .min(5);
         backend["timeout"] = serde_json::json!(configured);
         let transport = Backend::new(&backend, false)?;
-        let consent = Consent::explicit_trigger(transport.request());
+        let consent = self.consent(transport.request());
         Ok(Core {
             client: CoreClient::new(transport, self.gate.clone(), self.version),
             consent,
@@ -181,7 +193,7 @@ impl Network<'_> {
     /// An Electrum connection for `_fetch_*_electrum_graph_raw`.
     pub fn electrum(&self, backend: &Json, deadline: Instant) -> Result<Electrum> {
         let (transport, _) = selected(backend)?;
-        let consent = Consent::explicit_trigger(transport.request());
+        let consent = self.consent(transport.request());
         Ok(Electrum {
             client: ElectrumClient::connect(transport, self.gate, Some(consent), deadline)?,
             deadline,

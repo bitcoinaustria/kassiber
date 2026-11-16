@@ -30,11 +30,31 @@ const CONFIG_FIELDS: [&str; 14] = [
     "walletprefix",
 ];
 
-/// What an explicit public lookup may use: the user's request authorizes
-/// each selected backend through this transport.
+/// The automatic lookup's budget: it runs when a transaction is opened, so a
+/// slow or unreachable backend must not hold the daemon as long as a press.
+const WALLET_BACKEND_BUDGET: Duration = Duration::from_secs(6);
+
+/// Resolves a wallet's backend selection (its configured name, or `""` for
+/// the book's default) to the backend its sync uses.
+pub type ResolveBackend<'a> = dyn Fn(&Connection, &str) -> Result<serde_json::Value> + 'a;
+
+/// Whether the desktop's automatic lookup from the wallet's own sync backend
+/// (`lookup: "wallet_backend"`) may run. The daemon decides this before the
+/// read: offline mode, `KASSIBER_NO_EGRESS` and the user's setting refuse it
+/// before any request.
+pub enum WalletBackend<'a> {
+    Allowed(&'a ResolveBackend<'a>),
+    Offline,
+    Disabled,
+}
+
+/// What a public lookup may use. An explicit lookup authorizes each backend
+/// the user chose through this transport; the automatic lookup only the
+/// transaction's wallet's own sync backend, as `wallet_backend` allows.
 pub struct Public<'a> {
     pub network: Network<'a>,
     pub runtime: GraphRuntime<'a>,
+    pub wallet_backend: WalletBackend<'a>,
 }
 
 /// `normalize_backend_kind`.
@@ -980,6 +1000,90 @@ fn from_backend(
         ));
     }
     store(conn, chain, network, txid, &clean)
+}
+
+/// The automatic lookup's refusal before any request: the code says why, and
+/// the desktop keeps its explicit lookup for `wallet_backend_lookup_unavailable`
+/// and `wallet_backend_lookup_disabled`.
+fn wallet_refusal(raw: &Value, code: &str, message: &str) -> Value {
+    let mut output = raw.clone();
+    set(
+        &mut output,
+        "_graphLookupWarning",
+        dict([
+            ("code", s(code)),
+            ("level", s("info")),
+            ("message", s(message)),
+        ]),
+    );
+    output
+}
+
+/// The desktop's automatic lookup (`lookup: "wallet_backend"`): only the
+/// backend the transaction's wallet syncs from, never another configured
+/// backend, and only for a Bitcoin on-chain wallet that has synced. Offline
+/// mode, `KASSIBER_NO_EGRESS` and a disabled setting refuse it before any
+/// request, as does a wallet without such a backend.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn lookup_wallet_backend(
+    conn: &Connection,
+    public: &Public<'_>,
+    row: &Value,
+    raw: &Value,
+    chain: &str,
+    network: &str,
+    txid: &str,
+    liquid: bool,
+) -> Result<Value> {
+    let unavailable = || {
+        Ok(wallet_refusal(
+            raw,
+            "wallet_backend_lookup_unavailable",
+            "This wallet does not sync from a backend that can look up transaction references.",
+        ))
+    };
+    if liquid || chain != "bitcoin" {
+        return unavailable();
+    }
+    let Some(selection) = kassiber_wallets::freshness::sources::onchain_backend_selection(
+        &text_or(g(row, "wallet_kind")),
+        &text_or(g(row, "wallet_config_json")),
+    ) else {
+        return unavailable();
+    };
+    let resolve = match &public.wallet_backend {
+        WalletBackend::Offline => {
+            return Ok(wallet_refusal(
+                raw,
+                "wallet_backend_lookup_offline",
+                "Offline mode is on; input amounts were not looked up.",
+            ))
+        }
+        WalletBackend::Disabled => {
+            return Ok(wallet_refusal(
+                raw,
+                "wallet_backend_lookup_disabled",
+                "Filling in transaction details from the wallet's backend is turned off.",
+            ))
+        }
+        WalletBackend::Allowed(resolve) => resolve,
+    };
+    let Ok(resolved) = resolve(conn, &selection) else {
+        return unavailable();
+    };
+    let Ok(mapping) = kassiber_pytext::loads(&resolved.to_string()) else {
+        return unavailable();
+    };
+    let name = string_or_none(g(&mapping, "name")).unwrap_or_default();
+    let candidate = from_mapping(&name, &mapping);
+    if !matches(&candidate, chain, network) {
+        return unavailable();
+    }
+    let candidate = normalized(candidate);
+    let deadline = Instant::now() + WALLET_BACKEND_BUDGET;
+    from_backend(
+        conn, public, &candidate, chain, network, txid, raw, false, deadline,
+    )
 }
 
 /// The public half of `_enrich_reference_graph_raw`: every selected backend

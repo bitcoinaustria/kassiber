@@ -123,6 +123,39 @@ fn wallet_spec(
     result
 }
 
+/// The backend selection of a wallet whose history an on-chain backend sync
+/// observes (the `onchain_wallet_history` source [`build`] plans) and that
+/// has synced at least once: its configured backend name, or `""` for the
+/// book's default. `None` for every other wallet (file imports, BTCPay and
+/// Lightning sources, manual and exchange wallets) and for one that never
+/// synced, so nothing here grants contact with a backend the wallet does not
+/// already use. Reads the stored row only.
+pub fn onchain_backend_selection(kind: &str, config_json: &str) -> Option<String> {
+    let mut config: Json = serde_json::from_str(if config_json.is_empty() {
+        "{}"
+    } else {
+        config_json
+    })
+    .ok()?;
+    if !config.is_object() || config::normalize_btcpay(&mut config).is_err() {
+        return None;
+    }
+    let file = config.get("source_file").is_some_and(json_truthy)
+        && config.get("source_format").is_some_and(json_truthy);
+    if kind == "coreln" || file {
+        return None;
+    }
+    let descriptor = config::optional_text(config.get("descriptor")).is_some()
+        || (config::optional_text(config.get("xpub")).is_some()
+            && config.get("script_types").is_some_and(json_truthy));
+    let addresses = config::addresses(config.get("addresses")).ok()?;
+    if !descriptor && addresses.is_empty() {
+        return None;
+    }
+    config::optional_text(config.get("last_synced_at"))?;
+    Some(config::optional_text(config.get("backend")).unwrap_or_default())
+}
+
 pub fn build(conn: &Connection, profile: &str, options: &Options) -> Result<Vec<Value>> {
     let mut specs = Vec::new();
     for wallet in wallets(conn, profile, options.wallet.as_deref())? {
@@ -237,4 +270,36 @@ pub fn filter_by_policy(specs: Vec<Value>, policy: &Value, force: bool) -> Vec<V
                 .is_some_and(truthy)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod backend_selection_tests {
+    use super::onchain_backend_selection as selection;
+
+    #[test]
+    fn only_a_synced_onchain_wallet_names_its_backend() {
+        let synced = r#""last_synced_at": "2025-06-01T00:00:00Z""#;
+        let address = format!(r#"{{"addresses": ["bc1q"], "backend": "home", {synced}}}"#);
+        assert_eq!(selection("address", &address).as_deref(), Some("home"));
+        let default = format!(r#"{{"descriptor": "wpkh(x)", {synced}}}"#);
+        assert_eq!(selection("descriptor", &default).as_deref(), Some(""));
+        for (kind, config) in [
+            (
+                "address",
+                r#"{"addresses": ["bc1q"], "backend": "home"}"#.to_owned(),
+            ),
+            ("address", format!(r#"{{"backend": "home", {synced}}}"#)),
+            ("coreln", format!(r#"{{"addresses": ["bc1q"], {synced}}}"#)),
+            (
+                "address",
+                format!(
+                    r#"{{"addresses": ["bc1q"], "source_file": "f.csv", "source_format": "csv", {synced}}}"#
+                ),
+            ),
+            ("address", "not json".to_owned()),
+            ("address", String::new()),
+        ] {
+            assert_eq!(selection(kind, &config), None, "{kind} {config}");
+        }
+    }
 }

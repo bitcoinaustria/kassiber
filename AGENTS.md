@@ -36,7 +36,11 @@ changing external I/O, storage, credentials, diagnostics, or AI disclosure.
   unless the user triggered that exact action or enabled its narrowly scoped
   feature. This includes loopback probes. A seeded or saved backend/provider is
   configuration, not consent. New egress needs documentation and a regression
-  proving no traffic before consent.
+  proving no traffic before consent. The one owner-approved display-read
+  exception: opening a transaction in the desktop asks only its wallet's own
+  sync backend for missing graph references, while its Privacy setting is on
+  and offline mode and `KASSIBER_NO_EGRESS` are off, and never from AI tools
+  (see [privacy and security](docs/reference/privacy-and-security.md#external-requests-complete-list)).
 - AI tools must not expose arbitrary shell/filesystem/CLI dispatch, descriptors,
   xpubs, secrets, env files, raw wallet files, or wallet configuration. Preserve
   explicit allowlists, redacted projections, and book/input-version binding.

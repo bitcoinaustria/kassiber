@@ -21,7 +21,7 @@ use crate::report_blockers::{rows, sql_error, val};
 mod public;
 mod verify;
 
-pub use public::Public;
+pub use public::{Public, ResolveBackend, WalletBackend};
 pub use verify::verify;
 
 type Result<T> = std::result::Result<T, AppError>;
@@ -942,7 +942,7 @@ fn enrich(
     profile_id: &str,
     row: &Value,
     raw: Value,
-    allow_public_lookup: bool,
+    mode: LookupMode,
     public: Option<&Public<'_>>,
 ) -> Result<Value> {
     let liquid = looks_liquid_or_confidential(row, &raw);
@@ -1043,7 +1043,7 @@ fn enrich(
         );
         return Ok(cached);
     }
-    if !allow_public_lookup {
+    if mode == LookupMode::Local {
         return Ok(raw);
     }
     let _ = (label, prefix);
@@ -1056,7 +1056,60 @@ fn enrich(
         )
         .with_details(dict([("kind", s("ui.transactions.graph"))])));
     };
+    if mode == LookupMode::WalletBackend {
+        return public::lookup_wallet_backend(
+            conn, public, row, &raw, &chain, &network, &txid, liquid,
+        );
+    }
     public::lookup(conn, public, row, &raw, &chain, &network, &txid, liquid)
+}
+
+/// Which backends a graph read may ask for missing public references.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LookupMode {
+    /// Stored and cached references only.
+    Local,
+    /// `allowPublicLookup`: the user pressed the lookup; the backends they chose.
+    Explicit,
+    /// `lookup: "wallet_backend"`: the desktop's automatic lookup from the
+    /// transaction's wallet's own sync backend only.
+    WalletBackend,
+}
+
+/// The lookup a `ui.transactions.graph` request asks for. Only the desktop
+/// sends `lookup`; the AI's graph read passes the transaction alone.
+pub fn lookup_mode(args: Option<&Value>) -> Result<LookupMode> {
+    let empty = dict::<&str>([]);
+    let args = match args {
+        Some(v @ Value::Dict(_)) => v,
+        _ => &empty,
+    };
+    let explicit = public_lookup(args)?;
+    let scoped = match get(args, "lookup") {
+        None | Some(Value::Null) => false,
+        Some(Value::Str(t)) if t.as_str() == Some("wallet_backend") => true,
+        Some(Value::Str(t)) if t.as_str() == Some("none") => false,
+        Some(other) => {
+            return Err(AppError::new(
+                "validation",
+                "ui.transactions.graph lookup must be wallet_backend or none",
+            )
+            .with_details(dict([("lookup", other.clone())])))
+        }
+    };
+    match (explicit, scoped) {
+        (true, true) => Err(AppError::new(
+            "validation",
+            "ui.transactions.graph received conflicting public lookup flags",
+        )
+        .with_details(dict([
+            ("allowPublicLookup", Value::Bool(true)),
+            ("lookup", s("wallet_backend")),
+        ]))),
+        (true, false) => Ok(LookupMode::Explicit),
+        (false, true) => Ok(LookupMode::WalletBackend),
+        (false, false) => Ok(LookupMode::Local),
+    }
 }
 
 /// `_observed_liquid_leg_sats`: legs this book's own Liquid observations
@@ -2828,7 +2881,13 @@ pub fn snapshot_with(
         .iter()
         .map(|(k, _)| key_text(k))
         .filter(|k| {
-            !["transaction", "allowPublicLookup", "allow_public_lookup"].contains(&k.as_str())
+            ![
+                "transaction",
+                "allowPublicLookup",
+                "allow_public_lookup",
+                "lookup",
+            ]
+            .contains(&k.as_str())
         })
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -2866,8 +2925,8 @@ pub fn snapshot_with(
     let semantics = semantics(conn, &profile)?;
     let spends = profile_spends(conn, &profile_id)?;
     let raw = json_obj(g(&row, "raw_json"));
-    let allow = public_lookup(&args)?;
-    let enriched = enrich(conn, &profile_id, &row, raw, allow, public)?;
+    let mode = lookup_mode(Some(&args))?;
+    let enriched = enrich(conn, &profile_id, &row, raw, mode, public)?;
     let local = local_outpoint_amounts(conn, &profile_id, &row, &enriched)?;
     let mut graph = parse_graph(&row, &enriched, &local)?;
     let mut references = BTreeSet::new();
@@ -3045,6 +3104,31 @@ pub fn snapshot_with(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_an_exact_lookup_flag_leaves_the_local_read() {
+        let mode = |args: &str| lookup_mode(Some(&kassiber_pytext::loads(args).unwrap()));
+        assert_eq!(lookup_mode(None).unwrap(), LookupMode::Local);
+        assert_eq!(mode(r#"{"transaction": "t"}"#).unwrap(), LookupMode::Local);
+        assert_eq!(mode(r#"{"lookup": null}"#).unwrap(), LookupMode::Local);
+        assert_eq!(mode(r#"{"lookup": "none"}"#).unwrap(), LookupMode::Local);
+        assert_eq!(
+            mode(r#"{"lookup": "wallet_backend"}"#).unwrap(),
+            LookupMode::WalletBackend
+        );
+        assert_eq!(
+            mode(r#"{"allowPublicLookup": true}"#).unwrap(),
+            LookupMode::Explicit
+        );
+        for refused in [
+            r#"{"lookup": "WALLET_BACKEND"}"#,
+            r#"{"lookup": "any"}"#,
+            r#"{"lookup": true}"#,
+            r#"{"lookup": "wallet_backend", "allowPublicLookup": true}"#,
+        ] {
+            assert_eq!(mode(refused).unwrap_err().code, "validation", "{refused}");
+        }
+    }
 
     #[test]
     fn raw_transaction_sizes_follow_the_bip141_walk() {

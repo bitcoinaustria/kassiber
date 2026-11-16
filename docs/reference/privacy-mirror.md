@@ -84,6 +84,14 @@ These counts describe an explicit model, never ownership probabilities. The
 workbench can inspect the same transaction with a larger explicit budget and
 participant-fee scenarios.
 
+Each report first synchronizes the local analysis index (a no-op when no source
+changed; incremental after a sync or edit; a full build only the first time a
+book's index is built) and then runs one bounded read. It keeps no report cache
+of its own, so every call reflects the committed book. The daemon answers it on
+the request loop like other reads. On the ~1,100-transaction demo book a call
+with an up-to-date index takes about 0.45 s, after a small change about 0.8 s,
+and a first full index build about 4 s.
+
 ## Audience projection
 
 The desktop daemon receives local physical references for navigation. CLI
