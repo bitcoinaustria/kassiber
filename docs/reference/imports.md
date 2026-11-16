@@ -213,6 +213,17 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 
 `amount` should be positive. If you pass a negative amount, Kassiber normalizes it and infers direction when possible.
 
+`asset` (default `BTC`) must be one the wallet holds
+([plan 24](../plan/24-crypto-assets.md)): `BTC`, `LBTC` or a 64-hex Liquid
+asset id in any wallet, another crypto ticker (`ETH`) only when the wallet's
+`asset_scope` is `crypto`. A fiat code (`EUR`), a Bitcoin unit (`SATS`) or a
+metal is never stored as a holding. The import refuses such a row, naming it
+(`csv row 3`) and, for another crypto asset, the command that sets the scope.
+A Bitcoin alias (`XBT`) is refused with a request to write `BTC`: earlier
+builds stored it as written, a separate asset.
+The same applies to BTCPay's `Currency`. A ticker cannot tell a coin from a
+stock (`AAPL`), so check what a `crypto`-scope generic file stores.
+
 If imported transactions carry `fiat_rate` or `fiat_value`, Kassiber stores both
 the legacy numeric value and an exact decimal string plus pricing provenance.
 Fiat values and rates must pass the shared [pricing limits](tax.md#rates-and-tax-input-quality).
@@ -1564,6 +1575,9 @@ Behavior:
   present
 - relevant imports are match-existing-only and never create standalone
   transactions; full imports create excluded evidence rows
+- another crypto asset's orders follow the wallet's `asset_scope` (see
+  [Binance supplemental CSV](#binance-api-and-supplemental-csv)), and a row
+  whose `Type` is neither `buy` nor `sell` is refused, naming the row
 
 ## 21bitcoin
 
@@ -1719,8 +1733,13 @@ kassiber wallets import-ledger-live \
 ```
 
 You can also store `source_format="ledgerlive_csv"` on a wallet and use
-`wallets sync`. Non-BTC/LBTC assets are skipped. Unsupported Ledger operation
-types fail with `AppError` instead of being guessed.
+`wallets sync`. Other assets follow the wallet's `asset_scope` (see
+[Binance supplemental CSV](#binance-api-and-supplemental-csv)): counted in
+the `bitcoin` scope, deposits and withdrawals of that asset in the `crypto`
+scope. A send of another asset with a fee is refused, naming the row: the
+export does not say which asset pays it (a token's fee is paid in its
+chain's coin). Unsupported Ledger operation types fail with `AppError`
+instead of being guessed.
 
 ## DALI/RP2-Inspired Exchange Imports
 
@@ -1838,6 +1857,25 @@ Supplemental Binance CSV import currently supports:
   execution evidence
 - BTC dividend/mining-style rows as income without exact fiat pricing
 
+In a wallet import these three formats (Coinfinity, Ledger Live, Binance
+supplemental CSV) follow the wallet's `asset_scope`
+([plan 24](../plan/24-crypto-assets.md)): the default `bitcoin` scope counts
+each row of another crypto asset in the result's `assets.skipped` and names
+the command that keeps them; the `crypto` scope imports it as that asset.
+A row whose asset is not a crypto asset (a fiat code, a Bitcoin unit such as
+`SATS`) is refused, and every refusal names its row.
+
+Earlier builds left some rows out of a `bitcoin`-scope import without a word;
+they now stop the import in either scope, naming the row: a Coinfinity row
+whose `Type` is neither `buy` nor `sell`, a Binance dividend row paid in a
+fiat code (`EUR` cashback), and a Binance autoinvest row whose base symbol and
+amount suffix name different assets (`ETH` and `SOL`).
+
+In the `crypto` scope a Ledger Live row of another asset with no amount but a
+fee (a token send's gas, a failed transaction, a contract call) is refused,
+because the export does not say what it moved or which asset paid; a BTC row
+like it is still skipped.
+
 ID-less autoinvest and dividend rows use their economic tuple plus the count
 of identical occurrences within the file. Prepending newer rows to a cumulative
 export therefore preserves the earlier rows' identities while keeping genuine
@@ -1864,8 +1902,10 @@ kassiber wallets import-binance-supplemental \
   --file /path/to/binance-supplemental.csv
 ```
 
-Crypto-funded Binance autoinvest/cross-asset rows fail validation and should be
-entered through the generic ledger with explicit review. DALI's Pionex, Nexo,
+Crypto-funded Binance autoinvest rows (funded by USDT, FDUSD or another
+coin) are swaps and fail validation, naming the row; record both legs in a
+`crypto`-scope wallet with the generic CSV/JSON import and a shared
+`swap_ref`, since the generic ledger refuses another asset's cash leg. DALI's Pionex, Nexo,
 BlockFi, and Trezor-family plugins are deferred for Kassiber: they are
 obsolete, altcoin-heavy, or add less value than descriptor/wallet sync plus the
 generic ledger for BTC-side edge cases.

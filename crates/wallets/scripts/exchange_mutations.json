@@ -725,5 +725,15 @@
     "expect_failing": [
       "binance_btc_rail_imports_and_other_rails_refuse"
     ]
+  },
+  {
+    "id": "assets-exact-units-read-before-rounding",
+    "file": "crates/wallets/src/file_import/assets.rs",
+    "find": "    let digits = amount.coefficient().to_string();\n",
+    "replace": "    let amount = &amount.plus(&CTX).map_err(decimal_error)?;\n    let digits = amount.coefficient().to_string();\n",
+    "expect_failing": [
+      "exact_units_never_round_before_the_check"
+    ],
+    "rule": "Exact units read the decimal's own digits; a 32-digit rounded value can hide a tail past the 11th decimal."
   }
 ]

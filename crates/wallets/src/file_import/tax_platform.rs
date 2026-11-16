@@ -1,6 +1,7 @@
 use super::exchange::Columns;
 use super::river::{abs, arithmetic, nonnegative, positive, repr, truth, zero};
 use super::*;
+use assets::Scope;
 
 const COINTRACKING_REQUIRED: &[&str] = &[
     "Type",
@@ -344,6 +345,67 @@ fn mapped(
     };
     Ok((label, direction, kind))
 }
+/// The wallet an import writes to (docs/plan/24-crypto-assets.md): its
+/// asset scope, and its label for the hint that names the command widening
+/// that scope.
+#[derive(Clone, Copy)]
+pub(super) struct Target<'a> {
+    pub scope: Scope,
+    #[allow(
+        dead_code,
+        reason = "read by the hints of an importer that names the scope command"
+    )]
+    pub wallet: &'a str,
+}
+
+/// What a provider's canonical ticker is, for these exports. They carry no
+/// asset type, so a ticker that might be anything but a crypto asset is
+/// refused rather than guessed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Ticker {
+    Bitcoin,
+    Fiat,
+    Crypto,
+    Unsupported,
+}
+pub(super) fn ticker(code: &str) -> Ticker {
+    if exchange::bitcoin(Some(code)).is_some() {
+        return Ticker::Bitcoin;
+    }
+    let symbol = (1..=20).contains(&code.len())
+        && code.as_bytes()[0].is_ascii_alphanumeric()
+        && code
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b"._-".contains(&b))
+        && code.bytes().any(|b| b.is_ascii_uppercase());
+    match assets::class(code) {
+        assets::Class::Fiat => Ticker::Fiat,
+        _ if !symbol || BITCOIN_UNITS.contains(&code) || OTHER_FIAT.contains(&code) => {
+            Ticker::Unsupported
+        }
+        _ => Ticker::Crypto,
+    }
+}
+/// Bitcoin denominations that are not BTC itself.
+const BITCOIN_UNITS: [&str; 6] = ["SATS", "SAT", "MSAT", "MSATS", "BITS", "UBTC"];
+/// ISO 4217 codes (current, historic and metals) outside [`FIAT`]: a fiat
+/// leg Kassiber does not price, or a metal, never a crypto holding.
+const OTHER_FIAT: &[&str] = &[
+    "AFN", "ALL", "AMD", "ANG", "AOA", "ATS", "AWG", "AZN", "BAM", "BBD", "BDT", "BEF", "BGN",
+    "BHD", "BIF", "BMD", "BND", "BOB", "BOV", "BSD", "BTN", "BWP", "BYN", "BYR", "BZD", "CDF",
+    "CHE", "CHW", "CLF", "COP", "COU", "CRC", "CUC", "CUP", "CVE", "CYP", "DEM", "DJF", "DOP",
+    "DZD", "EEK", "EGP", "ERN", "ESP", "ETB", "FIM", "FJD", "FKP", "FRF", "GEL", "GHS", "GIP",
+    "GMD", "GNF", "GRD", "GTQ", "GYD", "HNL", "HRK", "HTG", "IDR", "IEP", "IQD", "IRR", "ISK",
+    "ITL", "JMD", "JOD", "KES", "KGS", "KHR", "KMF", "KPW", "KWD", "KYD", "KZT", "LAK", "LBP",
+    "LKR", "LRD", "LSL", "LTL", "LUF", "LVL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT",
+    "MOP", "MRO", "MRU", "MTL", "MUR", "MVR", "MWK", "MXV", "MYR", "MZN", "NAD", "NGN", "NIO",
+    "NLG", "NPR", "OMR", "PAB", "PEN", "PGK", "PHP", "PKR", "PTE", "PYG", "QAR", "RSD", "RUB",
+    "RWF", "SAR", "SBD", "SCR", "SDG", "SHP", "SIT", "SKK", "SLE", "SLL", "SOS", "SRD", "SSP",
+    "STD", "STN", "SVC", "SYP", "SZL", "TJS", "TMT", "TND", "TOP", "TTD", "TWD", "TZS", "UAH",
+    "UGX", "USN", "UYI", "UYU", "UYW", "UZS", "VED", "VEF", "VES", "VND", "VUV", "WST", "XAF",
+    "XAG", "XAU", "XBA", "XBB", "XBC", "XBD", "XCD", "XCG", "XDR", "XOF", "XPD", "XPF", "XPT",
+    "XSU", "XTS", "XUA", "XXX", "YER", "ZMK", "ZMW", "ZWG", "ZWL",
+];
 pub(super) fn load(file: &str, format: Format) -> Result<Vec<csv::Row>, AppError> {
     let provider = platform(format);
     let (header, rows) = platform_csv::load(file)?;

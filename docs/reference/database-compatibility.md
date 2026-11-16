@@ -270,6 +270,23 @@ on physical SQLite WAL/NORMAL and SQLCipher DELETE/FULL books. Reopen checks
 complete typed dumps, integrity and foreign keys. This covers the unregistered
 R4-12 writer, not migration termination or the R4-13 pipeline caller.
 
+## Other crypto assets and older builds
+
+A wallet whose `asset_scope` is `crypto` ([plan 24](../plan/24-crypto-assets.md))
+stores rows of other assets (ETH, USDT) next to Bitcoin, in the same integer
+column at 10^-11 of a unit. No migration marks such a book, so an older build
+opens it as usual:
+
+- It keeps the wallet's `asset_scope` key in `config_json` untouched and
+  ignores it, so its own imports and syncs bring in Bitcoin only.
+- Its reports treat every row as Bitcoin: another asset's raw units show as
+  sats or BTC in totals, holdings and the summary PDF, and the stored
+  difference of a crypto-to-crypto swap pair shows as a fee.
+
+This is display only. Stored rows, pairs and journals are unaffected, and the
+current build reads them correctly again. Use the current build for any book
+with other assets.
+
 ## Intentionally not inferred during upgrade
 
 ### Journal calculation semantics and older writers

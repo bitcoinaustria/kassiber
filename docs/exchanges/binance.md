@@ -21,6 +21,9 @@ separate reconciliation evidence.
   `exchange_execution` pricing.
 - Supplemental CSV BTC dividend/mining rows: inbound income/mining, no exact
   execution pricing.
+- Supplemental CSV rows of other coins: counted in `assets.skipped` in the
+  `bitcoin` scope, imported the same way in the `crypto` scope. Refusals
+  name the row.
 
 ## Deferred
 

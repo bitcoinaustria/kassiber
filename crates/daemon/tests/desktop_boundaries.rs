@@ -202,6 +202,17 @@ fn exchange_connection_kinds_are_desktop_kinds() {
 }
 
 #[test]
+fn asset_scope_toggle_stays_out_of_ai_tools() {
+    // docs/plan/24-crypto-assets.md: the desktop sets a wallet's asset scope
+    // through `ui.wallets.update`; assistant tools do not touch wallet
+    // configuration, so neither that kind nor the setting is an AI tool.
+    assert!(tauri_allowlist().contains("ui.wallets.update"));
+    let catalog = read("crates/ai/src/data/catalog.json");
+    assert!(!catalog.contains("ui.wallets.update"));
+    assert!(!catalog.contains("asset_scope"));
+}
+
+#[test]
 fn refresh_kinds_are_stream_capable_in_desktop_boundaries() {
     let tauri = read("ui-tauri/src-tauri/src/lib.rs");
     let at = tauri
