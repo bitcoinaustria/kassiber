@@ -2019,6 +2019,29 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Imports, source evidence, and wallet workflows
 
+- [ ] Other crypto assets per [plan 24](docs/plan/24-crypto-assets.md).
+  Done: the foundation (`asset_scope`, the skip tally, exact units, swap
+  pairing), Bitpanda, Kraken, Binance (without spot trades, which Binance
+  serves only per market; the sync result says so), Coinbase, CoinTracking
+  and Blockpit exports, the desktop toggle (exchange card and import result),
+  the per-asset overview backend, and the importer triage: Binance
+  supplemental, Ledger Live and Coinfinity CSVs follow the scope, generic
+  CSV/JSON and BTCPay rows are screened against it, and the bitcoin scope
+  refuses a Coinbase convert's BTC leg. The summary PDF's BTC fee and
+  transfer volume count Bitcoin rows only, a correction that also reaches
+  BTC-only Liquid books: an issued asset (USDt) there now has null sats and
+  leaves the BTC volume instead of adding its raw units. Open: the desktop's per-asset
+  overview, transactions and wallets views, Binance spot trades (the user
+  would have to name markets), Ledger Live sends of another asset with a fee,
+  or with only a fee (refused: the export does not say which asset pays a
+  token's fee), the
+  bitcoin scope telling a Coinbase convert against fiat from one against
+  crypto (both refused today; the crypto scope reads both legs),
+  and an assistant tool that sets a wallet's asset scope under the usual
+  consent (AI tools must not see wallet configuration, so it needs its own
+  narrow tool). Then further sources from the Rotki survey: Bitvavo (API), Bison,
+  Trade Republic and Crypto.com App (CSV; need real samples), Bitstamp,
+  Revolut, Nexo, KuCoin, Bybit, OKX and Bitcoin.de.
 - [ ] Coinbase API keys: Coinbase expired the legacy HMAC keys the sync
   signs with in February 2025 and accepts only CDP keys, which sign a
   short-lived JWT per request (ES256 or Ed25519), so `wallets sync-coinbase`
