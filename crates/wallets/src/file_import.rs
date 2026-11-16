@@ -2,6 +2,8 @@
 pub mod analysis;
 pub mod attachment;
 mod binance;
+mod bisq;
+pub use bisq::holds::{quarantines as bisq_hold_quarantines, REASON as BISQ_HOLD_REASON};
 mod btcpay;
 mod bull;
 mod bull_wallet;
@@ -48,6 +50,10 @@ pub struct Request {
     pub file: String,
     pub format: Format,
     pub mode: Option<String>,
+    /// A second export read alongside `file`: Bisq's Funds > Transactions CSV.
+    pub companion: Option<String>,
+    /// The IANA zone of a local-time export's clock (Bisq writes no offset).
+    pub timezone: Option<String>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
@@ -65,6 +71,7 @@ pub enum Format {
     CoinTracking,
     Blockpit,
     Binance,
+    Bisq,
     BtcpayCsv,
     BtcpayJson,
     Ledger,
@@ -89,6 +96,7 @@ impl Format {
             "strike_csv" => Self::Strike,
             "ledgerlive_csv" => Self::LedgerLive,
             "binance_supplemental_csv" => Self::Binance,
+            "bisq_csv" => Self::Bisq,
             "cointracking_csv" => Self::CoinTracking,
             "blockpit_csv" => Self::Blockpit,
             "wasabi_bundle" => Self::Wasabi,
@@ -116,6 +124,7 @@ impl Format {
             Self::CoinTracking => "cointracking_csv",
             Self::Blockpit => "blockpit_csv",
             Self::Binance => "binance_supplemental_csv",
+            Self::Bisq => "bisq_csv",
             Self::Ledger => "generic_ledger",
         }
     }
@@ -131,6 +140,10 @@ impl Format {
             Self::BtcpayCsv | Self::BtcpayJson => btcpay::load(file, self == Self::BtcpayJson),
             Self::Csv => csv::load(file),
             Self::Binance => binance::parse(csv::rows(&csv::read_sig(file)?)?),
+            Self::Bisq => Err(AppError::new(
+                "internal_error",
+                "Bisq imports read the book for their escrow timeline",
+            )),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
             Self::River => river::parse(csv::load(file)?),
             Self::Bull => bull::parse(csv::load(file)?),
@@ -159,7 +172,7 @@ impl Format {
         }
     }
     fn active(self) -> bool {
-        matches!(self, Self::TwentyOne | Self::Strike)
+        matches!(self, Self::TwentyOne | Self::Strike) || self == Self::Bisq
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
@@ -168,6 +181,7 @@ impl Format {
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),
             Self::Strike => ("Strike", "strike", "strike_rows"),
+            Self::Bisq => ("Bisq", "bisq", "bisq_rows"),
             _ => ("Bull Bitcoin", "bullbitcoin", "bullbitcoin_rows"),
         }
     }
@@ -1538,12 +1552,46 @@ fn run(
         None if request.format == Format::Wasabi => Some(wasabi::load(&request.file)?),
         None => None,
     };
+    let mut bisq_escrow = None;
     let rows = if let Some(bundle) = &bundle {
         wasabi::rows(&bundle.records)?
     } else if request.format == Format::Ledger {
         ledger::load(&request.file, column_map)?
     } else if request.format == Format::BullWallet {
         bull_wallet::parse_all(csv::load(&request.file)?)?
+    } else if request.format == Format::Bisq {
+        let wallet = wallet.as_ref().expect("bisq escrow wallet");
+        // The escrow ledger and its held trades belong to a dedicated wallet.
+        let kind: String = conn
+            .query_row("SELECT kind FROM wallets WHERE id=?", [&wallet.id], |r| {
+                r.get(0)
+            })
+            .map_err(database_error)?;
+        if kind != "bisq" {
+            return Err(AppError::new(
+                "validation",
+                format!(
+                    "Bisq trades import into a bisq wallet; '{}' is a {kind} wallet",
+                    wallet.label
+                ),
+            )
+            .with_hint(
+                "Omit --wallet to use the default Bisq wallet, or create one with `wallets create --kind bisq`.",
+            ));
+        }
+        let mut parsed = bisq::read(
+            &bisq::Book {
+                conn,
+                profile: &request.profile_id,
+                escrow: &wallet.id,
+                timezone: request.timezone.as_deref(),
+            },
+            &request.file,
+            request.companion.as_deref(),
+        )?;
+        let rows = std::mem::take(&mut parsed.rows);
+        bisq_escrow = Some(parsed);
+        rows
     } else {
         request.format.load(&request.file)?
     };
@@ -1596,6 +1644,32 @@ fn run(
                 Ok(result)
             }
         })
+    };
+    // Bisq: record held trades, pair legs by the txids Bisq names.
+    let result = match (&bisq_escrow, result) {
+        (Some(parsed), Ok(mut outcome)) => {
+            let wallet = wallet.as_ref().expect("bisq escrow wallet");
+            bisq::finish(conn, &request.profile_id, &wallet.id, parsed).map(|(summary, changed)| {
+                if let Py::Dict(entries) = &mut outcome {
+                    if changed {
+                        for (key, value) in entries.iter_mut() {
+                            if matches!(key, kassiber_pyjson::Key::Str(k) if k.as_str() == Some("journal_invalidated")) {
+                                *value = Py::Bool(true);
+                            }
+                        }
+                    }
+                    let at = entries
+                        .iter()
+                        .position(|(key, _)| matches!(key, kassiber_pyjson::Key::Str(k) if k.as_str() == Some("input_format")))
+                        .unwrap_or(entries.len());
+                    for (offset, (key, value)) in summary.into_iter().enumerate() {
+                        entries.insert(at + offset, (kassiber_pyjson::Key::from(key), value));
+                    }
+                }
+                outcome
+            })
+        }
+        (_, result) => result,
     };
     if result.is_ok() {
         conn.execute_batch("RELEASE wallet_file_import")

@@ -637,3 +637,25 @@ fn partition_export_preserves_ids_encryption_attachments_and_source() {
             .unwrap());
     }
 }
+#[test]
+fn partition_refuses_a_book_that_holds_bisq_trades() {
+    let f = seed(5);
+    let conn = f.book.connection();
+    let args = dict([
+        ("environment", s("main")),
+        ("wallet_ids", Value::List(vec![s("wallet-a")])),
+    ]);
+    kassiber_store::optional::ensure(conn, kassiber_store::optional::PROVIDER_TRADE_HOLDS).unwrap();
+    partition::plan(conn, "profile-1", &args).unwrap();
+    conn.execute(
+        "INSERT INTO provider_trade_holds(id,workspace_id,profile_id,provider,trade_id,trade_status,reason,state,created_at,updated_at) VALUES('hold-1','ws-1','profile-1','bisq','trade-1','Mediated','not_completed','held','2026-01-01','2026-01-01')",
+        [],
+    )
+    .unwrap();
+    let refused = partition::plan(conn, "profile-1", &args).unwrap_err();
+    assert!(
+        refused.message.contains("holds Bisq trades"),
+        "{}",
+        refused.message
+    );
+}

@@ -123,6 +123,23 @@ fn partition_snapshot(conn: &Connection, profile: &str, args: &Value) -> Result<
             "Select connections from this book for the partition",
         ));
     }
+    // Held Bisq trades name txids, not rows: a partition cannot carry them.
+    let holds = kassiber_store::optional::PROVIDER_TRADE_HOLDS;
+    if kassiber_store::optional::present(conn, holds)
+        .map_err(|e| AppError::new(e.code, e.message))?
+        && !rows(
+            conn,
+            "SELECT 1 FROM provider_trade_holds WHERE profile_id=? AND state='held'",
+            [profile],
+        )?
+        .is_empty()
+    {
+        return Err(error(
+            "validation",
+            "This book holds Bisq trades for review, which a network partition cannot carry yet",
+        )
+        .with_hint("Keep the book whole, or partition a backup from before the Bisq import."));
+    }
     let tables = scopes::SCOPES
         .iter()
         .map(|&(table, sql)| rows(conn, sql, [profile]).map(|rows| (table, rows)))
