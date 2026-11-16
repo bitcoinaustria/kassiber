@@ -272,15 +272,15 @@ pub(super) fn net_inbound(
         return Ok(None);
     }
     let (gross, charged) = (gross.copy_abs(), charged.copy_abs());
-    let net = gross.sub(&charged, &CTX).map_err(decimal_error)?;
-    if !net.is_positive() {
+    let net_amount = gross.sub(&charged, &CTX).map_err(decimal_error)?;
+    if !net_amount.is_positive() {
         return Err(AppError::new(
             "validation",
             format!("{row} receives {gross} {asset} but charges a fee of {charged} {asset}"),
         )
         .with_hint("Kassiber stores an incoming amount net of its fee and cannot store a fee that takes all of it; check the row in the source."));
     }
-    Ok(Some(PriceNumber::Finite(net)))
+    Ok(Some(PriceNumber::Finite(net_amount)))
 }
 
 /// The command that sets a wallet's scope to `crypto`, for hints that tell

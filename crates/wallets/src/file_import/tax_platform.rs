@@ -820,7 +820,7 @@ fn record(row: csv::Row, index: usize, p: &mut Parse<'_>) -> Result<Vec<csv::Row
         .transpose()?
         .flatten()
     {
-        Some(net) => (net, zero()),
+        Some(net_amount) => (net_amount, zero()),
         None => (amount, btc_fee),
     };
     let cash = if inbound.is_some() { sent } else { received };
@@ -981,7 +981,7 @@ fn swap(
     let reference = format!("{}-swap:{digest}:{occurrence}", format.migration_kind());
     // The inbound leg stores what the wallet gained (`assets::net_inbound`).
     let (received, in_fee) = match assets::net_inbound(into, &received, &in_fee, &label)? {
-        Some(net) => (net, zero()),
+        Some(net_amount) => (net_amount, zero()),
         None => (received, in_fee),
     };
     let mut rows = vec![];
