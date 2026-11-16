@@ -116,8 +116,15 @@ pub(crate) struct Tally {
     skipped: BTreeMap<String, i64>,
     /// Non-crypto rows no scope keeps.
     excluded: BTreeMap<String, i64>,
+    /// What the import did not read at all, for `next_step`.
+    notices: Vec<String>,
 }
 impl Tally {
+    /// Names a history the import did not read, in `next_step`.
+    pub(crate) fn notice(&mut self, text: String) {
+        self.notices.push(text);
+    }
+
     /// Whether a row in `code` of `class` may be imported under `scope`;
     /// a row left out is counted. Fiat is never a holding and is not counted.
     pub(crate) fn admit(&mut self, scope: Scope, code: &str, class: Class) -> bool {
@@ -152,15 +159,17 @@ impl Tally {
             ("skipped", counts(&self.skipped)),
             ("excluded", counts(&self.excluded)),
         ];
+        let mut steps = vec![];
         if !self.skipped.is_empty() {
-            fields.push((
-                "next_step",
-                s(format!(
-                    "{}, then sync or import again to keep {}",
-                    keep_command(wallet),
-                    self.skipped.keys().cloned().collect::<Vec<_>>().join(", ")
-                )),
+            steps.push(format!(
+                "{}, then sync or import again to keep {}",
+                keep_command(wallet),
+                self.skipped.keys().cloned().collect::<Vec<_>>().join(", ")
             ));
+        }
+        steps.extend(self.notices.iter().cloned());
+        if !steps.is_empty() {
+            fields.push(("next_step", s(steps.join("; "))));
         }
         dict(fields)
     }
