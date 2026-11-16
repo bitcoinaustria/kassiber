@@ -81,6 +81,7 @@ export type ConnectionSourceFormat =
   | "strike_csv"
   | "ledgerlive_csv"
   | "binance_supplemental_csv"
+  | "bitvavo_csv"
   | "cointracking_csv"
   | "blockpit_csv"
   | "wasabi_bundle"
@@ -693,6 +694,27 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
       "BTC buys, sells, Lightning, and on-chain rows become active platform activity",
       "Fiat-only funding and reversal rows are skipped",
       "Rows use Strike BTC Price as exact CSV pricing when present",
+    ],
+  },
+  {
+    id: "bitvavo",
+    title: "Bitvavo",
+    description: "Bitvavo transaction-history CSV import with exact trade pricing.",
+    category: "exchanges",
+    image: bitvavoIcon,
+    imageClassName: "size-8 rounded-lg",
+    status: "ready",
+    pathLabel: "Custodial platform",
+    formatLabel: "bitvavo_csv",
+    docsHref: "https://support.bitvavo.com/hc/en-us",
+    setupKind: "file-wallet",
+    walletKind: "bitvavo",
+    sourceFormat: "bitvavo_csv",
+    details: [
+      "Export Transaction history from Bitvavo and import it unchanged",
+      "BTC buys and sells against EUR keep exact execution pricing; deposits, withdrawals and staking import as BTC activity",
+      "Trades against altcoins or stablecoins (USDC) are refused by name; fiat-only rows are skipped",
+      "Shares transaction ids with the Bitvavo API connection, so importing both keeps one record each",
     ],
   },
   {

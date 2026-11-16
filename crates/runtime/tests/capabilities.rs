@@ -46,6 +46,7 @@ fn tables_match_python() {
     let rust_only = [
         ("wallets.sync-bitpanda", "wallets.sync-binance"),
         ("wallets.sync-bitvavo", "wallets.sync-binance"),
+        ("wallets.import-bitvavo", "wallets.import-strike"),
         ("journals.verify", "journals.list"),
         // Pinning a certificate is a trust decision, admin like revealing a token.
         ("backends.trust-certificate", "backends.reveal-token"),

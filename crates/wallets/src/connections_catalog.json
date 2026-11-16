@@ -127,9 +127,9 @@
   },
   {
     "kind": "bitvavo",
-    "summary": "Bitvavo read-only API connection for BTC trades and wallet movements.",
+    "summary": "Bitvavo read-only API connection and transaction-history CSV importer for BTC trades and wallet movements.",
     "requires": "",
-    "config_fields": "backend"
+    "config_fields": "backend, source_file, source_format"
   },
   {
     "kind": "wasabi",

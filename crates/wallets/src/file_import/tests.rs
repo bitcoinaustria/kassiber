@@ -4620,3 +4620,222 @@ fn asset_scope_is_validated_and_defaults_to_bitcoin() {
 
 mod supplemental_assets;
 mod tax_platform_assets;
+
+/// The Bitvavo API fixture's transactions (exchange_api/tests/bitvavo_api.rs)
+/// as the transaction-history export writes them: wall time in
+/// Europe/Amsterdam, a signed Amount, the buy's paid amount after the fee,
+/// the withdrawal's Amount including it, and an altcoin withdrawal finer than
+/// msat (skipped). Synthetic; the layout follows public sample exports.
+pub(super) const BITVAVO_CSV: &str = "\u{feff}Timezone,Date,Time,Type,Currency,Amount,Quote Currency,Quote Price,Received / Paid Currency,Received / Paid Amount,Fee currency,Fee amount,Status,Transaction ID,Address
+Europe/Amsterdam,2024-01-01,09:00:00,deposit,EUR,1000,,,,,EUR,0,Completed,dep-eur,NL00BANK*****
+Europe/Amsterdam,2024-01-02,10:00:00.250,buy,BTC,0.01,EUR,40000,EUR,-401.00,EUR,1.00,Completed,buy-gross,
+Europe/Amsterdam,2024-01-02,11:00:00,buy,BTC,0.0009999,EUR,24940,EUR,-25.00,EUR,0.062494,Completed,buy-net,
+Europe/Amsterdam,2024-01-03,01:00:00,deposit,BTC,0.005,,,,,BTC,0,Completed,dep-btc,bc1qdepositsynthetic
+Europe/Amsterdam,2024-07-05,14:30:45.999,withdrawal,BTC,-0.0041,,,,,BTC,0.0001,Completed,wd-btc,bc1qwithdrawalsynthetic
+Europe/Amsterdam,2024-07-06,02:00:00,sell,BTC,-0.002,EUR,42000,EUR,83.79,EUR,0.21,Completed,sell,
+Europe/Amsterdam,2024-07-07,02:00:00,staking,BTC,0.00001,,,,,,,Distributed,stake,
+Europe/Amsterdam,2024-07-08,02:00:00,affiliate,EUR,1.5,,,,,,,Completed,aff-eur,
+Europe/Amsterdam,2024-07-09,02:00:00,buy,ETH,0.04,EUR,2500,EUR,-100.25,EUR,0.25,Completed,buy-eth,
+Europe/Amsterdam,2024-07-09,03:00:00,withdrawal,ETH,-0.010713949999999999,,,,,ETH,0.000000000000000001,Completed,wd-eth,0xsynthetic
+Europe/Amsterdam,2024-07-10,02:00:00,buy,BTC,0.001,EUR,60000,EUR,-60.15,EUR,0.15,Pending,buy-pending,
+Europe/Amsterdam,2024-07-11,02:00:00,withdrawal,BTC,-0.001,,,,,BTC,0.0001,Canceled,wd-canceled,bc1qcanceledsynthetic
+";
+
+/// A book a provider wallet can be created in: EUR and a BTC account.
+fn bitvavo_book() -> Connection {
+    let conn = fixture();
+    conn.execute_batch("UPDATE profiles SET fiat_currency='EUR';
+        INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,asset,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','BTC','fixed');").unwrap();
+    conn
+}
+fn bitvavo_csv(lines: &[&str]) -> String {
+    let header = BITVAVO_CSV.lines().next().unwrap();
+    format!("{header}\n{}\n", lines.join("\n"))
+}
+type BitvavoRow = (String, String, i64, i64, Option<String>, String);
+fn bitvavo_rows(conn: &Connection) -> Vec<BitvavoRow> {
+    let sql = "SELECT external_id, kind, amount, fee, fiat_value_exact, occurred_at FROM transactions ORDER BY occurred_at, external_id";
+    let read = |r: &kassiber_store::rusqlite::Row<'_>| {
+        Ok((
+            r.get(0)?,
+            r.get(1)?,
+            r.get(2)?,
+            r.get(3)?,
+            r.get(4)?,
+            r.get(5)?,
+        ))
+    };
+    conn.prepare(sql)
+        .unwrap()
+        .query_map([], read)
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+}
+
+#[test]
+fn bitvavo_csv_maps_every_documented_btc_row_type_into_its_custodial_wallet() {
+    let conn = bitvavo_book();
+    let result = import_into(&conn, BITVAVO_CSV, Format::Bitvavo, "").unwrap();
+    let get = |key: &str| kassiber_envelope::get(&result, key).cloned();
+    assert_eq!(
+        (get("mode"), get("imported")),
+        (Some(s("full")), Some(Py::from(6)))
+    );
+    assert_eq!(get("source"), Some(s("file:bitvavo_csv")));
+    let row = |id: &str, kind: &str, amount, fee, value: Option<&str>, at: &str| {
+        (
+            format!("bitvavo:{id}"),
+            kind.to_owned(),
+            amount,
+            fee,
+            value.map(Into::into),
+            at.to_owned(),
+        )
+    };
+    assert_eq!(
+        bitvavo_rows(&conn),
+        [
+            // 10:00:00.250 CET is 09:00:00 UTC; the paid amount includes the fee.
+            row(
+                "buy-gross",
+                "buy",
+                1_000_000_000,
+                0,
+                Some("401"),
+                "2024-01-02T09:00:00Z"
+            ),
+            row(
+                "buy-net",
+                "buy",
+                99_990_000,
+                0,
+                Some("25"),
+                "2024-01-02T10:00:00Z"
+            ),
+            row(
+                "dep-btc",
+                "deposit",
+                500_000_000,
+                0,
+                None,
+                "2024-01-03T00:00:00Z"
+            ),
+            // CEST; the Amount 0.0041 included the 0.0001 fee.
+            row(
+                "wd-btc",
+                "withdrawal",
+                400_000_000,
+                10_000_000,
+                None,
+                "2024-07-05T12:30:45Z"
+            ),
+            // The received amount is net of the fee.
+            row(
+                "sell",
+                "sell",
+                200_000_000,
+                0,
+                Some("83.79"),
+                "2024-07-06T00:00:00Z"
+            ),
+            row(
+                "stake",
+                "staking",
+                1_000_000,
+                0,
+                None,
+                "2024-07-07T00:00:00Z"
+            ),
+        ]
+    );
+    let config: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE label='Bitvavo' AND kind='bitvavo'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(config, r#"{"source_format": "bitvavo_csv"}"#);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions WHERE pricing_method='bitvavo_csv' AND pricing_quality='exact' AND pricing_provider='Bitvavo'"), 3);
+    // Importing the same export again adds nothing; a UTC export with an
+    // exponent amount reads its wall time as UTC.
+    let again = import_into(&conn, BITVAVO_CSV, Format::Bitvavo, "").unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "imported"),
+        Some(&Py::from(0))
+    );
+    let utc = bitvavo_csv(&["UTC,2024-03-31,02:30:00,staking,BTC,1e-05,,,,,,,Distributed,s1,"]);
+    import_into(&conn, &utc, Format::Bitvavo, "").unwrap();
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions WHERE external_id='bitvavo:s1' AND amount=1000000 AND occurred_at='2024-03-31T02:30:00Z'"), 1);
+}
+
+#[test]
+fn bitvavo_csv_refuses_what_it_cannot_map_by_name() {
+    let line = |rest: &str| format!("Europe/Amsterdam,2024-08-01,10:00:00,{rest}");
+    for (row, message) in [
+        (line("buy,BTC,0.001,USDC,60000,USDC,-60.15,USDC,0.15,Completed,usdc,"),
+            "Bitvavo transaction 'usdc' (type 'buy') trades BTC against USDC, which is not a fiat currency"),
+        (line("rebate,BTC,0.00001,,,,,,,Completed,rebate,"), "Bitvavo transaction 'rebate' (type 'rebate') has a type Kassiber does not map"),
+        (line("deposit,BTC,0.001,,,,,,,Reversed,odd,"), "Bitvavo transaction 'odd' has status 'Reversed', which Kassiber does not know"),
+        ("America/New_York,2024-08-01,10:00:00,deposit,BTC,0.001,,,,,,,Completed,ny,".into(), "Bitvavo transaction 'ny' has time zone 'America/New_York'"),
+        ("Europe/Amsterdam,2024-10-27,02:30:00,deposit,BTC,0.001,,,,,,,Completed,twice,".into(),
+            "Bitvavo transaction 'twice' has a wall time the summer-time change skips or repeats"),
+        ("Europe/Amsterdam,2024-03-31,02:30:00,deposit,BTC,0.001,,,,,,,Completed,never,".into(),
+            "Bitvavo transaction 'never' has a wall time the summer-time change skips or repeats"),
+        ("Europe/Amsterdam,2024-02-30,10:00:00,deposit,BTC,0.001,,,,,,,Completed,date,".into(), "Bitvavo transaction 'date' has a Date or Time Kassiber cannot read"),
+        (line("deposit,BTC,0.100000000000000000000000000000000001,,,,,,,Completed,long,"),
+            "Bitvavo transaction 'long' (type 'deposit') has a BTC amount that is not a whole number of millisatoshi"),
+        (line("withdrawal,BTC,-0.1,,,,,BTC,0.000000000001,Completed,wd,"),
+            "Bitvavo transaction 'wd' (type 'withdrawal') has a BTC amount that is not a whole number of millisatoshi"),
+        (line("withdrawal,BTC,-0.0001,,,,,BTC,0.0001,Completed,eaten,"), "Bitvavo transaction 'eaten' (type 'withdrawal') has a withdrawal fee as large as its amount"),
+        (line("buy,BTC,0.001,EUR,60000,EUR,60.15,EUR,0.15,Completed,sign,"), "Bitvavo transaction 'sign' has an Amount and a Received / Paid Amount with the same sign"),
+        // A paid amount that fits only the before-fee reading contradicts the export.
+        (line("buy,BTC,0.01,EUR,40000,EUR,-400.00,EUR,1.00,Completed,before,"),
+            "Bitvavo transaction 'before' (type 'buy') has a cash amount that does not match its amount, price and fee"),
+        (line("deposit,BTC,1.000,,,,,,,Completed,,"), "Bitvavo CSV has a row without a Transaction ID"),
+        (line("deposit,BTC,1;5,,,,,,,Completed,comma,"), "Bitvavo transaction 'comma' has a Amount that is not a plain decimal"),
+    ] {
+        let conn = bitvavo_book();
+        let error = import_into(&conn, &bitvavo_csv(&[&row]), Format::Bitvavo, "").unwrap_err();
+        assert!(error.message.starts_with(message), "{}", error.message);
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    }
+    let partial = "Timezone,Date,Time,Type,Currency,Amount,Status,Transaction ID\nUTC,2024-01-01,00:00:00,deposit,BTC,1,Completed,x\n";
+    let error = import_into(&bitvavo_book(), partial, Format::Bitvavo, "").unwrap_err();
+    assert_eq!(error.message, "Bitvavo CSV is missing required columns: Quote Currency, Quote Price, Received / Paid Currency, Received / Paid Amount, Fee currency, Fee amount");
+}
+
+/// Rows of one import are stored in the order they happened (their
+/// milliseconds, the source position that decides FIFO and LIFO basis);
+/// a row a later import adds into a second an earlier import filled with the
+/// opposite direction is tagged with that row for review.
+#[test]
+fn bitvavo_csv_orders_same_second_rows_and_tags_them_across_imports() {
+    let later = "Europe/Amsterdam,2024-08-01,10:00:00.900,sell,BTC,-0.001,EUR,60000,EUR,59.85,EUR,0.15,Completed,aaa-later,";
+    let earlier = "Europe/Amsterdam,2024-08-01,10:00:00.100,buy,BTC,0.001,EUR,60000,EUR,-60.15,EUR,0.15,Completed,zzz-earlier,";
+    let query = |conn: &Connection, sql: &str| -> Vec<String> {
+        conn.prepare(sql)
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    };
+    let tagged = "SELECT t.external_id FROM transactions t JOIN transaction_tags x ON x.transaction_id=t.id JOIN tags g ON g.id=x.tag_id WHERE g.code='same-second-order-uncertain' ORDER BY 1";
+    let conn = bitvavo_book();
+    import_into(&conn, &bitvavo_csv(&[later, earlier]), Format::Bitvavo, "").unwrap();
+    let order = "SELECT t.external_id FROM import_batch_transactions b JOIN transactions t ON t.id=b.transaction_id ORDER BY b.source_position";
+    assert_eq!(
+        query(&conn, order),
+        ["bitvavo:zzz-earlier", "bitvavo:aaa-later"]
+    );
+    assert!(query(&conn, tagged).is_empty());
+    let conn = bitvavo_book();
+    import_into(&conn, &bitvavo_csv(&[later]), Format::Bitvavo, "").unwrap();
+    import_into(&conn, &bitvavo_csv(&[later, earlier]), Format::Bitvavo, "").unwrap();
+    assert_eq!(
+        query(&conn, tagged),
+        ["bitvavo:aaa-later", "bitvavo:zzz-earlier"]
+    );
+}

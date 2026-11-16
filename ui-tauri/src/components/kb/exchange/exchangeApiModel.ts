@@ -14,6 +14,20 @@ export function isExchangeKind(kind: string | null | undefined): kind is Exchang
   return (EXCHANGE_KINDS as readonly string[]).includes((kind ?? "").trim().toLowerCase());
 }
 
+/**
+ * The exchange a wallet syncs from through its API, or null. Only a wallet
+ * with a backend attached is an API connection: a wallet of the same kind
+ * that imports a CSV export (Bitvavo, the Binance supplemental CSV) keeps
+ * its file refresh.
+ */
+export function exchangeApiKind(
+  wallet: { kind?: string | null; backend?: { name?: string | null } | null } | null | undefined,
+): ExchangeKind | null {
+  const kind = (wallet?.kind ?? "").trim().toLowerCase();
+  if (!isExchangeKind(kind)) return null;
+  return wallet?.backend?.name?.trim() ? kind : null;
+}
+
 /** Bitpanda authenticates with the key alone; the others sign with a secret. */
 export function exchangeNeedsSecret(kind: ExchangeKind) {
   return kind !== "bitpanda";

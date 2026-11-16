@@ -160,7 +160,7 @@ import {
   type CertificateProblem,
 } from "@/lib/certificateTrust";
 import { useExchangeSync } from "@/components/kb/exchange/useExchangeSync";
-import { isExchangeKind } from "@/components/kb/exchange/exchangeApiModel";
+import { exchangeApiKind } from "@/components/kb/exchange/exchangeApiModel";
 import type {
   Connection,
   NodeSnapshot,
@@ -661,10 +661,9 @@ function ConnectionDetailView({
     connection,
     walletDetail,
   );
-  // Exchange API wallets sync from their exchange on Sync now only.
-  const exchangeKind = isExchangeKind(walletDetail?.kind)
-    ? walletDetail.kind
-    : null;
+  // Exchange API wallets sync from their exchange on Sync now only; a wallet
+  // of an exchange kind without a backend refreshes from its file.
+  const exchangeKind = exchangeApiKind(walletDetail);
   const exchangeSync = useExchangeSync({
     walletId: connection.id,
     label: connection.label,

@@ -5,6 +5,7 @@
 //! and the errors <https://docs.bitvavo.com/docs/errors/> lists. Kept out of
 //! rustfmt (tests.rs) so its fixture tables stay one row per line.
 use super::*;
+use crate::file_import::tests::{import_into, BITVAVO_CSV as CSV};
 use serde_json::Value as J;
 use std::sync::Mutex;
 
@@ -169,6 +170,36 @@ fn bitvavo_reads_only_and_maps_every_btc_event() {
     // A second sync adds nothing.
     assert_eq!(at(&sync_into(&run.conn, &fake), "imported"), &Py::from(0));
     assert_eq!(count(&run.conn, "SELECT count(*) FROM wallets WHERE kind='bitvavo'"), 1);
+}
+
+/// The export and the API name one transaction alike, so importing both
+/// into one wallet, in either order, keeps one record per transaction.
+#[test]
+fn bitvavo_csv_and_api_dedupe_in_either_order() {
+    for csv_first in [true, false] {
+        let (conn, fake) = (book(), serve_script(Script::new()));
+        let file = || import_into(&conn, CSV, crate::file_import::Format::Bitvavo, "").unwrap();
+        let (first, second) = match csv_first {
+            true => (file(), sync_into(&conn, &fake)),
+            false => (sync_into(&conn, &fake), file()),
+        };
+        assert_eq!(at(&first, "imported"), &Py::from(6), "{first:?}");
+        assert_eq!(at(&second, "imported"), &Py::from(0), "{second:?}");
+        let Py::List(updated) = at(&second, "updated_records") else {
+            panic!("updated records")
+        };
+        for record in updated {
+            let fields = kassiber_pyjson::dumps(at(record, "changed_fields"), &Default::default()).unwrap();
+            let moved = ["fingerprint", "\"amount", "\"fee\""].iter().any(|f| fields.contains(f));
+            assert!(!moved, "{fields}");
+        }
+        // The later source refreshes only the pricing provenance.
+        let method = if csv_first { "bitvavo_csv" } else { "bitvavo_api" };
+        let mut stored = rows(&conn);
+        stored.iter_mut().for_each(|row| row.5 = row.5.as_ref().map(|_| method.to_owned()));
+        assert_eq!(stored, expected(method), "csv first: {csv_first}");
+        assert_eq!(count(&conn, "SELECT count(*) FROM transactions WHERE excluded=1"), 0);
+    }
 }
 
 /// One BTC row Kassiber cannot book exactly refuses the whole sync by name,
@@ -404,6 +435,11 @@ fn bitvavo_bitcoin_scope_counts_other_assets_and_names_the_scope_command() {
     let skipped = format!(r#"{{"scope": "bitcoin", "skipped": {{"ETH": 1}}, "excluded": {{}}, "next_step": "{}, then sync or import again to keep ETH"}}"#, KEEP.replace('"', "\\\""));
     assert_eq!(dumped(at(&result, "assets")), skipped);
     assert_eq!(at(&result, "swap_pairs"), &Py::from(0));
+    let conn = book();
+    scoped(&conn, "bitcoin");
+    let file = import_into(&conn, CSV, crate::file_import::Format::Bitvavo, "").unwrap();
+    assert_eq!(at(&file, "imported"), &Py::from(6));
+    assert_eq!(dumped(at(&file, "assets")), skipped.replace(r#""ETH": 1"#, r#""ETH": 2"#));
     let at = "2024-08-01T00:00:00Z";
     for row in [
         item("eth", "sell", at, &[("sent", "BTC", "0.1"), ("received", "ETH", "2"), ("price", "ETH", "20")]),
@@ -482,3 +518,28 @@ fn bitvavo_crypto_scope_refuses_what_it_cannot_place() {
     assert!(error.message.contains("has more than 11 decimal places"), "{}", error.message);
 }
 
+/// The export states where a swap's fee is: its paid amount includes the
+/// fee, its received amount is net of it, and a withdrawal's Amount includes
+/// its fee for every asset. A padded Type reads as the type.
+#[test]
+fn bitvavo_csv_crypto_scope_places_swap_and_withdrawal_fees_as_the_export_states() {
+    let conn = book();
+    scoped(&conn, "crypto");
+    let header = CSV.lines().next().unwrap();
+    let csv = format!("{header}
+Europe/Amsterdam,2024-09-02,10:00:00,buy,ETH,1,BTC,0.05,BTC,-0.0501,BTC,0.0001,Completed,s1,
+Europe/Amsterdam,2024-09-03,10:00:00,sell,ETH,-1,BTC,0.05,BTC,0.0499,BTC,0.0001,Completed,s2,
+Europe/Amsterdam,2024-09-04,10:00:00,withdrawal,ETH,-0.2,,,,,ETH,0.001,Completed,w1,0xsynthetic
+Europe/Amsterdam,2024-09-05,10:00:00, withdrawal ,BTC,-0.0041,,,,,BTC,0.0001,Completed,w2,bc1qsynthetic
+");
+    let result = import_into(&conn, &csv, crate::file_import::Format::Bitvavo, "").unwrap();
+    assert_eq!(at(&result, "swap_pairs"), &Py::from(2));
+    assert_eq!(stored(&conn), [
+        row("s1:in", "ETH", "inbound", "swap", 100_000_000_000, 0, None),
+        row("s1:out", "BTC", "outbound", "swap", 5_000_000_000, 10_000_000, None),
+        row("s2:in", "BTC", "inbound", "swap", 4_990_000_000, 0, None),
+        row("s2:out", "ETH", "outbound", "swap", 100_000_000_000, 0, None),
+        row("w1", "ETH", "outbound", "withdrawal", 19_900_000_000, 100_000_000, None),
+        row("w2", "BTC", "outbound", "withdrawal", 400_000_000, 10_000_000, None),
+    ]);
+}

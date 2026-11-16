@@ -24,6 +24,7 @@ written.
 - 21bitcoin transaction CSV exports
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
+- Bitvavo transaction-history CSV exports and the Bitvavo read-only API sync
 - CoinTracking transaction CSV exports with complete history (Bitcoin rows;
   other crypto assets with the wallet's `asset_scope` set to `crypto`)
 - Blockpit transaction CSV exports with filters cleared (Bitcoin rows; other
@@ -44,6 +45,7 @@ Format references used by the dedicated importers:
 - 21bitcoin transaction CSV export from the 21bitcoin app
 - Pocket Bitcoin account CSV export
 - Strike CSV export from Strike transaction history
+- Bitvavo transaction-history CSV export (Transaction history → Export), layout pinned by public samples: <https://support.bitvavo.com/hc/en-us/articles/44936625205137-How-can-I-download-my-tax-report>; Bitvavo REST API: <https://docs.bitvavo.com/docs/rest-api/introduction/>
 - CoinTracking transaction CSV export: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000031008-create-backup-restore-or-export-your-account-data>
 - CoinTracking transaction types: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000042783>
 - Blockpit transaction CSV export: <https://intercom.help/blockpit/en/articles/12137149-how-to-export-my-blockpit-transactions-as-a-csv-file>
@@ -1949,6 +1951,26 @@ safe. The result's `provider_balance` compares Bitpanda's own BTC
 balance, read from the fetched history, with the wallet's book balance.
 [Bitpanda](bitpanda.md) records the API, the full mapping, the balance check
 and every refusal.
+
+### Bitvavo API and CSV
+
+Rust backend only. The read-only API sync (`wallets sync-bitvavo`, a
+View-only key in a `bitvavo` backend) and the transaction-history CSV
+(`wallets import-bitvavo`, active custodial ledger in `full` mode) land in
+one `bitvavo` wallet with one id per transaction, `bitvavo:<transaction id>`,
+so importing both in either order keeps one record each; the CSV covers
+history from before the key existed. Both follow the wallet's
+`asset_scope`: in `bitcoin` scope, transactions without BTC are skipped and
+counted by ticker in `assets`, and a BTC trade against another crypto asset
+or a Convert with BTC is refused naming the scope command; in `crypto` scope
+every crypto asset is kept, crypto-quoted trades and Converts as paired
+`swap` legs. Buys and sells for fiat get exact `exchange_execution` pricing;
+deposits, withdrawals, staking and affiliate rewards import unpriced;
+fiat-only transactions are skipped. Margin, loan and any type Kassiber does
+not map refuse the whole import by name. The sync reports the BTC spot
+balance as `reported_balance`.
+[Bitvavo](bitvavo.md) records the key setup, API, CSV layout, mapping and
+every refusal.
 
 ### Binance API and Supplemental CSV
 
