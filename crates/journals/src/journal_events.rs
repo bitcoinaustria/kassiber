@@ -82,6 +82,8 @@ fn pair(row: &Value) -> Value {
     let out_asset = val(row, "pair_out_asset");
     let in_asset = val(row, "pair_in_asset");
     let fee = msat(&val(row, "pair_swap_fee_msat"));
+    let comparable =
+        kassiber_store::assets::units_comparable(&py_str(&out_asset), &py_str(&in_asset));
     let leg = |prefix: &str, asset: Value| {
         let amount = msat(&val(row, &format!("pair_{prefix}_amount")));
         dict([
@@ -111,8 +113,17 @@ fn pair(row: &Value) -> Value {
         ),
         ("kind", val(row, "pair_kind")),
         ("policy", val(row, "pair_policy")),
-        ("swapFeeMsat", Value::Int(fee.into())),
-        ("swapFee", btc(fee)),
+        // A cross-asset pair's raw-unit difference is no fee
+        // (docs/plan/24-crypto-assets.md): unknown, not a number.
+        (
+            "swapFeeMsat",
+            if comparable {
+                Value::Int(fee.into())
+            } else {
+                Value::Null
+            },
+        ),
+        ("swapFee", if comparable { btc(fee) } else { Value::Null }),
         ("out", leg("out", out_asset.clone())),
         ("in", leg("in", in_asset.clone())),
     ])

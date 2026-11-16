@@ -2022,6 +2022,10 @@ See [tax countries](docs/reference/tax-countries.md) and
   `header_row` option; copying the statement file onto the accepted source;
   masking own non-IBAN account numbers inside bank free text; and network
   partitions of books holding statements.
+- [ ] Per-asset scale for large-supply tokens (SHIB, PEPE, BONK, BTTC): a
+  row holds at most about 92 million units at 10^-11, so one such row stops a
+  sync. Designed, not built, in [plan 24](docs/plan/24-crypto-assets.md#per-asset-scale-design-not-implemented);
+  needs the owner's decision on the released-Python exception.
 
 - [ ] Extend [exact exchange withdrawals](docs/reference/custody-resolution.md#exchange-withdrawals-that-name-their-txid)
   past Strike and River. Coinbase and Binance API rows name the txid, but the
