@@ -1299,6 +1299,7 @@ impl Supervisor {
     /// Starts the daemon now, without waiting for its ready record (tests; the app starts it
     /// with its first request).
     #[cfg(test)]
+    #[cfg_attr(not(unix), allow(dead_code))] // the unix-only stub-daemon tests
     pub fn start(&mut self) -> Result<(), DaemonError> {
         self.ensure().map(|_| ())
     }
@@ -1474,6 +1475,7 @@ impl Supervisor {
 
     /// A switch is warming its replacement.
     #[cfg(test)]
+    #[cfg_attr(not(unix), allow(dead_code))] // the unix-only stub-daemon tests
     pub fn switching(&self) -> bool {
         self.switching.is_some()
     }

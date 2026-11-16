@@ -760,6 +760,7 @@ mod tests {
     use crate::app::Route;
     use crate::daemon::{Launch, Supervisor};
 
+    #[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests
     /// An app on a stub daemon (`daemon::tests::stub`) serving the user's own book "home-book".
     fn stub_app() -> App {
         let mut app = crate::app::tests::quiet_app();
@@ -782,6 +783,7 @@ mod tests {
         app
     }
 
+    #[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests
     /// A demo copy on disk (with its marker) and its preference files.
     fn copy(name: &str) -> Session {
         let root =
@@ -805,10 +807,12 @@ mod tests {
         }
     }
 
+    #[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests
     fn pid_of(app: &App, kind: &str) -> Option<i64> {
         app.read(kind).and_then(|d| d["pid"].as_i64())
     }
 
+    #[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests
     #[derive(Clone, Copy, Debug)]
     enum Exit {
         Leave,

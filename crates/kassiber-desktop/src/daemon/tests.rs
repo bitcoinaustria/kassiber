@@ -248,6 +248,7 @@ fn command_resolution_order() {
 
 // ---- A stub daemon --------------------------------------------------------------------------
 
+#[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests
 /// A `sh` stand-in for `kassiber daemon`. Its mode is the `--data-root` argument:
 /// - `normal` (or anything else): ready, then answers each request with its own kind and
 ///   `data.pid`, except `test.exit` (exits 3), `test.noid` (a record without request_id),
@@ -295,6 +296,7 @@ done
     path
 }
 
+#[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests
 fn supervisor(mode: &str) -> Supervisor {
     let launch = Launch {
         data_root: Some(mode.into()),
@@ -310,6 +312,7 @@ fn supervisor(mode: &str) -> Supervisor {
     s
 }
 
+#[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests
 /// Drains until `done` holds for what arrived, or 20 s pass.
 fn drain_until(
     s: &mut Supervisor,
@@ -327,6 +330,7 @@ fn drain_until(
     got
 }
 
+#[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests
 fn record_for<'a>(got: &'a [(u64, Incoming)], id: &str) -> Option<&'a Value> {
     got.iter().find_map(|(_, m)| match m {
         Incoming::Record {
@@ -337,6 +341,7 @@ fn record_for<'a>(got: &'a [(u64, Incoming)], id: &str) -> Option<&'a Value> {
     })
 }
 
+#[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests
 fn exited(got: &[(u64, Incoming)]) -> Option<&DaemonError> {
     got.iter().find_map(|(_, m)| {
         if let Incoming::Exited(e) = m {
@@ -504,6 +509,7 @@ fn a_crash_on_start_is_recorded_redacted_and_backs_off() {
     assert!(s.backoff.failures >= 1);
 }
 
+#[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests
 /// Polls a switch to its outcome (the app does this from its pump, never blocking).
 fn finish_switch(s: &mut Supervisor) -> Result<Option<u64>, DaemonError> {
     let deadline = Instant::now() + Duration::from_secs(20);
