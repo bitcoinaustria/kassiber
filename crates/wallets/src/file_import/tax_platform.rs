@@ -1,7 +1,7 @@
 use super::exchange::Columns;
 use super::river::{abs, arithmetic, nonnegative, positive, repr, truth, zero};
 use super::*;
-use assets::Scope;
+use assets::{Scope, Tally};
 
 const COINTRACKING_REQUIRED: &[&str] = &[
     "Type",
@@ -262,11 +262,8 @@ pub(super) fn date(value: Option<String>, index: usize) -> Result<String, AppErr
     })?;
     Ok(candidate)
 }
-fn mapped(
-    raw: Option<String>,
-    inbound: bool,
-    provider: &Platform,
-) -> Result<(&'static str, &'static str, Option<&'static str>), AppError> {
+/// A row's type, and the key its mapping matches on.
+fn type_key(raw: Option<String>, provider: &Platform) -> Result<(String, String), AppError> {
     let text = raw
         .as_deref()
         .map(kassiber_pytext::strip)
@@ -314,9 +311,19 @@ fn mapped(
             "lost" | "verloren" => "lost",
             _ => "unsupported",
         }
+        .to_owned()
     } else {
-        key.as_str()
+        key
     };
+    Ok((text.to_owned(), key))
+}
+fn mapped(
+    raw: Option<String>,
+    inbound: bool,
+    provider: &Platform,
+) -> Result<(&'static str, &'static str, Option<&'static str>), AppError> {
+    let (text, key) = type_key(raw, provider)?;
+    let key = key.as_str();
     let (label,direction,kind) = match key {
         "trade" if inbound => ("Buy","inbound",Some("buy")),
         "trade" => ("Sell","outbound",Some("sell")),
@@ -347,11 +354,73 @@ fn mapped(
 #[derive(Clone, Copy)]
 pub(super) struct Target<'a> {
     pub scope: Scope,
-    #[allow(
-        dead_code,
-        reason = "read by the hints of an importer that names the scope command"
-    )]
     pub wallet: &'a str,
+}
+
+/// One parse of an export. A parse without a target reads as the `bitcoin`
+/// scope and names no wallet in its hints.
+struct Parse<'a> {
+    format: Format,
+    target: Option<Target<'a>>,
+    /// Rows the `bitcoin` scope left out, by ticker.
+    tally: Tally,
+    /// How often each swap's economics occurred so far in the file.
+    swaps: BTreeMap<String, usize>,
+}
+impl Parse<'_> {
+    fn crypto(&self) -> bool {
+        self.target.is_some_and(|t| t.scope == Scope::Crypto)
+    }
+
+    /// The canonical code of a leg this scope imports: Bitcoin always, other
+    /// crypto assets in the `crypto` scope.
+    fn held(&self, code: Option<&str>) -> Option<String> {
+        if let Some(bitcoin) = exchange::bitcoin(code) {
+            return Some(bitcoin.into());
+        }
+        let code = code?;
+        (self.crypto() && ticker(code) == Ticker::Crypto).then(|| code.to_owned())
+    }
+
+    /// The hint for a refusal: one the `crypto` scope would import names the
+    /// command that turns it on, where the wallet is known.
+    fn widen(&self, code: &str, hint: &str) -> String {
+        match self.target {
+            Some(target) if target.scope == Scope::Bitcoin && ticker(code) == Ticker::Crypto => {
+                format!(
+                    "This wallet imports Bitcoin only. To import {code} and the other crypto assets in this file, run {}, then import the file again.",
+                    assets::keep_command(target.wallet)
+                )
+            }
+            _ => hint.into(),
+        }
+    }
+
+    /// Counts the crypto tickers of a row the `bitcoin` scope leaves out, or
+    /// refuses a code the `crypto` scope cannot import.
+    fn screen(&mut self, codes: [Option<&str>; 3], label: &str) -> Result<(), AppError> {
+        let mut seen: Vec<&str> = vec![];
+        for code in codes.into_iter().flatten() {
+            if seen.contains(&code) {
+                continue;
+            }
+            seen.push(code);
+            match ticker(code) {
+                Ticker::Crypto if !self.crypto() => {
+                    self.tally
+                        .admit(Scope::Bitcoin, code, assets::Class::Crypto);
+                }
+                Ticker::Unsupported if self.crypto() => {
+                    return Err(fail(
+                        format!("{label} has unsupported asset {code}"),
+                        "Kassiber imports BTC, the fiat currencies it supports as cash legs, and crypto tickers of letters and digits. Bitcoin units such as SATS, other fiat currencies and metals are not crypto assets here; review this row with the Generic ledger template.",
+                    ));
+                }
+                _ => (),
+            }
+        }
+        Ok(())
+    }
 }
 
 /// What a provider's canonical ticker is, for these exports. They carry no
@@ -402,7 +471,52 @@ const OTHER_FIAT: &[&str] = &[
     "XAG", "XAU", "XBA", "XBB", "XBC", "XBD", "XCD", "XCG", "XDR", "XOF", "XPD", "XPF", "XPT",
     "XSU", "XTS", "XUA", "XXX", "YER", "ZMK", "ZMW", "ZWG", "ZWL",
 ];
+
+/// Whether a parsed fee charges anything.
+fn charged(fee: &Option<PriceNumber>) -> Result<bool, AppError> {
+    fee.as_ref()
+        .map(|n| abs(n.clone()).and_then(|n| positive(&n)))
+        .transpose()
+        .map(|v| v.unwrap_or(false))
+}
+
+/// Refuses a quantity of an asset other than Bitcoin that the book cannot
+/// store exactly, naming the row.
+fn exact(label: &str, code: &str, field: &str, amount: &PriceNumber) -> Result<(), AppError> {
+    if exchange::bitcoin(Some(code)).is_some() {
+        return Ok(());
+    }
+    let PriceNumber::Finite(amount) = amount else {
+        return Ok(());
+    };
+    assets::exact_units(code, field, &amount.copy_abs())
+        .map(|_| ())
+        .map_err(|mut error| {
+            error.message = format!("{label}: {}", error.message);
+            error
+        })
+}
+
+/// The bitcoin-scope parse the frozen Python vectors pin, without a wallet.
 pub(super) fn load(file: &str, format: Format) -> Result<Vec<csv::Row>, AppError> {
+    parse(file, format, None).map(|(rows, _)| rows)
+}
+
+/// The rows a wallet import keeps under the wallet's asset scope, and what
+/// the scope left out.
+pub(super) fn load_for(
+    file: &str,
+    format: Format,
+    target: Target<'_>,
+) -> Result<(Vec<csv::Row>, Tally), AppError> {
+    parse(file, format, Some(target))
+}
+
+fn parse(
+    file: &str,
+    format: Format,
+    target: Option<Target<'_>>,
+) -> Result<(Vec<csv::Row>, Tally), AppError> {
     let provider = platform(format);
     let (header, rows) = platform_csv::load(file)?;
     let missing: Vec<_> = provider
@@ -424,88 +538,177 @@ pub(super) fn load(file: &str, format: Format) -> Result<Vec<csv::Row>, AppError
             ),
         ));
     }
+    let mut parse = Parse {
+        format,
+        target,
+        tally: Tally::default(),
+        swaps: BTreeMap::new(),
+    };
     let mut occurrences = BTreeMap::<String, usize>::new();
     let mut result = vec![];
     for (index, row) in rows.into_iter().enumerate() {
-        if let Some(mut row) = record(row, index + 1, format)? {
-            let payload = dict([
-                ("amount", number_float(&row.data["amount"])),
-                ("asset", s(text(&row.data, "asset"))),
-                ("direction", s(text(&row.data, "direction"))),
-                ("fee", number_float(&row.data["fee"])),
-                ("occurred_at", s(text(&row.data, "occurred_at"))),
-            ]);
-            let encoded = kassiber_pyjson::dumps(&payload, &Default::default()).unwrap();
-            let digest = Sha256::digest(encoded.as_bytes())
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>();
-            let occurrence = occurrences.entry(digest.clone()).or_default();
-            *occurrence += 1;
-            row.data["_tax_platform_row_identity"] =
-                json!(format!("{}:{digest}:{occurrence}", format.migration_kind()));
+        for mut row in record(row, index + 1, &mut parse)? {
+            // A swap leg carries its own identity (see `swap`).
+            if row.data.get("swap_ref").is_none() {
+                let payload = dict([
+                    ("amount", number_float(&row.data["amount"])),
+                    ("asset", s(text(&row.data, "asset"))),
+                    ("direction", s(text(&row.data, "direction"))),
+                    ("fee", number_float(&row.data["fee"])),
+                    ("occurred_at", s(text(&row.data, "occurred_at"))),
+                ]);
+                let encoded = kassiber_pyjson::dumps(&payload, &Default::default()).unwrap();
+                let digest = sha256(&encoded);
+                let occurrence = occurrences.entry(digest.clone()).or_default();
+                *occurrence += 1;
+                row.data["_tax_platform_row_identity"] =
+                    json!(format!("{}:{digest}:{occurrence}", format.migration_kind()));
+            }
             result.push(row);
         }
     }
-    Ok(result)
+    Ok((result, parse.tally))
+}
+fn sha256(text: &str) -> String {
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 fn number_float(value: &Json) -> Py {
     let n: f64 = value.as_str().unwrap().parse().unwrap_or(f64::NAN);
     Py::Float(n)
 }
-fn record(row: csv::Row, index: usize, format: Format) -> Result<Option<csv::Row>, AppError> {
+
+/// What every row of one export row shares: its date, note, counterparty
+/// and provider id, and the original row.
+struct Shared {
+    occurred: String,
+    note: Option<String>,
+    counterparty: String,
+    txid: Option<String>,
+    raw: String,
+}
+impl Shared {
+    fn of(c: &Columns, provider: &Platform, index: usize) -> Result<Self, AppError> {
+        let occurred = date(c.get(provider.date), index)?;
+        let counterparty = c
+            .opt(provider.counterparty)
+            .unwrap_or_else(|| provider.name.into());
+        let note = [c.opt(provider.note[0]), c.opt(provider.note[1])]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
+        Ok(Self {
+            occurred,
+            note: (!note.is_empty()).then_some(note),
+            counterparty,
+            txid: c.opt(provider.txid),
+            raw: config::stored_json(&c.json()),
+        })
+    }
+
+    /// An unpriced row of this export row: a swap leg or a fee.
+    fn unpriced(
+        &self,
+        format: Format,
+        external: &str,
+        direction: &str,
+        code: &str,
+        amounts: (&PriceNumber, &PriceNumber),
+        kind: &str,
+    ) -> csv::Row {
+        csv::Row {
+            data: json!({"txid":external,"occurred_at":self.occurred,"direction":direction,"asset":code,"amount":repr(amounts.0),"fee":repr(amounts.1),"fiat_value":null,"fiat_rate":null,"fiat_currency":null,"pricing_source_kind":null,"pricing_provider":null,"pricing_pair":null,"pricing_method":format.name(),"pricing_external_ref":self.txid,"pricing_quality":null,"kind":kind,"description":self.note,"counterparty":self.counterparty,"raw_json":self.raw}),
+            headers: vec![],
+            rest: None,
+            original: None,
+        }
+    }
+}
+
+/// The rows one export row maps to: none (a fiat-only row, or one the scope
+/// leaves out), the held asset's row, a swap's two legs, and a row for a fee
+/// in a third asset.
+fn record(row: csv::Row, index: usize, p: &mut Parse<'_>) -> Result<Vec<csv::Row>, AppError> {
+    let format = p.format;
     let provider = platform(format);
     let name = provider.name;
+    let label = format!("{name} row {index}");
     let c = Columns::new(&row);
     let code = |names: &[&str]| c.opt(names).map(|v| asset(&v));
     let incoming = code(provider.incoming_asset);
     let mut outgoing = code(provider.outgoing_asset);
-    let inbound = exchange::bitcoin(incoming.as_deref());
-    let mut outbound = exchange::bitcoin(outgoing.as_deref());
-    if inbound.is_some() && outbound.is_some() {
-        return Err(fail(
-            format!("{name} row {index} has Bitcoin on both sides"),
-            "Review BTC/LBTC swaps explicitly instead of importing them as a fiat trade.",
-        ));
+    let inbound = p.held(incoming.as_deref());
+    let mut outbound = p.held(outgoing.as_deref());
+    if let (Some(into), Some(out)) = (&inbound, &outbound) {
+        if exchange::bitcoin(Some(into)).is_some() && exchange::bitcoin(Some(out)).is_some() {
+            return Err(fail(
+                format!("{name} row {index} has Bitcoin on both sides"),
+                "Review BTC/LBTC swaps explicitly instead of importing them as a fiat trade.",
+            ));
+        }
+        return swap(&c, index, p, out, into);
     }
     let mut fee_code = code(provider.fee_asset);
     let mut fee_raw = c.get(provider.fee_amount);
-    let mut fee = number(
-        fee_raw.clone(),
-        "Fee Amount",
-        &format!("{name} row {index}"),
+    let mut fee = number(fee_raw.clone(), "Fee Amount", &label)?;
+    let fee_charged = charged(&fee)?;
+    p.screen(
+        [
+            incoming.as_deref(),
+            outgoing.as_deref(),
+            fee_code.as_deref().filter(|_| fee_charged),
+        ],
+        &label,
     )?;
     let standalone =
-        inbound.is_none() && outbound.is_none() && exchange::bitcoin(fee_code.as_deref()).is_some();
+        inbound.is_none() && outbound.is_none() && p.held(fee_code.as_deref()).is_some();
     let mut sent_raw = c.get(provider.outgoing_amount);
     if standalone {
         outgoing = fee_code.clone();
-        outbound = exchange::bitcoin(outgoing.as_deref());
+        outbound = p.held(outgoing.as_deref());
         sent_raw = fee_raw.take();
         fee_code = None;
         fee = None;
     }
-    if inbound.is_none() && outbound.is_none() {
-        return Ok(None);
-    }
+    let Some(held) = inbound.clone().or(outbound.clone()) else {
+        return Ok(vec![]);
+    };
+    let bitcoin = exchange::bitcoin(Some(&held)).is_some();
+    let leg = if bitcoin { "Bitcoin" } else { held.as_str() };
     let opposing = if inbound.is_some() {
         &outgoing
     } else {
         &incoming
     };
     if let Some(code) = opposing.as_deref().filter(|v| !FIAT.contains(v)) {
-        return Err(fail(format!("{name} row {index} trades Bitcoin against unsupported asset {code}"),"The provider CSV does not identify the currency behind its account-currency value columns. Review this cross-asset row with the Generic ledger and enter an explicit fiat currency and value."));
+        return Err(fail(
+            format!("{name} row {index} trades {leg} against unsupported asset {code}"),
+            &p.widen(code, "The provider CSV does not identify the currency behind its account-currency value columns. Review this cross-asset row with the Generic ledger and enter an explicit fiat currency and value."),
+        ));
     }
-    let (label, type_direction, mut kind) = if standalone {
+    let (label_type, type_direction, mut kind) = if standalone {
         ("Spend", "outbound", Some("spend"))
     } else {
         mapped(c.get(provider.kind), inbound.is_some(), provider)?
     };
     let fiat = opposing.as_deref().filter(|v| FIAT.contains(v));
-    let accepted_fee = exchange::bitcoin(fee_code.as_deref()).is_some()
+    // A fee in the row's own asset: any Bitcoin fee on a Bitcoin row.
+    let own = |code: Option<&str>| {
+        if bitcoin {
+            exchange::bitcoin(code).is_some()
+        } else {
+            code == Some(held.as_str())
+        }
+    };
+    let accepted_fee = own(fee_code.as_deref())
         || fee_code
             .as_deref()
             .is_some_and(|v| FIAT.contains(&v) && Some(v) == fiat);
+    // A fee in a third asset the scope holds becomes its own row.
+    let mut third = None;
     if !accepted_fee {
         if fee
             .as_ref()
@@ -513,7 +716,19 @@ fn record(row: csv::Row, index: usize, format: Format) -> Result<Option<csv::Row
             .transpose()?
             .unwrap_or(false)
         {
-            return Err(fail(format!("{name} row {index} has a fee in unsupported asset {}",fee_code.as_deref().or(c.get(provider.fee_asset).as_deref()).unwrap_or("None")),"Kassiber cannot safely convert a third-asset fee into the Bitcoin or fiat leg. Review this row with the Generic ledger template."));
+            match p.held(fee_code.as_deref()) {
+                Some(code) => third = Some((code, fee_raw.clone())),
+                None => {
+                    let shown = fee_code
+                        .clone()
+                        .or(c.get(provider.fee_asset))
+                        .unwrap_or_else(|| "None".into());
+                    return Err(fail(
+                        format!("{name} row {index} has a fee in unsupported asset {shown}"),
+                        &p.widen(&shown, "Kassiber cannot safely convert a third-asset fee into the Bitcoin or fiat leg. Review this row with the Generic ledger template."),
+                    ));
+                }
+            }
         }
         fee_raw = None;
     }
@@ -553,7 +768,19 @@ fn record(row: csv::Row, index: usize, format: Format) -> Result<Option<csv::Row
             _ => sent_asset.as_deref(),
         });
     let fee = number_in(fee_raw, "Fee Amount", &ledger, fee_unit)?;
-    let amount = if inbound.is_some() { received.clone() } else { sent.clone() }.ok_or_else(|| fail(format!("Ledger row {index}: no Bitcoin leg found (expected BTC, LBTC, or SATS on the Received or Sent side)"),"Put the Bitcoin amount + asset on the Received side (inbound) or the Sent side (outbound)."))?;
+    let amount = if inbound.is_some() {
+        received.clone()
+    } else {
+        sent.clone()
+    };
+    let amount = match amount {
+        Some(amount) => amount,
+        None if bitcoin => return Err(fail(format!("Ledger row {index}: no Bitcoin leg found (expected BTC, LBTC, or SATS on the Received or Sent side)"),"Put the Bitcoin amount + asset on the Received side (inbound) or the Sent side (outbound).")),
+        None => return Err(fail(format!("{label}: the {held} amount is missing"), "Export the row with its amount, or review it with the Generic ledger template.")),
+    };
+    // Exactness is checked on the values as parsed, before a context-rounded
+    // `abs` could shorten them.
+    let parsed_amount = amount.clone();
     let amount = abs(amount)?;
     let direction = if inbound.is_some() {
         "inbound"
@@ -561,14 +788,16 @@ fn record(row: csv::Row, index: usize, format: Format) -> Result<Option<csv::Row
         "outbound"
     };
     if direction != type_direction {
-        return Err(fail(format!("Ledger row {index}: Type '{label}' is {type_direction} but the Bitcoin leg is {direction}"),"Inbound Types (Buy/Deposit/Income/…) need the Bitcoin amount on the Received side; outbound Types (Sell/Withdrawal/Spend/Gift sent/…) on the Sent side."));
+        return Err(fail(format!("Ledger row {index}: Type '{label_type}' is {type_direction} but the {leg} leg is {direction}"),"Inbound Types (Buy/Deposit/Income/…) need the Bitcoin amount on the Received side; outbound Types (Sell/Withdrawal/Spend/Gift sent/…) on the Sent side."));
     }
-    let (mut btc_fee, mut fiat_fee) = (zero(), zero());
+    let (mut btc_fee, mut fiat_fee, mut parsed_fee) = (zero(), zero(), zero());
     if let Some(fee) = fee {
+        let parsed = fee.clone();
         let fee = abs(fee)?;
         if positive(&fee)? {
-            if exchange::bitcoin(fee_code.as_deref()).is_some() {
+            if own(fee_code.as_deref()) {
                 btc_fee = fee;
+                parsed_fee = parsed;
             } else {
                 let cash = if inbound.is_some() {
                     sent.as_ref()
@@ -582,6 +811,18 @@ fn record(row: csv::Row, index: usize, format: Format) -> Result<Option<csv::Row
             }
         }
     }
+    exact(&label, &held, "amount", &parsed_amount)?;
+    exact(&label, &held, "fee", &parsed_fee)?;
+    // Another asset arriving with a fee in itself stores what the wallet
+    // gained (`assets::net_inbound`); a price then covers the net quantity.
+    let (amount, btc_fee) = match (direction == "inbound")
+        .then(|| assets::net_inbound(&held, &amount, &btc_fee, &label))
+        .transpose()?
+        .flatten()
+    {
+        Some(net_amount) => (net_amount, zero()),
+        None => (amount, btc_fee),
+    };
     let cash = if inbound.is_some() { sent } else { received };
     let priced = cash.is_some() && fiat.is_some();
     let value = if let Some(cash) = cash.filter(|_| priced) {
@@ -603,7 +844,7 @@ fn record(row: csv::Row, index: usize, format: Format) -> Result<Option<csv::Row
     } else {
         None
     };
-    let occurred = date(c.get(provider.date), index)?;
+    let shared = Shared::of(&c, provider, index)?;
     let source_type = river::column(&c.get(provider.kind).unwrap_or_default());
     if format == Format::CoinTracking && source_type == "expense (non taxable)"
         || format == Format::Blockpit
@@ -611,19 +852,166 @@ fn record(row: csv::Row, index: usize, format: Format) -> Result<Option<csv::Row
     {
         kind = Some("expense_non_taxable");
     }
-    let counterparty = c.opt(provider.counterparty).unwrap_or_else(|| name.into());
-    let note = [c.opt(provider.note[0]), c.opt(provider.note[1])]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .join(" · ");
-    let txid = c.opt(provider.txid);
-    Ok(Some(csv::Row {
-        data: json!({"txid":txid.clone().unwrap_or_default(),"occurred_at":occurred,"direction":direction,"asset":inbound.or(outbound).unwrap(),"amount":repr(&amount),"fee":repr(&btc_fee),"fiat_value":value.as_ref().map(repr),"fiat_rate":rate.as_ref().map(repr),"fiat_currency":if priced { fiat } else { None },"pricing_source_kind":if priced {Some("exchange_execution")} else {None},"pricing_provider":if priced {Some(&counterparty)} else {None},"pricing_pair":if priced {Some(format!("{}-{}",inbound.or(outbound).unwrap(),fiat.unwrap()))} else {None},"pricing_method":format.name(),"pricing_external_ref":txid,"pricing_quality":if priced {Some("exact")} else {None},"kind":kind,"description":if note.is_empty() {None} else {Some(note)},"counterparty":counterparty,"raw_json":config::stored_json(&c.json())}),
+    let Shared {
+        occurred,
+        note,
+        counterparty,
+        txid,
+        raw,
+    } = &shared;
+    let mut rows = vec![csv::Row {
+        data: json!({"txid":txid.clone().unwrap_or_default(),"occurred_at":occurred,"direction":direction,"asset":held,"amount":repr(&amount),"fee":repr(&btc_fee),"fiat_value":value.as_ref().map(repr),"fiat_rate":rate.as_ref().map(repr),"fiat_currency":if priced { fiat } else { None },"pricing_source_kind":if priced {Some("exchange_execution")} else {None},"pricing_provider":if priced {Some(counterparty)} else {None},"pricing_pair":if priced {Some(format!("{held}-{}",fiat.unwrap()))} else {None},"pricing_method":format.name(),"pricing_external_ref":txid,"pricing_quality":if priced {Some("exact")} else {None},"kind":kind,"description":note,"counterparty":counterparty,"raw_json":raw}),
         headers: vec![],
         rest: None,
         original: None,
-    }))
+    }];
+    if let Some((code, raw)) = third {
+        // Shares the trade's provider id where it has one; otherwise its own
+        // economics identify it, as for any id-less row.
+        let fee = fee_amount(raw, &code, index, &label)?;
+        let external = txid.clone().unwrap_or_default();
+        let (amount, fee) = assets::fee_only(fee);
+        rows.push(shared.unpriced(format, &external, "outbound", &code, (&amount, &fee), "fee"));
+    }
+    Ok(rows)
+}
+
+/// A third-asset fee's quantity, stored exactly or refused.
+fn fee_amount(
+    raw: Option<String>,
+    code: &str,
+    index: usize,
+    label: &str,
+) -> Result<PriceNumber, AppError> {
+    let ledger = format!("Ledger row {index}");
+    let fee = number_in(raw, "Fee Amount", &ledger, Some(code))?.unwrap_or_else(zero);
+    // Checked as parsed, before a context-rounded `abs` could shorten it.
+    exact(label, code, "fee", &fee)?;
+    abs(fee)
+}
+
+/// A crypto-to-crypto trade (the `crypto` scope only): an outbound and an
+/// inbound `swap` leg that share a `swap_ref`, and a third-asset fee row.
+/// The export names no currency for its value columns, so the legs stay
+/// unpriced; the import pairs them, and the profile's country decides
+/// whether the swap carries basis or is taxed (docs/plan/24-crypto-assets.md).
+///
+/// Neither format has an id that is certain to exist and be unique per
+/// trade, so a swap is identified by its economics (date, both legs, fee and
+/// any provider id) and its occurrence among identical rows in the file,
+/// like the id-less rows the importer already identifies that way. A
+/// re-import of the same export therefore finds the same legs.
+fn swap(
+    c: &Columns,
+    index: usize,
+    p: &mut Parse<'_>,
+    out: &str,
+    into: &str,
+) -> Result<Vec<csv::Row>, AppError> {
+    let format = p.format;
+    let provider = platform(format);
+    let label = format!("{} row {index}", provider.name);
+    let (text, key) = type_key(c.get(provider.kind), provider)?;
+    if key != "trade" {
+        return Err(fail(
+            format!("{label} exchanges {out} for {into} under type '{text}'"),
+            "Only a Trade can exchange one crypto asset for another. Review this row with the Generic ledger template.",
+        ));
+    }
+    if out == into {
+        return Err(fail(
+            format!("{label} trades {out} for itself"),
+            "Review this row with the Generic ledger template.",
+        ));
+    }
+    let ledger = format!("Ledger row {index}");
+    let amount = |names: &[&str], field: &str, code: &str| -> Result<PriceNumber, AppError> {
+        let parsed = number_in(c.get(names), field, &ledger, Some(code))?;
+        // Checked as parsed, before a context-rounded `abs` could shorten it.
+        if let Some(parsed) = &parsed {
+            exact(&label, code, "amount", parsed)?;
+        }
+        let amount = parsed.map(abs).transpose()?.filter(truth);
+        let amount = amount.ok_or_else(|| {
+            fail(
+                format!(
+                    "{label}: a swap needs both amounts, but its {code} amount is missing or zero"
+                ),
+                "Export the row with both amounts, or review it with the Generic ledger template.",
+            )
+        })?;
+        Ok(amount)
+    };
+    let sent = amount(provider.outgoing_amount, "Sent Amount", out)?;
+    let received = amount(provider.incoming_amount, "Received Amount", into)?;
+    let fee_code = c.opt(provider.fee_asset).map(|v| asset(&v));
+    let fee_raw = c.get(provider.fee_amount);
+    let fee = number(fee_raw.clone(), "Fee Amount", &label)?;
+    let (mut out_fee, mut in_fee, mut third) = (zero(), zero(), None);
+    if charged(&fee)? {
+        let Some(code) = p.held(fee_code.as_deref()) else {
+            let shown = fee_code
+                .or(c.get(provider.fee_asset))
+                .unwrap_or_else(|| "None".into());
+            return Err(fail(
+                format!("{label} has a fee in unsupported asset {shown}"),
+                "A fee on a crypto-to-crypto trade must be in a crypto asset: a fiat fee has no fiat leg to belong to. Review this row with the Generic ledger template.",
+            ));
+        };
+        let amount = fee_amount(fee_raw, &code, index, &label)?;
+        if code == out {
+            out_fee = amount;
+        } else if code == into {
+            in_fee = amount;
+        } else {
+            third = Some((code, amount));
+        }
+    }
+    let shared = Shared::of(c, provider, index)?;
+    let identity = json!({
+        "date": shared.occurred,
+        "out": [out, repr(&sent), repr(&out_fee)],
+        "in": [into, repr(&received), repr(&in_fee)],
+        "fee": third.as_ref().map(|(code, amount)| json!([code, repr(amount)])),
+        "txid": shared.txid,
+    });
+    let digest = sha256(&config::stored_json(&identity));
+    let occurrence = p.swaps.entry(digest.clone()).or_default();
+    *occurrence += 1;
+    let reference = format!("{}-swap:{digest}:{occurrence}", format.migration_kind());
+    // The inbound leg stores what the wallet gained (`assets::net_inbound`).
+    let (received, in_fee) = match assets::net_inbound(into, &received, &in_fee, &label)? {
+        Some(net_amount) => (net_amount, zero()),
+        None => (received, in_fee),
+    };
+    let mut rows = vec![];
+    for (suffix, direction, code, amounts) in [
+        ("out", "outbound", out, (&sent, &out_fee)),
+        ("in", "inbound", into, (&received, &in_fee)),
+    ] {
+        let mut row = shared.unpriced(
+            format,
+            &format!("{reference}:{suffix}"),
+            direction,
+            code,
+            amounts,
+            "swap",
+        );
+        row.data["swap_ref"] = json!(reference);
+        rows.push(row);
+    }
+    if let Some((code, amount)) = third {
+        let fee_only = assets::fee_only(amount);
+        rows.push(shared.unpriced(
+            format,
+            &format!("{reference}:fee"),
+            "outbound",
+            &code,
+            (&fee_only.0, &fee_only.1),
+            "fee",
+        ));
+    }
+    Ok(rows)
 }
 
 fn query(conn: &Connection, sql: &str, args: &[Sql]) -> Result<Vec<Fields>, AppError> {

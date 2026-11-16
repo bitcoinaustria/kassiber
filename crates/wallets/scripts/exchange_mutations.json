@@ -917,13 +917,46 @@
     "rule": "A cleared Bisq hold stays cleared only while the completed trade's legs are in the book; rolling the completing import back re-opens it."
   },
   {
+    "id": "assets-third-asset-fee-is-fee-only",
+    "file": "crates/wallets/src/file_import/assets.rs",
+    "find": "    (PriceNumber::Finite(Decimal::zero()), quantity)\n",
+    "replace": "    (quantity, PriceNumber::Finite(Decimal::zero()))\n",
+    "expect_failing": [
+      "third_asset_fees_become_their_own_rows"
+    ],
+    "rule": "A fee paid in a third asset is a fee-only spend (amount 0, the quantity as fee), never a principal the tax engine would sell."
+  },
+  {
+    "id": "assets-inbound-fee-nets-the-quantity",
+    "file": "crates/wallets/src/file_import/assets.rs",
+    "find": "    if class(asset) == Class::Bitcoin || charged.is_zero() {\n        return Ok(None);\n    }\n",
+    "replace": "    if true {\n        return Ok(None);\n    }\n",
+    "expect_failing": [
+      "inbound_fees_in_the_same_asset_leave_the_net_quantity",
+      "crypto_scope_imports_every_row_kind_for_any_crypto_asset",
+      "crypto_swaps_pair_once_and_reimports_add_nothing"
+    ],
+    "rule": "An incoming leg of another asset with a fee in itself stores the net quantity, since custody counts only an inbound row's amount."
+  },
+  {
     "id": "assets-exact-units-read-before-rounding",
     "file": "crates/wallets/src/file_import/assets.rs",
     "find": "    let digits = amount.coefficient().to_string();\n",
     "replace": "    let amount = &amount.plus(&CTX).map_err(decimal_error)?;\n    let digits = amount.coefficient().to_string();\n",
     "expect_failing": [
-      "exact_units_never_round_before_the_check"
+      "exact_units_never_round_before_the_check",
+      "crypto_scope_refuses_what_it_cannot_map_and_names_the_row"
     ],
     "rule": "Exact units read the decimal's own digits; a 32-digit rounded value can hide a tail past the 11th decimal."
+  },
+  {
+    "id": "tax-platform-exact-fee-before-abs",
+    "file": "crates/wallets/src/file_import/tax_platform.rs",
+    "find": "    exact(label, code, \"fee\", &fee)?;\n    abs(fee)\n",
+    "replace": "    let fee = abs(fee)?;\n    exact(label, code, \"fee\", &fee)?;\n    Ok(fee)\n",
+    "expect_failing": [
+      "crypto_scope_refuses_what_it_cannot_map_and_names_the_row"
+    ],
+    "rule": "A third-asset fee is checked as parsed, before a context-rounded abs could shorten it."
   }
 ]
