@@ -167,6 +167,9 @@ impl Format {
         target: tax_platform::Target<'_>,
     ) -> Result<(Vec<csv::Row>, Option<assets::Tally>), AppError> {
         match self {
+            Self::CoinTracking | Self::Blockpit => {
+                tax_platform::load_for(file, self, target).map(|(rows, tally)| (rows, Some(tally)))
+            }
             Self::Binance | Self::Coinfinity | Self::LedgerLive => {
                 let parse = match self {
                     Self::Binance => binance::parse,
@@ -186,7 +189,14 @@ impl Format {
     }
     /// Whether the format reads the wallet's asset scope (`load_for`).
     fn scoped(self) -> bool {
-        matches!(self, Self::Binance | Self::Coinfinity | Self::LedgerLive)
+        matches!(
+            self,
+            Self::CoinTracking
+                | Self::Blockpit
+                | Self::Binance
+                | Self::Coinfinity
+                | Self::LedgerLive
+        )
     }
     fn evidence(self) -> bool {
         matches!(

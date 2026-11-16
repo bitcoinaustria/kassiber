@@ -24,8 +24,10 @@ written.
 - 21bitcoin transaction CSV exports
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
-- CoinTracking transaction CSV exports with complete history (Bitcoin rows)
-- Blockpit transaction CSV exports with filters cleared (Bitcoin rows)
+- CoinTracking transaction CSV exports with complete history (Bitcoin rows;
+  other crypto assets with the wallet's `asset_scope` set to `crypto`)
+- Blockpit transaction CSV exports with filters cleared (Bitcoin rows; other
+  crypto assets with `asset_scope` `crypto`)
 - prior tax-report files preserved as external evidence
 - Samourai/Whirlpool descriptor and account-xpub source sets
 - Silent Payments watch-only receiving sources (`silent-payment` wallets)
@@ -272,14 +274,13 @@ overlap reconciliation. The provider CSV can stand alone when only the historica
 accounting record is available.
 
 The two CSV paths create ordinary rollback-capable import runs and preserve
-each original provider row in `transactions.raw_json` for audit. They are
-Bitcoin-scoped: BTC and L-BTC legs import, while unrelated
-asset-only rows are skipped. Straightforward trades, deposits, withdrawals,
-income, mining, staking, interest, gifts, fees, and losses map to Kassiber's
-existing transaction taxonomy. Complex loans, derivatives, liquidity-pool
-events, collateral movements, and other labels whose tax meaning cannot be
-inferred safely fail closed. Review those rows and enter the resulting Bitcoin
-facts through the Generic ledger rather than relabeling them automatically.
+each original provider row in `transactions.raw_json` for audit.
+Straightforward trades, deposits, withdrawals, income, mining, staking,
+interest, gifts, fees, and losses map to Kassiber's existing transaction
+taxonomy. Complex loans, derivatives, liquidity-pool events, collateral
+movements, and other labels whose tax meaning cannot be inferred safely fail
+closed. Review those rows and enter the resulting facts through the Generic
+ledger rather than relabeling them automatically.
 Blockpit files built on the "Blockpit Excel" manual-import template, whose
 optional columns end in `(optional)`, import their fee, comment and
 transaction id the same way.
@@ -295,9 +296,69 @@ silently taxed as market sales.
 CoinTracking's non-taxable receipt variants import as acquisitions rather than
 income. Its non-taxable expense variant is retained as an outflow but goes to
 the existing non-sale-disposal review gate instead of being taxed as a sale.
-BTC/altcoin trades stop for explicit review: CoinTracking supplies account-
-currency values but not the currency code, so Kassiber will not guess that the
-source account currency matches the active profile's fiat currency.
+
+### Assets: Bitcoin by default, other crypto assets by choice
+
+Which rows import depends on the provider wallet's `asset_scope`
+([plan 24](../plan/24-crypto-assets.md)). Both scopes report what they did in
+the result's `assets` field (`scope`, `skipped` and `excluded` rows by
+ticker, and with skipped assets a `next_step` naming the command that keeps
+them) and its `swap_pairs` count.
+
+- **`bitcoin`** (the default): BTC and L-BTC rows import as they always have.
+  Rows in other crypto assets are skipped and counted by ticker. A row that
+  trades BTC for another crypto asset, or pays a fee in a third asset, stops
+  the import. Its hint names
+  `kassiber wallets update --wallet W --config '{"asset_scope": "crypto"}'`,
+  which imports it.
+- **`crypto`**: every crypto asset imports, in the same 10^-11 unit as BTC.
+  Amounts finer than 11 decimals are refused, never rounded.
+  - Buys and sells against fiat carry the fiat leg as their exact execution
+    value, as for BTC. A fiat fee in the trade's currency is netted into that
+    value.
+  - Deposits, withdrawals, income, staking, mining, airdrops, forks, gifts
+    and losses import as for BTC, unpriced until priced in review.
+  - A crypto-to-crypto `Trade` becomes two unpriced `swap` legs (outbound
+    and inbound) that the import pairs with the policy the profile's country
+    recommends. Elsewhere the swap is taxable, and its legs wait in missing
+    price review. In Austria it is tax-neutral and carries the basis, but the
+    engine still needs both legs' prices. Until they are priced
+    (`journals quarantine resolve price-override`, or the desktop's price
+    review), `journals process` holds the pair as
+    `at_swap_basis_carry_unresolved` with `missing_spot_price`. The rate cache
+    prices only BTC.
+  - A fee in either leg's own asset stays on that leg, as a BTC fee does on a
+    BTC row. A fee in a third crypto asset becomes its own outbound `fee` row,
+    a fee-only spend (amount 0, the quantity as its fee) that the tax engine
+    books under the country's fee rule rather than as a sale.
+  - A fiat fee on a crypto-to-crypto trade is refused, because there is no
+    fiat leg for it to belong to.
+
+Neither export names the currency of its value columns. Blockpit's export
+has none. CoinTracking's transaction export and import template have only
+"Buy/Sell Value in Account Currency"; its Trade List view names the currency
+("Buy value in EUR"), but in a different column layout. So swaps stay
+unpriced rather than assuming the profile's currency.
+
+Tickers carry no asset type in these exports, so the `crypto` scope refuses
+what might not be a crypto asset, naming the row:
+- Bitcoin units such as SATS;
+- ISO 4217 currencies outside the supported fiat list, and metals such as XAU;
+- malformed tickers;
+- a two-asset row that is not a `Trade`.
+
+Re-imports deduplicate. Rows with a provider id (`Tx-ID`, `Trx. ID`) keep it
+as their external id. Blockpit fills that column with the exchange or chain
+id where it has one, otherwise with the user's own id. Rows without an id are
+identified by their date, asset, direction, amount and fee, plus their
+occurrence among identical rows. Neither format gives a swap an id that is
+certain to exist and be unique, so a swap's legs are identified the same way
+from the whole trade:
+`cointracking-swap:` or `blockpit-swap:`, then
+`<sha256 of its date, legs, fee and provider id>:<occurrence>` and `:out`,
+`:in` or `:fee`. Re-importing the same export, or turning the
+scope on and importing it again, adds only the rows that were not there and
+authors each swap's pair once.
 
 Command-line equivalents:
 
