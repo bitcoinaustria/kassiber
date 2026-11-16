@@ -21,7 +21,7 @@ $ daemon
 > {"args":{"backend":{"name":"x"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":9}
 < {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":9}
 > {"args":{"backend":{"kind":"Gopher","name":"x","url":"u"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":10}
-< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitpanda, bitstamp, bitvavo, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitfinex, bitpanda, bitstamp, bitvavo, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
 > {"args":{"backend":{},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":11}
 < {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":11}
 > {"args":{"backend":{"certificate":" cert ","chain":"bitcoin","insecure":0,"kind":"ESPLORA","name":" Node ","network":"regtest","notes":"n","url":"http://127.0.0.1:9"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":12}
@@ -77,7 +77,7 @@ $ daemon
 > {"args":{"backend":{"name":"x"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":9}
 < {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":9}
 > {"args":{"backend":{"kind":"Gopher","name":"x","url":"u"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":10}
-< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitpanda, bitstamp, bitvavo, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitfinex, bitpanda, bitstamp, bitvavo, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
 > {"args":{"backend":{},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":11}
 < {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":11}
 > {"args":{"fiat_currency":"eur","profile_label":"Book","tax_country":"at","tax_long_term_days":"400","workspace_label":" Main "},"kind":"ui.onboarding.complete","request_id":12}
@@ -129,7 +129,7 @@ $ daemon
 > {"args":{"backend":{"name":"x"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":9}
 < {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":9}
 > {"args":{"backend":{"kind":"Gopher","name":"x","url":"u"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":10}
-< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitpanda, bitstamp, bitvavo, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitfinex, bitpanda, bitstamp, bitvavo, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
 > {"args":{"backend":{},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":11}
 < {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":11}
 > {"args":{"gains_algorithm":"hifo","include_liquid_backends":true,"profile_label":"Book","tax_long_term_days":7.9,"workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":12}
@@ -180,7 +180,7 @@ $ daemon
 > {"args":{"backend":{"name":"x"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":9}
 < {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":9}
 > {"args":{"backend":{"kind":"Gopher","name":"x","url":"u"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":10}
-< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitpanda, bitstamp, bitvavo, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitfinex, bitpanda, bitstamp, bitvavo, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
 > {"args":{"backend":{},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":11}
 < {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":11}
 > {"args":{"backend_setup_mode":"skip","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":12}

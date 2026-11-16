@@ -8,6 +8,7 @@ export const EXCHANGE_KINDS = [
   "bitpanda",
   "bitvavo",
   "bitstamp",
+  "bitfinex",
 ] as const;
 export type ExchangeKind = (typeof EXCHANGE_KINDS)[number];
 
@@ -41,6 +42,7 @@ export const EXCHANGE_PROVIDER_NAMES: Record<ExchangeKind, string> = {
   bitpanda: "Bitpanda",
   bitvavo: "Bitvavo",
   bitstamp: "Bitstamp",
+  bitfinex: "Bitfinex",
 };
 
 export interface ExchangeKeyGuide {
@@ -57,8 +59,10 @@ export interface ExchangeKeyGuide {
  * Coinbase's accounts and transactions, Binance's fiat payments, deposits,
  * withdrawals and dividends, Bitpanda's operations, assets and currencies,
  * Bitvavo's transaction history and balance, Bitstamp's user transactions and
- * BTC balance (docs/reference/rust-exchange-sync.md, docs/reference/bitpanda.md,
- * docs/reference/bitvavo.md, docs/reference/bitstamp.md).
+ * BTC balance, Bitfinex's ledger, trades, movements and wallets
+ * (docs/reference/rust-exchange-sync.md, docs/reference/bitpanda.md,
+ * docs/reference/bitvavo.md, docs/reference/bitstamp.md,
+ * docs/reference/bitfinex.md).
  */
 export const EXCHANGE_KEY_GUIDES: Record<ExchangeKind, ExchangeKeyGuide> = {
   kraken: {
@@ -112,6 +116,21 @@ export const EXCHANGE_KEY_GUIDES: Record<ExchangeKind, ExchangeKeyGuide> = {
     keyPageUrl: "https://www.bitstamp.net/settings/access-control/api/",
     grant: ["Account balance", "User transactions"],
     deny: ["Orders", "Withdrawals", "Deposits", "Transfers"],
+  },
+  bitfinex: {
+    keyPageUrl: "https://setting.bitfinex.com/api",
+    grant: [
+      "Account History: Get historical balances entries and trade information",
+      "Wallets: Get wallet balances and addresses",
+    ],
+    deny: [
+      "Orders: Create and cancel orders",
+      "Margin Trading: Claim a position",
+      "Margin Funding: Offer, cancel and close funding",
+      "Wallets: Transfer between your wallets",
+      "Withdraw: Create a new withdrawal",
+      "Settings: Write account settings",
+    ],
   },
 };
 

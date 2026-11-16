@@ -395,6 +395,14 @@ mod loopback {
                     && (content_type == "application/x-www-form-urlencoded") == !body.is_empty()
                     && header("X-Auth-Signature") == expected
             }
+            // Bitfinex signs `/api/` + path + nonce + body with HMAC-SHA384.
+            "bitfinex" => {
+                let (nonce, body) = (header("bfx-nonce"), std::str::from_utf8(body).unwrap());
+                method == "POST"
+                    && header("bfx-apikey") == KEY
+                    && header("bfx-signature")
+                        == bitfinex::signature(SECRET, &target[1..], nonce, body)
+            }
             _ => {
                 let query = target.split_once('?').map(|(_, q)| q).unwrap_or("");
                 let Some((unsigned, signature)) = query.rsplit_once("&signature=") else {
@@ -543,6 +551,8 @@ mod loopback {
 }
 
 mod binance_api;
+#[rustfmt::skip]
+mod bitfinex_api;
 mod bitpanda_api;
 mod coinbase_api;
 #[rustfmt::skip]

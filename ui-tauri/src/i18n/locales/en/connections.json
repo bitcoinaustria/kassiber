@@ -1377,6 +1377,7 @@
       "bitpanda": "In Bitpanda, open Account settings → API Keys → New API key. Bitpanda shows the key only once, and it expires after at most a year. Kassiber refuses a key that can trade.",
       "bitvavo": "In Bitvavo, open Settings → API → Add new API key. Turn on only View access, optionally add this computer's IP address to the IP whitelist, and confirm with your 2FA code. Copy the API key and the secret; Bitvavo shows them only once. Bitvavo does not tell Kassiber what a key may do, so leave trading and withdrawals off yourself.",
       "bitstamp": "In Bitstamp, open Settings → API access and create a new key. Turn on only the read permissions below, confirm with your two-factor code, copy the API key and the secret (Bitstamp shows the secret only once), then activate the key from the confirmation email. Bitstamp does not tell Kassiber what else a key may do, so leave every trading, withdrawal, deposit and transfer permission off.",
+      "bitfinex": "In Bitfinex, open Account → API Keys → Create New Key and choose only read permissions. Bitfinex emails a confirmation link; after it, copy the API key and the API key secret, which Bitfinex shows only once. Optionally restrict the key to your IP address. Kassiber refuses a key with any write permission.",
       "grant": "Turn on only",
       "deny": "Leave off",
       "open": "Open the {{provider}} API key page"
@@ -1387,7 +1388,8 @@
         "kraken": "Private key",
         "coinbase": "API secret",
         "binance": "Secret key",
-        "bitstamp": "API secret"
+        "bitstamp": "API secret",
+        "bitfinex": "API key secret"
       },
       "stored": "When you add the connection, Kassiber stores the key in this book's backend settings — encrypted along with the book when the book is encrypted — and never shows it again."
     },

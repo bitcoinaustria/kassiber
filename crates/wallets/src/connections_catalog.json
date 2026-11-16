@@ -138,6 +138,12 @@
     "config_fields": "backend, source_file, source_format"
   },
   {
+    "kind": "bitfinex",
+    "summary": "Bitfinex read-only API connection for BTC spot trades, wallet movements and funding interest.",
+    "requires": "",
+    "config_fields": "backend"
+  },
+  {
     "kind": "wasabi",
     "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
     "requires": "",
