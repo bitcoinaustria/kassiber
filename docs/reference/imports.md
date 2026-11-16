@@ -2026,11 +2026,27 @@ kassiber wallets sync-coinbase \
 BTC account `buy`, `sell`, `trade`, and `advanced_trade_fill` rows import as
 exact execution evidence when Coinbase supplies a usable fiat native amount;
 the unit rate is that amount over the BTC amount, positive for buys and sells.
-BTC sends/exchange transfers import as wallet movement without exact execution
-pricing. Unsupported BTC row types raise validation errors rather than guessing.
+BTC sends, receives and exchange transfers import as wallet movement without
+exact execution pricing. Unsupported row types raise validation errors rather
+than guessing.
 A send's `network` is an object (`hash`, `status`, and fee/link fields), not a
 network declaration, so the book-network check ignores it for Coinbase wallets
 and the row stays unscoped.
+
+Other crypto assets follow the wallet's `asset_scope`
+([plan 24](../plan/24-crypto-assets.md)) as a filter
+([exchange contract](exchange-contract.md)): every sync reads every crypto
+account named by `/v2/accounts` (fiat accounts never are). In the default
+`bitcoin` scope BTC rows are imported and every other crypto asset's rows are
+counted in the result's `assets.skipped`. With `asset_scope` `crypto`,
+trades against fiat import as priced buys and sells, crypto-to-crypto converts
+and crypto-quoted Advanced Trade fills as two paired `swap` legs (by
+`trade.id`, or by `order_id`), rewards as income, and a trade fee in a third
+crypto asset as its own `fee` row. [Coinbase](../exchanges/coinbase.md) lists
+the mapping and refusals.
+
+Coinbase expired the legacy API keys this sync signs with in February 2025;
+see [known gaps](../exchanges/coinbase.md#known-gaps).
 
 ### Bitpanda API
 

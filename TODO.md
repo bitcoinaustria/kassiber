@@ -745,9 +745,9 @@ projections stay Python. Progress and remaining work for this slice:
   widen the mapping; a CSV importer once the export's fee semantics are known.
 - [x] One [exchange contract](docs/reference/exchange-contract.md) for every
   exchange: a registry of exchanges replaces per-name dispatch, and the asset
-  scope is a filter over each exchange's events. Bitpanda and Kraken read
-  every asset; Coinbase and Binance read BTC only until their other-asset
-  layers. A `bitcoin`-scope Kraken wallet now books BTC Buy Crypto and BTC
+  scope is a filter over each exchange's events. Bitpanda, Kraken and
+  Coinbase read every asset (Coinbase every crypto account, in either scope);
+  Binance reads BTC only. A `bitcoin`-scope Kraken wallet now books BTC Buy Crypto and BTC
   staking/earn rewards (owner decision 2026-11-18).
   Every sync reports `assets` (other coins as `unread` from a BTC-only
   reader) and `swap_pairs`, and an exchange that states its BTC balance
@@ -2035,6 +2035,12 @@ See [tax countries](docs/reference/tax-countries.md) and
   `header_row` option; copying the statement file onto the accepted source;
   masking own non-IBAN account numbers inside bank free text; and network
   partitions of books holding statements.
+- [ ] Coinbase API keys: Coinbase expired the legacy HMAC keys the sync
+  signs with in February 2025 and accepts only CDP keys, which sign a
+  short-lived JWT per request (ES256 or Ed25519), so `wallets sync-coinbase`
+  cannot authenticate against real Coinbase today, BTC-only included. Add CDP
+  key auth (likely a signing dependency, with a license review) and update
+  the desktop key guide. See [Coinbase](docs/exchanges/coinbase.md).
 - [ ] Price provider-reported crypto-to-crypto swaps without a Bitcoin leg.
   Bitpanda, Kraken, CoinTracking and Blockpit state no fiat value for a swap;
   a swap with a Bitcoin leg is now valued from the cached BTC rate
