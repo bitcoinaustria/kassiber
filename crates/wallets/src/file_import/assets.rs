@@ -241,6 +241,48 @@ pub(super) fn screen_stored(
     }
 }
 
+/// The `(amount, fee)` of a fee paid in a third asset (BEST, BNB, KCS): a
+/// fee-only spend of that asset, no principal and the whole quantity as its
+/// fee. The tax engine books a fee-only spend under the country's fee rule;
+/// a positive principal would be a sale at the fee's value instead. Every
+/// importer's third-asset fee row goes through here.
+pub(super) fn fee_only(quantity: PriceNumber) -> (PriceNumber, PriceNumber) {
+    (PriceNumber::Finite(Decimal::zero()), quantity)
+}
+
+/// The net quantity an inbound row of an asset other than Bitcoin stores
+/// when the provider reports a gross amount and a fee in that same asset
+/// (Kraken's ledger, an export's received amount with its fee): the row
+/// keeps `gross - fee` as its amount and no fee. Custody counts only an
+/// inbound row's amount, so a kept fee would leave the gross quantity in the
+/// book; the fee's value stays in the acquisition's cost, as a fiat fee on a
+/// buy does. `None` when there is nothing to net: a Bitcoin row (unchanged),
+/// no fee, or a non-finite value (the coordinator's own error). A fee that
+/// is not smaller than the amount is refused, naming the row.
+pub(super) fn net_inbound(
+    asset: &str,
+    amount: &PriceNumber,
+    fee: &PriceNumber,
+    row: &str,
+) -> Result<Option<PriceNumber>, AppError> {
+    let (PriceNumber::Finite(gross), PriceNumber::Finite(charged)) = (amount, fee) else {
+        return Ok(None);
+    };
+    if class(asset) == Class::Bitcoin || charged.is_zero() {
+        return Ok(None);
+    }
+    let (gross, charged) = (gross.copy_abs(), charged.copy_abs());
+    let net = gross.sub(&charged, &CTX).map_err(decimal_error)?;
+    if !net.is_positive() {
+        return Err(AppError::new(
+            "validation",
+            format!("{row} receives {gross} {asset} but charges a fee of {charged} {asset}"),
+        )
+        .with_hint("Kassiber stores an incoming amount net of its fee and cannot store a fee that takes all of it; check the row in the source."));
+    }
+    Ok(Some(PriceNumber::Finite(net)))
+}
+
 /// The command that sets a wallet's scope to `crypto`, for hints that tell
 /// the user how to keep the assets the `bitcoin` scope leaves out.
 pub(crate) fn keep_command(wallet: &str) -> String {

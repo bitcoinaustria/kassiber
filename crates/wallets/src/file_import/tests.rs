@@ -4619,3 +4619,4 @@ fn asset_scope_is_validated_and_defaults_to_bitcoin() {
 }
 
 mod supplemental_assets;
+mod tax_platform_assets;
