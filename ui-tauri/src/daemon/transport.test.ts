@@ -213,3 +213,52 @@ describe("regtest demo reset bridge gating", () => {
     expect(canResetRegtestDemo("/tmp/other-regtest-book/data")).toBe(false);
   });
 });
+
+describe("exchange auth errors in the RAM log and support exports", () => {
+  it("carry only Kassiber's own code values through both export tiers", async () => {
+    const { clearAppLogRecords, emitAppLog, exportSupportBundleRecords, getAppLogRecords } =
+      await import("@/lib/appLogs");
+    const key = "synthetic-exchange-key";
+    // The error the daemon sends when Bitpanda's 401 echoes the request's
+    // API key as its error code: the code is mapped to "unknown" in Rust
+    // (exchange_api tests: provider_codes_are_local_values_never_the_providers_string).
+    const envelope = {
+      kind: "error",
+      schema_version: 1,
+      request_id: "req-exchange",
+      error: {
+        code: "auth_error",
+        message: "Bitpanda refused the API key (HTTP 401)",
+        hint: "Check that the key is current, allowed from this IP address, and has the Transaction and Trade (Read) scopes.",
+        details: { http_status: 401, bitpanda_error: "unknown" },
+        retryable: false,
+      },
+    };
+    clearAppLogRecords();
+    emitAppLog({
+      level: "warning",
+      module: "daemon:bridge",
+      file: "daemon/transport.ts",
+      line: 0,
+      msg: "Daemon invoke failed",
+      fields: summarizeEnvelopeFields(envelope),
+    });
+    for (const mode of ["high_signal", "public_safe"] as const) {
+      const exported = exportSupportBundleRecords(getAppLogRecords(), {
+        issueDescription: "exchange sync failed",
+        header: {
+          appVersion: "0.22.0 (abc1234)",
+          os: "Linux",
+          timeRange: "2026-11-14T00:00:00Z to 2026-11-14T00:01:00Z",
+          activeFilter: "level=all",
+          redaction: "redacted-amounts",
+          generatedAt: "2026-11-14T00:02:00Z",
+        },
+        mode,
+      });
+      expect(exported).toContain("bitpanda_error");
+      expect(exported).toContain("unknown");
+      expect(exported).not.toContain(key);
+    }
+  });
+});

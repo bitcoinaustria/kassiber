@@ -743,6 +743,12 @@ projections stay Python. Progress and remaining work for this slice:
 - [ ] Bitpanda follow-ups: confirm the undocumented `operation_type` /
   `transaction_type` values and fee semantics against a real account, then
   widen the mapping; a CSV importer once the export's fee semantics are known.
+- [ ] Framework: a sub-second tie-break for same-second rows across import
+  batches. Stored times are whole seconds and source positions cover one
+  batch, so a later import's row precedes or follows an earlier one's by
+  import order, not time. This changes journal ordering for every importer,
+  so it needs a semantics bump. Bitvavo tags such rows
+  `same-second-order-uncertain` meanwhile ([Bitvavo](docs/reference/bitvavo.md)).
 - [ ] Exchange error display: a very short request credential (a one- to
   three-character proxy password) is withheld wherever it occurs, Kassiber's
   own message text included, which garbles the error; consider refusing such

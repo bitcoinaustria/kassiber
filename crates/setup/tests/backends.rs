@@ -76,9 +76,13 @@ fn create(f: &Fixture, c: &mut Config, name: &str, kind: &str, chain: &str) -> V
     )
 }
 
-/// Python's answers with the Rust-only `bitpanda` backend kind
+/// Python's answers with the Rust-only backend kinds ([`RUST_ONLY`])
 /// (docs/reference/rust-shell.md#rust-only-commands) where Python lists its
 /// kinds: the `backends kinds` catalog and the unsupported-kind hint.
+/// The backend kinds only the Rust backend accepts, in catalog order; they
+/// sort right after `bitcoinrpc`.
+const RUST_ONLY: [&str; 2] = ["bitpanda", "bitvavo"];
+
 fn with_rust_only_kinds(value: &mut Value) {
     match value {
         Value::List(items) => {
@@ -86,7 +90,9 @@ fn with_rust_only_kinds(value: &mut Value) {
                 .iter()
                 .position(|item| get(item, "kind") == Some(&s("bitcoinrpc")))
             {
-                items.insert(at + 1, dict([("kind", s("bitpanda"))]));
+                for (offset, kind) in RUST_ONLY.iter().enumerate() {
+                    items.insert(at + 1 + offset, dict([("kind", s(*kind))]));
+                }
             }
             items.iter_mut().for_each(with_rust_only_kinds);
         }
@@ -99,7 +105,7 @@ fn with_rust_only_kinds(value: &mut Value) {
                     *text = plain
                         .replace(
                             "binance, bitcoinrpc, btcpay",
-                            "binance, bitcoinrpc, bitpanda, btcpay",
+                            &format!("binance, bitcoinrpc, {}, btcpay", RUST_ONLY.join(", ")),
                         )
                         .into();
                 }

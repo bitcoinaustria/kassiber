@@ -101,12 +101,13 @@ pub const AI_PROVIDER_KIND_CHANGE_HELP: &str = "Change the privacy kind, or make
 /// (added by hand).
 pub const RUST_ONLY_LEAVES: &[&str] = &[
     "wallets.sync-bitpanda",
+    "wallets.sync-bitvavo",
     "journals.verify",
     "backends.trust-certificate",
 ];
 /// Backend kinds only the Rust backend accepts, extra `--kind` choices of
 /// `backends create` and `backends update`.
-pub const RUST_ONLY_BACKEND_KINDS: &[&str] = &["bitpanda"];
+pub const RUST_ONLY_BACKEND_KINDS: &[&str] = &["bitpanda", "bitvavo"];
 
 /// The `--cost-basis-pool-scope` help: each country's scopes, its default
 /// when it has a choice.

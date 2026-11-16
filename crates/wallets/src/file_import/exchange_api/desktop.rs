@@ -58,6 +58,7 @@ pub fn probe(
         "coinbase" => coinbase::probe(&client),
         "binance" => binance::probe(&client),
         "bitpanda" => bitpanda::probe(&client),
+        "bitvavo" => bitvavo::probe(&client),
         _ => Err(unknown_kind(&kind)),
     }
     // An echoed request credential (a signature, say) leaves every error.
@@ -65,7 +66,7 @@ pub fn probe(
     Ok(dict([
         ("exchange", s(kind.as_str())),
         ("ok", Py::Bool(true)),
-        // Kraken and Coinbase do not say what else a key may do.
+        // Kraken, Coinbase and Bitvavo do not say what else a key may do.
         ("read_only", read_only.map_or(Py::Null, Py::Bool)),
     ]))
 }

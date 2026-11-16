@@ -243,7 +243,7 @@ const QUALIFIERS: &str = "access account admin api app aws b base bitcoin client
 device electrum enc encoded encryption env github hash header hex id key keys lnd local login main master mfa
 my mysql new old payment payments pem pg phrase plain priv private prod raw recovery refresh remote root rpc
 scan server service signing silent sp spend str test text total twofa v value verification wallet web words
-x azure binance bitfinex bitpanda bitstamp blockstream btcpay cln coinbase core discord electrs fulcrum gcp
+x azure binance bitfinex bitpanda bitstamp bitvavo blockstream btcpay cln coinbase core discord electrs fulcrum gcp
 gitlab google kassiber kraken lightning mempool mongo nostr postgres redis slack smtp strike stripe telegram
 umbrel";
 const ORDINARY: &str = "bypass compass dnsseed encompass overpass passable passage passed passenger passerby

@@ -198,7 +198,10 @@ fn exchange_connection_kinds_are_desktop_kinds() {
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
-    assert_eq!(exchanges, ["binance", "bitpanda", "coinbase", "kraken"]);
+    assert_eq!(
+        exchanges,
+        ["binance", "bitpanda", "bitvavo", "coinbase", "kraken"]
+    );
 }
 
 #[test]

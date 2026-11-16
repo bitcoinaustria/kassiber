@@ -25,6 +25,7 @@ export type ConnectionKind =
   | "bitstamp"
   | "coinbase"
   | "bitpanda"
+  | "bitvavo"
   | "river"
   | "bullbitcoin"
   | "coinfinity"

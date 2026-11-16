@@ -104,7 +104,7 @@ export interface ConnectionSource {
   forwardTo?: string;
   walletKind?: string;
   /** Exchange whose history an `exchange-api` setup reads with a read-only key. */
-  exchange?: "kraken" | "coinbase" | "binance" | "bitpanda";
+  exchange?: "kraken" | "coinbase" | "binance" | "bitpanda" | "bitvavo";
   sourceFormat?: ConnectionSourceFormat;
   chain?: "bitcoin" | "liquid";
   network?: string;
@@ -125,6 +125,10 @@ export const sourceIcon = (
   `data:image/svg+xml,${encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="10" fill="${background}"/><text x="20" y="24" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="700" fill="${foreground}">${label}</text></svg>`,
   )}`;
+
+// No official Bitvavo mark is bundled yet (docs/exchanges/bitvavo.md); a
+// monogram in the brand blue stands in.
+const bitvavoIcon = sourceIcon("BV", "#0051FF", "#FFFFFF");
 
 const lightLogoFrame =
   "bg-muted/60 shadow-sm shadow-zinc-950/5 dark:bg-muted/55 dark:shadow-black/20";
@@ -749,6 +753,25 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
       "Needs a key with only the Transaction and Trade (Read) scopes; a key that can trade is refused",
       "BTC buys, sells, deposits, withdrawals and rewards import; other assets are skipped",
       "Kassiber contacts Bitpanda only when you test the key or press Sync now",
+    ],
+  },
+  {
+    id: "bitvavo-api",
+    title: "Bitvavo",
+    description: "Bitvavo history through a read-only API key.",
+    category: "exchanges",
+    image: bitvavoIcon,
+    imageClassName: "size-8 rounded-lg",
+    status: "ready",
+    pathLabel: "API import",
+    formatLabel: "read-only API key",
+    docsHref: "https://docs.bitvavo.com/docs/get-started/",
+    setupKind: "exchange-api",
+    exchange: "bitvavo",
+    details: [
+      "Needs a key with only View access; Bitvavo does not reveal a key's permissions, so leave trading and withdrawals off",
+      "BTC buys and sells against EUR, deposits, withdrawals and staking import; altcoin and stablecoin trades are refused by name",
+      "Kassiber contacts Bitvavo only when you test the key or press Sync now",
     ],
   },
   {
