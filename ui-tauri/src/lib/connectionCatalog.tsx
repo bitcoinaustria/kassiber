@@ -82,6 +82,7 @@ export type ConnectionSourceFormat =
   | "pocketbitcoin_csv"
   | "strike_csv"
   | "bitstamp_csv"
+  | "bitfinex_csv"
   | "ledgerlive_csv"
   | "binance_supplemental_csv"
   | "bitvavo_csv"
@@ -859,6 +860,26 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
       "BTC trades against USD, EUR, GBP or JPY keep their exact execution value; BTC deposits, withdrawals and funding interest import too",
       "Margin, derivatives and BTC traded against another coin refuse the sync by name",
       "Kassiber contacts Bitfinex only when you test the key or press Sync now",
+    ],
+  },
+  {
+    id: "bitfinex-csv",
+    title: "Bitfinex CSV",
+    description: "Bitfinex Reports trades, movements and ledgers exports.",
+    category: "exchanges",
+    image: bitfinexIcon,
+    imageClassName: "size-8",
+    status: "ready",
+    pathLabel: "Custodial platform",
+    formatLabel: "bitfinex_csv",
+    docsHref: "https://report.bitfinex.com/",
+    setupKind: "file-wallet",
+    walletKind: "bitfinex",
+    sourceFormat: "bitfinex_csv",
+    details: [
+      "Export Trades, Movements and Ledgers from Bitfinex Reports with the YYYY-MM-DD date format and UTC",
+      "Uses the same ids as the API, so a CSV import and an API sync never duplicate rows",
+      "Import the Reports zip with all three exports: a trade is accepted only when the ledger shows it in the exchange wallet (not margin)",
     ],
   },
   {

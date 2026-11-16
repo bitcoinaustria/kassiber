@@ -29,6 +29,7 @@ secret, which Bitfinex shows once. Give Kassiber its own key (see nonces).
 kassiber backends create bitfinex-main --kind bitfinex \
   --url https://api.bitfinex.com --token-stdin --auth-header-stdin
 kassiber wallets sync-bitfinex --backend bitfinex-main
+kassiber wallets import-bitfinex --file bitfinex-reports.zip
 ```
 
 ## API sync
@@ -58,6 +59,20 @@ Another program, or another Kassiber process, using the same key at once
 can send a larger nonce; the sync then stops on error 10114 with nothing
 imported and can simply run again. The desktop key check reads the
 permissions, one ledger entry and the wallets and reports `read_only: true`.
+
+## Reports CSV
+
+Bitfinex Reports (<https://report.bitfinex.com/>) exports Trades
+(`#,PAIR,AMOUNT,PRICE,FEE,FEE PERC,FEE CURRENCY,DATE,ORDER ID`), Movements
+(`#,STARTED,UPDATED,CURRENCY,STATUS,AMOUNT,FEES,DESCRIPTION,TRANSACTION ID,NOTE`)
+and Ledgers (`#,DESCRIPTION,CURRENCY,AMOUNT,BALANCE,DATE,WALLET`). Import
+the Reports zip (at most 16 CSV members, through the bounded `.xlsx` zip
+reader) or one CSV; each file is recognised by its exact header. An active
+custodial ledger in `full` mode. Only `YYYY-MM-DD HH:mm:ss[.SSS]` dates are
+read, as UTC: set that format and the UTC zone before exporting. The trades
+export has no order type, so a trade is spot only when the ledgers export
+in the same import books it in the exchange wallet. Rows without BTC are
+left out; the CSV result does not count them.
 
 ## Mapping
 

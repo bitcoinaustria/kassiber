@@ -622,6 +622,9 @@ function sourceFileFilters(
   if (source.sourceFormat === "binance_supplemental_csv") {
     return [{ name: t("add.fileFilter.binanceSupplementalCsv"), extensions: ["csv"] }];
   }
+  if (source.sourceFormat === "bitfinex_csv") {
+    return [{ name: t("add.fileFilter.bitfinexReports"), extensions: ["zip", "csv"] }];
+  }
   if (source.sourceFormat === "btcpay_csv") {
     return [{ name: t("add.fileFilter.btcpayCsv"), extensions: ["csv"] }];
   }

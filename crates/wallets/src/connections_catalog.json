@@ -139,9 +139,9 @@
   },
   {
     "kind": "bitfinex",
-    "summary": "Bitfinex read-only API connection for BTC spot trades, wallet movements and funding interest.",
+    "summary": "Bitfinex read-only API connection and Reports CSV importer for BTC spot trades, wallet movements and funding interest.",
     "requires": "",
-    "config_fields": "backend"
+    "config_fields": "backend, source_file, source_format"
   },
   {
     "kind": "wasabi",

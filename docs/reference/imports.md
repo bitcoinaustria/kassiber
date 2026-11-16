@@ -25,6 +25,7 @@ written.
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
 - Bitvavo transaction-history CSV exports and the Bitvavo read-only API sync
+- Bitfinex Reports trades, movements and ledgers CSV exports and the Bitfinex read-only API sync
 - CoinTracking transaction CSV exports with complete history (Bitcoin rows;
   other crypto assets with the wallet's `asset_scope` set to `crypto`)
 - Blockpit transaction CSV exports with filters cleared (Bitcoin rows; other
@@ -46,6 +47,7 @@ Format references used by the dedicated importers:
 - Pocket Bitcoin account CSV export
 - Strike CSV export from Strike transaction history
 - Bitvavo transaction-history CSV export (Transaction history → Export), layout pinned by public samples: <https://support.bitvavo.com/hc/en-us/articles/44936625205137-How-can-I-download-my-tax-report>; Bitvavo REST API: <https://docs.bitvavo.com/docs/rest-api/introduction/>
+- Bitfinex Reports CSV columns: `bfx-report` (<https://github.com/bitfinexcom/bfx-report>); API v2: <https://docs.bitfinex.com/docs/rest-auth>
 - CoinTracking transaction CSV export: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000031008-create-backup-restore-or-export-your-account-data>
 - CoinTracking transaction types: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000042783>
 - Blockpit transaction CSV export: <https://intercom.help/blockpit/en/articles/12137149-how-to-export-my-blockpit-transactions-as-a-csv-file>
@@ -1991,6 +1993,31 @@ kept asset refuse the whole import by name. The sync reports the account's
 BTC balance as `reported_balance`.
 [Bitstamp](bitstamp.md) records the key setup, API, CSV layout, mapping and
 every refusal.
+
+### Bitfinex API and Reports CSV
+
+Rust backend only. The read-only API sync (`wallets sync-bitfinex`, a key
+with only read permissions in a `bitfinex` backend; a key that can write is
+refused) and the Bitfinex Reports exports (`wallets import-bitfinex`, the
+Reports zip or one CSV, active custodial ledger in `full` mode) share one
+mapping and the ids `bitfinex:trade:<id>` and `bitfinex:movement:<id>`, so
+both in one wallet keep one record each. BTC spot trades against USD, EUR,
+GBP or JPY get exact `exchange_execution` pricing; completed BTC deposits
+and withdrawals import unpriced with the on-chain txid in `raw_json`, margin
+funding payments as `lending_interest`; transfers between the exchange and
+funding wallets are skipped when both legs pair. Every other BTC ledger
+entry must pair one-to-one with its trade, fee or movement; margin,
+derivatives, other funding entries, BTC against another coin, unknown ledger
+entries and anything ambiguous refuse the whole import by name. Kassiber
+reads only BTC from Bitfinex: in `bitcoin` scope both name the other assets
+they left out in `assets.unread` and `assets.next_step`; a wallet whose
+`asset_scope` is `crypto` is refused (the sync before any request, the import at the first
+row in another crypto asset). A
+withdrawal without ledger entries requested before the ledger's first entry
+keeps its movement fee, tagged `bitfinex-fee-unchecked`. Export with
+the `YYYY-MM-DD` date format in UTC, all three exports in one zip.
+[Bitfinex](bitfinex.md) records the key setup, API, CSV, mapping and every
+refusal.
 
 ### Binance API and Supplemental CSV
 
