@@ -65,6 +65,15 @@ fn txt(e: &rune::TextEdit) -> String {
     e.text.trim().to_owned()
 }
 
+/// Bisq's Funds > Transactions export and the zone its local times were written in, beside the
+/// trade history (`ui.wallets.create` and `ui.wallets.import_file` take both).
+fn bisq_args(f: &super::Form, fmt: &str, args: &mut Value) {
+    if fmt == "bisq_csv" {
+        args["companion_file"] = json!(txt(&f.companion_file));
+        args["timezone"] = json!(txt(&f.source_timezone));
+    }
+}
+
 // ---- Backends ------------------------------------------------------------------------------
 
 /// The `ui.backends.options` backends.
@@ -564,6 +573,20 @@ pub fn validate(app: &mut App) -> Vec<(&'static str, String)> {
                     t("connections:add.genericLedger.preview.submitBlocked"),
                 ));
             }
+            if m.source_format == Some("bisq_csv") {
+                if txt(&f.companion_file).is_empty() {
+                    e.push((
+                        "companionFile",
+                        t("connections:add.exportFile.bisqTransactionsError"),
+                    ));
+                }
+                if txt(&f.source_timezone).is_empty() {
+                    e.push((
+                        "sourceTimezone",
+                        t("connections:add.exportFile.bisqTimezoneError"),
+                    ));
+                }
+            }
             if btcpay_existing {
                 if existing_wallets(app).is_empty() {
                     e.push((
@@ -953,10 +976,23 @@ pub fn first_required_missing(app: &App) -> Option<(&'static str, bool)> {
                 )
                 .or_else(|| text(empty(&f.source_file), "connection-source-file"))
             } else {
+                let bisq = m.source_format == Some("bisq_csv");
                 text(
                     file_required && empty(&f.source_file),
                     "connection-source-file",
                 )
+                .or_else(|| {
+                    text(
+                        bisq && empty(&f.companion_file),
+                        "connection-companion-file",
+                    )
+                })
+                .or_else(|| {
+                    text(
+                        bisq && empty(&f.source_timezone),
+                        "connection-source-timezone",
+                    )
+                })
             }
         }
         SetupKind::FileEnrichment => select(
@@ -1146,6 +1182,7 @@ fn submit_file_wallet(app: &mut App, label: &str) {
             Some(b) => args["source_bundle"] = b,
             None => args["source_file"] = json!(txt(&f.source_file)),
         }
+        bisq_args(f, fmt, &mut args);
         send_job(app, Stage::ImportFile, "ui.wallets.import_file", args);
         return;
     }
@@ -1175,6 +1212,7 @@ fn submit_file_wallet(app: &mut App, label: &str) {
     if !rpc {
         args["source_file"] = json!(txt(&f.source_file));
     }
+    bisq_args(f, fmt, &mut args);
     let sync = f.sync_after && !rpc;
     if let Some(j) = stm(app).job.as_mut() {
         if sync {
@@ -2158,6 +2196,27 @@ mod tests {
         assert_eq!(backend_name_from_label("My Node #1"), "my-node-1");
         assert_eq!(backend_name_from_label("   "), "bitcoin-core");
         assert_eq!(backend_name_from_label("core.local_v2"), "core.local_v2");
+    }
+
+    #[test]
+    fn bisq_sends_its_transactions_export_and_time_zone() {
+        let src = crate::overview::catalog::SOURCES
+            .iter()
+            .find(|s| s.id == "bisq")
+            .expect("bisq in the catalog");
+        assert_eq!(meta(src.id).kind(), SetupKind::FileWallet);
+        assert_eq!(meta(src.id).wallet_kind, Some("bisq"));
+        let mut f = super::super::Form::defaults(src);
+        f.companion_file = rune::TextEdit::new(" /exports/transactions.csv ");
+        f.source_timezone = rune::TextEdit::new("Europe/Vienna");
+        let mut args = json!({"source_file": "/exports/history.csv"});
+        bisq_args(&f, "bisq_csv", &mut args);
+        assert_eq!(args["companion_file"], "/exports/transactions.csv");
+        assert_eq!(args["timezone"], "Europe/Vienna");
+        // Every other format sends neither.
+        let mut other = json!({"source_file": "/exports/strike.csv"});
+        bisq_args(&f, "strike_csv", &mut other);
+        assert_eq!(other, json!({"source_file": "/exports/strike.csv"}));
     }
 
     #[test]

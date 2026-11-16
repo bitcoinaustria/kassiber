@@ -768,6 +768,33 @@ pub static SOURCES: &[Source] = &[
         docs_href: Some("https://strike.me/"),
     },
     Source {
+        id: "bisq",
+        title: "Bisq",
+        description: "Peer-to-peer trades as escrow ledgers with exact contract pricing.",
+        category: "exchanges",
+        planned: false,
+        dev_only: false,
+        path_label: Some("CSV import"),
+        format_label: Some("bisq_csv"),
+        details: &[
+            "Needs Portfolio > History and Funds > Transactions exports from Bisq 1",
+            "Each completed BTC/fiat trade becomes deposit, trade and payout legs that net to zero",
+            "Legs pair by txid with the watch-only Bisq wallet; sync that wallet first and name the export's time zone",
+            "Mediated, arbitrated or incomplete trades are held for review; altcoin and BSQ trades are refused",
+        ],
+        art: Art::File(
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../assets/logos/integrations/bisq.svg"
+            )),
+            "svg",
+            false,
+        ),
+        size: Size::Square(2.0),
+        frame: Frame::Default,
+        docs_href: Some("https://bisq.network/"),
+    },
+    Source {
         id: "21bitcoin",
         title: Label::Name("21bitcoin"),
         description: "connections:catalog.sources.21bitcoin.description",

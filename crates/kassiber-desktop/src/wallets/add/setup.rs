@@ -380,6 +380,7 @@ fn file_filters(id: &str) -> Vec<(String, Vec<&'static str>)> {
         (Some("pocketbitcoin_csv"), _) => f("pocketbitcoinCsv", vec!["csv"]),
         (Some("21bitcoin_csv"), _) => f("twentyonebitcoinCsv", vec!["csv"]),
         (Some("strike_csv"), _) => f("strikeCsv", vec!["csv"]),
+        (Some("bisq_csv"), _) => f("bisqCsv", vec!["csv"]),
         (Some("ledgerlive_csv"), _) => f("ledgerliveCsv", vec!["csv"]),
         (Some("cointracking_csv"), _) => f("cointrackingCsv", vec!["csv"]),
         (Some("blockpit_csv"), _) => f("blockpitCsv", vec!["csv"]),
@@ -406,6 +407,7 @@ fn source_file_field(id: &str) -> (String, Option<String>) {
     let k = match m.source_format {
         Some("wasabi_bundle") => "wasabi",
         Some("btcpay_csv") => "btcpay",
+        Some("bisq_csv") => "bisq",
         Some("cointracking_csv") => "cointracking",
         Some("blockpit_csv") => "blockpit",
         _ => return (t("connections:add.exportFile.label"), None),
@@ -517,6 +519,9 @@ fn source_file_setup(app: &App, tk: &Tk, sync_label: Option<String>) -> Vec<El> 
         err(app, "sourceFile"),
         helper,
     )];
+    if m.source_format == Some("bisq_csv") {
+        out.extend(bisq_fields(app, tk));
+    }
     if ledger {
         let busy = st(app).template_pending;
         out.push(
@@ -586,6 +591,69 @@ fn source_file_setup(app: &App, tk: &Tk, sync_label: Option<String>) -> Vec<El> 
         out.push(sync_after(app, tk, &l));
     }
     out
+}
+
+fn set_companion_file(a: &mut App, path: String) {
+    stm(a).form.companion_file = TextEdit::new(&path);
+    stm(a).errors.remove("companionFile");
+    stm(a).last_import = None;
+}
+
+/// Bisq reads its Funds > Transactions export beside the trade history and needs the zone the
+/// exporting computer wrote its local times in.
+fn bisq_fields(app: &App, tk: &Tk) -> Vec<El> {
+    let src = selected(app);
+    let label = t("connections:add.exportFile.bisqTransactionsLabel");
+    let field = field_input(
+        app,
+        tk,
+        "connection-companion-file",
+        "companionFile",
+        &label,
+        &st(app).form.companion_file,
+        |a| &mut stm(a).form.companion_file,
+        None,
+        false,
+    );
+    let control = row()
+        .w_full()
+        .gap(tk.r(0.5))
+        .child(col().grow(1.0).min_w(0.0).child(field))
+        .child(browse(
+            tk,
+            "connection-companion-browse",
+            t("connections:add.field.browse"),
+            label.clone(),
+            file_filters(src.id),
+            set_companion_file,
+        ));
+    let zone = t("connections:add.exportFile.bisqTimezoneLabel");
+    vec![
+        setup_field(
+            tk,
+            &label,
+            control,
+            err(app, "companionFile"),
+            Some(t("connections:add.exportFile.bisqTransactionsHelper")),
+        ),
+        setup_field(
+            tk,
+            &zone,
+            field_input(
+                app,
+                tk,
+                "connection-source-timezone",
+                "sourceTimezone",
+                &zone,
+                &st(app).form.source_timezone,
+                |a| &mut stm(a).form.source_timezone,
+                Some("Europe/Vienna"),
+                false,
+            ),
+            err(app, "sourceTimezone"),
+            Some(t("connections:add.exportFile.bisqTimezoneHelper")),
+        ),
+    ]
 }
 
 /// A two-button toggle (`grid grid-cols-2 gap-2`, the active one `secondary`).
@@ -3433,6 +3501,7 @@ fn import_summary(tk: &Tk, r: &Value) -> El {
         "twentyonebitcoin_rows",
         "strike_rows",
         "binance_rows",
+        "bisq_rows",
         "wasabi_transactions",
     ]
     .iter()
@@ -3640,7 +3709,38 @@ fn import_summary(tk: &Tk, r: &Value) -> El {
                 )),
         )
         .child(grid)
+        .children(bisq_held_block(tk, r))
         .child(records)
+}
+
+/// `border-amber-500/40`: the trades a Bisq import held for review instead of booking.
+fn bisq_held_block(tk: &Tk, r: &Value) -> Option<El> {
+    let lines = super::bisq::held_lines(r);
+    if lines.is_empty() {
+        return None;
+    }
+    let amber = rune::color::hex("#f59e0b").expect("hex");
+    let mut c = col()
+        .key("connection-bisq-held")
+        .w_full()
+        .gap(tk.r(0.25))
+        .padding(tk.r(0.625))
+        .radius(tk.r(0.375))
+        .border(1.0, amber.alpha(0.4))
+        .border_layout()
+        .child(
+            text(tr(
+                "connections:add.summary.bisqHeld",
+                &[("value", &crate::format::count(lines.len()))],
+            ))
+            .font(tk.txs(500.0))
+            .color(tk.fg)
+            .wrap(),
+        );
+    for line in lines {
+        c = c.child(text(line).font(tk.txs(400.0)).color(tk.muted_fg).wrap());
+    }
+    Some(c)
 }
 
 /// The setup step's body: summary rail and form.
