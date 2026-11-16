@@ -448,8 +448,7 @@ pub fn configure(conn: &Connection, args: &Value, sources: &dyn Sources) -> Resu
     let (_, before) = select_book(conn, args)?;
     let id = text(&before, "id");
     let before_settings = settings(conn, &before)?;
-    conn.execute_batch("SAVEPOINT book_settings_change")
-        .map_err(sql_error)?;
+    kassiber_store::begin_write_savepoint(conn, "book_settings_change").map_err(sql_error)?;
     let outcome = apply(conn, args, &before, sources);
     let outcome = match outcome {
         Ok(result) if dry_run => {
