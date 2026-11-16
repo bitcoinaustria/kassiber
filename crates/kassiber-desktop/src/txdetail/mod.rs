@@ -268,6 +268,9 @@ pub struct DetailUi {
     pub maximized: bool,
     /// Last saved draft per transaction (the host's `drafts` map).
     pub drafts: HashMap<String, Draft>,
+    /// The transactions of the saves in flight, in the order they were sent (metadata writes run
+    /// one at a time and reply in order), so a reply finds its panel after a tab switch.
+    pub saving_ids: std::collections::VecDeque<String>,
     /// `ui.loans.list` marks.
     pub loans: Option<Vec<Value>>,
     /// The host's row order for "Save & next" (`set_nav_list`).
@@ -298,6 +301,7 @@ impl Default for DetailUi {
             add_open: false,
             width: DEFAULT_WIDTH,
             maximized: false,
+            saving_ids: Default::default(),
             drafts: HashMap::new(),
             loans: None,
             nav: vec![],

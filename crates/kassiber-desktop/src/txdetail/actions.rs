@@ -55,28 +55,60 @@ pub fn save(app: &mut App, close_after: bool, next: bool) {
                 .collect()
         })
         .unwrap_or_default();
-    let args = draft::save_args(s(rec, "id"), &o.draft, &o.base, &source_tags, scope);
+    let tx_id = s(rec, "id").to_owned();
+    let args = draft::save_args(&tx_id, &o.draft, &o.base, &source_tags, scope);
     o.saving = true;
     o.save_error = None;
     o.close_after_save = close_after;
     o.next_after_save = next;
+    app.detail.saving_ids.push_back(tx_id);
     app.send("ui.transactions.metadata.update", args, "txd.save");
 }
 
+fn save_error_text(e: &str) -> String {
+    if e.is_empty() {
+        t("transactions:save.couldNotSaveMetadata")
+    } else {
+        e.to_owned()
+    }
+}
+
 pub fn on_saved(app: &mut App, r: &Reply) {
+    let Some(id) = app.detail.saving_ids.pop_front() else {
+        return;
+    };
+    if app.detail.open.as_ref().and_then(|o| o.id()) != Some(id.as_str()) {
+        // The user moved to another tab (or closed this one) while it saved: finish the save on
+        // the parked panel it came from, without navigating.
+        let parked = app
+            .detail
+            .tabs
+            .iter_mut()
+            .filter_map(|slot| slot.parked.as_deref_mut())
+            .find(|o| o.id() == Some(id.as_str()));
+        if let Some(o) = parked {
+            o.saving = false;
+            match &r.error {
+                Some(e) => o.save_error = Some(save_error_text(e)),
+                None => {
+                    o.base = o.draft.clone();
+                    app.detail.drafts.insert(id.clone(), o.draft.clone());
+                }
+            }
+        }
+        if r.error.is_none() {
+            app.refresh_reads();
+        }
+        return;
+    }
     let Some(o) = app.detail.open.as_mut() else {
         return;
     };
     o.saving = false;
     if let Some(e) = &r.error {
-        o.save_error = Some(if e.is_empty() {
-            t("transactions:save.couldNotSaveMetadata")
-        } else {
-            e.clone()
-        });
+        o.save_error = Some(save_error_text(e));
         return;
     }
-    let id = o.id().unwrap_or_default().to_owned();
     let saved = o.draft.clone();
     o.base = saved.clone();
     let (close_after, next) = (o.close_after_save, o.next_after_save);
@@ -993,6 +1025,49 @@ mod tests {
             parse_links("https://a.example/x\n\nftp://b.example\nnot a url\nipfs://cid");
         assert_eq!(ok, vec!["https://a.example/x", "ipfs://cid"]);
         assert_eq!(bad.len(), 2);
+    }
+
+    /// Saving transaction A, then switching to tab B before the reply: the reply completes A's
+    /// parked panel and leaves B's edits alone.
+    #[test]
+    fn a_save_reply_finds_its_tab_after_a_switch() {
+        let mut app = crate::app::tests::quiet_app();
+        let panel = |id: &str, saving: bool| {
+            let mut o = super::super::Open::new(id, super::super::Tab::Details, vec![]);
+            o.record = Some(json!({ "id": id }));
+            o.draft.note = format!("edited {id}");
+            o.saving = saving;
+            Box::new(o)
+        };
+        app.detail.tabs = vec![
+            super::super::TabSlot {
+                parked: Some(panel("a", true)),
+                pinned: true,
+                label: "A".into(),
+            },
+            super::super::TabSlot {
+                parked: None,
+                pinned: true,
+                label: "B".into(),
+            },
+        ];
+        app.detail.active_tab = 1;
+        app.detail.open = Some(panel("b", false));
+        app.detail.saving_ids.push_back("a".into());
+        let reply = Reply {
+            kind: "ui.transactions.metadata.update".into(),
+            data: json!({}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_saved(&mut app, &reply);
+        let a = app.detail.tabs[0].parked.as_ref().unwrap();
+        assert!(!a.saving && a.dirty().count == 0, "A is saved");
+        let b = app.detail.open.as_ref().unwrap();
+        assert!(b.dirty().count > 0, "B keeps its unsaved edits");
+        assert!(app.detail.drafts.contains_key("a") && !app.detail.drafts.contains_key("b"));
+        assert!(app.detail.saving_ids.is_empty());
     }
 }
 
