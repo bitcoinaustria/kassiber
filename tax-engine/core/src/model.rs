@@ -248,8 +248,17 @@ pub enum Operation {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CountrySpec {
-    /// Kassiber's generic country: a holding period in whole days.
-    Generic { long_term_days: u64 },
+    /// Kassiber's generic country: a holding period in whole days, and the
+    /// book's own tax year (its first day `MM-DD` in an IANA zone of the
+    /// registry's calendar) when it is not the UTC calendar year. Both are
+    /// absent for a calendar-year book, so its request keeps its bytes.
+    Generic {
+        long_term_days: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tax_year_start: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timezone: Option<String>,
+    },
     /// Austria: never long-term (`sys.maxsize` days).
     At {},
     /// The United States: long-term once held more than one year by UTC
@@ -505,6 +514,12 @@ pub enum PoolScope {
     /// Only the lots the disposing wallet holds; a move carries the lots it
     /// takes, with their basis and acquisition time, to its destination.
     Wallet,
+    /// The global pool until the country's change to per-wallet
+    /// identification, then the wallet pool: at the change the pool's
+    /// remaining lots are allocated to the wallets that hold units by a
+    /// standing rule (the United States' 2025 transition under Rev. Proc.
+    /// 2024-28, `docs/reference/tax-country-us.md#the-2025-transition`).
+    GlobalThenWallet,
 }
 
 impl PoolScope {
@@ -575,6 +590,12 @@ pub struct ComputeRequest {
     /// `global` when absent.
     #[serde(default)]
     pub pool_scope: PoolScope,
+    /// The wallets (exchange labels) in the order the United States' 2025
+    /// allocation fills them (`global_then_wallet`): the book's wallets by
+    /// when they were added, so a rename moves no basis. Wallets it does
+    /// not name follow by label and holder; no other scope reads it.
+    #[serde(default)]
+    pub wallet_order: Vec<String>,
     pub assets: Vec<AssetInput>,
 }
 

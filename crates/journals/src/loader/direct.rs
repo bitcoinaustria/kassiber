@@ -468,6 +468,14 @@ pub fn load_read_snapshot(
     let rate_rows = rate_rows?;
     let gap_reviews = reader.rows(conn,"gap_reviews[]","SELECT r.* FROM custody_gap_reviews r JOIN (SELECT gap_id,MAX(revision) AS revision FROM custody_gap_reviews WHERE profile_id=? GROUP BY gap_id) latest ON latest.gap_id=r.gap_id AND latest.revision=r.revision WHERE r.profile_id=? ORDER BY r.gap_id,r.created_at,r.id",[&profile_id,&profile_id],false).or_else(|error| if operational(&error) { Ok(vec![]) } else { Err(error) })?;
     let owned_index = reader.gate.native("owned_index", owned)?;
+    // A book's own tax calendar, only when it chose one: the tax engine
+    // request reads it from the profile (`book_settings`).
+    let mut profile = profile;
+    for (key, value) in kassiber_setup::book_settings::engine_profile_keys(conn, &profile_id)
+        .map_err(app_refusal)?
+    {
+        kassiber_envelope::set(&mut profile, key, kassiber_envelope::s(value));
+    }
     let profile = reader
         .gate
         .native("profile", profile)?

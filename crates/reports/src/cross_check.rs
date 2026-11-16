@@ -73,10 +73,16 @@ fn iso(at: Option<i64>) -> String {
         .map(|s| format!("{}Z", s[..19].trim_start_matches('0')))
         .unwrap_or_default()
 }
-fn year(at: i64, zone: Option<&str>) -> Result<i64> {
+/// The book's tax year of an instant (`tax_years::Cut`).
+fn year(at: i64, cut: crate::tax_years::Cut<'_>) -> Result<i64> {
     let raw = kassiber_rates::time::format(at)
         .ok_or_else(|| AppError::new("internal_error", "date value out of range"))?;
-    if let Some(zone) = zone {
+    if cut.book.is_some() {
+        return cut
+            .year(&raw)?
+            .ok_or_else(|| AppError::new("internal_error", "date value out of range"));
+    }
+    if let Some(zone) = cut.zone {
         calendar::local(&raw, zone).map(|v| v.0)
     } else {
         raw[..4]
@@ -504,7 +510,7 @@ fn differences(
     t: &Tool,
     b: &BookRow,
     offset: i64,
-    zone: Option<&str>,
+    zone: crate::tax_years::Cut<'_>,
     types: bool,
 ) -> Result<Vec<Value>> {
     let mut result = Vec::new();
@@ -911,7 +917,9 @@ pub(super) fn report(
             })?,
         )
     };
-    let zone = crate::country::zone(&text(&profile, "tax_country").to_lowercase());
+    // The book's tax years: the calendar year in the country's zone, or the
+    // book's own tax year (`tax_years::Cut`).
+    let zone = crate::tax_years::Cut::of(conn, &profile)?;
     let selected = match value(args, "wallets") {
         Value::List(v) => Some(v.clone()),
         Value::Null => {
@@ -1312,7 +1320,7 @@ pub(super) fn report(
             s(if selected_year.is_none() {
                 ""
             } else {
-                zone.unwrap_or("UTC")
+                zone.zone.unwrap_or("UTC")
             }),
         ),
         ("years", Value::List(years)),

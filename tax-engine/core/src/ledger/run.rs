@@ -650,8 +650,14 @@ pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedEr
 /// request error.
 fn engine_country(country: &Country) -> EngineResult<engine::Country> {
     engine::Country::from_spec(&match country {
-        Country::Generic { long_term_days } => CountrySpec::Generic {
+        Country::Generic {
+            long_term_days,
+            tax_year_start,
+            timezone,
+        } => CountrySpec::Generic {
             long_term_days: *long_term_days,
+            tax_year_start: tax_year_start.clone(),
+            timezone: timezone.clone(),
         },
         Country::At {} => CountrySpec::At {},
         Country::Us {} => CountrySpec::Us {},
@@ -739,12 +745,19 @@ pub(crate) fn compute(
     };
     // Each asset's computation is its own, so they run concurrently and
     // are taken in order, up to the first failure.
+    // The allocation's wallets by label; an id the request's wallets do
+    // not list holds nothing.
+    let wallet_order: Vec<String> = policy
+        .wallet_order
+        .iter()
+        .filter_map(|id| book.wallet_label(id).map(str::to_owned))
+        .collect();
     par::map(&assets, 1, |parsed| {
         let borrowed = ParsedAsset {
             asset: parsed.asset.clone(),
             entries: Cow::Borrowed(&parsed.entries),
         };
-        compute_parsed(borrowed, country, method, policy.pool_scope)
+        compute_parsed(borrowed, country, method, policy.pool_scope, &wallet_order)
     })
     .into_iter()
     .zip(&assets)

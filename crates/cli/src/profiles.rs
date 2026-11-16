@@ -9,6 +9,8 @@ pub const COMMANDS: &[&str] = &[
     "profiles.create",
     "profiles.get",
     "profiles.set",
+    "profiles.settings",
+    "profiles.configure",
 ];
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
     book.service(

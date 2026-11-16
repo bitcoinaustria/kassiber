@@ -350,6 +350,13 @@ impl Cell {
     }
 }
 
+/// Whether a book's pool scope identifies lots per wallet, so its wallet
+/// cost basis is the basis of the lots each wallet holds: `wallet`, and
+/// `global_then_wallet` (the United States' pool, per wallet from 2025).
+pub(crate) fn per_wallet_scope(scope: &str) -> bool {
+    matches!(scope, "wallet" | "global_then_wallet")
+}
+
 /// Whether the stored `tax_country` (compared exactly) follows Austria's
 /// rules: its country layer (E 1kv Kennzahlen, regimes, review gate).
 pub(crate) fn austrian_rules(country: &str) -> bool {

@@ -222,7 +222,11 @@ fn united_states_profiles_follow_the_registry() {
     let details = f.run("profiles.get", dict([("profile", s("US"))]));
     assert_eq!(
         get(&details, "allowed_cost_basis_pool_scopes"),
-        Some(&Value::List(vec![s("global"), s("wallet")]))
+        Some(&Value::List(vec![
+            s("global"),
+            s("global_then_wallet"),
+            s("wallet")
+        ]))
     );
     // A US book may go back to the global scope (before 2025) but not to a
     // moving average.

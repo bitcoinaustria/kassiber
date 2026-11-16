@@ -109,6 +109,21 @@ impl From<kassiber_pydecimal::DecimalError> for Refusal {
     }
 }
 
+/// Adds a book's own tax calendar to the profile the tax engine request
+/// reads, only when the book chose one (`kassiber_setup::book_settings`).
+pub(crate) fn book_calendar(
+    conn: &kassiber_store::rusqlite::Connection,
+    profile: &mut Value,
+) -> Result<(), Refusal> {
+    let id = string(&profile["id"]);
+    for (key, value) in kassiber_setup::book_settings::engine_profile_keys(conn, &id)? {
+        if let Some(fields) = profile.as_object_mut() {
+            fields.insert(key.to_owned(), Value::String(value));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn array(value: &Value) -> &[Value] {
     value.as_array().map(Vec::as_slice).unwrap_or(&[])
 }

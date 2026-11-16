@@ -560,6 +560,12 @@ pub fn export(
     );
     set_setting(target_conn, "context_profile", profile)?;
     set_setting(target_conn, "context_workspace", &workspace)?;
+    // The book keeps its id and country, so its own tax calendar (a
+    // per-book setting beside the copied `profiles` row) comes with it.
+    let calendar = super::book_settings::calendar_key(profile);
+    if let Some(raw) = setting(conn, &calendar)? {
+        set_setting(target_conn, &calendar, &raw)?;
+    }
     let mut recipe = dict(
         ["environment", "chain_instance_id", "declared_wallet_ids"]
             .into_iter()

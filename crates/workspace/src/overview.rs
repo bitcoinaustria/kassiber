@@ -864,12 +864,50 @@ fn fiat_snapshot(
     adjustment: f64,
 ) -> Result<Value> {
     let market = total * rate;
-    let realized = rows(
-        conn,
-        "SELECT SUM(COALESCE(gain_loss, 0)) AS gain_loss FROM (SELECT gain_loss FROM journal_entries WHERE profile_id = ? \
-         AND gain_loss IS NOT NULL AND occurred_at >= date('now', 'start of year') ORDER BY occurred_at, created_at, id)",
-        [profile],
-    )?;
+    // "Realized YTD" is tax-year to date: the book's own tax year in its
+    // zone when it has one (`tax_years::book_cut`), else the UTC calendar
+    // year as before.
+    let book = match rows(conn, "SELECT * FROM profiles WHERE id = ?", [profile])?.first() {
+        Some(row) => kassiber_reports::tax_years::book_cut(conn, row)?,
+        None => None,
+    };
+    let realized = match &book {
+        Some(book) => {
+            let now: i64 = conn
+                .query_row("SELECT CAST(strftime('%s','now') AS INTEGER)", [], |r| r.get(0))
+                .map_err(sql_error)?;
+            let year = book
+                .tax_year(now * 1_000_000)
+                .map_err(|error| AppError::new("internal_error", error.to_string()))?;
+            let year = i64::from(year);
+            let (start, _) = kassiber_reports::tax_years::book_window(book, year)?;
+            // A day early, so instants stored in any offset are read, then
+            // each entry by its own tax year (as the desktop gains view):
+            // `occurred_at` text does not order instants across offsets.
+            let padded = kassiber_rates::time::parse(&start)
+                .and_then(|us| kassiber_rates::time::format(us - 86_400_000_000))
+                .ok_or_else(|| AppError::new("internal_error", "date value out of range"))?;
+            let mut total = 0.0;
+            for row in rows(
+                conn,
+                "SELECT occurred_at, gain_loss FROM journal_entries WHERE profile_id = ? \
+                 AND gain_loss IS NOT NULL AND occurred_at >= ? ORDER BY occurred_at, created_at, id",
+                [profile, padded.as_str()],
+            )? {
+                let occurred = py_str(&val(&row, "occurred_at"));
+                if kassiber_reports::tax_years::book_year(book, &occurred)?.0 >= year {
+                    total += float(&val(&row, "gain_loss"))?;
+                }
+            }
+            vec![dict([("gain_loss", Value::Float(total))])]
+        }
+        None => rows(
+            conn,
+            "SELECT SUM(COALESCE(gain_loss, 0)) AS gain_loss FROM (SELECT gain_loss FROM journal_entries WHERE profile_id = ? \
+             AND gain_loss IS NOT NULL AND occurred_at >= date('now', 'start of year') ORDER BY occurred_at, created_at, id)",
+            [profile],
+        )?,
+    };
     let realized = val(&realized[0], "gain_loss");
     let realized = if truthy(&realized) {
         float(&realized)?
@@ -895,6 +933,11 @@ fn fiat_snapshot(
             "chainDuplicateOutpointAdjustmentBtc",
             Value::Float(adjustment),
         );
+    }
+    if let Some(book) = book {
+        // The realized figure's period, only for a book's own tax year.
+        set(&mut payload, "realizedTaxYearStart", s(book.start_text()));
+        set(&mut payload, "realizedTimezone", s(book.timezone));
     }
     Ok(payload)
 }
@@ -2251,7 +2294,7 @@ fn book_overview(
                 ("taxCountry", val(profile, "tax_country")),
                 (
                     "taxLongTermDays",
-                    stored_int(profile, "tax_long_term_days")?,
+                    stored_int(&crate::readiness::taxed_days(profile), "tax_long_term_days")?,
                 ),
                 ("gainsAlgorithm", val(profile, "gains_algorithm")),
             ]),
@@ -2883,5 +2926,63 @@ mod same_time_tests {
             conn.execute("INSERT INTO import_batch_transactions(batch_id,transaction_id,source_position) VALUES('b',?,?)", kassiber_store::rusqlite::params![id, position]).unwrap();
         }
         assert_eq!(latest_transaction_rate(conn, "p", "EUR").unwrap(), 10000.0);
+    }
+}
+
+#[cfg(test)]
+mod realized_tests {
+    use super::*;
+
+    /// A United Kingdom book's realized figure starts at 6 April in London
+    /// and reads each entry's instant, not its text: an entry stored in a
+    /// negative offset just after the start counts, one in a positive
+    /// offset just before it does not.
+    #[test]
+    fn realized_tax_year_to_date_reads_instants_in_any_offset() {
+        let root = tempfile::tempdir().unwrap();
+        let book = kassiber_store::Book::create(root.path(), None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch("INSERT INTO workspaces(id,label,created_at) VALUES('ws','W','t');
+            INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,created_at) VALUES('p','ws','P','GBP','gb','t');
+            INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('acct','ws','p','treasury','Treasury','asset','t');
+            INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('w','ws','p','Cold','custom','t');
+            INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,created_at) VALUES('t','ws','p','w','t','2024-06-01T00:00:00Z','outbound','BTC',1000,'t');").unwrap();
+        let profile = rows(conn, "SELECT * FROM profiles WHERE id='p'", []).unwrap();
+        let cut = kassiber_reports::tax_years::book_cut(conn, &profile[0])
+            .unwrap()
+            .expect("the 6 April year");
+        let now: i64 = conn
+            .query_row("SELECT CAST(strftime('%s','now') AS INTEGER)", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let year = i64::from(cut.tax_year(now * 1_000_000).unwrap());
+        let (start, _) = kassiber_reports::tax_years::book_window(&cut, year).unwrap();
+        let at = |seconds: i64, offset: &str| {
+            let us = kassiber_rates::time::parse(&start).unwrap() + seconds * 1_000_000;
+            if offset == "Z" {
+                return kassiber_rates::time::format(us).unwrap();
+            }
+            // `YYYY-MM-DDTHH:MM:SSZ` shifted into `offset` (±HH:MM).
+            let hours: i64 = offset[..3].parse().unwrap();
+            let local = kassiber_rates::time::format(us + hours * 3_600_000_000).unwrap();
+            format!("{}{offset}", local.trim_end_matches('Z'))
+        };
+        for (id, occurred, gain) in [
+            // An hour after the start, written five hours behind UTC.
+            ("in", at(3600, "-05:00"), 7.0),
+            // An hour before it, written two hours ahead (its text sorts
+            // after the start's).
+            ("out", at(-3600, "+02:00"), 100.0),
+            ("late", at(86_400, "Z"), 3.0),
+        ] {
+            conn.execute(
+                "INSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,account_id,occurred_at,entry_type,asset,quantity,gain_loss,created_at) VALUES(?1,'ws','p','t','w','acct',?2,'disposal','BTC',-1,?3,'t')",
+                kassiber_store::rusqlite::params![id, occurred, gain],
+            )
+            .unwrap();
+        }
+        let snapshot = fiat_snapshot(conn, "p", &s("GBP"), 0.0, 0.0, 0.0).unwrap();
+        assert_eq!(val(&snapshot, "eurRealizedYTD"), Value::Float(10.0));
     }
 }

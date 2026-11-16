@@ -53,12 +53,15 @@ fn empty(year: i64) -> Value {
         ),
     ])
 }
+use crate::tax_years::Cut;
+
 fn years(
     conn: &Connection,
     profile: &str,
-    zone: Option<&str>,
+    cut: Cut<'_>,
     primary: Option<bool>,
 ) -> Result<Vec<i64>> {
+    let zone = cut.zone;
     let query = if let Some(primary) = primary {
         let filter = if primary {
             "((je.entry_type='disposal' AND COALESCE(je.at_category,'')!='neu_swap') OR (je.entry_type NOT IN ('fee','transfer_fee') AND je.at_kennzahl IS NOT NULL))"
@@ -72,7 +75,9 @@ fn years(
     let mut result = BTreeSet::new();
     for row in rows(conn, &query, [profile])? {
         let raw = text(&row, "occurred_at");
-        if let Some(zone) = zone {
+        if let Some(book) = &cut.book {
+            result.insert(crate::tax_years::book_year(book, &raw)?.0);
+        } else if let Some(zone) = zone {
             result.insert(calendar::local(&raw, zone)?.0);
         } else {
             let prefix: String = raw.chars().take(4).collect();
@@ -107,8 +112,11 @@ fn normalize_year(raw: &Value) -> Result<i64> {
         e
     })
 }
-fn date(raw: &str, zone: Option<&str>) -> Result<String> {
-    if let Some(zone) = zone {
+fn date(raw: &str, cut: Cut<'_>) -> Result<String> {
+    if let Some(book) = &cut.book {
+        return crate::tax_years::book_year(book, raw).map(|(_, date)| date);
+    }
+    if let Some(zone) = cut.zone {
         calendar::local(raw, zone).map(|(_, d)| d)
     } else {
         Ok(raw.chars().take(10).collect())
@@ -121,15 +129,33 @@ fn sat(n: i64) -> Value {
         Value::Float(n as f64 / 1000.0)
     }
 }
-fn in_year(row: &Value, year: i64, zone: Option<&str>) -> Result<bool> {
-    if let Some(zone) = zone {
+fn in_year(row: &Value, year: i64, cut: Cut<'_>) -> Result<bool> {
+    if let Some(book) = &cut.book {
+        return Ok(crate::tax_years::book_year(book, &text(row, "occurred_at"))?.0 == year);
+    }
+    if let Some(zone) = cut.zone {
         Ok(calendar::local(&text(row, "occurred_at"), zone)?.0 == year)
     } else {
         Ok(true)
     }
 }
-fn bounds(year: i64, zone: Option<&str>) -> (String, String, String) {
-    if zone.is_some() {
+fn bounds(year: i64, cut: Cut<'_>) -> Result<(String, String, String)> {
+    if let Some(book) = &cut.book {
+        // A day either side, so stored instants in any offset are read;
+        // `in_year` keeps the year's own.
+        let (start, end) = crate::tax_years::book_window(book, year)?;
+        let pad = |raw: &str, days: i64| -> Result<String> {
+            let (us, _) = calendar::utc_us(raw)?;
+            kassiber_rates::time::format(us + days * 86_400_000_000 + kassiber_rates::time::UNIX)
+                .ok_or_else(|| AppError::new("internal_error", "date value out of range"))
+        };
+        return Ok((
+            "je.occurred_at>=? AND je.occurred_at<?".into(),
+            pad(&start, -1)?,
+            pad(&end, 1)?,
+        ));
+    }
+    Ok(if cut.zone.is_some() {
         let (start, end) = calendar::window(year);
         ("je.occurred_at>=? AND je.occurred_at<?".into(), start, end)
     } else {
@@ -138,7 +164,7 @@ fn bounds(year: i64, zone: Option<&str>) -> (String, String, String) {
             year.to_string(),
             String::new(),
         )
-    }
+    })
 }
 
 /// `str(asset).upper() if asset else None`: the AI read's asset scope. A lone
@@ -177,12 +203,13 @@ pub(super) fn report(
     };
     let id = text(&profile, "id");
     let country = text(&profile, "tax_country").to_lowercase();
-    let zone = crate::country::zone(&country);
+    // The view's years are the book's tax years (`tax_years::Cut`).
+    let cut = Cut::of(conn, &profile)?;
     let austrian = crate::country::austrian(&country);
-    let primary = years(conn, &id, zone, Some(true))?;
-    let mut available: BTreeSet<_> = years(conn, &id, zone, Some(false))?
+    let primary = years(conn, &id, cut, Some(true))?;
+    let mut available: BTreeSet<_> = years(conn, &id, cut, Some(false))?
         .into_iter()
-        .chain(years(conn, &id, zone, None)?)
+        .chain(years(conn, &id, cut, None)?)
         .filter(|n| (2009..=2100).contains(n))
         .collect();
     let year = if !matches!(value(args, "year"), Value::Null) {
@@ -206,7 +233,7 @@ pub(super) fn report(
         available.insert(0, Value::Int(year.into()));
     }
     let asset = asset_filter(value(args, "asset"))?;
-    let (predicate, start, end) = bounds(year, zone);
+    let (predicate, start, end) = bounds(year, cut)?;
     let scoped = if asset.is_some() {
         "je.asset=? AND "
     } else {
@@ -216,7 +243,7 @@ pub(super) fn report(
     let selected=rows(conn,&format!("SELECT je.id,je.occurred_at,je.entry_type,je.quantity,je.cost_basis,je.proceeds,je.gain_loss,je.capital_gains_type,je.transaction_id,je.asset,je.at_category FROM journal_entries je LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' AND {scoped}{predicate} ORDER BY je.occurred_at DESC,je.created_at DESC,je.id DESC"),kassiber_store::rusqlite::params_from_iter(binds.into_iter().flatten()))?;
     let mut selected = selected
         .into_iter()
-        .filter_map(|r| match in_year(&r, year, zone) {
+        .filter_map(|r| match in_year(&r, year, cut) {
             Ok(true) => Some(Ok(r)),
             Ok(false) => None,
             Err(e) => Some(Err(e)),
@@ -237,7 +264,7 @@ pub(super) fn report(
             sum_eur(selected.iter().map(|r| value(r, "gain_loss")))?,
         ),
     ]);
-    let mut neutral = neutral(conn, &id, year, zone)?;
+    let mut neutral = neutral(conn, &id, year, cut)?;
     if let Some(asset) = &asset {
         // Like the rows and totals, an asset-scoped read keeps that asset's
         // swaps: the ones that gave it up.
@@ -286,7 +313,7 @@ pub(super) fn report(
                 gain_explanation::reference(conn, &profile, value(&row, "id"))?,
             ),
             ("acquired", s("")),
-            ("disposed", s(date(&text(&row, "occurred_at"), zone)?)),
+            ("disposed", s(date(&text(&row, "occurred_at"), cut)?)),
             ("sats", austrian::integer(&decimal(&Value::Float(sats))?)?),
             ("costEur", Value::Float(number(&row, "cost_basis"))),
             (
@@ -419,7 +446,16 @@ pub(super) fn report(
     } else {
         0
     };
-    Ok(dict([
+    let labels = cut.book.map(|book| {
+        // The book's own tax year: its first day, zone and each year's
+        // label (`2024-25`); absent for a calendar-year book.
+        dict([
+            ("taxYearStart", s(book.start_text())),
+            ("timezone", s(book.timezone)),
+            ("yearLabel", s(book.label(year as i32))),
+        ])
+    });
+    let mut result = dict([
         ("jurisdictionCode", s(country)),
         ("fiatCurrency", s(fiat)),
         ("longTermDays", long_term_days),
@@ -446,7 +482,11 @@ pub(super) fn report(
                 ("quarantines", Value::Int(quarantines.into())),
             ]),
         ),
-    ]))
+    ]);
+    if let Some(labels) = labels {
+        replace(&mut result, "taxYear", labels);
+    }
+    Ok(result)
 }
 
 /// `_is_long_term_gain`: both engines store `long`; `long_term` is read as
@@ -645,12 +685,12 @@ fn breakdown(rows: &[Value], swaps: &[Value], austrian: bool) -> Result<Vec<Valu
     Ok(breakdown)
 }
 
-fn neutral(conn: &Connection, id: &str, year: i64, zone: Option<&str>) -> Result<Vec<Value>> {
-    let (predicate, start, end) = bounds(year, zone);
+fn neutral(conn: &Connection, id: &str, year: i64, cut: Cut<'_>) -> Result<Vec<Value>> {
+    let (predicate, start, end) = bounds(year, cut)?;
     let query=format!("SELECT je.id AS entry_id,je.occurred_at,je.transaction_id,je.asset AS entry_asset,je.quantity,je.cost_basis,je.proceeds,je.gain_loss,COALESCE(relation.id,'') AS pair_id,COALESCE(relation.kind,'') AS kind,COALESCE(relation.policy,'') AS policy,COALESCE(relation.swap_fee_msat,0) AS swap_fee_msat,COALESCE(relation.swap_fee_kind,'') AS swap_fee_kind,wout.label AS out_wallet,relation.out_asset,COALESCE(relation.out_amount,tout.amount) AS out_amount,win.label AS in_wallet,relation.in_asset,relation.in_amount FROM journal_entries je LEFT JOIN journal_custody_projection_relations relation ON relation.out_transaction_id=je.transaction_id AND relation.profile_id=je.profile_id AND relation.relation_kind='conversion' LEFT JOIN transactions tout ON tout.id=relation.out_transaction_id LEFT JOIN transactions tin ON tin.id=relation.in_transaction_id LEFT JOIN wallets wout ON wout.id=tout.wallet_id LEFT JOIN wallets win ON win.id=tin.wallet_id WHERE je.profile_id=? AND je.entry_type='disposal' AND je.at_category='neu_swap' AND COALESCE(tout.taxability_override,1)!=0 AND {predicate} ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC");
     let mut result = vec![];
     for row in rows(conn, &query, params![id, start, end])? {
-        if !in_year(&row, year, zone)? {
+        if !in_year(&row, year, cut)? {
             continue;
         }
         let fallback = |key| {
@@ -674,7 +714,7 @@ fn neutral(conn: &Connection, id: &str, year: i64, zone: Option<&str>) -> Result
             }
         };
         result.push(dict([
-            ("date", s(date(&text(&row, "occurred_at"), zone)?)),
+            ("date", s(date(&text(&row, "occurred_at"), cut)?)),
             ("pairId", value(&row, "pair_id").clone()),
             ("journalEntryId", value(&row, "entry_id").clone()),
             ("transactionId", value(&row, "transaction_id").clone()),

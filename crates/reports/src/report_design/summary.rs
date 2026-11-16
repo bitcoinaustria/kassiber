@@ -367,11 +367,15 @@ pub fn summary(model: &Value) -> Document {
     let holdings = Section {
         id: "holdings",
         title: t("holdings.title").into(),
-        lead: t(if text(profile, "cost_basis_pool_scope") == "wallet" {
-            "holdings.lead_wallet"
-        } else {
-            "holdings.lead"
-        })
+        // `global_then_wallet` books identify lots per wallet too: from 2025
+        // the engine books each wallet's own lots (the US transition).
+        lead: t(
+            if super::per_wallet_scope(&text(profile, "cost_basis_pool_scope")) {
+                "holdings.lead_wallet"
+            } else {
+                "holdings.lead"
+            },
+        )
         .into(),
         page_break: false,
         landscape: false,
@@ -759,7 +763,10 @@ pub fn summary(model: &Value) -> Document {
         method.push(fact(
             "long_term_days",
             t("method.long_term_days"),
-            Cell::Count(int(profile, "tax_long_term_days")),
+            Cell::Count(int(
+                &crate::country::taxed_days(profile),
+                "tax_long_term_days",
+            )),
         ));
     }
     let blocks = vec![
@@ -821,6 +828,7 @@ pub fn summary_model(
     let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
     require_context(conn, &profile, false)?;
     let report = summary_pdf::model(conn, &workspace, &profile, args, sources)?;
+    let taxed = crate::country::taxed_days(&profile);
     let mut settings = dict(
         [
             "fiat_currency",
@@ -829,14 +837,15 @@ pub fn summary_model(
             "tax_country",
             "tax_long_term_days",
         ]
-        .map(|key| (key, value(&profile, key).clone())),
+        .map(|key| (key, value(&taxed, key).clone())),
     );
-    // Only a narrower pool scope is named, so global books keep their model.
+    // Only a narrower pool scope is named, so global books keep their model;
+    // a `global_then_wallet` book is named too, since it is not global from 2025.
     let scope = kassiber_pytext::lower(kassiber_pytext::strip(&text(
         &profile,
         "cost_basis_pool_scope",
     )));
-    if scope == "wallet" {
+    if super::per_wallet_scope(&scope) {
         replace(&mut settings, "cost_basis_pool_scope", s(scope));
     }
     let mut kennzahlen = Vec::new();

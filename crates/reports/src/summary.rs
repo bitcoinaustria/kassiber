@@ -395,7 +395,7 @@ pub fn report(
         ("tax_country", value(profile, "tax_country").clone()),
         (
             "tax_long_term_days",
-            Value::Int(int(profile, "tax_long_term_days").into()),
+            Value::Int(int(&crate::country::taxed_days(profile), "tax_long_term_days").into()),
         ),
         ("gains_algorithm", value(profile, "gains_algorithm").clone()),
         (

@@ -50,18 +50,43 @@ fn decimal_digits(text: &str) -> Option<i64> {
     }
     Some(year)
 }
-/// `_entry_year`; `zone` is the caller's reading of the book calendar
-/// (Europe/Vienna for Austria, `None` for UTC).
-fn entry_year(occurred_at: &Value, zone: Option<&str>) -> Option<i64> {
-    let text = or_text(occurred_at);
-    if let Some(zone) = zone {
-        return calendar::local(&text, zone).ok().map(|(year, _)| year);
+/// How a snapshot cuts its years: the book's own tax year where it has one
+/// ([`tax_years::book_cut`]: the United Kingdom's 6 April, a generic book's
+/// chosen start or zone), so a saved or filed report's summaries and its
+/// impact checks cover the same period as the file it records; otherwise
+/// the established cut, `zone` being the caller's reading of the book
+/// calendar (Europe/Vienna for Austria, `None` for UTC).
+#[derive(Clone, Copy)]
+struct Years {
+    zone: Option<&'static str>,
+    book: Option<kassiber_tax_countries::BookCalendar>,
+}
+
+impl Years {
+    fn of(conn: &Connection, profile_id: &str, zone: Option<&'static str>) -> Result<Self> {
+        let profile = rows(conn, "SELECT * FROM profiles WHERE id=?", [profile_id])?;
+        let book = match profile.first() {
+            Some(profile) => tax_years::book_cut(conn, profile)?,
+            None => None,
+        };
+        Ok(Self { zone, book })
     }
-    let head: String = text.chars().take(4).collect();
-    if head.chars().count() < 4 {
-        return None;
+
+    /// `_entry_year`, or the book's tax year of the instant.
+    fn entry(&self, occurred_at: &Value) -> Option<i64> {
+        let text = or_text(occurred_at);
+        if let Some(book) = &self.book {
+            return tax_years::book_year(book, &text).ok().map(|(year, _)| year);
+        }
+        if let Some(zone) = self.zone {
+            return calendar::local(&text, zone).ok().map(|(year, _)| year);
+        }
+        let head: String = text.chars().take(4).collect();
+        if head.chars().count() < 4 {
+            return None;
+        }
+        decimal_digits(&head)
     }
-    decimal_digits(&head)
 }
 fn country(profile: &Value) -> String {
     kassiber_pytext::strip(&or_text(value(profile, "tax_country"))).to_lowercase()
@@ -90,13 +115,14 @@ pub(crate) fn period_years(
         return Ok((start, end));
     }
     let at = crate::country::zone(&country(&profile_row(conn, profile_id)?));
+    let at = Years::of(conn, profile_id, at)?;
     let years: Vec<i64> = rows(
         conn,
         "SELECT occurred_at FROM journal_entries WHERE profile_id = ?",
         [profile_id],
     )?
     .iter()
-    .filter_map(|row| entry_year(value(row, "occurred_at"), at))
+    .filter_map(|row| at.entry(value(row, "occurred_at")))
     .collect();
     if let (Some(start), Some(end)) = (years.iter().min(), years.iter().max()) {
         return Ok((*start, *end));
@@ -150,7 +176,7 @@ pub fn summaries(
     scope: &Value,
 ) -> Result<(Value, Value)> {
     let profile = profile_row(conn, profile_id)?;
-    let at = crate::country::zone(&country(&profile));
+    let at = Years::of(conn, profile_id, crate::country::zone(&country(&profile)))?;
     let wallets: Vec<String> = artifact_csv::list(value(scope, "wallet_ids"))
         .iter()
         .map(py_str)
@@ -183,7 +209,7 @@ pub fn summaries(
         if !last.is_empty() && occurred > last {
             continue;
         }
-        match entry_year(value(row, "occurred_at"), at) {
+        match at.entry(value(row, "occurred_at")) {
             Some(year) if (start..=end).contains(&year) => (),
             _ => continue,
         }
@@ -414,6 +440,7 @@ pub(crate) fn capture_dependencies(
         Value::Str(code) => crate::country::zone(&py_str(&Value::Str(code.clone()))),
         _ => None,
     });
+    let at = Years::of(conn, &profile_id, at)?;
     let scope = value(snapshot, "report_scope");
     let wallets: BTreeSet<String> = artifact_csv::list(value(scope, "wallet_ids"))
         .iter()
@@ -435,7 +462,7 @@ pub(crate) fn capture_dependencies(
     let before_end = |row: &Value| last.is_empty() || occurred(row) <= last;
     let mut assets = BTreeSet::new();
     for row in &entries {
-        let Some(year) = entry_year(value(row, "occurred_at"), at) else {
+        let Some(year) = at.entry(value(row, "occurred_at")) else {
             continue;
         };
         if year <= end
@@ -454,7 +481,9 @@ pub(crate) fn capture_dependencies(
     let mut included = BTreeSet::new();
     for row in &entries {
         if assets.contains(&asset_key(row))
-            && entry_year(value(row, "occurred_at"), at).is_some_and(|year| year <= end)
+            && at
+                .entry(value(row, "occurred_at"))
+                .is_some_and(|year| year <= end)
             && before_end(row)
         {
             included.insert(id_key(value(row, "transaction_id")));
@@ -725,6 +754,88 @@ mod tests {
             .unwrap();
         conn.execute_batch("ROLLBACK").unwrap();
         assert_eq!(dependencies, 0);
+    }
+
+    /// A saved or filed report covers the book's own tax year: its period,
+    /// summaries and the impact checks that recompute them (journals'
+    /// `persistence::filed`) cut 1 July and 6 April books by that year, so a
+    /// change inside the filed year shows and one outside it does not.
+    #[test]
+    fn snapshots_cover_the_books_own_tax_year() {
+        let root = tempfile::tempdir().unwrap();
+        let book = kassiber_store::Book::create(&root.path().join("data"), None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(include_str!("../tests/data/book.sql"))
+            .unwrap();
+        conn.execute_batch(
+            "DELETE FROM journal_entries;
+             INSERT INTO settings(key,value) VALUES('tax.calendar.profile.p','{\"tax_year_start\":\"07-01\",\"timezone\":\"Australia/Sydney\"}');
+             INSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,account_id,occurred_at,entry_type,asset,quantity,cost_basis,proceeds,gain_loss,created_at) VALUES
+             ('before','ws','p','out','cold','acct','2024-03-10T00:00:00Z','disposal','BTC',-1,1,2,1,'fixed'),
+             ('inside','ws','p','out','cold','acct','2025-03-10T00:00:00Z','disposal','BTC',-1,10,30,20,'fixed'),
+             ('after','ws','p','out','cold','acct','2025-07-10T00:00:00Z','disposal','BTC',-1,100,400,300,'fixed');",
+        )
+        .unwrap();
+        let gain = |conn: &Connection| {
+            let (_, gains) = summaries(conn, "p", 2024, 2024, &Value::Null).unwrap();
+            text(&gains, "gain_loss_exact")
+        };
+        let file = root.path().join("handoff.xlsx");
+        std::fs::write(&file, "complete").unwrap();
+        let completion = Completion {
+            kind: "year-handoff.xlsx".into(),
+            year: Some(Value::Int(2024.into())),
+            end_year: None,
+            scope: Value::Null,
+        };
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let snapshot =
+            register(conn, "ws", "p", &completion, &[file], &Fixed(Cell::new(0))).unwrap();
+        conn.execute_batch("COMMIT").unwrap();
+        // Tax year 2024-25 holds only the March 2025 disposal.
+        assert_eq!(
+            text(value(&snapshot, "gain_summary"), "gain_loss_exact"),
+            "20.0"
+        );
+        assert_eq!(gain(conn), "20.0");
+        // Without a period, the journal's tax years.
+        assert_eq!(period_years(conn, "p", None, "2026").unwrap(), (2023, 2025));
+        // A change in January to June of the handoff's second calendar year
+        // is inside the filed year; one in its first half is not.
+        conn.execute(
+            "UPDATE journal_entries SET gain_loss=21 WHERE id='inside'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(gain(conn), "21.0");
+        conn.execute(
+            "UPDATE journal_entries SET gain_loss=9 WHERE id='before'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(gain(conn), "21.0");
+        // The United Kingdom's 6 April year without a choice of the book's:
+        // 2025-04-05T22:00Z is still 2024-25, 23:30Z (00:30 BST) 2025-26.
+        conn.execute_batch(
+            "DELETE FROM settings WHERE key='tax.calendar.profile.p';
+             UPDATE profiles SET tax_country='gb', fiat_currency='GBP' WHERE id='p';
+             UPDATE journal_entries SET occurred_at='2025-04-05T22:00:00Z' WHERE id='inside';
+             UPDATE journal_entries SET occurred_at='2025-04-05T23:30:00Z' WHERE id='after';
+             UPDATE journal_entries SET occurred_at='2024-04-05T22:00:00Z' WHERE id='before';",
+        )
+        .unwrap();
+        assert_eq!(gain(conn), "21.0");
+        conn.execute(
+            "UPDATE journal_entries SET gain_loss=22 WHERE id='inside'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(gain(conn), "22.0");
+        // A calendar-year book keeps its cut.
+        conn.execute("UPDATE profiles SET tax_country='generic' WHERE id='p'", [])
+            .unwrap();
+        let (_, gains) = summaries(conn, "p", 2025, 2025, &Value::Null).unwrap();
+        assert_eq!(text(&gains, "gain_loss_exact"), "322.0");
     }
 
     /// Python-generated registrations, including authoritative dependencies.

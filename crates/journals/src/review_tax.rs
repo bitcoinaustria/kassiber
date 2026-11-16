@@ -100,8 +100,8 @@ fn indicative_tax(
 
 fn years(conn: &Connection, current: &Value, austrian: bool) -> Result<(Vec<Value>, usize), Error> {
     let id = py_str(get(current, "id").unwrap_or(&Value::Null));
-    let zone = kassiber_reports::country::zone(&field(current, "tax_country").to_lowercase());
-    let totals = kassiber_reports::review_figures::year_totals(conn, &id, zone)?;
+    let cut = kassiber_reports::tax_years::Cut::of(conn, current)?;
+    let totals = kassiber_reports::review_figures::year_totals(conn, &id, cut)?;
     let skip = totals.len().saturating_sub(MAX_TAX_YEARS);
     let blocker_ids = if austrian && totals.len() > skip {
         report_blocker_ids(conn, current)?

@@ -195,6 +195,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(services::kinds().filter(|k| {
         profiles::KINDS.contains(k)
             && [
+                "ui.profiles.settings",
                 "ui.profiles.create",
                 "ui.profiles.rename",
                 "ui.profiles.update",

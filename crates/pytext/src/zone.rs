@@ -329,6 +329,46 @@ impl Zone {
     }
 }
 
+impl Zone {
+    /// A zone with one POSIX TZ rule in every year: `standard` seconds east
+    /// of UTC, an hour more from the `start` change to the `end` change,
+    /// each `(month, week, wall-clock seconds)` of a Sunday, week 5 the last
+    /// (`M10.1.0/2,M4.1.0/3`). Southern zones start after they end within a
+    /// year. The registry's rule for its southern zones without tzdata.
+    pub fn posix_rule(
+        key: &str,
+        standard: i64,
+        start: (i64, i64, i64),
+        end: (i64, i64, i64),
+    ) -> Zone {
+        let after = After::Rule(Rule {
+            std: standard,
+            dst: standard + 3600,
+            start: Offset::Calendar {
+                m: start.0,
+                w: start.1,
+                d: 0,
+                seconds: start.2,
+            },
+            end: Offset::Calendar {
+                m: end.0,
+                w: end.1,
+                d: 0,
+                seconds: end.2,
+            },
+        });
+        build(
+            key,
+            Vec::new(),
+            Vec::new(),
+            vec![standard],
+            vec![false],
+            Some(after),
+        )
+        .expect("a POSIX-rule zone")
+    }
+}
+
 fn build(
     key: &str,
     trans_utc: Vec<i64>,

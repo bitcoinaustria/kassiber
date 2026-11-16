@@ -704,6 +704,7 @@ pub static EN: &[(&str, &str)] = &[
     ("method.pool_scope", "Cost-basis pool"),
     ("us.pool.wallet", "Per wallet or account (Treas. Reg. § 1.1012-1(j))"),
     ("us.pool.global", "All wallets (universal; tax years before 2025 only)"),
+    ("us.pool.global_then_wallet", "All wallets through 2024; per wallet or account from 2025-01-01, after the basis remaining on that day was allocated to the wallets under the Rev. Proc. 2024-28 safe harbor (Treas. Reg. § 1.1012-1(j))"),
     ("us.method.forms", "Forms"),
     ("us.method.forms_value", "Form 8949, Schedule D, Form 1040 digital asset question"),
     // Ireland and United Kingdom layers
@@ -1567,6 +1568,7 @@ pub static DE: &[(&str, &str)] = &[
     ("method.pool_scope", "Bewertungspool"),
     ("us.pool.wallet", "Je Wallet oder Konto (Treas. Reg. § 1.1012-1(j))"),
     ("us.pool.global", "Alle Wallets (universell; nur Steuerjahre vor 2025)"),
+    ("us.pool.global_then_wallet", "Alle Wallets bis 2024; ab 1. Jänner 2025 je Wallet oder Konto, nachdem die an diesem Tag verbleibenden Anschaffungskosten nach dem Safe Harbor der Rev. Proc. 2024-28 auf die Wallets aufgeteilt wurden (Treas. Reg. § 1.1012-1(j))"),
     ("us.method.forms", "Formulare"),
     ("us.method.forms_value", "Form 8949, Schedule D, Digital-Asset-Frage der Form 1040"),
     // Irland und Vereinigtes Königreich

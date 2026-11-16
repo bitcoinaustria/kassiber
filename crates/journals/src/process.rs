@@ -239,6 +239,7 @@ fn build_in_transaction<'a>(
     progress("preparing");
     writes.check()?;
     let mut profile = prebuild.resolve(conn)?;
+    crate::book_calendar(conn, &mut profile)?;
     kassiber_custody::journal_support::require_tax_processing(&profile)
         .map_err(|(family, message)| Refusal::new(family, message))?;
     conn.execute_batch("SAVEPOINT journals_process")?;
