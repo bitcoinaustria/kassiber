@@ -11,8 +11,8 @@ have their own pages).
 
 1. **Pick the exchange.** The Add connection dialog lists Kraken, Coinbase,
    Bitpanda, Bitvavo, Bitstamp API, Bitfinex and Binance API under Exchanges
-   (setup kind `exchange-api`). The Binance supplemental CSV, Bitvavo CSV and
-   Bitstamp CSV imports stay separate cards.
+   (setup kind `exchange-api`). The Binance supplemental CSV, Bitvavo CSV,
+   Bitstamp CSV and Bitfinex CSV imports stay separate cards.
 2. **Create a read-only key.** The setup shows where to create the key and
    which of the exchange's permissions to turn on and leave off. The scopes
    follow what each sync reads:
@@ -58,7 +58,7 @@ A wallet is an exchange API connection only when it is of an exchange kind
 and its configuration names a backend: the configured source decides, for
 every exchange, not the kind alone. A backend beside a file source still
 makes it an API connection. A wallet of an exchange kind that
-imports a file (the Bitvavo CSV, the Binance supplemental CSV, a Kraken
+imports a file (the Bitvavo or Bitfinex CSV, the Binance supplemental CSV, a Kraken
 wallet with a source file) keeps its file refresh, is not listed by
 `status` and is refused by `sync` ("has no exchange API key attached")
 until `create` attaches a backend to it with `wallet`. Attaching keeps its

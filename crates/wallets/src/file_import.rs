@@ -3,6 +3,7 @@ pub mod analysis;
 pub mod assets;
 pub mod attachment;
 mod binance;
+mod bitfinex;
 mod bitstamp;
 mod bitvavo;
 mod btcpay;
@@ -71,6 +72,7 @@ pub enum Format {
     Binance,
     Bitvavo,
     Bitstamp,
+    Bitfinex,
     BtcpayCsv,
     BtcpayJson,
     Ledger,
@@ -97,6 +99,7 @@ impl Format {
             "binance_supplemental_csv" => Self::Binance,
             "bitvavo_csv" => Self::Bitvavo,
             "bitstamp_csv" => Self::Bitstamp,
+            "bitfinex_csv" => Self::Bitfinex,
             "cointracking_csv" => Self::CoinTracking,
             "blockpit_csv" => Self::Blockpit,
             "wasabi_bundle" => Self::Wasabi,
@@ -126,6 +129,7 @@ impl Format {
             Self::Binance => "binance_supplemental_csv",
             Self::Bitvavo => "bitvavo_csv",
             Self::Bitstamp => "bitstamp_csv",
+            Self::Bitfinex => "bitfinex_csv",
             Self::Ledger => "generic_ledger",
         }
     }
@@ -147,6 +151,7 @@ impl Format {
             ),
             Self::Bitvavo => bitvavo::parse(csv::rows(&csv::read_sig(file)?)?, None).map(|r| r.0),
             Self::Bitstamp => bitstamp::parse(csv::rows(&csv::read_sig(file)?)?, None).map(|r| r.0),
+            Self::Bitfinex => bitfinex::load(file, assets::Scope::Bitcoin).map(|r| r.0),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
             Self::River => river::parse(csv::load(file)?),
             Self::Bull => bull::parse(csv::load(file)?),
@@ -198,6 +203,9 @@ impl Format {
                 .map(|(rows, tally)| (rows, Some(tally))),
             Self::Bitstamp => bitstamp::parse(csv::rows(&csv::read_sig(file)?)?, Some(target))
                 .map(|(rows, tally)| (rows, Some(tally))),
+            Self::Bitfinex => {
+                bitfinex::load(file, target.scope).map(|(rows, tally)| (rows, Some(tally)))
+            }
             _ => self.load(file).map(|rows| (rows, None)),
         }
     }
@@ -212,6 +220,7 @@ impl Format {
                 | Self::LedgerLive
                 | Self::Bitvavo
                 | Self::Bitstamp
+                | Self::Bitfinex
         )
     }
     fn evidence(self) -> bool {
@@ -233,12 +242,14 @@ impl Format {
         matches!(self, Self::TwentyOne | Self::Strike)
             || self == Self::Bitvavo
             || self == Self::Bitstamp
+            || self == Self::Bitfinex
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
             Self::Binance => ("Binance", "binance", "binance_rows"),
             Self::Bitvavo => ("Bitvavo", "bitvavo", "bitvavo_rows"),
             Self::Bitstamp => ("Bitstamp", "bitstamp", "bitstamp_rows"),
+            Self::Bitfinex => ("Bitfinex", "bitfinex", "bitfinex_rows"),
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),
@@ -2072,6 +2083,9 @@ fn apply_records(
     )?;
     if matches!(request.format, Format::Bitvavo | Format::Bitstamp) {
         exchange_api::tag_same_second(conn, profile, &wallet.id, &inserted_ids, ids)?;
+    }
+    if request.format == Format::Bitfinex {
+        exchange_api::bitfinex::mapping::tag_unchecked(conn, profile, &wallet.id, rows, ids)?;
     }
     let invalidated = !imported.is_empty() || !updated.is_empty();
     if invalidated {

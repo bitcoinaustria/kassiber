@@ -8,7 +8,7 @@ record of how that provider's rows are interpreted.
 - **Worked example:** [strike.md](strike.md) — the shipped Strike importer
   written up as a filled spec (illustrative reference; the code is the source of
   truth).
-- **Implemented specs:** [binance.md](binance.md), [bitstamp.md](bitstamp.md),
+- **Implemented specs:** [binance.md](binance.md), [bitfinex.md](bitfinex.md), [bitstamp.md](bitstamp.md),
   [bitvavo.md](bitvavo.md), [coinbase.md](coinbase.md), [kraken.md](kraken.md), and
   [ledger-live.md](ledger-live.md).
 - **How to add one:** copy [TEMPLATE.md](TEMPLATE.md) to

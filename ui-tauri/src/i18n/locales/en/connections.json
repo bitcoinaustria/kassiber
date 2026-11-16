@@ -885,6 +885,7 @@
       "cointrackingCsv": "CoinTracking transaction CSV",
       "blockpitCsv": "Blockpit transaction CSV",
       "binanceSupplementalCsv": "Binance supplemental CSV",
+      "bitfinexReports": "Bitfinex Reports zip or CSV",
       "btcpayCsv": "BTCPay CSV",
       "wasabiBundle": "Wasabi JSON bundle",
       "samouraiSourceSet": "Samourai descriptor source set",

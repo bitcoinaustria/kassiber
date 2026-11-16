@@ -24,6 +24,7 @@ const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[
     ("sync-bitstamp", "sync-bitvavo"),
     ("import-bitstamp", "import-bitvavo"),
     ("sync-bitfinex", "sync-bitstamp"),
+    ("import-bitfinex", "import-bitstamp"),
 ];
 
 /// Rust-only leaves with no Python sibling to be described like, each with
