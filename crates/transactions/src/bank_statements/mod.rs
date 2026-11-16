@@ -7,6 +7,7 @@
 mod camt;
 mod csv;
 
+pub mod matching;
 pub mod money;
 pub mod store;
 
@@ -408,4 +409,296 @@ pub fn line_preview(line: &StatementLine) -> Value {
         ("remittance", shown(line.remittance.as_deref())),
         ("bank_reference", shown(line.bank_reference.as_deref())),
     ])
+}
+
+/// One bank-statement operation, as the CLI and daemon request it.
+pub enum Command {
+    Import(store::ImportRequest),
+    Imports {
+        limit: i64,
+    },
+    Rollback {
+        import: String,
+        confirm: bool,
+    },
+    Lines(store::LineFilter),
+    Suggest {
+        transaction: Option<String>,
+    },
+    Accept {
+        lines: Vec<String>,
+        transactions: Vec<String>,
+    },
+    Reject {
+        lines: Vec<String>,
+        transactions: Vec<String>,
+    },
+}
+
+/// A column map from text: inline JSON, or `@path` to a JSON file.
+pub fn column_map_arg(raw: &str) -> Result<Option<Value>> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    let text = match raw.strip_prefix('@') {
+        Some(file) => {
+            let path = crate::documents::expanded(file)?;
+            let bytes = std::fs::read(&path)
+                .map_err(|_| AppError::new("not_found", "The column-map file was not found"))?;
+            if bytes.len() > 1024 * 1024 {
+                return Err(invalid("The column-map file is larger than 1 MiB"));
+            }
+            String::from_utf8(bytes).map_err(|_| invalid("The column-map file is not UTF-8"))?
+        }
+        None => raw.to_owned(),
+    };
+    let value = kassiber_pytext::loads(&text)
+        .map_err(|e| invalid(format!("The column map is not valid JSON: {e}")))?;
+    if !matches!(value, Value::Dict(_)) {
+        return Err(invalid("A column map must be a JSON object"));
+    }
+    Ok(Some(value))
+}
+
+/// Run every operation except `Accept`, which needs the source-funds
+/// mutations and lives in `kassiber-reports`.
+pub fn execute(
+    conn: &kassiber_store::rusqlite::Connection,
+    scope: &crate::Scope<'_>,
+    attachments_root: &std::path::Path,
+    command: &Command,
+) -> Result<Value> {
+    match command {
+        Command::Import(request) => store::import_statement(conn, scope, attachments_root, request),
+        Command::Imports { limit } => Ok(dict([(
+            "imports",
+            store::list_imports(conn, scope, *limit)?,
+        )])),
+        Command::Rollback { import, confirm } => {
+            store::rollback(conn, scope, attachments_root, import, *confirm)
+        }
+        Command::Lines(filter) => Ok(dict([("lines", store::list_lines(conn, scope, filter)?)])),
+        Command::Suggest { transaction } => {
+            matching::suggest_for_book(conn, scope, transaction.as_deref())
+        }
+        Command::Reject {
+            lines,
+            transactions,
+        } => matching::reject(conn, scope, lines, transactions),
+        Command::Accept { .. } => Err(AppError::new(
+            "internal_error",
+            "bank-line acceptance runs through the source-funds service",
+        )),
+    }
+}
+
+fn key_is(key: &kassiber_pyjson::Key, names: &[&str]) -> bool {
+    matches!(key, kassiber_pyjson::Key::Str(k) if names.iter().any(|n| k.is(n)))
+}
+
+/// A counterparty as the assistant may see it: a curated exchange's name,
+/// else nothing.
+fn ai_counterparty(v: &Value) -> Value {
+    match v {
+        Value::Str(t) => t
+            .as_str()
+            .and_then(matching::named_exchange)
+            .map_or(Value::Null, |id| s(matching::exchange_name(id))),
+        _ => Value::Null,
+    }
+}
+
+/// The assistant's view of a bank-statement result: masked IBANs only, the
+/// counterparty only when it names a curated exchange, and no remittance
+/// text, bank references or file-derived plan.
+pub fn ai_projection(value: &Value) -> Value {
+    const DROPPED: &[&str] = &["remittance", "bank_reference", "end_to_end_id", "preview"];
+    match value {
+        Value::List(items) => Value::List(items.iter().map(ai_projection).collect()),
+        Value::Dict(pairs) => Value::Dict(
+            pairs
+                .iter()
+                .filter(|(key, _)| !key_is(key, DROPPED))
+                .map(|(key, v)| match key_is(key, &["counterparty_name"]) {
+                    true => (key.clone(), ai_counterparty(v)),
+                    false => (key.clone(), ai_projection(v)),
+                })
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// Project every `bank_evidence` list inside an assistant-bound payload
+/// (source-of-funds previews, review contexts, saved cases) down to dates,
+/// exact amount, currency, bank and masked accounts; the counterparty only
+/// when it names a curated exchange.
+pub fn ai_project_bank_evidence(value: &Value) -> Value {
+    const KEPT: &[&str] = &[
+        "booking_date",
+        "value_date",
+        "amount",
+        "currency",
+        "bank_name",
+        "counterparty_iban_masked",
+        "account_masked",
+    ];
+    let line = |item: &Value| match item {
+        Value::Dict(pairs) => Value::Dict(
+            pairs
+                .iter()
+                .filter_map(|(key, v)| {
+                    if key_is(key, KEPT) {
+                        Some((key.clone(), v.clone()))
+                    } else if key_is(key, &["counterparty_name"]) {
+                        Some((key.clone(), ai_counterparty(v)))
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        ),
+        other => other.clone(),
+    };
+    match value {
+        Value::List(items) => Value::List(items.iter().map(ai_project_bank_evidence).collect()),
+        Value::Dict(pairs) => Value::Dict(
+            pairs
+                .iter()
+                .map(|(key, v)| match (key_is(key, &["bank_evidence"]), v) {
+                    (true, Value::List(items)) => {
+                        (key.clone(), Value::List(items.iter().map(line).collect()))
+                    }
+                    _ => (key.clone(), ai_project_bank_evidence(v)),
+                })
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// The daemon kinds; each CLI command is the same operation.
+pub const KINDS: &[(&str, &str)] = &[
+    (
+        "ui.documents.import_statement",
+        "documents.import-statement",
+    ),
+    (
+        "ui.documents.statement_imports",
+        "documents.statement-imports",
+    ),
+    (
+        "ui.documents.rollback_statement",
+        "documents.rollback-statement",
+    ),
+    (
+        "ui.source_funds.bank_lines.list",
+        "source-funds.bank-lines.list",
+    ),
+    (
+        "ui.source_funds.bank_lines.suggest",
+        "source-funds.bank-lines.suggest",
+    ),
+    (
+        "ui.source_funds.bank_lines.accept",
+        "source-funds.bank-lines.accept",
+    ),
+    (
+        "ui.source_funds.bank_lines.reject",
+        "source-funds.bank-lines.reject",
+    ),
+];
+
+impl Command {
+    /// One operation from its daemon kind and arguments (the CLI passes its
+    /// options under the same names).
+    pub fn from_args(kind: &str, args: &Value) -> Result<Command> {
+        let text = |key: &str| match kassiber_envelope::get(args, key) {
+            Some(Value::Str(t)) => t
+                .as_str()
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+                .map(str::to_owned),
+            _ => None,
+        };
+        let flag = |key: &str| match kassiber_envelope::get(args, key) {
+            None | Some(Value::Null) => Ok(false),
+            Some(Value::Bool(b)) => Ok(*b),
+            Some(_) => Err(invalid(format!("{kind} args.{key} must be a boolean"))),
+        };
+        let limit = |default: i64| match kassiber_envelope::get(args, "limit") {
+            Some(Value::Int(n)) => i64::try_from(n.clone()).unwrap_or(default),
+            _ => default,
+        };
+        let ids = |key: &str| -> Result<Vec<String>> {
+            let fail = || invalid(format!("{kind} requires args.{key} as a list of ids"));
+            match kassiber_envelope::get(args, key) {
+                Some(Value::List(items)) if !items.is_empty() => items
+                    .iter()
+                    .map(|v| match v {
+                        Value::Str(t) => t
+                            .as_str()
+                            .map(str::trim)
+                            .filter(|t| !t.is_empty())
+                            .map(str::to_owned)
+                            .ok_or_else(fail),
+                        _ => Err(fail()),
+                    })
+                    .collect(),
+                _ => Err(fail()),
+            }
+        };
+        let required =
+            |key: &str| text(key).ok_or_else(|| invalid(format!("{kind} requires args.{key}")));
+        Ok(match kind {
+            "ui.documents.import_statement" => Command::Import(store::ImportRequest {
+                file: required("file_path")?,
+                options: ParseOptions {
+                    format: Format::choose(text("format").as_deref())?,
+                    column_map: match kassiber_envelope::get(args, "column_map") {
+                        None | Some(Value::Null) => None,
+                        Some(map @ Value::Dict(_)) => Some(map.clone()),
+                        Some(Value::Str(raw)) => column_map_arg(raw.as_str().unwrap_or_default())?,
+                        Some(_) => return Err(invalid("column_map must be a JSON object")),
+                    },
+                    currency: text("currency"),
+                    account: text("account"),
+                },
+                label: text("label"),
+                dry_run: flag("dry_run")?,
+            }),
+            "ui.documents.statement_imports" => Command::Imports { limit: limit(100) },
+            "ui.documents.rollback_statement" => Command::Rollback {
+                import: required("import_id")?,
+                confirm: match kassiber_envelope::get(args, "confirm") {
+                    None | Some(Value::Null) => false,
+                    Some(Value::Str(t)) if t.as_str() == Some("DELETE") => true,
+                    Some(_) => return Err(invalid(format!("{kind} confirm must be \"DELETE\""))),
+                },
+            },
+            "ui.source_funds.bank_lines.list" => Command::Lines(store::LineFilter {
+                direction: text("direction").unwrap_or_else(|| "all".into()),
+                document: text("document"),
+                limit: limit(200),
+            }),
+            "ui.source_funds.bank_lines.suggest" => Command::Suggest {
+                transaction: text("transaction"),
+            },
+            "ui.source_funds.bank_lines.accept" => Command::Accept {
+                lines: ids("line_ids")?,
+                transactions: ids("transaction_ids")?,
+            },
+            "ui.source_funds.bank_lines.reject" => Command::Reject {
+                lines: ids("line_ids")?,
+                transactions: ids("transaction_ids")?,
+            },
+            other => {
+                return Err(AppError::new(
+                    "unsupported_kind",
+                    format!("Unsupported bank-statement kind '{other}'"),
+                ))
+            }
+        })
+    }
 }
