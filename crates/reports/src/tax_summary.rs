@@ -274,7 +274,14 @@ fn fees(conn: &Connection, id: &str, cut: crate::tax_years::Cut<'_>) -> Result<V
                 normalized
             }
         };
-        let same = normalize_asset("out_asset") == normalize_asset("in_asset");
+        let (out_asset, in_asset) = (normalize_asset("out_asset"), normalize_asset("in_asset"));
+        // A pair between two different assets (BTC -> ETH) has no fee in raw
+        // units: their difference is meaningless and stays out of the
+        // Bitcoin swap-fee totals (plan 24).
+        if !kassiber_store::assets::units_comparable(&out_asset, &in_asset) {
+            continue;
+        }
+        let same = out_asset == in_asset;
         if same
             && ![
                 "chain-swap",

@@ -1,0 +1,83 @@
+[
+  {
+    "id": "workspace-other-assets-canonical-quantity",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "        if canonical_processed(conn, &id)? {\n            for row in rows(\n                conn,\n                \"SELECT location_id, asset, SUM(amount_msat)",
+    "replace": "        if false {\n            for row in rows(\n                conn,\n                \"SELECT location_id, asset, SUM(amount_msat)",
+    "expect_failing": [
+      "unpriced_holdings_count_beside_booked_ones",
+      "current_journal_holdings_carry_quantity_and_cost_basis"
+    ],
+    "rule": "Another asset's quantity and wallet count come from the canonical quantity balances, priced or not, not from journal holdings alone."
+  },
+  {
+    "id": "workspace-other-assets-partial-basis",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "            let full_basis = basis.filter(|_| complete).map(|basis| basis.basis);\n",
+    "replace": "            let full_basis = basis.map(|basis| basis.basis);\n",
+    "expect_failing": [
+      "unpriced_holdings_count_beside_booked_ones"
+    ],
+    "rule": "An unrealized result needs a basis that covers the whole quantity."
+  },
+  {
+    "id": "reports-unpriced-asset-value-unknown",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "            None if bitcoin => Some(Decimal::zero()),\n            None => None,\n",
+    "replace": "            None => Some(Decimal::zero()),\n",
+    "expect_failing": [
+      "an_unpriced_asset_has_no_value_and_leaves_totals_unknown"
+    ],
+    "rule": "A holding of another asset without a price in the book has an unknown value, never zero."
+  },
+  {
+    "id": "reports-summary-total-unknown",
+    "file": "crates/reports/src/summary.rs",
+    "find": "            *flag |= matches!(value(&row, key), Value::Null);\n",
+    "replace": "            *flag |= false;\n",
+    "expect_failing": [
+      "an_unpriced_asset_has_no_value_and_leaves_totals_unknown"
+    ],
+    "rule": "A summary total that an unvalued holding would add to is unknown, not understated."
+  },
+  {
+    "id": "reports-summary-pdf-unpriced-asset-value-unknown",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "                Some(mul(quantity, &Decimal::zero())?)\n            }\n            None => None,\n",
+    "replace": "                Some(mul(quantity, &Decimal::zero())?)\n            }\n            None => Some(Decimal::zero()),\n",
+    "expect_failing": [
+      "an_unpriced_asset_leaves_the_historical_value_unknown"
+    ],
+    "rule": "An as-of summary PDF leaves an unpriced asset's value unknown, never zero, so its totals read as incomplete."
+  },
+  {
+    "id": "reports-summary-pdf-btc-fees-bitcoin-only",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "let fee = if kassiber_store::assets::is_bitcoin(&text(row, \"asset\")) {",
+    "replace": "let fee = if true {",
+    "expect_failing": [
+      "bitcoin_totals_leave_other_assets_out"
+    ],
+    "rule": "The summary PDF's BTC fee total counts Bitcoin rows only; another asset's raw units are not sats."
+  },
+  {
+    "id": "reports-summary-pdf-transfer-btc-volume-bitcoin-only",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "THEN amount ELSE 0 END",
+    "replace": "THEN amount ELSE amount END",
+    "expect_failing": [
+      "bitcoin_totals_leave_other_assets_out"
+    ],
+    "rule": "The summary PDF's internal-transfer BTC volume counts Bitcoin rows only."
+  },
+  {
+    "id": "reports-summary-pdf-as-of-sats-bitcoin-only",
+    "file": "crates/reports/src/summary_pdf.rs",
+    "find": "let (sat, msat) = if kassiber_store::assets::is_bitcoin(&py_str_or_empty(asset)) {",
+    "replace": "let (sat, msat) = if true {",
+    "expect_failing": [
+      "bitcoin_totals_leave_other_assets_out"
+    ],
+    "rule": "An as-of summary PDF leaves another asset's sat and msat quantities empty, as the holdings report does."
+  }
+]

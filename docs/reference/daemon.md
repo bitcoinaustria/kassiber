@@ -1035,6 +1035,16 @@ book-set BTC totals use each book's de-duplicated `balanceSummary.totalBtc`.
 The desktop normalizer maps a missing or unknown block to `state="unavailable"`
 with `costBasisComplete=false`, so it never reads as complete.
 
+A book holding crypto assets other than Bitcoin also has `otherAssets`, one
+row per asset ([plan 24](../plan/24-crypto-assets.md)), never counted in the
+Bitcoin figures above. `quantity`, `quantityUnits` and `walletCount` come from
+the canonical quantity balances of current journals (`source: "books"`),
+priced or not, else from transactions (`source: "transactions"`). `costBasis`
+is what journals booked for the asset, `basisQuantity` how much of the
+quantity that covers, and `basisComplete` whether it covers all of it.
+`marketValue` is `null` without a price in the book, and `unrealized` is
+`null` unless both the price and a complete basis are known.
+
 ## Freshness jobs
 
 Kassiber's daemon owns source freshness. The desktop configures, observes,

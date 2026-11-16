@@ -20,8 +20,15 @@ pub(super) fn aggregate(portfolio: &[Value]) -> Result<Vec<Value>> {
             grouped.len() - 1
         });
         for key in ["quantity", "cost_basis", "market_value", "unrealized_pnl"] {
-            let sum = number(&grouped[index], key) + number(row, key);
-            replace(&mut grouped[index], key, Value::Float(sum));
+            // A holding without a value in the book leaves its bucket's
+            // value unknown (`null`), never understated.
+            let known = |row: &Value| !matches!(get(row, key), Some(Value::Null));
+            let sum = if known(&grouped[index]) && known(row) {
+                Value::Float(number(&grouped[index], key) + number(row, key))
+            } else {
+                Value::Null
+            };
+            replace(&mut grouped[index], key, sum);
         }
     }
     grouped.sort_by_key(|row| {
@@ -328,4 +335,53 @@ pub(super) fn context(
         generated_at,
         history,
     })
+}
+
+#[cfg(test)]
+mod aggregate_tests {
+    use super::*;
+
+    fn row(wallet: &str, asset: &str, quantity: f64, market: Value) -> Value {
+        dict([
+            ("wallet", s(wallet)),
+            ("account", s("treasury")),
+            ("asset", s(asset)),
+            ("quantity", Value::Float(quantity)),
+            ("cost_basis", Value::Float(100.0)),
+            ("market_value", market.clone()),
+            ("unrealized_pnl", market),
+        ])
+    }
+
+    /// The balances bucket of one account and asset sums every wallet's
+    /// row; a row without a value in the book leaves that value unknown.
+    #[test]
+    fn aggregate_sums_each_bucket_and_keeps_unknown_values_unknown() {
+        let balances = aggregate(&[
+            row("A", "BTC", 0.25, Value::Float(10_000.0)),
+            row("B", "BTC", 0.5, Value::Float(20_000.0)),
+            row("A", "ETH", 1.0, Value::Float(3_000.0)),
+            row("B", "ETH", 2.0, Value::Null),
+        ])
+        .unwrap();
+        let bucket = |asset: &str| {
+            balances
+                .iter()
+                .find(|row| text(row, "asset") == asset)
+                .unwrap()
+                .clone()
+        };
+        let btc = bucket("BTC");
+        assert_eq!(value(&btc, "quantity"), &Value::Float(0.75));
+        assert_eq!(
+            value(&btc, "quantity_msat"),
+            &Value::Int(75_000_000_000i64.into())
+        );
+        assert_eq!(value(&btc, "cost_basis"), &Value::Float(200.0));
+        assert_eq!(value(&btc, "market_value"), &Value::Float(30_000.0));
+        let eth = bucket("ETH");
+        assert_eq!(value(&eth, "quantity"), &Value::Float(3.0));
+        assert_eq!(value(&eth, "market_value"), &Value::Null);
+        assert_eq!(value(&eth, "unrealized_pnl"), &Value::Null);
+    }
 }

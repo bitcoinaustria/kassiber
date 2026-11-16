@@ -680,6 +680,7 @@ fn read(
                 book,
             )?,
         );
+        payload = projections::partial_basis_for_ai(kind, payload);
         if SAFETY_COMPOSITES.contains(&kind) {
             if let Some(mut safety @ Value::Dict(_)) = get(&payload, "safety").cloned() {
                 let contacted = auto_sync_data.is_some();

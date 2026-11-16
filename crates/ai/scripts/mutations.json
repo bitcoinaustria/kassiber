@@ -2246,5 +2246,15 @@
       "without_owned_by_a_prefixed_id_takes_only_its_listed_base_family"
     ],
     "rule": "Without owned_by and without a listed base, a prefixed id has no family: nothing is guessed."
+  },
+  {
+    "id": "ai-other-asset-partial-basis",
+    "file": "crates/ai/src/projections.rs",
+    "find": "            if get(item, \"basisComplete\") != Some(&Value::Bool(true)) {\n",
+    "replace": "            if false {\n",
+    "expect_failing": [
+      "a_partial_basis_of_another_asset_never_reads_as_the_full_one"
+    ],
+    "rule": "Another asset's cost basis that does not cover its whole quantity reaches the assistant only as partialCostBasis, never as costBasis."
   }
 ]
