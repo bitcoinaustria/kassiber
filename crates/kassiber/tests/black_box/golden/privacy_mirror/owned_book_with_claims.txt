@@ -16,7 +16,7 @@ exit 0
       "query": {
 … [9874 bytes, 312 lines fnv128 f00b1235327a0b8b260f498a8d1f76e9]
 === book changes after the step
-- (116 tables, 96 empty)
+- (117 tables, 97 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:out"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"bitcoin:main:record:out"
@@ -28,7 +28,7 @@ exit 0
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
-… [53783 bytes, 101 lines fnv128 a8c6f34181e48f35d14a6dbecf5010b5]
+… [53783 bytes, 101 lines fnv128 f2c3ed3bff78b26c3a8bbcac33a66275]
 $ --machine reports privacy-mirror
 exit 0
 --- stdout
@@ -237,10 +237,10 @@ $ daemon
 - chain_index_labels: profile_id=t:"p" | id=t:"dataset:pack:2" | payload_json=t:"{\"accounting_authority\":false,\"attribution_method\":\"declared\",\"category\":\"service\",\"chain\":\"bitcoin\",\"cluster_defining\":false,\"confidence\":\"imported\",\"content_sha256\":\"fixture\",\"dataset_id\":\"pack\",\"dataset_status\":\"active\",\"dataset_version\":\"one\",\"evidence_level\":\"sourced_claim\",\"id\":\"dataset:pack:2\",\"label\":\"Declared entity\",\"license\":\"Local fixture\",\"network\":\"main\",\"node_ids\":[\"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\"],\"revision\":1,\"source\":\"Declared source\",\"source_record\":{\"retained\":\"\\u96ea\"},\"subject\":\"out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\",\"valid_from\":null,\"valid_until\":null,\"visibility\":\"public\"}"
 - chain_index_labels: profile_id=t:"p" | id=t:"dataset:pack:3" | payload_json=t:"{\"accounting_authority\":false,\"attribution_method\":\"declared\",\"category\":\"service\",\"chain\":\"bitcoin\",\"cluster_defining\":false,\"confidence\":\"imported\",\"content_sha256\":\"fixture\",\"dataset_id\":\"pack\",\"dataset_status\":\"active\",\"dataset_version\":\"one\",\"evidence_level\":\"sourced_claim\",\"id\":\"dataset:pack:3\",\"label\":\"Declared entity\",\"license\":\"Local fixture\",\"network\":\"main\",\"node_ids\":[\"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\"],\"revision\":1,\"source\":\"Declared source\",\"source_record\":{\"retained\":\"\\u96ea\"},\"subject\":\"script:00142222222222222222222222222222222222222222\",\"valid_from\":null,\"valid_until\":null,\"visibility\":\"public\"}"
 - chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:34 | revision=i:2 | snapshot_id=t:"780f789e0ef57641074cc8c299b7ae6aa0921be9796e9872eb2976f077be5011" | coverage_json=t:"{\"… [1624 bytes fnv128 7b98e03191916f5765aff287477a9d7c]
-- (116 tables, 88 empty)
+- (117 tables, 89 empty)
 + chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:35 | revision=i:3 | snapshot_id=t:"288759279caa4575e907add9b779ad1648d85d2d6ce96383c4a5e6af21497902" | coverage_json=t:"{\"… [1624 bytes fnv128 a611f48f3c8bded1e68a06b223fbacd4]
-+ (116 tables, 90 empty)
-… [6362 bytes, 10 lines fnv128 61fae1bfc169f31b09cc09ccdc833719]
++ (117 tables, 91 empty)
+… [6362 bytes, 10 lines fnv128 640e5e9b928a9f282b1644868ff7a5f9]
 # offline=true
 $ --machine reports privacy-mirror
 exit 0
@@ -259,7 +259,7 @@ exit 0
       "query": {
 … [9888 bytes, 312 lines fnv128 35f66125291baa620845b8ff770432db]
 === book changes after the step
-- (116 tables, 96 empty)
+- (117 tables, 97 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:out"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"bitcoin:main:record:out"
@@ -271,7 +271,7 @@ exit 0
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
-… [53783 bytes, 101 lines fnv128 a8c6f34181e48f35d14a6dbecf5010b5]
+… [53783 bytes, 101 lines fnv128 f2c3ed3bff78b26c3a8bbcac33a66275]
 $ --machine reports privacy-mirror
 exit 0
 --- stdout
@@ -480,7 +480,7 @@ $ daemon
 - chain_index_labels: profile_id=t:"p" | id=t:"dataset:pack:2" | payload_json=t:"{\"accounting_authority\":false,\"attribution_method\":\"declared\",\"category\":\"service\",\"chain\":\"bitcoin\",\"cluster_defining\":false,\"confidence\":\"imported\",\"content_sha256\":\"fixture\",\"dataset_id\":\"pack\",\"dataset_status\":\"active\",\"dataset_version\":\"one\",\"evidence_level\":\"sourced_claim\",\"id\":\"dataset:pack:2\",\"label\":\"Declared entity\",\"license\":\"Local fixture\",\"network\":\"main\",\"node_ids\":[\"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\"],\"revision\":1,\"source\":\"Declared source\",\"source_record\":{\"retained\":\"\\u96ea\"},\"subject\":\"out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\",\"valid_from\":null,\"valid_until\":null,\"visibility\":\"public\"}"
 - chain_index_labels: profile_id=t:"p" | id=t:"dataset:pack:3" | payload_json=t:"{\"accounting_authority\":false,\"attribution_method\":\"declared\",\"category\":\"service\",\"chain\":\"bitcoin\",\"cluster_defining\":false,\"confidence\":\"imported\",\"content_sha256\":\"fixture\",\"dataset_id\":\"pack\",\"dataset_status\":\"active\",\"dataset_version\":\"one\",\"evidence_level\":\"sourced_claim\",\"id\":\"dataset:pack:3\",\"label\":\"Declared entity\",\"license\":\"Local fixture\",\"network\":\"main\",\"node_ids\":[\"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\"],\"revision\":1,\"source\":\"Declared source\",\"source_record\":{\"retained\":\"\\u96ea\"},\"subject\":\"script:00142222222222222222222222222222222222222222\",\"valid_from\":null,\"valid_until\":null,\"visibility\":\"public\"}"
 - chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:34 | revision=i:2 | snapshot_id=t:"780f789e0ef57641074cc8c299b7ae6aa0921be9796e9872eb2976f077be5011" | coverage_json=t:"{\"… [1624 bytes fnv128 7b98e03191916f5765aff287477a9d7c]
-- (116 tables, 88 empty)
+- (117 tables, 89 empty)
 + chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:35 | revision=i:3 | snapshot_id=t:"288759279caa4575e907add9b779ad1648d85d2d6ce96383c4a5e6af21497902" | coverage_json=t:"{\"… [1624 bytes fnv128 a611f48f3c8bded1e68a06b223fbacd4]
-+ (116 tables, 90 empty)
-… [6362 bytes, 10 lines fnv128 61fae1bfc169f31b09cc09ccdc833719]
++ (117 tables, 91 empty)
+… [6362 bytes, 10 lines fnv128 640e5e9b928a9f282b1644868ff7a5f9]

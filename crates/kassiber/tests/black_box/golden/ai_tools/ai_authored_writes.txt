@@ -103,13 +103,13 @@ $ daemon
 - journal_quarantines: transaction_id=t:"c" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_fee_price" | detail_json=t:"{}" | created_at=t:"2025"
 - profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 fc6dc2cd07900c94490b7b655f416e22]
 - transactions: id=t:"c" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"exchange" | external… [1134 bytes fnv128 e8ed9bc854cda8689d13e926bb116c41]
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_clock: id=i:1 | revision=i:37
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:37
 + chain_index_dirty: source_table=t:"transactions" | source_key=i:3 | revision=i:35
 + profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 b40751319ae66ada11caf1089733f927]
 + transaction_edit_events: id=t:"<uuid#1>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=… [445 bytes fnv128 af40849b4f8c5018bd3d37e583c4e610]
-… [4563 bytes, 15 lines fnv128 433cc846b887c3627b87dfcd2e1a798b]
+… [4563 bytes, 15 lines fnv128 3320265715de9e665fef50eeef3ab9ad]
 # fixture desktop
 $ daemon
 > #0
@@ -144,10 +144,10 @@ $ daemon
 - transaction_tags: transaction_id=t:"a" | tag_id=t:"z"
 - transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"cold" | external_id=… [1267 bytes fnv128 8942fd4d394e9581c9ec9c0858256ee6]
 - transactions: id=t:"g" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"cold" | external_id=… [1130 bytes fnv128 6a5bc293557d1b213c69cde1012eae18]
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_clock: id=i:1 | revision=i:40
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:40
-… [8398 bytes, 25 lines fnv128 9136c99258cbb045b2d4ab1ace3a5d84]
+… [8398 bytes, 25 lines fnv128 7ee9bbff883f3b0dc288723df5a7d154]
 # fixture desktop
 $ daemon
 > #0
@@ -193,7 +193,7 @@ $ daemon
 - journal_account_holdings: id=t:"zero" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:0 | cost_basis=r:5.0 | created_at=t:"fixed"
 - journal_custody_decisions: decision_id=t:"00000000000000000000000000000000000000000000000000000000… [966 bytes fnv128 181bafffd4f91b5403ae71c7bdd17f1c]
 - journal_custody_decisions: decision_id=t:"00000000000000000000000000000000000000000000000000000000… [973 bytes fnv128 83c43e1bdb8a0882a355135f5f359cd6]
-… [24520 bytes, 63 lines fnv128 5b65fc57d1534f073694d74c3e7b965b]
+… [24521 bytes, 63 lines fnv128 3b222bd0f220b84f9a8469b8159e1e05]
 # fixture reports
 $ daemon
 > #0
@@ -221,7 +221,7 @@ $ daemon
 - journal_account_holdings: id=t:"negative" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:-1 | cost_basis=r:5.0 | created_at=t:"fixed"
 - journal_account_holdings: id=t:"zero" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:0 | cost_basis=r:5.0 | created_at=t:"fixed"
 - journal_custody_decisions: decision_id=t:"00000000000000000000000000000000000000000000000000000000… [966 bytes fnv128 181bafffd4f91b5403ae71c7bdd17f1c]
-… [26154 bytes, 65 lines fnv128 7b5346977e544610220cdcab1887370d]
+… [26155 bytes, 65 lines fnv128 3fb70bef5aeb0497b983b5bf9df9ec19]
 # fixture reports
 $ daemon
 > #0
@@ -256,10 +256,10 @@ $ daemon
 - transaction_tags: transaction_id=t:"in" | tag_id=t:"tag2"
 - transactions: id=t:"in" | workspace_id=t:"ws" | profile_id=t:"p" | wallet_id=t:"cold" | external_i… [1163 bytes fnv128 820371228759605579c6cf01a8dfdac0]
 - transactions: id=t:"out" | workspace_id=t:"ws" | profile_id=t:"p" | wallet_id=t:"cold" | external_… [1121 bytes fnv128 235fee0078531b1039352288be82900e]
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + chain_index_clock: id=i:1 | revision=i:33
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:33
-… [8166 bytes, 25 lines fnv128 2d82d2f252a1e99651b5b6607a7e0b79]
+… [8167 bytes, 25 lines fnv128 fcf2f1567299fc78a2ecc6e3ded9fbeb]
 # fixture reports
 $ daemon
 > #0

@@ -28,6 +28,12 @@
     ],
     [
       "index",
+      "idx_balance_checkpoints_wallet",
+      "balance_checkpoints",
+      "CREATE INDEX idx_balance_checkpoints_wallet\n    ON balance_checkpoints(profile_id, wallet_id, as_of)"
+    ],
+    [
+      "index",
       "idx_bip329_labels_profile_created",
       "bip329_labels",
       "CREATE INDEX idx_bip329_labels_profile_created\n            ON bip329_labels(profile_id, created_at DESC, id DESC)\n        "
@@ -919,6 +925,12 @@
       "backends",
       "backends",
       "CREATE TABLE backends (\n    name TEXT PRIMARY KEY,\n    kind TEXT NOT NULL,\n    chain TEXT,\n    network TEXT,\n    url TEXT NOT NULL,\n    auth_header TEXT,\n    token TEXT,\n    batch_size INTEGER,\n    timeout INTEGER,\n    tor_proxy TEXT,\n    config_json TEXT NOT NULL DEFAULT '{}',\n    notes TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL\n)"
+    ],
+    [
+      "table",
+      "balance_checkpoints",
+      "balance_checkpoints",
+      "CREATE TABLE balance_checkpoints (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,\n    asset TEXT NOT NULL CHECK(asset IN ('BTC', 'LBTC')),\n    as_of TEXT NOT NULL,\n    amount_msat INTEGER NOT NULL CHECK(typeof(amount_msat) = 'integer' AND amount_msat >= 0),\n    origin TEXT NOT NULL CHECK(origin IN ('api', 'file', 'chain', 'node', 'manual')),\n    scope TEXT,\n    origin_ref TEXT,\n    attachment_id TEXT REFERENCES attachments(id) ON DELETE SET NULL,\n    note TEXT,\n    created_at TEXT NOT NULL\n)"
     ],
     [
       "table",

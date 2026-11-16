@@ -891,11 +891,11 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + source_funds_sources: id=t:"<uuid#2>" | workspace_id=t:"w" | profile_id=t:"p" | source_type=t:"fia… [363 bytes fnv128 b9790356d55230064616e8a8c62f0a83]
 + source_funds_sources: id=t:"<uuid#1>" | workspace_id=t:"w" | profile_id=t:"p" | source_type=t:"fia… [339 bytes fnv128 8d99914fe65f93570b04261f1f5019b5]
 + source_funds_sources: id=t:"<uuid#3>" | workspace_id=t:"w" | profile_id=t:"p" | source_type=t:"gif… [353 bytes fnv128 03bec16ecc65bc87cf4c5d314307b692]
-+ (116 tables, 104 empty)
++ (117 tables, 105 empty)
 # fixture desktop
 $ daemon
 > #0
@@ -954,7 +954,7 @@ $ daemon
 - chain_index_clock: id=i:1 | revision=i:34
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
 - profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 fc6dc2cd07900c94490b7b655f416e22]
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_clock: id=i:1 | revision=i:38
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:38
 + custody_authored_evidence_snapshots: workspace_id=t:"w" | profile_id=t:"p" | subject_kind=t:"custo… [951 bytes fnv128 8c151d72d4793f566fcb77736115e253]
@@ -963,7 +963,7 @@ $ daemon
 + custody_component_evidence_commitments: id=t:"afb5aebdec2d899fb107a78fabdeb031bbda12193411646f5b4b… [429 bytes fnv128 4ab29159afdbecd14a62d1f796b34632]
 + custody_component_legs: id=t:"0790989a-ec50-5d6c-ac9c-2772c808e667" | component_id=t:"43faf282-fb3… [603 bytes fnv128 5cdfc204b736609b6c90b7c0c1a874f9]
 + custody_component_legs: id=t:"80b7c4fb-7201-56f5-a670-1e13b5b90336" | component_id=t:"43faf282-fb3… [611 bytes fnv128 75f3d8080e0513a2eac22e6a01eb2de6]
-… [6283 bytes, 16 lines fnv128 cc409cebed55d8e35b607f9eb44c8536]
+… [6283 bytes, 16 lines fnv128 f091c81badd3d10a84c5051722cbe52e]
 # fixture desktop
 $ daemon
 > #0
@@ -1018,12 +1018,12 @@ $ daemon
 - chain_index_clock: id=i:1 | revision=i:34
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
 - profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 fc6dc2cd07900c94490b7b655f416e22]
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_clock: id=i:1 | revision=i:36
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:36
 + profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 b40751319ae66ada11caf1089733f927]
 + transaction_pair_dismissals: id=t:"<uuid#4>" | workspace_id=t:"w" | profile_id=t:"p" | out_transaction_id=t:"g" | in_transaction_id=t:"a" | reason=NULL | created_at=t:"2026-03-04T05:06:07Z" | expires_at=t:"<later>"
-+ (116 tables, 104 empty)
++ (117 tables, 105 empty)
 # fixture desktop
 $ daemon
 > #0
@@ -1041,9 +1041,9 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + swap_matching_rules: id=t:"<uuid#4>" | workspace_id=t:"w" | profile_id=t:"p" | name=NULL | predicate_json=t:"{}" | kind=t:"manual" | policy=t:"carrying-value" | enabled=i:1 | created_at=t:"2026-03-04T05:06:07Z" | updated_at=t:"2026-03-04T05:06:07Z"
-+ (116 tables, 104 empty)
++ (117 tables, 105 empty)
 # fixture desktop
 $ daemon
 > #0
@@ -1083,10 +1083,10 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + saved_views: id=t:"<uuid#6>" | workspace_id=t:"w" | profile_id=t:"p" | surface=t:"transactions" | name=t:"AI view" | filter_json=t:"{}" | created_at=t:"<now>" | updated_at=t:"<now>"
 + saved_views: id=t:"<uuid#5>" | workspace_id=t:"w" | profile_id=t:"p" | surface=t:"x" | name=t:"x" | filter_json=t:"{}" | created_at=t:"<now>" | updated_at=t:"<now>"
-+ (116 tables, 104 empty)
++ (117 tables, 105 empty)
 # fixture desktop
 $ daemon
 > #0
@@ -1111,12 +1111,12 @@ $ daemon
 - chain_index_clock: id=i:1 | revision=i:34
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
 - profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 fc6dc2cd07900c94490b7b655f416e22]
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_clock: id=i:1 | revision=i:36
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:36
 + loan_legs: id=t:"<uuid#7>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"g" | loan_id=NULL | role=t:"collateral_lock" | note=NULL | deleted_at=NULL | created_at=t:"<now>"
 + profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 b40751319ae66ada11caf1089733f927]
-+ (116 tables, 104 empty)
++ (117 tables, 105 empty)
 # fixture desktop
 $ daemon
 > #0
@@ -1192,12 +1192,12 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + attachments: id=t:"<uuid#10>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | att… [462 bytes fnv128 ad4702b0249a1d60fbec53f8c9124870]
 + attachments: id=t:"<uuid#11>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | att… [462 bytes fnv128 e7f30805ec9c3bf3e98647a457fd10aa]
 + attachments: id=t:"<uuid#8>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | atta… [458 bytes fnv128 0e2bb6b15c5c2372a4630e515a48c6da]
 + attachments: id=t:"<uuid#9>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | atta… [458 bytes fnv128 e27522d021458ee9a8f11174dbeb9b5e]
-+ (116 tables, 104 empty)
++ (117 tables, 105 empty)
 # fixture desktop
 $ daemon
 > #0
@@ -1251,11 +1251,11 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + source_funds_cases: id=t:"<uuid#12>" | workspace_id=t:"w" | profile_id=t:"p" | target_transaction_… [13520 bytes fnv128 b20f7e800f772783f901a48c7606ba1f]
 + source_funds_snapshots: id=t:"<uuid#13>" | case_id=t:"<uuid#12>" | snapshot_hash=t:"3476ea58dfead7… [13117 bytes fnv128 5d79a208859e9b5443d28cb05b64d6c7]
-+ (116 tables, 103 empty)
-… [26691 bytes, 4 lines fnv128 cdae01c4ef72479832386d1d9f71857d]
++ (117 tables, 104 empty)
+… [26691 bytes, 4 lines fnv128 00f5e3d80803b4ba2e64f31865fd3da9]
 # fixture desktop
 $ daemon
 > #0
@@ -1297,9 +1297,9 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + external_documents: id=t:"<uuid#14>" | workspace_id=t:"w" | profile_id=t:"p" | document_type=t:"in… [390 bytes fnv128 2cf16353b92b9be5e6dd486c4fd9c368]
-+ (116 tables, 104 empty)
++ (117 tables, 105 empty)
 # fixture desktop
 $ daemon
 > #0
@@ -1670,14 +1670,14 @@ $ daemon
 - chain_index_clock: id=i:1 | revision=i:27
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
 - profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + chain_index_clock: id=i:1 | revision=i:28
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:28
 + freshness_jobs: id=t:"<uuid#15>" | profile_id=t:"p" | job_type=t:"journal_refresh" | source_key=t:… [601 bytes fnv128 344fd172861afc28408173da179354e8]
 + freshness_source_states: profile_id=t:"p" | source_key=t:"journals:p" | source_type=t:"journals" |… [502 bytes fnv128 c736e581830143898e2823c5b383a1f1]
 + profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [557 bytes fnv128 461dff0c614778e1d377fc50448403ab]
-+ (116 tables, 97 empty)
-… [2522 bytes, 10 lines fnv128 5f8adb6ee02c0baa5a043675723ff446]
++ (117 tables, 98 empty)
+… [2523 bytes, 10 lines fnv128 8bbbe9538cd2af8ee9d0dd1a904fd84e]
 # fixture reports
 $ daemon
 > #0
@@ -1731,11 +1731,11 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + source_funds_sources: id=t:"<uuid#17>" | workspace_id=t:"ws" | profile_id=t:"p" | source_type=t:"f… [365 bytes fnv128 93170561394712bfbd99680b003536ea]
 + source_funds_sources: id=t:"<uuid#16>" | workspace_id=t:"ws" | profile_id=t:"p" | source_type=t:"f… [341 bytes fnv128 03520b3e56eeb48ed502fb170dcc7208]
 + source_funds_sources: id=t:"<uuid#18>" | workspace_id=t:"ws" | profile_id=t:"p" | source_type=t:"g… [355 bytes fnv128 f5e63e7eb40d8f26afe16ce9ff97aa47]
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)
 # fixture reports
 $ daemon
 > #0
@@ -1767,10 +1767,10 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + source_funds_links: id=t:"<uuid#19>" | workspace_id=t:"ws" | profile_id=t:"p" | from_source_id=NUL… [673 bytes fnv128 e562d13d824615ce8ee9fba9ad5d6dcb]
 + source_funds_links: id=t:"<uuid#20>" | workspace_id=t:"ws" | profile_id=t:"p" | from_source_id=NUL… [677 bytes fnv128 55a37ef5797f217b43b4b6effa00e573]
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)
 # fixture reports
 $ daemon
 > #0
@@ -1797,7 +1797,7 @@ $ daemon
 - chain_index_clock: id=i:1 | revision=i:27
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
 - profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + chain_index_clock: id=i:1 | revision=i:31
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
 + custody_authored_evidence_snapshots: workspace_id=t:"ws" | profile_id=t:"p" | subject_kind=t:"cust… [952 bytes fnv128 1543f7a701c68e7d78dd381f2acf2e90]
@@ -1806,7 +1806,7 @@ $ daemon
 + custody_component_evidence_commitments: id=t:"72df14404237a6bcb1353130945a88266d8cc6dd418b626daa85… [430 bytes fnv128 37b89c6f54d6429706a4254011c51caa]
 + custody_component_legs: id=t:"0ad3271c-4aae-53af-88ce-82c6fe549e50" | component_id=t:"49c84233-cc6… [611 bytes fnv128 6682667166f18bbe5eba3c70d2807b47]
 + custody_component_legs: id=t:"56e03302-1a6e-5afc-ba5e-821d5f904995" | component_id=t:"49c84233-cc6… [615 bytes fnv128 7d5e52c15e99e31fb35411c73932d8f5]
-… [6342 bytes, 16 lines fnv128 08f4923397c07ecb2fdf2d65239c72e1]
+… [6343 bytes, 16 lines fnv128 8ee0f2bf525e6b48d20b441ea04bc257]
 # fixture reports
 $ daemon
 > #0
@@ -1861,12 +1861,12 @@ $ daemon
 - chain_index_clock: id=i:1 | revision=i:27
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
 - profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + chain_index_clock: id=i:1 | revision=i:29
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:29
 + profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [538 bytes fnv128 612d8e9317bf4f1f7decdb0e99bf6470]
 + transaction_pair_dismissals: id=t:"<uuid#4>" | workspace_id=t:"ws" | profile_id=t:"p" | out_transaction_id=t:"out" | in_transaction_id=t:"in" | reason=NULL | created_at=t:"2026-03-04T05:06:07Z" | expires_at=t:"<later>"
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)
 # fixture reports
 $ daemon
 > #0
@@ -1884,9 +1884,9 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + swap_matching_rules: id=t:"<uuid#4>" | workspace_id=t:"ws" | profile_id=t:"p" | name=NULL | predicate_json=t:"{}" | kind=t:"manual" | policy=t:"carrying-value" | enabled=i:1 | created_at=t:"2026-03-04T05:06:07Z" | updated_at=t:"2026-03-04T05:06:07Z"
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)
 # fixture reports
 $ daemon
 > #0
@@ -1926,10 +1926,10 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + saved_views: id=t:"<uuid#22>" | workspace_id=t:"ws" | profile_id=t:"p" | surface=t:"transactions" | name=t:"AI view" | filter_json=t:"{}" | created_at=t:"<now>" | updated_at=t:"<now>"
 + saved_views: id=t:"<uuid#21>" | workspace_id=t:"ws" | profile_id=t:"p" | surface=t:"x" | name=t:"x" | filter_json=t:"{}" | created_at=t:"<now>" | updated_at=t:"<now>"
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)
 # fixture reports
 $ daemon
 > #0
@@ -1954,12 +1954,12 @@ $ daemon
 - chain_index_clock: id=i:1 | revision=i:27
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
 - profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + chain_index_clock: id=i:1 | revision=i:29
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:29
 + loan_legs: id=t:"<uuid#23>" | workspace_id=t:"ws" | profile_id=t:"p" | transaction_id=t:"out" | loan_id=NULL | role=t:"collateral_lock" | note=NULL | deleted_at=NULL | created_at=t:"<now>"
 + profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [538 bytes fnv128 612d8e9317bf4f1f7decdb0e99bf6470]
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)
 # fixture reports
 $ daemon
 > #0
@@ -2035,12 +2035,12 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + attachments: id=t:"<uuid#26>" | workspace_id=t:"ws" | profile_id=t:"p" | transaction_id=t:"in" | a… [464 bytes fnv128 8683cb9750f79db3070490f645f7f0c5]
 + attachments: id=t:"<uuid#27>" | workspace_id=t:"ws" | profile_id=t:"p" | transaction_id=t:"in" | a… [464 bytes fnv128 cf9bcfbb7517cbf988514a5e3563c413]
 + attachments: id=t:"<uuid#24>" | workspace_id=t:"ws" | profile_id=t:"p" | transaction_id=t:"in" | a… [462 bytes fnv128 0e299d0ebf054bc9ed6bdbfbf41cc47b]
 + attachments: id=t:"<uuid#25>" | workspace_id=t:"ws" | profile_id=t:"p" | transaction_id=t:"in" | a… [462 bytes fnv128 5861266f3d666d4615aa5b4e2168d9c5]
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)
 # fixture reports
 $ daemon
 > #0
@@ -2082,10 +2082,10 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + source_funds_links: id=t:"<uuid#28>" | workspace_id=t:"ws" | profile_id=t:"p" | from_source_id=NUL… [673 bytes fnv128 93cd04a63f1852e8651ed14068b352ff]
 + source_funds_links: id=t:"<uuid#29>" | workspace_id=t:"ws" | profile_id=t:"p" | from_source_id=NUL… [677 bytes fnv128 3b89f0f614ae2d842a948a90034709f2]
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)
 # fixture reports
 $ daemon
 > #0
@@ -2097,11 +2097,11 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + source_funds_cases: id=t:"<uuid#30>" | workspace_id=t:"ws" | profile_id=t:"p" | target_transaction… [12503 bytes fnv128 7d604516a6f23f24cb498e4c10fd4f74]
 + source_funds_snapshots: id=t:"<uuid#31>" | case_id=t:"<uuid#30>" | snapshot_hash=t:"4591859a35e253… [12166 bytes fnv128 d17b18060cbf9e079fa48ca8d6584187]
-+ (116 tables, 97 empty)
-… [24721 bytes, 4 lines fnv128 51069be36c81cf6b8ae8ccf666669608]
++ (117 tables, 98 empty)
+… [24722 bytes, 4 lines fnv128 f1bbbe0f57747d9772e5f65e41a18748]
 # fixture reports
 $ daemon
 > #0
@@ -2143,9 +2143,9 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + external_documents: id=t:"<uuid#32>" | workspace_id=t:"ws" | profile_id=t:"p" | document_type=t:"i… [391 bytes fnv128 145bdf635d9b4e39b4020cb89a394f55]
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)
 # fixture reports
 $ daemon
 > #0
@@ -2189,7 +2189,7 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + filed_report_chain_captures: snapshot_id=t:"<uuid#33>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
 + filed_report_chain_captures: snapshot_id=t:"<uuid#34>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
 + filed_report_chain_captures: snapshot_id=t:"<uuid#35>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
@@ -2200,8 +2200,8 @@ $ daemon
 + filed_report_snapshots: id=t:"<uuid#33>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [798 bytes fnv128 417d21c6a597f6b6880969867eb29d13]
 + filed_report_snapshots: id=t:"<uuid#35>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [799 bytes fnv128 80be9f231f73f8ef88460f54e06d2001]
 + filed_report_snapshots: id=t:"<uuid#36>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [745 bytes fnv128 53b64c6f3198863db3910a812f72469d]
-+ (116 tables, 97 empty)
-… [4674 bytes, 12 lines fnv128 bb808202f0b55e423171be7f5a86db93]
++ (117 tables, 98 empty)
+… [4675 bytes, 12 lines fnv128 fc60cd74078199a3a07f27b07591dd87]
 # fixture reports
 $ daemon
 > #0

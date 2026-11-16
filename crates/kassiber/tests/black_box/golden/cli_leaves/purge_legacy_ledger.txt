@@ -87,8 +87,8 @@ exit 0
 - gl_entries: id=t:"entry-2" | profile_id=t:"p" | description=t:"Close"
 - gl_evidence: id=t:"ev-1" | profile_id=t:"p" | content=b:00 | source_document_id=t:"doc-1"
 - gl_lines: entry_id=t:"entry-1" | profile_id=t:"p" | ordinal=i:1
-- (121 tables, 101 empty)
-+ (116 tables, 100 empty)
+- (122 tables, 102 empty)
++ (117 tables, 101 empty)
 $ --machine maintenance purge-legacy-ledger
 exit 0
 --- stdout
