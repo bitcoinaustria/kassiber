@@ -55,6 +55,9 @@ run cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-target
 run cargo test -p kassiber --features test-harness --locked
 run cargo build -p kassiber --features test-harness --locked
 run scripts/check-no-test-tape.sh --expect-tape target/debug/kassiber
+# The desktop app is its own Cargo workspace (the root one excludes it): format, clippy with
+# and without Rune's agent tooling, and its unit tests (the scene check runs on demand).
+run crates/kassiber-desktop/packaging/ci/rune-checks.sh --skip-scenes
 # The parity sessions recorded where Rust and Python agreed
 # (docs/reference/testing.md#replaying-the-recorded-sessions).
 run scripts/replay-sessions.sh
