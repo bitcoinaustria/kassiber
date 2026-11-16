@@ -26,6 +26,7 @@ It only taps controls that open overlays (menus, selects, dialogs, sheets): noth
 tests a connection or talks to a provider. Frames go to a temporary directory, removed after.
 """
 
+from pathlib import Path
 import argparse
 import json
 import os
@@ -140,7 +141,7 @@ def script_for(steps, tail=1.6):
 
 def run(binary, o, tmp, steps, frames, scale):
     sp = os.path.join(tmp, "script.json")
-    json.dump(script_for(steps, 1.6 if frames else 1.2), open(sp, "w"))
+    Path(sp).write_text(json.dumps(script_for(steps, 1.6 if frames else 1.2)), encoding="utf-8")
     tr = os.path.join(tmp, "t.jsonl")
     cmd = [binary, "--size", o["size"], "--scale", str(scale), "--script", sp, "--trace", tr]
     if frames:
@@ -148,7 +149,7 @@ def run(binary, o, tmp, steps, frames, scale):
     r = subprocess.run(cmd + o["args"], capture_output=True, text=True, cwd=tmp)
     if r.returncode != 0:
         raise RuntimeError("run failed: " + (r.stderr.strip().splitlines() or ["?"])[-1][:160])
-    return [json.loads(line) for line in open(tr)][1:]
+    return [json.loads(line) for line in Path(tr).read_text(encoding="utf-8").splitlines()][1:]
 
 
 def resolve(binary, o, tmp, scale):
@@ -176,7 +177,7 @@ def crop_frames(paths, rect, tmp):
     subprocess.run(["sips", "-s", "format", "bmp", "-c", str(h), str(w), "--cropOffset", str(y), str(x)] + paths + ["--out", out], capture_output=True, check=True)
     imgs = []
     for p in paths:
-        data = open(os.path.join(out, os.path.basename(p)[:-4] + ".bmp"), "rb").read()
+        data = Path(out, os.path.basename(p)[:-4] + ".bmp").read_bytes()
         off, = struct.unpack_from("<I", data, 10)
         bw, bh, _, bpp = struct.unpack_from("<iiHH", data, 18)
         step = bpp // 8

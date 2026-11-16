@@ -4,6 +4,7 @@ Reading and resizing go through macOS `sips` (PNG → BMP); comparison and the h
 Python; PNG output is stdlib zlib. With `magick` on PATH, diff.py uses ImageMagick instead.
 """
 
+from pathlib import Path
 import os
 import shutil
 import struct
@@ -19,7 +20,7 @@ def read_rgb(path, w, h):
     with tempfile.TemporaryDirectory() as tmp:
         bmp = os.path.join(tmp, "x.bmp")
         subprocess.run(["sips", "-s", "format", "bmp", "-z", str(h), str(w), path, "--out", bmp], capture_output=True, check=True)
-        data = open(bmp, "rb").read()
+        data = Path(bmp).read_bytes()
     off, = struct.unpack_from("<I", data, 10)
     bw, bh, _, bpp = struct.unpack_from("<iiHH", data, 18)
     top_down = bh < 0

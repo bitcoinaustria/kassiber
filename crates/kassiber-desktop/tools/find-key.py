@@ -1,5 +1,6 @@
 # Lists i18n keys whose English value matches each argument (exact, then case-insensitive substring).
 # Usage: python3 -I tools/find-key.py "Text one" "Text two" ...
+from pathlib import Path
 import json, os, sys
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "assets", "i18n", "locales")
 def flat(prefix, v, out):
@@ -15,7 +16,7 @@ en, de = {}, {}
 for lang, out in (("en", en), ("de", de)):
     d = os.path.join(root, lang)
     for f in sorted(os.listdir(d)):
-        flat(f[:-5] + ":", json.load(open(os.path.join(d, f))), out)
+        flat(f[:-5] + ":", json.loads(Path(d, f).read_text(encoding="utf-8")), out)
 for q in sys.argv[1:]:
     exact = [k for k, v in en.items() if v == q]
     print(f"== {q!r}")

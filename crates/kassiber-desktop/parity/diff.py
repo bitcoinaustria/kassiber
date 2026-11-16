@@ -17,6 +17,7 @@ Per scene of scenes.json, given `<tauri-dir>/<scene>.png|.dom.json` and
 Writes `<out-dir>/report.md`, `<out-dir>/report.json` and `<out-dir>/img/<scene>.{side.jpg,heat.png}`.
 """
 
+from pathlib import Path
 import json
 import math
 import os
@@ -137,7 +138,7 @@ def norm(t):
 
 
 def load_tauri(path):
-    d = json.load(open(path))
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
     texts = []
     for t in d["texts"]:
         n = norm(t["text"])
@@ -157,7 +158,7 @@ INTERACTIVE = {"button", "link", "menuitem", "menuitemcheckbox", "menuitemradio"
 
 
 def load_rune(path, vw, vh):
-    d = json.load(open(path))
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
     texts, containers = [], []
     for e in d["elements"]:
         r = e.get("rect") or [0, 0, 0, 0]
@@ -437,11 +438,11 @@ def scene_report(sc, tdir, rdir, img_dir, W, H):
 def main():
     tdir, rdir, out = sys.argv[1:4]
     only = [s for s in os.environ.get("ONLY", "").split(",") if s]
-    cfg = json.load(open(os.path.join(HERE, "scenes.json")))
+    cfg = json.loads(Path(HERE, "scenes.json").read_text(encoding="utf-8"))
     extra = os.path.join(HERE, "scenes.d")
     for f in sorted(os.listdir(extra)) if os.path.isdir(extra) else []:
         if f.endswith(".json"):
-            cfg["scenes"] += json.load(open(os.path.join(extra, f)))["scenes"]
+            cfg["scenes"] += json.loads(Path(extra, f).read_text(encoding="utf-8"))["scenes"]
     img = os.path.join(out, "img")
     os.makedirs(img, exist_ok=True)
     reps = []
@@ -451,7 +452,7 @@ def main():
         rep = scene_report(sc, tdir, rdir, img, cfg["width"], cfg["height"])
         reps.append(rep)
         print(rep["name"], rep.get("error") or f'{rep["pixel_diff_pct"]}% px, {rep["matched"]}/{rep["texts_tauri"]} texts, pos mean {rep["pos_mean"]} max {rep["pos_max"]}, -{len(rep["texts_only_tauri"])} texts, -{len(rep["controls_only_tauri"])} controls', flush=True)
-    json.dump(reps, open(os.path.join(out, "report.json"), "w"), indent=1, ensure_ascii=False)
+    Path(out, "report.json").write_text(json.dumps(reps, indent=1, ensure_ascii=False), encoding="utf-8")
     write_md(reps, os.path.join(out, "report.md"))
 
 
@@ -489,7 +490,7 @@ def write_md(reps, path):
                     L.append(f'- {c["tauri"]} → {c["rune"]} d={c["d"]} fill {c["tauri_fill"]} → {c["rune_fill"]} (ΔE {c["dE"]}), radius {c["tauri_radius"]} `{c["tauri_cls"][:50]}`')
                 else:
                     L.append(f'- {c["tauri"]} fill {c["tauri_fill"]} radius {c["tauri_radius"]}: no Rune box (best IoU {c["best_iou"]}) `{c["tauri_cls"][:50]}`')
-    open(path, "w").write("\n".join(L) + "\n")
+    Path(path).write_text("\n".join(L) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

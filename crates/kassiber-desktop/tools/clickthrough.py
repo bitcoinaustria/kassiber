@@ -20,6 +20,7 @@ network egress are never pressed (see EGRESS below); they are reported as "egres
 Daemon requests are observed through a KASSIBER_BIN wrapper that records only the request
 `kind` values (`ui.*`), never arguments, into a per-run file in the worker's scratch dir.
 """
+from pathlib import Path
 import argparse
 import collections
 import concurrent.futures as cf
@@ -155,7 +156,7 @@ def run_app(w, scene, events, at, tag, snap=None, keep_tree=None):
     for p in (tree, reqlog):
         if os.path.exists(p):
             os.remove(p)
-    open(reqlog, "w").close()
+    Path(reqlog).write_text("")
     with open(script, "w") as f:
         json.dump({"events": events}, f)
     env = dict(os.environ)

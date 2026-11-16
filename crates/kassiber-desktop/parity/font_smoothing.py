@@ -10,6 +10,7 @@ is found on both sides and whose ink boxes differ by at most 1 pt in size compar
 Needs the Rune env (CARGO_TARGET_DIR, KASSIBER_BIN, KASSIBER_DEMO_DATA_ROOT…).
 """
 
+from pathlib import Path
 import json
 import os
 import subprocess
@@ -86,7 +87,7 @@ def main():
         rows.append({"mode": mode, "texts": n, "coverage_ratio_median": round(med(covs), 3) if covs else None,
                      "width_ratio_median": round(med(widths), 3) if widths else None, "glyph_rmse_mean": round(sum(rmses) / len(rmses), 4) if rmses else None})
         print(rows[-1], flush=True)
-    json.dump(rows, open(os.path.join(out, "font-smoothing.json"), "w"), indent=1)
+    Path(out, "font-smoothing.json").write_text(json.dumps(rows, indent=1), encoding="utf-8")
 
 
 if __name__ == "__main__":
