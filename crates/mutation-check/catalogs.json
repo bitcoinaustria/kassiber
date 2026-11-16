@@ -1400,6 +1400,23 @@
      ]
     }
    }
+  },
+  {
+   "name": "crypto-assets",
+   "catalogs": [
+    "crates/kassiber/scripts/crypto_asset_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness",
+    "--test",
+    "exchange_swaps"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
   }
  ]
 }

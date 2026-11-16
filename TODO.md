@@ -2035,6 +2035,14 @@ See [tax countries](docs/reference/tax-countries.md) and
   `header_row` option; copying the statement file onto the accepted source;
   masking own non-IBAN account numbers inside bank free text; and network
   partitions of books holding statements.
+- [ ] Price provider-reported crypto-to-crypto swaps without a Bitcoin leg.
+  Bitpanda, Kraken, CoinTracking and Blockpit state no fiat value for a swap;
+  a swap with a Bitcoin leg is now valued from the cached BTC rate
+  (counter-leg pricing, [plan 24](docs/plan/24-crypto-assets.md)), and
+  journals hold the others in review (`at_swap_link` in Austria,
+  `missing_spot_price` elsewhere) until the user prices both legs. Options:
+  per-asset rate sources (the rates crate is BTC-only) or a provider value
+  with a confirmed meaning (Bitpanda's `trade.to_eur_rate`).
 - [ ] Per-asset scale for large-supply tokens (SHIB, PEPE, BONK, BTTC): a
   row holds at most about 92 million units at 10^-11, so one such row stops a
   sync. Designed, not built, in [plan 24](docs/plan/24-crypto-assets.md#per-asset-scale-design-not-implemented);

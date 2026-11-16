@@ -129,6 +129,7 @@ crates/kassiber/tests/provider_broker.rs|signal|let status = Command::new("/bin/
 crates/kassiber/tests/provider_broker_claude_codex.rs|broker|let mut child = Command::new(env!("CARGO_BIN_EXE_kassiber"))
 crates/kassiber/tests/overview_other_assets.rs|command|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/kassiber/tests/tax_platform_swaps.rs|kassiber|let output = Command::new(env!("CARGO_BIN_EXE_kassiber"))
+crates/kassiber/tests/exchange_swaps.rs|binary|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 # Rune desktop app (crates/kassiber-desktop). The bundled `kassiber` binary: the supervised
 # daemon, its pre-launch state-root migration, the demo-book creator, installed-app CLI
 # forwarding, and the consent-gated update check (any egress is the CLI's own, through
