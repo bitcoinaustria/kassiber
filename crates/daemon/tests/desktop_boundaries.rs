@@ -165,6 +165,7 @@ const DESKTOP_KINDS: &[&str] = &[
     "ui.connections.btcpay.create",
     "ui.connections.btcpay.discover",
     "ui.connections.btcpay.test",
+    "ui.connections.bullbitcoin_wallet.create",
     "ui.metadata.bip329.import",
     "ui.rates.kraken_csv.import",
     "ui.rates.latest",

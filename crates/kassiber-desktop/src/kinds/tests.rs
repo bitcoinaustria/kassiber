@@ -20,10 +20,7 @@ const SENDERS: &[&str] = &[
 ];
 
 /// Kinds the app's code sends that ALLOWED_DAEMON_KINDS lacks, with the reason.
-const KNOWN_UNLISTED: &[(&str, &str)] = &[(
-    "ui.connections.bullbitcoin_wallet.create",
-    "the Bull Bitcoin wallet dialog sends it but it is not allowlisted, so the app refuses it with kind_not_allowed",
-)];
+const KNOWN_UNLISTED: &[(&str, &str)] = &[];
 
 fn looks_like_kind(s: &str) -> bool {
     (s == "status" || ["ui.", "ai.", "daemon."].iter().any(|p| s.starts_with(p)))

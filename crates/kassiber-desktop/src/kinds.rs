@@ -225,6 +225,8 @@ pub const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.connections.btcpay.discover",
     "ui.connections.btcpay.key_guide",
     "ui.connections.btcpay.test",
+    // Bull Bitcoin Wallet CSV import: the user-picked file becomes a wallet.
+    "ui.connections.bullbitcoin_wallet.create",
     "ui.connections.exchange.status",
     "ui.connections.exchange.test",
     "ui.connections.exchange.create",
