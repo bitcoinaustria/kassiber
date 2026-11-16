@@ -739,7 +739,7 @@ fn swap(
     match &event.fee {
         Some(fee) if fee.amount.is_zero() => {}
         Some(fee) if quote == Some(sent.asset.as_str()) && fee.asset == sent.asset => {
-            out = net(&sent.amount, &fee.amount, refuse)?
+            out = net_of_fee(&sent.amount, &fee.amount, refuse)?
                 .ok_or_else(|| refuse(&"has a fee as large as its amount", REVIEW))?;
             out_fee = fee.amount.clone();
         }
@@ -769,7 +769,7 @@ fn swap(
 
 /// `amount - fee` in the book's unit (msat for BTC, the same 10^-11 for
 /// every other asset), never rounded; `None` when nothing is left.
-fn net(amount: &Decimal, fee: &Decimal, refuse: &Refuse<'_>) -> Result<Option<Decimal>, AppError> {
+fn net_of_fee(amount: &Decimal, fee: &Decimal, refuse: &Refuse<'_>) -> Result<Option<Decimal>, AppError> {
     let (Some(amount), Some(fee)) = (exact_msat(amount), exact_msat(fee)) else {
         return Err(refuse(
             &"has an amount finer than 11 decimal places",
@@ -857,7 +857,7 @@ fn movement(
     };
     let mut amount = leg.amount.clone();
     if event.fee_included && !fee.is_zero() {
-        amount = net(&amount, &fee, refuse)?
+        amount = net_of_fee(&amount, &fee, refuse)?
             .ok_or_else(|| refuse(&"has a withdrawal fee as large as its amount", REVIEW))?;
     }
     if amount.is_zero() {
