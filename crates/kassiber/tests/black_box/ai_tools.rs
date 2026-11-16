@@ -643,3 +643,125 @@ fn test_attachment_import_flow_matches_python() {
     }
     t.finish();
 }
+
+/// The Rust-only balance checkpoint tools (docs/reference/ai.md#balance-checkpoints):
+/// the read projects away import references, the writes need consent and
+/// the input version the read returned, and a stale version or another book
+/// writes nothing.
+#[test]
+fn test_balance_checkpoint_tools_bind_the_book_and_project_the_read() {
+    let sandbox = sandbox("desktop");
+    sandbox.sql(
+        "INSERT INTO balance_checkpoints(id,workspace_id,profile_id,wallet_id,asset,as_of,amount_msat,origin,scope,origin_ref,note,created_at)
+         VALUES('cp-csv','w','p','exchange','BTC','2025-01-31T23:59:59.999999Z',5,'manual',NULL,'csv:/home/user/statements.csv','January','2025');",
+    );
+    let remote = state(REMOTE, "desktop", json!({}));
+    let call = |name: &str, arguments: Value, id: &str, state: Value| {
+        let mut request = tool(name, arguments, id, state);
+        request["request_id"] = json!(id);
+        request
+    };
+    let send = |requests: &[Value]| -> Vec<Value> {
+        sandbox
+            .daemon(requests)
+            .iter()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .filter(|record| record["request_id"] != "stop")
+            .collect()
+    };
+    let read = send(&[call(
+        "ui_wallets_checkpoints_list",
+        json!({}),
+        "list",
+        remote.clone(),
+    )]);
+    let listed = output(read.last().unwrap());
+    assert_eq!(listed["ok"], true, "{listed}");
+    let data = &listed["envelope"]["data"];
+    let version = data["journals"]["input_version"].clone();
+    assert!(version.is_i64(), "{data}");
+    let text = data.to_string();
+    assert!(text.contains("cp-csv"), "{text}");
+    assert!(
+        !text.contains("origin_ref") && !text.contains("statements.csv"),
+        "{text}"
+    );
+    // A write bound to another input version or another book writes nothing.
+    let stale = send(&[call(
+        "ui_wallets_checkpoints_add",
+        json!({"wallet": "exchange", "btc": "0.001", "date": "2025-02-01",
+               "expected_input_version": version.as_i64().unwrap() + 1}),
+        "stale",
+        remote.clone(),
+    )]);
+    assert_eq!(output(stale.last().unwrap())["reason"], "stale_context");
+    let elsewhere = send(&[call(
+        "ui_wallets_checkpoints_add",
+        json!({"wallet": "exchange", "btc": "0.001", "date": "2025-02-01",
+               "expected_input_version": version}),
+        "elsewhere",
+        json!({"provider_kind": "remote", "provider_on_device": false,
+               "scope_workspace_id": "w", "scope_profile_id": "other"}),
+    )]);
+    assert_eq!(output(elsewhere.last().unwrap())["reason"], "stale_context");
+    // Without the version the call is refused before it runs.
+    let unbound = send(&[call(
+        "ui_wallets_checkpoints_add",
+        json!({"wallet": "exchange", "btc": "0.001", "date": "2025-02-01"}),
+        "unbound",
+        remote.clone(),
+    )]);
+    assert_eq!(output(unbound.last().unwrap())["ok"], false);
+    assert_eq!(
+        sandbox.query_strings("SELECT id FROM balance_checkpoints"),
+        ["cp-csv"]
+    );
+    // The same balance again returns the existing row: projected like the
+    // list, so the write never shows what the read hides.
+    let repeated = send(&[call(
+        "ui_wallets_checkpoints_add",
+        json!({"wallet": "exchange", "btc": "0.00000000005", "date": "2025-01-31",
+               "note": "January", "expected_input_version": version}),
+        "repeat",
+        remote.clone(),
+    )]);
+    let repeated = output(repeated.last().unwrap());
+    assert_eq!(repeated["ok"], true, "{repeated}");
+    assert_eq!(repeated["envelope"]["data"]["id"], "cp-csv", "{repeated}");
+    assert_eq!(repeated["envelope"]["data"]["created"], false);
+    let text = repeated.to_string();
+    assert!(
+        !text.contains("origin_ref")
+            && !text.contains("statements.csv")
+            && !text.contains("attachment_id"),
+        "{text}"
+    );
+    // Consented and bound: added, then removed.
+    let added = send(&[call(
+        "ui_wallets_checkpoints_add",
+        json!({"wallet": "exchange", "btc": "0.001", "date": "2025-02-01",
+               "note": "February statement", "expected_input_version": version}),
+        "add",
+        remote.clone(),
+    )]);
+    let added = output(added.last().unwrap());
+    assert_eq!(added["ok"], true, "{added}");
+    let id = added["envelope"]["data"]["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        sandbox.query_strings(
+            "SELECT origin||'|'||amount_msat FROM balance_checkpoints WHERE id NOT IN ('cp-csv')"
+        ),
+        ["manual|100000000"]
+    );
+    let removed = send(&[call(
+        "ui_wallets_checkpoints_remove",
+        json!({"id": id, "expected_input_version": version}),
+        "remove",
+        remote,
+    )]);
+    assert_eq!(output(removed.last().unwrap())["ok"], true);
+    assert_eq!(
+        sandbox.query_strings("SELECT id FROM balance_checkpoints"),
+        ["cp-csv"]
+    );
+}

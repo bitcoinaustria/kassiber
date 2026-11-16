@@ -438,6 +438,11 @@ fn native_mutate(
         }
         _ => {}
     }
+    if crate::checkpoints::KINDS.contains(&kind) {
+        // Balance checkpoints: the book service, which checks the
+        // expected_input_version the AI tool passes.
+        return daemon.book_mut()?.service(kind, args);
+    }
     if crate::review::KINDS.contains(&kind) {
         // AI review calls reach `HostBook::review`; restricted otherwise.
         return crate::review::execute_as(
@@ -596,6 +601,9 @@ fn native_read(
 ) -> Result<Value, AppError> {
     let raw = args;
     let args = Some(args);
+    if crate::checkpoints::KINDS.contains(&kind) {
+        return daemon.book_mut()?.service(kind, raw);
+    }
     if kind == "status" {
         // `_status_payload_from_parts`: the desktop's project fields are not
         // part of the AI view.

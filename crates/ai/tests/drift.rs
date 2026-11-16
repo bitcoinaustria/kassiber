@@ -126,12 +126,22 @@ fn constants_match_python() {
 
 #[test]
 fn embedded_catalog_has_every_definition() {
-    assert_eq!(tools().len(), 180);
+    // Python's 176 tools and the Rust-only ones after them.
+    assert_eq!(
+        tools().len(),
+        176 + kassiber_ai::catalog::RUST_ONLY_TOOLS.len()
+    );
+    let rust_only: Vec<&str> = tools()[176..].iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(rust_only, kassiber_ai::catalog::RUST_ONLY_TOOLS);
     let reads = tools()
         .iter()
         .filter(|tool| tool.kind_class == KindClass::ReadOnly)
         .count();
-    assert_eq!(reads, 112);
+    assert_eq!(
+        reads,
+        110 + 3,
+        "Python's reads, ui.journals.verify, ui.source_funds.bank_lines.suggest and ui.wallets.checkpoints.list"
+    );
     let egressing: Vec<&str> = tools()
         .iter()
         .filter(|tool| tool.egresses)

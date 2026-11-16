@@ -1700,8 +1700,7 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
   as a read tool and `ui.profiles.update` as a mutating, non-reversible
   policy tool (always asks) whose plan step is its own `dry_run` preview,
   appended as Rust-only tools (`RUST_ONLY_TOOLS` in
-  `crates/ai/tests/python_vectors.rs`, `RUST_ONLY` in
-  `crates/mcp/tests/registry.rs`) with a skill-reference section. Adding a
+  `crates/ai/src/catalog.rs`) with a skill-reference section. Adding a
   tool changes the tool lists hashed in the black-box goldens
   (`crates/kassiber/tests/black_box/golden/mcp/every_grant.txt`,
   `ai_chat/writes_ask_apply_and_undo.txt`,

@@ -110,7 +110,7 @@ const EGRESS_WITHOUT_FLAG: [&str; 6] = [
 /// `MUTATING_TOOL_HINTS`: `(destructiveHint, idempotentHint)` for every
 /// mutating tool MCP exposes. A mutating tool missing here is not exposed
 /// until a reviewer classifies it.
-pub const MUTATING_TOOL_HINTS: [(&str, bool, bool); 61] = [
+pub const MUTATING_TOOL_HINTS: [(&str, bool, bool); 63] = [
     ("ui.wallets.sync", false, true),
     ("ui.journals.process", false, true),
     ("ui.maintenance.configure", false, true),
@@ -137,6 +137,9 @@ pub const MUTATING_TOOL_HINTS: [(&str, bool, bool); 61] = [
     ("ui.transfers.rules.apply", false, true),
     ("ui.saved_views.create", false, false),
     ("ui.saved_views.delete", true, true),
+    // Rust only (docs/reference/balance-checkpoints.md).
+    ("ui.wallets.checkpoints.add", false, false),
+    ("ui.wallets.checkpoints.remove", true, true),
     ("ui.loans.mark", false, true),
     ("ui.loans.link", false, true),
     ("ui.loans.unmark", true, true),

@@ -79,15 +79,12 @@ fn messages(value: &Value) -> Option<&[Value]> {
     }
 }
 
-/// Tools only the Rust runtime offers (`docs/reference/rust-shell.md#rust-only-commands`),
-/// last in the catalog so every Python tool keeps its index; the frozen
-/// vectors never name them.
-const RUST_ONLY_TOOLS: &[&str] = &["ui.journals.verify"];
-
+/// Python's tools: the Rust-only ones (`catalog::RUST_ONLY_TOOLS`) sit last in
+/// the catalog so every Python tool keeps its index; the frozen vectors never
+/// name them.
 fn python_tools() -> impl Iterator<Item = &'static kassiber_ai::ToolEntry> {
     tools()
         .iter()
-        .filter(|tool| !RUST_ONLY_TOOLS.contains(&tool.name.as_str()))
         .filter(|tool| !kassiber_ai::catalog::RUST_ONLY_TOOLS.contains(&tool.name.as_str()))
 }
 
@@ -118,11 +115,11 @@ fn selection_matches_python() {
         let profile = optional_text(field(case, "profile"));
         let have = match build_responses_tools(messages(field(case, "messages")), screen, profile) {
             Ok(selected) => {
+                // Rust-only tools sit after Python's and are left out.
                 let indexes: Vec<Value> = selected
                     .iter()
                     .filter(|tool| {
-                        !RUST_ONLY_TOOLS.contains(&tool.name.as_str())
-                            && !kassiber_ai::catalog::RUST_ONLY_TOOLS.contains(&tool.name.as_str())
+                        !kassiber_ai::catalog::RUST_ONLY_TOOLS.contains(&tool.name.as_str())
                     })
                     .map(|tool| {
                         Value::from(

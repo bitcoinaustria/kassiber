@@ -8339,6 +8339,108 @@
    "summary_template": "Reject bank-line matches",
    "egresses": false,
    "reversible": false
+  },
+  {
+   "name": "ui.wallets.checkpoints.add",
+   "wire_name": "ui_wallets_checkpoints_add",
+   "description": "Record, after explicit consent, a balance the user read from a statement or account for one wallet at one time (a manual balance checkpoint). It is only compared with the book; it never changes journals, cost basis or tax results. Pass expected_input_version from ui_wallets_checkpoints_list; a changed book refuses the write. Amounts are BTC decimals with at most 11 decimals; a date alone means the whole UTC day.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "wallet",
+     "btc",
+     "date",
+     "expected_input_version"
+    ],
+    "properties": {
+     "wallet": {
+      "type": "string",
+      "description": "Wallet id or label."
+     },
+     "btc": {
+      "type": "string",
+      "description": "The balance in BTC as a plain decimal string, e.g. \"0.12345678\"."
+     },
+     "date": {
+      "type": "string",
+      "description": "A date (2024-12-31, the whole UTC day) or an ISO date-time with an offset."
+     },
+     "asset": {
+      "type": "string",
+      "enum": [
+       "BTC",
+       "LBTC"
+      ],
+      "description": "BTC (default) or LBTC."
+     },
+     "note": {
+      "type": "string",
+      "description": "Where the figure comes from, e.g. 'December statement'."
+     },
+     "expected_input_version": {
+      "type": "integer",
+      "description": "journals.input_version from the last ui_wallets_checkpoints_list."
+     }
+    }
+   },
+   "kind_class": "mutating",
+   "daemon_kind": "ui.wallets.checkpoints.add",
+   "summary_template": "Record a balance checkpoint",
+   "egresses": false,
+   "reversible": false
+  },
+  {
+   "name": "ui.wallets.checkpoints.list",
+   "wire_name": "ui_wallets_checkpoints_list",
+   "description": "Read balance checkpoints: balances an exchange API, an imported file, the last chain or Lightning node sync, or the user reported for a wallet at a time, each compared with the book's balance then (matches, differs with a signed difference, or not comparable and why). A difference means the source may be incomplete; it is never a correction. Local read; never contacts a source. Returns journals.input_version for a later add or remove.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "wallet": {
+      "type": "string",
+      "description": "Wallet id or label (default: every wallet)."
+     },
+     "history": {
+      "type": "boolean",
+      "description": "Every checkpoint, not only the latest per wallet, origin and asset."
+     }
+    }
+   },
+   "kind_class": "read_only",
+   "daemon_kind": "ui.wallets.checkpoints.list",
+   "summary_template": "Read balance checks",
+   "egresses": false,
+   "reversible": false
+  },
+  {
+   "name": "ui.wallets.checkpoints.remove",
+   "wire_name": "ui_wallets_checkpoints_remove",
+   "description": "Delete one stored balance checkpoint by id after explicit consent. Chain and node checkpoints are derived and cannot be removed. Pass expected_input_version from ui_wallets_checkpoints_list; a changed book refuses the write.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "id",
+     "expected_input_version"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "The checkpoint id from ui_wallets_checkpoints_list."
+     },
+     "expected_input_version": {
+      "type": "integer",
+      "description": "journals.input_version from the last ui_wallets_checkpoints_list."
+     }
+    }
+   },
+   "kind_class": "mutating",
+   "daemon_kind": "ui.wallets.checkpoints.remove",
+   "summary_template": "Delete a balance checkpoint",
+   "egresses": false,
+   "reversible": false
   }
  ],
  "aliases": {

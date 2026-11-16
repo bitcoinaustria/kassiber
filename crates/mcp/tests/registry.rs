@@ -32,12 +32,13 @@ fn list(value: &Value) -> &[Value] {
     }
 }
 
-/// Tools only the Rust runtime serves (`docs/reference/rust-shell.md#rust-only-commands`);
-/// Python's frozen registry never names them, so they are checked on their own.
-const RUST_ONLY: &[&str] = &["journals_verify"];
-
-fn python_only(tool: &&kassiber_mcp::tools::McpTool) -> bool {
-    !RUST_ONLY.contains(&tool.name.as_str()) && !rust_only(tool.entry.name.as_str())
+/// Whether Python's registry knew the tool: the Rust-only ones
+/// (`catalog::RUST_ONLY_TOOLS`) are checked on their own below.
+fn python(name: &str) -> bool {
+    !mcp_tools().iter().any(|tool| {
+        tool.name == name
+            && kassiber_ai::catalog::RUST_ONLY_TOOLS.contains(&tool.entry.name.as_str())
+    })
 }
 
 const GRANTS: [&str; 3] = ["read", "operator", "accounting_decisions"];
@@ -48,7 +49,7 @@ fn every_tool_is_classified_as_python_classifies_it() {
     let vectors = vectors();
     let have: Vec<Value> = mcp_tools()
         .iter()
-        .filter(python_only)
+        .filter(|tool| python(&tool.name))
         .map(|tool| {
             dict([
                 ("name", s(tool.name.as_str())),
@@ -70,7 +71,7 @@ fn listings_and_definitions_follow_the_grant() {
     for grant in GRANTS {
         for access in ACCESS {
             let names: Vec<Value> = available_tools(grant, access)
-                .filter(python_only)
+                .filter(|tool| python(&tool.name))
                 .map(|tool| s(tool.name.as_str()))
                 .collect();
             let key = format!("{grant}/{access}");
@@ -81,14 +82,12 @@ fn listings_and_definitions_follow_the_grant() {
             );
         }
     }
-    let rust_names: Vec<Value> = mcp_tools()
-        .iter()
-        .filter(|tool| !python_only(tool))
-        .map(|tool| s(tool.name.as_str()))
-        .collect();
     let definitions: Vec<Value> = tool_definitions("accounting_decisions", "full")
         .into_iter()
-        .filter(|d| !get(d, "name").is_some_and(|n| rust_names.contains(n)))
+        .filter(|definition| match get(definition, "name") {
+            Some(Value::Str(name)) => python(&kassiber_envelope::py_str(&Value::Str(name.clone()))),
+            _ => true,
+        })
         .collect();
     assert_eq!(definitions, list(field(&vectors, "definitions")));
 }
@@ -100,10 +99,7 @@ fn refusals_name_what_the_call_needs() {
         panic!()
     };
     let mut seen = 0;
-    for tool in mcp_tools()
-        .iter()
-        .filter(|tool| !rust_only(tool.entry.name.as_str()))
-    {
+    for tool in mcp_tools().iter().filter(|tool| python(&tool.name)) {
         for grant in GRANTS {
             for access in ACCESS {
                 let key = format!("{}/{grant}/{access}", tool.name);
@@ -159,20 +155,22 @@ fn instructions_capabilities_and_client_names_match_python() {
     }
 }
 
-/// Tools new in Rust (`kassiber_ai::catalog::RUST_ONLY_TOOLS`), absent from
-/// Python's vectors; compared separately below.
-fn rust_only(entry: &str) -> bool {
-    kassiber_ai::catalog::RUST_ONLY_TOOLS.contains(&entry)
-}
-
+/// The Rust-only bank statement tools: the suggestion read at every grant,
+/// accept and reject only with accounting decisions.
 #[test]
 fn rust_only_bank_statement_tools_follow_the_grant() {
     let tools: Vec<_> = mcp_tools()
         .iter()
-        .filter(|tool| rust_only(tool.entry.name.as_str()))
+        .filter(|tool| {
+            tool.entry
+                .name
+                .as_str()
+                .starts_with("ui.source_funds.bank_lines.")
+        })
         .collect();
     assert_eq!(tools.len(), 3);
     for tool in &tools {
+        assert!(kassiber_ai::catalog::RUST_ONLY_TOOLS.contains(&tool.entry.name.as_str()));
         let read = tool.entry.name.ends_with(".suggest");
         assert_eq!(
             tool.required.as_str(),
@@ -184,6 +182,38 @@ fn rust_only_bank_statement_tools_follow_the_grant() {
         assert_eq!(refusal_for(tool, "read", "full").is_some(), !read);
         assert!(refusal_for(tool, "accounting_decisions", "full").is_none());
     }
+}
+
+/// The Rust-only balance checkpoint tools: the read at every grant, the
+/// writes from operator up, and removal marked destructive.
+#[test]
+fn balance_checkpoint_tools_follow_their_capabilities() {
+    let find = |name: &str| {
+        mcp_tools()
+            .iter()
+            .find(|tool| tool.entry.name == name)
+            .unwrap_or_else(|| panic!("{name}"))
+    };
+    let list = find("ui.wallets.checkpoints.list");
+    let add = find("ui.wallets.checkpoints.add");
+    let remove = find("ui.wallets.checkpoints.remove");
+    assert_eq!(list.required.as_str(), "read");
+    assert_eq!(
+        (add.required.as_str(), add.destructive),
+        ("operator", false)
+    );
+    assert_eq!(
+        (remove.required.as_str(), remove.destructive),
+        ("operator", true)
+    );
+    for tool in [list, add, remove] {
+        assert!(!tool.egress && !tool.full_access_only, "{}", tool.name);
+    }
+    let read: Vec<&str> = available_tools("read", "restricted")
+        .map(|t| t.name.as_str())
+        .collect();
+    assert!(read.contains(&list.name.as_str()));
+    assert!(!read.contains(&add.name.as_str()));
 }
 
 /// The reproducibility check is a read: every grant and access mode lists it,

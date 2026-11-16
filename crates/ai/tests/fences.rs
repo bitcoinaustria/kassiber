@@ -576,7 +576,12 @@ fn no_shell_filesystem_secret_or_configuration_tool_exists() {
                         "ui.wallets.read_document",
                         // A desktop handoff card naming a source kind; the
                         // user enters the source in the wizard.
-                        "ui.wallets.request_input"
+                        "ui.wallets.request_input",
+                        // Balance checkpoints: compared figures, never a
+                        // source's configuration (docs/reference/ai.md#balance-checkpoints).
+                        "ui.wallets.checkpoints.list",
+                        "ui.wallets.checkpoints.add",
+                        "ui.wallets.checkpoints.remove"
                     ]
                     .contains(&kind),
                     "{kind} configures sources"

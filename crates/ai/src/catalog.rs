@@ -11,6 +11,20 @@ use kassiber_pyjson::{Key, PyStr, Value};
 
 const CATALOG_JSON: &str = include_str!("data/catalog.json");
 
+/// Tools only the Rust backend offers, appended after Python's catalog so
+/// every Python tool keeps its position; the Python parity vectors leave
+/// them out (docs/reference/rust-shell.md#rust-only-commands; bank statements:
+/// docs/reference/bank-statements.md).
+pub const RUST_ONLY_TOOLS: &[&str] = &[
+    "ui.journals.verify",
+    "ui.source_funds.bank_lines.suggest",
+    "ui.source_funds.bank_lines.accept",
+    "ui.source_funds.bank_lines.reject",
+    "ui.wallets.checkpoints.add",
+    "ui.wallets.checkpoints.list",
+    "ui.wallets.checkpoints.remove",
+];
+
 /// `ToolKindClass`: does the tool change the book?
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KindClass {
@@ -142,15 +156,6 @@ fn catalog() -> &'static Catalog {
 }
 
 /// `TOOL_CATALOG`, in order.
-/// Tools new in the Rust backend, absent from the frozen Python vectors
-/// (bank statements, `docs/reference/bank-statements.md`). They are appended
-/// to the catalog so every Python tool keeps its position.
-pub const RUST_ONLY_TOOLS: &[&str] = &[
-    "ui.source_funds.bank_lines.suggest",
-    "ui.source_funds.bank_lines.accept",
-    "ui.source_funds.bank_lines.reject",
-];
-
 pub fn tools() -> &'static [ToolEntry] {
     &catalog().tools
 }
