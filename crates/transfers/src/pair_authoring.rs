@@ -428,6 +428,9 @@ fn create(c: &Connection, scope: &Scope<'_>, args: &Value, sources: &dyn Sources
                 || value(r, "in_transaction_id") == value(&row, "in_transaction_id")
         })
         .collect();
+    if let Some(stated) = related.iter().find(|r| spec::stated_fee(r).is_some()) {
+        return Err(stated_fee_fixed(&text(stated, "id")));
+    }
     let mut plan = if related.is_empty() {
         let mut plan = spec::group(std::slice::from_ref(&row), false)?;
         finish_residual(c, &row, &mut plan)?;
@@ -500,6 +503,9 @@ fn update(c: &Connection, scope: &Scope<'_>, args: &Value, sources: &dyn Sources
         .all(|k| value(old, k) == value(&revised, k))
     {
         return Ok(project(old, PUBLIC));
+    }
+    if spec::stated_fee(old).is_some() {
+        return Err(stated_fee_fixed(&id));
     }
     if value(old, "kind") != value(&revised, "kind") {
         let portion = if value(old, "out_asset") != value(old, "in_asset") {
@@ -621,4 +627,125 @@ fn delete(c: &Connection, scope: &Scope<'_>, args: &Value, sources: &dyn Sources
 
 fn s(v: impl AsRef<str>) -> Value {
     kassiber_envelope::s(v.as_ref())
+}
+
+/// A pair whose provider stated its miner fee keeps exactly that shape.
+fn stated_fee_fixed(id: &str) -> AppError {
+    AppError::new(
+        "validation",
+        format!("Pair '{id}' books the miner fee its provider stated and cannot be revised or grouped"),
+    )
+    .with_hint(format!("Unpair it first (kassiber transfers unpair --pair-id {id}), then pair the transactions as you need."))
+}
+
+/// What [`create_evidenced`] did.
+#[derive(Debug)]
+pub enum Evidenced {
+    /// The pair it authored (`id`, `component_id`, ...).
+    Created(Value),
+    /// The owner already decided about this edge or one of its legs.
+    Declined(&'static str),
+}
+
+/// A same-asset transfer pair an importer proves: the provider's own export
+/// names the outbound transaction's txid and states how much of its observed
+/// debit paid miner fees (`declared_fee_msat`). The fee becomes an explicit
+/// network-fee allocation, never suspense; a debit that does not reconcile to
+/// principal plus that fee is refused. The owner's decisions win: an edge the
+/// owner unpaired or dismissed, or a leg another review already covers, is
+/// declined rather than paired again. The pair records `pair_source
+/// provider_txid` and `authored_source import`; `notes` names the evidence.
+pub fn create_evidenced(
+    c: &Connection,
+    scope: &Scope<'_>,
+    out_id: &str,
+    in_id: &str,
+    declared_fee_msat: i128,
+    notes: &str,
+    sources: &dyn Sources,
+) -> Result<Evidenced> {
+    atomic(c, || {
+        let now = sources.now(c)?;
+        if crate::pairing::service::declined_edge(c, scope, out_id, in_id, &now)? {
+            return Ok(Evidenced::Declined("declined_by_owner"));
+        }
+        let out = resolve(c, scope, &s(out_id), "outbound")?;
+        let inbound = resolve(c, scope, &s(in_id), "inbound")?;
+        let refs = active_refs(c, scope)?;
+        let legs = [value(&out, "id"), value(&inbound, "id")];
+        if refs.iter().any(|r| {
+            legs.contains(&value(r, "out_transaction_id"))
+                || legs.contains(&value(r, "in_transaction_id"))
+        }) {
+            return Ok(Evidenced::Declined("already_reviewed"));
+        }
+        // An active review whose evidence no longer holds keeps its legs too.
+        if !rows(
+            c,
+            "SELECT 1 FROM custody_component_legs l JOIN custody_components k ON k.id=l.component_id WHERE k.profile_id=? AND k.state='active' AND COALESCE(l.transaction_id,l.anchor_transaction_id) IN (?,?) LIMIT 1",
+            [scope.profile_id, out_id, in_id],
+        )?
+        .is_empty()
+        {
+            return Ok(Evidenced::Declined("already_reviewed"));
+        }
+        let carrying = s("carrying-value");
+        network(&out, &inbound, "carrying-value")?;
+        policy(
+            c,
+            scope,
+            &text(&out, "asset"),
+            &text(&inbound, "asset"),
+            "carrying-value",
+        )?;
+        let mut row = dict([
+            ("out_transaction_id", value(&out, "id")),
+            ("in_transaction_id", value(&inbound, "id")),
+            ("kind", s("manual")),
+            ("policy", carrying),
+            ("out_asset", value(&out, "asset")),
+            ("in_asset", value(&inbound, "asset")),
+        ]);
+        for (key, v) in [
+            ("id", s(sources.uuid(c)?)),
+            ("workspace_id", s(scope.workspace_id)),
+            ("profile_id", s(scope.profile_id)),
+            ("notes", s(notes)),
+            // The provider's fee statement is the pair's own economic fact. A
+            // pair carrying one is never revised or grouped (`update` and
+            // `create` refuse); unpair it first.
+            (
+                "swap_fee_msat",
+                if declared_fee_msat > 0 {
+                    spec::num(declared_fee_msat)
+                } else {
+                    Value::Null
+                },
+            ),
+            (
+                "swap_fee_kind",
+                if declared_fee_msat > 0 {
+                    s(spec::STATED_FEE)
+                } else {
+                    Value::Null
+                },
+            ),
+            ("confidence_at_pair", s("exact")),
+            ("pair_source", s("provider_txid")),
+            ("out_amount", Value::Null),
+            ("deleted_at", Value::Null),
+            ("created_at", s(now)),
+        ] {
+            set(&mut row, key, v);
+        }
+        let row = boundary(c, &row)?;
+        let mut plan = spec::group(std::slice::from_ref(&row), false)?;
+        spec::check_stated_fee(&plan, &row)?;
+        finish_residual(c, &row, &mut plan)?;
+        let id = store::activate(c, scope, &row, &mut plan, "import", None)?;
+        let mut created = project(&row, PUBLIC);
+        set(&mut created, "component_id", s(id));
+        store::invalidate(c, scope.profile_id)?;
+        Ok(Evidenced::Created(created))
+    })
 }
