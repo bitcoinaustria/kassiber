@@ -156,6 +156,13 @@ pub fn parse_start(text: &str) -> Option<(u32, u32)> {
 /// 1 July. None when it can't be a day every year has.
 pub fn normalize_start(text: &str) -> Option<String> {
     let t = text.trim();
+    // Digits and separators only, so the byte slices below fall on character boundaries.
+    if !t
+        .bytes()
+        .all(|b| b.is_ascii_digit() || matches!(b, b'-' | b'/' | b'.'))
+    {
+        return None;
+    }
     let parts: Vec<&str> = t.split(['-', '/', '.']).collect();
     let (m, d) = match parts.as_slice() {
         [m, d] if !m.is_empty() && !d.is_empty() && m.len() <= 2 && d.len() <= 2 => {
@@ -567,6 +574,9 @@ mod tests {
         assert_eq!(normalize_start("31-12"), None);
         assert_eq!(normalize_start("7"), None);
         assert_eq!(normalize_start("123-1"), None);
+        // A four-byte character is one "len 4" token; it must not be sliced.
+        assert_eq!(normalize_start("📅"), None);
+        assert_eq!(normalize_start("é1-1"), None);
     }
 
     #[test]

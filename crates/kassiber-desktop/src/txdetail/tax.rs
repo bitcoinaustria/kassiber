@@ -34,7 +34,7 @@ pub fn narrative(o: &Open, r: &Value) -> String {
     let fiat = match f(r, "eur").filter(|x| *x != 0.0) {
         Some(v) => tr(
             "transactions:tax.narrative.worthAtTime",
-            &[("value", &format::fiat(v.abs(), "EUR"))],
+            &[("value", &format::fiat(v.abs(), &row_currency(None, r)))],
         ),
         None => t("transactions:tax.narrative.noFiatYet"),
     };
@@ -69,6 +69,19 @@ struct Effect {
     cost: Option<f64>,
     proceeds: Option<f64>,
     gain: Option<f64>,
+}
+
+/// The currency of a transaction's fiat figures: its own `fiatCurrency` (the row's `eur` and the
+/// journal amounts are in the book's accounting currency despite their historical names), else
+/// the open book's, else EUR.
+fn row_currency(app: Option<&App>, r: &Value) -> String {
+    opt_s(r, "fiatCurrency")
+        .filter(|c| !c.trim().is_empty())
+        .or_else(|| {
+            app.and_then(|a| a.snapshot())
+                .and_then(|s| s.fiat.fiat_currency.clone())
+        })
+        .unwrap_or_else(|| "EUR".into())
 }
 
 fn sum(events: &[Value], key: &str) -> Option<f64> {
@@ -375,10 +388,10 @@ pub fn tax(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) -> El {
             .child(toggles)
     };
     body = body.child(box_().fill(tk.background).child(inner));
-    body.child(effect_table(app, tk, o))
+    body.child(effect_table(app, tk, o, r))
 }
 
-fn effect_table(app: &App, tk: &Tk, o: &Open) -> El {
+fn effect_table(app: &App, tk: &Tk, o: &Open, r: &Value) -> El {
     let hide = app.prefs.hide_sensitive();
     let events: Vec<Value> = o
         .events
@@ -386,9 +399,10 @@ fn effect_table(app: &App, tk: &Tk, o: &Open) -> El {
         .and_then(|e| e["events"].as_array().cloned())
         .unwrap_or_default();
     let eff = effect(&events);
+    let currency = row_currency(Some(app), r);
     let money = |v: Option<f64>, fallback: String| -> (String, bool) {
         match v {
-            Some(x) => (format::fiat(x, "EUR"), true),
+            Some(x) => (format::fiat(x, &currency), true),
             None => (fallback, false),
         }
     };
@@ -812,4 +826,17 @@ fn preview_rows(tk: &Tk, p: &Value, hide: bool) -> El {
         }
     }
     c
+}
+
+#[cfg(test)]
+mod currency_tests {
+    use super::row_currency;
+    use serde_json::json;
+
+    #[test]
+    fn tax_figures_use_the_rows_currency() {
+        assert_eq!(row_currency(None, &json!({"fiatCurrency": "USD"})), "USD");
+        assert_eq!(row_currency(None, &json!({"fiatCurrency": ""})), "EUR");
+        assert_eq!(row_currency(None, &json!({})), "EUR");
+    }
 }
