@@ -126,12 +126,12 @@ fn constants_match_python() {
 
 #[test]
 fn embedded_catalog_has_every_definition() {
-    assert_eq!(tools().len(), 177);
+    assert_eq!(tools().len(), 180);
     let reads = tools()
         .iter()
         .filter(|tool| tool.kind_class == KindClass::ReadOnly)
         .count();
-    assert_eq!(reads, 111);
+    assert_eq!(reads, 112);
     let egressing: Vec<&str> = tools()
         .iter()
         .filter(|tool| tool.egresses)

@@ -1948,6 +1948,19 @@ evidence. `ui_source_funds_assemble`, `ui_source_funds_cases_save`, and the
 virtual `ui_source_funds_export` complete that workflow; export results sent to
 the model include the filename/format but not the managed local path.
 
+Bank-statement evidence ([bank statements](bank-statements.md)) has one read
+and two consent-gated writes. `ui_source_funds_bank_lines_suggest` returns the
+exact match suggestions with their reasons and the unmatched purchases;
+every bank-statement result the assistant sees is projected first: IBANs
+stay masked, a counterparty name appears only when it names a curated
+exchange, and remittance text, bank references and column plans are
+withheld; amounts, ids and hashes reach the assistant exactly.
+`ui_source_funds_bank_lines_accept` and `ui_source_funds_bank_lines_reject`
+take explicit `line_ids` and `transaction_ids` and run the same accept/reject
+service as the CLI and desktop. Importing a statement and rolling one back are
+not assistant tools: a statement file is a local path, and rollback is an
+admin-class deletion.
+
 AI source admission and case saving run in the mutating executor
 ([`crates/ai/src/mutate.rs`](../../crates/ai/src/mutate.rs)). A call needs a
 consent bound to its call id, reaches the same source-funds service the

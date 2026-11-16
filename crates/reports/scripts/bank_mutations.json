@@ -1,0 +1,22 @@
+[
+  {
+    "id": "bank-accept-outgoing",
+    "file": "crates/reports/src/source_funds_bank.rs",
+    "find": "if !amount.is_negative() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "accept_refuses_pairs_that_cannot_be_funding_and_writes_nothing"
+    ],
+    "rule": "Only outgoing bank lines can fund a purchase."
+  },
+  {
+    "id": "bank-accept-currency",
+    "file": "crates/reports/src/source_funds_bank.rs",
+    "find": "if !fiat.is_empty() && !fiat.eq_ignore_ascii_case(&currency) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "accept_refuses_pairs_that_cannot_be_funding_and_writes_nothing"
+    ],
+    "rule": "A purchase priced in another currency is refused."
+  }
+]

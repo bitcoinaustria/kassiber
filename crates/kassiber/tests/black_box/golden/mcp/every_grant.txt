@@ -1,9 +1,9 @@
 # grant read, access full
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [959 bytes fnv128 57e4bb1261b9d7ffb10caed193c0a6ba]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [82453 bytes fnv128 53485cf4e4a0c0e3f99136e695db039f]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [83210 bytes fnv128 fac03bffd638969e236f4cb16052b2cf]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1052 bytes fnv128 2de5ffa6b35149c5796d7135dbe64329]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [82588 bytes fnv128 f726f7fb31e9ca2c80797c4f8e787e9c]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [83345 bytes fnv128 7cfc22ebc8686aa620d0b96836c0726c]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -201,9 +201,9 @@ $ mcp serve --workspace w --profile p
 # grant read, access restricted
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [959 bytes fnv128 57e4bb1261b9d7ffb10caed193c0a6ba]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [74467 bytes fnv128 2726af3c680ab1c3169281ba9e641f7d]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [75224 bytes fnv128 ae8785d09d70f260a850cc335fedf1a9]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1052 bytes fnv128 2de5ffa6b35149c5796d7135dbe64329]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [74602 bytes fnv128 82293087ed534e90f8569efc8899ea3e]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [75359 bytes fnv128 db09d9a4798591b23c6c8c9dbd7262a2]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -385,9 +385,9 @@ $ mcp serve --workspace w --profile p
 # grant operator, access full
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1345 bytes fnv128 f4470e9af02e31018f5c1499a5466aec]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [110833 bytes fnv128 4b1006fd34e51291cf08d396a043efcd]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [111590 bytes fnv128 41e9974b911d183672f7bcaf55d8fa99]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1438 bytes fnv128 0dfd8d5f07051417d5c6a6653f028a77]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [110968 bytes fnv128 f6804d996568a4834a537f5f2cda878e]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [111725 bytes fnv128 64217b015d54b5389f6286de62a22752]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -663,9 +663,9 @@ $ mcp serve --workspace w --profile p
 # grant operator, access restricted
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1345 bytes fnv128 f4470e9af02e31018f5c1499a5466aec]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [100406 bytes fnv128 f65128d6f7b36426ab06220903dbadcf]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [101163 bytes fnv128 340f3037e3fa89fdf9ea3c711eae051f]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1438 bytes fnv128 0dfd8d5f07051417d5c6a6653f028a77]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [100541 bytes fnv128 f7da15c8d3293f7395ae13e487d5eb4c]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [101298 bytes fnv128 91b0bd0e86ff44771f8aed3274ae3d3c]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -917,9 +917,9 @@ $ mcp serve --workspace w --profile p
 # grant accounting_decisions, access full
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1387 bytes fnv128 f2c22ff542a7aa846f44840f303a25e0]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [140213 bytes fnv128 cf7986ff9627f179073bdd85b109500c]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [142506 bytes fnv128 7f583d6572402ea7efa83563392dcca5]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1480 bytes fnv128 c070b5e38f51cd4cd525ec4d79a9dfef]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [140348 bytes fnv128 6270a4c53fe0311f6e1ab8054a7a9f51]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [142641 bytes fnv128 5e447de6e4c9f1d82a3fae3e38f0c896]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -1242,9 +1242,9 @@ $ mcp serve --workspace w --profile p
 # grant accounting_decisions, access restricted
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1387 bytes fnv128 f2c22ff542a7aa846f44840f303a25e0]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [128890 bytes fnv128 5baf0835e10d3480610e3fb57d181644]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [131183 bytes fnv128 5d8e25b789662d73122578990e17264d]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1480 bytes fnv128 c070b5e38f51cd4cd525ec4d79a9dfef]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [129025 bytes fnv128 c876cebd39f7d23d46adcebc2dcad419]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [131318 bytes fnv128 f08014e561752c070a8d7a1dc2edca8e]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}

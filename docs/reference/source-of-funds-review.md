@@ -88,6 +88,13 @@ compressed disclosure without creating a second MOVE or adding intermediate
 wallet identities to it. A stale journal, retired component or retracted route
 invalidates the certificate. These records are derived, not authored.
 
+Fiat evidence for an exchange purchase can come from the user's own bank
+statements: CAMT.053 and bank CSV files are imported as `statement`
+documents, a line is suggested for a Bitcoin purchase only on an exact,
+unique match, and an accepted line lands on a reviewed `fiat_purchase` root
+source as `bank_evidence`. Lines are evidence only; see
+[bank statements](bank-statements.md).
+
 The CLI and built-in assistant cross the same interface:
 
 ```sh

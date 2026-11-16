@@ -1119,6 +1119,13 @@ fn book_command(
         if operation.starts_with("loans.") {
             return emit(crate::loans::execute(book.as_mut(), operation, namespace)?);
         }
+        if let Some(kind) = crate::bank_statements::kind(operation) {
+            return emit(crate::bank_statements::execute(
+                book.as_mut(),
+                kind,
+                namespace,
+            )?);
+        }
         if operation.starts_with("documents.") {
             return emit(crate::documents::execute(
                 book.as_mut(),

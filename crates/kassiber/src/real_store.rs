@@ -1789,6 +1789,43 @@ impl Book for RealBook {
             command,
         )
     }
+    fn bank_statements(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        command: &kassiber_transactions::bank_statements::Command,
+    ) -> Result<Value, AppError> {
+        use kassiber_transactions::bank_statements::Command;
+        let (workspace_id, profile_id) = self.resolve_scope(workspace, profile)?;
+        let paths = context()?
+            .resolve(&ResolveOptions {
+                data_root: Some(PathBuf::from(&self.data_root)),
+                ..Default::default()
+            })
+            .map_err(error)?;
+        let scope = kassiber_transactions::Scope {
+            workspace_id: &workspace_id,
+            profile_id: &profile_id,
+        };
+        match command {
+            Command::Accept {
+                lines,
+                transactions,
+            } => kassiber_reports::source_funds_bank::accept(
+                self.conn()?,
+                &scope,
+                lines,
+                transactions,
+                &ReportSources,
+            ),
+            other => kassiber_transactions::bank_statements::execute(
+                self.conn()?,
+                &scope,
+                &paths.attachments_root,
+                other,
+            ),
+        }
+    }
     fn commercial(
         &mut self,
         workspace: Option<&Value>,

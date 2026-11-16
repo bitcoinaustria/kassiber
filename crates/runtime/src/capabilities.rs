@@ -54,6 +54,7 @@ const CLI_READ_PATHS: &str = "
     transfers.components.list transfers.components.show transfers.components.plan
     transfers.payouts.list transfers.suggest transfers.rules.list views.list
     btcpay.provenance.list btcpay.provenance.links btcpay.key-url documents.list
+    documents.statement-imports source-funds.bank-lines.list source-funds.bank-lines.suggest
     source-funds.sources.list source-funds.links.list source-funds.cases.list
     source-funds.review-context source-funds.request-input
     source-funds.coverage source-funds.recipients.list reports.summary
@@ -93,7 +94,7 @@ const CLI_OPERATOR_PATHS: &str = "
     metadata.records.note.set metadata.records.note.clear mcp.disable
     metadata.records.tag.add metadata.records.tag.remove journals.process
     btcpay.provenance.sync btcpay.provenance.suggest btcpay.inspect btcpay.setup documents.create
-    documents.attach documents.import-report source-funds.sources.create
+    documents.attach documents.import-report documents.import-statement source-funds.sources.create
     source-funds.sources.attach
     source-funds.links.create source-funds.links.attach source-funds.suggest
     source-funds.assemble source-funds.recipients.create
@@ -123,6 +124,7 @@ const CLI_ACCOUNTING_DECISION_PATHS: &str = "
     transfers.rules.disable transfers.rules.apply views.create views.delete
     btcpay.provenance.review source-funds.links.review
     source-funds.links.bulk-review reports.filed-snapshots.create
+    source-funds.bank-lines.accept source-funds.bank-lines.reject
 ";
 
 const CLI_ADMIN_PATHS: &str = "
@@ -134,6 +136,7 @@ const CLI_ADMIN_PATHS: &str = "
     secrets.migrate-credentials backup.export backup.import
     backends.delete backends.reveal-token backends.trust-certificate
     wallets.delete imports.rollback
+    documents.rollback-statement
     maintenance.purge-legacy-ledger
     wallets.reveal-descriptor ai.providers.create ai.providers.update
     ai.providers.delete ai.providers.set-default ai.providers.clear-default
@@ -162,6 +165,7 @@ const DAEMON_READ_KINDS: &str = "
     ui.reports.psbt_privacy ui.reports.explain_capital_gain
     ui.source_funds.preview ui.source_funds.review_context ui.source_funds.request_input ui.source_funds.cases.list
     ui.source_funds.sources.list ui.source_funds.links.list
+    ui.documents.statement_imports ui.source_funds.bank_lines.list ui.source_funds.bank_lines.suggest
     ui.source_funds.evidence.list ui.source_funds.coverage
     ui.source_funds.recipients.list ui.btcpay.provenance.list
     ui.btcpay.provenance.links ui.transactions.commercial_context
@@ -223,6 +227,7 @@ const DAEMON_OPERATOR_KINDS: &str = "
     ui.source_funds.recipients.update ui.source_funds.recipients.delete
     ui.btcpay.provenance.sync ui.btcpay.provenance.suggest
     ui.documents.create ui.documents.attach ui.documents.import_report
+    ui.documents.import_statement
     ui.journals.process
     ui.saved_views.create ui.saved_views.delete ui.onboarding.complete
     ui.networks.bind ui.networks.partition_export
@@ -247,6 +252,7 @@ const DAEMON_ACCOUNTING_DECISION_KINDS: &str = "
     ui.transactions.history.revert ui.loans.link ui.loans.mark ui.loans.unmark
     ui.source_funds.cases.save ui.source_funds.links.review
     ui.source_funds.links.bulk_review ui.btcpay.provenance.review
+    ui.source_funds.bank_lines.accept ui.source_funds.bank_lines.reject
     ui.journals.quarantine.resolve ui.review.apply ui.transfers.payouts.create
     ui.transfers.payouts.delete ui.transfers.pair ui.transfers.unpair
     ui.transfers.update ui.transfers.bulk_pair ui.transfers.dismiss ui.transfers.dismissals.delete
@@ -261,6 +267,7 @@ const DAEMON_ADMIN_KINDS: &str = "
     ui.projects.select ui.backup.export ui.backup.preview ui.backup.apply ui.backup.cancel
     ui.secrets.init ui.secrets.change_passphrase
     ui.secrets.forget_cli_unlock ui.wallets.delete ui.imports.rollback daemon.lock daemon.unlock
+    ui.documents.rollback_statement
     ai.providers.create ai.providers.update ai.providers.set_api_key
     ai.providers.move_api_key ai.providers.delete ai.providers.set_default
     ai.providers.clear_default ai.providers.acknowledge ai.test_connection

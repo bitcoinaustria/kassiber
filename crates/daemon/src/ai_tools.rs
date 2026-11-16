@@ -133,7 +133,11 @@ impl AiBook for HostBook<'_> {
         arguments: &Value,
         authored_source: &'static str,
     ) -> Result<Value, ToolError> {
-        native_read(self.daemon, kind, arguments, authored_source).map_err(tool_error)
+        // Bank evidence inside any report-shaped result is projected for
+        // the assistant (docs/reference/bank-statements.md#privacy).
+        let value =
+            native_read(self.daemon, kind, arguments, authored_source).map_err(tool_error)?;
+        Ok(kassiber_transactions::bank_statements::ai_project_bank_evidence(&value))
     }
 
     fn report_blockers(&mut self, auto_sync: Option<&Value>) -> Result<Value, ToolError> {
@@ -274,7 +278,9 @@ impl AiBook for HostBook<'_> {
         arguments: &Value,
         authored_source: &'static str,
     ) -> Result<Value, ToolError> {
-        native_mutate(self.daemon, kind, arguments, authored_source).map_err(tool_error)
+        let value =
+            native_mutate(self.daemon, kind, arguments, authored_source).map_err(tool_error)?;
+        Ok(kassiber_transactions::bank_statements::ai_project_bank_evidence(&value))
     }
 
     fn maintenance_run(
@@ -454,6 +460,12 @@ fn native_mutate(
     if crate::attachments::KINDS.contains(&kind) {
         return crate::attachments::execute(daemon.book_mut()?.as_mut(), kind, Some(args));
     }
+    if crate::bank_statements::handles(kind) {
+        // The assistant sees masked IBANs, exchange names only and no
+        // remittance text (docs/reference/bank-statements.md#privacy).
+        return crate::bank_statements::execute(daemon.book_mut()?.as_mut(), kind, Some(args))
+            .map(|v| kassiber_transactions::bank_statements::ai_projection(&v));
+    }
     if crate::documents::KINDS.contains(&kind) {
         return crate::documents::execute(daemon.book_mut()?.as_mut(), kind, Some(args));
     }
@@ -602,6 +614,10 @@ fn native_read(
         || crate::transactions::AUDIT_KINDS.contains(&kind)
     {
         return crate::transactions::execute(daemon.book_mut()?.as_mut(), kind, args);
+    }
+    if crate::bank_statements::handles(kind) {
+        return crate::bank_statements::execute(daemon.book_mut()?.as_mut(), kind, args)
+            .map(|v| kassiber_transactions::bank_statements::ai_projection(&v));
     }
     if crate::documents::KINDS.contains(&kind) {
         return crate::documents::execute(daemon.book_mut()?.as_mut(), kind, args);

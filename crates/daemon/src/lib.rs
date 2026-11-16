@@ -20,6 +20,7 @@ mod ai_tools;
 mod attachments;
 mod backends;
 mod backup;
+mod bank_statements;
 mod chain_analysis_reads;
 mod chat_uploads;
 pub mod control;
@@ -111,6 +112,13 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.backends.certificate.fetch",
     "ui.backends.certificate.trust",
     "ui.profiles.settings",
+    "ui.documents.import_statement",
+    "ui.documents.statement_imports",
+    "ui.documents.rollback_statement",
+    "ui.source_funds.bank_lines.list",
+    "ui.source_funds.bank_lines.suggest",
+    "ui.source_funds.bank_lines.accept",
+    "ui.source_funds.bank_lines.reject",
 ];
 
 /// Every kind `daemon.ready` advertises.
@@ -186,6 +194,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
             )
     }));
     kinds.extend(documents::KINDS);
+    kinds.extend(bank_statements::kinds());
     kinds.push("ui.journals.process");
     kinds.extend(journals::KINDS);
     kinds.extend(transfers::KINDS);
@@ -1014,6 +1023,17 @@ impl Daemon {
             }
             let payload =
                 workspace_reads::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if bank_statements::handles(&kind_text) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload =
+                bank_statements::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,

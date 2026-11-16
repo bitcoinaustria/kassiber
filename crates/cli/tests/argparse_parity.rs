@@ -96,6 +96,13 @@ fn rust_only(got: String, expected: String) -> (String, String) {
         .iter()
         .map(|leaf| leaf.rsplit('.').next().unwrap())
         .chain(kassiber_cli::spec::RUST_ONLY_BACKEND_KINDS.iter().copied())
+        // New commands: their own name under their parent (`bank-lines` for
+        // the `source-funds.bank-lines.` group).
+        .chain(
+            kassiber_cli::spec::RUST_ONLY_NEW_COMMANDS
+                .iter()
+                .map(|c| c.trim_end_matches('.').rsplit('.').next().unwrap()),
+        )
         .collect();
     if !names
         .iter()

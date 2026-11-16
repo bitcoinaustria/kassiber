@@ -514,6 +514,18 @@
    ]
   },
   {
+   "name": "reports-bank",
+   "catalogs": [
+    "crates/reports/scripts/bank_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-reports",
+    "--test",
+    "source_funds_bank"
+   ]
+  },
+  {
    "name": "reports-psbt-privacy",
    "catalogs": [
     "crates/reports/scripts/psbt_privacy_mutations.json",
@@ -833,6 +845,18 @@
    "cargo": [
     "-p",
     "kassiber-transactions"
+   ]
+  },
+  {
+   "name": "transactions-bank",
+   "catalogs": [
+    "crates/transactions/scripts/bank_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transactions",
+    "--test",
+    "bank_statements"
    ]
   },
   {

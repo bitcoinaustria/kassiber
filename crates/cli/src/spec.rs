@@ -107,6 +107,22 @@ pub const RUST_ONLY_LEAVES: &[&str] = &[
     "profiles.settings",
     "profiles.configure",
 ];
+/// Commands new in the Rust backend with no Python counterpart at all
+/// (docs/reference/rust-shell.md#rust-only-commands): dotted leaves, or a
+/// group prefix ending in `.`. Their own descriptions extend Python's catalog.
+pub const RUST_ONLY_NEW_COMMANDS: &[&str] = &[
+    "documents.import-statement",
+    "documents.statement-imports",
+    "documents.rollback-statement",
+    "source-funds.bank-lines.",
+];
+
+/// Whether a dotted command path is one of [`RUST_ONLY_NEW_COMMANDS`].
+pub fn rust_only_new(dotted: &str) -> bool {
+    RUST_ONLY_NEW_COMMANDS
+        .iter()
+        .any(|c| dotted == *c || (c.ends_with('.') && dotted.starts_with(c)))
+}
 /// Backend kinds only the Rust backend accepts, extra `--kind` choices of
 /// `backends create` and `backends update`.
 pub const RUST_ONLY_BACKEND_KINDS: &[&str] = &["bitpanda"];
