@@ -637,3 +637,28 @@ fn partition_export_preserves_ids_encryption_attachments_and_source() {
             .unwrap());
     }
 }
+
+/// Bank-statement evidence is not split by network: a partition of a book
+/// holding statements is refused by name, never exported without them.
+#[test]
+fn partition_refuses_a_book_with_bank_statements() {
+    let f = seed(5);
+    let conn = f.book.connection();
+    let args = dict([
+        ("environment", s("main")),
+        ("wallet_ids", Value::List(vec![s("wallet-a")])),
+    ]);
+    assert!(
+        partition::plan(conn, "profile-1", &args).is_ok(),
+        "empty bank tables do not block"
+    );
+    conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+    kassiber_store::optional::ensure_bank_statement_schema(conn).unwrap();
+    conn.execute_batch("COMMIT").unwrap();
+    conn.execute_batch("INSERT INTO external_documents(id,workspace_id,profile_id,document_type,label,created_at,updated_at) VALUES('doc','ws-1','profile-1','statement','Statement','2026','2026'); INSERT INTO bank_statement_imports(id,workspace_id,profile_id,document_id,source_format,file_sha256,file_key,account_keys,imported_at) VALUES('imp','ws-1','profile-1','doc','csv','a','k','a','2026');").unwrap();
+    let error = partition::plan(conn, "profile-1", &args).unwrap_err();
+    assert_eq!(
+        get(error.details.as_ref().unwrap(), "reason"),
+        Some(&s("bank_statements_partition"))
+    );
+}

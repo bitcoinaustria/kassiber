@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "bank_statements": [
+    [
+      "index",
+      "idx_bank_statement_imports_profile",
+      "bank_statement_imports",
+      "CREATE INDEX idx_bank_statement_imports_profile\n    ON bank_statement_imports(profile_id, imported_at)"
+    ],
+    [
+      "index",
+      "idx_bank_statement_line_decisions_profile",
+      "bank_statement_line_decisions",
+      "CREATE INDEX idx_bank_statement_line_decisions_profile\n    ON bank_statement_line_decisions(profile_id, state)"
+    ],
+    [
+      "index",
+      "idx_bank_statement_lines_group",
+      "bank_statement_lines",
+      "CREATE INDEX idx_bank_statement_lines_group\n    ON bank_statement_lines(profile_id, dedupe_group)"
+    ],
+    [
+      "index",
+      "idx_bank_statement_lines_profile_date",
+      "bank_statement_lines",
+      "CREATE INDEX idx_bank_statement_lines_profile_date\n    ON bank_statement_lines(profile_id, booking_date)"
+    ],
+    [
+      "table",
+      "bank_statement_imports",
+      "bank_statement_imports",
+      "CREATE TABLE bank_statement_imports (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    document_id TEXT NOT NULL REFERENCES external_documents(id) ON DELETE CASCADE,\n    attachment_id TEXT REFERENCES attachments(id) ON DELETE SET NULL,\n    source_format TEXT NOT NULL,\n    file_sha256 TEXT NOT NULL,\n    file_key TEXT NOT NULL,\n    account_keys TEXT NOT NULL,\n    account_id TEXT,\n    account_masked TEXT,\n    bank_name TEXT,\n    bank_bic TEXT,\n    statement_ref TEXT,\n    column_map_json TEXT,\n    period_start TEXT,\n    period_end TEXT,\n    lines_total INTEGER NOT NULL DEFAULT 0,\n    lines_new INTEGER NOT NULL DEFAULT 0,\n    lines_existing INTEGER NOT NULL DEFAULT 0,\n    lines_skipped INTEGER NOT NULL DEFAULT 0,\n    imported_at TEXT NOT NULL\n)"
+    ],
+    [
+      "table",
+      "bank_statement_line_decisions",
+      "bank_statement_line_decisions",
+      "CREATE TABLE bank_statement_line_decisions (\n    line_id TEXT NOT NULL REFERENCES bank_statement_lines(id) ON DELETE CASCADE,\n    transaction_id TEXT NOT NULL,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    state TEXT NOT NULL CHECK (state IN ('accepted', 'rejected')),\n    source_id TEXT REFERENCES source_funds_sources(id) ON DELETE SET NULL,\n    group_key TEXT,\n    reasons_json TEXT NOT NULL DEFAULT '[]',\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    PRIMARY KEY (line_id, transaction_id)\n)"
+    ],
+    [
+      "table",
+      "bank_statement_lines",
+      "bank_statement_lines",
+      "CREATE TABLE bank_statement_lines (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    import_id TEXT NOT NULL REFERENCES bank_statement_imports(id) ON DELETE CASCADE,\n    document_id TEXT NOT NULL REFERENCES external_documents(id) ON DELETE CASCADE,\n    line_index INTEGER NOT NULL,\n    booking_date TEXT NOT NULL,\n    value_date TEXT,\n    amount TEXT NOT NULL,\n    currency TEXT NOT NULL,\n    counterparty_name TEXT,\n    counterparty_iban_masked TEXT,\n    remittance TEXT,\n    bank_reference TEXT,\n    end_to_end_id TEXT,\n    account_id TEXT NOT NULL,\n    account_masked TEXT,\n    dedupe_group TEXT NOT NULL,\n    dedupe_key TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    UNIQUE (profile_id, dedupe_key)\n)"
+    ]
+  ]
+}

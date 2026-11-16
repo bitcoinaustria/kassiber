@@ -98,6 +98,31 @@ pub fn execute(
             tx.execute(sql, rusqlite::params_from_iter(parameters))
                 .map_err(sql_error)?;
         }
+        // Bank statements are opt-in tables (`docs/reference/bank-statements.md`):
+        // a wipe discards them too, with their statement documents, so a
+        // re-import starts from nothing. Counted only when the book has them.
+        if kassiber_store::optional::bank_statements_present(&tx)
+            .map_err(|e| AppError::new(e.code, e.message))?
+        {
+            let imports: i64 = tx
+                .query_row(
+                    "SELECT COUNT(*) FROM bank_statement_imports WHERE profile_id = ?",
+                    [&pid],
+                    |r| r.get(0),
+                )
+                .map_err(sql_error)?;
+            replace(
+                &mut removed,
+                "bank_statement_imports",
+                Value::Int(imports.into()),
+            );
+            for (table, sql) in BANK_STATEMENT_WIPE {
+                let n = tx.execute(sql, [&pid]).map_err(sql_error)?;
+                if !table.is_empty() {
+                    replace(&mut removed, table, Value::Int((n as i64).into()));
+                }
+            }
+        }
     } else {
         rebind = crate::book_reset::park_profile(&tx, &wid, &pid, &sources.now(&tx)?)?;
         for sql in DERIVED_DELETES {
@@ -396,6 +421,14 @@ const COUNTS: &[(&str, &str)] = &[
     ("source_funds_recipients", "SELECT COUNT(*) FROM source_funds_recipients WHERE profile_id = ?"),
     ("ai_chat_sessions", "SELECT COUNT(*) FROM ai_chat_sessions WHERE profile_id = ?"),
     ("ai_chat_messages", "SELECT COUNT(*) FROM ai_chat_messages WHERE session_id IN ( SELECT id FROM ai_chat_sessions WHERE profile_id = ? )"),
+];
+/// The wipe of the opt-in bank-statement tables, children first; the
+/// statement documents go last (their attachments are already gone).
+const BANK_STATEMENT_WIPE: &[(&str, &str)] = &[
+    ("bank_statement_line_decisions", "DELETE FROM bank_statement_line_decisions WHERE profile_id = ?"),
+    ("bank_statement_lines", "DELETE FROM bank_statement_lines WHERE profile_id = ?"),
+    ("", "DELETE FROM external_documents WHERE id IN (SELECT document_id FROM bank_statement_imports WHERE profile_id = ?)"),
+    ("", "DELETE FROM bank_statement_imports WHERE profile_id = ?"),
 ];
 const DELETES: &[&str] = &[
     "DELETE FROM chain_observer_instances WHERE profile_id = ?",

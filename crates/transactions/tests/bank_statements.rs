@@ -2,9 +2,55 @@
 //! Synthetic names, IBANs (published example check digits) and amounts only.
 use kassiber_envelope::{dict, get, s};
 use kassiber_pyjson::Value;
-use kassiber_transactions::bank_statements::{
-    mask_ibans, parse, Format, Money, ParseOptions, ParsedStatement,
+use kassiber_store::{rusqlite::Connection, Book};
+use kassiber_transactions::{
+    bank_statements::{
+        mask_ibans, parse,
+        store::{self, ImportRequest, LineFilter},
+        Format, Money, ParseOptions, ParsedStatement,
+    },
+    Scope,
 };
+use std::{fs, path::Path};
+
+fn scope() -> Scope<'static> {
+    Scope {
+        workspace_id: "w",
+        profile_id: "p",
+    }
+}
+
+fn book() -> (tempfile::TempDir, Book) {
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(&dir.path().join("data"), None).unwrap();
+    book.connection().execute_batch("INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2025'); INSERT INTO profiles(id,workspace_id,label,fiat_currency,created_at) VALUES('p','w','Main','EUR','2025'); INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('kraken','w','p','Kraken','kraken','2025'); INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,asset,direction,amount,fee,occurred_at,kind,fiat_currency,fiat_value_exact,created_at) VALUES('buy1','w','p','kraken','f1','BTC','inbound',2000000000,0,'2025-03-05T10:00:00Z','buy','EUR','1000.00','2025'),('buy2','w','p','kraken','f2','BTC','inbound',1000000000,0,'2025-03-20T10:00:00Z','buy','EUR',NULL,'2025');").unwrap();
+    (dir, book)
+}
+
+fn text(v: &Value, key: &str) -> String {
+    match get(v, key) {
+        Some(Value::Str(t)) => t.as_str().unwrap().to_owned(),
+        other => panic!("{key}: {other:?} in {v:?}"),
+    }
+}
+
+fn int(v: &Value, key: &str) -> i64 {
+    match get(v, key) {
+        Some(Value::Int(n)) => i64::try_from(n.clone()).unwrap(),
+        other => panic!("{key}: {other:?}"),
+    }
+}
+
+fn list(v: &Value) -> &[Value] {
+    match v {
+        Value::List(v) => v,
+        _ => panic!("{v:?}"),
+    }
+}
+
+fn count(conn: &Connection, sql: &str) -> i64 {
+    conn.query_row(sql, [], |r| r.get(0)).unwrap()
+}
 
 fn giro() -> ParseOptions {
     ParseOptions {
@@ -372,4 +418,217 @@ fn money_is_exact_decimal_text() {
     for bad in ["1e3", "1,5", " 1", "", "-", "1.2.3"] {
         assert!(Money::parse(bad).is_none(), "{bad}");
     }
+}
+
+// Storage.
+
+fn import_file(
+    conn: &Connection,
+    root: &Path,
+    file: &Path,
+    options: ParseOptions,
+    dry_run: bool,
+) -> kassiber_transactions::bank_statements::Result<Value> {
+    let request = ImportRequest {
+        file: file.to_string_lossy().into_owned(),
+        options,
+        label: None,
+        dry_run,
+    };
+    store::import_statement(conn, &scope(), root, &request)
+}
+
+fn own() -> ParseOptions {
+    ParseOptions {
+        account: Some("AT611904300234573201".into()),
+        ..ParseOptions::default()
+    }
+}
+
+fn csv_ref(lines: &[&str]) -> String {
+    let mut out =
+        String::from("Buchungsdatum;Empfänger;IBAN;Verwendungszweck;Bankreferenz;Betrag;Währung\n");
+    for line in lines {
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
+const MARCH: &str =
+    "03.03.2025;Payward Ltd;AT61 1904 3002 3457 3201;Kraken deposit;REF-MARCH;-1.000,00;EUR";
+const SALARY: &str = "05.03.2025;Example Employer AG;;Gehalt;REF-SALARY;2.500,00;EUR";
+const APRIL: &str = "02.04.2025;Example Shop;;Einkauf;REF-APRIL;-20,00;EUR";
+
+#[test]
+fn imports_dedupe_by_reference_and_roll_back_exactly_what_they_added() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let root = dir.path().join("attachments");
+    let first = dir.path().join("statement_AT611904300234573201.csv");
+    fs::write(&first, csv_ref(&[MARCH, SALARY])).unwrap();
+    let preview = import_file(conn, &root, &first, own(), true).unwrap();
+    assert_eq!(
+        (
+            int(&preview, "lines_new"),
+            store::tables_present(conn).unwrap()
+        ),
+        (2, false),
+        "a dry run creates no tables"
+    );
+    let imported = import_file(conn, &root, &first, own(), false).unwrap();
+    assert_eq!(
+        text(get(&imported, "document").unwrap(), "document_type"),
+        "statement"
+    );
+    let import_id = text(get(&imported, "import").unwrap(), "id");
+    let again = import_file(conn, &root, &first, own(), false).unwrap();
+    assert_eq!(
+        (
+            get(&again, "already_imported"),
+            int(&again, "lines_existing")
+        ),
+        (Some(&Value::Bool(true)), 2)
+    );
+    let second = dir.path().join("april.csv");
+    fs::write(&second, csv_ref(&[SALARY, APRIL])).unwrap();
+    let overlap = import_file(conn, &root, &second, own(), false).unwrap();
+    assert_eq!(
+        (int(&overlap, "lines_new"), int(&overlap, "lines_existing")),
+        (1, 1)
+    );
+    // The same bytes for another own account are another statement.
+    let other = ParseOptions {
+        account: Some("DE89370400440532013000".into()),
+        ..ParseOptions::default()
+    };
+    assert_eq!(
+        int(
+            &import_file(conn, &root, &first, other, false).unwrap(),
+            "lines_new"
+        ),
+        2
+    );
+    // No full counterparty IBAN, no IBAN hash and no original file name is stored.
+    let dump: String = conn.query_row("SELECT group_concat(coalesce(counterparty_iban_masked,'')||coalesce(remittance,''),'|') FROM bank_statement_lines", [], |r| r.get(0)).unwrap();
+    let names: String = conn
+        .query_row(
+            "SELECT group_concat(original_filename||label,'|') FROM attachments",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(
+        !dump.contains("1904300234")
+            && !dump.contains("1904 3002")
+            && !names.contains("1904300234"),
+        "{dump} {names}"
+    );
+    let lines = store::list_lines(
+        conn,
+        &scope(),
+        &LineFilter {
+            direction: "out".into(),
+            document: None,
+            limit: 0,
+        },
+    )
+    .unwrap();
+    assert_eq!(list(&lines).len(), 3);
+    // Rollback plans first, then deletes its lines, document and file.
+    let stored: String = conn.query_row("SELECT a.stored_relpath FROM attachments a JOIN bank_statement_imports i ON i.attachment_id=a.id WHERE i.id=?", [&import_id], |r| r.get(0)).unwrap();
+    assert_eq!(
+        int(
+            &store::rollback(conn, &scope(), &root, &import_id, false).unwrap(),
+            "lines_to_delete"
+        ),
+        2
+    );
+    store::rollback(conn, &scope(), &root, &import_id, true).unwrap();
+    assert_eq!(count(conn, "SELECT COUNT(*) FROM bank_statement_lines"), 3);
+    assert!(!root.join(stored).exists());
+    assert_eq!(
+        store::rollback(conn, &scope(), &root, &import_id, true)
+            .unwrap_err()
+            .code,
+        "not_found"
+    );
+}
+
+#[test]
+fn lines_kassiber_cannot_place_are_refused_by_name() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let root = dir.path().join("attachments");
+    let plain = |name: &str, body: &str| {
+        let file = dir.path().join(name);
+        fs::write(
+            &file,
+            format!("Buchungsdatum;Empfänger;Verwendungszweck;Betrag;Währung\n{body}"),
+        )
+        .unwrap();
+        file
+    };
+    let reason = |e: kassiber_envelope::AppError| text(e.details.as_ref().unwrap(), "reason");
+    import_file(
+        conn,
+        &root,
+        &plain("a.csv", "03.03.2025;Shop;x;-10,00;EUR\n"),
+        own(),
+        false,
+    )
+    .unwrap();
+    // The same transfer without a bank reference, in another file: refused.
+    let same = plain(
+        "b.csv",
+        "03.03.2025;Shop;x;-10,00;EUR\n04.03.2025;Shop;y;-1,00;EUR\n",
+    );
+    assert_eq!(
+        reason(import_file(conn, &root, &same, own(), false).unwrap_err()),
+        "bank_statement_line_ambiguous"
+    );
+    // Same account, date, amount and (no) reference but other details: refused.
+    let differs = plain("c.csv", "03.03.2025;Shop;z;-10,00;EUR\n");
+    let error = import_file(conn, &root, &differs, own(), false).unwrap_err();
+    assert_eq!(
+        (
+            reason(error.clone()),
+            text(error.details.as_ref().unwrap(), "field")
+        ),
+        (
+            "bank_statement_line_conflict".into(),
+            "remittance text".into()
+        )
+    );
+    // The same bytes read with another column map: refused naming the import.
+    let remapped = ParseOptions {
+        column_map: Some(dict([
+            ("booking_date", s("Buchungsdatum")),
+            ("amount", s("Betrag")),
+            ("currency", s("Währung")),
+        ])),
+        ..own()
+    };
+    assert_eq!(
+        reason(
+            import_file(
+                conn,
+                &root,
+                &plain("a.csv", "03.03.2025;Shop;x;-10,00;EUR\n"),
+                remapped,
+                false
+            )
+            .unwrap_err()
+        ),
+        "bank_statement_reparsed"
+    );
+    assert_eq!(
+        count(conn, "SELECT COUNT(*) FROM bank_statement_imports"),
+        1
+    );
+    assert_eq!(
+        count(conn, "SELECT COUNT(*) FROM attachments"),
+        1,
+        "refused imports leave nothing behind"
+    );
 }

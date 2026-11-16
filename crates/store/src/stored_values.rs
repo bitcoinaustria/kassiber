@@ -87,6 +87,13 @@ pub(crate) fn layout_pending(conn: &Connection) -> crate::Result<bool> {
         .map_err(map_sqlite_error)?
         .collect::<rusqlite::Result<_>>()
         .map_err(map_sqlite_error)?;
+    // Opt-in objects (bank statements) are known, never pending layout.
+    let actual: std::collections::BTreeSet<(String, String)> = actual
+        .into_iter()
+        .filter(|(kind, name)| {
+            !crate::optional::optional_names().any(|(k, n)| k == kind && n == name)
+        })
+        .collect();
     if actual != expected {
         return Ok(true);
     }
