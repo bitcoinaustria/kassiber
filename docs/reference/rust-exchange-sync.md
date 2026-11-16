@@ -100,6 +100,18 @@ All three share these rules:
 Kraken API errors (`error` truthy) fail as `auth_error` when any entry mentions
 `permission`, otherwise `protocol_error`, with `details.kraken_errors`.
 
+The table is the `bitcoin` asset scope, the default and Python's behaviour.
+A wallet whose `asset_scope` is `crypto` ([plan 24](../plan/24-crypto-assets.md))
+changes the following, which Python never had:
+
+- **Kraken** sends the same requests and maps the ledger grouped by `refid`
+  for every crypto asset ([mapping](imports.md#kraken-api)).
+
+In both scopes the mapper returns its asset tally, so the envelope gains
+`assets` (`scope`, `skipped` and `excluded` by ticker, and `next_step`) and
+`swap_pairs`. A Kraken crypto-scope sync that skipped moves between Kraken
+balances sets `skipped` to `{"internal_moves": n}`.
+
 ## Stored rows
 
 Each exchange record is a Python import dict: `txid`, `occurred_at`,

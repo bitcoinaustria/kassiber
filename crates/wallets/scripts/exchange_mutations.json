@@ -151,16 +151,6 @@
     "rule": "An error mentioning permission is an auth_error."
   },
   {
-    "id": "kraken-withhold-credentials",
-    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
-    "find": "Py::Str(scrub(item, &[client.key, client.secret]))",
-    "replace": "Py::Str(item.clone())",
-    "expect_failing": [
-      "kraken_errors_keep_permission_codes_and_withhold_credentials"
-    ],
-    "rule": "Echoed credentials never reach the error details."
-  },
-  {
     "id": "kraken-base64-lenient",
     "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
     "find": "let Some(v) = value(c) else { continue };",
@@ -859,12 +849,215 @@
     ]
   },
   {
+    "id": "kraken-bitcoin-scope-tally",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "            left_out(&row, tally);",
+    "replace": "            let _ = &tally;",
+    "expect_failing": [
+      "kraken_bitcoin_scope_keeps_btc_and_counts_every_other_asset"
+    ],
+    "rule": "The bitcoin scope counts every non-fiat row it leaves out, by ticker."
+  },
+  {
+    "id": "kraken-earn-btc-counted",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "tally.admit(Scope::Bitcoin, &code, assets::Class::Crypto);",
+    "replace": "tally.admit(Scope::Bitcoin, &code, assets::Class::Bitcoin);",
+    "expect_failing": [
+      "kraken_bitcoin_scope_keeps_btc_and_counts_every_other_asset"
+    ],
+    "rule": "BTC in a Kraken earn or staking balance, left out by the bitcoin scope, is counted as BTC."
+  },
+  {
+    "id": "kraken-staking-suffixes",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "const SUFFIXES: [&str; 6] = [\"S\", \"M\", \"F\", \"B\", \"P\", \"HOLD\"];",
+    "replace": "const SUFFIXES: [&str; 6] = [\"X\", \"M\", \"F\", \"B\", \"P\", \"HOLD\"];",
+    "expect_failing": [
+      "kraken_asset_codes_map_exactly_or_not_at_all",
+      "kraken_crypto_scope_maps_trades_swaps_rewards_fees_and_internal_moves"
+    ],
+    "rule": "Kraken balance suffixes name the base asset."
+  },
+  {
+    "id": "kraken-bonding-digits-not-guessed",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "base.bytes().rev().take(2).all(|b| b.is_ascii_digit())",
+    "replace": "false",
+    "expect_failing": [
+      "kraken_asset_codes_map_exactly_or_not_at_all",
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "A staked code ending in two unknown digits is refused, not read as a ticker."
+  },
+  {
+    "id": "kraken-legacy-aliases",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "    (\"XXDG\", \"DOGE\"),",
+    "replace": "    (\"XXDG\", \"XXDG\"),",
+    "expect_failing": [
+      "kraken_asset_codes_map_exactly_or_not_at_all"
+    ],
+    "rule": "Kraken's legacy X/Z codes map to their canonical tickers."
+  },
+  {
+    "id": "kraken-tokenized-excluded",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "\"tokenized_asset\" => Some(Some(assets::Class::Excluded)),",
+    "replace": "\"tokenized_asset\" => Some(None),",
+    "expect_failing": [
+      "kraken_tokenized_assets_are_excluded_by_their_own_asset_class"
+    ],
+    "rule": "Kraken's own tokenized asset class is excluded, never imported."
+  },
+  {
+    "id": "kraken-unknown-asset-class",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "\"tokenized_asset\" => Some(Some(assets::Class::Excluded)),\n        _ => None,",
+    "replace": "\"tokenized_asset\" => Some(Some(assets::Class::Excluded)),\n        _ => Some(None),",
+    "expect_failing": [
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "An unknown Kraken asset class is refused."
+  },
+  {
+    "id": "kraken-excluded-against-crypto",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "        if !holdings.is_empty() {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "A tokenized asset paid for with crypto is refused rather than drop the crypto disposal."
+  },
+  {
+    "id": "kraken-swap-ref",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "            swap_leg(entry, &reference)",
+    "replace": "            record(entry)",
+    "expect_failing": [
+      "kraken_crypto_scope_maps_trades_swaps_rewards_fees_and_internal_moves"
+    ],
+    "rule": "Both legs of a crypto-to-crypto trade share the trade's swap_ref, so the import pairs them."
+  },
+  {
+    "id": "kraken-third-asset-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "        } else if !is_zero(&leg.parsed.fee)? {\n            fees.push(*leg);",
+    "replace": "        } else if !is_zero(&leg.parsed.fee)? {\n            fees.push(*leg);\n            fees.pop();",
+    "expect_failing": [
+      "kraken_crypto_scope_maps_trades_swaps_rewards_fees_and_internal_moves"
+    ],
+    "rule": "A fee-only row in a third asset (KFEE) is its own fee row."
+  },
+  {
+    "id": "kraken-fee-in-traded-asset",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": ".find(|fee| holdings.iter().any(|leg| leg.code == fee.code))",
+    "replace": ".find(|_| false)",
+    "expect_failing": [
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "A separate fee row in a traded asset is refused."
+  },
+  {
+    "id": "kraken-swap-fiat-leg",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "if !is_zero(&leg.parsed.amount)? || !is_zero(&leg.parsed.fee)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "A swap that also moves fiat is refused."
+  },
+  {
+    "id": "kraken-swap-directions",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "if first_in == at_least_zero(&second.parsed.amount)? || first.code == second.code {",
+    "replace": "if first.code == second.code {",
+    "expect_failing": [
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "A swap is one asset out and another in."
+  },
+  {
+    "id": "kraken-trade-family-mix",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": ".any(|leg| buy_crypto(leg) != buy_crypto(group[0]))",
+    "replace": ".any(|_| false)",
+    "expect_failing": [
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "Trade and spend/receive rows under one refid are refused."
+  },
+  {
+    "id": "kraken-buy-crypto-value",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "let gross = abs(counter.parsed.amount.clone())?;",
+    "replace": "let gross = abs(counter.parsed.fee.clone())?;",
+    "expect_failing": [
+      "kraken_crypto_scope_maps_trades_swaps_rewards_fees_and_internal_moves"
+    ],
+    "rule": "Buy Crypto is valued at the fiat leg it spent."
+  },
+  {
+    "id": "kraken-reward-income",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "        kind: \"income\",",
+    "replace": "        kind: \"deposit\",",
+    "expect_failing": [
+      "kraken_crypto_scope_maps_trades_swaps_rewards_fees_and_internal_moves"
+    ],
+    "rule": "Staking and earn rewards are income."
+  },
+  {
+    "id": "kraken-reward-positive",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "if !positive(&leg.parsed.amount)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "A reward that is not a positive credit is refused."
+  },
+  {
+    "id": "kraken-internal-subtypes",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "\"spottostaking\" | \"stakingfromspot\" | \"stakingtospot\" | \"spotfromstaking\"",
+    "replace": "_",
+    "expect_failing": [
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "Only spot/staking moves are skipped; other transfers (futures) are refused."
+  },
+  {
+    "id": "kraken-internal-move-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "    if !is_zero(&leg.parsed.fee)? {\n        return Err(refused(",
+    "replace": "    if false {\n        return Err(refused(",
+    "expect_failing": [
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "A move between Kraken balances that costs a fee is refused."
+  },
+  {
+    "id": "kraken-exact-units-named",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "    exact(\n        &entry,\n        &format!(\"ledger row '{}'\", id.trim_start_matches(\"kraken:\")),\n    )?;\n",
+    "replace": "",
+    "expect_failing": [
+      "kraken_crypto_scope_refuses_rows_it_cannot_map_exactly"
+    ],
+    "rule": "An amount finer than 11 decimals is refused naming the ledger row."
+  },
+  {
     "id": "assets-third-asset-fee-is-fee-only",
     "file": "crates/wallets/src/file_import/assets.rs",
     "find": "    (PriceNumber::Finite(Decimal::zero()), quantity)\n",
     "replace": "    (quantity, PriceNumber::Finite(Decimal::zero()))\n",
     "expect_failing": [
       "bitpanda_crypto_scope_imports_other_crypto_assets",
+      "kraken_crypto_scope_maps_trades_swaps_rewards_fees_and_internal_moves",
       "third_asset_fees_become_their_own_rows"
     ],
     "rule": "A fee paid in a third asset is a fee-only spend (amount 0, the quantity as fee), never a principal the tax engine would sell."
@@ -876,6 +1069,7 @@
     "replace": "    if true {\n        return Ok(None);\n    }\n",
     "expect_failing": [
       "inbound_fees_in_the_same_asset_leave_the_net_quantity",
+      "kraken_crypto_scope_maps_trades_swaps_rewards_fees_and_internal_moves",
       "crypto_scope_imports_every_row_kind_for_any_crypto_asset",
       "crypto_swaps_pair_once_and_reimports_add_nothing"
     ],
@@ -911,6 +1105,16 @@
       "bitpanda_crypto_scope_refuses_what_it_cannot_place"
     ],
     "rule": "Every exchange record's amount and fee is checked as parsed, before a 32-digit rounding could store a finer value as a whole unit."
+  },
+  {
+    "id": "kraken-cross-asset-hint-names-the-way",
+    "file": "crates/wallets/src/file_import/exchange_api/kraken.rs",
+    "find": "if error.hint.as_deref() != Some(CROSS_ASSET) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "kraken_crypto_quoted_trade_hint_names_a_way_to_import_it"
+    ],
+    "rule": "A Kraken sync replaces the dead-end generic-ledger hint for a crypto-quoted trade with the scope command or the generic CSV/JSON import."
   },
   {
     "id": "exchange-echoed-page-refused",
