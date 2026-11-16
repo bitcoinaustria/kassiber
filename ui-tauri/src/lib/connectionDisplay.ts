@@ -30,6 +30,7 @@ export const connectionKindCategoryLabels: Record<ConnectionKind, string> = {
   coinbase: "Exchange",
   bitpanda: "Exchange",
   bitvavo: "Exchange",
+  bitfinex: "Exchange",
   river: "Exchange",
   bullbitcoin: "Exchange",
   coinfinity: "Exchange",
@@ -85,6 +86,7 @@ export const connectionKindLabels: Record<ConnectionKind, string> = {
   coinbase: "Coinbase",
   bitpanda: "Bitpanda",
   bitvavo: "Bitvavo",
+  bitfinex: "Bitfinex",
   river: "River",
   bullbitcoin: "Bull Bitcoin",
   coinfinity: "Coinfinity",
@@ -166,6 +168,7 @@ export function connectionTypeLabel(connection: ConnectionTypeInput): string {
     case "coinbase":
     case "bitpanda":
     case "bitvavo":
+    case "bitfinex":
     case "river":
     case "bullbitcoin":
     case "coinfinity":

@@ -11,6 +11,7 @@ import {
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import binanceIcon from "@/assets/integrations/binance.svg";
+import bitfinexIcon from "@/assets/integrations/bitfinex.svg";
 import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
 import bitstampIcon from "@/assets/integrations/bitstamp.svg";
 import bitboxIcon from "@/assets/integrations/bitbox.svg";
@@ -107,7 +108,7 @@ export interface ConnectionSource {
   forwardTo?: string;
   walletKind?: string;
   /** Exchange whose history an `exchange-api` setup reads with a read-only key. */
-  exchange?: "kraken" | "coinbase" | "binance" | "bitpanda" | "bitvavo" | "bitstamp";
+  exchange?: "kraken" | "coinbase" | "binance" | "bitpanda" | "bitvavo" | "bitstamp" | "bitfinex";
   sourceFormat?: ConnectionSourceFormat;
   chain?: "bitcoin" | "liquid";
   network?: string;
@@ -838,6 +839,26 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
       "Import the transaction history exported in the RFC 4180 format; the legacy export has no transaction IDs and is refused",
       "Rows share their IDs with the API, so the export and the API sync dedupe in one wallet",
       "Fiat-only and other-asset rows are skipped; BTC traded against another coin is refused",
+    ],
+  },
+  {
+    id: "bitfinex",
+    title: "Bitfinex",
+    description: "Bitfinex BTC spot trades and movements through a read-only API key.",
+    category: "exchanges",
+    image: bitfinexIcon,
+    imageClassName: "size-8",
+    status: "ready",
+    pathLabel: "API import",
+    formatLabel: "read-only API key",
+    docsHref: "https://docs.bitfinex.com/docs/api-access",
+    setupKind: "exchange-api",
+    exchange: "bitfinex",
+    details: [
+      "Needs a key with only read permissions (Account History and Wallets); a key with any write permission is refused",
+      "BTC trades against USD, EUR, GBP or JPY keep their exact execution value; BTC deposits, withdrawals and funding interest import too",
+      "Margin, derivatives and BTC traded against another coin refuse the sync by name",
+      "Kassiber contacts Bitfinex only when you test the key or press Sync now",
     ],
   },
   {

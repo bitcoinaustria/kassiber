@@ -131,6 +131,20 @@ describe("ExchangeApiSetupPanel", () => {
     expect(screen.getByRole("list", { name: "Leave off" }).textContent).toContain("Withdrawals");
     expect(screen.getByLabelText("API secret")).toBeTruthy();
     expect(screen.getByText(/does not tell Kassiber what else a key may do/)).toBeTruthy();
+    cleanup();
+
+    // Bitfinex signs with a key and its API key secret; the key may only read.
+    mount("bitfinex");
+    const bitfinexGrant = screen.getByRole("list", { name: "Turn on only" }).textContent;
+    expect(bitfinexGrant).toContain("Account History: Get historical balances entries and trade information");
+    expect(bitfinexGrant).toContain("Wallets: Get wallet balances and addresses");
+    expect(screen.getByRole("list", { name: "Leave off" }).textContent).toContain(
+      "Withdraw: Create a new withdrawal",
+    );
+    expect(screen.getByLabelText("API key secret")).toBeTruthy();
+    expect(screen.getByText(/refuses a key with any write permission/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open the Bitfinex API key page" }));
+    expect(mocks.openExternalUrl).toHaveBeenCalledWith("https://setting.bitfinex.com/api");
   });
 
   it("tests only complete credentials, sends exactly them, and never shows them", async () => {

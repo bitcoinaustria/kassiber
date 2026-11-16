@@ -12,10 +12,10 @@ use std::collections::BTreeMap;
 const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
 const DESCRIPTOR_KINDS: [&str; 4] = ["descriptor", "xpub", "silent-payment", "samourai"];
 const LIGHTNING_NODE_KINDS: [&str; 2] = ["coreln", "lnd"];
-const EXCHANGE_API_KINDS: [&str; 6] = [
-    "kraken", "coinbase", "binance", "bitpanda", "bitvavo", "bitstamp",
+const EXCHANGE_API_KINDS: [&str; 7] = [
+    "kraken", "coinbase", "binance", "bitpanda", "bitvavo", "bitstamp", "bitfinex",
 ];
-const CUSTODIAL_EXPORT_KINDS: [&str; 12] = [
+const CUSTODIAL_EXPORT_KINDS: [&str; 13] = [
     "river",
     "bullbitcoin",
     "coinfinity",
@@ -28,6 +28,7 @@ const CUSTODIAL_EXPORT_KINDS: [&str; 12] = [
     "bitpanda",
     "bitvavo",
     "bitstamp",
+    "bitfinex",
 ];
 /// Classes Kassiber scans itself, so a missing sync time means nothing was
 /// observed yet.
@@ -398,6 +399,7 @@ mod tests {
                 r#"{"source_format":"bitstamp_csv"}"#,
                 "exchange-export",
             ),
+            ("bitfinex", r#"{"backend":"b"}"#, "provider-api"),
             ("custom", r#"{"source_format":"generic_ledger"}"#, "manual"),
             ("custom", r#"{"source_format":" "}"#, "manual"),
             ("custom", r#"{"source_format":"bisq"}"#, "file-import"),

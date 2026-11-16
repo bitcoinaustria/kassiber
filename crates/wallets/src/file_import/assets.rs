@@ -116,6 +116,8 @@ pub(crate) struct Tally {
     skipped: BTreeMap<String, i64>,
     /// Non-crypto rows no scope keeps.
     excluded: BTreeMap<String, i64>,
+    /// Crypto rows of an importer that reads only BTC, which no scope keeps.
+    unread: BTreeMap<String, i64>,
     /// What the import did not read at all, for `next_step`.
     notices: Vec<String>,
 }
@@ -123,6 +125,26 @@ impl Tally {
     /// Names a history the import did not read, in `next_step`.
     pub(crate) fn notice(&mut self, text: String) {
         self.notices.push(text);
+    }
+
+    /// Counts, rows per ticker, the crypto assets an importer that reads only
+    /// BTC from `provider` left out, as `unread` and in `next_step`: not as
+    /// `skipped`, which would offer a scope that does not keep them.
+    pub(crate) fn unread(&mut self, provider: &str, rows: &BTreeMap<String, i64>) {
+        if rows.is_empty() {
+            return;
+        }
+        for (code, n) in rows {
+            *self.unread.entry(code.clone()).or_default() += n;
+        }
+        let rows: Vec<String> = rows
+            .iter()
+            .map(|(code, n)| format!("{code} ({n})"))
+            .collect();
+        self.notice(format!(
+            "Kassiber reads only BTC from {provider}, in either asset scope, and left out entries in {}; record them yourself (generic CSV/JSON import)",
+            rows.join(", ")
+        ));
     }
 
     /// Whether a row in `code` of `class` may be imported under `scope`;
@@ -144,8 +166,9 @@ impl Tally {
     }
 
     /// `{"scope", "skipped": {TICKER: rows}, "excluded": {TICKER: rows}}`,
-    /// plus `next_step` naming the command that keeps the skipped assets
-    /// when the `bitcoin` scope skipped any.
+    /// plus `unread: {TICKER: rows}` when an importer that reads only BTC
+    /// left any out, and `next_step` naming the command that keeps the
+    /// skipped assets when the `bitcoin` scope skipped any.
     pub(crate) fn envelope(&self, scope: Scope, wallet: &str) -> Py {
         let counts = |map: &BTreeMap<String, i64>| {
             dict(
@@ -159,6 +182,9 @@ impl Tally {
             ("skipped", counts(&self.skipped)),
             ("excluded", counts(&self.excluded)),
         ];
+        if !self.unread.is_empty() {
+            fields.push(("unread", counts(&self.unread)));
+        }
         let mut steps = vec![];
         if !self.skipped.is_empty() {
             steps.push(format!(
@@ -286,6 +312,21 @@ pub(super) fn net_inbound(
         .with_hint("Kassiber stores an incoming amount net of its fee and cannot store a fee that takes all of it; check the row in the source."));
     }
     Ok(Some(PriceNumber::Finite(net_amount)))
+}
+
+/// The hint of an importer that reads only BTC from `provider` when a wallet
+/// whose scope is `crypto` meets another asset.
+pub(crate) fn only_btc(provider: &str) -> String {
+    format!("Kassiber does not import other assets from {provider}. Set this wallet's asset_scope to bitcoin to import its BTC, and record the other assets yourself (generic CSV/JSON import).")
+}
+
+/// Refuses, before any request, a sync that reads only BTC history from
+/// `provider` into a wallet whose scope is `crypto`: it cannot see another
+/// asset's bookings, so it would leave them out unnamed.
+pub(crate) fn btc_only_sync(provider: &str) -> AppError {
+    let message =
+        format!("{provider} sync reads only BTC, and this wallet's asset_scope is crypto");
+    AppError::new("validation", message).with_hint(only_btc(provider))
 }
 
 /// The command that sets a wallet's scope to `crypto`, for hints that tell

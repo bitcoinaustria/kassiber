@@ -200,7 +200,7 @@ fn exchange_connection_kinds_are_desktop_kinds() {
         .collect();
     assert_eq!(
         exchanges,
-        ["binance", "bitpanda", "bitstamp", "bitvavo", "coinbase", "kraken"]
+        ["binance", "bitfinex", "bitpanda", "bitstamp", "bitvavo", "coinbase", "kraken"]
     );
 }
 

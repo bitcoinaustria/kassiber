@@ -35,9 +35,10 @@ pub(super) const RESERVED: [&str; 17] = [
     "is_default",
     "source",
 ];
-pub(super) const KINDS: [&str; 15] = [
+pub(super) const KINDS: [&str; 16] = [
     "binance",
     "bitcoinrpc",
+    "bitfinex",
     "bitpanda",
     "bitstamp",
     "bitvavo",
