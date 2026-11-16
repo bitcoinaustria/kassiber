@@ -77,6 +77,86 @@ All three share these rules:
 Kraken API errors (`error` truthy) fail as `auth_error` when any entry mentions
 `permission`, otherwise `protocol_error`, with `details.kraken_errors`.
 
+## Reported balances
+
+Each sync also reads the exchange's own BTC balance in the same consented run
+and stores it as an `api` [balance checkpoint](balance-checkpoints.md), which
+the book's balance at that time is compared with. Python never read balances;
+this is Rust only. The read is part of the user's sync: there is no separate
+request, schedule or background read, and offline mode or a revoked consent
+stops it like any history read.
+
+The shared interface, in `crates/wallets/src/file_import/exchange_api.rs`:
+
+```rust
+pub struct ReportedBalance {
+    pub asset: &'static str,  // "BTC"
+    pub amount_msat: i64,     // exact; more than 11 fractional digits fail closed
+    pub as_of: String,        // UTC ISO-8601 instant the figure refers to
+    pub scope: &'static str,  // which balance it is, documented per exchange
+}
+```
+
+An exchange module's `fetch` returns the shared `Fetched { records, skipped,
+balance, balance_unavailable }`. A new exchange plugs in by returning
+`balance: Some(...)` from one function that reads the balance after the
+history reads, through the same `Client` (so the gate is rechecked), and
+parses figures with `balance_msat(text, exchange)`. Balances that include
+funds the history cannot see (staking, Earn, margin, funding wallets) must be
+left out of the number or named in `scope`, and the scope gets a sentence in
+`kassiber_wallets::checkpoints::scope_note` and in the exchange's reference.
+A balance is a diagnostic, so its failure never fails the history sync:
+wrap the read in `soft_balance(...)`, which turns every recoverable failure
+(a permission refusal, an HTTP 4xx or 5xx, a network error, an unreadable
+answer) into a `BalanceGap { reason, error }` and keeps only offline and
+consent refusals (`network_egress_disabled`, `interaction_required`) fatal.
+`split` turns the outcome into the `balance` and `balance_unavailable`
+fields. Reasons: `permission_denied` (an `auth_error`), `read_failed`,
+`incomplete`, `conflicting` and `ambiguous`.
+
+`execute` stores the balance as a checkpoint (origin `api`, `origin_ref`
+`<kind>:api:<backend>`) in the same savepoint as the imported rows, so a sync
+that fails or is refused before publication stores neither. Its envelope adds:
+
+```json
+"reported_balance": {"asset": "BTC", "amount_msat": 698900000, "as_of": "2026-11-12T10:00:00Z", "scope": "kraken_spot"},
+"balance_checkpoint_id": "<id>"
+```
+
+or, when the history imported but no balance is stored,
+
+```json
+"reported_balance_unavailable": {"reason": "permission_denied", "error": {"class": "auth", "message": "The exchange refused this key access to the balance."}}
+```
+
+(`error` is `null` for a missing or conflicting figure). The error is an
+allowlisted class (`auth`, `rate_limited`, `unavailable`, `malformed`,
+`network`) with a fixed local message: the exchange's response text, which a
+read error can quote, never reaches the envelope, the desktop's last-sync
+record or the book. The keys are omitted when the exchange has no
+BTC account at all.
+
+| Exchange | Balance read | `scope` | Counts | Key permission |
+| --- | --- | --- | --- | --- |
+| Kraken | `POST /0/private/Balance` (body `nonce=<ns>`), after both histories | `kraken_spot` | `XXBT` plus `XBT` (both spellings of spot BTC). Every suffixed key (`XBT.F` Earn/flexible, `XBT.B`, `XBT.S`, `XBT.M`, `XBT.P` staking and opt-in rewards) and futures are excluded: the Ledgers history this sync imports does not cover them | Query Funds. A key without it still syncs; the envelope gives reason `permission_denied`, no checkpoint is stored, and the desktop's Balance checks card asks for Query funds (read-only) |
+| Coinbase | none extra: the `balance` of every BTC account already in the `/v2/accounts` pages, summed, as of the end of that read (before the transactions are read) | `coinbase_btc_accounts` | every BTC account the sync reads history for, wallets and vaults, each id once (the same id on two pages counts once); a pending send or receive may already be in it. A BTC account without a usable id or without a balance gives no total (`incomplete`); one id with two figures gives none (`conflicting`) | `wallet:accounts:read`, which the sync needs anyway |
+| Binance | `GET /api/v3/account?omitZeroBalances=true`, after the four history reads | `binance_spot_free_plus_locked` | spot `free` plus `locked` for `BTC`. Earn (Simple Earn, staking), Funding, margin and futures wallets are separate accounts and excluded. The API history does not import spot trades, so a spot account that traded shows them as a difference | Enable Reading |
+| Bitpanda | none: each BTC wallet's `asset_balance_after` on its latest BTC transaction in the `/v1/operations` history, summed, as of the latest of those transactions | `bitpanda_wallet_balance_after` | every Bitpanda wallet with a BTC leg in the history. No balance when a wallet's latest leg lacks the figure (`incomplete`) or two of its legs share the latest time with different figures (`ambiguous`). BTC staked or in Earn outside those wallets is not included | none beyond the sync's (`Transaction`, `Trade (Read)`); the `Balances` scope is not used |
+
+Coverage: `exchange_api/tests.rs` (`kraken_signs_every_page_*` asserts the
+balance is the last of the run's requests and the stored checkpoint,
+`a_kraken_key_without_query_funds_still_syncs_its_history`,
+`binance_signs_each_history_query_*`, `coinbase_signs_pages_*`,
+`reported_balances_parse_exactly_or_fail_closed`,
+`coinbase_totals_need_every_btc_account_once`,
+`a_failed_binance_balance_read_still_imports_the_history` (403, 500, a
+malformed and an inexact answer), `kraken_and_coinbase_balance_failures_leave_the_history`,
+`going_offline_before_the_balance_read_stops_the_whole_sync`) and
+`tests/bitpanda_api.rs` (`bitpanda_without_a_latest_balance_still_imports_the_history`), all against loopback servers. The existing
+`exchange_reads_need_the_callers_consent_and_an_open_gate` shows that without
+consent or with the gate closed no request, the balance read included, is
+sent.
+
 ## Stored rows
 
 Each exchange record is a Python import dict: `txid`, `occurred_at`,

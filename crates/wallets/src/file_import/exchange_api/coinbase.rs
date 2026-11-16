@@ -14,9 +14,12 @@ const MOVEMENTS: [&str; 6] = [
 ];
 const INCOME: [&str; 3] = ["interest", "staking_reward", "inflation_reward"];
 
-pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
+pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {
     let mut budget = Budget::default();
     let accounts = paginated(client, "/v2/accounts", &mut budget)?;
+    // The account pages already carry each account's balance: no further
+    // request, and the figure is as of this read, before the transactions.
+    let as_of = read_time()?;
     let mut transactions = vec![];
     for account in &accounts {
         if !matches!(account, Py::Dict(_)) {
@@ -40,7 +43,96 @@ pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
         // str(item.get("currency") or ...): the code was truthy to get here.
         transactions.push((text(code), rows));
     }
-    records(&transactions)
+    // A missing, conflicting or unreadable figure leaves the history intact.
+    let outcome = match balance(&accounts, as_of) {
+        Ok(balance) => (balance, None),
+        Err(gap) => (None, Some(gap)),
+    };
+    Ok(Fetched {
+        records: records(&transactions)?,
+        skipped: None,
+        balance: outcome.0,
+        balance_unavailable: outcome.1,
+    })
+}
+
+/// The sum of every BTC account's `balance` (wallets and vaults alike: the
+/// sync reads every BTC account's history), only from a complete set of
+/// unique accounts. A BTC account without a balance gives no total
+/// (`incomplete`); the same account id listed twice with different figures
+/// gives none either (`conflicting`); an unreadable figure is `read_failed`.
+/// `Ok(None)` when there is no BTC account at all.
+pub(super) fn balance(
+    accounts: &[Py],
+    as_of: String,
+) -> Result<Option<ReportedBalance>, BalanceGap> {
+    let mut seen: BTreeMap<String, i64> = BTreeMap::new();
+    for account in accounts.iter().filter(|a| matches!(a, Py::Dict(_))) {
+        let currency = at(account, "currency");
+        let code = match currency {
+            Py::Dict(_) => at(currency, "code"),
+            other => other,
+        };
+        if asset(code) != "BTC" {
+            continue;
+        }
+        // A BTC account the sync cannot name (and whose history it skips)
+        // leaves the set incomplete.
+        let id = at(account, "id");
+        let id = if truthy(id) {
+            lossy(&text(id))
+        } else {
+            String::new()
+        };
+        if kassiber_pytext::strip(&id).is_empty() {
+            return Err(BalanceGap::new("incomplete", None));
+        }
+        let balance = at(account, "balance");
+        if *balance == Py::Null {
+            return Err(BalanceGap::new("incomplete", None));
+        }
+        let refused = || {
+            BalanceGap::new(
+                "read_failed",
+                Some(AppError::new(
+                    "protocol_error",
+                    "Coinbase reported a BTC account balance Kassiber cannot read exactly",
+                )),
+            )
+        };
+        if asset(at(balance, "currency")) != "BTC" {
+            return Err(refused());
+        }
+        let Py::Str(amount) = at(balance, "amount") else {
+            return Err(refused());
+        };
+        let amount = balance_msat(&lossy(amount), "Coinbase")
+            .map_err(|error| BalanceGap::new("read_failed", Some(error)))?;
+        match seen.get(&id) {
+            Some(known) if *known != amount => {
+                return Err(BalanceGap::new("conflicting", None));
+            }
+            Some(_) => {}
+            None => {
+                seen.insert(id, amount);
+            }
+        }
+    }
+    if seen.is_empty() {
+        return Ok(None);
+    }
+    let mut total: i64 = 0;
+    for amount in seen.values() {
+        total = total
+            .checked_add(*amount)
+            .ok_or_else(|| BalanceGap::new("read_failed", Some(limit())))?;
+    }
+    Ok(Some(ReportedBalance {
+        asset: "BTC",
+        amount_msat: total,
+        as_of,
+        scope: "coinbase_btc_accounts",
+    }))
 }
 
 /// `normalize_coinbase_records` over `{"currency", "transactions"}` items.

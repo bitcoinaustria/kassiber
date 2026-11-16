@@ -367,8 +367,20 @@ fn a_new_connection_wallet_is_the_one_the_cli_sync_creates() {
         tables(conn)
             .into_iter()
             .filter(|row| !row.starts_with("schema_migration_audits:"))
+            // A balance checkpoint carries the time of its own read.
+            .filter(|row| !row.starts_with("balance_checkpoints:"))
             .collect()
     };
+    for conn in [&desktop_conn, &cli] {
+        let checkpoints: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM balance_checkpoints WHERE origin='api' AND amount_msat=698900000",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(checkpoints, 1);
+    }
     let (desktop_rows, cli_rows) = (rows(&desktop_conn), rows(&cli));
     assert!(cli_rows.iter().any(|row| row.starts_with("transactions:")));
     let only = |a: &[String], b: &[String]| -> Vec<String> {

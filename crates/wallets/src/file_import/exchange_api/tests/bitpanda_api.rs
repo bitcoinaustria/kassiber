@@ -433,6 +433,12 @@ fn bitpanda_reads_only_and_maps_every_btc_event() {
         kassiber_pyjson::dumps(at(&result, "skipped"), &Default::default()).unwrap(),
         r#"{"fiat_only_operations": 1, "non_btc_operations": 2, "internal_btc_moves": 1}"#
     );
+    // Each BTC wallet's balance after its latest BTC leg (w-btc 0.00491 on
+    // 01-08, w-earn 0.005 on 01-04), from the history itself.
+    let balance = at(&result, "reported_balance");
+    assert_eq!(at(balance, "amount_msat"), &Py::from(991_000_000));
+    assert_eq!(at(balance, "as_of"), &s("2024-01-08T00:00:00Z"));
+    assert_eq!(at(balance, "scope"), &s("bitpanda_wallet_balance_after"));
     // Only reads, each carrying the key, in this order; cursors escaped.
     assert!(served.fake.seen.lock().unwrap().iter().all(|r| r.signed));
     assert_eq!(
@@ -1064,4 +1070,25 @@ fn bitpanda_query_values_are_escaped() {
         "eyJsYXN0SWQiOiIxMjM0NTYifQ%3D%3D"
     );
     assert_eq!(bitpanda::escape("a+b/c d~-._"), "a%2Bb%2Fc%20d~-._");
+}
+
+/// A Bitpanda wallet whose latest BTC leg carries no balance gives no
+/// checkpoint, says why, and the history still imports.
+#[test]
+fn bitpanda_without_a_latest_balance_still_imports_the_history() {
+    let mut script = Script::new();
+    let savings = script
+        .operations
+        .iter()
+        .position(|o| o["operation_id"] == "op-savings")
+        .unwrap();
+    script.operations[savings]["transactions"][0]["asset_balance_after"] = json!(null);
+    let (_, run) = sync(script);
+    let result = run.result.unwrap();
+    assert_eq!(at(&result, "imported"), &Py::from(6));
+    assert_eq!(at(&result, "reported_balance"), &Py::Null);
+    assert_eq!(
+        at(at(&result, "reported_balance_unavailable"), "reason"),
+        &s("incomplete")
+    );
 }

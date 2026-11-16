@@ -22,12 +22,6 @@ const NAMED: [&str; 5] = ["deposit", "withdrawal", "reward", "buy", "sell"];
 /// Bitpanda's BTC quantities must be whole msat.
 const BTC_DECIMALS: usize = 11;
 
-pub(super) struct Fetched {
-    pub records: Vec<Py>,
-    /// Operations left out on purpose, by reason; reported in the envelope.
-    pub skipped: Py,
-}
-
 pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {
     refuse_trading_keys(client)?;
     let mut budget = Budget::default();
@@ -560,14 +554,90 @@ pub(super) fn normalize(
             None => internal += 1,
         }
     }
+    // A missing or ambiguous figure leaves the history intact.
+    let outcome = match balance(&ledger) {
+        Ok(balance) => (balance, None),
+        Err(gap) => (None, Some(gap)),
+    };
     Ok(Fetched {
         records,
-        skipped: dict([
+        skipped: Some(dict([
             ("fiat_only_operations", Py::from(fiat_only)),
             ("non_btc_operations", Py::from(other)),
             ("internal_btc_moves", Py::from(internal)),
-        ]),
+        ])),
+        balance: outcome.0,
+        balance_unavailable: outcome.1,
     })
+}
+
+/// A non-negative decimal as exact msat, `None` when it is finer than a
+/// millisatoshi or too large.
+fn decimal_msat(value: &Decimal) -> Option<i64> {
+    if value.is_negative() {
+        return None;
+    }
+    let mut coefficient = value.coefficient_u128()?;
+    let mut shift = value.exponent().checked_add(BTC_DECIMALS as i64)?;
+    while shift < 0 {
+        if coefficient % 10 != 0 {
+            return None;
+        }
+        coefficient /= 10;
+        shift += 1;
+    }
+    for _ in 0..shift {
+        coefficient = coefficient.checked_mul(10)?;
+    }
+    i64::try_from(coefficient).ok()
+}
+
+/// The BTC balance the history itself reports: each Bitpanda BTC wallet's
+/// `asset_balance_after` on its latest BTC transaction, summed, as of the
+/// latest of those transactions. No extra request or scope. `None` when a
+/// wallet's latest balance is missing or two of its transactions share the
+/// latest time with different balances (the order is then unknown).
+pub(super) fn balance(ledger: &Ledger) -> Result<Option<ReportedBalance>, BalanceGap> {
+    let unreadable = |message: &str| {
+        BalanceGap::new(
+            "read_failed",
+            Some(AppError::new("protocol_error", message.to_owned())),
+        )
+    };
+    let (mut total, mut latest) = (0i64, None::<i64>);
+    for entries in ledger.values() {
+        let Some(last) = entries.iter().map(|(at, _, _)| *at).max() else {
+            continue;
+        };
+        let mut figures = entries
+            .iter()
+            .filter(|(at, _, _)| *at == last)
+            .map(|(_, after, _)| after.as_ref().map(decimal_msat));
+        let Some(Some(figure)) = figures.next() else {
+            return Err(BalanceGap::new("incomplete", None));
+        };
+        if figures.any(|other| other != Some(figure)) {
+            return Err(BalanceGap::new("ambiguous", None));
+        }
+        let figure = figure.ok_or_else(|| {
+            unreadable("Bitpanda reported a BTC balance Kassiber cannot read exactly")
+        })?;
+        total = total
+            .checked_add(figure)
+            .ok_or_else(|| BalanceGap::new("read_failed", Some(limit())))?;
+        latest = Some(latest.map_or(last, |l| l.max(last)));
+    }
+    let Some(latest) = latest else {
+        return Ok(None);
+    };
+    let as_of = kassiber_rates::time::format(latest - latest % 1_000_000)
+        .ok_or_else(|| unreadable("Bitpanda transaction time is out of range"))?;
+    Ok(Some(ReportedBalance {
+        asset: "BTC",
+        amount_msat: total,
+        as_of,
+        scope: "bitpanda_wallet_balance_after",
+    }))
 }
 
 const REVIEW: &str = "Kassiber imports only plain BTC buys, sells, deposits, withdrawals and rewards from Bitpanda; record this operation yourself (generic ledger import) after checking it in Bitpanda.";

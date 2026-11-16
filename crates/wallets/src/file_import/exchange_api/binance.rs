@@ -5,7 +5,7 @@ use super::*;
 /// Binance.com spot trading launched in July 2017; Python reads from there.
 const START_MS: &str = "1498867200000";
 
-pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
+pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {
     let end = now()?.as_millis().to_string();
     let fiat = signed_get(
         client,
@@ -38,12 +38,62 @@ pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
         ],
     )?;
     let dividends = attribute_get(&dividends, "rows")?;
-    normalize(&[
+    let records = normalize(&[
         (Kind::Fiat, fiat),
         (Kind::Deposit, deposits),
         (Kind::Withdrawal, withdrawals),
         (Kind::Dividend, dividends),
-    ])
+    ])?;
+    // The spot account, read last in the same consented run; Enable Reading
+    // covers it. A failed read or an unreadable answer leaves the history
+    // import intact; offline and consent refusals stay fatal.
+    let (balance, balance_unavailable) = split(soft_balance(
+        signed_get(client, "/api/v3/account", &[("omitZeroBalances", "true")])
+            .and_then(|account| balance(&account, read_time()?)),
+    )?);
+    Ok(Fetched {
+        records,
+        skipped: None,
+        balance,
+        balance_unavailable,
+    })
+}
+
+/// `GET /api/v3/account`'s spot BTC: `free` plus `locked` (in open orders).
+/// Earn, Funding, margin and futures wallets are separate accounts this
+/// read does not include. No BTC row means a zero spot balance.
+pub(super) fn balance(account: &Py, as_of: String) -> Result<ReportedBalance, AppError> {
+    let refused = || {
+        AppError::new(
+            "protocol_error",
+            "Binance account response has no readable balances list",
+        )
+    };
+    let Py::List(rows) = at(account, "balances") else {
+        return Err(refused());
+    };
+    let mut total: i64 = 0;
+    for row in rows {
+        if !matches!(row, Py::Dict(_)) {
+            return Err(refused());
+        }
+        if !matches!(at(row, "asset"), Py::Str(code) if code.as_str() == Some("BTC")) {
+            continue;
+        }
+        for part in ["free", "locked"] {
+            let Py::Str(text) = at(row, part) else {
+                return Err(refused());
+            };
+            let amount = balance_msat(&lossy(text), "Binance")?;
+            total = total.checked_add(amount).ok_or_else(limit)?;
+        }
+    }
+    Ok(ReportedBalance {
+        asset: "BTC",
+        amount_msat: total,
+        as_of,
+        scope: "binance_spot_free_plus_locked",
+    })
 }
 
 /// Restrictions that only let a key read.

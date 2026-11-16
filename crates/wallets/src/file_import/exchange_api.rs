@@ -33,6 +33,151 @@ const BUDGET: Duration = Duration::from_secs(3600);
 /// Bitpanda is Rust only; Python knows the first three.
 pub const KINDS: [&str; 4] = ["kraken", "coinbase", "binance", "bitpanda"];
 
+/// A BTC balance the exchange itself reports, read inside the same consented
+/// sync run as the history (docs/reference/rust-exchange-sync.md#reported-balances).
+/// `execute` stores it as an `api` balance checkpoint and reports it in the
+/// envelope as `reported_balance`; nothing else reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReportedBalance {
+    /// Always "BTC" for now (LBTC only if the exchange reports it separately).
+    pub asset: &'static str,
+    /// Exact amount in msat; parse decimals exactly, fail closed on more than 11 fractional digits for BTC.
+    pub amount_msat: i64,
+    /// UTC ISO-8601 time the balance refers to (the response time or the exchange's own timestamp).
+    pub as_of: String,
+    /// Which balance it is, e.g. "spot_available_plus_reserved"; documented per exchange.
+    pub scope: &'static str,
+}
+
+impl ReportedBalance {
+    /// The envelope's `reported_balance` object.
+    fn envelope(&self) -> Py {
+        dict([
+            ("asset", s(self.asset)),
+            ("amount_msat", Py::from(self.amount_msat)),
+            ("as_of", s(self.as_of.as_str())),
+            ("scope", s(self.scope)),
+        ])
+    }
+}
+
+/// A balance figure as the exchange spells it (`"0.0123456789"`), to exact
+/// msat. Trailing zeros past the 11th decimal are dropped; any other excess
+/// precision, a sign, an exponent or a non-number fails closed.
+pub fn balance_msat(text: &str, exchange: &str) -> Result<i64, AppError> {
+    let trimmed = match text.split_once('.') {
+        Some((whole, fraction)) => {
+            let fraction = fraction.trim_end_matches('0');
+            if fraction.is_empty() {
+                whole.to_owned()
+            } else {
+                format!("{whole}.{fraction}")
+            }
+        }
+        None => text.to_owned(),
+    };
+    crate::checkpoints::parse_btc_msat(&trimmed).ok_or_else(|| {
+        AppError::new(
+            "protocol_error",
+            format!("{exchange} reported a BTC balance Kassiber cannot read exactly"),
+        )
+    })
+}
+
+/// The current UTC time, to the second, as a balance read's `as_of`.
+fn read_time() -> Result<String, AppError> {
+    let seconds = i64::try_from(now()?.as_secs())
+        .map_err(|_| AppError::new("internal_error", "Clock out of range"))?;
+    kassiber_rates::time::epoch(seconds)
+        .ok_or_else(|| AppError::new("internal_error", "Clock out of range"))
+}
+
+/// What one exchange's fetch returns: its records, the operations it left
+/// out on purpose (Bitpanda), the balance it read in the same run, and why
+/// no balance came with the history when it did not.
+pub(super) struct Fetched {
+    pub records: Vec<Py>,
+    pub skipped: Option<Py>,
+    pub balance: Option<ReportedBalance>,
+    pub balance_unavailable: Option<BalanceGap>,
+}
+
+/// Why a sync stored no balance checkpoint. A balance is a diagnostic: its
+/// failure never stops the history import (docs/reference/rust-exchange-sync.md#reported-balances).
+#[derive(Debug)]
+pub struct BalanceGap {
+    /// `permission_denied`, `read_failed` (an HTTP, network or parse error),
+    /// `incomplete`, `conflicting` or `ambiguous`.
+    pub reason: &'static str,
+    /// The allowlisted class of the error behind it (`auth`, `rate_limited`,
+    /// `unavailable`, `malformed`, `network`). The error's own message can
+    /// quote the exchange's response, so it is never kept.
+    pub class: Option<&'static str>,
+}
+
+impl BalanceGap {
+    pub fn new(reason: &'static str, error: Option<AppError>) -> Self {
+        let class = error.as_ref().map(|e| match e.code.as_str() {
+            "auth_error" => "auth",
+            "rate_limited" => "rate_limited",
+            "protocol_error" | "internal_error" | "validation" => "malformed",
+            "network_error" | "backend_timeout" => "network",
+            _ => "unavailable",
+        });
+        Self { reason, class }
+    }
+    /// The envelope's `reported_balance_unavailable` object.
+    fn envelope(&self) -> Py {
+        let error = self.class.map_or(Py::Null, |class| {
+            dict([("class", s(class)), ("message", s(class_message(class)))])
+        });
+        dict([("reason", s(self.reason)), ("error", error)])
+    }
+}
+
+/// The fixed local text for a balance error class: no upstream words.
+fn class_message(class: &str) -> &'static str {
+    match class {
+        "auth" => "The exchange refused this key access to the balance.",
+        "rate_limited" => "The exchange limited the request rate; the balance was not read.",
+        "malformed" => "The exchange's balance answer could not be read exactly.",
+        "network" => "The balance read did not reach the exchange.",
+        _ => "The exchange did not provide the balance.",
+    }
+}
+
+/// Refusals that end the whole sync even for the balance read: the network
+/// went offline or the consent no longer covers the route.
+const FATAL_BALANCE_CODES: [&str; 2] = ["network_egress_disabled", "interaction_required"];
+
+/// A balance outcome as the `Fetched` fields.
+pub(super) fn split(
+    outcome: Result<ReportedBalance, BalanceGap>,
+) -> (Option<ReportedBalance>, Option<BalanceGap>) {
+    match outcome {
+        Ok(balance) => (Some(balance), None),
+        Err(gap) => (None, Some(gap)),
+    }
+}
+
+/// A balance read's outcome: the balance, or why there is none when the
+/// failure is recoverable; offline and consent refusals stay fatal.
+pub(super) fn soft_balance<T>(
+    result: Result<T, AppError>,
+) -> Result<Result<T, BalanceGap>, AppError> {
+    match result {
+        Ok(value) => Ok(Ok(value)),
+        Err(error) if FATAL_BALANCE_CODES.contains(&error.code.as_str()) => Err(error),
+        Err(error) => {
+            let reason = match error.code.as_str() {
+                "auth_error" => "permission_denied",
+                _ => "read_failed",
+            };
+            Ok(Err(BalanceGap::new(reason, Some(error))))
+        }
+    }
+}
+
 /// The resolved backend as Python's `runtime_config["backends"][name]`.
 /// The trusted command boundary supplies a fresh consent for [`Route::request`].
 pub struct Route {
@@ -96,15 +241,15 @@ pub fn execute(
     };
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
-    let mut skipped = None;
-    let records = match kind.as_str() {
+    let Fetched {
+        records,
+        skipped,
+        balance,
+        balance_unavailable,
+    } = match kind.as_str() {
         "kraken" => kraken::fetch(&client)?,
         "coinbase" => coinbase::fetch(&client)?,
-        "bitpanda" => {
-            let fetched = bitpanda::fetch(&client)?;
-            skipped = Some(fetched.skipped);
-            fetched.records
-        }
+        "bitpanda" => bitpanda::fetch(&client)?,
         _ => binance::fetch(&client)?,
     };
     let fetched = records.len();
@@ -138,6 +283,17 @@ pub fn execute(
         None,
         Some(&format!("{kind}:api:{}", lossy(&name))),
     )
+    // The balance read in this run becomes an `api` checkpoint with the
+    // history it is compared with, or not at all.
+    .and_then(|result| {
+        let checkpoint = match &balance {
+            Some(balance) => Some(store_balance(
+                conn, profile, &wallet.id, balance, &kind, &name,
+            )?),
+            None => None,
+        };
+        Ok((result, checkpoint))
+    })
     // A revoked or offline route never publishes a book.
     .and_then(|result| client.authorize().map(|()| result));
     match &result {
@@ -145,7 +301,7 @@ pub fn execute(
         Err(_) => conn.execute_batch("ROLLBACK TO exchange_api_import;RELEASE exchange_api_import"),
     }
     .map_err(database_error)?;
-    let mut result = result?;
+    let (mut result, checkpoint) = result?;
     let url = kassiber_setup::backends::redact_backend_url(at(&backend, "url"))?;
     for (key, item) in [
         ("backend", Py::Str(name)),
@@ -160,7 +316,43 @@ pub fn execute(
     if let Some(skipped) = skipped {
         kassiber_envelope::set(&mut result, "skipped", skipped);
     }
+    if let Some(balance) = &balance {
+        kassiber_envelope::set(&mut result, "reported_balance", balance.envelope());
+    }
+    if let Some(gap) = &balance_unavailable {
+        kassiber_envelope::set(&mut result, "reported_balance_unavailable", gap.envelope());
+    }
+    if let Some(id) = checkpoint {
+        kassiber_envelope::set(&mut result, "balance_checkpoint_id", s(id));
+    }
     Ok(result)
+}
+
+/// Store the reported balance as an `api` checkpoint of the synced wallet.
+fn store_balance(
+    conn: &Connection,
+    profile: &str,
+    wallet: &str,
+    balance: &ReportedBalance,
+    kind: &str,
+    backend: &PyStr,
+) -> Result<String, AppError> {
+    let (id, _) = crate::checkpoints::record(
+        conn,
+        profile,
+        &crate::checkpoints::New {
+            wallet_id: wallet.to_owned(),
+            asset: balance.asset.to_owned(),
+            as_of: balance.as_of.clone(),
+            amount_msat: balance.amount_msat,
+            origin: "api",
+            scope: Some(balance.scope.to_owned()),
+            origin_ref: Some(format!("{kind}:api:{}", lossy(backend))),
+            attachment_id: None,
+            note: None,
+        },
+    )?;
+    Ok(id)
 }
 
 /// The backend's name and its exchange kind, which must be `expected` when

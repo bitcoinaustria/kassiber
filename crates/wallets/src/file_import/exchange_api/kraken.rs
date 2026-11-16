@@ -3,11 +3,60 @@
 use super::*;
 use kassiber_pyjson::BigInt;
 
-pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
+pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {
     let mut pages = 0;
     let trades = paginated(client, "/0/private/TradesHistory", "trades", &mut pages)?;
     let ledgers = paginated(client, "/0/private/Ledgers", "ledger", &mut pages)?;
-    normalize(&ledgers, &trades)
+    let records = normalize(&ledgers, &trades)?;
+    // The spot balance, read last in the same consented run. A key without
+    // the Query Funds permission, or any other recoverable failure, still
+    // syncs its history; offline and consent refusals stay fatal.
+    let (balance, balance_unavailable) = split(soft_balance(
+        post(client, "/0/private/Balance", None)
+            .and_then(|payload| balance(&payload, read_time()?)),
+    )?);
+    Ok(Fetched {
+        records,
+        skipped: None,
+        balance,
+        balance_unavailable,
+    })
+}
+
+/// Kraken's spot BTC keys. `XBT.F`, `XBT.B`, `XBT.S`, `XBT.M`, `XBT.P` and
+/// any other suffixed key hold staked, Earn or futures balances that the
+/// Ledgers history this sync imports does not move, so they never count.
+const SPOT_KEYS: [&str; 2] = ["XXBT", "XBT"];
+
+/// `/0/private/Balance`'s `result`: every asset's balance as a decimal string.
+pub(super) fn balance(payload: &Py, as_of: String) -> Result<ReportedBalance, AppError> {
+    let Py::Dict(assets) = at(payload, "result") else {
+        return Err(AppError::new(
+            "protocol_error",
+            "Kraken balance response was not a JSON result object",
+        ));
+    };
+    let mut total: i64 = 0;
+    for (key, value) in assets {
+        let key = lossy(&key_text(key));
+        if !SPOT_KEYS.contains(&key.as_str()) {
+            continue;
+        }
+        let Py::Str(text) = value else {
+            return Err(AppError::new(
+                "protocol_error",
+                "Kraken reported a BTC balance that is not a decimal string",
+            ));
+        };
+        let amount = balance_msat(&lossy(text), "Kraken")?;
+        total = total.checked_add(amount).ok_or_else(limit)?;
+    }
+    Ok(ReportedBalance {
+        asset: "BTC",
+        amount_msat: total,
+        as_of,
+        scope: "kraken_spot",
+    })
 }
 
 /// The desktop key check: the first page of both histories the sync reads,
@@ -15,7 +64,7 @@ pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
 /// what else a key may do.
 pub(super) fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
     for path in ["/0/private/TradesHistory", "/0/private/Ledgers"] {
-        if !matches!(at(&post(client, path, "0")?, "result"), Py::Dict(_)) {
+        if !matches!(at(&post(client, path, Some("0"))?, "result"), Py::Dict(_)) {
             return Err(AppError::new(
                 "protocol_error",
                 "Kraken response was not a JSON result object",
@@ -41,7 +90,7 @@ fn paginated(
         if *pages > MAX_PAGES {
             return Err(limit());
         }
-        let payload = post(client, path, &offset.to_string())?;
+        let payload = post(client, path, Some(&offset.to_string()))?;
         let result = at(&payload, "result");
         if !matches!(result, Py::Dict(_)) {
             return Err(AppError::new(
@@ -107,9 +156,13 @@ fn integer(value: &Py) -> Result<Option<BigInt>, AppError> {
 }
 
 /// `_kraken_private_post`: one nonce-signed form POST and its error check.
-fn post(client: &Client<'_>, path: &str, offset: &str) -> Result<Py, AppError> {
+/// History pages send their offset; the balance read sends none.
+fn post(client: &Client<'_>, path: &str, offset: Option<&str>) -> Result<Py, AppError> {
     let nonce = now()?.as_nanos().to_string();
-    let body = format!("nonce={nonce}&ofs={offset}");
+    let body = match offset {
+        Some(offset) => format!("nonce={nonce}&ofs={offset}"),
+        None => format!("nonce={nonce}"),
+    };
     let mut secret = base64_decode(client.secret)
         .ok_or_else(|| AppError::new("config_error", "Kraken API secret must be base64 encoded"))?;
     let digest = sha256::Hash::hash(format!("{nonce}{body}").as_bytes());

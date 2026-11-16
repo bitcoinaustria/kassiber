@@ -17,7 +17,7 @@ page).
 
    | Exchange | Turn on only | Kassiber checks |
    | --- | --- | --- |
-   | Kraken | Query closed orders & trades, Query ledger entries | nothing more: Kraken does not report a key's other permissions |
+   | Kraken | Query funds, Query closed orders & trades, Query ledger entries (Query funds only for the [reported balance](rust-exchange-sync.md#reported-balances); a key without it still syncs) | nothing more: Kraken does not report a key's other permissions |
    | Coinbase | `wallet:accounts:read`, `wallet:transactions:read` (an API key and secret; Coinbase Developer Platform key files are not supported) | nothing more: the v2 API does not report them |
    | Binance | Enable Reading | `GET /sapi/v1/account/apiRestrictions`: reading must be on and every other `enable*`/`permits*` flag off, including flags Binance adds later |
    | Bitpanda | Transaction, Trade (Read) | `GET /v1/trading-limits`: a key that can trade is refused |

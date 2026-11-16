@@ -201,6 +201,18 @@ through the generic ledger after checking it in Bitpanda.
   amount's; a transaction without an id; an operation without a transaction
   list.
 
+### Reported balance
+
+No request is added for the [balance checkpoint](balance-checkpoints.md):
+the history already carries each BTC transaction's `asset_balance_after`.
+The sync sums, over every Bitpanda wallet with a BTC leg, the figure on that
+wallet's latest BTC leg, as of the latest of those legs (scope
+`bitpanda_wallet_balance_after`), and stores it as an `api` checkpoint
+([reported balances](rust-exchange-sync.md#reported-balances)). It reports no
+balance when a wallet's latest leg has no figure or two legs share the latest
+time with different figures. BTC held in staking or Earn outside those
+wallets is not in the figure; the `Balances` (portfolio) scope is not used.
+
 ### Stored rows
 
 Records go through the shared wallet coordinator exactly as the other
