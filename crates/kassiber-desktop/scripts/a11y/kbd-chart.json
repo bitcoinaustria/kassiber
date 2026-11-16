@@ -1,0 +1,369 @@
+{
+"events": [
+{
+"t": 0.2,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.28,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.36,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.44,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.52,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.6,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.68,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.76,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.84,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.92,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.0,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.08,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.16,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.24,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.32,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.4,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.48,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.56,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.64,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.72,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.8,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.88,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.96,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.04,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.12,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.2,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.28,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.36,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.44,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.52,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.6,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.68,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.76,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.84,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.92,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.0,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.08,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.16,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.24,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.32,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.4,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.48,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.56,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.64,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.72,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.8,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.88,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 3.96,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.04,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.12,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.2,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.28,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.36,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.44,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.52,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.6,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.68,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.76,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 4.84,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 5.02,
+"type": "key",
+"name": "Enter"
+},
+{
+"t": 5.17,
+"type": "mark",
+"name": "range"
+},
+{
+"t": 5.22,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 5.3,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 5.38,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 5.46,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 5.54,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 5.62,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 5.7,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 5.88,
+"type": "key",
+"name": "Enter"
+},
+{
+"t": 6.180000000000001,
+"type": "key",
+"name": "Down"
+},
+{
+"t": 6.38,
+"type": "mark",
+"name": "gear"
+},
+{
+"t": 6.58,
+"type": "key",
+"name": "Escape"
+},
+{
+"t": 6.880000000000001,
+"type": "mark",
+"name": "end"
+}
+]
+}

@@ -1,0 +1,16 @@
+{"events": [
+ {"t": 0.3, "type": "tap", "key": "overview-edit"},
+ {"t": 0.8, "type": "tap", "key": "ov-tile-taxYear"},
+ {"t": 1.2, "type": "key", "name": "Left"},
+ {"t": 1.8, "type": "mark", "name": "moved"},
+ {"t": 2.0, "type": "type", "text": "s"},
+ {"t": 2.6, "type": "mark", "name": "sized"},
+ {"t": 2.8, "type": "key", "name": "Delete"},
+ {"t": 3.4, "type": "mark", "name": "removed"},
+ {"t": 3.6, "type": "key", "name": "Escape"},
+ {"t": 4.2, "type": "mark", "name": "done"},
+ {"t": 4.4, "type": "tap", "key": "overview-edit"},
+ {"t": 4.8, "type": "tap", "key": "ov-reset"},
+ {"t": 5.2, "type": "tap", "key": "overview-done"},
+ {"t": 5.7, "type": "mark", "name": "end"}
+]}

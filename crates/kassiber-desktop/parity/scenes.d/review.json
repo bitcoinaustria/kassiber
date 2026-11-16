@@ -1,0 +1,260 @@
+{
+  "scenes": [
+    {
+      "name": "review-default",
+      "book": "coarse-review",
+      "rune": {
+        "scene": "review",
+        "args": []
+      },
+      "tauri": {
+        "path": "/review",
+        "state": {},
+        "steps": [
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-light",
+      "book": "coarse-review",
+      "rune": {
+        "scene": "review-light",
+        "args": []
+      },
+      "tauri": {
+        "path": "/review",
+        "state": {
+          "theme": "light"
+        },
+        "steps": [
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-de",
+      "book": "coarse-review",
+      "rune": {
+        "scene": "review-de",
+        "args": []
+      },
+      "tauri": {
+        "path": "/review",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-expanded",
+      "book": "coarse-review",
+      "rune": {
+        "scene": "review-expanded",
+        "args": []
+      },
+      "tauri": {
+        "path": "/review",
+        "state": {},
+        "steps": [
+          {
+            "wait": 800
+          },
+          {
+            "click": {
+              "labelPrefix": "Show more of"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-waiting",
+      "book": "coarse-review",
+      "rune": {
+        "scene": "review-waiting",
+        "args": []
+      },
+      "tauri": {
+        "path": "/review",
+        "state": {},
+        "steps": [
+          {
+            "wait": 800
+          },
+          {
+            "click": {
+              "text": "Show them",
+              "sel": "button"
+            }
+          },
+          {
+            "wait": 1500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-prices",
+      "book": "coarse-review",
+      "rune": {
+        "scene": "review-prices",
+        "args": []
+      },
+      "tauri": {
+        "path": "/review",
+        "state": {},
+        "steps": [
+          {
+            "wait": 800
+          },
+          {
+            "click": {
+              "text": "Enter exact prices",
+              "sel": "button"
+            }
+          },
+          {
+            "wait": 600
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-accept",
+      "book": "coarse-review",
+      "rune": {
+        "scene": "review-accept",
+        "args": []
+      },
+      "tauri": {
+        "path": "/review",
+        "state": {},
+        "steps": [
+          {
+            "wait": 800
+          },
+          {
+            "click": {
+              "textIncludes": "Accept these",
+              "sel": "button"
+            }
+          },
+          {
+            "wait": 8000
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-reconcile",
+      "rune": {
+        "scene": "review-reconcile",
+        "args": []
+      },
+      "tauri": {
+        "path": "/reconcile",
+        "state": {},
+        "steps": [
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-reconcile-tools",
+      "rune": {
+        "scene": "review-reconcile-tools",
+        "args": []
+      },
+      "tauri": {
+        "path": "/reconcile?mode=tools",
+        "state": {},
+        "steps": [
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-reconcile-light",
+      "rune": {
+        "scene": "review-reconcile-light",
+        "args": []
+      },
+      "tauri": {
+        "path": "/reconcile",
+        "state": {
+          "theme": "light"
+        },
+        "steps": [
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-reconcile-de",
+      "rune": {
+        "scene": "review-reconcile-de",
+        "args": []
+      },
+      "tauri": {
+        "path": "/reconcile",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "review-reconcile-tools-de",
+      "rune": {
+        "scene": "review-reconcile-tools-de",
+        "args": []
+      },
+      "tauri": {
+        "path": "/reconcile?mode=tools",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    }
+  ]
+}

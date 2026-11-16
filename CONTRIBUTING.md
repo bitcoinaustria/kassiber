@@ -21,8 +21,11 @@ dependency changes. Regenerate lockfiles instead of copying them.
 
 ## Setup
 
-Kassiber is a Rust workspace plus the Tauri desktop in `ui-tauri/`. Use the
-Rust release [rust-toolchain.toml](rust-toolchain.toml) pins, with rustfmt and
+Kassiber is a Rust workspace plus the desktop app in `crates/kassiber-desktop`
+(a Rune app with its own Cargo workspace and lockfile; the root workspace
+excludes it) and the earlier Tauri desktop in `ui-tauri/`. Both desktops read
+their translations and integration logos from `assets/` at the repository
+root. Use the Rust release [rust-toolchain.toml](rust-toolchain.toml) pins, with rustfmt and
 clippy. rustup selects it inside the checkout once it is installed:
 
 ```sh
@@ -66,7 +69,20 @@ cargo test -p kassiber-journals --features test-harness
 scripts/replay-sessions.sh --only test_cli_smoke
 ```
 
-Focused frontend checks, from `ui-tauri/`:
+Desktop app checks, from `crates/kassiber-desktop/` (see its
+[README](crates/kassiber-desktop/README.md); Linux builds need `pkg-config`,
+`libfontconfig1-dev` and `libwayland-dev`):
+
+```sh
+packaging/ci/rune-checks.sh --skip-scenes   # fmt, clippy with and without tooling, tests
+cargo test --release                        # the unit tests alone
+packaging/ci/rune-checks.sh --scenes-only --kassiber-bin ../../target/debug/kassiber
+```
+
+The last runs every scene headless against a disposable book and fails on
+accessibility-tree problems and missing translations (offline, temporary `HOME`).
+
+Focused frontend checks for the Tauri UI, from `ui-tauri/`:
 
 ```sh
 pnpm typecheck
@@ -92,9 +108,10 @@ It refuses a toolchain other than the pinned one and checks the locked test
 data, then runs `cargo fmt` and clippy, the workspace tests, the mutation
 catalog check (`cargo run -p kassiber-mutation-check -- check`), the
 ledger-feature check, the egress observer and `kassiber` test-harness tests,
-the check that a product build carries no test hooks, the recorded-session
-replay (`scripts/replay-sessions.sh`), and TypeScript, ESLint, and Vitest for
-the desktop. The CI lanes, including the regtest integration lanes, are
+the check that a product build carries no test hooks, the desktop app's
+format, clippy and unit-test checks (`crates/kassiber-desktop/packaging/ci/rune-checks.sh
+--skip-scenes`), the recorded-session replay (`scripts/replay-sessions.sh`), and
+TypeScript, ESLint, and Vitest for the Tauri UI. The CI lanes, including the regtest integration lanes, are
 explained in [Testing](docs/reference/testing.md#pull-request-ci). The full
 gate is required before calling work push-ready.
 

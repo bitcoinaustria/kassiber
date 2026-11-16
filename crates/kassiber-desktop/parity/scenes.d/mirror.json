@@ -1,0 +1,329 @@
+{
+ "scenes": [
+  {
+   "name": "provenance-mirror-default",
+   "rune": {
+    "scene": "provenance-mirror-default",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-mirror-light",
+   "rune": {
+    "scene": "provenance-mirror-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-mirror-de",
+   "rune": {
+    "scene": "provenance-mirror-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-mirror-narrow",
+   "rune": {
+    "scene": "provenance-mirror-narrow",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 980,
+   "height": 700
+  },
+  {
+   "name": "provenance-mirror-attention",
+   "rune": {
+    "scene": "provenance-mirror-attention",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "textIncludes": "Locking script reused",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-mirror-context",
+   "rune": {
+    "scene": "provenance-mirror-context",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "textIncludes": "Surrounding activity",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-mirror-basis",
+   "rune": {
+    "scene": "provenance-mirror-basis",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "textIncludes": "Surrounding activity",
+       "sel": "summary"
+      }
+     },
+     {
+      "click": {
+       "textIncludes": "Consistent low-R signatures",
+       "sel": "summary"
+      }
+     },
+     {
+      "click": {
+       "text": "Assumptions and limits",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-mirror-coverage",
+   "rune": {
+    "scene": "provenance-mirror-coverage",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "text": "What was examined",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-mirror-entropy",
+   "rune": {
+    "scene": "provenance-mirror-entropy",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "text": "What was examined",
+       "sel": "summary"
+      }
+     },
+     {
+      "click": {
+       "textIncludes": "conditional interpretation analys",
+       "sel": "summary"
+      }
+     },
+     {
+      "click": {
+       "text": "Observer assumptions",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-mirror-all",
+   "rune": {
+    "scene": "provenance-mirror-all",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "textIncludes": "Locking script reused",
+       "sel": "summary"
+      }
+     },
+     {
+      "click": {
+       "textIncludes": "Surrounding activity",
+       "sel": "summary"
+      }
+     },
+     {
+      "click": {
+       "text": "What was examined",
+       "sel": "summary"
+      }
+     },
+     {
+      "click": {
+       "textIncludes": "conditional interpretation analys",
+       "sel": "summary"
+      }
+     },
+     {
+      "click": {
+       "text": "Observer assumptions",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-mirror-drill",
+   "rune": {
+    "scene": "provenance-mirror-drill",
+    "args": []
+   },
+   "tauri": {
+    "path": "/privacy-mirror",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "textIncludes": "Locking script reused",
+       "sel": "summary"
+      }
+     },
+     {
+      "click": {
+       "text": "Investigate",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 6000
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  }
+ ]
+}

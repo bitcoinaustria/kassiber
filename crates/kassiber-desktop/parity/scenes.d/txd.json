@@ -1,0 +1,629 @@
+{
+ "scenes": [
+  {
+   "name": "txd-details-480",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "details",
+     "--width",
+     "480"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=details",
+    "state": {
+     "sidePanelWidth": 480
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-details-900",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "details",
+     "--width",
+     "900"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=details",
+    "state": {
+     "sidePanelWidth": 900
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-details-max",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "details",
+     "--max"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=details",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Maximize panel"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-details-de",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--lang",
+     "de",
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "details"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=details",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-details-light",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "details",
+     "--light"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=details",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-classify-480",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "classify",
+     "--width",
+     "480"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=classify",
+    "state": {
+     "sidePanelWidth": 480
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-classify-900",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "classify",
+     "--width",
+     "900"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=classify",
+    "state": {
+     "sidePanelWidth": 900
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-classify-max",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "classify",
+     "--max"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=classify",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Maximize panel"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-classify-de",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--lang",
+     "de",
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "classify"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=classify",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-classify-light",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "classify",
+     "--light"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=classify",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-pricing-480",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "pricing",
+     "--width",
+     "480"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=pricing",
+    "state": {
+     "sidePanelWidth": 480
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-pricing-900",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "pricing",
+     "--width",
+     "900"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=pricing",
+    "state": {
+     "sidePanelWidth": 900
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-pricing-max",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "pricing",
+     "--max"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=pricing",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Maximize panel"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-pricing-de",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--lang",
+     "de",
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "pricing"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=pricing",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-pricing-light",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:partial}",
+     "--tab",
+     "pricing",
+     "--light"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:partial}&tab=pricing",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-tax-480",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:full}",
+     "--tab",
+     "tax",
+     "--width",
+     "480"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:full}&tab=tax",
+    "state": {
+     "sidePanelWidth": 480
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-tax-900",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:full}",
+     "--tab",
+     "tax",
+     "--width",
+     "900"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:full}&tab=tax",
+    "state": {
+     "sidePanelWidth": 900
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-tax-max",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:full}",
+     "--tab",
+     "tax",
+     "--max"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:full}&tab=tax",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Maximize panel"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-tax-de",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--lang",
+     "de",
+     "--tx",
+     "{fx:full}",
+     "--tab",
+     "tax"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:full}&tab=tax",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-tax-light",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:full}",
+     "--tab",
+     "tax",
+     "--light"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:full}&tab=tax",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-linked-480",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:linked}",
+     "--tab",
+     "linked",
+     "--width",
+     "480"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:linked}&tab=linked",
+    "state": {
+     "sidePanelWidth": 480
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-linked-900",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:linked}",
+     "--tab",
+     "linked",
+     "--width",
+     "900"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:linked}&tab=linked",
+    "state": {
+     "sidePanelWidth": 900
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-linked-max",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:linked}",
+     "--tab",
+     "linked",
+     "--max"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:linked}&tab=linked",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Maximize panel"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-linked-de",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--lang",
+     "de",
+     "--tx",
+     "{fx:linked}",
+     "--tab",
+     "linked"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:linked}&tab=linked",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  },
+  {
+   "name": "txd-linked-light",
+   "rune": {
+    "scene": "txd-open",
+    "args": [
+     "--tx",
+     "{fx:linked}",
+     "--tab",
+     "linked",
+     "--light"
+    ]
+   },
+   "tauri": {
+    "path": "/overview?tx={fx:linked}&tab=linked",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [],
+    "ready": "detail"
+   },
+   "width": 1440,
+   "height": 2600
+  }
+ ]
+}

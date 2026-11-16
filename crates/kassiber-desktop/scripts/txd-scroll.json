@@ -1,0 +1,19 @@
+{"events": [
+ {"t": 0.3, "type": "scroll", "dy": -120, "x": 1100, "y": 500},
+ {"t": 0.5, "type": "mark", "name": "s1"},
+ {"t": 0.7, "type": "scroll", "dy": -160, "x": 1100, "y": 500},
+ {"t": 0.9, "type": "mark", "name": "s2"},
+ {"t": 1.1, "type": "scroll", "dy": -260, "x": 1100, "y": 500},
+ {"t": 1.4, "type": "mark", "name": "s3"},
+ {"t": 1.6, "type": "scroll", "dy": -400, "x": 1100, "y": 500},
+ {"t": 1.9, "type": "mark", "name": "s4"},
+ {"t": 2.1, "type": "scroll", "dy": -900, "x": 1100, "y": 500},
+ {"t": 2.5, "type": "mark", "name": "s5"},
+ {"t": 2.7, "type": "scroll", "dy": 2000, "x": 1100, "y": 500},
+ {"t": 3.1, "type": "tap", "key": "sh-bell"},
+ {"t": 3.4, "type": "mark", "name": "menu"},
+ {"t": 3.6, "type": "key", "name": "Escape"},
+ {"t": 3.8, "type": "tap", "key": "graph-expand"},
+ {"t": 4.2, "type": "scroll", "dy": -500, "x": 720, "y": 500},
+ {"t": 4.6, "type": "mark", "name": "end"}
+]}

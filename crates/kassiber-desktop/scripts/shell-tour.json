@@ -1,0 +1,20 @@
+{"events": [
+  {"t": 0.2, "type": "key", "name": "k", "cmd": true},
+  {"t": 0.5, "type": "type", "text": "journ"},
+  {"t": 0.9, "type": "key", "name": "Enter"},
+  {"t": 1.2, "type": "mark", "name": "journals"},
+  {"t": 1.4, "type": "tap", "key": "sh-nav/overview"},
+  {"t": 1.7, "type": "tap", "key": "sh-book-crumb"},
+  {"t": 2.0, "type": "key", "name": "Down"},
+  {"t": 2.2, "type": "mark", "name": "books"},
+  {"t": 2.4, "type": "key", "name": "Escape"},
+  {"t": 2.6, "type": "key", "name": "b", "cmd": true},
+  {"t": 2.9, "type": "mark", "name": "folded"},
+  {"t": 3.0, "type": "key", "name": "b", "cmd": true},
+  {"t": 3.2, "type": "tap", "key": "sh-privacy"},
+  {"t": 3.5, "type": "tap", "key": "sh-privacy-HideAmounts"},
+  {"t": 3.8, "type": "tap", "key": "sh-currency"},
+  {"t": 4.0, "type": "tap", "key": "sh-extras"},
+  {"t": 4.3, "type": "tap", "key": "sh-extra/privacy-mirror"},
+  {"t": 4.6, "type": "mark", "name": "end"}
+]}

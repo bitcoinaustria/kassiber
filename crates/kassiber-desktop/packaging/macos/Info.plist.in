@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Kassiber.app's Info.plist for the Rune desktop (packaging/macos/build-app.sh fills the
+  @@...@@ fields). It carries every key the Tauri bundle's generated Info.plist had
+  (ui-tauri/src-tauri/tauri.conf.json + Info.plist, as inspected in the shipped 0.22.78 app),
+  with these deliberate differences:
+  - LSMinimumSystemVersion is the binaries' real deployment target (both the Rune app and the
+    `kassiber` sidecar are built for macOS 11.0; Tauri declared 10.13, which neither binary ran on).
+  - LSRequiresCarbon is gone (Tauri's template default; the Rune app is not a Carbon app).
+  - LSApplicationCategoryType, NSPrincipalClass and NSSupportsAutomaticGraphicsSwitching are new.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleDisplayName</key>
+	<string>@@PRODUCT_NAME@@</string>
+	<key>CFBundleExecutable</key>
+	<string>kassiber-ui</string>
+	<key>CFBundleIconFile</key>
+	<string>icon.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>@@BUNDLE_ID@@</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>@@PRODUCT_NAME@@</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@@VERSION@@</string>
+	<key>CFBundleVersion</key>
+	<string>@@VERSION@@</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>@@BUNDLE_ID@@ kassiber</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>kassiber</string>
+			</array>
+		</dict>
+	</array>
+	<key>CSResourcesFileMapped</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.finance</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>@@MIN_OS@@</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Kassiber uses the camera only when you choose to scan a wallet descriptor or BBQR export.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+</dict>
+</plist>

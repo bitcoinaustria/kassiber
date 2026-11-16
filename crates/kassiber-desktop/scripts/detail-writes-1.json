@@ -1,0 +1,11 @@
+{"events": [
+ {"t": 0.3, "type": "tap", "key": "txd-note"},
+ {"t": 0.5, "type": "type", "text": "Pilot note from Rune"},
+ {"t": 1.0, "type": "key", "name": "s", "cmd": true},
+ {"t": 2.5, "type": "tap", "key": "txd-attach-links"},
+ {"t": 2.8, "type": "type", "text": "https://example.org/receipt-pilot"},
+ {"t": 3.2, "type": "tap", "key": "txd-links-submit"},
+ {"t": 4.5, "type": "tap", "key": "txd-attach-files"},
+ {"t": 5.0, "type": "file-dialog", "path": "/srv/build-fast/build-cache/kassiber-build/t3-9888a5d2/p2-detail/attach-test.txt"},
+ {"t": 7.0, "type": "mark", "name": "end"}
+]}

@@ -1,0 +1,451 @@
+{
+ "scenes": [
+  {
+   "name": "provenance-chain-default",
+   "rune": {
+    "scene": "provenance-chain-default",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-light",
+   "rune": {
+    "scene": "provenance-chain-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-de",
+   "rune": {
+    "scene": "provenance-chain-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-tools",
+   "rune": {
+    "scene": "provenance-chain-tools",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "text": "Tools",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-node",
+   "rune": {
+    "scene": "provenance-chain-node",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "css": "[data-node=\"bitcoin:regtest:tx:006cf2c07b2cd172a33142e12c6e05afea3bc643b73e92768d17c1bdd9882c45\"]"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-filters",
+   "rune": {
+    "scene": "provenance-chain-filters",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "text": "Advanced",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-table",
+   "rune": {
+    "scene": "provenance-chain-table",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "text": "Table",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-coverage",
+   "rune": {
+    "scene": "provenance-chain-coverage",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis?tab=coverage",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "hover": {
+       "text": "Capabilities",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-entropy",
+   "rune": {
+    "scene": "provenance-chain-entropy",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis?tab=entropy",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "hover": {
+       "text": "Compute entropy",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-labels",
+   "rune": {
+    "scene": "provenance-chain-labels",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis?tab=labels",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "hover": {
+       "text": "Add label",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-saved",
+   "rune": {
+    "scene": "provenance-chain-saved",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "text": "Tools",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "text": "Saved investigations",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-acquire",
+   "rune": {
+    "scene": "provenance-chain-acquire",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "text": "Tools",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "text": "Acquire missing chain evidence",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-watch",
+   "rune": {
+    "scene": "provenance-chain-watch",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "text": "Watch",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-inbox",
+   "rune": {
+    "scene": "provenance-chain-inbox",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "textIncludes": "Watches",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-psbt",
+   "rune": {
+    "scene": "provenance-chain-psbt",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis?workspace=psbt",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-datasets",
+   "rune": {
+    "scene": "provenance-chain-datasets",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis?workspace=datasets",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-trace",
+   "rune": {
+    "scene": "provenance-chain-trace",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis?subject=006cf2c07b2cd172a33142e12c6e05afea3bc643b73e92768d17c1bdd9882c45",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "provenance-chain-empty",
+   "rune": {
+    "scene": "provenance-chain-empty",
+    "args": []
+   },
+   "tauri": {
+    "path": "/chain-analysis?mode=trace",
+    "state": {},
+    "steps": [
+     {
+      "wait": 2500
+     },
+     {
+      "wait": 700
+     }
+    ],
+    "ready": "none"
+   }
+  }
+ ]
+}

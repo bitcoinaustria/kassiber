@@ -1,0 +1,4 @@
+occurred_at,txid,direction,asset,amount,fee,fiat_value,description
+2024-02-01T10:00:00Z,synthetic-rune-0001,inbound,BTC,0.01000000,0,420.00,synthetic regtest row
+2024-03-05T12:00:00Z,synthetic-rune-0002,inbound,BTC,0.00250000,0,150.00,synthetic regtest row
+2024-04-09T08:30:00Z,synthetic-rune-0003,outbound,BTC,0.00100000,0.00001000,60.00,synthetic regtest row

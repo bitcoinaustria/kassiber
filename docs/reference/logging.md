@@ -28,6 +28,7 @@ The guiding principle:
 | Operator ring ([`crates/operator/src/telemetry.rs`](../../crates/operator/src/telemetry.rs)) | Per-login-user broker process | 1,000 records | individual CLI/agent exits only |
 | Supervisor stderr tail + lifecycle ring ([`ui-tauri/src-tauri/src/supervisor.rs`](../../ui-tauri/src-tauri/src/supervisor.rs)) | Tauri (Rust) process | 16 KiB tail, 64 lifecycle records | daemon crashes and restarts |
 | Webview ring ([`ui-tauri/src/lib/appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts)) | Browser/Webview JS heap | 10,000 records / 4 MiB | nothing (it is the view) |
+| Desktop app stderr tail, lifecycle ring and log store ([`crates/kassiber-desktop/src/daemon.rs`](../../crates/kassiber-desktop/src/daemon.rs), [`reports/diag/logstore.rs`](../../crates/kassiber-desktop/src/reports/diag/logstore.rs)) | Rune desktop process | 16 KiB tail, 64 lifecycle records; 10,000 records / 4 MiB | daemon crashes and restarts |
 
 The desktop webview ring is the merge point for desktop-owned buffers. The desktop app polls
 `ui.logs.snapshot` (a pre-unlock daemon kind — it works while the database
@@ -80,8 +81,10 @@ itself, so it must not become a health checker or background probe.
 extended private/public keys, descriptors, Silent Payments `sp()` / `spscan` /
 `spspend` material, BDK/LWK observer blobs or opaque store values, API keys,
 bearer tokens, and passphrase assignments. These are scrubbed by
-`kassiber_envelope::redaction` (the backend and the desktop supervisor) and
-`redactSecretFloorText` (TypeScript)
+`kassiber_envelope::redaction` (the backend, the Tauri supervisor, and the
+Rune desktop app, which compiles the same source through
+[`secret_floor.rs`](../../crates/kassiber-desktop/src/secret_floor.rs) and adds
+the webview's extra patterns after it) and `redactSecretFloorText` (TypeScript)
 before a record is stored, so this material never exists in any buffer and
 cannot leak through later code paths, exports, or memory dumps.
 

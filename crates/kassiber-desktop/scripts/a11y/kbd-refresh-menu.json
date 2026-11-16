@@ -1,0 +1,64 @@
+{
+"events": [
+{
+"t": 0.2,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.28,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.36,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.44,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.52,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.6,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.68,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.86,
+"type": "key",
+"name": "Enter"
+},
+{
+"t": 1.1600000000000001,
+"type": "key",
+"name": "Down"
+},
+{
+"t": 1.3599999999999999,
+"type": "mark",
+"name": "open"
+},
+{
+"t": 1.56,
+"type": "key",
+"name": "Escape"
+},
+{
+"t": 1.86,
+"type": "mark",
+"name": "end"
+}
+]
+}

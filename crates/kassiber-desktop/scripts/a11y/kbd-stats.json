@@ -1,0 +1,174 @@
+{
+"events": [
+{
+"t": 0.2,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.28,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.36,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.44,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.52,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.6,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.68,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.76,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.84,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 0.92,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.0,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.08,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.16,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.24,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.32,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.4,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.48,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.56,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.64,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.72,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.8,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.88,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 1.96,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.04,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.12,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.2,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.28,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.36,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.44,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.52,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.6,
+"type": "key",
+"name": "Tab"
+},
+{
+"t": 2.73,
+"type": "mark",
+"name": "focused"
+},
+{
+"t": 2.8800000000000003,
+"type": "key",
+"name": "Enter"
+},
+{
+"t": 3.2800000000000002,
+"type": "mark",
+"name": "end"
+}
+]
+}

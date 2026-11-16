@@ -120,6 +120,7 @@ configurable.
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
 | Successful daemon wallet sync explicitly requested by the user (including a consented Assistant sync), or sync under its enabled automatic-sync feature; follow-up starts after sync returns | only that synced wallet's selected backend, including an explicitly chosen default; no fallback to another server | existing Esplora HTTP(S), Core RPC, or Electrum transport, with its proxy policy and no redirects | transaction IDs and spent previous-transaction IDs from that wallet's incomplete graph rows, IP and request timing; at most 50 transactions and 250 uncached prevout fetches per pass; launch, display, status and idle paths do not grant this access |
+| Opening a transaction in the desktop's detail panel whose stored graph lacks spent-output amounts (or inputs and outputs), while **Settings → Privacy → Fill in transaction details from the wallet's backend** is on (the default) and offline mode and `KASSIBER_NO_EGRESS` are off; the owner-approved exception to "display reads send nothing", because the user already syncs that wallet through that backend | only the backend that transaction's own Bitcoin on-chain wallet syncs from (its chosen backend or the book default it uses), and only once that wallet has synced; never the book's default or another backend in its place, never for Liquid, file-import, BTCPay, Lightning, exchange or never-synced wallets | existing Esplora HTTP(S), Core RPC, or Electrum transport through `kassiber-net` with a narrowly scoped grant, its proxy policy and no redirects; 6-second budget, at most 250 uncached prevout fetches | the transaction id and the ids of the transactions it spends, IP and request timing (which tells that server which transaction the user opened); local, stored and cached references answer first, and the sanitized result is cached so reopening sends nothing. One request per transaction opened; the AI's graph tool, MCP and the CLI cannot ask for it. Rows without such a backend keep the explicit **Look up on-chain** |
 | Explicit **Acquire observations** confirmation, CLI `chain-analysis acquire apply --plan …`, or once-only consent to the Assistant's acquisition tool (full agent access only) | only the backend and proxy bound into that plan | bounded, genesis-checked Esplora HTTP(S), Core RPC, or Electrum requests; HTTP redirects refused | selected transaction IDs and queried ancestors/spenders, query timing and IP; the plan itself, local graph queries, PSBT analysis and dataset imports make no network requests |
 | `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
 | `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured HTTP(S) SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
@@ -159,6 +160,25 @@ and any automatic-sync permission before transport and cache writes. Locking or
 switching projects discards pending grants; persisted jobs cannot grant access
 on restart. Only sanitized public references enter the existing local graph cache;
 they establish neither ownership nor accounting facts.
+
+The desktop's automatic graph lookup from a wallet's own backend
+(`ui.transactions.graph` with `lookup: "wallet_backend"`, row above) has no
+grant to keep: the daemon decides per request. It reads offline mode (failing
+closed on an unreadable preference), `KASSIBER_NO_EGRESS` and the owner-only
+preference file `<state root>/config/wallet-backend-lookup.json`
+(`KASSIBER_WALLET_BACKEND_LOOKUP_FILE`; missing means on, unreadable means off)
+before choosing a backend, then resolves only the wallet's own sync backend from
+its stored configuration and refuses every other case without a request. The
+`kassiber-net` gate rechecks offline mode and `KASSIBER_NO_EGRESS` for each
+connection. The desktop sends it only for the transaction open in the panel,
+once per transaction, and never from headless tooling; switching transactions
+starts no new request, though one already sent finishes. The assistant's graph
+tool accepts only a transaction reference, so neither this lookup nor the
+explicit one is reachable from AI, MCP or the operator broker.
+`crates/kassiber/tests/graph_wallet_backend.rs` proves against loopback fakes
+that offline mode, `KASSIBER_NO_EGRESS`, the preference turned off or damaged, a
+never-synced wallet and plain reads contact nothing, and that an allowed lookup
+contacts only the wallet's backend, including when it fails.
 
 Raw transport checkpoints, including cached script and transaction memberships,
 remain in local source state. Sanitized job results and desktop/AI freshness
@@ -479,6 +499,12 @@ until that process stops. `kassiber status` reports the effective root.
   contain passphrases, verifier hashes, wrapped keys, descriptors, xpubs,
   backend tokens, accounting rows, or chat content. Project ids/names and
   last-opened timestamps are still local metadata: choose labels accordingly.
+- `<state-root>/demo/<stamp>-<hex>/` — disposable copies of the bundled
+  [demo book](demo.md), written only by an explicit **Try the demo** or
+  `kassiber projects demo`, outside the project catalog. Each carries its own
+  `config/offline-mode.json` and `config/agent-access.json`, seeded from the
+  user's and used only by the demo. The book has no sync backend, so creating
+  and opening it contacts nothing. **Leave demo** deletes the copy.
 - `<state-root>/.state-root-migration.json` — owner-only migration marker. It is
   prepared inside the legacy root and travels with the atomic rename; its
   location under the native root proves cutover completed. It contains only a
@@ -795,6 +821,88 @@ device/inode identity of the XDG runtime root, so logout or runtime-directory
 replacement tears down leases even with a lingering user manager. Broker
 startup fails closed when neither mechanism can prove logout lifetime; manual
 mode remains available on such unusual no-PAM systems.
+
+## Operating-system surfaces
+
+The desktop app hands some data to the operating system. These rules keep book
+data from spreading through those channels. None of them make a network
+request; all are local system calls, and tooling runs (tests, headless scenes,
+scripted runs) record what they would do instead of doing it.
+
+The app itself has no network code; every request goes through its daemon.
+`crates/net/tests/chokepoint.rs` scans `crates/kassiber-desktop` like any other
+crate: each program it starts (the bundled `kassiber`, and fixed local tools
+such as `open`, `osascript` or `codesign`) is a reviewed entry, its one socket
+is the macOS single-instance handoff (a `0600` Unix socket in the user's
+private `$TMPDIR`), and Rune, pinned to one full commit, is the only git
+source the scan admits. Rune's own interaction timing posts to a loopback
+OpenTelemetry collector only when `RUNE_PERF=1` or
+`OTEL_EXPORTER_OTLP_ENDPOINT` names a loopback address.
+
+- **Clipboard.** Every copy (addresses, transaction ids, `txid:vout`, payment
+  hashes, amounts, labels, CSV, revealed wallet material, diagnostics) goes
+  through one helper. On macOS Kassiber writes the pasteboard itself with
+  `NSPasteboardContentsCurrentHostOnly`, so Universal Clipboard / Handoff does
+  not send it to other devices, and adds `org.nspasteboard.ConcealedType` and
+  `org.nspasteboard.TransientType`, so clipboard managers that follow
+  nspasteboard.org skip it. On Windows the copy carries
+  `ExcludeClipboardContentFromMonitorProcessing`, which keeps it out of
+  clipboard history and cloud clipboard. On Linux it carries
+  `x-kde-passwordManagerHint=secret`, which Klipper and history tools that read
+  the hint honor; other history tools may still record it. With **Clear
+  clipboard after copy** (on by default) a copy is cleared after 30 seconds,
+  but only if the clipboard still holds it (compared by change count, so a
+  later copy by the user is never cleared). A copy still held is also cleared
+  when the session locks and when Kassiber quits. On Windows and Linux the
+  exclusion marks only exist on the self-clearing path, so with clearing off a
+  copy is held for 24 hours and then cleared if unchanged. Limitation: text
+  selected with the pointer and copied with ⌘C/Ctrl+C (assistant messages,
+  input fields) uses the UI toolkit's plain copy and carries none of these
+  marks.
+- **OS notifications.** The title is always "Kassiber" and the body one of a
+  fixed set of generic sentences ("Background work has finished."). No amount,
+  count, wallet or account name, label, txid, address, server, path or error
+  text reaches the system's notification store, the lock screen or mirrored
+  devices, whatever **Hide amounts** is set to. A test scans every body and
+  fails if any other module talks to the notification service.
+- **OS backups.** An encrypted book is ciphertext on disk, and Time Machine may
+  back it up. With **Keep unencrypted books out of Time Machine** (Settings →
+  Data, on by default) Kassiber sets the per-item exclusion attribute
+  `com.apple.metadata:com_apple_backup_excludeItem` (what `tmutil
+  addexclusion` writes; no administrator rights, no change to Time Machine
+  settings). For an unencrypted book it marks the database and its `-wal`,
+  `-shm` and `-journal` files, and the managed `attachments/` and `exports/`
+  folders when they are inside the state root. For any book it also marks the
+  plaintext `kassiber.pre-encryption.sqlite3.bak` rollback copy. Marks are
+  set when the open book's status arrives or changes, and checked again every
+  minute while an unencrypted book is open, because SQLite recreates its
+  `-wal`/`-shm` files. Only existing items are marked. The data root itself,
+  anything outside the state root, and export destinations the user picks are
+  never marked. Each mark carries a Kassiber marker attribute
+  (`at.bitcoinaustria.kassiber.backup-excluded`), so turning the setting off,
+  or encrypting the book, removes Kassiber's marks and never one the user set.
+  An excluded unencrypted book is not in any Time Machine backup; keep a copy
+  with an encrypted `.kassiber` backup. Windows and Linux backup tools have no
+  per-file attribute Kassiber can set; the Data page asks the user to exclude
+  the folder there or encrypt the book.
+- **Synced folders.** Time Machine attributes do nothing for file-sync
+  services. When an unencrypted book's database sits in iCloud Drive
+  (including iCloud's Desktop & Documents), `~/Library/CloudStorage`
+  providers, Dropbox, OneDrive, Google Drive or a Syncthing folder, the Data
+  page warns that the database leaves the device in plain text. Detection
+  reads only path names and local marker files (`.stfolder`, `.dropbox`).
+- **Screen sharing and recording.** With **Hide amounts while the screen is
+  shared** (Settings → Privacy, on by default) a Normal privacy mode is raised
+  to Hide amounts while the screen is shared or recorded and lowered again
+  when that ends, unless the user changed the mode meanwhile. The saved
+  preference never records the raised mode. macOS has no public capture
+  signal that works without the Screen Recording permission; Kassiber asks the
+  WindowServer's `CGSIsScreenWatcherPresent` (private, resolved at run time,
+  no permission prompt) once a second while the setting is on. It is true for
+  ScreenCaptureKit recordings and shares and for Screen Sharing sessions,
+  including captures of another display. If a macOS release removes it, the
+  setting reports that sharing cannot be detected. Windows and Linux report no
+  capture to apps; there the setting is unavailable.
 
 ## Safe-to-record CLI output
 

@@ -1,0 +1,5 @@
+#!/bin/sh
+# /usr/bin/kassiber in the desktop package: the bundled CLI through the desktop executable
+# (unchanged from ui-tauri/src-tauri/bin/kassiber-linux; `kassiber-ui --cli` forwards to the
+# sidecar under /usr/lib/Kassiber/binaries before any window or GPU state exists).
+exec /usr/bin/kassiber-ui --cli "$@"

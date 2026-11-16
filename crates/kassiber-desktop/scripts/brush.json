@@ -1,0 +1,1 @@
+{"events": [{"t": 0.1, "type": "drag", "x": 327, "y": 675, "dx": 500, "dy": 0, "dur": 0.8}, {"t": 1.2, "type": "move", "x": 900, "y": 470}, {"t": 1.4, "type": "mark", "name": "end"}]}

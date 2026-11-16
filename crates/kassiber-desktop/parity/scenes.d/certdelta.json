@@ -1,0 +1,10 @@
+{"scenes": [
+ {"name": "certdelta-real-dialog", "rune": {"scene": "certdelta-real-dialog", "args": []},
+  "tauri": {"path": "/settings/bitcoin", "state": {}, "steps": [{"wait": 1500}, {"click": {"label": "Edit Local TLS node"}}, {"wait": 1200}, {"click": {"text": "Check certificate…", "sel": "button"}}, {"wait": 800}], "ready": "none"}},
+ {"name": "certdelta-real-dialog-de", "rune": {"scene": "certdelta-real-dialog-de", "args": []},
+  "tauri": {"path": "/settings/bitcoin", "state": {"lang": "de"}, "steps": [{"wait": 1500}, {"click": {"label": "Local TLS node bearbeiten"}}, {"wait": 1200}, {"click": {"text": "Zertifikat prüfen …", "sel": "button"}}, {"wait": 800}], "ready": "none"}},
+ {"name": "certdelta-journals-verify", "rune": {"scene": "certdelta-journals-verify", "args": []},
+  "tauri": {"path": "/journals", "state": {}, "steps": [{"waitText": "Entry mix"}, {"click": {"text": "Check reproducibility", "sel": "button"}}, {"waitText": "The stored journals"}, {"wait": 500}], "ready": "none"}},
+ {"name": "certdelta-journals-verify-de", "rune": {"scene": "certdelta-journals-verify-de", "args": []},
+  "tauri": {"path": "/journals", "state": {"lang": "de"}, "steps": [{"wait": 2000}, {"click": {"text": "Reproduzierbarkeit prüfen", "sel": "button"}}, {"waitText": "Die gespeicherten Journale"}, {"wait": 500}], "ready": "none"}}
+]}

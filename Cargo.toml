@@ -1,9 +1,10 @@
 # Kassiber's Rust workspace (docs/plan/21-rust-backend.md): the tax engine
-# and the backend crates. ui-tauri/src-tauri is its own workspace on the same
-# toolchain (rust-toolchain.toml).
+# and the backend crates. The desktop app (crates/kassiber-desktop) and
+# ui-tauri/src-tauri are their own workspaces with their own lockfiles, on the
+# same toolchain (rust-toolchain.toml).
 [workspace]
-# Cargo would otherwise claim ui-tauri/src-tauri as an undeclared member.
-exclude = ["ui-tauri"]
+# Cargo would otherwise claim these as undeclared members.
+exclude = ["crates/kassiber-desktop", "ui-tauri"]
 resolver = "2"
 members = [
   "crates/ai",

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Kassiber MSI for the Rune desktop (WiX Toolset v3, as on GitHub's windows-latest image; the
+  same schema as ui-tauri/src-tauri/windows/fragments/cli-path.wxs). Per-machine install like
+  the Tauri MSI, same layout as the Tauri bundle so the sidecar lookup (src/bundle.rs), the PATH
+  copy and upgrades keep working:
+
+    [INSTALLDIR]kassiber-ui.exe                                   the Rune app (no `tooling`)
+    [INSTALLDIR]binaries\kassiber-cli-x86_64-pc-windows-msvc.exe  the `kassiber` daemon/CLI
+    [INSTALLDIR]binaries\BUILD_INFO.json
+    [INSTALLDIR]bin\kassiber.exe                                  PATH copy of the sidecar
+    [INSTALLDIR]windows\update-path.ps1                           (NSIS hooks use it; kept for parity)
+
+  UpgradeCode: Tauri's default for productName "Kassiber" is uuid5(DNS, "Kassiber.exe.app.x64")
+  = f3c714a3-dc4a-53c3-ad68-fbede17c4009. VERIFY against an installed Tauri MSI
+  (`Get-CimInstance Win32_Product`/the MSI's Property table) before the first release, or
+  MajorUpgrade will install beside the Tauri app instead of replacing it.
+
+  Build (CI, Git Bash): packaging/windows/build-installers.sh. NEEDS A WINDOWS RUNNER.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="Kassiber" Language="1033" Version="$(var.Version)"
+           Manufacturer="Bitcoin Austria" UpgradeCode="f3c714a3-dc4a-53c3-ad68-fbede17c4009">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Kassiber is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="KassiberIcon" SourceFile="$(var.IconsDir)\icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="KassiberIcon" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="Kassiber">
+          <Directory Id="BinariesDir" Name="binaries" />
+          <Directory Id="CliBinDir" Name="bin" />
+          <Directory Id="WindowsDir" Name="windows" />
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder" />
+    </Directory>
+
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="App" Guid="*" Win64="yes">
+        <File Id="KassiberUi" Source="$(var.Stage)\kassiber-ui.exe" KeyPath="yes" />
+        <!-- kassiber:// deep links (Tauri's deep-link plugin registered the same keys). -->
+        <RegistryKey Root="HKCR" Key="kassiber">
+          <RegistryValue Type="string" Value="URL:kassiber" />
+          <RegistryValue Name="URL Protocol" Type="string" Value="" />
+          <RegistryValue Key="DefaultIcon" Type="string" Value="[INSTALLDIR]kassiber-ui.exe,0" />
+          <RegistryValue Key="shell\open\command" Type="string" Value="&quot;[INSTALLDIR]kassiber-ui.exe&quot; &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+    </DirectoryRef>
+    <DirectoryRef Id="BinariesDir">
+      <Component Id="Sidecar" Guid="*" Win64="yes">
+        <File Id="SidecarExe" Source="$(var.Stage)\binaries\kassiber-cli-x86_64-pc-windows-msvc.exe" KeyPath="yes" />
+        <File Id="BuildInfo" Source="$(var.Stage)\binaries\BUILD_INFO.json" />
+      </Component>
+    </DirectoryRef>
+    <DirectoryRef Id="CliBinDir">
+      <Component Id="CliCopy" Guid="*" Win64="yes">
+        <File Id="CliExe" Source="$(var.Stage)\bin\kassiber.exe" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+    <DirectoryRef Id="WindowsDir">
+      <Component Id="PathScript" Guid="*" Win64="yes">
+        <File Id="UpdatePath" Source="$(var.Stage)\windows\update-path.ps1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+    <DirectoryRef Id="ProgramMenuFolder">
+      <Component Id="StartMenu" Guid="*" Win64="yes">
+        <Shortcut Id="KassiberShortcut" Name="Kassiber" Target="[INSTALLDIR]kassiber-ui.exe" WorkingDirectory="INSTALLDIR" />
+        <RegistryValue Root="HKCU" Key="Software\Bitcoin Austria\Kassiber" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="Main" Title="Kassiber" Level="1">
+      <ComponentRef Id="App" />
+      <ComponentRef Id="Sidecar" />
+      <ComponentRef Id="CliCopy" />
+      <ComponentRef Id="PathScript" />
+      <ComponentRef Id="StartMenu" />
+      <!-- The unchanged PATH fragment: ui-tauri/src-tauri/windows/fragments/cli-path.wxs. -->
+      <ComponentRef Id="KassiberCliPath" />
+    </Feature>
+  </Product>
+</Wix>

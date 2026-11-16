@@ -1,0 +1,1 @@
+{"events": [{"t": 0.3, "type": "tap", "key": "txs-sort-amount"}, {"t": 0.9, "type": "tap", "key": "txs-sort-amount"}, {"t": 1.5, "type": "tap", "key": "txs-sort-date"}, {"t": 2.1, "type": "tap", "key": "txs-filters"}, {"t": 2.5, "type": "key", "name": "Escape"}, {"t": 2.8, "type": "tap", "key": "txs-chip-status"}, {"t": 3.3, "type": "mark", "name": "end"}]}

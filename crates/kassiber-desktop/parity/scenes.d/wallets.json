@@ -1,0 +1,2472 @@
+{
+  "scenes": [
+    {
+      "name": "wallets-list",
+      "rune": {
+        "scene": "wallets-list",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-list-light",
+      "rune": {
+        "scene": "wallets-list-light",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "theme": "light"
+        },
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-list-de",
+      "rune": {
+        "scene": "wallets-list-de",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-list-fiat",
+      "rune": {
+        "scene": "wallets-list-fiat",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "currency": "eur"
+        },
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-list-hidden",
+      "rune": {
+        "scene": "wallets-list-hidden",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "privacyMode": "hideAmounts"
+        },
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-list-filters",
+      "rune": {
+        "scene": "wallets-list-filters",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Filters"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-list-filters-status",
+      "rune": {
+        "scene": "wallets-list-filters-status",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Filters"
+            }
+          },
+          {
+            "wait": 500
+          },
+          {
+            "hover": {
+              "sel": "[role=menuitem]",
+              "text": "Status"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-list-filters-kind",
+      "rune": {
+        "scene": "wallets-list-filters-kind",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Filters"
+            }
+          },
+          {
+            "wait": 500
+          },
+          {
+            "hover": {
+              "sel": "[role=menuitem]",
+              "text": "Kind"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-list-filtered",
+      "rune": {
+        "scene": "wallets-list-filtered",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Filters"
+            }
+          },
+          {
+            "wait": 500
+          },
+          {
+            "hover": {
+              "sel": "[role=menuitem]",
+              "text": "Kind"
+            }
+          },
+          {
+            "wait": 500
+          },
+          {
+            "click": {
+              "sel": "[role=menuitemradio]",
+              "text": "Liquid"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-list-empty-filter",
+      "rune": {
+        "scene": "wallets-list-empty-filter",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Filters"
+            }
+          },
+          {
+            "wait": 500
+          },
+          {
+            "hover": {
+              "sel": "[role=menuitem]",
+              "text": "Status"
+            }
+          },
+          {
+            "wait": 500
+          },
+          {
+            "click": {
+              "sel": "[role=menuitemradio]",
+              "text": "Error"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-list-sorted",
+      "rune": {
+        "scene": "wallets-list-sorted",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "th button",
+              "text": "Balance"
+            }
+          },
+          {
+            "wait": 300
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-spending",
+      "rune": {
+        "scene": "wallets-detail-spending",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {},
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-spending-coins",
+      "rune": {
+        "scene": "wallets-detail-spending-coins",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "textIncludes": "Coins",
+              "sel": "[role=tab]"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-spending-details",
+      "rune": {
+        "scene": "wallets-detail-spending-details",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "textIncludes": "Details",
+              "sel": "[role=tab]"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-liquid",
+      "rune": {
+        "scene": "wallets-detail-liquid",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_liquid}",
+        "state": {},
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-liquid-coins",
+      "rune": {
+        "scene": "wallets-detail-liquid-coins",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_liquid}",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "textIncludes": "Coins",
+              "sel": "[role=tab]"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-liquid-details",
+      "rune": {
+        "scene": "wallets-detail-liquid-details",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_liquid}",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "textIncludes": "Details",
+              "sel": "[role=tab]"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-liquid-deprecated",
+      "rune": {
+        "scene": "wallets-detail-liquid-deprecated",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_liquid_deprecated}",
+        "state": {},
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-silent",
+      "rune": {
+        "scene": "wallets-detail-silent",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_silent}",
+        "state": {},
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-menu",
+      "rune": {
+        "scene": "wallets-detail-menu",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "More actions"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-liquid-menu",
+      "rune": {
+        "scene": "wallets-detail-liquid-menu",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_liquid}",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "More actions"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-edit",
+      "rune": {
+        "scene": "wallets-detail-edit",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "More actions"
+            }
+          },
+          {
+            "wait": 400
+          },
+          {
+            "click": {
+              "text": "Edit",
+              "sel": "[role=menuitem]"
+            }
+          },
+          {
+            "wait": 600
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-liquid-edit",
+      "rune": {
+        "scene": "wallets-detail-liquid-edit",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_liquid}",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "More actions"
+            }
+          },
+          {
+            "wait": 400
+          },
+          {
+            "click": {
+              "text": "Edit",
+              "sel": "[role=menuitem]"
+            }
+          },
+          {
+            "wait": 600
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-remove",
+      "rune": {
+        "scene": "wallets-detail-remove",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "More actions"
+            }
+          },
+          {
+            "wait": 400
+          },
+          {
+            "click": {
+              "text": "Remove",
+              "sel": "[role=menuitem]"
+            }
+          },
+          {
+            "wait": 600
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-reveal",
+      "rune": {
+        "scene": "wallets-detail-reveal",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_liquid}",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "More actions"
+            }
+          },
+          {
+            "wait": 400
+          },
+          {
+            "click": {
+              "text": "Copy wallet export",
+              "sel": "[role=menuitem]"
+            }
+          },
+          {
+            "wait": 600
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-light",
+      "rune": {
+        "scene": "wallets-detail-light",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {
+          "theme": "light"
+        },
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-de",
+      "rune": {
+        "scene": "wallets-detail-de",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-de-coins",
+      "rune": {
+        "scene": "wallets-detail-de-coins",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [
+          {
+            "click": {
+              "textIncludes": "Coins",
+              "sel": "[role=tab]"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-light-coins",
+      "rune": {
+        "scene": "wallets-detail-light-coins",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {
+          "theme": "light"
+        },
+        "steps": [
+          {
+            "click": {
+              "textIncludes": "Coins",
+              "sel": "[role=tab]"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-hidden",
+      "rune": {
+        "scene": "wallets-detail-hidden",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/{fx:wallet_spending}",
+        "state": {
+          "privacyMode": "hideAmounts"
+        },
+        "steps": [
+          {
+            "click": {
+              "textIncludes": "Coins",
+              "sel": "[role=tab]"
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-detail-notfound",
+      "rune": {
+        "scene": "wallets-detail-notfound",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections/does-not-exist",
+        "state": {},
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-node",
+      "rune": {
+        "scene": "wallets-node",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "ready": "none",
+        "steps": [
+          {
+            "waitText": "Regtest Lightning Node"
+          },
+          {
+            "click": {
+              "text": "Regtest Lightning Node"
+            }
+          },
+          {
+            "waitText": "node snapshot"
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "wallets-node-light",
+      "rune": {
+        "scene": "wallets-node-light",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "theme": "light"
+        },
+        "ready": "none",
+        "steps": [
+          {
+            "waitText": "Regtest Lightning Node"
+          },
+          {
+            "click": {
+              "text": "Regtest Lightning Node"
+            }
+          },
+          {
+            "waitText": "node snapshot"
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "wallets-node-de",
+      "rune": {
+        "scene": "wallets-node-de",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "lang": "de"
+        },
+        "ready": "none",
+        "steps": [
+          {
+            "waitText": "Regtest Lightning Node"
+          },
+          {
+            "click": {
+              "text": "Regtest Lightning Node"
+            }
+          },
+          {
+            "waitText": "Regtest Lightning Node"
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "wallets-add-btcpay",
+      "rune": {
+        "scene": "wallets-add-btcpay-continue",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Merchant"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "BTCPay Server"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "wallets-add-btcpay-manual-key",
+      "rune": {
+        "scene": "wallets-add-btcpay-manual-key-continue",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Merchant"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "BTCPay Server"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          },
+          {
+            "click": {
+              "sel": "button[role=radio]",
+              "textIncludes": "Read-only plus"
+            }
+          },
+          {
+            "click": {
+              "sel": "summary",
+              "text": "Create the key manually"
+            }
+          },
+          {
+            "scrollTop": "[role=dialog]"
+          },
+          {
+            "wait": 200
+          },
+          {
+            "wait": 300
+          }
+        ]
+      }
+    },
+    {
+      "name": "wallets-add-exchange-kraken",
+      "rune": {
+        "scene": "wallets-add-exchange-kraken-continue",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Exchanges"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Kraken"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "wallets-add-exchange-coinbase",
+      "rune": {
+        "scene": "wallets-add-exchange-coinbase-continue",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Exchanges"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Coinbase"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "wallets-add-exchange-binance",
+      "rune": {
+        "scene": "wallets-add-exchange-binance-continue",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Exchanges"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Binance API"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "wallets-add-exchange-bitpanda",
+      "rune": {
+        "scene": "wallets-add-exchange-bitpanda-continue",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Exchanges"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Bitpanda"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "wallets-add-exchange-kraken-light",
+      "rune": {
+        "scene": "wallets-add-exchange-kraken-light-continue",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "theme": "light"
+        },
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Exchanges"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Kraken"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "wallets-add",
+      "rune": {
+        "scene": "wallets-add",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Wallet export"
+            }
+          },
+          {
+            "wait": 200
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-nodes",
+      "rune": {
+        "scene": "wallets-add-nodes",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Nodes"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Bitcoin Core"
+            }
+          },
+          {
+            "wait": 200
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-merchant",
+      "rune": {
+        "scene": "wallets-add-merchant",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Merchant"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "BTCPay Server"
+            }
+          },
+          {
+            "wait": 200
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-files",
+      "rune": {
+        "scene": "wallets-add-files",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Files"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Generic ledger"
+            }
+          },
+          {
+            "wait": 200
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-de",
+      "rune": {
+        "scene": "wallets-add-de",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallet hinzuf\u00fcgen"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Wallet export"
+            }
+          },
+          {
+            "wait": 200
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-light",
+      "rune": {
+        "scene": "wallets-add-light",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "theme": "light"
+        },
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Wallet export"
+            }
+          },
+          {
+            "wait": 200
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-descriptor",
+      "rune": {
+        "scene": "wallets-add-descriptor",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Wallet export"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-sparrow",
+      "rune": {
+        "scene": "wallets-add-sparrow",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Sparrow"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-address-list",
+      "rune": {
+        "scene": "wallets-add-address-list",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Address list"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-silent-payment",
+      "rune": {
+        "scene": "wallets-add-silent-payment",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Silent Payments"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-liquid",
+      "rune": {
+        "scene": "wallets-add-liquid",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Liquid wallet export"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-samourai",
+      "rune": {
+        "scene": "wallets-add-samourai",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Samourai Wallet"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-wasabi",
+      "rune": {
+        "scene": "wallets-add-wasabi",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Wasabi Wallet"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-bitcoin-core",
+      "rune": {
+        "scene": "wallets-add-bitcoin-core",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Nodes"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Bitcoin Core"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-ledger",
+      "rune": {
+        "scene": "wallets-add-ledger",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Ledger"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-phoenix",
+      "rune": {
+        "scene": "wallets-add-phoenix",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Lightning"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Phoenix"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-bull-wallet",
+      "rune": {
+        "scene": "wallets-add-bull-wallet",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Bull Bitcoin Wallet"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-btcpay-csv",
+      "rune": {
+        "scene": "wallets-add-btcpay-csv",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Merchant"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "BTCPay CSV"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-bullbitcoin",
+      "rune": {
+        "scene": "wallets-add-bullbitcoin",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Exchanges"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Bull Bitcoin"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-prior-report",
+      "rune": {
+        "scene": "wallets-add-prior-report",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Files"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Prior tax report"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-generic-ledger",
+      "rune": {
+        "scene": "wallets-add-generic-ledger",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Files"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Generic ledger"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-csv",
+      "rune": {
+        "scene": "wallets-add-csv",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Files"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "CSV import"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-bip329",
+      "rune": {
+        "scene": "wallets-add-bip329",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Files"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "BIP329 labels"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-descriptor-de",
+      "rune": {
+        "scene": "wallets-add-descriptor-de",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallet hinzuf\u00fcgen"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Wallet export"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Weiter"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-add-descriptor-light",
+      "rune": {
+        "scene": "wallets-add-descriptor-light",
+        "args": []
+      },
+      "tauri": {
+        "path": "/connections",
+        "state": {
+          "theme": "light"
+        },
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Add wallet"
+            }
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Wallets"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button span",
+              "text": "Wallet export"
+            }
+          },
+          {
+            "wait": 200
+          },
+          {
+            "click": {
+              "sel": "button",
+              "text": "Continue"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-imports",
+      "rune": {
+        "scene": "wallets-imports",
+        "args": []
+      },
+      "tauri": {
+        "path": "/imports",
+        "state": {},
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-imports-light",
+      "rune": {
+        "scene": "wallets-imports-light",
+        "args": []
+      },
+      "tauri": {
+        "path": "/imports",
+        "state": {
+          "theme": "light"
+        },
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-imports-de",
+      "rune": {
+        "scene": "wallets-imports-de",
+        "args": []
+      },
+      "tauri": {
+        "path": "/imports",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-imports-files",
+      "rune": {
+        "scene": "wallets-imports-files",
+        "args": []
+      },
+      "tauri": {
+        "path": "/imports",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Files"
+            }
+          },
+          {
+            "wait": 300
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-imports-exchanges",
+      "rune": {
+        "scene": "wallets-imports-exchanges",
+        "args": []
+      },
+      "tauri": {
+        "path": "/imports",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Exchanges"
+            }
+          },
+          {
+            "wait": 300
+          }
+        ],
+        "ready": "none"
+      }
+    },
+    {
+      "name": "wallets-imports-setup",
+      "rune": {
+        "scene": "wallets-imports-setup",
+        "args": []
+      },
+      "tauri": {
+        "path": "/imports",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "sel": "button",
+              "text": "Files"
+            }
+          },
+          {
+            "wait": 300
+          },
+          {
+            "click": {
+              "css": "div.space-y-3 > div:nth-last-child(2) button"
+            }
+          },
+          {
+            "wait": 900
+          }
+        ],
+        "ready": "none"
+      }
+    }
+  ]
+}

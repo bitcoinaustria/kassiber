@@ -1,0 +1,65 @@
+{
+ "scenes": [
+  {
+   "name": "widgets-default",
+   "rune": {
+    "scene": "overview-layout",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {},
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1180
+  },
+  {
+   "name": "widgets-narrow",
+   "rune": {
+    "scene": "overview-layout",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {},
+    "steps": []
+   },
+   "width": 980,
+   "height": 700
+  },
+  {
+   "name": "widgets-light-de",
+   "rune": {
+    "scene": "overview-layout-light-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "theme": "light",
+     "lang": "de"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1180
+  },
+  {
+   "name": "widgets-hide-amounts",
+   "rune": {
+    "scene": "overview-layout-hide-amounts",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "privacyMode": "hideAmounts"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1180
+  }
+ ]
+}

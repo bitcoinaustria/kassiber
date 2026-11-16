@@ -1,0 +1,154 @@
+{
+ "scenes": [
+  {
+   "name": "delta-review-links",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "review",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Suggested links"
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "delta-review-links-de",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "review-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "delta-review-links-light",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "review-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "waitText": "Suggested links"
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "delta-review-links-menu",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "review-links-menu",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Suggested links"
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "labelPrefix": "More for ",
+       "nth": 0
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "delta-review-links-ticked",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "review-links-ticked",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Suggested links"
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "labelPrefix": "Select ",
+       "nth": 0
+      }
+     },
+     {
+      "wait": 200
+     },
+     {
+      "click": {
+       "labelPrefix": "Select ",
+       "nth": 1
+      }
+     },
+     {
+      "wait": 500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "delta-transactions-paired",
+   "rune": {
+    "scene": "route",
+    "args": [
+     "--route",
+     "/transactions?period=all&wallet=Test%20Vault"
+    ]
+   },
+   "tauri": {
+    "path": "/transactions?period=all&wallet=Test%20Vault",
+    "state": {},
+    "steps": [],
+    "ready": "transactions"
+   },
+   "height": 1500
+  }
+ ]
+}

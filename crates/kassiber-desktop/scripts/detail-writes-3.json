@@ -1,0 +1,10 @@
+{"events": [
+ {"t": 0.3, "type": "tap", "key": "txd-history-toggle"},
+ {"t": 0.8, "type": "tap", "key": "txd-revert-9e56444c-77da-45c8-9afd-90cfdbb7912e"},
+ {"t": 1.2, "type": "tap", "key": "txd-revert-confirm"},
+ {"t": 2.5, "type": "key", "name": "2"},
+ {"t": 3.0, "type": "tap", "key": "txd-loan-0"},
+ {"t": 4.5, "type": "mark", "name": "marked"},
+ {"t": 5.0, "type": "tap", "key": "txd-loan-0"},
+ {"t": 6.5, "type": "mark", "name": "end"}
+]}

@@ -1,0 +1,7 @@
+{"events": [
+ {"t": 0.3, "type": "tap", "key": "range-All-0"},
+ {"t": 0.8, "type": "tap", "key": "sh-currency"},
+ {"t": 1.3, "type": "tap", "key": "range-4Y-0"},
+ {"t": 1.8, "type": "tap", "key": "sh-currency"},
+ {"t": 2.3, "type": "mark", "name": "end"}
+]}

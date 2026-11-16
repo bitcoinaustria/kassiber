@@ -1,0 +1,16 @@
+Package: kassiber
+Version: @@VERSION@@
+Architecture: @@ARCH@@
+Maintainer: Bitcoin Austria <office@bitcoin-austria.at>
+Section: utils
+Priority: optional
+Homepage: https://github.com/bitcoinaustria/kassiber
+Installed-Size: @@INSTALLED_KB@@
+Depends: libc6 (>= 2.35), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libx11-6, libx11-xcb1, libxcursor1, libxrandr2, libxi6, libvulkan1, mesa-vulkan-drivers | vulkan-icd, fontconfig
+Recommends: xdg-desktop-portal
+Provides: kassiber-command
+Conflicts: kassiber-cli
+Replaces: kassiber-cli
+Description: Local-first Bitcoin accounting desktop application
+ Kassiber is a local-first Bitcoin accounting suite. This package contains the
+ desktop application and its bundled command-line sidecar.

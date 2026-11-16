@@ -1,0 +1,4 @@
+{"events": [
+  {"t": 0.3, "type": "tap", "button": "back", "x": 760, "y": 800},
+  {"t": 0.8, "type": "mark", "name": "end"}
+]}
