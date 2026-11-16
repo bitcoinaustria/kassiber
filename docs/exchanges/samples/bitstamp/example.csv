@@ -1,0 +1,10 @@
+ID,Account,Type,Subtype,Datetime,Amount,Amount currency,Value,Value currency,Rate,Rate currency,Fee,Fee currency,Order ID
+1,Main Account,Deposit,,2024-01-01T09:00:00Z,1000.00,EUR,,,,,,,
+2,Main Account,Market,Buy,2024-01-02T10:00:00Z,0.01000000,BTC,400.00,EUR,40000.00,EUR,1.20,EUR,9001
+3,Main Account,Deposit,,2024-01-03T00:00:00Z,0.00500000,BTC,,,,,,,
+4,Main Account,Withdrawal,,2024-01-04T12:30:45Z,0.00400000,BTC,,,,,0.00010000,BTC,
+5,Main Account,Market,Sell,2024-01-05T00:00:00Z,0.00200000,BTC,84.00,EUR,42000.00,EUR,0.34,EUR,9002
+8,Main Account,Referral reward,,2024-01-08T00:00:00Z,0.00001000,BTC,,,,,,,
+9,Main Account,Deposit,,2024-01-09T00:00:00Z,1.00000000,ETH,,,,,,,
+10,Main Account,Market,Buy,2024-01-10T00:00:00Z,0.50000000,ETH,1000.00,EUR,2000.00,EUR,,,
+12,Main Account,Withdrawal,,2024-01-12T00:00:00Z,100.00,EUR,,,,,,,
