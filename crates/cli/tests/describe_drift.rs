@@ -18,6 +18,9 @@ use kassiber_pyjson::{dumps, Options, Value};
 /// must still be Python's.
 /// Each Rust-only leaf and the Python leaf it is described like.
 const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[("sync-bitpanda", "sync-binance")];
+/// Rust-only leaves with a grammar of their own and the Python leaf they
+/// follow: Python has nothing to compare, so they describe themselves.
+const RUST_ONLY_OWN: &[(&str, &str)] = &[("import-bisq", "import-strike")];
 
 /// Rust-only leaves with no Python sibling to be described like, each with
 /// the leaf it follows and its reviewed description
@@ -47,6 +50,17 @@ fn python_catalog() -> Value {
             .expect("sibling");
         let text = compact(&commands[at]).replace(sibling, leaf);
         commands.insert(at + 1, kassiber_pytext::loads(&text).unwrap());
+    }
+    for (leaf, sibling) in RUST_ONLY_OWN {
+        let at = commands
+            .iter()
+            .position(|c| compact(c).contains(&format!("\"wallets.{sibling}\"")))
+            .expect("sibling");
+        let own = leaves()
+            .into_iter()
+            .find(|l| l.dotted() == format!("wallets.{leaf}"))
+            .expect("rust-only leaf");
+        commands.insert(at + 1, describe_leaf(&own));
     }
     for (after, entry) in RUST_ONLY_ENTRIES {
         let at = commands
