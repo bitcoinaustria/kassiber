@@ -13,7 +13,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request id"},"id":null}
 < {"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":10},"notifications":{}}}
 < {"jsonrpc":"2.0","id":"c0","result":{"content":[{"type":"text","text":"{\"tool\":\"status\",\"book… [1722 bytes fnv128 d026e3fc36895a33034c5f3cff0485d4]
-< {"jsonrpc":"2.0","id":"c1","result":{"content":[{"type":"text","text":"{\"tool\":\"overview_snapsh… [33268 bytes fnv128 92c3017d3e7f44d920956ede6e094281]
+< {"jsonrpc":"2.0","id":"c1","result":{"content":[{"type":"text","text":"{\"tool\":\"overview_snapsh… [42656 bytes fnv128 0b7b9d18c03f4c321e6a8ae108f5ee9f]
 < {"jsonrpc":"2.0","id":"c2","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [13252 bytes fnv128 60d1e43142eed776cc034746327836c6]
 < {"jsonrpc":"2.0","id":"c3","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [5942 bytes fnv128 a0eea5997f9d99f05cdc3ffabd399521]
 < {"jsonrpc":"2.0","id":"c4","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [13250 bytes fnv128 442779b8f36adc82b2d654353b356aa2]
@@ -213,7 +213,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request id"},"id":null}
 < {"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":10},"notifications":{}}}
 < {"jsonrpc":"2.0","id":"c0","result":{"content":[{"type":"text","text":"{\"tool\":\"status\",\"book… [1722 bytes fnv128 d026e3fc36895a33034c5f3cff0485d4]
-< {"jsonrpc":"2.0","id":"c1","result":{"content":[{"type":"text","text":"{\"tool\":\"overview_snapsh… [33268 bytes fnv128 92c3017d3e7f44d920956ede6e094281]
+< {"jsonrpc":"2.0","id":"c1","result":{"content":[{"type":"text","text":"{\"tool\":\"overview_snapsh… [42656 bytes fnv128 0b7b9d18c03f4c321e6a8ae108f5ee9f]
 < {"jsonrpc":"2.0","id":"c2","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [13252 bytes fnv128 60d1e43142eed776cc034746327836c6]
 < {"jsonrpc":"2.0","id":"c3","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [5942 bytes fnv128 a0eea5997f9d99f05cdc3ffabd399521]
 < {"jsonrpc":"2.0","id":"c4","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [13250 bytes fnv128 442779b8f36adc82b2d654353b356aa2]

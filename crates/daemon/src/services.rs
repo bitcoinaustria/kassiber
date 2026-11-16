@@ -13,6 +13,7 @@ pub fn kinds() -> impl Iterator<Item = &'static str> {
         .chain(crate::accounts::KINDS.iter().copied())
         .chain(crate::context::KINDS.iter().copied())
         .chain(crate::connections::KINDS.iter().copied())
+        .chain(crate::sources::KINDS.iter().copied())
 }
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
     let empty = dict::<&str>([]);
@@ -36,6 +37,9 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
     }
     if crate::connections::KINDS.contains(&kind) {
         return crate::connections::execute(book, kind, args);
+    }
+    if crate::sources::KINDS.contains(&kind) {
+        return book.service(kind, args);
     }
     if crate::workspaces::KINDS.contains(&kind) {
         return book.service(kind, args);

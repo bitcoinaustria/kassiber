@@ -1220,6 +1220,22 @@ fn connections(
 ) -> Result<Vec<Value>> {
     let assets = observed_assets(conn, profile)?;
     let imports = import_summary(conn, profile)?;
+    // Source coverage for today (docs/reference/desktop.md#sources-live-sync-and-file-snapshots):
+    // `status` says whether a source is current, not whether it holds rows.
+    let now = kassiber_rates::time::format(clock.now).unwrap_or_default();
+    let coverage: std::collections::BTreeMap<String, kassiber_wallets::coverage::Source> =
+        kassiber_wallets::coverage::sources(
+            conn,
+            profile,
+            &kassiber_wallets::coverage::Options {
+                skip_scan_bounds: true,
+                ..Default::default()
+            },
+            &now,
+        )?
+        .into_iter()
+        .map(|source| (source.wallet_id.clone(), source))
+        .collect();
     let mut output = Vec::new();
     for row in rows(
         conn,
@@ -1288,7 +1304,19 @@ fn connections(
                 "chainActiveCount",
                 balance.map_or(Value::Null, |b| b.active.clone()),
             ),
-            ("status", s(if tx_count != 0 { "synced" } else { "idle" })),
+            (
+                "status",
+                s(match coverage.get(&id).map(|c| c.freshness_state) {
+                    Some("current") => "synced",
+                    Some("behind") => "behind",
+                    Some("sync_failed") => "error",
+                    _ => "idle",
+                }),
+            ),
+            (
+                "coverage",
+                coverage.get(&id).map_or(Value::Null, |c| c.to_value()),
+            ),
             ("transactionCount", tx_count.into()),
             ("syncMode", s(summary.sync_mode)),
             ("syncSource", s(sync_source)),

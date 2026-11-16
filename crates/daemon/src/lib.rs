@@ -124,6 +124,8 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.source_funds.bank_lines.accept",
     "ui.source_funds.bank_lines.reject",
     "ui.diagnostics.replay_bundle.export",
+    "ui.sources.coverage",
+    "ui.sources.attest_coverage",
 ];
 
 /// Every kind `daemon.ready` advertises.
@@ -264,6 +266,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     );
     kinds.push("ui.wallets.detect_script_types");
     kinds.extend(services::kinds().filter(|k| connections::KINDS.contains(k)));
+    kinds.extend(services::kinds().filter(|k| sources::KINDS.contains(k)));
     kinds.push("ui.connections.node.snapshot");
     kinds.push("ui.reports.lightning_profitability");
     kinds.extend(metadata::KINDS.iter().copied().filter(|k| {
@@ -1929,6 +1932,7 @@ mod offline;
 mod profiles;
 mod projects;
 mod services;
+mod sources;
 mod views;
 mod watches;
 mod workspaces;

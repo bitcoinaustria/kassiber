@@ -1281,6 +1281,22 @@ history every background pass. Rate jobs reuse the existing
 `rates_checked_minutes` cache and do not run destructive rebuilds in background
 freshness work.
 
+## Source coverage
+
+Rust-only kinds (desktop-invokable, in both allowlists; also AI tools and MCP
+tools at their grants) for [source coverage](desktop.md#sources-live-sync-and-file-snapshots):
+
+| Kind | Arguments | Writes | Answer |
+| --- | --- | --- | --- |
+| `ui.sources.coverage` | `period_end?` (`YYYY-MM-DD`, default today), `wallet?`, `check_file?` (needs `wallet`) | nothing; a `stat` of a remembered import file, and with `check_file` a bounded hash of it | `period_end`, `period_end_default`, `summary` (counts per state and `needs_action`), `sources` (per wallet: `source_mode`, `covered_from`, `covered_through`, `freshness_state`, `reason`, `action`, `needs_action`, `live`, `file`, `transactions`, `attestation`, `attestation_gap`, `scan_warnings`; `file.source_file_remembered` only when true; with `check_file`, `file.source_file_check`) |
+| `ui.sources.attest_coverage` | `wallet`, then `kind` (`no_activity_after`/`closed_on`) + `date` + `note?`, or `clear: true` | the wallet's `config_json.coverage_attestation` | `wallet_id`, `wallet`, `previous`, `cleared`, `source` |
+
+Both refuse unknown arguments. The read is classified `read`, the attestation
+`accounting_decisions` (the CLI's `wallets coverage` and `wallets
+attest-coverage` likewise). `ui.overview.snapshot` embeds each connection's
+coverage for today and derives its `status` from it. Neither kind contacts a
+network.
+
 ## Backend certificate kinds
 
 `ui.backends.certificate.fetch` (`{name}`) and `ui.backends.certificate.trust`

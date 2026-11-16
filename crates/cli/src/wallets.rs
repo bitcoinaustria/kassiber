@@ -24,6 +24,27 @@ pub fn execute(
             &crate::connections::arguments(namespace),
         );
     }
+    if let Some(command @ ("coverage" | "attest-coverage")) = namespace.text("wallets_command") {
+        // Source coverage (docs/reference/desktop.md#sources-live-sync-and-file-snapshots).
+        let keys: &[&str] = if command == "coverage" {
+            &["workspace", "profile", "wallet", "period_end", "check_file"]
+        } else {
+            &[
+                "workspace",
+                "profile",
+                "wallet",
+                "kind",
+                "date",
+                "note",
+                "clear",
+            ]
+        };
+        let args = dict(
+            keys.iter()
+                .map(|key| (*key, namespace.get(key).cloned().unwrap_or(Value::Null))),
+        );
+        return book.service(&format!("wallets.{command}"), &args);
+    }
     if namespace.text("wallets_command") == Some("import-samourai") {
         return book.import_samourai(kassiber_wallets::file_import::samourai::Request {
             workspace: namespace.get("workspace").cloned(),

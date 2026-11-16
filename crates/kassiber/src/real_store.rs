@@ -12,6 +12,7 @@ mod onboarding;
 mod rates_rebuild;
 mod replay;
 mod reproduce;
+mod sources;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -1551,6 +1552,9 @@ impl Book for RealBook {
         }
         if exchange::COMMANDS.contains(&operation) {
             return self.exchange_service(operation, args);
+        }
+        if sources::COMMANDS.contains(&operation) {
+            return self.sources_service(operation, args);
         }
         if let Some(result) = self.workspace_read(operation, args) {
             return result;

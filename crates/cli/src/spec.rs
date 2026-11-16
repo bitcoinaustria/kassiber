@@ -102,6 +102,8 @@ pub const AI_PROVIDER_KIND_CHANGE_HELP: &str = "Change the privacy kind, or make
 pub const RUST_ONLY_LEAVES: &[&str] = &[
     "wallets.sync-bitpanda",
     "wallets.import-bisq",
+    "wallets.coverage",
+    "wallets.attest-coverage",
     "journals.verify",
     "backends.trust-certificate",
     "projects.demo",

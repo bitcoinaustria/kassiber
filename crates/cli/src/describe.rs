@@ -31,6 +31,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.sync-coinbase",
     "wallets.sync-binance",
     "wallets.sync-bitpanda",
+    "wallets.coverage",
+    "wallets.attest-coverage",
     "wallets.sync",
     "journals.process",
     "journals.quarantine.groups",

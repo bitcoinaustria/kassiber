@@ -62,6 +62,21 @@ fn python_catalog() -> Value {
             .expect("rust-only leaf");
         commands.insert(at + 1, describe_leaf(&own));
     }
+    // Rust-only leaves with no Python sibling, pinned in-tree as they
+    // describe (docs/reference/desktop.md#sources-live-sync-and-file-snapshots),
+    // after `wallets.sync-bitpanda` in grammar order.
+    let Value::List(pinned) =
+        kassiber_pytext::loads(include_str!("data/rust_only_describe.json")).unwrap()
+    else {
+        panic!("rust_only_describe.json")
+    };
+    let at = commands
+        .iter()
+        .position(|c| compact(c).contains("\"wallets.sync-bitpanda\""))
+        .expect("sync-bitpanda");
+    for (offset, entry) in pinned.into_iter().enumerate() {
+        commands.insert(at + 1 + offset, entry);
+    }
     for (after, entry) in RUST_ONLY_ENTRIES {
         let at = commands
             .iter()

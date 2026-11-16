@@ -112,7 +112,9 @@ fn rust_only(got: String, expected: String) -> (String, String) {
     }
     let collapse = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut got = got;
-    for name in names {
+    // A Rust-only name that is also one of Python's own choices here (`coverage`
+    // under `source-funds`) stays.
+    for name in names.into_iter().filter(|name| !expected.contains(name)) {
         got = got
             .replace(&format!(",{name},"), ",")
             .replace(&format!(",{name}}}"), "}")
