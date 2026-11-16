@@ -331,6 +331,7 @@ fn a_new_connection_wallet_is_the_one_the_cli_sync_creates() {
         "test",
         &mut |route| Some(Consent::explicit_trigger(route.request())),
         Some(&cli_ids),
+        &mut None,
     )
     .unwrap();
     // The desktop: the connection creates that wallet, then its sync imports
@@ -360,6 +361,7 @@ fn a_new_connection_wallet_is_the_one_the_cli_sync_creates() {
         "test",
         &mut |route| Some(Consent::explicit_trigger(route.request())),
         Some(&rest),
+        &mut None,
     )
     .unwrap();
     // Each fixture stamps its own creation time on the migration audits.

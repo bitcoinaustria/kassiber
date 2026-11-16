@@ -58,11 +58,15 @@ pub fn execute(
     version: &str,
     consent: &mut dyn FnMut(&Route) -> Option<Consent>,
     identity: Option<&Identity>,
+    resolved_wallet: &mut Option<String>,
 ) -> Result<Py, AppError> {
     let backend = to_py(backend)?;
     let (name, kind) = backend_kind(&backend, expected)?;
     let mut ids = Ids { identity, at: 0 };
     let wallet = wallet(conn, profile, wallet_ref, &kind, &name, &mut ids)?;
+    // The caller records this sync's outcome on the wallet it ran for, also
+    // when no `--wallet` named it.
+    *resolved_wallet = Some(wallet.id.clone());
     let label = provider(&kind);
     let prepared = prepare(&backend, &kind, &name)?;
     let book = book_id(conn)?;

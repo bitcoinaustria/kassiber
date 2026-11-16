@@ -1538,12 +1538,11 @@
       "keyStored": "Gespeichert im Backend „{{backend}}“",
       "keyMissing": "Fehlt — füge die Börse erneut hinzu",
       "lastSync": "Letzter Sync",
-      "never": "Seit dem Start von Kassiber nicht synced",
+      "never": "Noch nie gesynct",
       "ok": "{{time}} · {{imported}} neu von {{fetched}} gelesen",
       "failed": "{{time}} · fehlgeschlagen",
       "skipped_one": "{{count}} Eintrag wurde übersprungen, weil er kein BTC ist oder nur Fiat bewegt.",
-      "skipped_other": "{{count}} Einträge wurden übersprungen, weil sie kein BTC sind oder nur Fiat bewegen.",
-      "sessionNote": "Sync-Ergebnisse bleiben bis zum Neustart von Kassiber erhalten; das Buch speichert nur die importierten Transaktionen."
+      "skipped_other": "{{count}} Einträge wurden übersprungen, weil sie kein BTC sind oder nur Fiat bewegen."
     }
   },
   "catalog": {

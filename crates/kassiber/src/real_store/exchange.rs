@@ -4,9 +4,9 @@
 //! contact an exchange, each for one explicit user action under a consent
 //! minted for exactly that route. `create` stores the backend and wallet rows
 //! `backends create` and `wallets sync-<kind>` store, and `sync` runs that
-//! very command, so the book holds the CLI's bytes. The last result of each
-//! wallet's sync lives in this open book's memory only: the CLI stores none,
-//! and its rows must stay Python's.
+//! very command, so the book holds the CLI's bytes. Every sync, CLI or desktop,
+//! leaves its outcome on the wallet (`config_json.exchange_sync`), which
+//! `status` reads, so it survives a restart.
 use super::*;
 use kassiber_envelope::get;
 use kassiber_wallets::file_import::exchange_api::{self, desktop};
@@ -23,7 +23,14 @@ fn allowed(operation: &str) -> &'static [&'static str] {
     match operation {
         "ui.connections.exchange.status" => &["wallet"],
         "ui.connections.exchange.test" => &["backend", "exchange", "api_key", "api_secret", "url"],
-        "ui.connections.exchange.create" => &["exchange", "label", "api_key", "api_secret", "url"],
+        "ui.connections.exchange.create" => &[
+            "exchange",
+            "label",
+            "api_key",
+            "api_secret",
+            "url",
+            "wallet",
+        ],
         _ => &["wallet"],
     }
 }
@@ -136,7 +143,7 @@ impl RealBook {
     }
 
     /// Every exchange wallet in the active profile, its backend's presence
-    /// and this session's last sync. Local reads only.
+    /// and its last stored sync. Local reads only.
     fn exchange_status(&mut self, args: &Value) -> Result<Value, AppError> {
         let profile = self.exchange_profile()?;
         let conn = self.conn()?;
@@ -187,10 +194,7 @@ impl RealBook {
                 ),
                 (
                     "last_sync",
-                    self.exchange_syncs
-                        .get(&target.id)
-                        .cloned()
-                        .unwrap_or(Value::Null),
+                    stored_sync(conn, &target.id)?.unwrap_or(Value::Null),
                 ),
             ]));
         }
@@ -265,24 +269,37 @@ impl RealBook {
             .as_ref()
             .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
             .connection();
+        // `wallet` attaches the key to an exchange wallet the user already
+        // fills from CSV exports (a hybrid source); it must be the same
+        // exchange and name no backend yet.
+        let attach = text(args, "wallet")?
+            .map(|reference| attachable(conn, &profile, &reference, &kind))
+            .transpose()?;
         // The sync imports into any wallet already carrying the label, so a
         // new connection must not share one.
-        let taken: bool = conn
+        let taken: Option<(String, String, String, Option<String>)> = conn
             .query_row(
-                "SELECT 1 FROM wallets WHERE profile_id=? AND lower(label)=lower(?) LIMIT 1",
+                "SELECT id,lower(trim(kind)),label,config_json FROM wallets WHERE profile_id=? AND lower(label)=lower(?) LIMIT 1",
                 [profile.as_str(), label.as_str()],
-                |_| Ok(true),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .optional()
-            .map_err(|e| error(map_sqlite_error(e)))?
-            .unwrap_or(false);
-        if taken {
+            .map_err(|e| error(map_sqlite_error(e)))?;
+        if let (None, Some((id, existing_kind, existing_label, config))) = (&attach, &taken) {
+            let mut details = vec![("wallet", s(label.as_str()))];
+            // The same exchange's CSV wallet can take the key instead.
+            if *existing_kind == kind && backend_of(config.as_deref()).is_none() {
+                details.push(("attachable_wallet_id", s(id.as_str())));
+                details.push(("attachable_wallet", s(existing_label.as_str())));
+            }
             return Err(AppError::new(
                 "conflict",
                 format!("A wallet named '{label}' already exists in this book"),
             )
-            .with_hint("Choose another name for this exchange connection.")
-            .with_details(dict([("wallet", s(label.as_str()))])));
+            .with_hint(
+                "Choose another name, or add the key to the existing wallet so it keeps its CSV history.",
+            )
+            .with_details(dict(details)));
         }
         let before = self.backends.clone();
         let mut merged = self.backends.clone();
@@ -315,18 +332,22 @@ impl RealBook {
             });
         #[cfg(not(feature = "test-harness"))]
         let identity = None;
-        let wallet =
-            match desktop::create_wallet(conn, &profile, &label, &kind, &name, identity.as_ref()) {
-                Ok(wallet) => wallet,
-                Err(error) => {
-                    // Leave no key behind for a connection that does not exist.
-                    let _ = conn.execute("DELETE FROM backends WHERE name=?", [&name]);
-                    self.backends = before;
-                    return Err(error);
-                }
-            };
+        let created = match &attach {
+            Some(wallet) => attach_backend(conn, wallet, &name).map(|()| wallet.clone()),
+            None => desktop::create_wallet(conn, &profile, &label, &kind, &name, identity.as_ref()),
+        };
+        let wallet = match created {
+            Ok(wallet) => wallet,
+            Err(error) => {
+                // Leave no key behind for a connection that does not exist.
+                let _ = conn.execute("DELETE FROM backends WHERE name=?", [&name]);
+                self.backends = before;
+                return Err(error);
+            }
+        };
         Ok(dict([
             ("exchange", s(kind.as_str())),
+            ("attached", Value::Bool(attach.is_some())),
             (
                 "wallet",
                 dict([
@@ -341,7 +362,7 @@ impl RealBook {
 
     /// `ui.connections.exchange.sync`: `wallets sync-<kind> --backend B
     /// --wallet W` for the wallet's own backend, on the user's explicit
-    /// request. Its result, or its error, is this session's last sync.
+    /// request. Its result, or its error, is stored as the wallet's last sync.
     fn exchange_sync(&mut self, args: &Value) -> Result<Value, AppError> {
         let reference = text(args, "wallet")?.ok_or_else(|| {
             AppError::new(
@@ -361,31 +382,106 @@ impl RealBook {
             )
             .with_hint("Add the exchange again with a read-only API key."));
         };
-        let result = self.import_exchange_api(&profile, &target.id, &backend, &target.kind);
-        let at = kassiber_setup::Sources::now(&SetupSources, self.conn()?)?;
-        let record = match &result {
-            Ok(payload) => {
-                let mut record = vec![("status", s("ok")), ("at", s(at))];
-                for key in ["imported", "updated", "fetched", "skipped"] {
-                    if let Some(value) = get(payload, key) {
-                        record.push((key, value.clone()));
-                    }
-                }
-                dict(record)
-            }
-            // The error exactly as the envelope reports it, already withheld.
-            Err(error) => dict([
-                ("status", s("error")),
-                ("at", s(at)),
-                (
-                    "error",
-                    get(&error.envelope(None), "error")
-                        .cloned()
-                        .unwrap_or(Value::Null),
-                ),
-            ]),
-        };
-        self.exchange_syncs.insert(target.id.clone(), record);
-        result
+        // `import_exchange_api` stores the outcome on the wallet.
+        self.import_exchange_api(&profile, &target.id, &backend, &target.kind)
     }
+}
+
+/// The persisted last sync of an exchange wallet (`None` before the first).
+fn stored_sync(conn: &Connection, wallet: &str) -> Result<Option<Value>, AppError> {
+    let config: Option<String> = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id=?",
+            [wallet],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| error(map_sqlite_error(e)))?
+        .flatten();
+    Ok(kassiber_wallets::coverage::exchange_sync_record(
+        config.as_deref(),
+    ))
+}
+
+fn backend_of(config: Option<&str>) -> Option<String> {
+    let config: serde_json::Value = serde_json::from_str(config?).ok()?;
+    config
+        .get("backend")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+}
+
+/// The wallet a key may be attached to: the same exchange, no backend yet.
+fn attachable(
+    conn: &Connection,
+    profile: &str,
+    reference: &str,
+    kind: &str,
+) -> Result<kassiber_wallets::Wallet, AppError> {
+    let wallet = kassiber_wallets::resolve(conn, profile, reference)?;
+    let (existing, config): (String, Option<String>) = conn
+        .query_row(
+            "SELECT lower(trim(kind)),config_json FROM wallets WHERE id=?",
+            [&wallet.id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|e| error(map_sqlite_error(e)))?;
+    if existing != kind {
+        return Err(AppError::new(
+            "validation",
+            format!(
+                "Wallet '{}' is not a {} wallet",
+                wallet.label,
+                desktop::provider_name(kind)
+            ),
+        )
+        .with_hint("Attach the key to the wallet that holds this exchange's CSV history."));
+    }
+    if backend_of(config.as_deref()).is_some() {
+        return Err(AppError::new(
+            "conflict",
+            format!("Wallet '{}' already has an API key", wallet.label),
+        )
+        .with_hint("Sync it, or remove its key before adding another."));
+    }
+    Ok(wallet)
+}
+
+/// Name the new backend in the wallet's config, as `wallets sync-<kind>`
+/// would have stored it; every other key keeps its bytes.
+fn attach_backend(
+    conn: &Connection,
+    wallet: &kassiber_wallets::Wallet,
+    backend: &str,
+) -> Result<(), AppError> {
+    let tx = kassiber_store::write_transaction(conn).map_err(|e| error(map_sqlite_error(e)))?;
+    let raw: Option<String> = tx
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id=?",
+            [&wallet.id],
+            |r| r.get(0),
+        )
+        .map_err(|e| error(map_sqlite_error(e)))?;
+    let mut config = match raw.as_deref().filter(|raw| !raw.trim().is_empty()) {
+        Some(raw) => kassiber_pytext::loads(raw)
+            .map_err(|_| AppError::new("internal_error", "Invalid wallet configuration JSON"))?,
+        None => dict::<&str>([]),
+    };
+    if !matches!(config, Value::Dict(_)) {
+        return Err(AppError::new(
+            "internal_error",
+            "Invalid wallet configuration JSON",
+        ));
+    }
+    kassiber_envelope::set(&mut config, "backend", s(backend));
+    let stored = kassiber_pyjson::dumps(&config, &kassiber_pyjson::Options::new().sort_keys(true))
+        .map_err(|_| AppError::new("internal_error", "Invalid wallet configuration JSON"))?;
+    tx.execute(
+        "UPDATE wallets SET config_json=? WHERE id=?",
+        [stored.as_str(), wallet.id.as_str()],
+    )
+    .map_err(|e| error(map_sqlite_error(e)))?;
+    tx.commit().map_err(|e| error(map_sqlite_error(e)))
 }

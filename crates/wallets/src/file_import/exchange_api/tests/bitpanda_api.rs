@@ -576,6 +576,7 @@ fn bitpanda_resync_is_idempotent() {
             "test",
             &mut |route| Some(Consent::explicit_trigger(route.request())),
             None,
+            &mut None,
         )
         .unwrap();
         assert_eq!(at(&result, "imported"), &Py::from(expected), "{result:?}");

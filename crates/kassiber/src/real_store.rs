@@ -814,7 +814,6 @@ impl BookStore for RealStore {
             backends,
             backend_kinds,
             report_read_attempts: Default::default(),
-            exchange_syncs: Default::default(),
             opened: OPENED_BOOKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         }))
     }
@@ -1059,9 +1058,6 @@ struct RealBook {
     /// Report-read refresh attempts of this open book, per profile: when the
     /// last one started and its payload. A reopened book starts empty.
     report_read_attempts: std::collections::HashMap<String, (std::time::Instant, Option<Value>)>,
-    /// Each exchange wallet's last desktop sync in this open book, by wallet
-    /// id. Never stored: the CLI's sync stores none either.
-    exchange_syncs: std::collections::HashMap<String, Value>,
 }
 
 struct NativeJournalReply<'a> {
@@ -2865,47 +2861,47 @@ impl Book for RealBook {
         backend: &str,
         kind: &str,
     ) -> Result<Value, AppError> {
-        use kassiber_net::{Consent, Gate, Ledger, Offline};
-        use kassiber_wallets::file_import::{exchange_api, Identity};
-        // backends.resolve_backend(runtime_config, name) over the merged view.
-        let mut backends = self.backends.clone();
-        backends.merge(self.conn()?)?;
-        let config = backends.resolve_configured(self.conn()?, Some(backend))?;
-        let gate = Gate::new(
-            || match Context::from_env()
+        let mut resolved = None;
+        let result = self.run_exchange_api(profile, wallet, backend, kind, &mut resolved);
+        // Every sync, CLI or desktop, leaves its outcome on the wallet it ran
+        // for (the importer names it, also when no `--wallet` did) so source
+        // coverage and the desktop sync card survive a restart
+        // (docs/reference/desktop.md#sources-live-sync-and-file-snapshots).
+        // A run that failed before it had a wallet has nothing to record.
+        let conn = self.conn()?;
+        let target = match resolved {
+            Some(id) => Some(id),
+            None if !wallet.trim().is_empty() => kassiber_wallets::resolve(conn, profile, wallet)
                 .ok()
-                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
-            {
-                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
-                Some(_) => Offline::Online,
-                None => Offline::Unavailable,
-            },
-            Ledger::process(),
-        );
-        #[cfg(feature = "test-harness")]
-        let identity = std::env::var("KASSIBER_RUST_TEST_IMPORT_IDS")
-            .ok()
-            .and_then(|ids| {
-                Some(Identity {
-                    ids: ids.split(',').map(str::to_owned).collect(),
-                    timestamp: std::env::var("KASSIBER_RUST_TEST_IMPORT_TIME").ok()?,
-                })
-            });
-        #[cfg(not(feature = "test-harness"))]
-        let identity: Option<Identity> = None;
-        // This command is the user's explicit request for exactly this
-        // backend's signed history; the grant covers only the reported route.
-        exchange_api::execute(
-            self.conn()?,
-            profile,
-            wallet,
-            &config,
-            kind,
-            &gate,
-            env!("CARGO_PKG_VERSION"),
-            &mut |route| Some(Consent::explicit_trigger(route.request())),
-            identity.as_ref(),
-        )
+                .map(|found| found.id),
+            None => None,
+        };
+        if let Some(target) = target {
+            let at = kassiber_setup::Sources::now(&SetupSources, conn)?;
+            let outcome = match &result {
+                Ok(payload) => {
+                    let mut record = vec![("status", s("ok"))];
+                    for key in ["imported", "updated", "fetched", "skipped"] {
+                        if let Some(value) = kassiber_envelope::get(payload, key) {
+                            record.push((key, value.clone()));
+                        }
+                    }
+                    dict(record)
+                }
+                // Only the error's code reaches the recorder, which keeps its class.
+                Err(error) => dict([
+                    ("status", s("error")),
+                    (
+                        "error",
+                        kassiber_envelope::get(&error.envelope(None), "error")
+                            .cloned()
+                            .unwrap_or(Value::Null),
+                    ),
+                ]),
+            };
+            kassiber_wallets::coverage::record_exchange_sync(conn, &target, &at, &outcome)?;
+        }
+        result
     }
     fn import_ledger_file(
         &mut self,
@@ -3577,5 +3573,60 @@ mod selected_data_root_tests {
             kassiber_paths::canonicalize_allow_missing(&selected).unwrap(),
             kassiber_paths::canonicalize_allow_missing(&data).unwrap()
         );
+    }
+}
+
+impl RealBook {
+    /// One exchange API sync under the user's explicit grant for this route.
+    fn run_exchange_api(
+        &mut self,
+        profile: &str,
+        wallet: &str,
+        backend: &str,
+        kind: &str,
+        resolved: &mut Option<String>,
+    ) -> Result<Value, AppError> {
+        use kassiber_net::{Consent, Gate, Ledger, Offline};
+        use kassiber_wallets::file_import::{exchange_api, Identity};
+        // backends.resolve_backend(runtime_config, name) over the merged view.
+        let mut backends = self.backends.clone();
+        backends.merge(self.conn()?)?;
+        let config = backends.resolve_configured(self.conn()?, Some(backend))?;
+        let gate = Gate::new(
+            || match Context::from_env()
+                .ok()
+                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
+            {
+                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
+                Some(_) => Offline::Online,
+                None => Offline::Unavailable,
+            },
+            Ledger::process(),
+        );
+        #[cfg(feature = "test-harness")]
+        let identity = std::env::var("KASSIBER_RUST_TEST_IMPORT_IDS")
+            .ok()
+            .and_then(|ids| {
+                Some(Identity {
+                    ids: ids.split(',').map(str::to_owned).collect(),
+                    timestamp: std::env::var("KASSIBER_RUST_TEST_IMPORT_TIME").ok()?,
+                })
+            });
+        #[cfg(not(feature = "test-harness"))]
+        let identity: Option<Identity> = None;
+        // This command is the user's explicit request for exactly this
+        // backend's signed history; the grant covers only the reported route.
+        exchange_api::execute(
+            self.conn()?,
+            profile,
+            wallet,
+            &config,
+            kind,
+            &gate,
+            env!("CARGO_PKG_VERSION"),
+            &mut |route| Some(Consent::explicit_trigger(route.request())),
+            identity.as_ref(),
+            resolved,
+        )
     }
 }

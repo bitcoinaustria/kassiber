@@ -1538,12 +1538,11 @@
       "keyStored": "Stored in backend “{{backend}}”",
       "keyMissing": "Missing — add the exchange again",
       "lastSync": "Last sync",
-      "never": "Not synced since Kassiber started",
+      "never": "Never synced",
       "ok": "{{time}} · {{imported}} new of {{fetched}} read",
       "failed": "{{time}} · failed",
       "skipped_one": "{{count}} entry was skipped because it is not BTC or moves only fiat.",
-      "skipped_other": "{{count}} entries were skipped because they are not BTC or move only fiat.",
-      "sessionNote": "Sync results are kept until Kassiber restarts; the book stores only the imported transactions."
+      "skipped_other": "{{count}} entries were skipped because they are not BTC or move only fiat."
     }
   },
   "catalog": {

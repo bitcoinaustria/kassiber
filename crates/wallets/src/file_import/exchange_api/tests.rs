@@ -466,6 +466,7 @@ mod loopback {
             "test",
             &mut |route| consent.then(|| Consent::explicit_trigger(route.request())),
             None,
+            &mut None,
         );
         Run { result, conn }
     }
