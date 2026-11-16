@@ -1953,6 +1953,62 @@ quote fail safe. A trade row without `price` takes its cost / volume, which is
 what Kraken's price is; one without a cost stays unpriced, and `journals
 process` holds it as `missing_spot_price`.
 
+**Other crypto assets** follow the wallet's `asset_scope`
+([plan 24](../plan/24-crypto-assets.md)) as a filter over the same events
+([exchange contract](exchange-contract.md)): every sync reads the same two
+histories and groups the ledger into events (the rows of one `refid`
+together, every other row alone). An event that moves BTC or LBTC is mapped
+the same way in every scope; in the default `bitcoin` scope an event without
+Bitcoin is left out and counted per ticker in `assets.skipped`, with the
+`next_step` command that turns the scope on (`kassiber wallets update --wallet
+Kraken --config '{"asset_scope": "crypto"}'`), and in the `crypto` scope it is
+mapped too. `skipped` counts fiat-only entries, other-asset entries and
+internal moves.
+
+**Changed 2026-11-18:** a `bitcoin`-scope Kraken wallet now books BTC Buy
+Crypto (`spend`/`receive`) and BTC staking and earn rewards (`XBT.M`,
+`XBT.S`, ...) as the `crypto` scope always did; it used to refuse the former
+and leave the latter out. A BTC trade against another crypto asset is still
+refused there with the command that sets the `crypto` scope, and a fee row in
+a third asset (`KFEE`) is left out and counted, as before. The mapping:
+
+| Ledger rows | Imported as |
+| --- | --- |
+| `deposit`, `withdrawal` | wallet movement, unpriced, fee in the row's asset |
+| `trade` rows sharing a `refid`, one crypto leg | buy or sell priced from `TradesHistory`, exactly as for BTC; a crypto leg whose pair is not fiat-quoted is refused |
+| `trade` rows sharing a `refid`, two crypto legs (one out, one in) | `crypto` scope: two `swap` rows with `swap_ref` `kraken:<refid>`, paired by the import; unpriced, each with its own fee. `bitcoin` scope: a BTC leg against another crypto asset is refused |
+| `spend` + `receive` (Buy Crypto) sharing a `refid` | a buy valued at the fiat spent, or a sell valued at the fiat received net of its fee; two crypto legs are a swap |
+| a trade row with no amount and a fee in a third asset (`KFEE` fee credits) | `crypto` scope: its own outbound `fee` row in that asset; `bitcoin` scope: left out and counted, unless the fee is in BTC. The scope filters a trade by the assets it trades, never by such a fee row: another asset's trade with a BTC fee row books only that BTC `fee` row in the `bitcoin` scope, the same row the `crypto` scope books next to the trade |
+| `staking`, `earn` with subtype `reward` | `income`, unpriced until reviewed |
+| `transfer` (`spottostaking`, `stakingfromspot`, `stakingtospot`, `spotfromstaking`), `earn` (`allocation`, `deallocation`, `autoallocation`, `migration`) | skipped: moves between the user's own Kraken balances, counted in `skipped.internal_moves`; one that charges a fee is refused |
+| fiat rows outside a trade | skipped: fiat is not a holding |
+| `aclass` `tokenized_asset` (xStocks) | never imported, counted in `assets.excluded`; paid for with crypto, the trade is refused |
+
+The ledger grouped by `refid` is the base because it is Kraken's complete
+account history: every balance change, including staking, earn, Buy Crypto
+and fee credits, has a ledger row, while `TradesHistory` only covers order
+book trades. `TradesHistory` still prices a fiat-quoted trade, so a BTC trade
+gets the same row in both scopes and turning the scope on re-imports nothing
+that was already stored. A BTC row of a type the table does not map is refused
+with the reference's own message (`Kraken BTC ledger row ... has unsupported
+type ...`).
+
+Kraken's asset codes are mapped exactly: the legacy codes `XXBT`/`XBT`
+(BTC), `XXDG`/`XDG` (DOGE), `XETH`, `XETC`, `XLTC`, `XXLM`, `XXMR`, `XXRP`,
+`XZEC`, `XREP`, `XMLN`, `XICN`, `XNMC`, `XXVN`, `XDAO`, and the fiat codes
+`ZEUR`, `ZUSD`, `ZGBP`, `ZCAD`, `ZJPY`, `ZAUD`, `ZCHF`; any other code is its
+own ticker (`ZEUS` stays `ZEUS`). The balance suffixes `.S`, `.M`, `.F`,
+`.B`, `.P` and `.HOLD` name the same asset (`DOT.S` is DOT), and the bonded
+codes `ATOM21`, `DOT28`, `FLOW14`, `KAVA21`, `KSM07`, `SCRT21` and `SOL03`
+drop their bonding days. `ETH2` stays its own asset. A suffixed code whose
+last two characters are digits but is not in that list (bonding days or part
+of the ticker?), any other suffix, an asset class other than `currency` or
+`tokenized_asset`, a ledger type or subtype not listed above, a trade with
+more than two crypto legs, a swap that also moves fiat, a separate fee row
+in a traded asset, a reward that is not a positive credit, and an amount
+finer than 11 decimals are refused, naming the ledger row, and nothing is
+imported.
+
 ### Coinbase API
 
 Create a backend with `kind=coinbase`; store the API key in `token` and the

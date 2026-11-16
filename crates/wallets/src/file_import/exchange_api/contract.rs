@@ -113,6 +113,32 @@ impl Balance {
     }
 }
 
+impl Event {
+    /// The event of an exchange's built record entry: its `kind` text as the
+    /// event's kind (`buy`/`sell` a trade, `fee` a third-asset fee).
+    pub fn from_entry(entry: Entry) -> Self {
+        let kind = match entry.kind {
+            "buy" | "sell" => Kind::Trade,
+            "fee" => Kind::Fee,
+            kind => Kind::Movement(kind),
+        };
+        let (amount, fee) = match kind {
+            // The entry already holds the fee-only shape; the event holds
+            // the quantity.
+            Kind::Fee => (entry.fee, PriceNumber::Finite(Decimal::zero())),
+            _ => (entry.amount, entry.fee),
+        };
+        Self {
+            occurred_at: entry.occurred_at,
+            fee,
+            pricing: entry.pricing,
+            description: entry.description,
+            raw: entry.raw,
+            ..Self::one(entry.external_id, kind, entry.inbound, entry.asset, amount)
+        }
+    }
+}
+
 /// What one import or sync of an exchange produced.
 pub(super) struct Mapped {
     pub records: Vec<Py>,
@@ -129,6 +155,8 @@ pub(super) struct Mapped {
 pub(super) struct Mapper {
     exchange: &'static Descriptor,
     scope: Scope,
+    /// The wallet's label, for hints that name the scope command.
+    wallet: String,
     records: Vec<Py>,
     tally: Tally,
     unread: BTreeMap<String, i64>,
@@ -138,10 +166,11 @@ pub(super) struct Mapper {
 }
 
 impl Mapper {
-    pub fn new(exchange: &'static Descriptor, scope: Scope) -> Self {
+    pub fn new(exchange: &'static Descriptor, scope: Scope, wallet: &str) -> Self {
         Self {
             exchange,
             scope,
+            wallet: wallet.to_owned(),
             records: vec![],
             tally: Tally::default(),
             unread: BTreeMap::new(),
@@ -207,9 +236,27 @@ impl Mapper {
         kept
     }
 
+    /// Whether a leg of an event already admitted is kept: Bitcoin always,
+    /// another crypto asset as [`Self::admit`] keeps it; a leg left out (a
+    /// third-asset fee in a `bitcoin` wallet) is counted.
+    pub fn keeps(&mut self, code: &str, class: Class) -> bool {
+        match class {
+            Class::Crypto if self.exchange.reads == Reads::BitcoinOnly => {
+                *self.unread.entry(code.to_owned()).or_default() += 1;
+                false
+            }
+            class => self.tally.admit(self.scope, code, class),
+        }
+    }
+
     /// The wallet's asset scope.
     pub fn scope(&self) -> Scope {
         self.scope
+    }
+
+    /// The command that sets this wallet's scope to `crypto`.
+    pub fn keep_command(&self) -> String {
+        assets::keep_command(&self.wallet)
     }
 
     /// Counts an event left out whose assets the exchange does not name:

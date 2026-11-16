@@ -745,8 +745,10 @@ projections stay Python. Progress and remaining work for this slice:
   widen the mapping; a CSV importer once the export's fee semantics are known.
 - [x] One [exchange contract](docs/reference/exchange-contract.md) for every
   exchange: a registry of exchanges replaces per-name dispatch, and the asset
-  scope is a filter over each exchange's events. Bitpanda reads every asset;
-  Kraken, Coinbase and Binance read BTC only until their other-asset layers.
+  scope is a filter over each exchange's events. Bitpanda and Kraken read
+  every asset; Coinbase and Binance read BTC only until their other-asset
+  layers. A `bitcoin`-scope Kraken wallet now books BTC Buy Crypto and BTC
+  staking/earn rewards (owner decision 2026-11-18).
   Every sync reports `assets` (other coins as `unread` from a BTC-only
   reader) and `swap_pairs`, and an exchange that states its BTC balance
   reports both `provider_balance` and `reported_balance`.

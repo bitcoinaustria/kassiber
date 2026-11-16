@@ -37,7 +37,7 @@ fn the_scope_filters_events_before_their_type_is_read() {
         (&kraken::EXCHANGE, Scope::Bitcoin),
         (&kraken::EXCHANGE, Scope::Crypto),
     ] {
-        let mut mapper = Mapper::new(exchange, scope);
+        let mut mapper = Mapper::new(exchange, scope, "W");
         assert!(mapper.admit(&["BTC", "EUR"]));
         assert!(mapper.admit(&["LBTC", "ETH"]));
         assert!(!mapper.admit(&["EUR", "USD"]));
@@ -62,7 +62,7 @@ fn the_scope_filters_events_before_their_type_is_read() {
 /// events.
 #[test]
 fn left_out_events_are_counted_by_reason() {
-    let mut mapper = Mapper::new(&EVERY_ASSET, Scope::Bitcoin);
+    let mut mapper = Mapper::new(&EVERY_ASSET, Scope::Bitcoin, "W");
     mapper.admit(&["EUR"]);
     mapper.admit(&["ETH"]);
     mapper.leave(false);
@@ -77,7 +77,7 @@ fn left_out_events_are_counted_by_reason() {
             ("internal", Py::from(1)),
         ])
     );
-    assert!(Mapper::new(&kraken::EXCHANGE, Scope::Bitcoin)
+    assert!(Mapper::new(&binance::EXCHANGE, Scope::Bitcoin, "W")
         .finish()
         .skipped
         .is_none());
@@ -87,7 +87,7 @@ fn left_out_events_are_counted_by_reason() {
 /// when the leg arrives.
 #[test]
 fn an_event_maps_to_one_record() {
-    let mut mapper = Mapper::new(&kraken::EXCHANGE, Scope::Bitcoin);
+    let mut mapper = Mapper::new(&kraken::EXCHANGE, Scope::Bitcoin, "W");
     let sell = Event {
         occurred_at: Some("2024-01-02T03:04:05Z".into()),
         fee: number("0.0001"),

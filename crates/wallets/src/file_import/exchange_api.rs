@@ -101,7 +101,7 @@ pub fn execute(
     };
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
-    let mut mapper = Mapper::new(exchange, scope);
+    let mut mapper = Mapper::new(exchange, scope, &wallet.label);
     // Every error leaves with every credential the reads carried withheld.
     let balance = (exchange.fetch)(&client, &mut mapper)
         .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
@@ -619,6 +619,15 @@ fn normalized(value: &Py) -> String {
     } else {
         kassiber_pytext::upper(raw)
     }
+}
+/// Whether a canonical code is a plain exchange ticker (`ETH`, `1INCH`):
+/// ASCII capitals and digits, at most 20 characters. Anything else is not
+/// mapped to an asset by guesswork.
+fn ticker(code: &str) -> bool {
+    (1..=20).contains(&code.len())
+        && code
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
 }
 /// Refuses, naming the provider's row, a non-Bitcoin amount or fee finer
 /// than the 11 decimals the book stores (docs/plan/24-crypto-assets.md),

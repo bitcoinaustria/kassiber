@@ -218,7 +218,7 @@ fn normalizers_match_python_reference_vectors() {
         let name = kassiber_envelope::py_str(at(vector, "name"));
         let payload = at(vector, "payload");
         let exchange = contract::registry::by_kind(&exchange).expect("exchange");
-        let mut mapper = Mapper::new(exchange, assets::Scope::Bitcoin);
+        let mut mapper = Mapper::new(exchange, assets::Scope::Bitcoin, "W");
         let result = match exchange.kind {
             "kraken" => {
                 kraken::normalize(at(payload, "ledgers"), at(payload, "trades"), &mut mapper)
@@ -512,6 +512,7 @@ mod loopback {
 
 mod bitpanda_api;
 mod desktop_api;
+mod kraken_api;
 
 use loopback::{backend, run, serve};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -663,6 +664,26 @@ fn kraken_errors_keep_permission_codes_and_withhold_credentials() {
     assert!(!details.contains(loopback::KEY), "{details}");
     assert!(
         details.contains("Permission denied for <redacted>"),
+        "{details}"
+    );
+    // The shared scrub withholds over code points: a lone surrogate the
+    // item carries survives beside the withheld key, as in Python.
+    let fake = serve("kraken", |_, _, _| {
+        (
+            200,
+            format!(
+                "{{\"error\":[\"EGeneral:Invalid \\ud800 {}\"]}}",
+                loopback::KEY
+            ),
+        )
+    });
+    let error = run(&backend("kraken", &fake.url), "kraken", "", true, online())
+        .result
+        .unwrap_err();
+    let details =
+        kassiber_pyjson::dumps(error.details.as_ref().unwrap(), &Default::default()).unwrap();
+    assert!(
+        details.contains(r#""EGeneral:Invalid \ud800 <redacted>""#),
         "{details}"
     );
 }
