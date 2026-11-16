@@ -53,7 +53,7 @@ const SENSITIVE_KEY_PARTS: [&str; 26] = [
 ];
 
 /// Request headers whose whole value authenticates the request.
-const CREDENTIAL_HEADERS: [&str; 18] = [
+const CREDENTIAL_HEADERS: [&str; 19] = [
     "authorization",
     "proxy-authorization",
     "cookie",
@@ -71,6 +71,8 @@ const CREDENTIAL_HEADERS: [&str; 18] = [
     // Bitfinex: the key and the request signature (the nonce is public).
     "bfx-apikey",
     "bfx-signature",
+    // Bitcoin.de's per-request HMAC (its key travels in x-api-key).
+    "x-api-signature",
     "rune",
     // Bitstamp v2: `BITSTAMP <key>`, the request's signature and its
     // single-use nonce.

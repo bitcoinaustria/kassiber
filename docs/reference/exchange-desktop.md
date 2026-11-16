@@ -1,18 +1,19 @@
 # Exchange API connections in the desktop
 
-The desktop connects Kraken, Coinbase, Binance, Bitpanda, Bitvavo, Bitstamp
-and Bitfinex through a read-only API key and syncs their history on request.
-Each setup and sync runs the [exchange API framework](rust-exchange-sync.md)
-the CLI's `wallets sync-<kind>` commands use ([Bitpanda](bitpanda.md),
-[Bitvavo](bitvavo.md), [Bitstamp](bitstamp.md) and [Bitfinex](bitfinex.md)
-have their own pages).
+The desktop connects Kraken, Coinbase, Binance, Bitpanda, Bitvavo, Bitstamp,
+Bitfinex and Bitcoin.de through a read-only API key and syncs their history
+on request. Each setup and sync runs the
+[exchange API framework](rust-exchange-sync.md) the CLI's
+`wallets sync-<kind>` commands use ([Bitpanda](bitpanda.md),
+[Bitvavo](bitvavo.md), [Bitstamp](bitstamp.md), [Bitfinex](bitfinex.md) and
+[Bitcoin.de](bitcoinde.md) have their own pages).
 
 ## Flow
 
 1. **Pick the exchange.** The Add connection dialog lists Kraken, Coinbase,
-   Bitpanda, Bitvavo, Bitstamp API, Bitfinex and Binance API under Exchanges
-   (setup kind `exchange-api`). The Binance supplemental CSV, Bitvavo CSV,
-   Bitstamp CSV and Bitfinex CSV imports stay separate cards.
+   Bitpanda, Bitvavo, Bitstamp API, Bitfinex, Bitcoin.de and Binance API under
+   Exchanges (setup kind `exchange-api`). The Binance supplemental CSV,
+   Bitvavo CSV, Bitstamp CSV and Bitfinex CSV imports stay separate cards.
 2. **Create a read-only key.** The setup shows where to create the key and
    which of the exchange's permissions to turn on and leave off. The scopes
    follow what each sync reads:
@@ -26,6 +27,7 @@ have their own pages).
    | Bitvavo | View access | nothing more: Bitvavo does not report a key's permissions, so the guide asks to leave Trade digital assets and Withdraw digital assets off |
    | Bitstamp | Account balance, User transactions (leave orders, withdrawals, deposits and transfers off) | nothing more: no Bitstamp read reveals a key's other permissions, so the guide names each one to leave off |
    | Bitfinex | Account History, Wallets (get); every write permission off | `POST /v2/auth/r/permissions`: a key with any write flag is refused |
+   | Bitcoin.de | showPermissions, showAccountLedger, showMyTrades | `GET /v4/permissions`: a key granted any method but the documented reads is refused |
 
 3. **Paste the key** (and secret; Bitpanda has none). The fields are password
    inputs; the values stay in the form until it saves or closes.
@@ -35,8 +37,9 @@ have their own pages).
    Coinbase's first accounts page, Binance's API restrictions, Bitpanda's
    write-scope check, currencies and a one-row operations page, Bitvavo's
    BTC balance and a one-row history page, Bitstamp's BTC balance and a
-   one-row user transactions page, and Bitfinex's permissions, one BTC
-   ledger entry and its wallets. It writes
+   one-row user transactions page, Bitfinex's permissions, one BTC ledger
+   entry and its wallets, and Bitcoin.de's permission check and one
+   statement page. It writes
    nothing. The dialog saves only credentials that passed the test as they
    are; changing the key or secret asks for a new test.
 5. **Create connection** (`ui.connections.exchange.create`). No request. It

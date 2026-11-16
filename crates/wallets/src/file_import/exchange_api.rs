@@ -16,6 +16,7 @@ use kassiber_pyjson::{Key, PyStr};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 mod binance;
+pub(super) mod bitcoinde;
 pub(super) mod bitfinex;
 mod bitpanda;
 pub(super) mod bitstamp;
@@ -55,10 +56,17 @@ impl From<Vec<Py>> for Fetched {
     }
 }
 
-/// Bitpanda, Bitvavo, Bitstamp and Bitfinex are Rust only; Python knows the
-/// first three.
-pub const KINDS: [&str; 7] = [
-    "kraken", "coinbase", "binance", "bitpanda", "bitvavo", "bitstamp", "bitfinex",
+/// Bitpanda, Bitvavo, Bitstamp, Bitfinex and Bitcoin.de are Rust only; Python
+/// knows the first three.
+pub const KINDS: [&str; 8] = [
+    "kraken",
+    "coinbase",
+    "binance",
+    "bitpanda",
+    "bitvavo",
+    "bitstamp",
+    "bitfinex",
+    "bitcoinde",
 ];
 
 /// A BTC balance the exchange itself reports, read inside the same consented sync run.
@@ -185,6 +193,14 @@ pub fn execute(
                     ..fetched.records.into()
                 }
             }
+            "bitcoinde" => {
+                let fetched = bitcoinde::fetch(&client)?;
+                balance = fetched.balance;
+                Fetched {
+                    skipped: Some(fetched.skipped),
+                    ..fetched.records.into()
+                }
+            }
             _ => return Err(unknown_kind(&kind)),
         })
     })();
@@ -242,6 +258,12 @@ pub fn execute(
             bitfinex::mapping::tag_unchecked(conn, profile, &wallet.id, &rows, &mut ids)?;
         }
         Ok(result)
+    })
+    .and_then(|mut result| match kind.as_str() {
+        "bitcoinde" => {
+            bitcoinde::record_run(conn, profile, &wallet.id, &mut result, &mut ids).map(|()| result)
+        }
+        _ => Ok(result),
     })
     // A revoked or offline route never publishes a book.
     // Both legs of each swap are stored now; pair them in the same write.
@@ -348,7 +370,7 @@ fn backend_kind(backend: &Py, expected: &str) -> Result<(PyStr, String), AppErro
                 format!("' has kind '{kind}', expected an exchange API kind").into(),
             ]))
             .with_hint(
-                "Use a backend kind of kraken, coinbase, binance, bitpanda, bitvavo, bitstamp, or bitfinex.",
+                "Use a backend kind of kraken, coinbase, binance, bitpanda, bitvavo, bitstamp, bitfinex, or bitcoinde.",
             ));
     }
     if !expected.is_empty() && kind != expected {
@@ -440,6 +462,7 @@ fn provider(kind: &str) -> &'static str {
         "bitvavo" => "Bitvavo",
         "bitstamp" => "Bitstamp",
         "bitfinex" => "Bitfinex",
+        "bitcoinde" => "Bitcoin.de",
         _ => "Binance",
     }
 }
@@ -451,6 +474,7 @@ fn default_url(kind: &str) -> &'static str {
         "bitvavo" => "https://api.bitvavo.com",
         "bitstamp" => "https://www.bitstamp.net",
         "bitfinex" => "https://api.bitfinex.com",
+        "bitcoinde" => "https://api.bitcoin.de",
         _ => "https://api.binance.com",
     }
 }

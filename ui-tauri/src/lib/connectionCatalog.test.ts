@@ -57,6 +57,7 @@ describe("connection catalog", () => {
       ["bitvavo-api", "bitvavo"],
       ["bitstamp-api", "bitstamp"],
       ["bitfinex", "bitfinex"],
+      ["bitcoinde-api", "bitcoinde"],
       ["kraken", "kraken"],
       ["coinbase", "coinbase"],
       ["binance-api", "binance"],

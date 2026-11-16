@@ -28,11 +28,11 @@ kind, desktop action or AI tool calls an exchange API:
   backend addresses configured"}` without I/O.
 
 The Rust backend keeps these boundaries. The three CLI commands run natively.
-Four more, `wallets sync-bitpanda`, `wallets sync-bitvavo`,
-`wallets sync-bitstamp` and `wallets sync-bitfinex`, exist only in Rust and
-follow the same framework; [Bitpanda](bitpanda.md), [Bitvavo](bitvavo.md),
-[Bitstamp](bitstamp.md) and [Bitfinex](bitfinex.md) record their APIs,
-mappings and refusals.
+Five more, `wallets sync-bitpanda`, `wallets sync-bitvavo`,
+`wallets sync-bitstamp`, `wallets sync-bitfinex` and `wallets sync-bitcoinde`,
+exist only in Rust and follow the same framework; [Bitpanda](bitpanda.md),
+[Bitvavo](bitvavo.md), [Bitstamp](bitstamp.md), [Bitfinex](bitfinex.md) and
+[Bitcoin.de](bitcoinde.md) record their APIs, mappings and refusals.
 `ui.wallets.sync` and the AI tool now answer the direct path natively when
 every selected wallet is sourceless (exchange API wallets and empty manual
 wallets). They still return `native_fallback_required` for any other direct-path
@@ -107,6 +107,7 @@ All three share these rules:
 | Bitvavo (Rust only) | `GET /v2/account/history?fromDate=0&toDate=<ms>&page=<n>&maxItems=100`, then `GET /v2/balance?symbol=BTC` for the reported balance | `page` from 1 to the first page's `totalPages`; a page that is not the one asked for, or a moving count, fails closed | `Bitvavo-Access-Key`, `Bitvavo-Access-Signature` = hex HMAC-SHA256(secret, timestamp ‖ `GET` ‖ path with `/v2` and query), `Bitvavo-Access-Timestamp` (ms), `Bitvavo-Access-Window: 10000`; re-signed on each retry |
 | Bitstamp (Rust only) | `POST /api/v2/user_transactions/` with `limit=1000&since_id=<n>&sort=asc`, then `POST /api/v2/account_balances/btc/` for the reported balance | `since_id` from 1, then one past the last id, until a page holds fewer than 1,000 rows; ids out of cursor order fail closed | `X-Auth: BITSTAMP <key>`, `X-Auth-Signature` = hex HMAC-SHA256(secret, `BITSTAMP <key>` ‖ method ‖ host ‖ path ‖ content type ‖ nonce ‖ timestamp ‖ `v2` ‖ body), `X-Auth-Nonce` (random UUID per attempt), `X-Auth-Timestamp`, `X-Auth-Version: v2` |
 | Bitfinex (Rust only; [reference](bitfinex.md)) | `POST /v2/auth/r/permissions`, `/ledgers/BTC/hist`, `/trades/hist`, `/movements/BTC/hist`, `/wallets`, JSON bodies | `end` = the oldest millisecond of the last page (inclusive) until a page is shorter than its limit (2,500; movements 1,000) | `bfx-apikey`, `bfx-nonce` (rising microseconds, one request of the process at a time), `bfx-signature` = hex HMAC-SHA384(secret, `/api/` ‖ path ‖ nonce ‖ body) |
+| Bitcoin.de (Rust only) | `GET /v4/permissions` (refuses a key that can write), then `GET /v4/btc/account/ledger?datetime_start=2011-01-01T00:00:00+01:00` and `GET /v4/btceur/trades?state=1` | `page` from 1 until `page.current` reaches `page.last`; another page than asked for fails closed; waits for `credits` up to 120 s | `X-API-KEY`, `X-API-NONCE` (ms, rising per process), `X-API-SIGNATURE` = hex HMAC-SHA256(secret, `GET#URL#KEY#NONCE#` MD5 of the empty body); re-signed with a new nonce on each retry |
 
 Kraken API errors (`error` truthy) fail as `auth_error` when any entry mentions
 `permission`, otherwise `protocol_error`, with `details.kraken_errors`.

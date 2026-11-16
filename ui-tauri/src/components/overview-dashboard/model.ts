@@ -2261,6 +2261,7 @@ export function railForConnection(kind: string, label: string): BalanceRail {
     case "bitpanda":
     case "bitvavo":
     case "bitfinex":
+    case "bitcoinde":
     case "river":
     case "bullbitcoin":
     case "coinfinity":
