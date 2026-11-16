@@ -1949,6 +1949,12 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Imports, source evidence, and wallet workflows
 
+- [ ] Coinbase API keys: Coinbase expired the legacy HMAC keys the sync
+  signs with in February 2025 and accepts only CDP keys, which sign a
+  short-lived JWT per request (ES256 or Ed25519), so `wallets sync-coinbase`
+  cannot authenticate against real Coinbase today, BTC-only included. Add CDP
+  key auth (likely a signing dependency, with a license review) and update
+  the desktop key guide. See [Coinbase](docs/exchanges/coinbase.md).
 - [ ] Price provider-reported crypto-to-crypto swaps without a Bitcoin leg.
   Bitpanda, Kraken, CoinTracking and Blockpit state no fiat value for a swap;
   a swap with a Bitcoin leg is now valued from the cached BTC rate

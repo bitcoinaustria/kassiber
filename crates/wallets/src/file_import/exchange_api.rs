@@ -125,7 +125,7 @@ pub fn execute(
     let fetched = (|| -> Result<Fetched, AppError> {
         Ok(match kind.as_str() {
             "kraken" => kraken::fetch(&client)?,
-            "coinbase" => coinbase::fetch(&client)?.into(),
+            "coinbase" => coinbase::fetch(&client)?,
             "binance" => binance::fetch(&client)?.into(),
             "bitpanda" => bitpanda::fetch(&client)?,
             _ => return Err(unknown_kind(&kind)),

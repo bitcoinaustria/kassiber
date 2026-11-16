@@ -94,7 +94,7 @@ All three share these rules:
 | Exchange | Requests | Paging | Signature |
 | --- | --- | --- | --- |
 | Kraken | `POST /0/private/TradesHistory`, then `POST /0/private/Ledgers`, form body `nonce=<ns>&ofs=<offset>` | `ofs` advances by the page's entry count until a page is empty or the merged row count reaches `result.count`; a non-integer `count` falls back to the row count | `API-Key`, `API-Sign` = base64 HMAC-SHA512(base64-decoded secret, path ‖ SHA-256(nonce ‖ body)) |
-| Coinbase | `GET /v2/accounts`, then `GET /v2/accounts/<quoted id>/transactions` for each BTC/LBTC account with an id | follows `pagination.next_uri` until absent | `CB-ACCESS-KEY`, `CB-ACCESS-SIGN` = hex HMAC-SHA256(secret, timestamp ‖ `GET` ‖ path), `CB-ACCESS-TIMESTAMP`, `CB-VERSION: 2017-11-27` |
+| Coinbase | `GET /v2/accounts`, then `GET /v2/accounts/<quoted id>/transactions` for each BTC/LBTC account with an id, and in the `crypto` asset scope each other crypto account | follows `pagination.next_uri` until absent | `CB-ACCESS-KEY`, `CB-ACCESS-SIGN` = hex HMAC-SHA256(secret, timestamp ‖ `GET` ‖ path), `CB-ACCESS-TIMESTAMP`, `CB-VERSION: 2017-11-27` |
 | Binance | `GET /sapi/v1/fiat/payments` (`transactionType=0`), `/sapi/v1/capital/deposit/hisrec` (`coin=BTC`), `/sapi/v1/capital/withdraw/history` (`coin=BTC`), `/sapi/v1/asset/assetDividend` (`asset=BTC`, `limit=500`), all from `1498867200000` to now | none (single request each) | `X-MBX-APIKEY`, query `...&timestamp=<ms>&signature=` hex HMAC-SHA256(secret, query) |
 
 Kraken API errors (`error` truthy) fail as `auth_error` when any entry mentions
