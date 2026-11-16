@@ -743,6 +743,10 @@ projections stay Python. Progress and remaining work for this slice:
 - [ ] Bitpanda follow-ups: confirm the undocumented `operation_type` /
   `transaction_type` values and fee semantics against a real account, then
   widen the mapping; a CSV importer once the export's fee semantics are known.
+- [ ] Exchange error display: a very short request credential (a one- to
+  three-character proxy password) is withheld wherever it occurs, Kassiber's
+  own message text included, which garbles the error; consider refusing such
+  short proxy passwords at backend setup instead.
 - [x] Port Binance supplemental autoinvest/dividend core/CLI ingestion with
   frozen Python files, SQLite/SQLCipher full-book/wire parity, commercial
   coordination, reference-bug repros and named mutation killers. See the

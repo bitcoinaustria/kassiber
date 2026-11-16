@@ -225,6 +225,7 @@ fn normalize(tx: &Py, currency: &str) -> Result<Option<Py>, AppError> {
         return Ok(None);
     }
     let (native, native_currency) = money(tx, "native_amount")?;
+    let native_currency = native_currency.map(fiat_code);
     let occurred_at = str_or_none(either(tx, &["created_at", "createdAt"]));
     let id = at(tx, "id");
     let id = if truthy(id) { text(id) } else { "".into() };

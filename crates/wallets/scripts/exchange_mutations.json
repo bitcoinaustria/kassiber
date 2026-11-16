@@ -52,13 +52,13 @@
   {
     "id": "exchange-z-fiat-alias",
     "file": "crates/wallets/src/file_import/exchange_api.rs",
-    "find": "code.starts_with('Z') && code.chars().count() == 4",
-    "replace": "code.starts_with('Z') && code.chars().count() == 3",
+    "find": "Some(rest) if code.chars().count() == 4 => rest.into(),",
+    "replace": "Some(rest) if code.chars().count() == 3 => rest.into(),",
     "expect_failing": [
       "assets_follow_normalize_asset_code_and_exchange_aliases",
       "normalizers_match_python_reference_vectors"
     ],
-    "rule": "Four-character Z codes name fiat currencies."
+    "rule": "In a fiat field, a four-character Z code is Kraken's alias of a fiat currency."
   },
   {
     "id": "exchange-ms-epoch",
@@ -326,7 +326,7 @@
   {
     "id": "http-withhold-before-truncation",
     "file": "crates/chain/src/http.rs",
-    "find": "                credentials.extend(self.withheld.iter().cloned());\n",
+    "find": "        found.extend(self.withheld.iter().cloned());\n",
     "replace": "",
     "expect_failing": [
       "http_error_bodies_withhold_credentials_before_truncation"
@@ -386,8 +386,8 @@
   {
     "id": "bitpanda-shared-accept-policy",
     "file": "crates/chain/src/http.rs",
-    "find": "                    || matches!(policy, StatusPolicy::Accept(statuses) if statuses.contains(&response.status))\n",
-    "replace": "",
+    "find": "                    if accepted.contains(&response.status) {\n",
+    "replace": "                    if false {\n",
     "expect_failing": [
       "bitpanda_reads_only_and_maps_every_btc_event",
       "bitpanda_auth_errors_withhold_the_echoed_key"
@@ -414,6 +414,16 @@
       "bitpanda_refusals_withhold_echoed_credentials"
     ],
     "rule": "Server text quoted in a refusal withholds the credentials."
+  },
+  {
+    "id": "exchange-scrub-keeps-code-points",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "            Py::Str(text) => *text = withhold_py(text, forms),",
+    "replace": "            Py::Str(text) => *text = PyStr::from(kassiber_credentials::withhold(&lossy(text), forms).as_str()),",
+    "expect_failing": [
+      "kraken_errors_keep_permission_codes_and_withhold_credentials"
+    ],
+    "rule": "The shared exchange error scrub withholds over code points: a provider's lone surrogate survives beside a withheld credential, as Python keeps it."
   },
   {
     "id": "bitpanda-paging-needs-has-next",
@@ -768,5 +778,45 @@
       "crypto_scope_refuses_what_it_cannot_map_and_names_the_row"
     ],
     "rule": "A third-asset fee is checked as parsed, before a context-rounded abs could shorten it."
+  },
+  {
+    "id": "exchange-echoed-page-refused",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "    if client.http.echoed() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "every_exchange_refuses_a_page_that_echoes_a_credential"
+    ],
+    "rule": "A sync whose successful pages echoed a request credential stores nothing."
+  },
+  {
+    "id": "exchange-errors-withhold-request-credentials",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "    } = fetched.map_err(|error| scrub_error(error, &client.http.display_credentials()))?;",
+    "replace": "    } = fetched?;",
+    "expect_failing": [
+      "a_kraken_error_echoing_its_signature_withholds_it"
+    ],
+    "rule": "Every error an exchange sync returns withholds every credential its requests carried, a computed signature too."
+  },
+  {
+    "id": "exchange-credential-codes-dropped",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "            Py::Int(number) if credentials.contains(&number.to_string()) => *value = Py::Null,\n",
+    "replace": "",
+    "expect_failing": [
+      "sync_errors_withhold_every_request_credential"
+    ],
+    "rule": "A numeric error detail equal to a request credential is dropped."
+  },
+  {
+    "id": "exchange-z-alias-kraken-only",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "        \"XETH\" => \"ETH\".into(),\n        _ => code,",
+    "replace": "        \"XETH\" => \"ETH\".into(),\n        _ if code.starts_with('Z') && code.chars().count() == 4 => code[1..].into(),\n        _ => code,",
+    "expect_failing": [
+      "assets_follow_normalize_asset_code_and_exchange_aliases"
+    ],
+    "rule": "Only fiat fields drop Kraken's Z prefix: a four-letter Z crypto ticker (ZETA) stays as written."
   }
 ]
