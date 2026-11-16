@@ -397,6 +397,7 @@ impl RealBook {
                     "updated",
                     "fetched",
                     "skipped",
+                    "provider_balance",
                     // docs/plan/24-crypto-assets.md: what the wallet's asset
                     // scope left out, for the card's "also track" prompt.
                     "assets",

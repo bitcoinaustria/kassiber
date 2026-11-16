@@ -24,10 +24,6 @@ pub(crate) enum Class {
     Crypto,
     /// Stocks, ETFs, ETCs, metals, indices: never imported. Only a provider's
     /// own asset type can say this; a ticker alone never does.
-    #[allow(
-        dead_code,
-        reason = "only an exchange mapper that reads a provider asset type builds it"
-    )]
     Excluded,
 }
 

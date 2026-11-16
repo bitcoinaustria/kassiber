@@ -21,7 +21,7 @@ mod coinbase;
 mod contract;
 pub mod desktop;
 mod kraken;
-use contract::{Descriptor, Event, Kind, Mapper};
+use contract::{Balance, Descriptor, Event, Kind, Mapper};
 #[cfg(test)]
 mod tests;
 
@@ -103,7 +103,7 @@ pub fn execute(
     // (such as decoding the Kraken secret).
     let mut mapper = Mapper::new(exchange, scope);
     // Every error leaves with every credential the reads carried withheld.
-    (exchange.fetch)(&client, &mut mapper)
+    let balance = (exchange.fetch)(&client, &mut mapper)
         .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
     let contract::Mapped {
         records,
@@ -174,7 +174,58 @@ pub fn execute(
     }
     let assets = tally.envelope(scope, &wallet.label);
     kassiber_envelope::set(&mut result, "assets", assets);
+    if let Some(balance) = balance {
+        let check = provider_balance(conn, profile, &wallet.id, &balance)?;
+        kassiber_envelope::set(&mut result, "provider_balance", check);
+        if let Some(reported) = balance.reported() {
+            kassiber_envelope::set(&mut result, "reported_balance", reported);
+        }
+    }
     Ok(result)
+}
+
+/// The exchange's own BTC balance against the wallet's book balance after the
+/// import: what the wallet's included BTC rows add up to. Informational: a
+/// mismatch is reported, never corrected.
+fn provider_balance(
+    conn: &Connection,
+    profile: &str,
+    wallet: &str,
+    balance: &contract::Balance,
+) -> Result<Py, AppError> {
+    let provider = match balance.msat {
+        Ok(msat) => msat,
+        Err(reason) => {
+            return Ok(dict([
+                ("status", s("unavailable")),
+                ("asset", s("BTC")),
+                ("reason", s(reason)),
+            ]))
+        }
+    };
+    let book: i64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(CASE WHEN direction = 'inbound' THEN amount \
+             WHEN direction = 'outbound' THEN -amount - fee ELSE 0 END), 0) \
+             FROM transactions WHERE profile_id = ? AND wallet_id = ? AND excluded = 0 AND asset = 'BTC'",
+            [profile, wallet],
+            |row| row.get(0),
+        )
+        .map_err(database_error)?;
+    Ok(dict([
+        (
+            "status",
+            s(if book == provider {
+                "matches"
+            } else {
+                "mismatch"
+            }),
+        ),
+        ("asset", s("BTC")),
+        ("provider_msat", Py::from(provider)),
+        ("book_msat", Py::from(book)),
+        ("difference_msat", Py::from(book as i128 - provider as i128)),
+    ]))
 }
 
 /// The backend's name and its exchange kind, which must be `expected` when
@@ -569,6 +620,26 @@ fn normalized(value: &Py) -> String {
         kassiber_pytext::upper(raw)
     }
 }
+/// Refuses, naming the provider's row, a non-Bitcoin amount or fee finer
+/// than the 11 decimals the book stores (docs/plan/24-crypto-assets.md),
+/// before the coordinator would refuse it without the row's id.
+fn exact(entry: &Entry, row: &str) -> Result<(), AppError> {
+    if assets::class(&entry.asset) == assets::Class::Bitcoin {
+        return Ok(());
+    }
+    for (field, value) in [("amount", &entry.amount), ("fee", &entry.fee)] {
+        // Non-finite values keep the coordinator's own error. The check
+        // reads the value as given: a context-rounded `abs` could shorten it.
+        abs(value.clone())?;
+        if let PriceNumber::Finite(value) = value {
+            assets::exact_units(&entry.asset, field, &value.copy_abs()).map_err(|mut error| {
+                error.message = format!("{} {row}: {}", entry.provider, error.message);
+                error
+            })?;
+        }
+    }
+    Ok(())
+}
 fn is_bitcoin(code: &str) -> bool {
     matches!(code, "BTC" | "LBTC")
 }
@@ -727,6 +798,14 @@ struct Pricing {
     external_ref: PyStr,
 }
 fn record(entry: Entry) -> Result<Py, AppError> {
+    // Every exchange's amount and fee is checked here, as parsed, before the
+    // net-of-fee sum and the `abs` below round them to the decimal context:
+    // a value finer than 11 decimals would otherwise be stored rounded
+    // (docs/plan/24-crypto-assets.md).
+    exact(
+        &entry,
+        &format!("transaction '{}'", lossy(&entry.external_id)),
+    )?;
     let Entry {
         provider,
         external_id,
@@ -907,4 +986,13 @@ fn scrub_error(mut error: AppError, credentials: &[String]) -> AppError {
         walk(details, &forms, credentials);
     }
     error
+}
+
+/// A provider's error code as Kassiber's own value: the matching entry of
+/// `table`, else "unknown", never the provider's string.
+fn known_code(code: &str, table: &[&'static str]) -> Py {
+    table
+        .iter()
+        .find(|known| **known == code)
+        .map_or_else(|| s("unknown"), |known| s(*known))
 }

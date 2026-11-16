@@ -43,9 +43,26 @@ read, whether the event is mapped:
 So a row type Kassiber does not map in another coin never stops a Bitcoin
 wallet's import, and turning the scope on never changes a Bitcoin row.
 
+`Mapper::admit_classed` takes the provider's own class for each asset
+(Bitpanda's stocks and metals are `Excluded`): an excluded asset is counted in
+`assets.excluded` and never kept; traded against a kept crypto asset, the
+exchange refuses the event, because that crypto leg is a disposal.
+
 `Mapper::push` turns each admitted event into its record through the shared
-record builder. A sync's envelope always carries `assets` and `swap_pairs`,
-and `skipped` where the exchange reports it.
+record builder: a `Movement` as its kind, a `Trade` as a buy or sell, a
+`Swap(reference)` leg as an unpriced `swap` row carrying `swap_ref` (the import
+pairs both legs), and a `Fee` in a third asset as a fee-only `fee` row. A
+sync's envelope always carries `assets` and `swap_pairs`, and `skipped` where
+the exchange reports it.
+
+## Balances
+
+An exchange that states its own BTC balance returns it from `fetch` as a
+`Balance` (whole msat or why it is unknown, `as_of`, and which balance it is).
+The envelope then carries `provider_balance` (the figure against the wallet's
+book balance after the import: `matches`, `mismatch` or `unavailable`) and,
+when the figure is known, `reported_balance` (`{asset, amount_msat, as_of,
+scope}`). A mismatch is reported, never corrected.
 
 ## Stored identities
 

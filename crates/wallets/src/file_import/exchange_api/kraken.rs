@@ -14,11 +14,12 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     skipped: None,
 };
 
-fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {
+fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<Option<Balance>, AppError> {
     let mut pages = 0;
     let trades = paginated(client, "/0/private/TradesHistory", "trades", &mut pages)?;
     let ledgers = paginated(client, "/0/private/Ledgers", "ledger", &mut pages)?;
-    normalize(&ledgers, &trades, mapper)
+    normalize(&ledgers, &trades, mapper)?;
+    Ok(None)
 }
 
 /// The desktop key check: the first page of both histories the sync reads,

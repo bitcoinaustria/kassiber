@@ -356,8 +356,8 @@
   {
     "id": "bitpanda-write-scope-check",
     "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
-    "find": "fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {\n    refuse_trading_keys(client)?;\n",
-    "replace": "fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {\n    let _ = refuse_trading_keys;\n",
+    "find": "fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<Option<Balance>, AppError> {\n    refuse_trading_keys(client)?;\n",
+    "replace": "fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<Option<Balance>, AppError> {\n    let _ = refuse_trading_keys;\n",
     "expect_failing": [
       "bitpanda_refuses_keys_that_can_trade"
     ],
@@ -395,15 +395,14 @@
     "rule": "Accepted statuses reach the caller; every other non-2xx keeps the shared error."
   },
   {
-    "id": "bitpanda-auth-code-withheld",
+    "id": "bitpanda-auth-code-from-table",
     "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
-    "find": "let code = kassiber_chain::withhold_credentials(&code, &[client.key, client.secret]);",
-    "replace": "let code = code.clone();",
+    "find": "Py::Str(code) => known_code(&lossy(code), &KNOWN_ERRORS),",
+    "replace": "Py::Str(code) => Py::Str(code.clone()),",
     "expect_failing": [
-      "bitpanda_auth_errors_withhold_the_echoed_key",
-      "bitpanda_reads_need_consent_an_open_gate_and_a_key"
+      "bitpanda_auth_errors_withhold_the_echoed_key"
     ],
-    "rule": "A 401/403 error code never carries an echoed key or secret."
+    "rule": "A 401/403 error code is one of Kassiber's known keys or \"unknown\", never Bitpanda's string."
   },
   {
     "id": "bitpanda-refusal-text-withheld",
@@ -413,7 +412,7 @@
     "expect_failing": [
       "bitpanda_refusals_withhold_echoed_credentials"
     ],
-    "rule": "Server text quoted in a refusal withholds the credentials."
+    "rule": "Server text quoted in a refusal withholds the credentials before it is cut to 80 characters, so a key crossing the cut leaves no prefix."
   },
   {
     "id": "exchange-scrub-keeps-code-points",
@@ -479,8 +478,8 @@
   {
     "id": "bitpanda-trade-separate-fee",
     "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
-    "find": "    if leg.fee.is_some() || cash.fee.is_some() {",
-    "replace": "    if false {",
+    "find": "        let third = context.admitted(holding) && legs.iter().all(|other| other.holding != *holding);\n        if !third {",
+    "replace": "        let third = context.admitted(holding) && legs.iter().all(|other| other.holding != *holding);\n        if false {",
     "expect_failing": [
       "bitpanda_refuses_ambiguous_btc_events"
     ],
@@ -489,8 +488,8 @@
   {
     "id": "bitpanda-trade-against-movement-type",
     "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
-    "find": "    if MOVEMENTS.contains(&kind) {\n        return Err(refuse.because(\n            format!(\"has type '{shown_kind}' but carries trade details\"),",
-    "replace": "    if false {\n        return Err(refuse.because(\n            format!(\"has type '{shown_kind}' but carries trade details\"),",
+    "find": "        if MOVEMENTS.contains(&kind.as_str()) {\n            return Err(refuse.because(\n                format!(\"has type '{shown_kind}' but carries trade details\"),",
+    "replace": "        if false {\n            return Err(refuse.because(\n                format!(\"has type '{shown_kind}' but carries trade details\"),",
     "expect_failing": [
       "bitpanda_refuses_ambiguous_btc_events"
     ],
@@ -500,7 +499,7 @@
     "id": "bitpanda-reversal-refused",
     "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
     "find": "        return Err(refuse.because(\"reverses an earlier transaction\", REVIEW));",
-    "replace": "        return Ok(None);",
+    "replace": "        return Ok(Vec::new());",
     "expect_failing": [
       "bitpanda_refuses_ambiguous_btc_events"
     ],
@@ -509,8 +508,8 @@
   {
     "id": "bitpanda-other-asset-refused",
     "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
-    "find": "    if btc.is_empty() || btc.len() + fiat.len() != operation.legs.len() {",
-    "replace": "    if btc.is_empty() {",
+    "find": "    if held.is_empty() {\n        let code = named_assets(",
+    "replace": "    if false {\n        let code = named_assets(",
     "expect_failing": [
       "bitpanda_refuses_ambiguous_btc_events"
     ],
@@ -529,8 +528,8 @@
   {
     "id": "bitpanda-internal-move-balance",
     "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
-    "find": "        if btc.iter().all(|l| l.fee.is_none()) && total(true)? == total(false)? {",
-    "replace": "        if btc.iter().all(|l| l.fee.is_none()) {",
+    "find": "            .all(|l| l.holding == held[0].holding && l.fee.is_none())\n            && total(true)? == total(false)?\n",
+    "replace": "            .all(|l| l.holding == held[0].holding && l.fee.is_none())\n",
     "expect_failing": [
       "bitpanda_refuses_ambiguous_btc_events"
     ],
@@ -625,6 +624,129 @@
       "bitpanda_reads_only_and_maps_every_btc_event"
     ],
     "rule": "Bitpanda needs the key alone, no secret."
+  },
+  {
+    "id": "bitpanda-balance-latest-leg",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        if leg.occurred > entry.0 {\n            *entry = (leg.occurred, vec![leg]);",
+    "replace": "        if leg.occurred < entry.0 {\n            *entry = (leg.occurred, vec![leg]);",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event",
+      "bitpanda_reports_a_balance_mismatch_without_changing_the_book"
+    ],
+    "rule": "Bitpanda's reported balance is each wallet's balance after its latest BTC transaction."
+  },
+  {
+    "id": "bitpanda-balance-tie-disagrees",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "                Some(seen) if seen != value => {",
+    "replace": "                Some(seen) if seen != value && false => {",
+    "expect_failing": [
+      "bitpanda_balance_is_unavailable_rather_than_guessed"
+    ],
+    "rule": "Two legs at a wallet's latest time with different balances leave the balance unknown."
+  },
+  {
+    "id": "bitpanda-balance-whole-msat",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "            let whole = fraction_digits(at(raw, \"value\")) <= BTC_DECIMALS;",
+    "replace": "            let whole = true;",
+    "expect_failing": [
+      "bitpanda_balance_is_unavailable_rather_than_guessed"
+    ],
+    "rule": "A reported balance finer than a msat is not rounded into a comparison."
+  },
+  {
+    "id": "bitpanda-balance-needs-wallet",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        let Some(wallet) = leg.wallet.as_deref() else {\n            return Err(\"a BTC transaction names no Bitpanda wallet\");\n        };",
+    "replace": "        let wallet = leg.wallet.as_deref().unwrap_or(\"\");",
+    "expect_failing": [
+      "bitpanda_balance_is_unavailable_rather_than_guessed"
+    ],
+    "rule": "A BTC leg without a wallet makes the reported balance unknown."
+  },
+  {
+    "id": "bitpanda-crypto-needs-scope",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "            Holding::Asset(_, Class::Crypto) => self.scope == assets::Scope::Crypto,",
+    "replace": "            Holding::Asset(_, Class::Crypto) => true,",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event",
+      "bitpanda_bitcoin_scope_points_swaps_at_the_asset_scope"
+    ],
+    "rule": "Other crypto assets are imported only in the wallet's crypto asset scope."
+  },
+  {
+    "id": "bitpanda-tally-skipped",
+    "file": "crates/wallets/src/file_import/exchange_api/contract.rs",
+    "find": "                Class::Crypto => kept |= self.tally.admit(self.scope, code, *class),",
+    "replace": "                Class::Crypto => kept |= self.scope == Scope::Crypto,",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "Every asset the scope leaves out is counted by ticker."
+  },
+  {
+    "id": "bitpanda-unlisted-refused-in-crypto",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        if let (Some(asset), assets::Scope::Crypto) = (unlisted, context.scope) {",
+    "replace": "        if let (Some(asset), assets::Scope::Crypto) = (unlisted, assets::Scope::Bitcoin) {",
+    "expect_failing": [
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "In crypto scope an asset Bitpanda does not list is refused, not left out unseen."
+  },
+  {
+    "id": "bitpanda-shared-ticker",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        entry.shared = seen[&entry.code] > 1;",
+    "replace": "        entry.shared = seen[&entry.code] > 2;",
+    "expect_failing": [
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "A ticker two Bitpanda crypto assets share is never imported under that ticker."
+  },
+  {
+    "id": "bitpanda-fee-third-asset-only",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        let third = context.admitted(holding) && legs.iter().all(|other| other.holding != *holding);\n",
+    "replace": "        let third = true;\n",
+    "expect_failing": [
+      "bitpanda_refuses_ambiguous_btc_events",
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "Only a fee in a third imported asset becomes its own row; a fee in a leg's asset or in cash stays refused."
+  },
+  {
+    "id": "bitpanda-swap-opposite-flows",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    if a.inbound == b.inbound {\n        return Err(refuse.because(\n            format!(\n                \"moves {} and {} the same way\",",
+    "replace": "    if false {\n        return Err(refuse.because(\n            format!(\n                \"moves {} and {} the same way\",",
+    "expect_failing": [
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "A swap's two legs flow opposite ways."
+  },
+  {
+    "id": "bitpanda-other-asset-precision",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "    if refuse.context.admitted(&holding) && (amount.is_zero() || finer) {",
+    "replace": "    if false && (amount.is_zero() || finer) {",
+    "expect_failing": [
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "Another crypto asset's amount must be positive and at most 11 decimal places."
+  },
+  {
+    "id": "exchange-provider-balance-book-sum",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "WHEN direction = 'outbound' THEN -amount - fee ELSE 0 END), 0) \\\n",
+    "replace": "WHEN direction = 'outbound' THEN -amount ELSE 0 END), 0) \\\n",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "The book balance compared with the exchange's subtracts outbound fees."
   },
   {
     "id": "desktop-binance-unknown-flags",
@@ -932,6 +1054,7 @@
     "find": "    (PriceNumber::Finite(Decimal::zero()), quantity)\n",
     "replace": "    (quantity, PriceNumber::Finite(Decimal::zero()))\n",
     "expect_failing": [
+      "bitpanda_crypto_scope_imports_other_crypto_assets",
       "third_asset_fees_become_their_own_rows"
     ],
     "rule": "A fee paid in a third asset is a fee-only spend (amount 0, the quantity as fee), never a principal the tax engine would sell."
@@ -968,6 +1091,16 @@
       "crypto_scope_refuses_what_it_cannot_map_and_names_the_row"
     ],
     "rule": "A third-asset fee is checked as parsed, before a context-rounded abs could shorten it."
+  },
+  {
+    "id": "record-exact-units-before-rounding",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "    exact(\n        &entry,\n        &format!(\"transaction '{}'\", lossy(&entry.external_id)),\n    )?;\n",
+    "replace": "",
+    "expect_failing": [
+      "bitpanda_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "Every exchange record's amount and fee is checked as parsed, before a 32-digit rounding could store a finer value as a whole unit."
   },
   {
     "id": "exchange-echoed-page-refused",

@@ -16,7 +16,7 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     skipped: None,
 };
 
-fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {
+fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<Option<Balance>, AppError> {
     let end = now()?.as_millis().to_string();
     let fiat = signed_get(
         client,
@@ -57,7 +57,8 @@ fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {
             (History::Dividend, dividends),
         ],
         mapper,
-    )
+    )?;
+    Ok(None)
 }
 
 /// Restrictions that only let a key read.

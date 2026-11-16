@@ -26,7 +26,7 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
 };
 
 /// Reads the BTC accounts' transactions; other accounts are not requested.
-fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {
+fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<Option<Balance>, AppError> {
     let mut budget = Budget::default();
     let accounts = paginated(client, "/v2/accounts", &mut budget)?;
     let mut transactions = vec![];
@@ -52,7 +52,8 @@ fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {
         // str(item.get("currency") or ...): the code was truthy to get here.
         transactions.push((text(code), rows));
     }
-    records(&transactions, mapper)
+    records(&transactions, mapper)?;
+    Ok(None)
 }
 
 /// `normalize_coinbase_records` over `{"currency", "transactions"}` items:

@@ -1992,10 +1992,16 @@ kassiber wallets sync-bitpanda --workspace W --profile P --backend bitpanda-main
 The importer reads Bitpanda's public API (`/v1/operations` and the asset and
 currency lookups) and imports BTC buys and sells (including savings plans)
 with the cash leg as exact `exchange_execution` pricing (`pricing_method =
-"bitpanda_api"`), BTC deposits, withdrawals and rewards. Fiat-only and
-non-BTC operations (altcoins, BEST, metals, stocks, ETFs) are skipped and
-counted; swaps, index trades, reversals, separate trade fees and unknown
-types fail safe. [Bitpanda](bitpanda.md) records the API, the full mapping
+"bitpanda_api"`), BTC deposits, withdrawals and rewards. With the wallet's
+`asset_scope` set to `crypto` ([plan 24](../plan/24-crypto-assets.md)) it
+imports the same for every other crypto asset, crypto swaps as two paired
+`swap` rows, and fees in a third asset (BEST) as `fee` rows. Fiat-only
+operations, other crypto in the default `bitcoin` scope, and metals, stocks
+and ETFs in any scope are skipped and counted by ticker in the result's
+`assets`; index trades, reversals, ambiguous fees and unknown types fail
+safe. The result's `provider_balance` compares Bitpanda's own BTC
+balance, read from the fetched history, with the wallet's book balance.
+[Bitpanda](bitpanda.md) records the API, the full mapping, the balance check
 and every refusal.
 
 ### Binance API and Supplemental CSV

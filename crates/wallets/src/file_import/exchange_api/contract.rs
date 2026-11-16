@@ -27,12 +27,19 @@ pub(super) struct Leg {
 }
 
 /// What an event is, from the exchange's own table of its row types.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Kind {
     /// A deposit, withdrawal or reward of its one leg, stored as this kind.
     Movement(&'static str),
     /// A buy (the leg arrives) or sell (it leaves), priced by the event.
     Trade,
+    /// One leg of a crypto-to-crypto swap, unpriced; both legs carry the
+    /// same reference (`swap_ref`), so the import pairs them and the
+    /// profile's country decides the tax treatment.
+    Swap(PyStr),
+    /// A fee paid in a third asset (BEST, BNB, KCS): its own outbound row of
+    /// that asset, a fee-only spend ([`assets::fee_only`]).
+    Fee,
 }
 
 /// One provider transaction, from its API or its file export.
@@ -82,6 +89,30 @@ impl Event {
     }
 }
 
+/// The provider's own BTC balance, read in the same consented sync after its
+/// history, or why it is unknown.
+pub(super) struct Balance {
+    /// Whole msat, or why the provider's figure cannot be read exactly.
+    pub msat: Result<i64, &'static str>,
+    /// UTC ISO-8601 time the balance refers to.
+    pub as_of: String,
+    /// Which balance it is (`spot_available_plus_reserved`); documented per
+    /// exchange.
+    pub scope: &'static str,
+}
+impl Balance {
+    /// `reported_balance`: the provider's figure, when it is known.
+    pub fn reported(&self) -> Option<Py> {
+        let msat = *self.msat.as_ref().ok()?;
+        Some(dict([
+            ("asset", s("BTC")),
+            ("amount_msat", Py::from(msat)),
+            ("as_of", s(self.as_of.as_str())),
+            ("scope", s(self.scope)),
+        ]))
+    }
+}
+
 /// What one import or sync of an exchange produced.
 pub(super) struct Mapped {
     pub records: Vec<Py>,
@@ -126,10 +157,24 @@ impl Mapper {
     /// is `crypto`; otherwise it is counted once per asset (fiat is never a
     /// holding) and left out.
     pub fn admit(&mut self, assets: &[&str]) -> bool {
-        let mut codes: Vec<&str> = assets.iter().copied().filter(|c| !c.is_empty()).collect();
-        codes.sort_unstable();
-        codes.dedup();
-        let classes: Vec<Class> = codes.iter().map(|code| assets::class(code)).collect();
+        let classed: Vec<(&str, Class)> = assets
+            .iter()
+            .map(|code| (*code, assets::class(code)))
+            .collect();
+        self.admit_classed(&classed)
+    }
+
+    /// [`Self::admit`] with the provider's own class for each asset (a stock
+    /// or metal is `Excluded`, counted and never kept).
+    pub fn admit_classed(&mut self, assets: &[(&str, Class)]) -> bool {
+        let mut classed: Vec<(&str, Class)> = assets
+            .iter()
+            .copied()
+            .filter(|(code, _)| !code.is_empty())
+            .collect();
+        classed.sort_unstable_by(|a, b| a.0.cmp(b.0));
+        classed.dedup_by(|a, b| a.0 == b.0);
+        let (codes, classes): (Vec<&str>, Vec<Class>) = classed.into_iter().unzip();
         if classes.contains(&Class::Bitcoin) {
             return true;
         }
@@ -140,26 +185,31 @@ impl Mapper {
             self.fiat_only += 1;
             return false;
         }
-        let crypto = codes
-            .iter()
-            .zip(&classes)
-            .filter(|(_, class)| **class == Class::Crypto)
-            .map(|(code, _)| *code);
-        if self.exchange.reads == Reads::BitcoinOnly {
-            for code in crypto {
-                *self.unread.entry(code.to_owned()).or_default() += 1;
+        // Kept when the scope keeps one of its crypto assets. An excluded
+        // asset (a stock) is counted; traded against a kept crypto asset,
+        // that leg is a disposal the exchange's parser must refuse.
+        let mut kept = false;
+        for (code, class) in codes.iter().zip(&classes) {
+            match class {
+                Class::Crypto if self.exchange.reads == Reads::BitcoinOnly => {
+                    *self.unread.entry((*code).to_owned()).or_default() += 1;
+                }
+                Class::Crypto => kept |= self.tally.admit(self.scope, code, *class),
+                Class::Excluded => {
+                    self.tally.admit(self.scope, code, *class);
+                }
+                _ => {}
             }
-            self.other += 1;
-            return false;
-        }
-        let mut kept = true;
-        for code in crypto {
-            kept &= self.tally.admit(self.scope, code, Class::Crypto);
         }
         if !kept {
             self.other += 1;
         }
         kept
+    }
+
+    /// The wallet's asset scope.
+    pub fn scope(&self) -> Scope {
+        self.scope
     }
 
     /// Counts an event left out whose assets the exchange does not name:
@@ -194,24 +244,37 @@ impl Mapper {
                 ))
             }
         };
-        let kind = match kind {
-            Kind::Movement(kind) => kind,
-            Kind::Trade if inbound => "buy",
-            Kind::Trade => "sell",
+        let (kind, reference) = match kind {
+            Kind::Movement(kind) => (kind, None),
+            Kind::Trade if inbound => ("buy", None),
+            Kind::Trade => ("sell", None),
+            Kind::Swap(reference) => ("swap", Some(reference)),
+            Kind::Fee if inbound => {
+                return Err(AppError::new("internal_error", "An incoming fee row"))
+            }
+            Kind::Fee => ("fee", None),
         };
-        self.records.push(record(Entry {
+        let (amount, fee) = match kind {
+            "fee" => assets::fee_only(leg.amount),
+            _ => (leg.amount, fee),
+        };
+        let mut record = record(Entry {
             provider: self.exchange.provider,
             external_id,
             occurred_at,
             inbound,
             asset: leg.asset,
-            amount: leg.amount,
+            amount,
             fee,
             kind,
             raw,
             description,
             pricing,
-        })?);
+        })?;
+        if let Some(reference) = reference {
+            kassiber_envelope::set(&mut record, "swap_ref", Py::Str(reference));
+        }
+        self.records.push(record);
         Ok(())
     }
 
