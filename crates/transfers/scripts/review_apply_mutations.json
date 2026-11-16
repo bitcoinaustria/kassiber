@@ -188,5 +188,15 @@
       "review_apply_filed_impacts_resolve_only_after_report_ready_storage_and_roll_back_late"
     ],
     "rule": "Filed and saved report impacts resolve only from a report-ready canonical journal."
+  },
+  {
+    "id": "RVA-pair-group-transaction-order",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "            text(r, \"out_transaction_id\"),\n            text(r, \"in_transaction_id\"),\n",
+    "replace": "",
+    "expect_failing": [
+      "a_one_to_many_manual_link_applies_as_planned_whatever_ids_its_pairs_draw"
+    ],
+    "rule": "Pairs authored in one apply share created_at, so their transactions, not their fresh ids, decide which slice carries a shared send's fee; otherwise the apply disagrees with its plan."
   }
 ]
