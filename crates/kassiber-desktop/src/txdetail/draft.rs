@@ -535,6 +535,13 @@ pub fn parse_decimal(s: &str) -> Option<f64> {
     t.parse::<f64>().ok().filter(|x| x.is_finite())
 }
 
+/// A manual decimal as the daemon's decimal parser reads it: trimmed, the one decimal comma
+/// [`parse_decimal`] accepts turned into a point, text kept as typed (no float round trip).
+/// None when it isn't a number.
+pub fn decimal_text(s: &str) -> Option<String> {
+    parse_decimal(s).map(|_| s.trim().replacen(',', ".", 1))
+}
+
 /// `metadataUpdateArgs(id, draft, baseline, sourceTags)`.
 pub fn save_args(id: &str, d: &Draft, base: &Draft, source_tags: &[String], scope: Value) -> Value {
     let persist_label = d.label != "Unlabeled"
@@ -583,16 +590,8 @@ pub fn save_args(id: &str, d: &Draft, base: &Draft, source_tags: &[String], scop
         args["pricing_source_kind"] = json!(d.pricing_source_kind);
         args["pricing_quality"] = json!(d.pricing_quality);
         args["fiat_currency"] = json!(d.manual_currency.trim().to_uppercase());
-        args["fiat_rate"] = if parse_decimal(&d.manual_price).is_some() {
-            json!(d.manual_price)
-        } else {
-            Value::Null
-        };
-        args["fiat_value"] = if parse_decimal(&d.manual_value).is_some() {
-            json!(d.manual_value)
-        } else {
-            Value::Null
-        };
+        args["fiat_rate"] = decimal_text(&d.manual_price).map_or(Value::Null, |v| json!(v));
+        args["fiat_value"] = decimal_text(&d.manual_value).map_or(Value::Null, |v| json!(v));
         args["pricing_external_ref"] = if d.manual_source.trim().is_empty() {
             Value::Null
         } else {
@@ -644,7 +643,11 @@ mod tests {
         d.pricing_source_kind = Some("manual_override".into());
         d.manual_price = "70000,5".into();
         let a = save_args("t1", &d, &base, &[], Value::Null);
-        assert_eq!(a["fiat_rate"], json!("70000,5"));
+        // The daemon's decimal parser takes a point; the text is otherwise sent as typed.
+        assert_eq!(a["fiat_rate"], json!("70000.5"));
+        d.manual_value = " 1234,56789012345678901 ".into();
+        let a = save_args("t1", &d, &base, &[], Value::Null);
+        assert_eq!(a["fiat_value"], json!("1234.56789012345678901"));
         assert_eq!(a["pricing_external_ref"], Value::Null);
     }
 
