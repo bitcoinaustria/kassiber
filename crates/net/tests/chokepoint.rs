@@ -252,7 +252,48 @@ fn forwarded_feature(value: &str) -> bool {
     }
 }
 
-fn dependency_invalid(name: &str, item: &Item, own: bool) -> bool {
+/// The Rune desktop app's own manifest (its own Cargo workspace). It alone may
+/// take Rune from git and patch crates with Rune's forks.
+const DESKTOP_MANIFEST: &str = "crates/kassiber-desktop/Cargo.toml";
+/// The one reviewed git source: Rune, pinned to a full commit, never a branch or tag.
+const RUNE_GIT: &str = "https://github.com/anomalyco/rune";
+/// The crates.io crates the desktop replaces with Rune's forks at a pinned commit.
+const RUNE_PATCHED: &[&str] = &[
+    "winit",
+    "parley_engine",
+    "wgpu-hal",
+    "accesskit_windows",
+    "accesskit_macos",
+];
+
+/// `git` is exactly Rune's repository and `rev` a full 40-hex commit; any key
+/// beyond `extra` (branch, tag, path, version, package, registry...) refuses it.
+fn pinned_rune(table: &dyn TableLike, extra: &[&str]) -> bool {
+    table.get("git").and_then(Item::as_str) == Some(RUNE_GIT)
+        && table.get("rev").and_then(Item::as_str).is_some_and(|rev| {
+            rev.len() == 40 && rev.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        })
+        && table
+            .iter()
+            .all(|(key, _)| matches!(key, "git" | "rev") || extra.contains(&key))
+}
+
+/// `[patch.crates-io]` naming only reviewed Rune forks, each a pinned Rune commit.
+fn reviewed_rune_patch(item: &Item) -> bool {
+    item.as_table_like().is_some_and(|patch| {
+        patch.iter().all(|(registry, crates)| {
+            registry == "crates-io"
+                && crates.as_table_like().is_some_and(|crates| {
+                    crates.iter().all(|(name, dep)| {
+                        RUNE_PATCHED.contains(&name)
+                            && dep.as_table_like().is_some_and(|dep| pinned_rune(dep, &[]))
+                    })
+                })
+        })
+    })
+}
+
+fn dependency_invalid(name: &str, item: &Item, own: bool, desktop: bool) -> bool {
     const NET_ONLY: &[&str] = &[
         "httparse",
         "idna_adapter",
@@ -266,8 +307,9 @@ fn dependency_invalid(name: &str, item: &Item, own: bool) -> bool {
     }
     if let Some(table) = item.as_table_like() {
         if table.get("package").is_some()
-            || table.get("git").is_some()
             || table.get("registry").is_some()
+            || (table.get("git").is_some()
+                && !(desktop && pinned_rune(table, &["default-features", "features"])))
         {
             return true;
         }
@@ -287,8 +329,13 @@ fn dependency_invalid(name: &str, item: &Item, own: bool) -> bool {
     false
 }
 
-fn tables_invalid(table: &dyn TableLike, own: bool) -> bool {
+/// `desktop` is true only for the desktop manifest's top-level tables: its
+/// target-specific and other nested tables get no Rune git or patch allowance.
+fn tables_invalid(table: &dyn TableLike, own: bool, desktop: bool) -> bool {
     table.iter().any(|(key, item)| {
+        if key == "patch" && desktop {
+            return !reviewed_rune_patch(item);
+        }
         if matches!(key, "patch" | "replace" | "source") {
             return true;
         }
@@ -298,7 +345,7 @@ fn tables_invalid(table: &dyn TableLike, own: bool) -> bool {
         ) {
             return item.as_table_like().is_none_or(|deps| {
                 deps.iter()
-                    .any(|(name, dep)| dependency_invalid(name, dep, own))
+                    .any(|(name, dep)| dependency_invalid(name, dep, own, desktop))
             });
         }
         if key == "features" {
@@ -313,18 +360,22 @@ fn tables_invalid(table: &dyn TableLike, own: bool) -> bool {
             });
         }
         item.as_table_like()
-            .is_some_and(|nested| tables_invalid(nested, own))
+            .is_some_and(|nested| tables_invalid(nested, own, false))
     })
 }
 
 fn unreviewed_dependencies(source: &str) -> bool {
-    manifest_invalid(source, false)
+    manifest_invalid(source, false, false)
 }
 
-fn manifest_invalid(source: &str, own: bool) -> bool {
+fn unreviewed_desktop_manifest(source: &str) -> bool {
+    manifest_invalid(source, false, true)
+}
+
+fn manifest_invalid(source: &str, own: bool, desktop: bool) -> bool {
     source
         .parse::<DocumentMut>()
-        .map_or(true, |doc| tables_invalid(doc.as_table(), own))
+        .map_or(true, |doc| tables_invalid(doc.as_table(), own, desktop))
 }
 
 // File, enclosing function, exact call line. Each entry grants one occurrence,
@@ -391,6 +442,19 @@ fn local_ipc_allowance(source: &str) -> String {
     reviewed.replace("libc::connect(", "ReviewedLocalConnect(")
 }
 
+/// The desktop app's single-instance handoff (macOS: a 0600 socket in the
+/// user's private `$TMPDIR`) alone may use std's `AF_UNIX` types and close a
+/// stream's write half. No libc socket call, no other `std::net` item, and no
+/// other file of the app gets this. Windows and Linux use Rune's own
+/// `single_instance`, so the app has no named-pipe code to admit.
+const INSTANCE_SOURCE: &str = "crates/kassiber-desktop/src/native/instance.rs";
+
+fn instance_allowance(source: &str) -> String {
+    source
+        .replace("std::os::unix::net", "ReviewedLocalIpc")
+        .replace("std::net::Shutdown::Write", "ReviewedLocalShutdown")
+}
+
 fn scan(path: &Path, own: &Path, failures: &mut Vec<String>) {
     walk(path, path, own, false, failures);
 }
@@ -408,6 +472,9 @@ fn walk(path: &Path, root: &Path, own: &Path, in_crate: bool, failures: &mut Vec
         "ui-tauri/src-tauri/target",
         // Sidecar binaries the desktop build copies in; not checked-in source.
         "ui-tauri/src-tauri/binaries",
+        // The desktop app's own Cargo workspace: its build output and packaged apps.
+        "crates/kassiber-desktop/target",
+        "crates/kassiber-desktop/dist",
     ]
     .iter()
     .any(|name| relative == Path::new(name))
@@ -466,7 +533,11 @@ fn walk(path: &Path, root: &Path, own: &Path, in_crate: bool, failures: &mut Vec
     } else if metadata.is_file() {
         if manifest || cargo_config {
             let source = fs::read_to_string(path).unwrap();
-            if manifest_invalid(&source, path.parent() == Some(own)) {
+            if manifest_invalid(
+                &source,
+                path.parent() == Some(own),
+                relative == Path::new(DESKTOP_MANIFEST),
+            ) {
                 failures.push(path.display().to_string());
             }
         } else if in_crate
@@ -484,6 +555,8 @@ fn walk(path: &Path, root: &Path, own: &Path, in_crate: bool, failures: &mut Vec
             };
             let source = if relative.starts_with(IPC_SOURCE) {
                 local_ipc_allowance(&source)
+            } else if relative == Path::new(INSTANCE_SOURCE) {
+                instance_allowance(&source)
             } else {
                 source
             };
@@ -655,6 +728,140 @@ fn local_ipc_allowance_admits_only_af_unix_forms() {
     ] {
         assert!(bypass(&local_ipc_allowance(source)), "{source}");
     }
+}
+
+#[test]
+fn instance_allowance_admits_only_af_unix_forms() {
+    for source in [
+        "use std::os::unix::net::{UnixListener, UnixStream};",
+        "s.shutdown(std::net::Shutdown::Write)",
+    ] {
+        assert!(bypass(source), "{source} needs the allowance");
+        assert!(!bypass(&instance_allowance(source)), "{source}");
+    }
+    for source in [
+        "use std::net::TcpStream;",
+        "use std::net::{Shutdown, TcpStream};",
+        "std::os::unix::net::UnixStream; std::net::UdpSocket::bind(addr)",
+        "s.shutdown(std::net::Shutdown::Write); std::net::TcpListener::bind(addr)",
+        "libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0)",
+        "libc::socket(libc::AF_UNIX, 1, 0); libc::connect(fd, address, length)",
+    ] {
+        assert!(bypass(&instance_allowance(source)), "{source}");
+    }
+}
+
+#[test]
+fn instance_allowance_covers_only_the_desktop_instance_file() {
+    let root = tempfile::tempdir().unwrap();
+    let crate_dir = root.path().join("crates/kassiber-desktop");
+    fs::create_dir_all(crate_dir.join("src/native")).unwrap();
+    fs::write(
+        crate_dir.join("Cargo.toml"),
+        "[package]\nname = \"kassiber-desktop\"\nversion = \"0.0.0\"\n",
+    )
+    .unwrap();
+    let unix = "use std::os::unix::net::UnixStream;\npub fn f(s: &UnixStream) { let _ = s.shutdown(std::net::Shutdown::Write); }";
+    fs::write(crate_dir.join("src/native/instance.rs"), unix).unwrap();
+    fs::write(crate_dir.join("src/native/other.rs"), unix).unwrap();
+    fs::write(
+        crate_dir.join("src/native/mod.rs"),
+        "pub fn f() { let _ = std::net::TcpStream::connect(\"127.0.0.1:9\"); }",
+    )
+    .unwrap();
+    let mut failures = Vec::new();
+    scan(root.path(), &root.path().join("net"), &mut failures);
+    failures.sort();
+    assert_eq!(failures.len(), 2, "{failures:?}");
+    assert!(failures[0].ends_with("src/native/mod.rs"), "{failures:?}");
+    assert!(failures[1].ends_with("src/native/other.rs"), "{failures:?}");
+}
+
+const RUNE_REV: &str = "f6cf57db95c662c99c40d682a6076f20f18b2f20";
+
+#[test]
+fn desktop_manifest_admits_only_pinned_rune_git_sources_and_patches() {
+    let rune = format!(
+        "[dependencies]\nrune = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\", default-features = false, features = [\"svg\", \"metal-backend\"] }}\nrune-kit = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\" }}\n"
+    );
+    let patch = format!(
+        "[patch.crates-io]\nwinit = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\" }}\nwgpu-hal = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\" }}\n"
+    );
+    let reviewed = format!("{rune}{patch}");
+    assert!(!unreviewed_desktop_manifest(&reviewed), "{reviewed}");
+    // The same reviewed sources in any other manifest still fail.
+    assert!(unreviewed_dependencies(&rune));
+    assert!(unreviewed_dependencies(&patch));
+    let short = &RUNE_REV[..7];
+    let upper = RUNE_REV.to_uppercase();
+    for source in [
+        // Another repository, or Rune's URL respelled.
+        format!("[dependencies]\nrune = {{ git = \"https://github.com/someone/rune\", rev = \"{RUNE_REV}\" }}"),
+        format!("[dependencies]\nrune = {{ git = \"{RUNE_GIT}.git\", rev = \"{RUNE_REV}\" }}"),
+        format!("[dependencies]\nrune = {{ git = \"http://github.com/anomalyco/rune\", rev = \"{RUNE_REV}\" }}"),
+        // A moving or abbreviated reference.
+        format!("[dependencies]\nrune = {{ git = \"{RUNE_GIT}\", branch = \"main\" }}"),
+        format!("[dependencies]\nrune = {{ git = \"{RUNE_GIT}\", tag = \"v1\" }}"),
+        format!("[dependencies]\nrune = {{ git = \"{RUNE_GIT}\" }}"),
+        format!("[dependencies]\nrune = {{ git = \"{RUNE_GIT}\", rev = \"{short}\" }}"),
+        format!("[dependencies]\nrune = {{ git = \"{RUNE_GIT}\", rev = \"{upper}\" }}"),
+        format!("[dependencies]\nrune = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\", branch = \"main\" }}"),
+        // A reviewed source smuggling another package or an unreviewed feature.
+        format!("[dependencies]\nrune = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\", package = \"reqwest\" }}"),
+        format!("[dependencies]\nrune = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\", features = [\"hot\"] }}"),
+        format!("[dependencies]\nreqwest = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\" }}"),
+        // Git sources only at the manifest's top level.
+        format!("[target.'cfg(unix)'.dependencies]\nrune = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\" }}"),
+        // Patches: path, other URLs, moving references, unreviewed crates, other registries.
+        "[patch.crates-io]\nwinit = { path = \"vendor/winit\" }".to_owned(),
+        format!("[patch.crates-io]\nwinit = {{ git = \"https://github.com/someone/rune\", rev = \"{RUNE_REV}\" }}"),
+        format!("[patch.crates-io]\nwinit = {{ git = \"{RUNE_GIT}\", branch = \"main\" }}"),
+        format!("[patch.crates-io]\nwinit = {{ git = \"{RUNE_GIT}\", rev = \"{short}\" }}"),
+        format!("[patch.crates-io]\nwinit = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\", path = \"vendor\" }}"),
+        format!("[patch.crates-io]\nwinit = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\", package = \"tokio\" }}"),
+        format!("[patch.crates-io]\nlibc = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\" }}"),
+        format!("[patch.crates-io]\nwinit = \"{RUNE_REV}\""),
+        format!("[patch.\"{RUNE_GIT}\"]\nwinit = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\" }}"),
+        "[patch]\ncrates-io = \"vendor\"".to_owned(),
+        // Still refused outright.
+        "[replace]\n\"winit:0.30.0\" = { path = \"vendor/winit\" }".to_owned(),
+        "[source.crates-io]\nreplace-with = \"vendor\"".to_owned(),
+    ] {
+        assert!(unreviewed_desktop_manifest(&source), "{source}");
+    }
+}
+
+#[test]
+fn rune_git_exception_applies_only_to_the_desktop_manifest_in_the_tree_walk() {
+    let manifest = format!(
+        "[package]\nname = \"example\"\nversion = \"0.0.0\"\n[dependencies]\nrune = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\" }}\n[patch.crates-io]\nwinit = {{ git = \"{RUNE_GIT}\", rev = \"{RUNE_REV}\" }}\n"
+    );
+    let mut found = Vec::new();
+    for at in [
+        "crates/kassiber-desktop/Cargo.toml",
+        "crates/other/Cargo.toml",
+        "Cargo.toml",
+        "crates/kassiber-desktop/nested/Cargo.toml",
+        "crates/kassiber-desktop/.cargo/config.toml",
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join(at);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, &manifest).unwrap();
+        let mut failures = Vec::new();
+        scan(root.path(), &root.path().join("net"), &mut failures);
+        found.push((at, failures.len()));
+    }
+    assert_eq!(
+        found,
+        [
+            ("crates/kassiber-desktop/Cargo.toml", 0),
+            ("crates/other/Cargo.toml", 1),
+            ("Cargo.toml", 1),
+            ("crates/kassiber-desktop/nested/Cargo.toml", 1),
+            ("crates/kassiber-desktop/.cargo/config.toml", 1),
+        ]
+    );
 }
 
 #[test]
