@@ -1375,6 +1375,7 @@
       "binance": "Öffne in Binance Konto → API-Verwaltung, erstelle einen systemgenerierten Key und bearbeite seine Beschränkungen. Kopiere den API-Key und den Secret Key; Binance zeigt das Secret nur einmal an. Kassiber lehnt einen Key ab, der mehr als lesen darf.",
       "bitpanda": "Öffne in Bitpanda Kontoeinstellungen → API-Keys → Neuer API-Key. Bitpanda zeigt den Key nur einmal an, und er läuft spätestens nach einem Jahr ab. Kassiber lehnt einen Key ab, der handeln darf.",
       "bitvavo": "Öffne in Bitvavo Einstellungen → API → Neuen API-Key hinzufügen. Aktiviere nur View access, trage bei Bedarf die IP-Adresse dieses Computers in die IP-Whitelist ein und bestätige mit deinem 2FA-Code. Kopiere den API-Key und das Secret; Bitvavo zeigt beide nur einmal an. Bitvavo verrät Kassiber nicht, was ein Key darf, also lass Handel und Auszahlungen selbst ausgeschaltet.",
+      "bitstamp": "Öffne in Bitstamp Einstellungen → API-Zugang und erstelle einen neuen Key. Schalte nur die unten genannten Leseberechtigungen ein, bestätige mit deinem Zwei-Faktor-Code, kopiere den API-Key und das Secret (Bitstamp zeigt das Secret nur einmal an) und aktiviere den Key über die Bestätigungs-E-Mail. Bitstamp verrät Kassiber nicht, was ein Key sonst noch darf, also lass alle Berechtigungen für Handel, Auszahlungen, Einzahlungen und Überträge ausgeschaltet.",
       "grant": "Nur einschalten",
       "deny": "Ausgeschaltet lassen",
       "open": "API-Key-Seite von {{provider}} öffnen"
@@ -1384,7 +1385,8 @@
       "secret": {
         "kraken": "Private Key",
         "coinbase": "API-Secret",
-        "binance": "Secret Key"
+        "binance": "Secret Key",
+        "bitstamp": "API-Secret"
       },
       "stored": "Wenn du die Verbindung hinzufügst, speichert Kassiber den Key in den Backend-Einstellungen dieses Buchs — verschlüsselt mit dem Buch, wenn das Buch verschlüsselt ist — und zeigt ihn nie wieder an."
     },

@@ -1725,6 +1725,257 @@
     "rule": "The desktop exchange sync refuses a wallet with no API key attached instead of routing its file source away."
   },
   {
+    "id": "bitstamp-signature-covers-v2",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "{timestamp}v2{body}",
+    "replace": "{timestamp}{body}",
+    "expect_failing": [
+      "bitstamp_signs_the_documented_text_over_the_base_urls_host_and_path"
+    ],
+    "rule": "The signature covers Bitstamp's documented text, `v2` included."
+  },
+  {
+    "id": "bitstamp-no-content-type-without-body",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "let content_type = if body.is_empty() { \"\" } else { FORM };",
+    "replace": "let content_type = FORM;",
+    "expect_failing": [
+      "bitstamp_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A request without a body signs no content type."
+  },
+  {
+    "id": "bitstamp-fresh-nonce-per-attempt",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "let (nonce, timestamp) = (nonce()?, now()?.as_millis().to_string());",
+    "replace": "let (nonce, timestamp) = (\"00000000-0000-4000-8000-000000000000\".to_owned(), now()?.as_millis().to_string());",
+    "expect_failing": [
+      "bitstamp_reads_only_and_maps_every_btc_event",
+      "bitstamp_throttling_is_retried_with_a_fresh_signature_then_imports"
+    ],
+    "rule": "Every attempt, retries included, carries a fresh nonce."
+  },
+  {
+    "id": "bitstamp-cursor-reads-every-page",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "Some(last) if data.len() >= PAGE => since = last + 1,",
+    "replace": "Some(last) if data.len() > PAGE => since = last + 1,",
+    "expect_failing": [
+      "bitstamp_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A full page moves the since_id cursor past its last id and reads on."
+  },
+  {
+    "id": "bitstamp-ids-rise",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "if number < since || last.is_some_and(|last| number <= last) {",
+    "replace": "if number < since {",
+    "expect_failing": [
+      "bitstamp_malformed_pages_fail_closed"
+    ],
+    "rule": "Ids out of cursor order fail closed."
+  },
+  {
+    "id": "bitstamp-balance-total-is-available-plus-reserved",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "if available.checked_add(reserved) != Some(total) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitstamp_malformed_pages_fail_closed"
+    ],
+    "rule": "The reported total must be available plus reserved."
+  },
+  {
+    "id": "bitstamp-numbers-read-from-their-lexeme",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "_ => Py::Str(lexeme.as_str().into()),",
+    "replace": "_ => kassiber_pytext::loads(&lexeme).unwrap_or(Py::Null),",
+    "expect_failing": [
+      "bitstamp_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A non-integer JSON number is read as its decimal text, never through f64."
+  },
+  {
+    "id": "bitstamp-error-code-documented-only",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "Py::Str(code) => known_code(&lossy(code), &KNOWN_CODES),",
+    "replace": "Py::Str(code) => Py::Str(code.clone()),",
+    "expect_failing": [
+      "bitstamp_errors_keep_the_documented_code_and_none_of_the_text"
+    ],
+    "rule": "Errors carry a documented code or \"unknown\", never Bitstamp's string."
+  },
+  {
+    "id": "bitstamp-rate-limit-retryable",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "if RATE_LIMITS.contains(&known.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitstamp_errors_keep_the_documented_code_and_none_of_the_text"
+    ],
+    "rule": "Bitstamp's rate-limit codes fail rate_limited, retryable."
+  },
+  {
+    "id": "bitstamp-null-field-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "Some(None) => return Err(bad(&format!(\"a {name} that is null\"))),",
+    "replace": "Some(None) => continue,",
+    "expect_failing": [
+      "bitstamp_malformed_pages_fail_closed"
+    ],
+    "rule": "A null amount or rate of any asset refuses the row."
+  },
+  {
+    "id": "bitstamp-unstated-fee-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "Some(fee) => fee,",
+    "replace": "Some(fee) => fee.or(Some(Decimal::zero())),",
+    "expect_failing": [
+      "bitstamp_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "An absent or null API fee is unknown, never zero."
+  },
+  {
+    "id": "bitstamp-altcoin-trade-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "if !is_fiat(&quote.currency) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitstamp_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "BTC traded against an altcoin or stablecoin is never priced as a fiat trade: refused naming the coin in bitcoin scope, a swap in crypto scope."
+  },
+  {
+    "id": "bitstamp-skips-counted-by-reason",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "true => fiat_only += 1,",
+    "replace": "true => non_btc += 1,",
+    "expect_failing": [
+      "bitstamp_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "Rows without BTC are skipped and counted as fiat-only or other-asset."
+  },
+  {
+    "id": "bitstamp-buy-cost-adds-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "true => (cash.add(fee, &CTX), cash.sub(fee, &CTX)),",
+    "replace": "true => (cash.sub(fee, &CTX), cash.add(fee, &CTX)),",
+    "expect_failing": [
+      "bitstamp_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A buy's value is its fiat amount plus the fee, a sale's minus it."
+  },
+  {
+    "id": "bitstamp-fee-inside-tolerance-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "if !fee.is_zero()\n        && !off(",
+    "replace": "if fee.is_zero()\n        && !off(",
+    "expect_failing": [
+      "bitstamp_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A fee too small to tell whether the fiat amount includes it refuses the trade."
+  },
+  {
+    "id": "bitstamp-trade-matches-rate",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "if off(&cash)?.rp2_gt(&tolerance, &CTX).map_err(e)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitstamp_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A trade's fiat amount must be its BTC amount times its rate."
+  },
+  {
+    "id": "bitstamp-btc-msat-precision",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": ".any(|l| l.currency == \"BTC\" && exact_msat(&l.amount.copy_abs()).is_none())",
+    "replace": ".any(|_: &Leg| false)",
+    "expect_failing": [
+      "bitstamp_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A BTC amount finer than a millisatoshi refuses the import."
+  },
+  {
+    "id": "bitstamp-undocumented-type-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "_ => return Err(refuse(\"has a type Kassiber does not map\".into(), REVIEW)),",
+    "replace": "_ => (\"deposit\", fee.clone(), None),",
+    "expect_failing": [
+      "bitstamp_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A BTC row of an undocumented type refuses the import by name."
+  },
+  {
+    "id": "bitstamp-documented-type-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "Some(code) if type_name(code).is_some() => {",
+    "replace": "Some(code) if type_name(code).is_some() && false => {",
+    "expect_failing": [
+      "bitstamp_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "Staking, conversions, settlements and derivatives refuse by their type."
+  },
+  {
+    "id": "bitstamp-movement-direction",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "if (code == 0 && !inbound) || (code == 1 && inbound) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitstamp_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A deposit must bring BTC in and a withdrawal take it out."
+  },
+  {
+    "id": "bitstamp-movement-single-currency",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "if let Some(other) = others.first() {",
+    "replace": "if let Some(other) = others.first().filter(|_| false) {",
+    "expect_failing": [
+      "bitstamp_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A deposit or withdrawal moving a second currency refuses."
+  },
+  {
+    "id": "bitstamp-store-order-by-time",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "(a.occurred_us, a.id.len(), &a.id).cmp(&(b.occurred_us, b.id.len(), &b.id))",
+    "replace": "(a.id.len(), &a.id).cmp(&(b.id.len(), &b.id))",
+    "expect_failing": [
+      "bitstamp_orders_same_second_rows_by_time_and_tags_them_across_syncs"
+    ],
+    "rule": "Rows are stored by microsecond time, then id."
+  },
+  {
+    "id": "bitstamp-external-id-padded",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "format!(\"bitstamp:{id:0>20}\")",
+    "replace": "format!(\"bitstamp:{id}\")",
+    "expect_failing": [
+      "bitstamp_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "The external id is the zero-padded transaction id, so it sorts as Bitstamp numbers rows."
+  },
+  {
+    "id": "bitstamp-api-tags-same-second",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "if matches!(kind.as_str(), \"bitvavo\" | \"bitstamp\") {",
+    "replace": "if kind == \"bitvavo\" {",
+    "expect_failing": [
+      "bitstamp_orders_same_second_rows_by_time_and_tags_them_across_syncs"
+    ],
+    "rule": "A Bitstamp sync tags rows whose same-second order across imports is uncertain."
+  },
+  {
+    "id": "bitstamp-signature-is-a-credential",
+    "file": "crates/credentials/src/lib.rs",
+    "find": "\"x-auth-signature\",",
+    "replace": "\"x-auth-signature-unused\",",
+    "expect_failing": [
+      "bitstamp_refuses_a_page_echoing_its_signature"
+    ],
+    "rule": "Bitstamp's X-Auth-Signature header is a request credential, so an echo refuses the sync."
+  },
+  {
     "id": "bitvavo-scope-tally-by-ticker",
     "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
     "find": "tally.admit(scope, code, assets::Class::Crypto);",
@@ -1816,6 +2067,77 @@
       "bitvavo_crypto_scope_refuses_what_it_cannot_place"
     ],
     "rule": "An asset code that is not a plain ticker is refused by name, never stored as written."
+  },
+  {
+    "id": "bitstamp-scope-tally-by-ticker",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "tally.admit(scope, code, assets::Class::Crypto);",
+    "replace": "let _ = code;",
+    "expect_failing": [
+      "bitstamp_bitcoin_scope_counts_other_assets_and_names_the_scope_command"
+    ],
+    "rule": "In bitcoin scope each other asset a skipped Bitstamp transaction moves is counted by ticker, in the sync and the export."
+  },
+  {
+    "id": "bitstamp-kept-assets-follow-scope",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "let kept = |code: &str| code == \"BTC\" || (scope == Scope::Crypto && !is_fiat(code));",
+    "replace": "let kept = |code: &str| !is_fiat(code);",
+    "expect_failing": [
+      "bitstamp_bitcoin_scope_counts_other_assets_and_names_the_scope_command",
+      "bitstamp_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A bitcoin-scope wallet keeps no other crypto asset: a BTC trade against one is refused, never booked as a swap."
+  },
+  {
+    "id": "bitstamp-bitcoin-scope-names-scope-command",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "let hint = if kept(&quote.currency) { REVIEW } else { keep };",
+    "replace": "let hint = REVIEW;",
+    "expect_failing": [
+      "bitstamp_bitcoin_scope_counts_other_assets_and_names_the_scope_command"
+    ],
+    "rule": "A bitcoin-scope refusal of a BTC trade against another crypto asset names the command that sets the crypto scope."
+  },
+  {
+    "id": "bitstamp-swap-buy-pays-fee-on-top",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "true => (quote.currency.clone(), quote.amount.copy_abs(), fee.clone()),",
+    "replace": "true => (quote.currency.clone(), value.clone(), Decimal::zero()),",
+    "expect_failing": [
+      "bitstamp_crypto_scope_maps_trades_swaps_and_movements_of_every_asset"
+    ],
+    "rule": "A swap buy's outgoing quote leg stores the quote amount and the fee apart."
+  },
+  {
+    "id": "bitstamp-swap-sale-net-of-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "false => (quote.currency.clone(), value, zero),",
+    "replace": "false => (quote.currency.clone(), quote.amount.copy_abs(), zero),",
+    "expect_failing": [
+      "bitstamp_crypto_scope_maps_trades_swaps_and_movements_of_every_asset"
+    ],
+    "rule": "A swap sale's incoming quote leg is the quote amount less the fee."
+  },
+  {
+    "id": "bitstamp-swap-legs-share-ref",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "\"swap\" => swap_leg(entry, &id.as_str().into()),",
+    "replace": "\"swap\" => record(entry),",
+    "expect_failing": [
+      "bitstamp_crypto_scope_maps_trades_swaps_and_movements_of_every_asset"
+    ],
+    "rule": "Both legs of a Bitstamp swap share its swap_ref, so the import pairs them."
+  },
+  {
+    "id": "bitstamp-swap-btc-fee-msat",
+    "file": "crates/wallets/src/file_import/exchange_api/bitstamp.rs",
+    "find": "if quote.currency == \"BTC\" && exact_msat(fee).is_none() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitstamp_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "A swap's BTC fee finer than a millisatoshi refuses the import."
   },
   {
     "id": "exchange-z-alias-kraken-only",

@@ -17,6 +17,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 mod binance;
 mod bitpanda;
+pub(super) mod bitstamp;
 pub(super) mod bitvavo;
 mod coinbase;
 pub mod desktop;
@@ -53,8 +54,10 @@ impl From<Vec<Py>> for Fetched {
     }
 }
 
-/// Bitpanda and Bitvavo are Rust only; Python knows the first three.
-pub const KINDS: [&str; 5] = ["kraken", "coinbase", "binance", "bitpanda", "bitvavo"];
+/// Bitpanda, Bitvavo and Bitstamp are Rust only; Python knows the first three.
+pub const KINDS: [&str; 6] = [
+    "kraken", "coinbase", "binance", "bitpanda", "bitvavo", "bitstamp",
+];
 
 /// A BTC balance the exchange itself reports, read inside the same consented sync run.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -162,6 +165,15 @@ pub fn execute(
                     ..fetched.records.into()
                 }
             }
+            "bitstamp" => {
+                let fetched = bitstamp::fetch(&client)?;
+                balance = Some(fetched.balance);
+                Fetched {
+                    skipped: Some(fetched.skipped),
+                    tally: Some(fetched.tally),
+                    ..fetched.records.into()
+                }
+            }
             _ => return Err(unknown_kind(&kind)),
         })
     })();
@@ -205,7 +217,7 @@ pub fn execute(
         Some(&format!("{kind}:api:{}", lossy(&name))),
     )
     .and_then(|result| {
-        if kind == "bitvavo" {
+        if matches!(kind.as_str(), "bitvavo" | "bitstamp") {
             let inserted: Vec<String> = match at(&result, "inserted_records") {
                 Py::List(items) => items
                     .iter()
@@ -321,7 +333,9 @@ fn backend_kind(backend: &Py, expected: &str) -> Result<(PyStr, String), AppErro
                 name.clone(),
                 format!("' has kind '{kind}', expected an exchange API kind").into(),
             ]))
-            .with_hint("Use a backend kind of kraken, coinbase, binance, bitpanda, or bitvavo."));
+            .with_hint(
+                "Use a backend kind of kraken, coinbase, binance, bitpanda, bitvavo, or bitstamp.",
+            ));
     }
     if !expected.is_empty() && kind != expected {
         return Err(
@@ -410,6 +424,7 @@ fn provider(kind: &str) -> &'static str {
         "coinbase" => "Coinbase",
         "bitpanda" => "Bitpanda",
         "bitvavo" => "Bitvavo",
+        "bitstamp" => "Bitstamp",
         _ => "Binance",
     }
 }
@@ -419,6 +434,7 @@ fn default_url(kind: &str) -> &'static str {
         "coinbase" => "https://api.coinbase.com",
         "bitpanda" => "https://api.public.bitpanda.com",
         "bitvavo" => "https://api.bitvavo.com",
+        "bitstamp" => "https://www.bitstamp.net",
         _ => "https://api.binance.com",
     }
 }

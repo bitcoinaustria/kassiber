@@ -120,6 +120,17 @@ describe("ExchangeApiSetupPanel", () => {
     expect(screen.getByText(/leave trading and withdrawals off yourself/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open the Bitvavo API key page" }));
     expect(mocks.openExternalUrl).toHaveBeenCalledWith("https://account.bitvavo.com/user/api");
+    cleanup();
+
+    // Bitstamp signs with a secret and cannot report write scope, so the
+    // guide names every permission to leave off.
+    mount("bitstamp");
+    expect(screen.getByRole("list", { name: "Turn on only" }).textContent).toContain(
+      "User transactions",
+    );
+    expect(screen.getByRole("list", { name: "Leave off" }).textContent).toContain("Withdrawals");
+    expect(screen.getByLabelText("API secret")).toBeTruthy();
+    expect(screen.getByText(/does not tell Kassiber what else a key may do/)).toBeTruthy();
   });
 
   it("tests only complete credentials, sends exactly them, and never shows them", async () => {

@@ -376,6 +376,25 @@ mod loopback {
                     && stamp.len() == 13
                     && header("Bitvavo-Access-Signature") == expected
             }
+            // Bitstamp v2: a form POST (no Content-Type without a body),
+            // signed over host, path, nonce, timestamp and body.
+            "bitstamp" => {
+                let body = std::str::from_utf8(body).unwrap();
+                let (content_type, nonce) = (header("Content-Type"), header("X-Auth-Nonce"));
+                let stamp = header("X-Auth-Timestamp");
+                let host = header("Host");
+                let expected = bitstamp::signature(
+                    SECRET,
+                    [KEY, method, host, target, content_type, nonce, stamp, body],
+                );
+                method == "POST"
+                    && header("X-Auth") == format!("BITSTAMP {KEY}")
+                    && header("X-Auth-Version") == "v2"
+                    && nonce.len() == 36
+                    && stamp.len() == 13
+                    && (content_type == "application/x-www-form-urlencoded") == !body.is_empty()
+                    && header("X-Auth-Signature") == expected
+            }
             _ => {
                 let query = target.split_once('?').map(|(_, q)| q).unwrap_or("");
                 let Some((unsigned, signature)) = query.rsplit_once("&signature=") else {
@@ -526,6 +545,8 @@ mod loopback {
 mod binance_api;
 mod bitpanda_api;
 mod coinbase_api;
+#[rustfmt::skip]
+mod bitstamp_api;
 #[rustfmt::skip]
 mod bitvavo_api;
 mod desktop_api;
@@ -1029,7 +1050,7 @@ fn stored_secret(kind: &str) -> String {
 /// error names no value.
 #[test]
 fn every_exchange_refuses_a_page_that_echoes_a_credential() {
-    for kind in ["kraken", "coinbase", "binance", "bitvavo"] {
+    for kind in ["kraken", "coinbase", "binance", "bitvavo", "bitstamp"] {
         for mapped in [true, false] {
             let echo = format!("{} {}", loopback::KEY, stored_secret(kind));
             let id = if mapped { loopback::KEY } else { "row-1" };
@@ -1056,6 +1077,13 @@ fn every_exchange_refuses_a_page_that_echoes_a_credential() {
                         json!({"items": [{"transactionId": id, "type": "deposit",
                         "executedAt": "2024-01-03T00:00:00Z", "receivedCurrency": "BTC", "receivedAmount": "0.001", "address": echo}],
                         "currentPage": 1, "totalPages": 1})
+                    }
+                    ("bitstamp", "/api/v2/user_transactions/") => {
+                        json!([{"id": 1, "datetime": "2024-01-03 00:00:00", "type": "0", "fee": "0",
+                        "btc": "0.001", "order_id": echo}])
+                    }
+                    ("bitstamp", _) => {
+                        json!({"currency": "btc", "total": "0", "available": "0", "reserved": "0"})
                     }
                     ("binance", "/sapi/v1/capital/withdraw/history") | ("bitvavo", _) => json!([]),
                     _ => json!({"rows": []}),
@@ -1113,9 +1141,14 @@ fn provider_codes_are_local_values_never_the_providers_string() {
     let bitvavo = serve("bitvavo", |_, _, _| {
         (403, r#"{"errorCode":987654,"error":"x"}"#.into())
     });
+    let bitstamp = serve("bitstamp", |_, _, _| {
+        let body = json!({"status": "error", "code": loopback::KEY, "reason": "x"});
+        (403, body.to_string())
+    });
     for (kind, fake, field) in [
         ("bitpanda", bitpanda, "bitpanda_error"),
         ("bitvavo", bitvavo, "bitvavo_error_code"),
+        ("bitstamp", bitstamp, "bitstamp_code"),
     ] {
         let error = run(&backend(kind, &fake.url), kind, "", true, online())
             .result

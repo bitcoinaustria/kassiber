@@ -12,6 +12,7 @@ import {
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import binanceIcon from "@/assets/integrations/binance.svg";
 import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
+import bitstampIcon from "@/assets/integrations/bitstamp.svg";
 import bitboxIcon from "@/assets/integrations/bitbox.svg";
 import bluewalletIcon from "@/assets/integrations/bluewallet.png";
 import blockstreamGreenIcon from "@/assets/integrations/blockstream-green.svg";
@@ -105,7 +106,7 @@ export interface ConnectionSource {
   forwardTo?: string;
   walletKind?: string;
   /** Exchange whose history an `exchange-api` setup reads with a read-only key. */
-  exchange?: "kraken" | "coinbase" | "binance" | "bitpanda" | "bitvavo";
+  exchange?: "kraken" | "coinbase" | "binance" | "bitpanda" | "bitvavo" | "bitstamp";
   sourceFormat?: ConnectionSourceFormat;
   chain?: "bitcoin" | "liquid";
   network?: string;
@@ -794,6 +795,27 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
       "Needs a key with only View access; Bitvavo does not reveal a key's permissions, so leave trading and withdrawals off",
       "BTC buys and sells against EUR, deposits, withdrawals and staking import; altcoin and stablecoin trades are refused by name",
       "Kassiber contacts Bitvavo only when you test the key or press Sync now",
+    ],
+  },
+  {
+    id: "bitstamp-api",
+    title: "Bitstamp API",
+    description: "Bitstamp history and BTC balance through a read-only API key.",
+    category: "exchanges",
+    image: bitstampIcon,
+    imageFrameClassName: lightLogoFrame,
+    imageClassName: "size-8 rounded-lg",
+    status: "ready",
+    pathLabel: "API import",
+    formatLabel: "read-only API key",
+    docsHref: "https://www.bitstamp.net/api/",
+    setupKind: "exchange-api",
+    exchange: "bitstamp",
+    details: [
+      "Needs a key with only Account balance and User transactions; Bitstamp cannot tell Kassiber whether a key can trade, so leave every other permission off",
+      "Fiat BTC trades keep their exact value; deposits, withdrawals, account transfers and referral rewards import too",
+      "Reads the whole transaction history, oldest first; the CSV export imports into the same wallet without duplicates",
+      "Kassiber contacts Bitstamp only when you test the key or press Sync now",
     ],
   },
   {
