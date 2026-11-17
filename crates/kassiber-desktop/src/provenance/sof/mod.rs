@@ -83,6 +83,8 @@ pub struct Query {
     pub errors: HashMap<String, String>,
     pub stale: HashSet<String>,
     pub inflight: Option<String>,
+    /// `App::book_generation` the request in flight was sent in.
+    pub inflight_generation: u64,
     pub current: String,
 }
 
@@ -377,6 +379,9 @@ impl Case {
 
 #[derive(Default)]
 pub struct Sof {
+    /// `App::book_generation` the reads below were last checked against: a book refresh (an
+    /// exclusion, reprocessed journals) marks them stale, so the investigation revalidates.
+    pub generation: u64,
     /// `ui.workspace.health`: the canonical scope, None until it answers; Err when it failed.
     pub scope: Option<Result<(String, String), String>>,
     pub health_sent: bool,
@@ -540,6 +545,7 @@ fn want(
     } else {
         String::new()
     };
+    let generation = app.book_generation;
     let q = pick(&mut app.provenance.sof);
     q.current = key.clone();
     if !enabled || q.inflight.is_some() {
@@ -552,13 +558,19 @@ fn want(
     }
     q.inflight = Some(key.clone());
     q.stale.remove(&key);
+    q.inflight_generation = generation;
     if !send(app, kind, args, tag) {
         pick(&mut app.provenance.sof).inflight = None;
     }
 }
 
-fn landed(q: &mut Query, r: &Reply) {
+fn landed(q: &mut Query, r: &Reply, generation: u64) {
     let Some(key) = q.inflight.take() else { return };
+    if q.inflight_generation != generation {
+        // Asked before the latest book refresh: not cached; the next poll reads it again.
+        q.stale.insert(key);
+        return;
+    }
     match &r.error {
         Some(e) => {
             q.errors.insert(key.clone(), e.clone());
@@ -839,6 +851,10 @@ fn sync(app: &mut App) -> bool {
 /// Every frame on the route: persist the draft, start the reads the case needs, run the
 /// auto-assembly effect.
 fn step(app: &mut App) -> bool {
+    if app.provenance.sof.generation != app.book_generation {
+        app.provenance.sof.generation = app.book_generation;
+        invalidate(app);
+    }
     let Some(c) = app.provenance.sof.case.as_ref() else {
         return false;
     };
@@ -1057,6 +1073,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     let Some(sub) = tag.strip_prefix("provenance.sof.") else {
         return;
     };
+    let generation = app.book_generation;
     let sof = &mut app.provenance.sof;
     match sub {
         "health" => {
@@ -1088,14 +1105,14 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                 }
             }
         }
-        "wallets" => landed(&mut sof.wallets, r),
-        "recipients" => landed(&mut sof.recipients, r),
-        "preview" => landed(&mut sof.preview, r),
-        "resolve" => landed(&mut sof.resolved, r),
-        "sources" => landed(&mut sof.sources, r),
-        "evidence" => landed(&mut sof.evidence, r),
-        "coverage" => landed(&mut sof.coverage, r),
-        "diagram" => landed(&mut sof.diagram, r),
+        "wallets" => landed(&mut sof.wallets, r, generation),
+        "recipients" => landed(&mut sof.recipients, r, generation),
+        "preview" => landed(&mut sof.preview, r, generation),
+        "resolve" => landed(&mut sof.resolved, r, generation),
+        "sources" => landed(&mut sof.sources, r, generation),
+        "evidence" => landed(&mut sof.evidence, r, generation),
+        "coverage" => landed(&mut sof.coverage, r, generation),
+        "diagram" => landed(&mut sof.diagram, r, generation),
         "assemble" | "assemble.quiet" => {
             sof.busy.remove("assemble");
             on_assembled(app, r, sub == "assemble");
@@ -2139,5 +2156,49 @@ mod source_link_tests {
                 .any(|(tag, _, _)| *tag == "provenance.sof.attach")
         );
         assert_eq!(app.provenance.sof.attaching.front().unwrap(), "purchase");
+    }
+}
+
+#[cfg(test)]
+mod generation_tests {
+    use super::*;
+
+    /// A read asked before a book refresh (an exclusion elsewhere) is not cached as current:
+    /// its key stays stale so the investigation reads it again.
+    #[test]
+    fn a_pre_refresh_answer_is_not_cached() {
+        let mut q = Query {
+            inflight: Some("k".into()),
+            inflight_generation: 1,
+            current: "k".into(),
+            ..Query::default()
+        };
+        let r = Reply {
+            kind: "ui.source_funds.preview".into(),
+            data: json!({"ready": true}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        landed(&mut q, &r, 2);
+        assert!(q.data().is_none());
+        assert!(q.stale.contains("k"));
+        assert!(q.inflight.is_none());
+    }
+
+    /// A book refresh marks the cached reads stale (shown, but read again).
+    #[test]
+    fn a_book_refresh_marks_the_reads_stale() {
+        let mut app = crate::app::tests::quiet_app();
+        app.provenance.sof.preview.current = "k".into();
+        app.provenance
+            .sof
+            .preview
+            .cache
+            .insert("k".into(), json!({}));
+        app.book_generation += 1;
+        step(&mut app);
+        assert!(app.provenance.sof.preview.stale.contains("k"));
+        assert_eq!(app.provenance.sof.generation, app.book_generation);
     }
 }
