@@ -400,6 +400,12 @@ pub struct Sof {
     /// For each source being created, in send order, the link it gets once created: the form
     /// as it was submitted, not as it reads when the source comes back.
     pub source_links: std::collections::VecDeque<Value>,
+    /// For each link review in flight, in send order: the link, the evidence to attach once
+    /// accepted, and its type (for the toast), as submitted. The page may be gone or showing
+    /// another link when the answer comes.
+    pub reviews: std::collections::VecDeque<(String, String, String)>,
+    /// For each evidence attach in flight: the reviewed link's type (for the toast).
+    pub attaching: std::collections::VecDeque<String>,
 }
 
 // ---- Scope and requests -----------------------------------------------------------------------
@@ -1095,8 +1101,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         "attach" => {
             sof.busy.remove("attach");
+            let ty = sof.attaching.pop_front().unwrap_or_default();
             invalidate(app);
-            reviewed_toast(app, true);
+            reviewed_toast(app, true, &ty);
         }
         "create_link" => {
             sof.busy.remove("create_link");
@@ -1289,12 +1296,19 @@ pub fn review_link(app: &mut App, accept: bool) {
     if app.provenance.sof.busy.contains("review") {
         return;
     }
-    let c = app.provenance.sof.case.as_ref().expect("case");
+    let Some(c) = app.provenance.sof.case.as_ref() else {
+        return;
+    };
     let base = c.inspected.clone().unwrap_or(sel);
     let payload = model::link_review_payload(
         &base,
         &c.link.form(),
         if accept { "reviewed" } else { "rejected" },
+    );
+    let asked = (
+        c.selected_link.clone(),
+        c.link.attachment_id.clone(),
+        c.link.link_type.clone(),
     );
     if send(
         app,
@@ -1307,10 +1321,13 @@ pub fn review_link(app: &mut App, accept: bool) {
         },
     ) {
         app.provenance.sof.busy.insert("review");
+        app.provenance.sof.reviews.push_back(asked);
     }
 }
 
 fn on_reviewed(app: &mut App, r: &Reply, accepted: bool) {
+    // What was submitted, whatever the page shows now (or if it was left).
+    let (link_id, attach, link_type) = app.provenance.sof.reviews.pop_front().unwrap_or_default();
     if r.error.is_some() {
         // A stale inspection is not retryable as-is: reload it.
         let stale = r.error_detail["code"].as_str() == Some("source_funds_link_stale");
@@ -1330,10 +1347,7 @@ fn on_reviewed(app: &mut App, r: &Reply, accepted: bool) {
         return;
     }
     invalidate(app);
-    let c = app.provenance.sof.case.as_ref().expect("case");
-    let attach = c.link.attachment_id.clone();
-    let link_id = c.selected_link.clone();
-    if accepted && attach != NO_ATTACHMENT {
+    if accepted && !attach.is_empty() && attach != NO_ATTACHMENT && !link_id.is_empty() {
         if send(
             app,
             "ui.source_funds.links.attach",
@@ -1341,21 +1355,15 @@ fn on_reviewed(app: &mut App, r: &Reply, accepted: bool) {
             "provenance.sof.attach",
         ) {
             app.provenance.sof.busy.insert("attach");
+            app.provenance.sof.attaching.push_back(link_type);
         }
         return;
     }
-    reviewed_toast(app, accepted);
+    reviewed_toast(app, accepted, &link_type);
 }
 
-fn reviewed_toast(app: &mut App, accepted: bool) {
-    let ty = app
-        .provenance
-        .sof
-        .case
-        .as_ref()
-        .map(|c| c.link.link_type.clone())
-        .unwrap_or_default();
-    let label = link_type_label(&ty);
+fn reviewed_toast(app: &mut App, accepted: bool, ty: &str) {
+    let label = link_type_label(ty);
     app.toast(
         if accepted {
             ToastTone::Success
@@ -2044,5 +2052,41 @@ mod source_link_tests {
         on_source_created(&mut app, &reply);
         assert!(app.provenance.sof.source_links.is_empty());
         assert!(app.provenance.sof.busy.contains("create_link"));
+    }
+
+    /// Accepting a link, then leaving the page (or picking other evidence) before the answer:
+    /// the answer attaches the evidence that was submitted, to the link that was reviewed, and
+    /// does not need the page.
+    #[test]
+    fn a_review_answer_after_leaving_uses_what_was_submitted() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut case = Case::new(&Draft::default(), "tx-a");
+        case.selected_link = "link-1".into();
+        case.link.attachment_id = "att-1".into();
+        case.link.link_type = "purchase".into();
+        app.provenance.sof.case = Some(case);
+        app.provenance
+            .sof
+            .reviews
+            .push_back(("link-1".into(), "att-1".into(), "purchase".into()));
+        // The page is left; then the answer comes.
+        app.provenance.sof.case = None;
+        let ok = Reply {
+            kind: "ui.source_funds.links.review".into(),
+            data: json!({}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        let before = app.pending.len();
+        on_reviewed(&mut app, &ok, true);
+        assert!(app.provenance.sof.reviews.is_empty());
+        assert_eq!(app.pending.len(), before + 1, "the attach is sent");
+        assert!(
+            app.pending
+                .values()
+                .any(|(tag, _, _)| *tag == "provenance.sof.attach")
+        );
+        assert_eq!(app.provenance.sof.attaching.front().unwrap(), "purchase");
     }
 }
