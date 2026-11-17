@@ -62,7 +62,11 @@ pub fn key_guide(kind: &str) -> KeyGuide {
         },
         _ => KeyGuide {
             key_page_url: "https://pro.kraken.com/app/settings/api",
-            grant: &["Query closed orders & trades", "Query ledger entries"],
+            grant: &[
+                "Query funds",
+                "Query closed orders & trades",
+                "Query ledger entries",
+            ],
             deny: &[
                 "Deposit funds",
                 "Withdraw funds",
@@ -201,7 +205,11 @@ mod tests {
         let k = key_guide("kraken");
         assert_eq!(
             k.grant,
-            &["Query closed orders & trades", "Query ledger entries"]
+            &[
+                "Query funds",
+                "Query closed orders & trades",
+                "Query ledger entries"
+            ]
         );
         assert!(k.deny.contains(&"Withdraw funds"));
         assert_eq!(

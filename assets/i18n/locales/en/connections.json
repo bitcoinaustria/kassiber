@@ -1866,7 +1866,7 @@
       "kraken": {
         "description": "Kraken trades and ledger through a read-only API key.",
         "details": [
-          "Needs a key that can only query closed orders & trades and ledger entries",
+          "Needs a key that can only query funds, closed orders & trades and ledger entries",
           "Fiat-quoted BTC trades keep Kraken's exact execution price; deposits and withdrawals import as wallet movement",
           "Kassiber contacts Kraken only when you test the key or press Sync now"
         ]

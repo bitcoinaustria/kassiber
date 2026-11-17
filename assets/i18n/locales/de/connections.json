@@ -1866,7 +1866,7 @@
       "kraken": {
         "description": "Kraken-Trades und Ledger-Einträge über einen API-Key, der nur lesen darf.",
         "details": [
-          "Braucht einen Key, der nur geschlossene Orders & Trades und Ledger-Einträge abfragen kann",
+          "Braucht einen Key, der nur Guthaben, geschlossene Orders & Trades und Ledger-Einträge abfragen kann",
           "In Fiat notierte BTC-Trades behalten Krakens exakten Ausführungspreis; Ein- und Auszahlungen werden als Wallet-Bewegungen importiert",
           "Kassiber kontaktiert Kraken nur, wenn du den Key testest oder auf „Sync starten“ drückst"
         ]
