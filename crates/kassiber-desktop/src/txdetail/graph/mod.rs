@@ -42,7 +42,7 @@ use crate::app::{App, Reply};
 use crate::i18n::t;
 use crate::icons as I;
 use crate::theme::Tk;
-use crate::ui::{ic, surface};
+use crate::ui::surface;
 
 pub use data::{LegKey, Payload, Warning};
 pub use dev::{dev_page, scene_open};
@@ -622,30 +622,19 @@ fn ctx<'a>(app: &'a App, tk: &'a Tk, record: &Value, sh: &Shown, sfx: &'static s
 /// "Look up on-chain" (`Button variant="outline" size="sm"`: h-8, px-3, text-xs); disabled while
 /// offline mode is on. The click is the consent, for this transaction id alone.
 fn lookup_button(tk: &Tk, key: &str, record_id: String, off: bool) -> El {
-    let label = t("transactions:graph.lookupOnChain");
-    let b = row()
-        .key(key.to_owned())
-        .h(tk.r(2.0))
-        .px(tk.r(0.75))
-        .center_y()
-        .radius(tk.r(0.375))
-        .border(1.0, tk.input)
-        // shadcn outline: `bg-background`, `dark:bg-input/30`.
-        .fill(if tk.dark {
-            tk.input.alpha(tk.input.a * 0.3)
-        } else {
-            tk.background
-        })
-        .hover(tk.accent)
-        .role("button")
-        .label(label.clone())
-        .child(text(label).font(tk.txs(500.0)).color(tk.fg));
+    let b = crate::ui::button::button(
+        tk,
+        key,
+        crate::ui::button::Variant::Outline,
+        crate::ui::button::Size::Sm,
+        None,
+        &t("transactions:graph.lookupOnChain"),
+        !off,
+    );
     if off {
-        b.disabled(true)
-            .opacity(0.5)
-            .help(t("chrome:network.indicator.offlineMode"))
+        b.help(t("chrome:network.indicator.offlineMode"))
     } else {
-        b.focusable(true).on_press(move |a: &mut App| {
+        b.on_press(move |a: &mut App| {
             // Offline mode can have turned on since this frame.
             if !sources::offline(a) {
                 approve_lookup(a, &record_id);
@@ -827,27 +816,17 @@ pub fn focus_view(
 
     // Restore (outline `size="sm"`, Minimize2 + text, the table's Expand/Restore pair).
     let restore = t("transactions:table.expand.collapse");
-    let back = row()
-        .key("graph-focus-restore")
-        .h(tk.r(2.0))
-        .px(tk.r(0.625))
-        .gap(tk.r(0.375))
-        .center_y()
-        .radius(tk.r(0.375))
-        .border(1.0, tk.input)
-        .fill(if tk.dark {
-            tk.input.alpha(tk.input.a * 0.3)
-        } else {
-            tk.background
-        })
-        .hover(tk.accent)
-        .role("button")
-        .label(restore.clone())
-        .help(format!("{restore} (Esc)"))
-        .focusable(true)
-        .on_press_tx(|a: &mut App, tx: &mut Tx| collapse(a, tx, false))
-        .child(ic(&I::MINIMIZE_2, tk.r(0.875), tk.fg))
-        .child(text(restore).font(tk.txs(500.0)).color(tk.fg));
+    let back = crate::ui::button::button(
+        tk,
+        "graph-focus-restore",
+        crate::ui::button::Variant::Outline,
+        crate::ui::button::Size::Sm,
+        Some(&I::MINIMIZE_2),
+        &restore,
+        true,
+    )
+    .help(format!("{restore} (Esc)"))
+    .on_press_tx(|a: &mut App, tx: &mut Tx| collapse(a, tx, false));
     let mut title_line = row().min_w(0.0).gap(tk.r(0.5)).center_y().child(
         text(t("transactions:graph.title"))
             .font(tk.tsm(600.0))

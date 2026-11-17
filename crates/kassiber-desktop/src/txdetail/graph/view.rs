@@ -434,22 +434,14 @@ fn legend(c: &Ctx, keys: &[&'static str]) -> El {
 }
 
 pub fn expand_button(tk: &Tk) -> El {
-    row()
-        .key("graph-expand")
-        .size(tk.r(2.0), tk.r(2.0))
-        .center()
-        .radius(tk.r(0.375))
-        .border(1.0, tk.input)
-        .fill(if tk.dark {
-            tk.input.alpha(tk.input.a * 0.3)
-        } else {
-            tk.background
-        })
-        .hover(tk.accent)
-        .role("button")
-        .label(t("transactions:graph.expand"))
-        .help(t("transactions:graph.expand"))
-        .focusable(true)
-        .on_press_tx(super::expand)
-        .child(crate::ui::ic(&I::MAXIMIZE_2, tk.r(1.0), tk.fg))
+    crate::ui::button::icon_button(
+        tk,
+        "graph-expand",
+        crate::ui::button::Variant::Outline,
+        tk.r(2.0),
+        &I::MAXIMIZE_2,
+        tk.r(1.0),
+        t("transactions:graph.expand"),
+    )
+    .on_press_tx(super::expand)
 }

@@ -63,41 +63,12 @@ fn button_sm(
     enabled: bool,
     spin: bool,
 ) -> El {
-    let fg = if variant == Variant::Default {
-        tk.primary_fg
-    } else {
-        tk.fg
+    use crate::ui::button as b;
+    let v = match variant {
+        Variant::Default => b::Variant::Default,
+        Variant::Outline => b::Variant::Outline,
     };
-    let base = row()
-        .key(key.to_owned())
-        .h(tk.r(2.0))
-        .px(if glyph.is_some() {
-            tk.r(0.625)
-        } else {
-            tk.r(0.75)
-        })
-        .gap(tk.r(0.375))
-        .center()
-        .radius(tk.r(0.375));
-    let mut b = match variant {
-        Variant::Default => base.fill(tk.primary).hover(tk.primary.alpha(0.9)),
-        Variant::Outline => crate::ui::outline_surface(tk, base),
-    }
-    .role("button")
-    .label(label.to_owned())
-    .focusable(enabled)
-    .disabled(!enabled);
-    if !enabled {
-        b = b.opacity(0.5);
-    }
-    if let Some(g) = glyph {
-        let mut i = ic(g, tk.r(1.0), fg);
-        if spin {
-            i = i.looping(rune::LoopSpec::rotation(1.0));
-        }
-        b = b.child(i);
-    }
-    b.child(text(label.to_owned()).font(tk.tsm(500.0)).color(fg))
+    b::button_busy(tk, key, v, b::Size::Sm, spin, glyph, label, enabled)
 }
 
 /// The Refresh button (`onSync`, egress on press). `wide` keeps the header button as wide as its
@@ -583,19 +554,17 @@ fn header(
     busy: bool,
     sm: bool,
 ) -> El {
-    let back = crate::ui::outline_surface(
+    let back = crate::ui::button::icon_button(
         tk,
-        row()
-            .key("node-back")
-            .size(tk.r(2.0), tk.r(2.0))
-            .center()
-            .radius(tk.r(0.375)),
+        "node-back",
+        crate::ui::button::Variant::Outline,
+        tk.r(2.0),
+        &I::ARROW_LEFT,
+        tk.r(1.0),
+        t("connections:node.header.backToWallets"),
     )
     .role("link")
-    .label(t("connections:node.header.backToWallets"))
-    .focusable(true)
-    .on_press(|a: &mut App| a.navigate("/connections"))
-    .child(ic(&I::ARROW_LEFT, tk.r(1.0), tk.fg));
+    .on_press(|a: &mut App| a.navigate("/connections"));
     let dot = || {
         text("·")
             .font(tk.txs(400.0))
