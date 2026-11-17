@@ -55,6 +55,11 @@ pub struct State {
     pub tests: std::collections::VecDeque<(u64, Credentials)>,
     /// Counts form resets (each open of Add connection starts a new form).
     pub form: u64,
+    /// Each exchange sync in flight, oldest first: (wallet, label, exchange). Kept outside
+    /// the page's `SyncState`, which another wallet's page replaces.
+    pub syncs: std::collections::VecDeque<(String, String, String)>,
+    /// The wallet of each status read in flight, oldest first.
+    pub statuses: std::collections::VecDeque<String>,
     pub show_errors: bool,
     pub sync: SyncState,
     /// Scene harness: `wallets-detail-exchange-card` mounts `card_scene_view` full-page.
@@ -68,7 +73,6 @@ pub struct SyncState {
     pub wallet: Option<String>,
     pub row: Option<Value>,
     pub status_error: Option<ErrorInfo>,
-    pub pending: bool,
     pub last_error: Option<ErrorInfo>,
     pub label: String,
     pub exchange: String,
@@ -112,11 +116,15 @@ pub fn reset(app: &mut App, exchange: &str) {
     let s = stm(app);
     let sync = std::mem::take(&mut s.sync);
     let tests = std::mem::take(&mut s.tests);
+    let syncs = std::mem::take(&mut s.syncs);
+    let statuses = std::mem::take(&mut s.statuses);
     let form = s.form + 1;
     app.wallets.add.exchange = State {
         exchange: exchange.to_owned(),
         sync,
         tests,
+        syncs,
+        statuses,
         form,
         ..State::default()
     };
@@ -186,7 +194,12 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             });
         }
         "wallets.exchange.status" => {
+            let asked = stm(app).statuses.pop_front();
             let s = &mut stm(app).sync;
+            // Another wallet's page since: not this page's status.
+            if asked.is_none() || asked != s.wallet {
+                return;
+            }
             match &r.error {
                 None => {
                     s.row = r.data["connections"]
@@ -199,14 +212,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "wallets.exchange.sync" => {
-            let (label, wallet, exchange) = {
-                let s = &mut stm(app).sync;
-                s.pending = false;
-                (
-                    s.label.clone(),
-                    s.wallet.clone().unwrap_or_default(),
-                    s.exchange.clone(),
-                )
+            // The wallet this sync was for, whichever wallet's page is open now.
+            let Some((wallet, label, exchange)) = stm(app).syncs.pop_front() else {
+                return;
             };
             match &r.error {
                 None => {
@@ -250,10 +258,13 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     app.shell
                         .note(&title, Some(msg.clone()), ToastTone::Error, clock);
                     app.toast(ToastTone::Error, &title, Some(msg), Some("exchange-sync"));
-                    stm(app).sync.last_error = Some(info);
+                    if stm(app).sync.wallet.as_deref() == Some(wallet.as_str()) {
+                        stm(app).sync.last_error = Some(info);
+                    }
                 }
             }
             // `status.refetch()`, and the mutation invalidates every read.
+            stm(app).statuses.push_back(wallet.clone());
             app.send(
                 "ui.connections.exchange.status",
                 json!({"wallet": wallet}),
@@ -299,6 +310,7 @@ pub fn sync_prime(app: &mut App, c: &Conn) -> bool {
         exchange: ex,
         ..SyncState::default()
     };
+    stm(app).statuses.push_back(c.id.clone());
     app.send(
         "ui.connections.exchange.status",
         json!({"wallet": c.id}),
@@ -307,8 +319,13 @@ pub fn sync_prime(app: &mut App, c: &Conn) -> bool {
     true
 }
 
+/// Whether the shown wallet has a sync in flight.
 pub fn sync_pending(app: &App) -> bool {
-    st(app).sync.pending
+    let s = st(app);
+    s.sync
+        .wallet
+        .as_ref()
+        .is_some_and(|w| s.syncs.iter().any(|(x, _, _)| x == w))
 }
 
 fn run_sync(a: &mut App) {
@@ -316,9 +333,10 @@ fn run_sync(a: &mut App) {
     let Some(wallet) = s.wallet.clone() else {
         return;
     };
-    if s.pending {
+    if sync_pending(a) {
         return;
     }
+    let (label, exchange) = (s.label.clone(), s.exchange.clone());
     stm(a).sync.last_error = None;
     if a.send(
         "ui.connections.exchange.sync",
@@ -327,7 +345,7 @@ fn run_sync(a: &mut App) {
     )
     .is_some()
     {
-        stm(a).sync.pending = true;
+        stm(a).syncs.push_back((wallet, label, exchange));
     }
 }
 
@@ -679,7 +697,7 @@ pub fn sync_card(app: &App, _cx: &mut Cx<App>, tk: &Tk, c: &Conn, disabled: bool
         .and_then(|l| l["skipped"].as_object())
         .map(|m| m.values().filter_map(Value::as_u64).sum())
         .unwrap_or(0);
-    let pending = mine && s.pending;
+    let pending = mine && sync_pending(app);
     let enabled = !(disabled || pending || needs_rust || key_stored == Some(false));
 
     let mut sync_btn = button(
@@ -933,6 +951,45 @@ mod test_reply_tests {
             error_detail: Value::Null,
             elapsed: Default::default(),
         }
+    }
+
+    /// Wallet A's sync still running when wallet B's page opens: A's failure is not B's
+    /// error, B's own sync stays pending, and A's status read does not land on B's card.
+    #[test]
+    fn an_exchange_sync_answer_stays_with_its_wallet() {
+        let mut app = crate::app::tests::quiet_app();
+        stm(&mut app)
+            .syncs
+            .push_back(("a".into(), "A".into(), "kraken".into()));
+        stm(&mut app)
+            .syncs
+            .push_back(("b".into(), "B".into(), "kraken".into()));
+        stm(&mut app).sync = SyncState {
+            wallet: Some("b".into()),
+            label: "B".into(),
+            exchange: "kraken".into(),
+            ..SyncState::default()
+        };
+        let failed = Reply {
+            kind: "ui.connections.exchange.sync".into(),
+            data: Value::Null,
+            error: Some("refused".into()),
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "wallets.exchange.sync", &failed);
+        assert!(st(&app).sync.last_error.is_none(), "A's failure is not B's");
+        assert!(sync_pending(&app), "B's sync still runs");
+        // A's status read (queued after its sync) does not land on B's card.
+        let status = Reply {
+            kind: "ui.connections.exchange.status".into(),
+            data: json!({"connections": [{"id": "a"}]}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "wallets.exchange.status", &status);
+        assert!(st(&app).sync.row.is_none());
     }
 
     /// A test for credentials A still out when Add connection closes and reopens: its answer

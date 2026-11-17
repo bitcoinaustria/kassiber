@@ -452,6 +452,20 @@ fn load(app: &mut App, c: &Conn) {
     send_reads(app, &id);
 }
 
+/// The book was refreshed since the shown reads: read the wallet again, keeping the page's
+/// state. Only its own reads: starting a book refresh here would bump the generation again
+/// and loop.
+fn follow_generation(app: &mut App) -> bool {
+    if app.wallets.detail.wallet.is_empty() || app.wallets.detail.generation == app.book_generation
+    {
+        return false;
+    }
+    app.wallets.detail.generation = app.book_generation;
+    let id = app.wallets.detail.wallet.clone();
+    send_reads(app, &id);
+    true
+}
+
 /// Re-reads after a mutation (the web invalidates every daemon query), keeping the UI state.
 pub fn reload(app: &mut App) {
     let id = app.wallets.detail.wallet.clone();
@@ -475,11 +489,8 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     if app.wallets.detail.wallet != c.id {
         load(app, &c);
         changed = true;
-    } else if app.wallets.detail.generation != app.book_generation {
-        // The book was refreshed since these reads: read again, keeping the page's state.
-        app.wallets.detail.generation = app.book_generation;
-        reload(app);
-        changed = true;
+    } else {
+        changed |= follow_generation(app);
     }
     if let Some((_, until)) = app.wallets.detail.copied
         && app.clock >= until
@@ -933,6 +944,19 @@ pub fn notices_enc(s: &str) -> String {
 #[cfg(test)]
 mod transient_tests {
     use super::*;
+
+    /// A book refresh re-reads the open wallet once and starts no refresh of its own (which
+    /// would bump the generation again and loop).
+    #[test]
+    fn a_book_refresh_rereads_the_wallet_without_another_refresh() {
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.detail.wallet = "w1".into();
+        app.book_generation += 1;
+        let phase = app.cycle.phase;
+        assert!(follow_generation(&mut app));
+        assert_eq!(app.cycle.phase, phase, "no book refresh started");
+        assert!(!follow_generation(&mut app), "once per refresh");
+    }
 
     #[test]
     fn leaving_the_wallet_page_keeps_reads_and_drops_page_state() {
