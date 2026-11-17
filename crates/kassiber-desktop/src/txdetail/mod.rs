@@ -270,7 +270,9 @@ pub struct DetailUi {
     pub drafts: HashMap<String, Draft>,
     /// The transactions of the saves in flight, in the order they were sent (metadata writes run
     /// one at a time and reply in order), so a reply finds its panel after a tab switch.
-    pub saving_ids: std::collections::VecDeque<String>,
+    /// With each, the draft that was submitted: only that becomes the saved baseline, so edits
+    /// made while it saves stay dirty.
+    pub saving_ids: std::collections::VecDeque<(String, Draft)>,
     /// `ui.loans.list` marks.
     pub loans: Option<Vec<Value>>,
     /// The host's row order for "Save & next" (`set_nav_list`).

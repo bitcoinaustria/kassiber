@@ -61,7 +61,8 @@ pub fn save(app: &mut App, close_after: bool, next: bool) {
     o.save_error = None;
     o.close_after_save = close_after;
     o.next_after_save = next;
-    app.detail.saving_ids.push_back(tx_id);
+    let submitted = o.draft.clone();
+    app.detail.saving_ids.push_back((tx_id, submitted));
     app.send("ui.transactions.metadata.update", args, "txd.save");
 }
 
@@ -74,7 +75,7 @@ fn save_error_text(e: &str) -> String {
 }
 
 pub fn on_saved(app: &mut App, r: &Reply) {
-    let Some(id) = app.detail.saving_ids.pop_front() else {
+    let Some((id, submitted)) = app.detail.saving_ids.pop_front() else {
         return;
     };
     if app.detail.open.as_ref().and_then(|o| o.id()) != Some(id.as_str()) {
@@ -91,8 +92,8 @@ pub fn on_saved(app: &mut App, r: &Reply) {
             match &r.error {
                 Some(e) => o.save_error = Some(save_error_text(e)),
                 None => {
-                    o.base = o.draft.clone();
-                    app.detail.drafts.insert(id.clone(), o.draft.clone());
+                    o.base = submitted.clone();
+                    app.detail.drafts.insert(id.clone(), submitted);
                 }
             }
         }
@@ -109,7 +110,8 @@ pub fn on_saved(app: &mut App, r: &Reply) {
         o.save_error = Some(save_error_text(e));
         return;
     }
-    let saved = o.draft.clone();
+    // Only what was submitted is saved; edits made meanwhile stay dirty.
+    let saved = submitted;
     o.base = saved.clone();
     let (close_after, next) = (o.close_after_save, o.next_after_save);
     app.detail.drafts.insert(id.clone(), saved);
@@ -1053,7 +1055,10 @@ mod tests {
         ];
         app.detail.active_tab = 1;
         app.detail.open = Some(panel("b", false));
-        app.detail.saving_ids.push_back("a".into());
+        let submitted = app.detail.tabs[0].parked.as_ref().unwrap().draft.clone();
+        app.detail.saving_ids.push_back(("a".into(), submitted));
+        // An edit made after the save was sent stays unsaved.
+        app.detail.tabs[0].parked.as_mut().unwrap().draft.note = "edited again".into();
         let reply = Reply {
             kind: "ui.transactions.metadata.update".into(),
             data: json!({}),
@@ -1063,7 +1068,12 @@ mod tests {
         };
         on_saved(&mut app, &reply);
         let a = app.detail.tabs[0].parked.as_ref().unwrap();
-        assert!(!a.saving && a.dirty().count == 0, "A is saved");
+        assert!(!a.saving, "A finished saving");
+        assert_eq!(
+            a.base.note, "edited a",
+            "the submitted draft is the baseline"
+        );
+        assert!(a.dirty().count > 0, "the later edit stays dirty");
         let b = app.detail.open.as_ref().unwrap();
         assert!(b.dirty().count > 0, "B keeps its unsaved edits");
         assert!(app.detail.drafts.contains_key("a") && !app.detail.drafts.contains_key("b"));
