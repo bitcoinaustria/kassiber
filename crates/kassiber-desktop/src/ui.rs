@@ -139,6 +139,32 @@ pub fn outline_button(tk: &Tk, key: &str, glyph: Option<&'static Icon>, label: &
     )
 }
 
+/// A status or kind label: its ink and an optional 0.75 rem glyph, no fill or border (the app
+/// draws no pills; a state reads by its color and icon).
+pub fn tag(tk: &Tk, ink: Color, glyph: Option<&'static Icon>, label: impl Into<String>) -> El {
+    let label = label.into();
+    let mut r = row().gap(tk.r(0.25)).center_y().min_w(0.0);
+    if let Some(g) = glyph {
+        r = r.child(ic(g, tk.r(0.75), ink));
+    }
+    r.child(
+        text(label.clone())
+            .font(tk.txs(500.0))
+            .color(ink)
+            .single_line()
+            .truncate()
+            .min_w(0.0)
+            .help_when_truncated(label),
+    )
+}
+
+/// A count beside a heading: plain muted figures, no box.
+pub fn count(tk: &Tk, n: usize, style: rune::TextStyle) -> El {
+    text(n.to_string())
+        .font(style.features("'tnum' 1"))
+        .color(tk.muted_fg)
+}
+
 /// A 1 px rule.
 pub fn hairline(color: Color) -> El {
     el().h(1.0).w_full().fill(color)

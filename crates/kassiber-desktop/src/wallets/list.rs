@@ -358,7 +358,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
 /// The sync line on the header's left (an owner request; the web's header holds only `Add wallet`):
 /// "Syncing…" while a refresh runs, else the newest successful sync across the sources, with the
 /// exact time on hover, and the failed-source count when any failed.
-fn sync_line(app: &App, tk: &Tk) -> El {
+pub fn sync_line(app: &App, tk: &Tk) -> El {
     let mut r = row()
         .key("wallets-sync-line")
         .gap(tk.r(0.5))
@@ -774,30 +774,11 @@ fn filters(app: &App, tk: &Tk, layer: &mut Vec<El>, count: usize) -> El {
                 ),
         );
     }
-    // `bg-gray-50 text-gray-600 ring-gray-500/10` (dark `bg-gray-800/50 text-gray-400 ring-gray-400/20`).
-    let gray = |s: &str| rune::color::hex(s).expect("hex");
-    let (cfill, cink, cring) = if tk.dark {
-        (
-            gray("#1f2937").alpha(0.5),
-            gray("#9ca3af"),
-            gray("#9ca3af").alpha(0.2),
-        )
-    } else {
-        (gray("#f9fafb"), gray("#4b5563"), gray("#6b7280").alpha(0.1))
-    };
-    let count_badge = row()
-        .ml(tk.r(0.25))
-        .px(tk.r(0.5))
-        .py(tk.r(0.25))
-        .radius(tk.r(0.375))
-        .fill(cfill)
-        .border(1.0, cring)
-        .center_y()
-        .child(
-            text(count.to_string())
-                .font(if sm { tk.txs(500.0) } else { tk.t2xs(500.0) })
-                .color(cink),
-        );
+    let count_badge = crate::ui::count(
+        tk,
+        count,
+        if sm { tk.tbase(400.0) } else { tk.tsm(400.0) },
+    );
     let head = row()
         .w_full()
         .px(if sm { tk.card_pad() } else { tk.r(0.75) })

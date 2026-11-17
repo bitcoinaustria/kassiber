@@ -37,50 +37,23 @@ pub fn header(tk: &Tk) -> El {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BadgeVariant {
-    Secondary,
     Outline,
 }
 
-/// shadcn `Badge` (`rounded-full border px-2 py-0.5 text-xs font-medium gap-1`, svg `size-3`).
-pub fn badge(tk: &Tk, variant: BadgeVariant, label: &str) -> El {
-    let b = row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .gap(tk.r(0.25))
-        .center_y()
-        .radius(tk.r(9999.0).min(999.0))
-        .border(
-            1.0,
-            if variant == BadgeVariant::Outline {
-                tk.border
-            } else {
-                Color::TRANSPARENT
-            },
-        );
-    let b = if variant == BadgeVariant::Secondary {
-        b.fill(tk.muted)
-    } else {
-        b
-    };
-    b.child(text(label.to_owned()).font(tk.txs(500.0)).color(tk.fg))
+/// A neutral label (`crate::ui::tag`).
+pub fn badge(tk: &Tk, _variant: BadgeVariant, label: &str) -> El {
+    crate::ui::tag(tk, tk.muted_fg, None, label)
 }
 
-/// A badge in a status tone (`border-…/30 bg-…/10 text-…`), optional leading glyph.
+/// A label in a status tone, optional leading glyph (`crate::ui::tag`).
 pub fn tone_badge(
     tk: &Tk,
     tone: &Tone,
     glyph: Option<(&'static Icon, Color)>,
     label: &str,
-    rounded_md: bool,
+    _rounded_md: bool,
 ) -> El {
-    let mut b = row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .gap(tk.r(0.25))
-        .center()
-        .radius(if rounded_md { tk.r(0.375) } else { 999.0 })
-        .fill(tone.bg)
-        .border(1.0, tone.border);
+    let mut b = row().gap(tk.r(0.25)).center_y();
     if let Some((g, c)) = glyph {
         b = b.child(ic(g, tk.r(0.75), c));
     }
@@ -503,16 +476,6 @@ pub fn menu_surface(tk: &Tk, content: El) -> El {
 /// sides in place of `px-6`): the card's `h2`
 /// (`text-base font-medium`), a gray count badge, then the card's controls on the right.
 pub fn card_header(tk: &Tk, title: String, count: Option<usize>, right: El) -> El {
-    let gray = |s: &str| rune::color::hex(s).unwrap_or(Color::WHITE);
-    let (cfill, cink, cring) = if tk.dark {
-        (
-            gray("#1f2937").alpha(0.5),
-            gray("#9ca3af"),
-            gray("#9ca3af").alpha(0.2),
-        )
-    } else {
-        (gray("#f9fafb"), gray("#4b5563"), gray("#6b7280").alpha(0.1))
-    };
     let mut left = row().grow(1.0).min_w(0.0).gap(tk.r(0.5)).center_y().child(
         text(title)
             .font(tk.tbase(500.0))
@@ -521,17 +484,7 @@ pub fn card_header(tk: &Tk, title: String, count: Option<usize>, right: El) -> E
             .level(2),
     );
     if let Some(n) = count {
-        left = left.child(
-            row()
-                .ml(tk.r(0.25))
-                .px(tk.r(0.5))
-                .py(tk.r(0.25))
-                .radius(tk.r(0.375))
-                .fill(cfill)
-                .border(1.0, cring)
-                .center_y()
-                .child(text(n.to_string()).font(tk.txs(500.0)).color(cink)),
-        );
+        left = left.child(crate::ui::count(tk, n, tk.tbase(400.0)));
     }
     row()
         .w_full()

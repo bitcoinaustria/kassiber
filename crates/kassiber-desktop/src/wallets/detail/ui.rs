@@ -44,28 +44,14 @@ pub fn card_title(tk: &Tk, s: &str) -> El {
         .role("heading")
 }
 
-/// `Badge variant="secondary"`: `bg-secondary text-secondary-foreground rounded-md px-2 py-0.5
-/// text-xs font-medium`.
+/// A neutral label (`crate::ui::tag`).
 pub fn badge_secondary(tk: &Tk, s: &str) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .fill(tk.muted)
-        .center_y()
-        .child(text(s.to_owned()).font(tk.txs(500.0)).color(tk.fg))
+    crate::ui::tag(tk, tk.muted_fg, None, s)
 }
 
-/// `Badge variant="outline"`.
+/// A neutral label (`crate::ui::tag`).
 pub fn badge_outline(tk: &Tk, s: &str) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .border(1.0, tk.border)
-        .border_layout()
-        .center_y()
-        .child(text(s.to_owned()).font(tk.txs(500.0)).color(tk.fg))
+    crate::ui::tag(tk, tk.muted_fg, None, s)
 }
 
 /// The amber notice tones (`border-amber-300 bg-amber-50 text-amber-900`, dark

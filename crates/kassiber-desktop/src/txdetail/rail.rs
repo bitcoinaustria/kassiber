@@ -341,12 +341,8 @@ fn source_badge(tk: &Tk, source: &str, label: &str) -> El {
     };
     row()
         .h(tk.r(1.25))
-        .px(tk.r(0.375))
         .gap(tk.r(0.25))
         .center_y()
-        .radius(tk.r(0.375))
-        .fill(tone.bg)
-        .border(1.0, tone.border)
         .child(ic(glyph, tk.r(0.625), tone.text))
         .child(text(label.to_owned()).font(tk.t2xs(500.0)).color(tone.text))
 }
@@ -364,11 +360,7 @@ fn family_badge(tk: &Tk, fam: &str) -> El {
     };
     row()
         .h(tk.r(1.25))
-        .px(tk.r(0.375))
         .center_y()
-        .radius(tk.r(0.375))
-        .fill(tone.bg)
-        .border(1.0, tone.border)
         .child(text(fam.to_owned()).font(tk.t2xs(500.0)).color(tone.text))
 }
 

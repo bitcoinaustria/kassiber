@@ -178,41 +178,19 @@ pub fn skeleton(tk: &Tk, w: f32, h: f32) -> El {
 /// The developer badge: `Badge variant="outline" border-sky-500/40 text-2xs font-normal
 /// text-sky-700 dark:text-sky-300`.
 pub fn dev_badge(tk: &Tk) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .border(1.0, tw("sky-500").alpha(0.4))
-        .child(
-            text(crate::i18n::t("review:transfersPage.checked.developer"))
-                .font(tk.t2xs(400.0))
-                .color(ink(tk, "sky")),
-        )
+    crate::ui::tag(
+        tk,
+        ink(tk, "sky"),
+        None,
+        crate::i18n::t("review:transfersPage.checked.developer"),
+    )
 }
 
 /// `surfaceCountClassName`: the count beside a card's title.
 pub fn count_chip(tk: &Tk, label: String) -> El {
-    let (fg, bg, ring) = if tk.dark {
-        (
-            tw("gray-400"),
-            tw("gray-800").alpha(0.5),
-            tw("gray-400").alpha(0.2),
-        )
-    } else {
-        (tw("gray-600"), tw("gray-50"), tw("gray-500").alpha(0.1))
-    };
-    row()
-        .ml(tk.r(0.25))
-        .px(tk.r(0.5))
-        .py(tk.r(0.25))
-        .radius(tk.r(0.375))
-        .fill(bg)
-        .border(1.0, ring)
-        .child(
-            text(label)
-                .font(tk.txs(500.0).features("'tnum' 1"))
-                .color(fg),
-        )
+    text(label)
+        .font(tk.tbase(400.0).features("'tnum' 1"))
+        .color(tk.muted_fg)
 }
 
 /// `surfaceFilterChipClassName` with an X: a removable filter chip.
@@ -285,12 +263,8 @@ pub fn readiness_pill(
     row()
         .key(key.to_owned())
         .h(tk.r(1.75))
-        .px(tk.r(0.5))
         .gap(tk.r(0.375))
         .center_y()
-        .radius(tk.r(0.375))
-        .border(1.0, tw("amber-500").alpha(0.25))
-        .fill(tw("amber-500").alpha(0.1))
         .role("button")
         .label(label.to_owned())
         .help(description.to_owned())
@@ -299,7 +273,12 @@ pub fn readiness_pill(
         .opacity(if busy { 0.6 } else { 1.0 })
         .hover_group()
         .child(icon)
-        .child(text(label.to_owned()).font(tk.txs(500.0)).color(fg))
+        .child(
+            text(label.to_owned())
+                .font(tk.tsm(500.0))
+                .color(fg)
+                .group_opacity(1.0, 0.8),
+        )
 }
 
 /// A row detail behind an icon: the text shows on hover or keyboard focus (`RowHint`).

@@ -1627,10 +1627,6 @@ fn overview(app: &App, tk: &Tk, v: &Visual, key: &str, wide: bool, expanded: boo
             row()
                 .gap(tk.r(0.25))
                 .center_y()
-                .radius(999.0)
-                .fill(tone.bg)
-                .px(tk.r(0.5))
-                .py(2.0)
                 .child(ic(glyph, tk.r(0.75), tone.text).a11y_hidden())
                 .child(text(label).font(tk.t2xs(500.0)).color(tone.text)),
         );

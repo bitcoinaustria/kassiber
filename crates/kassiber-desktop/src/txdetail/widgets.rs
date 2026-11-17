@@ -208,15 +208,8 @@ pub fn callout(
 }
 
 /// An outline badge (`rounded-md border px-1.5 text-2xs`).
-pub fn badge(tk: &Tk, label: &str, fg: Color, bg: Color, border: Color) -> El {
-    row()
-        .h(tk.r(1.25))
-        .px(tk.r(0.375))
-        .center_y()
-        .radius(tk.r(0.375))
-        .fill(bg)
-        .border(1.0, border)
-        .child(text(label.to_owned()).font(tk.t2xs(500.0)).color(fg))
+pub fn badge(tk: &Tk, label: &str, fg: Color, _bg: Color, _border: Color) -> El {
+    crate::ui::tag(tk, fg, None, label)
 }
 
 pub fn muted_badge(tk: &Tk, label: &str) -> El {
@@ -552,10 +545,5 @@ pub fn ledger_table(tk: &Tk) -> El {
 /// An outline badge in `text-2xs` (`Badge variant="outline" rounded-md text-2xs`). In a ledger
 /// header it inherits the header's `uppercase`; callers pass the label uppercased there.
 pub fn outline_badge_2xs(tk: &Tk, label: &str) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .border(1.0, tk.border)
-        .child(text(label.to_owned()).font(tk.t2xs(500.0)).color(tk.fg))
+    crate::ui::tag(tk, tk.muted_fg, None, label)
 }
