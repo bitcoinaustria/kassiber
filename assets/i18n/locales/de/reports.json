@@ -223,7 +223,7 @@
       "notFound": "Die Datei des Berichtsexports wurde nicht gefunden: {{error}}",
       "otherProject": "Nur Exporte aus dem aktiven Kassiber-Projekt können geöffnet oder gespeichert werden.",
       "inspect": "Die Datei des Berichtsexports konnte nicht geprüft werden: {{error}}",
-      "unsupported": "Nur verwaltete PDF-, XLSX- und CSV-Dateien, österreichische CSV-Bundle-Ordner und Prüfpaket-Ordner können geöffnet oder gespeichert werden.",
+      "unsupported": "Nur verwaltete PDF-, XLSX-, CSV- und ZIP-Dateien, österreichische CSV-Bundle-Ordner und Prüfpaket-Ordner können geöffnet oder gespeichert werden.",
       "inspectDestination": "Das Ziel des Berichtsexports konnte nicht geprüft werden: {{error}}",
       "destinationNotEmpty": "Wähle einen neuen oder leeren Ordner für den Berichtsexport.",
       "createDestination": "Das Ziel des Berichtsexports konnte nicht angelegt werden: {{error}}",
@@ -234,7 +234,7 @@
       "createParent": "Der Zielordner des Berichtsexports konnte nicht angelegt werden: {{error}}",
       "inspectParent": "Der Zielordner des Berichtsexports konnte nicht geprüft werden: {{error}}",
       "insideManaged": "Wähle ein Ziel außerhalb von Kassibers verwaltetem Exportordner.",
-      "extension": "Das Ziel des Berichtsexports muss auf .pdf, .xlsx oder .csv enden.",
+      "extension": "Das Ziel des Berichtsexports muss auf .pdf, .xlsx, .csv oder .zip enden.",
       "save": "Der Berichtsexport konnte nicht gespeichert werden: {{error}}"
     }
   }

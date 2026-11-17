@@ -585,11 +585,13 @@ fn handle_test(app: &mut App) {
     }
     f.test = TestRun {
         state: "running",
-        target,
+        target: target.clone(),
         listing,
         ..Default::default()
     };
-    send(app, "ai.test_connection", args, "settings.aiform_test");
+    if send(app, "ai.test_connection", args, "settings.aiform_test") {
+        app.settings.aiform_tests.push_back(target);
+    }
 }
 
 /// `handleSubmit`.
@@ -755,10 +757,17 @@ fn finish_save(app: &mut App) {
 }
 
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
+    let tested = if tag == "settings.aiform_test" {
+        app.settings.aiform_tests.pop_front()
+    } else {
+        None
+    };
     let f = &mut app.settings.aiform;
     match tag {
         "settings.aiform_test" => {
-            if f.test.state != "running" {
+            // Only the answer for the test now shown: an earlier test of other values (or of a
+            // form since closed) must not stand in for it.
+            if f.test.state != "running" || tested.as_deref() != Some(f.test.target.as_str()) {
                 return;
             }
             match &r.error {
@@ -2222,4 +2231,41 @@ fn check_step(app: &App, tk: &Tk, f: &AiForm) -> El {
     }
     let _ = app;
     out
+}
+
+#[cfg(test)]
+mod test_reply_tests {
+    use super::*;
+
+    fn passed() -> Reply {
+        Reply {
+            kind: "ai.test_connection".into(),
+            data: json!({"probe": {"status": "ok"}, "detected_api_format": "responses"}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Endpoint A tested, the form changed to B and tested again before A answered: A's
+    /// answer is not B's result; B's own answer is.
+    #[test]
+    fn an_earlier_tests_answer_is_not_the_current_tests_result() {
+        let mut app = crate::app::tests::quiet_app();
+        app.settings.aiform_tests.push_back("A".into());
+        app.settings.aiform_tests.push_back("B".into());
+        app.settings.aiform.test = TestRun {
+            state: "running",
+            target: "B".into(),
+            ..Default::default()
+        };
+        on_reply(&mut app, "settings.aiform_test", &passed());
+        assert_eq!(
+            app.settings.aiform.test.state, "running",
+            "A's answer dropped"
+        );
+        on_reply(&mut app, "settings.aiform_test", &passed());
+        assert_eq!(app.settings.aiform.test.state, "ok");
+        assert!(app.settings.aiform_tests.is_empty());
+    }
 }
