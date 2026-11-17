@@ -742,6 +742,24 @@ fn limit_toast(app: &mut App) {
     );
 }
 
+/// A picked file's bytes, read only up to `limit` (+1 to tell it is over): a multi-gigabyte
+/// pick is refused without loading it. `None`: larger than `limit`. Only regular files.
+fn read_bounded(p: &std::path::Path, limit: usize) -> std::io::Result<Option<Vec<u8>>> {
+    use std::io::Read;
+    let file = std::fs::File::open(p)?;
+    let meta = file.metadata()?;
+    if !meta.is_file() {
+        return Err(std::io::ErrorKind::InvalidInput.into());
+    }
+    if meta.len() > limit as u64 {
+        return Ok(None);
+    }
+    let mut bytes = Vec::with_capacity(meta.len() as usize);
+    // The file can grow between the size check and the read.
+    file.take(limit as u64 + 1).read_to_end(&mut bytes)?;
+    Ok((bytes.len() <= limit).then_some(bytes))
+}
+
 /// Files picked or dropped: each is read and handed to the daemon one after another, shown as an
 /// uploading card meanwhile.
 pub fn attach_paths(app: &mut App, paths: &[std::path::PathBuf]) {
@@ -767,27 +785,30 @@ pub fn attach_paths(app: &mut App, paths: &[std::path::PathBuf]) {
             limit_toast(app);
             break;
         }
-        let Ok(bytes) = std::fs::read(p) else {
-            app.toast(
-                ToastTone::Warning,
-                &t("assistant:composer.attachmentFailed"),
-                Some(name.clone()),
-                Some("assistant-attachment-failed"),
-            );
-            continue;
+        let bytes = match read_bounded(p, MAX_UPLOAD) {
+            Ok(Some(bytes)) => bytes,
+            Ok(None) => {
+                app.toast(
+                    ToastTone::Warning,
+                    &t("assistant:composer.attachmentTooLarge.title"),
+                    Some(tr(
+                        "assistant:composer.attachmentTooLarge.bodyNamed",
+                        &[("filename", &name)],
+                    )),
+                    Some("assistant-attachmentTooLarge"),
+                );
+                continue;
+            }
+            Err(_) => {
+                app.toast(
+                    ToastTone::Warning,
+                    &t("assistant:composer.attachmentFailed"),
+                    Some(name.clone()),
+                    Some("assistant-attachment-failed"),
+                );
+                continue;
+            }
         };
-        if bytes.len() > MAX_UPLOAD {
-            app.toast(
-                ToastTone::Warning,
-                &t("assistant:composer.attachmentTooLarge.title"),
-                Some(tr(
-                    "assistant:composer.attachmentTooLarge.bodyNamed",
-                    &[("filename", &name)],
-                )),
-                Some("assistant-attachmentTooLarge"),
-            );
-            continue;
-        }
         if bytes.is_empty() {
             continue;
         }
@@ -966,6 +987,22 @@ fn base64(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Reads stop at the limit: a file over it is refused, one at it is read whole, and
+    /// something that is not a regular file (a directory here) is an error.
+    #[test]
+    fn attachment_reads_are_bounded() {
+        let dir = std::env::temp_dir().join(format!("kassiber-attach-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let at = dir.join("at.csv");
+        let over = dir.join("over.csv");
+        std::fs::write(&at, [7u8; 16]).unwrap();
+        std::fs::write(&over, [7u8; 17]).unwrap();
+        assert_eq!(read_bounded(&at, 16).unwrap().unwrap().len(), 16);
+        assert!(read_bounded(&over, 16).unwrap().is_none());
+        assert!(read_bounded(&dir, 16).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     fn queue(app: &mut App, key: &str, name: &str) {
         let book: chat::Book = ("w".into(), "p".into());

@@ -164,9 +164,9 @@ pub fn open(app: &mut App) {
                 })
             });
     }
-    if e.wallets.is_none() {
-        app.send("ui.wallets.list", Value::Null, "txs.export.wallets");
-    }
+    // Every opening re-reads the choices (the last ones stay up meanwhile): a wallet added
+    // since must be offered, and an explicit allowlist must not leave it out.
+    app.send("ui.wallets.list", Value::Null, "txs.export.wallets");
 }
 
 /// Closes the dialog unless an export is being written (`onOpenChange` ignores it then).
@@ -326,7 +326,7 @@ pub fn blocked(err: &Value) -> bool {
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
         "txs.export.wallets" => {
-            let list = r.data["wallets"]
+            let list: Vec<WalletOpt> = r.data["wallets"]
                 .as_array()
                 .map(|a| {
                     a.iter()
@@ -340,7 +340,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                         .collect()
                 })
                 .unwrap_or_default();
-            app.txs.export.wallets = Some(list);
+            let e = &mut app.txs.export;
+            e.excluded.retain(|id| list.iter().any(|w| &w.id == id));
+            e.wallets = Some(list);
         }
         "txs.export.preview" => {
             let e = &mut app.txs.export;
@@ -734,6 +736,50 @@ mod tests {
         assert_eq!(preview_args(&e), Some(json!({"export": "labels"})));
         e.excluded.insert("w1".into());
         assert_eq!(preview_args(&e), None);
+    }
+}
+
+#[cfg(test)]
+mod reopen_tests {
+    use super::*;
+
+    /// Reopening re-reads the wallet choices: a wallet added since is offered, and an
+    /// exclusion of a wallet that is gone is dropped.
+    #[test]
+    fn reopening_rereads_the_wallet_choices() {
+        let mut app = crate::app::tests::quiet_app();
+        let list = |ids: &[&str]| Reply {
+            kind: "ui.wallets.list".into(),
+            data: json!({"wallets": ids.iter().map(|i| json!({"id": i})).collect::<Vec<_>>()}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        open(&mut app);
+        on_reply(&mut app, "txs.export.wallets", &list(&["a", "b"]));
+        app.txs.export.excluded.insert("b".into());
+        close(&mut app);
+        let reads = |a: &App| -> usize {
+            a.pending
+                .values()
+                .filter(|(tag, _, _)| *tag == "txs.export.wallets")
+                .count()
+        };
+        let before = reads(&app);
+        open(&mut app);
+        assert_eq!(reads(&app), before + 1, "the choices are read again");
+        on_reply(&mut app, "txs.export.wallets", &list(&["a", "c"]));
+        let ids: Vec<_> = app
+            .txs
+            .export
+            .wallets
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|w| w.id.as_str())
+            .collect();
+        assert_eq!(ids, ["a", "c"]);
+        assert!(app.txs.export.excluded.is_empty());
     }
 }
 
