@@ -102,7 +102,11 @@ fn count(outcome: &Value, key: &str) -> i64 {
 }
 
 /// `enrich_wallet_from_bullbitcoin_wallet_exports`: match each route's rows
-/// against the wallet's transactions, never inserting. `None` without routes.
+/// against the wallet's transactions by txid, never inserting. The wallet's
+/// observed amounts and fees win; a row adds only its metadata. Lightning
+/// rows match the observed lockup/claim that proves this wallet paid or
+/// received them. Undated pending and fee-less self rows are counted under
+/// `bullbitcoin_wallet_skipped`. `None` without routes.
 pub(crate) fn bull_enrichment(
     conn: &Connection,
     profile_id: &str,
@@ -118,7 +122,9 @@ pub(crate) fn bull_enrichment(
     for (file, network) in routes {
         let all = file_import::bull_wallet_rows(&file)?;
         let total = all.len() as i64;
-        let rows = file_import::bull_wallet_filter(all, &network);
+        let routed = file_import::bull_wallet_enrichment(all, &network)?;
+        let skipped = routed.skipped_py();
+        let rows = routed.rows;
         let outcome = file_import::import_records(
             conn,
             &RecordImport {
@@ -147,7 +153,7 @@ pub(crate) fn bull_enrichment(
         for (slot, value) in totals[1..].iter_mut().zip(result) {
             *slot += value;
         }
-        results.push(dict([
+        let mut route = dict([
             ("source_file", s(file)),
             ("network", s(network)),
             ("rows", Value::Int(result[0].into())),
@@ -161,7 +167,11 @@ pub(crate) fn bull_enrichment(
                     get(&outcome, "journal_invalidated").is_some_and(kassiber_envelope::truthy),
                 ),
             ),
-        ]));
+        ]);
+        if let Some(skipped) = skipped {
+            set(&mut route, "bullbitcoin_wallet_skipped", skipped);
+        }
+        results.push(route);
     }
     let mut pairs: Vec<(&str, Value)> = [
         "routes",

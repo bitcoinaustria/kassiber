@@ -8720,7 +8720,7 @@
     "expect_failing": [
       "python_bull_wallet_import_vectors"
     ],
-    "rule": "Self transfers are skipped, not refused."
+    "rule": "A self-transfer books its miner fee as a fee-only outflow, not a refusal."
   },
   {
     "id": "W-bullw-inbound",
@@ -8785,12 +8785,13 @@
   {
     "id": "W-bullw-hash-fallback",
     "file": "crates/wallets/src/file_import/bull_wallet.rs",
-    "find": ".or_else(|| hex64(Some(external_id.clone())).map(|(text, _)| text))",
-    "replace": ".or_else(|| None)",
+    "find": "hex64(columns.get(&[\"preimage\"])).map(|preimage| {",
+    "replace": "hex64(columns.get(&[\"preimage\"])).or_else(|| hex64(Some(external_id.clone()))).map(|preimage| {",
     "expect_failing": [
-      "python_bull_wallet_import_vectors"
+      "python_bull_wallet_import_vectors",
+      "bull_wallet_lightning_hash_comes_only_from_a_preimage"
     ],
-    "rule": "A hex external id is the payment hash when no preimage is usable."
+    "rule": "Only a valid preimage proves a Lightning payment hash; the on-chain txid never does."
   },
   {
     "id": "W-bullw-preimage-redaction",
@@ -8835,12 +8836,147 @@
   {
     "id": "W-bullw-filter",
     "file": "crates/wallets/src/file_import/bull_wallet.rs",
-    "find": ".filter(|row| row.data[\"_bullbitcoin_wallet_network\"].as_str() == Some(network))",
-    "replace": ".filter(|row| row.data[\"_bullbitcoin_wallet_network\"].as_str() != Some(network))",
+    "find": "let relevant = network.is_none_or(|n| n == own) || (lightning && on_chain_wallet);",
+    "replace": "let relevant = true;",
     "expect_failing": [
-      "python_bull_wallet_import_vectors"
+      "bull_wallet_undated_pending_rows_are_skipped_and_reported"
     ],
-    "rule": "A network wallet imports only its own rows."
+    "rule": "A network wallet imports and counts only its own rows."
+  },
+  {
+    "id": "W-bullw-negative",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "    if value.is_negative() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "python_bull_wallet_import_vectors",
+      "bull_wallet_generations_parse_and_formula_guard_is_stripped_exactly"
+    ],
+    "rule": "A negative sat count fails closed instead of becoming its absolute value."
+  },
+  {
+    "id": "W-bullw-formula-guard",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "if rest.starts_with(['=', '+', '-', '@', '\\t', '\\r']) {",
+    "replace": "if !rest.is_empty() {",
+    "expect_failing": [
+      "bull_wallet_generations_parse_and_formula_guard_is_stripped_exactly"
+    ],
+    "rule": "Only the v6.13+ formula guard is stripped, and it marks the generation."
+  },
+  {
+    "id": "W-bullw-aborted-generation",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "generation_c |= folded(Columns::new(row).get(&[\"status\"])) == \"aborted\";",
+    "replace": "generation_c |= false;",
+    "expect_failing": [
+      "bull_wallet_generations_parse_and_formula_guard_is_stripped_exactly",
+      "bull_wallet_chain_swap_fee_upgrades_only_from_a_provable_v6_13_export"
+    ],
+    "rule": "The v6.13+ aborted status proves the export generation."
+  },
+  {
+    "id": "W-bullw-undated-pending",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "if date.is_none() && status == \"pending\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bull_wallet_undated_pending_rows_are_skipped_and_reported"
+    ],
+    "rule": "An undated pending row is skipped and counted, not a whole-file refusal."
+  },
+  {
+    "id": "W-bullw-payjoin-review",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "\"review\": if payjoin { Some(REVIEW_PAYJOIN) } else { None },",
+    "replace": "\"review\": None::<&str>,",
+    "expect_failing": [
+      "bull_wallet_payjoin_without_observation_is_held_for_review_and_keeps_the_net"
+    ],
+    "rule": "An unobserved payjoin amount is held out of accounting for review."
+  },
+  {
+    "id": "W-bullw-lightning-proof",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "if !holders(conn, profile, &txid)?.iter().any(|w| w == wallet) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bull_wallet_lightning_rows_book_only_where_their_network_is_proven"
+    ],
+    "rule": "A Bitcoin or Liquid wallet takes a Lightning row only when it holds the txid."
+  },
+  {
+    "id": "W-bullw-lightning-elsewhere",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "if !holders.is_empty() && !holders.iter().any(|w| w == wallet) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bull_wallet_lightning_rows_book_only_where_their_network_is_proven"
+    ],
+    "rule": "A Lightning row another wallet already holds is not booked twice."
+  },
+  {
+    "id": "W-bullw-txid-match",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "                r.bull.is_some(),\n",
+    "replace": "                false,\n",
+    "expect_failing": [
+      "bull_wallet_observed_transaction_keeps_its_amounts",
+      "bull_wallet_payjoin_without_observation_is_held_for_review_and_keeps_the_net"
+    ],
+    "rule": "A Bull row matches its txid whatever its amounts; it never duplicates the transaction."
+  },
+  {
+    "id": "W-bullw-match-only",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "} else if match_existing_only || r.bull.as_ref().is_some_and(|b| b.match_only) {",
+    "replace": "} else if match_existing_only {",
+    "expect_failing": [
+      "bull_wallet_lightning_row_never_inserts_beside_a_differently_shaped_holding"
+    ],
+    "rule": "A routed Lightning row only ever matches."
+  },
+  {
+    "id": "W-bullw-review-excluded",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "                fields.insert(\"excluded\".into(), Sql::Integer(1));",
+    "replace": "                fields.insert(\"excluded\".into(), Sql::Integer(0));",
+    "expect_failing": [
+      "bull_wallet_payjoin_without_observation_is_held_for_review_and_keeps_the_net",
+      "bull_wallet_lightning_rows_book_only_where_their_network_is_proven"
+    ],
+    "rule": "A row held for review is excluded from accounting."
+  },
+  {
+    "id": "W-bullw-payjoin-net",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if bull.kind.starts_with(\"payjoin_\") && incoming(\"amount\") < stored(\"amount\") {",
+    "replace": "if bull.kind.starts_with(\"payjoin_\") && incoming(\"amount\") != stored(\"amount\") {",
+    "expect_failing": [
+      "bull_wallet_payjoin_without_observation_is_held_for_review_and_keeps_the_net"
+    ],
+    "rule": "A re-imported payjoin keeps the smaller wallet-net amount."
+  },
+  {
+    "id": "W-bullw-chain-swap-generation",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "        && bull.generation_c\n",
+    "replace": "        && true\n",
+    "expect_failing": [
+      "bull_wallet_chain_swap_fee_upgrades_only_from_a_provable_v6_13_export"
+    ],
+    "rule": "Only a provable v6.13+ export replaces a chain swap's outgoing fee."
+  },
+  {
+    "id": "W-bullw-fingerprint",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "        && same_quantities\n",
+    "replace": "        && true\n",
+    "expect_failing": [
+      "bull_wallet_observed_transaction_keeps_its_amounts",
+      "bull_wallet_payjoin_without_observation_is_held_for_review_and_keeps_the_net"
+    ],
+    "rule": "A txid match keeps the fingerprint hashing the stored quantities."
   },
   {
     "id": "W-sync-bull-dedupe",
@@ -8905,8 +9041,8 @@
   {
     "id": "W-records-match-existing-only",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "        } else if match_existing_only {\n            skipped += 1;",
-    "replace": "        } else if false {\n            skipped += 1;",
+    "find": "        } else if match_existing_only || r.bull.as_ref().is_some_and(|b| b.match_only) {\n            skipped += 1;",
+    "replace": "        } else if r.bull.as_ref().is_some_and(|b| b.match_only) {\n            skipped += 1;",
     "expect_failing": [
       "record_imports_match_existing_only_and_label_their_source"
     ],

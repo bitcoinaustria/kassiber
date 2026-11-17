@@ -466,6 +466,30 @@ fn python_river_import_vectors() {
 fn assert_import_vectors(cases: &Json) {
     for case in cases.as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
+        let outcome = import_vector_outcome(case);
+        match outcome.get("records") {
+            Some(records) => assert_eq!(
+                kassiber_pytext::loads(&records.to_string()).unwrap(),
+                kassiber_pytext::loads(&case["records"].to_string()).unwrap(),
+                "{name}"
+            ),
+            None => {
+                if let Some(expected) = case["error"].get("details_json") {
+                    assert_eq!(outcome["error"]["details_json"], *expected, "{name}");
+                }
+                for key in ["code", "message", "hint"] {
+                    assert_eq!(outcome["error"][key], case["error"][key], "{name}: {key}");
+                }
+            }
+        }
+    }
+}
+
+/// What the current code makes of one import vector: `{"records": [...]}`,
+/// or `{"error": {...}}` with `details_json` when the vector records one.
+fn import_vector_outcome(case: &Json) -> Json {
+    {
+        let name = case["name"].as_str().unwrap();
         let bytes = case.get("bytes").map(|v| {
             v.as_array()
                 .unwrap()
@@ -551,28 +575,143 @@ fn assert_import_vectors(cases: &Json) {
         });
         std::fs::remove_file(&path).unwrap();
         match result {
-            Ok(records) => assert_eq!(
-                kassiber_pytext::loads(&json!(records).to_string()).unwrap(),
-                kassiber_pytext::loads(&case["records"].to_string()).unwrap(),
-                "{name}"
-            ),
+            Ok(records) => json!({ "records": records }),
             Err(error) => {
-                if let Some(expected) = case["error"].get("details_json") {
+                let mut out = json!({"code":error.code,"message":error.message.replace(path.to_str().unwrap(),"{file}"),"hint":error.hint});
+                if case["error"].get("details_json").is_some() {
                     let details = error
                         .details
                         .as_ref()
                         .map(|v| kassiber_pyjson::dumps(v, &Default::default()).unwrap())
                         .unwrap_or_else(|| "null".into());
-                    assert_eq!(json!(details), *expected, "{name}");
+                    out["details_json"] = json!(details);
                 }
-                assert_eq!(
-                    json!({"code":error.code,"message":error.message.replace(path.to_str().unwrap(),"{file}"),"hint":error.hint}),
-                    json!({"code":case["error"]["code"],"message":case["error"]["message"],"hint":case["error"]["hint"]}),
-                    "{name}"
-                );
+                json!({ "error": out })
             }
         }
     }
+}
+
+/// `KASSIBER_GOLDEN_WRITE=1` (refused under `CI`): rewrite a frozen import
+/// vector file from the current code. Unchanged cases keep their bytes; a
+/// changed record keeps the key order of the file's existing records.
+fn write_import_vectors(
+    path: &str,
+    cases: &Json,
+    networks: impl Fn(&Json) -> Option<Json>,
+) -> bool {
+    if std::env::var_os("KASSIBER_GOLDEN_WRITE").is_none() {
+        return false;
+    }
+    assert!(
+        std::env::var_os("CI").is_none(),
+        "golden writes are refused under CI"
+    );
+    use kassiber_pyjson::{Key, Value as V};
+    let text = std::fs::read_to_string(path).unwrap();
+    let mut document = kassiber_pytext::loads(&text).unwrap();
+    let py = |value: &Json| kassiber_pytext::loads(&value.to_string()).unwrap();
+    let field_order: Vec<Key> = match &document {
+        V::List(items) => items
+            .iter()
+            .find_map(|case| match kassiber_envelope::get(case, "records") {
+                Some(V::List(records)) => {
+                    records
+                        .first()
+                        .and_then(|r| match kassiber_envelope::get(r, "fields") {
+                            Some(V::Dict(pairs)) => {
+                                Some(pairs.iter().map(|(k, _)| k.clone()).collect())
+                            }
+                            _ => None,
+                        })
+                }
+                _ => None,
+            })
+            .unwrap_or_default(),
+        _ => unreachable!(),
+    };
+    let ordered = |value: V| -> V {
+        let V::List(records) = value else {
+            return value;
+        };
+        V::List(
+            records
+                .into_iter()
+                .map(|record| {
+                    let V::Dict(pairs) = record else {
+                        return record;
+                    };
+                    V::Dict(
+                        pairs
+                            .into_iter()
+                            .map(|(key, value)| match (key == Key::from("fields"), value) {
+                                (true, V::Dict(mut fields)) => {
+                                    fields.sort_by_key(|(k, _)| {
+                                        field_order
+                                            .iter()
+                                            .position(|o| o == k)
+                                            .unwrap_or(usize::MAX)
+                                    });
+                                    (key, V::Dict(fields))
+                                }
+                                (_, value) => (key, value),
+                            })
+                            .collect(),
+                    )
+                })
+                .collect(),
+        )
+    };
+    let V::List(items) = &mut document else {
+        unreachable!()
+    };
+    for (item, case) in items.iter_mut().zip(cases.as_array().unwrap()) {
+        let outcome = import_vector_outcome(case);
+        let V::Dict(pairs) = item else { unreachable!() };
+        let same = |key: &str| {
+            outcome.get(key).is_some_and(|value| {
+                pairs
+                    .iter()
+                    .any(|(k, old)| *k == Key::from(key) && *old == py(value))
+            })
+        };
+        let networks = networks(case);
+        let networks_same = networks.as_ref().is_none_or(|n| {
+            pairs
+                .iter()
+                .any(|(k, old)| *k == Key::from("networks") && *old == py(n))
+        });
+        if (same("records") || same("error")) && networks_same {
+            continue;
+        }
+        pairs.retain(|(k, _)| {
+            ![
+                Key::from("records"),
+                Key::from("error"),
+                Key::from("networks"),
+            ]
+            .contains(k)
+        });
+        match outcome.get("records") {
+            Some(records) => {
+                pairs.push((Key::from("records"), ordered(py(records))));
+                if let Some(networks) = networks {
+                    pairs.push((Key::from("networks"), py(&networks)));
+                }
+            }
+            None => pairs.push((Key::from("error"), py(&outcome["error"]))),
+        }
+    }
+    let options = kassiber_pyjson::Options {
+        indent: Some(kassiber_pyjson::Indent::Spaces(2)),
+        ..Default::default()
+    };
+    std::fs::write(
+        path,
+        kassiber_pyjson::dumps(&document, &options).unwrap() + "\n",
+    )
+    .unwrap();
+    true
 }
 
 fn parsed_rows(text: &str) -> Result<Vec<Json>, AppError> {
@@ -917,6 +1056,24 @@ fn python_bull_wallet_import_vectors() {
         "../../tests/vectors/python_bull_wallet_imports.json"
     ))
     .unwrap();
+    let networks = |case: &Json| {
+        let text = case["text"].as_str()?;
+        let rows = bull_wallet::parse(csv::rows(text).ok()?).ok()?;
+        Some(json!(rows
+            .iter()
+            .map(|row| row.data["_bullbitcoin_wallet_network"].clone())
+            .collect::<Vec<_>>()))
+    };
+    if write_import_vectors(
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/vectors/python_bull_wallet_imports.json"
+        ),
+        &cases,
+        networks,
+    ) {
+        return;
+    }
     assert_import_vectors(&cases);
     // The wallet's network filter reads each row's normalized network, and
     // enrichment matches descriptor rows whatever fee Bull reports.
@@ -4450,4 +4607,426 @@ fn record_imports_match_existing_only_and_label_their_source() {
     )
     .unwrap_err();
     assert_eq!(error.code, "not_found");
+}
+
+// Bull Bitcoin wallet-history export (bullbitcoin_wallet_csv): formatter
+// generations A (v6.11), B (v6.12) and C (v6.13+) share one header.
+const BULL_HEADER: &str = "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\n";
+
+fn bull_txid(digit: char) -> String {
+    std::iter::repeat_n(digit, 64).collect()
+}
+
+fn bull_csv(rows: &[String]) -> String {
+    let mut text = BULL_HEADER.to_owned();
+    for row in rows {
+        text.push_str(row);
+        text.push('\n');
+    }
+    text
+}
+
+fn bull_received(digit: char) -> String {
+    format!(
+        "2026-06-01T09:15:42Z,onchain,incoming,250000,0.00250000,0,confirmed,{},bitcoin,bc1qexample,,,,,,,",
+        bull_txid(digit)
+    )
+}
+
+fn bull_chain_swap_out(fee: u32) -> String {
+    let send = bull_txid('4');
+    format!("2026-06-03T10:00:00Z,chain_swap,outgoing,500000,0.00500000,{fee},completed,{send},bitcoin,lq1qexample,swap4,,3500,bitcoin,liquid,{send},{}", bull_txid('5'))
+}
+
+fn bull_payjoin_send(amount: u32) -> String {
+    format!(
+        "2026-06-05T12:00:00Z,payjoin_send,outgoing,{amount},0.00{amount},2381,completed,{},bitcoin,bc1qmerchant,,,,,,,",
+        bull_txid('6')
+    )
+}
+
+fn bull_import(conn: &Connection, rows: &[String]) -> Result<Py, AppError> {
+    import_kind(conn, &bull_csv(rows), Format::BullWallet)
+}
+
+fn bull_network(conn: &Connection, network: &str) {
+    conn.execute(
+        "UPDATE wallets SET config_json=? WHERE id='wallet'",
+        [format!(r#"{{"bullbitcoin_wallet_network":"{network}"}}"#)],
+    )
+    .unwrap();
+}
+
+fn bull_parsed(rows: &[String]) -> Result<Vec<Record>, AppError> {
+    bull_wallet::parse(csv::rows(&bull_csv(rows))?)?
+        .iter()
+        .map(normalize)
+        .collect()
+}
+
+#[test]
+fn bull_wallet_generations_parse_and_formula_guard_is_stripped_exactly() {
+    // Generation A and B rows parse alike; B's `refunded` rows are skipped.
+    let a = bull_parsed(&[bull_received('1'), bull_chain_swap_out(2100)]).unwrap();
+    assert_eq!(a.len(), 2);
+    assert_eq!(string(&a[0].fields, "external_id"), bull_txid('1'));
+    assert_eq!(a[0].fields["amount"], Sql::Integer(250_000_000));
+    assert_eq!(a[1].fields["fee"], Sql::Integer(2_100_000));
+    assert!(!a[1].bull.as_ref().unwrap().generation_c);
+    assert!(!string(&a[0].fields, "raw_json").contains("export_generation"));
+    let refunded = bull_chain_swap_out(2100).replace("completed", "refunded");
+    assert_eq!(bull_parsed(&[refunded]).unwrap().len(), 0);
+    // Generation C: the `'` formula guard goes, nothing else does.
+    let guarded = bull_received('1').replace("bc1qexample", "'=HYPERLINK(1)");
+    let c = bull_parsed(&[guarded, bull_chain_swap_out(1410)]).unwrap();
+    assert!(string(&c[0].fields, "raw_json").contains(r#""address": "=HYPERLINK(1)""#));
+    assert!(string(&c[0].fields, "raw_json").contains(r#""export_generation": "v6.13+""#));
+    assert!(c[1].bull.as_ref().unwrap().generation_c);
+    let quoted = bull_received('1').replace("bc1qexample", "'bc1q");
+    let kept = bull_parsed(&[quoted]).unwrap();
+    assert!(string(&kept[0].fields, "raw_json").contains(r#""address": "'bc1q""#));
+    assert!(!kept[0].bull.as_ref().unwrap().generation_c);
+    // `aborted` (v6.13+ only) also proves the generation.
+    let aborted = bull_payjoin_send(100001).replace("completed", "aborted");
+    let rows = bull_parsed(&[aborted, bull_chain_swap_out(1410)]).unwrap();
+    assert!(rows.iter().all(|r| r.bull.as_ref().unwrap().generation_c));
+    // A guarded negative amount fails closed instead of becoming positive.
+    for amount in ["'-150", "-150", "(150)"] {
+        let row = bull_received('1').replacen("250000", amount, 1);
+        let error = bull_parsed(&[row]).err().unwrap();
+        assert_eq!(error.code, "app_error", "{amount}");
+        assert_eq!(
+            error.message, "Bull Bitcoin wallet CSV has negative amount_sats: -150",
+            "{amount}"
+        );
+    }
+    let row = bull_received('1').replacen(",0,confirmed", ",'-2,confirmed", 1);
+    assert_eq!(
+        bull_parsed(&[row]).err().unwrap().message,
+        "Bull Bitcoin wallet CSV has negative fee_sats: -2"
+    );
+}
+
+#[test]
+fn bull_wallet_lightning_hash_comes_only_from_a_preimage() {
+    let claim = bull_txid('7');
+    let receive = format!("2026-06-02T08:00:00Z,lightning_receive,incoming,80000,0.00080000,150,completed,{claim},lightning,,ln7,,420,,,,{claim}");
+    let preimage = bull_txid('8');
+    let send = format!("2026-06-02T09:00:00Z,lightning_send,outgoing,60000,0.00060000,40,completed,{},lightning,,ln9,{preimage},300,,,{},", bull_txid('9'), bull_txid('9'));
+    let rows = bull_parsed(&[receive, send.clone(), send.replace(&preimage, "zz")]).unwrap();
+    assert_eq!(rows[0].fields["payment_hash"], Sql::Null);
+    assert_eq!(rows[0].fields["payment_hash_source"], Sql::Null);
+    use sha2::Digest;
+    let hash: String = sha2::Sha256::digest([0x88u8; 32])
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    assert_eq!(rows[1].fields["payment_hash"], Sql::Text(hash));
+    assert!(!string(&rows[1].fields, "raw_json").contains(&preimage));
+    assert_eq!(
+        rows[2].fields["payment_hash"],
+        Sql::Null,
+        "the txid is no hash"
+    );
+}
+
+#[test]
+fn bull_wallet_undated_pending_rows_are_skipped_and_reported() {
+    let conn = fixture();
+    bull_network(&conn, "bitcoin");
+    let undated = format!(
+        ",onchain,incoming,30000,0.00030000,0,pending,{},bitcoin,bc1qexample,,,,,,,",
+        bull_txid('2')
+    );
+    let undated_liquid = format!(
+        ",liquid,incoming,30000,0.00030000,0,pending,{},liquid,lq1qexample,,,,,,,",
+        bull_txid('a')
+    );
+    let result = bull_import(
+        &conn,
+        &[bull_received('1'), undated.clone(), undated_liquid],
+    )
+    .unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "bullbitcoin_wallet_skipped"),
+        Some(&kassiber_envelope::dict([("undated_pending", Py::from(1))])),
+        "only this wallet's network counts"
+    );
+    let Some(Py::List(warnings)) = kassiber_envelope::get(&result, "warnings") else {
+        panic!("warnings: {result:?}")
+    };
+    assert!(kassiber_envelope::py_str(&warnings[0]).contains("without a date"));
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+    // An undated row that claims to be confirmed is malformed: it still fails.
+    let error = bull_import(&conn, &[undated.replace("pending", "confirmed")]).unwrap_err();
+    assert_eq!(error.message, "Missing occurred_at/date value");
+}
+
+#[test]
+fn bull_wallet_self_transfer_books_its_miner_fee_once() {
+    let conn = fixture();
+    bull_network(&conn, "bitcoin");
+    let own = format!(
+        "2026-06-04T08:00:00Z,onchain,self,40000,0.00040000,312,confirmed,{},bitcoin,bc1qown,,,,,,,",
+        bull_txid('3')
+    );
+    let free = own
+        .replace(",312,", ",0,")
+        .replace(&bull_txid('3'), &bull_txid('b'));
+    let result = bull_import(&conn, &[own.clone(), free]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "bullbitcoin_wallet_skipped"),
+        Some(&kassiber_envelope::dict([(
+            "self_without_fee",
+            Py::from(1)
+        )]))
+    );
+    let (direction, amount, fee, kind): (String, i64, i64, String) = conn
+        .query_row(
+            "SELECT direction,amount,fee,kind FROM transactions",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        (direction.as_str(), amount, fee, kind.as_str()),
+        ("outbound", 0, 312_000, "fee"),
+        "a fee-only outflow, as an observer books a send-to-self"
+    );
+    let again = bull_import(&conn, &[own]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+}
+
+#[test]
+fn bull_wallet_payjoin_without_observation_is_held_for_review_and_keeps_the_net() {
+    let conn = fixture();
+    bull_network(&conn, "bitcoin");
+    // v6.13+ reports the negotiated 100001 sats; the wallet's debit was
+    // 99705 + 2381 = 102086 sats.
+    let first = bull_import(&conn, &[bull_payjoin_send(100001)]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&first, "bullbitcoin_wallet_review"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(scalar(&conn, "SELECT excluded FROM transactions"), 1);
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE t.code IN ('bullbitcoin-wallet-review','bullbitcoin-wallet-payjoin-amount-unverified')"),
+        2
+    );
+    // A v6.11/v6.12 export of the same txid names the smaller wallet net.
+    let older = bull_import(&conn, &[bull_payjoin_send(99705)]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&older, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+    assert_eq!(scalar(&conn, "SELECT amount FROM transactions"), 99_705_000);
+    let fingerprint: String = conn
+        .query_row("SELECT fingerprint FROM transactions", [], |r| r.get(0))
+        .unwrap();
+    // The nominal amount never replaces the net again, and a user's
+    // inclusion survives a re-import.
+    conn.execute_batch("UPDATE transactions SET excluded=0")
+        .unwrap();
+    bull_import(&conn, &[bull_payjoin_send(100001)]).unwrap();
+    assert_eq!(scalar(&conn, "SELECT amount FROM transactions"), 99_705_000);
+    assert_eq!(scalar(&conn, "SELECT excluded FROM transactions"), 0);
+    let kept: String = conn
+        .query_row("SELECT fingerprint FROM transactions", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(
+        kept, fingerprint,
+        "the fingerprint keeps hashing the stored amount"
+    );
+}
+
+#[test]
+fn bull_wallet_observed_transaction_keeps_its_amounts() {
+    let conn = fixture();
+    bull_network(&conn, "bitcoin");
+    // A row the wallet observed itself (not a Bull row): debit 102086 sats.
+    conn.execute_batch(&format!("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,external_id_kind,fingerprint,occurred_at,direction,asset,amount,fee,kind,raw_json,created_at) VALUES('obs','ws','p','wallet','{}','txid','observed','2026-06-05T12:00:00Z','outbound','BTC',99705000,2381000,'withdrawal','{{\"txid\":\"x\"}}','2026-06-05')", bull_txid('6'))).unwrap();
+    let result = bull_import(&conn, &[bull_payjoin_send(100001)]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(0))
+    );
+    let (amount, fee, excluded, boundary, fingerprint): (i64, i64, i64, String, String) = conn
+        .query_row(
+            "SELECT amount,fee,excluded,privacy_boundary,fingerprint FROM transactions",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        )
+        .unwrap();
+    assert_eq!((amount, fee, excluded), (99_705_000, 2_381_000, 0));
+    assert_eq!(
+        (boundary.as_str(), fingerprint.as_str()),
+        ("payjoin", "observed")
+    );
+}
+
+#[test]
+fn bull_wallet_chain_swap_fee_upgrades_only_from_a_provable_v6_13_export() {
+    let conn = fixture();
+    bull_network(&conn, "bitcoin");
+    bull_import(&conn, &[bull_chain_swap_out(2100)]).unwrap();
+    // Without a generation marker 1410 might be an older provider figure.
+    bull_import(&conn, &[bull_chain_swap_out(1410)]).unwrap();
+    assert_eq!(scalar(&conn, "SELECT fee FROM transactions"), 2_100_000);
+    let marker = format!(
+        "2026-06-06T12:00:00Z,payjoin_receive,incoming,50000,0.00050000,0,aborted,{},bitcoin,bc1qown,,,,,,,",
+        bull_txid('c')
+    );
+    bull_import(&conn, &[bull_chain_swap_out(1410), marker]).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT fee FROM transactions WHERE kind='chain_swap'"
+        ),
+        1_410_000
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE kind='chain_swap'"
+        ),
+        1
+    );
+}
+
+#[test]
+fn bull_wallet_lightning_rows_book_only_where_their_network_is_proven() {
+    let conn = fixture();
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('liquid','ws','p','Liquid','custom','{}','2025-01-01')").unwrap();
+    let claim = bull_txid('7');
+    let receive = format!("2026-06-02T08:00:00Z,lightning_receive,incoming,80000,0.00080000,150,completed,{claim},lightning,,ln7,,420,,,,{claim}");
+    let unseen = receive
+        .replace(&claim, &bull_txid('d'))
+        .replace("ln7", "ln8");
+    // A Liquid CSV wallet cannot prove which wallet paid a Lightning swap.
+    bull_network(&conn, "liquid");
+    let result = bull_import(&conn, &[receive.clone(), unseen.clone()]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "bullbitcoin_wallet_skipped"),
+        Some(&kassiber_envelope::dict([(
+            "lightning_not_observed_in_wallet",
+            Py::from(2)
+        )]))
+    );
+    // Another wallet observed the claim: that wallet holds it.
+    conn.execute_batch(&format!("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,raw_json,created_at) VALUES('claim','ws','p','liquid','{claim}','f','2026-06-02T08:00:00Z','inbound','LBTC',79850000,0,'{{}}','2026-06-02')")).unwrap();
+    bull_network(&conn, "lightning");
+    let held = bull_import(&conn, &[receive.clone(), unseen]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&held, "imported"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&held, "bullbitcoin_wallet_review"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&held, "bullbitcoin_wallet_skipped"),
+        Some(&kassiber_envelope::dict([(
+            "lightning_booked_in_other_wallet",
+            Py::from(1)
+        )]))
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            &format!(
+                "SELECT excluded FROM transactions WHERE wallet_id='wallet' AND external_id='{}'",
+                bull_txid('d')
+            )
+        ),
+        1
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE t.code='bullbitcoin-wallet-lightning-network-unproven'"),
+        1
+    );
+    // Enrichment of the observing Liquid wallet proves the network by txid:
+    // the observed L-BTC claim keeps its amount; the row fills its empty kind.
+    let routed = bull_wallet_enrichment(
+        bull_wallet_rows(&{
+            let file = std::env::temp_dir()
+                .join(format!("kassiber-bull-enrich-{}.csv", std::process::id()));
+            std::fs::write(&file, bull_csv(&[receive])).unwrap();
+            file.to_string_lossy().into_owned()
+        })
+        .unwrap(),
+        "liquid",
+    )
+    .unwrap();
+    std::fs::remove_file(
+        std::env::temp_dir().join(format!("kassiber-bull-enrich-{}.csv", std::process::id())),
+    )
+    .unwrap();
+    let enriched = import_records(
+        &conn,
+        &RecordImport {
+            profile_id: "p",
+            wallet_id: "liquid",
+            label: "bullbitcoin-wallet:liquid",
+            match_existing_only: true,
+            report_updates: true,
+            btcpay: false,
+            settlement_ids: &[],
+        },
+        &routed.rows,
+    )
+    .unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&enriched, "updated"),
+        Some(&Py::from(1))
+    );
+    let (amount, kind): (i64, String) = conn
+        .query_row(
+            "SELECT amount,kind FROM transactions WHERE id='claim'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!((amount, kind.as_str()), (79_850_000, "lightning_receive"));
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE wallet_id='liquid'"
+        ),
+        1
+    );
+}
+
+#[test]
+fn bull_wallet_lightning_row_never_inserts_beside_a_differently_shaped_holding() {
+    let conn = fixture();
+    bull_network(&conn, "liquid");
+    let claim = bull_txid('7');
+    // The wallet holds the txid, but as an outflow: the inbound Lightning
+    // row proves nothing about it and must not become a second row.
+    conn.execute_batch(&format!("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,raw_json,created_at) VALUES('held','ws','p','wallet','{claim}','f','2026-06-02T08:00:00Z','outbound','LBTC',1000,0,'{{}}','2026-06-02')")).unwrap();
+    let receive = format!("2026-06-02T08:00:00Z,lightning_receive,incoming,80000,0.00080000,150,completed,{claim},lightning,,ln7,,420,,,,{claim}");
+    let result = bull_import(&conn, &[receive]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
 }
