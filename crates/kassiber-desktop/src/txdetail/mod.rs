@@ -180,6 +180,9 @@ pub struct Open {
     pub split_policy: String,
     pub split_error: Option<String>,
     pub split_msg: Option<String>,
+    /// The split card's text fields while this panel is parked (out amount, payout,
+    /// counterparty, notes); the shown panel's live in `DetailUi`.
+    pub split_text: [String; 4],
     /// `t` pressed: focus the tag input on the next view.
     pub focus_tag: bool,
     /// Opened by the Review page: its reading and "Save & next" queue (None elsewhere).
@@ -237,6 +240,7 @@ impl Open {
             split_policy: "carrying-value".into(),
             split_error: None,
             split_msg: None,
+            split_text: Default::default(),
             focus_tag: false,
             review: None,
             scope: None,
@@ -437,7 +441,16 @@ fn park_active(app: &mut App) {
         .as_deref()
         .map(|o| view::tab_label(app, o))
         .unwrap_or_default();
-    let cur = app.detail.open.take();
+    let mut cur = app.detail.open.take();
+    if let Some(o) = cur.as_mut() {
+        let d = &app.detail;
+        o.split_text = [
+            d.split_out.text.clone(),
+            d.split_payout.text.clone(),
+            d.split_counterparty.text.clone(),
+            d.split_notes.text.clone(),
+        ];
+    }
     if let Some(slot) = app.detail.tabs.get_mut(app.detail.active_tab) {
         slot.label = label;
         slot.parked = cur;
@@ -455,6 +468,7 @@ pub fn activate(app: &mut App, i: usize) {
     if let Some(d) = app.detail.open.as_ref().map(|o| o.draft.clone()) {
         sync_edits(app, &d);
     }
+    restore_split(app);
 }
 
 /// "Keep open": the preview keeps its own tab.
@@ -498,6 +512,7 @@ fn open_inner(app: &mut App, id: &str, tab: Tab, trail: Vec<String>, follow_from
     let mut o = Open::new(id, tab, trail);
     o.follow_from = follow_from;
     app.detail.open = Some(Box::new(o));
+    restore_split(app);
     // The reply goes to this panel only: a query with `:` resolves to a record that need not
     // carry it, so the record alone cannot tell which panel asked.
     send_for(
@@ -559,6 +574,7 @@ pub fn close(app: &mut App) {
     if let Some(d) = app.detail.open.as_ref().map(|o| o.draft.clone()) {
         sync_edits(app, &d);
     }
+    restore_split(app);
 }
 
 pub fn retry(app: &mut App) {
@@ -650,6 +666,21 @@ pub fn sync_edits(app: &mut App, d: &Draft) {
     ui.price = TextEdit::new(d.manual_price.clone());
     ui.value = TextEdit::new(d.manual_value.clone());
     ui.source = TextEdit::new(d.manual_source.clone());
+}
+
+/// Binds the split card's text fields to the shown panel's (empty for a new panel).
+fn restore_split(app: &mut App) {
+    let [out, payout, counterparty, notes] = app
+        .detail
+        .open
+        .as_mut()
+        .map(|o| std::mem::take(&mut o.split_text))
+        .unwrap_or_default();
+    let ui = &mut app.detail;
+    ui.split_out = TextEdit::new(out);
+    ui.split_payout = TextEdit::new(payout);
+    ui.split_counterparty = TextEdit::new(counterparty);
+    ui.split_notes = TextEdit::new(notes);
 }
 
 /// The side reads of the panel and transaction `to` names.
@@ -1037,5 +1068,34 @@ pub fn pump_until(app: &mut App, done: fn(&App) -> bool) {
     while !done(app) && std::time::Instant::now() < deadline {
         app.pump();
         std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+
+    /// The split card's inputs belong to their panel: another pinned transaction starts empty,
+    /// and switching back brings each panel's own amounts (a save never pairs one panel's
+    /// amounts with another's asset and policy).
+    #[test]
+    fn split_inputs_stay_with_their_panel() {
+        let mut app = crate::app::tests::quiet_app();
+        open(&mut app, "a", "tax");
+        pin(&mut app);
+        app.detail.split_out = TextEdit::new("0.5");
+        app.detail.split_notes = TextEdit::new("A's note");
+        open(&mut app, "b", "tax");
+        assert_eq!(app.detail.active_tab, 1);
+        assert_eq!(app.detail.split_out.text, "");
+        assert_eq!(app.detail.split_notes.text, "");
+        app.detail.split_out = TextEdit::new("0.2");
+        activate(&mut app, 0);
+        assert_eq!(app.detail.split_out.text, "0.5");
+        assert_eq!(app.detail.split_notes.text, "A's note");
+        activate(&mut app, 1);
+        assert_eq!(app.detail.split_out.text, "0.2");
+        close(&mut app);
+        assert_eq!(app.detail.split_out.text, "0.5");
     }
 }

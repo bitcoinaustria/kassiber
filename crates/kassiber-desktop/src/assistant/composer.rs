@@ -862,13 +862,20 @@ fn send_chunk(app: &mut App) {
     args["offset"] = json!(u.offset);
     args["chunk_base64"] = json!(chunk);
     app.assistant.upload_busy = true;
+    let key = u.key.clone();
+    app.assistant.upload_sent.push_back(key);
     app.send("ui.chat.attachments.upload", args, "assistant.upload");
 }
 
 /// The daemon's answer to a chunk: the next chunk, the staged file, or why it failed.
 pub fn on_upload_reply(app: &mut App, r: &crate::app::Reply) {
-    if app.assistant.uploads.is_empty() {
-        app.assistant.upload_busy = false;
+    let sent = app.assistant.upload_sent.pop_front();
+    // A chunk of a file the chat let go of (cleared meanwhile): the queue's first file is
+    // another one, whose own chunk is already out, or the queue is empty.
+    if app.assistant.uploads.first().map(|u| &u.key) != sent.as_ref() {
+        if app.assistant.uploads.is_empty() {
+            app.assistant.upload_busy = false;
+        }
         return;
     }
     let key = app.assistant.uploads[0].key.clone();
@@ -957,6 +964,62 @@ fn base64(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn queue(app: &mut App, key: &str, name: &str) {
+        let book: chat::Book = ("w".into(), "p".into());
+        app.assistant.files.push(ChatFile {
+            key: key.into(),
+            view: AttachmentView {
+                filename: name.into(),
+                kind: None,
+                size_bytes: Some(3),
+            },
+            state: FileState::Uploading,
+            book: Some(book.clone()),
+        });
+        app.assistant.uploads.push(Upload {
+            key: key.into(),
+            bytes: b"abc".to_vec(),
+            offset: 0,
+            upload_id: None,
+            book,
+        });
+        send_chunk(app);
+    }
+
+    fn staged(token: &str) -> crate::app::Reply {
+        crate::app::Reply {
+            kind: "ui.chat.attachments.upload".into(),
+            data: serde_json::json!({"complete": true, "document_token": token}),
+            error: None,
+            error_detail: serde_json::Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Clearing the chat while file A's last chunk is out, then attaching B: A's answer must not
+    /// hand A's staged document to B's card; B's own answer does.
+    #[test]
+    fn an_abandoned_uploads_answer_does_not_land_on_the_next_file() {
+        let mut app = crate::app::tests::quiet_app();
+        app.prefs.ai_features = true;
+        queue(&mut app, "upload-1", "a.csv");
+        chat::start_fresh(&mut app);
+        queue(&mut app, "upload-2", "b.csv");
+        on_upload_reply(&mut app, &staged("doc-a"));
+        let f = &app.assistant.files;
+        assert_eq!(f.len(), 1);
+        assert_eq!(
+            (f[0].key.as_str(), f[0].state),
+            ("upload-2", FileState::Uploading)
+        );
+        on_upload_reply(&mut app, &staged("doc-b"));
+        let f = &app.assistant.files[0];
+        assert_eq!(
+            (f.key.as_str(), f.view.filename.as_str(), f.state),
+            ("doc-b", "b.csv", FileState::Ready)
+        );
+    }
 
     #[test]
     fn base64_matches_rfc4648() {

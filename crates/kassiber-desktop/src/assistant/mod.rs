@@ -173,6 +173,9 @@ pub struct Ui {
     /// A saved chat being reopened: the book and conversation it was asked from.
     pub resume_book: Option<chat::Book>,
     pub resume_generation: u64,
+    /// The conversation generation each saved-chat read in flight was sent with, oldest first:
+    /// only the latest click's answer opens a chat (an earlier one has an older generation).
+    pub resume_asked: std::collections::VecDeque<u64>,
     pub evidence: evidence::State,
     pub checks: checks::State,
     /// The answer being read aloud (its key) and the system voice process.
@@ -217,6 +220,10 @@ pub struct Ui {
     /// Files being handed to the daemon, first one in flight.
     pub uploads: Vec<composer::Upload>,
     pub upload_busy: bool,
+    /// The upload each chunk in flight was sent for (its key), oldest first. Clearing the chat
+    /// empties `uploads` but not this, so an abandoned file's answer is recognized and dropped
+    /// instead of landing on the next file.
+    pub upload_sent: std::collections::VecDeque<String>,
     pub thread: thread::State,
     pub picker: picker::State,
     // ---- Below the page (AssistantLayout) ----
@@ -264,6 +271,7 @@ impl Default for Ui {
             effort_seed_for: None,
             resume_book: None,
             resume_generation: 0,
+            resume_asked: Default::default(),
             evidence: Default::default(),
             checks: Default::default(),
             speaking: None,
@@ -288,6 +296,7 @@ impl Default for Ui {
             next_file: 0,
             uploads: vec![],
             upload_busy: false,
+            upload_sent: Default::default(),
             thread: Default::default(),
             picker: Default::default(),
             bar_unfolded: false,
@@ -787,6 +796,10 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             };
         }
         "assistant.session_get" => match &r.error {
+            // An earlier click's answer (another chat was asked for since).
+            _ if app.assistant.resume_asked.pop_front()
+                != Some(app.assistant.resume_generation)
+                || app.assistant.resume_generation != app.assistant.generation => {}
             Some(e) => {
                 app.assistant.resume_error = Some(e.clone());
                 // The submenu opens again to show why.
@@ -854,6 +867,9 @@ pub fn resume(app: &mut App, id: &str) {
     app.assistant.resume_generation = app.assistant.generation;
     let args = json!({"session_id": id, "expected_scope": chat::scope_json(&book)});
     app.assistant.resume_book = Some(book);
+    app.assistant
+        .resume_asked
+        .push_back(app.assistant.generation);
     app.send("ui.chat.sessions.get", args, "assistant.session_get");
 }
 
@@ -1629,5 +1645,44 @@ mod tests {
             Some(Front::Detail)
         );
         assert_eq!(pick_front(&[], Front::Assistant), None);
+    }
+}
+
+#[cfg(test)]
+mod resume_tests {
+    use super::*;
+
+    fn saved(id: &str) -> Reply {
+        Reply {
+            kind: "ui.chat.sessions.get".into(),
+            data: json!({"id": id, "messages": []}),
+            error: None,
+            error_detail: serde_json::Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Saved chat A, then B before A's read returns: A's answer is dropped and leaves B's
+    /// pending reopen alone; B's answer is the one that opens.
+    #[test]
+    fn only_the_latest_saved_chat_click_opens() {
+        let mut app = crate::app::tests::quiet_app();
+        let book: chat::Book = ("w".into(), "p".into());
+        for _ in ["a", "b"] {
+            let a = &mut app.assistant;
+            a.generation += 1;
+            a.resume_generation = a.generation;
+            a.resume_asked.push_back(a.generation);
+            a.resume_book = Some(book.clone());
+        }
+        on_reply(&mut app, "assistant.session_get", &saved("a"));
+        assert_eq!(
+            app.assistant.resume_book,
+            Some(book),
+            "B's reopen still waits"
+        );
+        on_reply(&mut app, "assistant.session_get", &saved("b"));
+        assert_eq!(app.assistant.resume_book, None, "B's answer took it");
+        assert!(app.assistant.resume_asked.is_empty());
     }
 }

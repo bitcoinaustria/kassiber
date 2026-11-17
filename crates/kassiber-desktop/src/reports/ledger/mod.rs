@@ -39,6 +39,9 @@ pub struct Ui {
     /// A sync or journal run was in flight at the last poll; its end re-reads (the web
     /// invalidates every daemon query when a mutation settles).
     busy: bool,
+    /// `App::book_generation` at the last poll: a mutation's refresh cycle (an exclusion, a
+    /// custody or classification change) re-reads too, not only a sync or journal run.
+    generation: u64,
 }
 
 pub fn owns(path: &str) -> bool {
@@ -80,7 +83,8 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     changed
 }
 
-/// Drops every cached read when the book changes or a sync / journal run finishes.
+/// Drops every cached read when the book changes, a sync / journal run finishes or the book's
+/// reads are refreshed.
 fn invalidate_on_change(app: &mut App) -> bool {
     let book = app
         .read("ui.profiles.snapshot")
@@ -88,6 +92,7 @@ fn invalidate_on_change(app: &mut App) -> bool {
         .and_then(Value::as_str)
         .map(str::to_owned);
     let busy = app.busy.processing || app.busy.syncing;
+    let generation = app.book_generation;
     let ui = &mut app.reports.ledger;
     let mut drop = false;
     if book.is_some() && ui.book.is_some() && book != ui.book {
@@ -103,6 +108,10 @@ fn invalidate_on_change(app: &mut App) -> bool {
         drop = true;
     }
     ui.busy = busy;
+    if ui.generation != generation {
+        drop = true;
+        ui.generation = generation;
+    }
     if drop {
         ui.journals.invalidate();
         ui.exit.invalidate();
@@ -281,3 +290,17 @@ pub const SCENES: &[super::Scene] = &[
         open(a, "/exit-tax");
     }),
 ];
+
+#[cfg(test)]
+mod refresh_tests {
+    /// An exclusion or custody change refreshes the book's reads without a sync or journal run;
+    /// Journals must read again rather than keep calling the old figures current.
+    #[test]
+    fn a_book_refresh_marks_cached_ledger_reads_stale() {
+        let mut app = crate::app::tests::quiet_app();
+        assert!(!super::invalidate_on_change(&mut app));
+        app.book_generation += 1;
+        assert!(super::invalidate_on_change(&mut app));
+        assert!(!super::invalidate_on_change(&mut app), "once per refresh");
+    }
+}
