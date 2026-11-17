@@ -1501,8 +1501,22 @@ Behavior:
 - pending rows the app exported without a date are skipped and counted
   (`undated_pending`); they import from a later export once confirmed. An
   undated row with any other status still refuses the file
-- amounts and fees are exact non-negative integer sats; a negative count
-  refuses the file rather than being read as its absolute value
+- amounts and fees are exact integer sats. Bull never exports a negative
+  count, so a row stating one (`-150`, the v6.13+ guarded `'-150`, or
+  accounting-style `(150)`; `-0` is zero) is held for review rather than
+  refusing the file or being booked as its absolute value: the rest of the
+  file imports, and the row is stored **excluded from accounting** with its
+  magnitude and stated `direction`, tagged `bullbitcoin-wallet-review` and
+  `bullbitcoin-wallet-negative-amount`. Its raw metadata keeps the original
+  cells and lists the negative ones under `negative_columns`. Such a row never
+  changes a transaction the book already holds, not even its metadata:
+  wherever it could only match (enrichment routes, a Lightning row on a
+  Bitcoin or Liquid wallet, or a txid the wallet already holds) it is left
+  out and counted under `negative_amount`. A Lightning row with a negative
+  count is held under this tag rather than
+  `bullbitcoin-wallet-lightning-network-unproven`. Other refusals (header,
+  unsupported network, book network, non-numeric or non-integer counts)
+  still refuse the file
 - chain-swap metadata such as `swap_id`, `send_network`, `receive_network`,
   `send_txid`, and `receive_txid` is preserved in redacted raw metadata and
   feeds `provider_swap_id` review for cooperative Taproot/key-path flows where
@@ -1522,14 +1536,17 @@ Behavior:
   script-path HTLC refund evidence) or provider/SDK metadata that carries both
   the lockup and refund legs before pairing it as `swap-refund`
 - the import result reports skipped rows as `bullbitcoin_wallet_skipped`
-  (`{reason: count}`), rows held for review as `bullbitcoin_wallet_review`, and
-  plain-English `warnings`; wallet refreshes report enrichment skips per route
+  (`{reason: count}`), rows held for review as `bullbitcoin_wallet_review`
+  (negative-count rows included), and plain-English `warnings`; wallet
+  refreshes report enrichment skips per route
 
 Resolve a held row by attaching the export to the observing descriptor/xpub
 wallet (`attach-bullbitcoin-wallet`, below), whose sync proves the network and
 the amounts, or — after checking the amount against the wallet — by including
 it with `kassiber metadata include`. Leave the other copy excluded if the same
-transaction is also booked elsewhere.
+transaction is also booked elsewhere. A negative-count row has no observation
+that settles it: include it only after checking that its stored magnitude and
+direction are what the transaction really moved; otherwise leave it excluded.
 
 The export omits by design (upstream, not fixable from the CSV) wallet
 transactions that the app matched to a Bull exchange order, such as buy-order

@@ -8735,8 +8735,8 @@
   {
     "id": "W-bullw-fee-default",
     "file": "crates/wallets/src/file_import/bull_wallet.rs",
-    "find": "None if default => return Ok(\"0\".into()),",
-    "replace": "None if default => return Ok(\"1\".into()),",
+    "find": "None if default => return Ok((\"0\".into(), false)),",
+    "replace": "None if default => return Ok((\"1\".into(), false)),",
     "expect_failing": [
       "python_bull_wallet_import_vectors"
     ],
@@ -8846,13 +8846,86 @@
   {
     "id": "W-bullw-negative",
     "file": "crates/wallets/src/file_import/bull_wallet.rs",
-    "find": "    if value.is_negative() {",
-    "replace": "    if false {",
+    "find": "        value.is_negative(),\n",
+    "replace": "        false,\n",
+    "expect_failing": [
+      "python_bull_wallet_import_vectors",
+      "bull_wallet_generations_parse_and_formula_guard_is_stripped_exactly",
+      "bull_wallet_negative_rows_are_held_for_review_and_never_change_a_holding"
+    ],
+    "rule": "A negative sat count is held for review instead of booking as its absolute value."
+  },
+  {
+    "id": "W-bullw-negative-review",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "\"review\": if !negative.is_empty() {",
+    "replace": "\"review\": if false {",
+    "expect_failing": [
+      "bull_wallet_generations_parse_and_formula_guard_is_stripped_exactly",
+      "bull_wallet_negative_rows_are_held_for_review_and_never_change_a_holding"
+    ],
+    "rule": "A row stating a negative count is held out of accounting for review."
+  },
+  {
+    "id": "W-bullw-negative-raw",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "        if !negative.is_empty() {\n            fields.insert(",
+    "replace": "        if false {\n            fields.insert(",
     "expect_failing": [
       "python_bull_wallet_import_vectors",
       "bull_wallet_generations_parse_and_formula_guard_is_stripped_exactly"
     ],
-    "rule": "A negative sat count fails closed instead of becoming its absolute value."
+    "rule": "A held negative row's raw metadata says which counts were negative."
+  },
+  {
+    "id": "W-bullw-negative-self",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "if fee == \"0\" && negative.is_empty() {",
+    "replace": "if fee == \"0\" {",
+    "expect_failing": [
+      "bull_wallet_negative_rows_are_held_for_review_and_never_change_a_holding"
+    ],
+    "rule": "A self-transfer stating a negative count is held, not skipped as fee-less."
+  },
+  {
+    "id": "W-bullw-negative-route",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "if negative && (conn.is_none() || lightning && on_chain_wallet) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bull_wallet_negative_rows_never_enrich_or_prove_lightning"
+    ],
+    "rule": "A negative row is skipped and counted wherever it could only match a holding."
+  },
+  {
+    "id": "W-bullw-negative-lightning-reason",
+    "file": "crates/wallets/src/file_import/bull_wallet.rs",
+    "find": "        if !negative {\n            mark(&mut row, \"review\", json!(REVIEW_LIGHTNING));\n        }",
+    "replace": "        mark(&mut row, \"review\", json!(REVIEW_LIGHTNING));",
+    "expect_failing": [
+      "bull_wallet_negative_rows_never_enrich_or_prove_lightning"
+    ],
+    "rule": "A held Lightning row stating a negative count keeps its negative-amount review."
+  },
+  {
+    "id": "W-bullw-negative-merge",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "let changes = if r.bull.as_ref().is_some_and(Bull::negative) {",
+    "replace": "let changes = if false {",
+    "expect_failing": [
+      "bull_wallet_negative_rows_are_held_for_review_and_never_change_a_holding"
+    ],
+    "rule": "A negative Bull row never changes a transaction the book already holds."
+  },
+  {
+    "id": "W-bullw-negative-merge-count",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "            if negative_rows > held_negative {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "bull_wallet_negative_rows_are_held_for_review_and_never_change_a_holding"
+    ],
+    "rule": "A negative row left out against a holding is counted in the import result."
   },
   {
     "id": "W-bullw-formula-guard",
@@ -8888,8 +8961,8 @@
   {
     "id": "W-bullw-payjoin-review",
     "file": "crates/wallets/src/file_import/bull_wallet.rs",
-    "find": "\"review\": if payjoin { Some(REVIEW_PAYJOIN) } else { None },",
-    "replace": "\"review\": None::<&str>,",
+    "find": "            } else if payjoin {\n                Some(REVIEW_PAYJOIN)",
+    "replace": "            } else if false {\n                Some(REVIEW_PAYJOIN)",
     "expect_failing": [
       "bull_wallet_payjoin_without_observation_is_held_for_review_and_keeps_the_net"
     ],
