@@ -263,7 +263,7 @@ describe("app update checks", () => {
     });
 
     expect(showDialog).toHaveBeenCalledWith(
-      expect.stringContaining("could not check GitHub"),
+      expect.stringContaining("could not reach GitHub"),
       expect.objectContaining({ kind: "error" }),
     );
   });
@@ -282,7 +282,7 @@ describe("app update checks", () => {
 
     expect(check).not.toHaveBeenCalled();
     expect(showDialog).toHaveBeenCalledWith(
-      expect.stringContaining("Update checks are disabled"),
+      expect.stringContaining("Update checks are off"),
       expect.objectContaining({ kind: "info" }),
     );
   });

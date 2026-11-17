@@ -106,7 +106,7 @@
   },
   "unavailable": {
     "title": "Privacy Mirror unavailable",
-    "body": "The daemon did not return the current local exposure report. Refresh after the daemon has restarted."
+    "body": "Could not load the exposure report. Try refreshing."
   },
   "assistantPrompt": "Read ui_reports_privacy_mirror for this book. Explain its most useful public-observer findings, separate my activity from surrounding context, state missing evidence and conditional assumptions, and suggest concrete next steps. Use local evidence only; ask before any network acquisition.",
   "statement": {

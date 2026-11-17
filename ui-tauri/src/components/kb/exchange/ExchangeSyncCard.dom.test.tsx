@@ -209,7 +209,7 @@ describe("ExchangeSyncCard", () => {
     };
     render(<Card />);
     expect((screen.getByRole("button", { name: "Sync now" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole("alert").textContent).toContain("need a newer Kassiber backend");
+    expect(screen.getByRole("alert").textContent).toContain("need a newer Kassiber version");
   });
 
   it("speaks Austrian German", async () => {

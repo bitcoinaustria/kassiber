@@ -1030,7 +1030,7 @@ describe("Transfers overview", () => {
     mount();
     const list = await screen.findByTestId("transfers-linked-list");
     await waitFor(() => expect(within(list).getByText("Different asset")).toBeTruthy());
-    expect(within(list).getByText("By you")).toBeTruthy();
+    expect(within(list).getByText("Manually")).toBeTruthy();
   });
 
   it("writes a send of another asset in that asset on every list", async () => {
@@ -1145,7 +1145,7 @@ describe("Transfers overview", () => {
     // On the Linked list its row is marked, and its details offer the same.
     await openTab(/^Linked/);
     const row = await screen.findByRole("row", { name: /Show the transfer Treasury to Spending/ });
-    // Said in words where the others say "By you", with the amount behind the hint.
+    // Said in words where the others say "Manually", with the amount behind the hint.
     expect(within(row).getByTestId("transfers-part-linked").textContent).toBe("Part linked");
     expect(within(row).getByRole("button", { name: /^₿0\.01700000 of the send is still unlinked\. You linked/ })).toBeTruthy();
     fireEvent.click(row);

@@ -1,10 +1,10 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
-import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
-import coreLightningIcon from "@/assets/integrations/core-lightning.svg";
-import lightningLabsIcon from "@/assets/integrations/lightning-labs.png";
-import liquidIcon from "@/assets/integrations/liquid.svg";
+import bitcoinIcon from "@shared/logos/integrations/bitcoin.svg";
+import coreLightningIcon from "@shared/logos/integrations/core-lightning.svg";
+import lightningLabsIcon from "@shared/logos/integrations/lightning-labs.png";
+import liquidIcon from "@shared/logos/integrations/liquid.svg";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

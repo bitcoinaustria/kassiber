@@ -49,7 +49,7 @@
         "manual_bridge": "Manuelle Brücke"
       },
       "serverPreviewVerified": "Rollback-geprüft",
-      "serverPreviewFailed": "Daemon-Vorschau fehlgeschlagen",
+      "serverPreviewFailed": "Vorschau fehlgeschlagen",
       "editDraft": "Entwurf bearbeiten",
       "revise": "Revision erstellen",
       "retireDraft": "Entwurf stilllegen",
@@ -202,11 +202,11 @@
         "custody_component_scope_mismatch": "Die Komponente gehört nicht zum aktiven Buch.",
         "custody_component_state_conflict": "Die Komponente wurde während dieser Aktion geändert. Lade neu und versuche es nochmals.",
         "custody_component_superseded": "Eine abgelöste Revision kann nicht direkt aktiviert werden. Stelle sie zuerst als neuen Entwurf wieder her.",
-        "custody_component_validation": "Der Daemon hat ein Feld der Verwahrungskomponente abgelehnt.",
+        "custody_component_validation": "Kassiber hat ein Feld der Verwahrungskomponente abgelehnt.",
         "conflict": "Die Anfrage für die Verwahrungskomponente widerspricht vorhandenen Daten.",
         "not_found": "Verwahrungskomponente, Transaktion oder Wallet wurde in diesem Buch nicht gefunden.",
-        "validation": "Der Daemon hat die Anfrage für die Verwahrungskomponente abgelehnt.",
-        "unknown": "Der Daemon hat die Anfrage abgelehnt ({{code}}).",
+        "validation": "Kassiber hat diese Verwahrungskomponente abgelehnt.",
+        "unknown": "Kassiber hat die Anfrage abgelehnt ({{code}}).",
         "unexpected": "Die Anfrage für die Verwahrungskomponente ist unerwartet fehlgeschlagen."
       },
       "form": {
@@ -411,7 +411,7 @@
     "method": {
       "any": "Beliebige Methode",
       "paymentHash": "Payment Hash",
-      "providerSwapId": "Provider-Nachweis",
+      "providerSwapId": "Anbieter-Nachweis",
       "heuristic": "Zeit + Betrag",
       "htlcRefund": "Refund-Verknüpfung",
       "ownershipGraph": "Eigentumsgraph"
@@ -502,7 +502,7 @@
       "candidateLabelLayerTransition": "Bitcoin-Swap-Kandidat",
       "candidateLabelSwap": "Swap-Kandidat",
       "matchedByPaymentHash": "Über Payment Hash zugeordnet.",
-      "matchedByProviderEvidence": "Über Provider-Nachweis zugeordnet.",
+      "matchedByProviderEvidence": "Über Anbieter-Nachweis zugeordnet.",
       "matchedByTimeAmount": "Über Zeit und Betrag zugeordnet.",
       "matchedByRefundLink": "Über HTLC-Refund-Verknüpfung zugeordnet.",
       "matchedByOwnershipGraph": "Über Wallet-Eigentumsnachweis zugeordnet.",
@@ -513,7 +513,7 @@
       "policy": "Richtlinie",
       "matchRationale": "Treffer-Begründung",
       "rationalePaymentHash": "Beide Legs teilen denselben Lightning Payment Hash.",
-      "rationaleProviderEvidence": "Beide Legs teilen dieselbe redigierte Provider-Swap-ID.",
+      "rationaleProviderEvidence": "Beide Legs teilen dieselbe redigierte Anbieter-Swap-ID.",
       "rationaleHeuristic": "Die Legs liegen nach Berücksichtigung der Gebührendifferenz nah in Zeit und Betrag.",
       "rationaleHtlcRefund": "Der eingehende Refund gibt den HTLC-Funding-Output des ausgehenden Legs aus, eine deterministische Verknüpfung auch innerhalb einer Wallet.",
       "rationaleOwnershipGraph": "Die On-Chain-Transaktion belegt eine Zahlung an eine andere eigene Wallet. Die Bestätigung schreibt eine normale Carrying-Value-Verknüpfung; sie erfindet keinen Eingang.",
@@ -818,9 +818,9 @@
     "staleReports": "Veraltete Berichte",
     "loadedEdits_one": "geladene Bearbeitung",
     "loadedEdits_other": "geladene Bearbeitungen",
-    "refreshing": "Wird aktualisiert...",
+    "refreshing": "Wird aktualisiert…",
     "emptyLabel": "Keine Metadaten-Aktivität passt zu diesen Filtern",
-    "loadingMore": "Wird geladen...",
+    "loadingMore": "Wird geladen…",
     "loadMore": "Mehr laden",
     "revert": {
       "reasonField": "{{label}} aus Aktivität zurückgesetzt",
@@ -833,7 +833,7 @@
   },
   "egress": {
     "subtitle": "Live-RAM-Ledger für ausgehende Verbindungen",
-    "notMonitored": "Diese Seite erfasst Anfragen, die Kassiber im Daemon-Prozess stellt. Was Kassiber an ein separates Programm übergibt — die Release-Prüfung, den AI-CLI-Broker und lightning-cli — steht hier nicht, weil dieser Verkehr aus einem Prozess stammt, den dieses Protokoll nicht sehen kann.",
+    "notMonitored": "Diese Seite listet Anfragen, die der Hauptprozess von Kassiber stellt. Was an ein separates Programm übergeben wird (die Release-Prüfung, den KI-CLI-Broker und lightning-cli), steht hier nicht, weil dieser Verkehr aus einem Prozess stammt, den diese Seite nicht sehen kann.",
     "refresh": "Aktualisieren",
     "loadFailed": "Egress-Ledger konnte nicht geladen werden: {{error}}",
     "empty": "Kein ausgehender Egress erfasst",
@@ -879,7 +879,7 @@
       "none": "kein",
       "allowlist": "Allowlist",
       "notCaptured": "Nicht erfasst",
-      "notCapturedValue": "Pfad, Query-Werte, Request-Body, Header, Zugangsdaten, Deskriptoren und AI-Prompts werden vor dem RAM-Puffer verworfen."
+      "notCapturedValue": "Pfad, Query-Werte, Request-Body, Header, Zugangsdaten, Deskriptoren und KI-Prompts werden vor dem RAM-Puffer verworfen."
     },
     "status": {
       "user": "Benutzer",
@@ -894,7 +894,7 @@
     "subsystem": {
       "sync": "Sync",
       "pricing": "Bewertung",
-      "ai": "AI",
+      "ai": "KI",
       "update": "Update",
       "unknown": "Unbekannt"
     }
@@ -940,7 +940,7 @@
     "recordsLine": "{{count}} Datensätze · RAM-Puffer {{size}} ({{percent}} %)",
     "renderingNewest": "{{count}} neueste werden angezeigt",
     "noMatching": "Keine passenden Log-Datensätze",
-    "waiting": "Warte auf Daemon-Verkehr…",
+    "waiting": "Warte auf Aktivität…",
     "filterLevel": "Level {{level}}",
     "filterModule": "Modul {{module}}",
     "filterSearch": "Suche \"{{query}}\"",
@@ -1185,7 +1185,7 @@
       },
       "chip": {
         "automatic": "Automatisch",
-        "reviewed": "Von dir",
+        "reviewed": "Manuell",
         "undone": "Getrennt",
         "rule": "Per Regel",
         "part": "Teilweise verknüpft"
@@ -1204,7 +1204,7 @@
       "linkedByYouReason": "Du hast diese zwei Transaktionen selbst verknüpft.",
       "taxable": "Steuerpflichtig",
       "how": {
-        "sameTransaction": "Dieselbe Transaktion",
+        "sameTransaction": "On-Chain",
         "fanout": "An mehrere bezahlt",
         "consolidation": "Zusammenführung",
         "channel": "Lightning-Kanal",

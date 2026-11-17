@@ -271,7 +271,8 @@ site; the list below is what that search returns today.
    `crates/cli/src/describe.rs`, and the path to its capability class in
    `crates/runtime/src/capabilities.rs` next to `wallets.import-strike`.
 
-5. **`ui-tauri/src/assets/integrations/<slug>.svg`** — the connection logo.
+5. **`assets/logos/integrations/<slug>.svg`** (repository root, shared across
+   front ends) — the connection logo.
    Prefer a **vector** (`.svg`): it stays crisp at every size and the existing
    assets are almost all tiny SVGs (~0.3–3 KB). Source the official brand mark
    from the provider's press/brand kit or site, optimize it (e.g. SVGO; strip
@@ -284,7 +285,7 @@ site; the list below is what that search returns today.
 
 6. **`ui-tauri/src/lib/connectionCatalog.tsx`** — add the catalog entry so it
    shows in the desktop Add Connection modal. Steps:
-   - `import <slug>Icon from "@/assets/integrations/<slug>.svg";` at the top.
+   - `import <slug>Icon from "@shared/logos/integrations/<slug>.svg";` at the top.
    - Add the `<slug>_csv` member to the `ConnectionSourceFormat` union.
    - Add a `CONNECTION_SOURCES` entry mirroring `strike`: `id`, `title`,
      `description`, `category: "exchanges"`, `image: <slug>Icon`,

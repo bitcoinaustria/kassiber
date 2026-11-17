@@ -16,8 +16,8 @@
       "repairing": "Überschneidende Quellen werden geprüft",
       "pricing": "Zwischengespeicherte Preise werden angewendet",
       "building": "Journaleinträge werden erstellt",
-      "storing": "Journalprojektion wird gespeichert",
-      "complete": "Journalprojektion wurde gespeichert",
+      "storing": "Journale werden gespeichert",
+      "complete": "Journale gespeichert",
       "fallback": "Journale werden verarbeitet"
     },
     "retry": "Erneut versuchen"
@@ -34,7 +34,7 @@
     },
     "unavailable": {
       "title": "Hauptbuch nicht verfügbar",
-      "fallback": "Der Daemon hat keine Journaldaten geliefert."
+      "fallback": "Journale konnten nicht geladen werden."
     },
     "metric": {
       "status": "Status",
@@ -114,7 +114,7 @@
   "reportable": {
     "unavailable": {
       "title": "Hauptbuch-Einträge nicht verfügbar",
-      "fallback": "Der Daemon hat keine verarbeiteten Hauptbuch-Einträge geliefert."
+      "fallback": "Journaleinträge konnten nicht geladen werden."
     },
     "description": "Journaleinträge, die durch das Verarbeiten von Transaktionen in Tranchen, Bewertung, Anschaffungskosten, Erlös und Gewinn/Verlust entstehen.",
     "badge": {
@@ -140,8 +140,8 @@
       "manual": "Manueller Preis",
       "source": "Quellenpreis",
       "cached": "Zwischengespeicherter Marktkurs",
-      "providerSample": "Provider-Marktstichprobe",
-      "providerPrice": "Provider-Marktpreis",
+      "providerSample": "Anbieter-Marktstichprobe",
+      "providerPrice": "Anbieter-Marktpreis",
       "qualified": "{{source}} ({{quality}})"
     },
     "nextAction": {
@@ -159,7 +159,7 @@
   "quarantine": {
     "unavailable": {
       "title": "Quarantäne nicht verfügbar",
-      "fallback": "Der Daemon hat keine Quarantänedaten geliefert."
+      "fallback": "Die Quarantäne konnte nicht geladen werden."
     },
     "actions": {
       "fixWithAssistant": "Mit Assistent beheben"
@@ -765,10 +765,10 @@
     "version": "Eingabeversion {{version}}",
     "quarantines": "{{count}} Transaktionen in Quarantäne sind vom Journal ausgeschlossen. Diese Erklärung betrifft nur das angezeigte Ergebnis.",
     "inheritedBasis": "Übertragene Anschaffungskosten",
-    "inheritedContext": "Die geprüfte Übertragung verknüpft diesen Erwerb mit der vollständigen ausgehenden Engine-Berechnung einschließlich ihrer Gebühren. Diese historischen Beiträge sind keine Aufteilung auf den späteren Verkauf.",
+    "inheritedContext": "Die geprüfte Übertragung verknüpft diesen Erwerb mit der vollständigen ausgehenden Berechnung unten, einschließlich ihrer Gebühren. Diese früheren Beiträge sind keine Aufteilung auf den späteren Verkauf.",
     "inheritedUnavailable": "Die geerbte Quellenberechnung ist in diesem Journal nicht verfügbar. Es wurde keine historische Zuordnung abgeleitet.",
     "inheritedTruncated": "Die begrenzte Rückverfolgung der Anschaffungsquellen endet hier; weitere historische Berechnungsdetails werden nicht angezeigt.",
-    "poolNote": "Eine von der Engine vorgegebene Stückbasis ist die Basis dieser Berechnung. Bei Durchschnittsmethoden dient der ausgewählte Erwerb als Zuordnungsanker; er ist keine Aufteilung des Pools auf diese Transaktion.",
+    "poolNote": "Diese Berechnung verwendet überschriebene Anschaffungskosten pro Einheit. Bei Durchschnittsmethoden dient der ausgewählte Erwerb als Zuordnungsanker; er ist keine Aufteilung des Pools auf diese Transaktion.",
     "fragment": "Beitrag {{index}}",
     "unitBasis": "Stückbasis der Engine",
     "disposal": "Steuerliches Ereignis",
@@ -776,7 +776,7 @@
     "acquisitionBasis": "Erwerbsbasis der Engine",
     "custody": "Zugehörige Verwahrungsentscheidungen",
     "noCustody": "Keine gespeicherten Verwahrungsentscheidungen in diesem Quellzeitraum und Wallet-Kontext gefunden.",
-    "custodyContext": "Gespeicherte eingehende Verwahrungsbewegungen vor diesem Ergebnis bis zur frühesten Engine-Quelle. Dieser Wallet-Kontext ordnet keine physischen Coins steuerlichen Losen zu.",
+    "custodyContext": "Eingehende Bewegungen zwischen deinen Wallets vor diesem Ergebnis, zurück bis zur frühesten Quelle. Das ordnet keine physischen Coins steuerlichen Losen zu.",
     "custodyTruncated": "Weitere Verwahrungsentscheidungen sind vorhanden. Öffne den Verwahrungsverlauf für die vollständige Historie.",
     "missingSource": "Quelltransaktion nicht verfügbar",
     "timestamp": "Zeitpunkt",

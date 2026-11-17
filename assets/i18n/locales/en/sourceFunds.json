@@ -179,7 +179,7 @@
     "reject": "Reject"
   },
   "sourceOrGap": {
-    "title": "Source Or Gap",
+    "title": "Source or gap",
     "description": "Add a reviewed root source or explicit missing-history stop.",
     "sourceType": "Source type",
     "linkType": "Link type",
@@ -188,7 +188,7 @@
     "asset": "Asset",
     "appliesTo": "Applies to",
     "evidenceNote": "Evidence note",
-    "create": "Create Source Link"
+    "create": "Create source link"
   },
   "manualLink": {
     "title": "Manual Link",
@@ -200,7 +200,7 @@
     "allocation": "Allocation",
     "fromAmount": "From amount",
     "reviewNote": "Review note",
-    "add": "Add Reviewed Link"
+    "add": "Add reviewed link"
   },
   "gates": {
     "title": "Gates",
@@ -491,10 +491,10 @@
     "saveAFrozenCaseAnd": "Save a frozen case and export the recipient handoff ZIP from the same reviewed snapshot:",
     "savesTheCaseSnapshotFirst": "Saves the case snapshot first, then renders the PDF from it.",
     "whoReceivesThisDossierTheir": "Who receives this dossier — their default reveal mode is a suggestion, your choice wins.",
-    "buildingReviewedFlow": "Building reviewed flow...",
-    "computingCoverage": "Computing coverage...",
-    "searchTxidWalletNote": "Search txid, wallet, note...",
-    "krakenBitpandaOtcDesk": "Kraken, Bitpanda, OTC desk..."
+    "buildingReviewedFlow": "Building reviewed flow…",
+    "computingCoverage": "Computing coverage…",
+    "searchTxidWalletNote": "Search txid, wallet, note…",
+    "krakenBitpandaOtcDesk": "Kraken, Bitpanda, OTC desk…"
   },
   "gapAction": {
     "open_source_creator": "Document this gap",
@@ -602,9 +602,9 @@
     },
     "stale_custody_component_lineage": {
       "title": "Custody evidence changed",
-      "nextStep": "Re-review this link against the current custody projection",
+      "nextStep": "Review this link again against the current custody data",
       "messages": {
-        "aReviewedCustodyLinkIsAbsentOr": "A reviewed custody link is absent or stale in the current stored projection."
+        "aReviewedCustodyLinkIsAbsentOr": "A reviewed custody link is missing or out of date in the current custody data."
       }
     },
     "stale_structural_lineage": {

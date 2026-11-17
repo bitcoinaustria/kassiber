@@ -1,4 +1,4 @@
-import english from "@/i18n/locales/en/sourceFunds.json";
+import english from "@shared/i18n/locales/en/sourceFunds.json";
 import type { SourceFundsFinding } from "./model";
 
 /** Codes can have several distinct findings; unknown diagnostic variants stay verbatim. */

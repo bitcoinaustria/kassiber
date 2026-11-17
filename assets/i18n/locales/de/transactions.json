@@ -90,7 +90,7 @@
       "description": "Vom Quellsystem gelieferten Preis verwenden"
     },
     "fmvProvider": {
-      "label": "FMV-Provider",
+      "label": "FMV-Anbieter",
       "description": "Einen gesampelten Marktkurs verwenden"
     },
     "manualOverride": {
@@ -104,7 +104,7 @@
   },
   "pricingQuality": {
     "coarseFallback": "Grober Rückfallwert",
-    "providerSample": "Provider-Sample",
+    "providerSample": "Anbieter-Sample",
     "exact": "Exakt",
     "missing": "Fehlt"
   },
@@ -478,7 +478,7 @@
       "copyId": "ID kopieren",
       "exclude": "Transaktion ausnehmen",
       "voidConfirm": "Diese Transaktion stornieren? Das kann nicht rückgängig gemacht werden.",
-      "excludeConfirm": "Diese Transaktion aus Journals und Berichten ausnehmen? Du kannst sie im Klassifizieren-Tab wieder einbeziehen.",
+      "excludeConfirm": "Diese Transaktion aus Journalen und Berichten ausnehmen? Du kannst sie im Klassifizieren-Tab wieder einbeziehen.",
       "collateral": {
         "collateralBadge": "BTC-Sicherheit gestellt",
         "returnedBadge": "BTC-Sicherheit zurück",
@@ -502,6 +502,8 @@
       "complete": "{{count}} Transaktionen werden angezeigt",
       "loaded": "{{count}} geladene Transaktionen werden angezeigt",
       "moreHint": "Weitere Transaktionen werden beim Scrollen automatisch geladen.",
+      "loadedInline": "{{count}} angezeigt · weitere laden beim Scrollen",
+      "loadingMoreInline": "{{count}} angezeigt · weitere werden geladen…",
       "loadingMore": "Weitere Transaktionen werden geladen…",
       "scrollRegion": "Scrollbare Transaktionstabelle"
     }
@@ -556,7 +558,7 @@
     },
     "transactionExcluded": {
       "title": "Transaktion ausgenommen",
-      "body": "Verarbeite Journals neu, bevor du Berichten wieder vertraust."
+      "body": "Verarbeite die Journale neu, bevor du Berichten wieder vertraust."
     },
     "evidenceReused": {
       "title": "Beleg wiederverwendet",
@@ -652,7 +654,7 @@
     "expand": "Vergrößern",
     "expandedTitle": "Erweiterter Transaktionsgraph",
     "view3dAria": "3D-Ansicht des Transaktionsflusses.",
-    "view3dLoading": "3D-Ansicht wird vorbereitet …",
+    "view3dLoading": "3D-Ansicht wird vorbereitet…",
     "view3dUnavailable": "Die 3D-Ansicht ist auf diesem Gerät nicht verfügbar, daher wird der 2D-Graph gezeigt.",
     "view3dLegend": "Klare Bänder: bekannte Beträge. Milchige Bänder: Betrag unbekannt. Blaue Blöcke: deine Wallets. Alle Inputs werden im Glasring gemeinsam ausgegeben; die Reihenfolge der Bänder sagt nicht, welcher Input welchen Output bezahlt hat.",
     "feeRate": "Gebührensatz",
@@ -690,7 +692,7 @@
       "openFundingTransaction": "Transaktion öffnen, die diesen Input erzeugt hat: {{reference}}"
     },
     "legAria": "{{role}}-Graph-Strang",
-    "liquidBody": "Kassiber hat für diese Zeile noch keine öffentlichen Liquid-Input-/Output-Referenzen. Richte ein Liquid-Backend ein oder aktualisiere es, damit der Graph generische vertrauliche Stränge verwenden kann.",
+    "liquidBody": "Für diese Transaktion sind noch keine öffentlichen Liquid-Inputs oder -Outputs gespeichert. Füge ein Liquid-Backend hinzu oder aktualisiere es, um sie zu zeichnen.",
     "liquidGraphless": "Liquid-Graph nicht lokal gespeichert",
     "loading": "Graph wird geladen",
     "loadingBody": "Lokaler Transaktionsgraph wird gelesen.",
@@ -766,7 +768,7 @@
       "bitcoin_reference_lookup_prevout_limit": "Diese Transaktion bräuchte zu viele ungecachte vorherige Transaktionen; der Abruf wurde begrenzt, um das Backend nicht zu überlasten.",
       "bitcoin_reference_lookup_unavailable": "Kein konfiguriertes Bitcoin-Backend kann öffentliche Transaktions-Referenzen abrufen.",
       "confidential_values_hidden": "Bei mindestens einem Liquid-Leg sind die Beträge vertraulich. Referenzen und Eigentums-Hinweise sind verfügbar, aber keine betragsproportionalen Stränge und keine Gebührenrate.",
-      "custody_projection_stale": "Custody-Annotationen sind erst nach einem Neuaufbau der Journale verfügbar.",
+      "custody_projection_stale": "Wallet-Zuordnungen erscheinen, nachdem die Journale verarbeitet sind.",
       "graphless_import": "Dieser Quelldatensatz enthält keine Bitcoin-Input/Output-Referenzen.",
       "input_prevout_values_missing": "Input-Beträge stammen aus den ausgegebenen vorherigen Outputs, die lokal nicht gespeichert sind. Referenzen und Outputs werden trotzdem gezeichnet; Gebühr und Gebührenrate brauchen diese Beträge.",
       "liquid_reference_graph_not_local": "Lokal liegt nur die importierte Liquid-Zeile. Füge ein Liquid-Explorer-Backend hinzu, um öffentliche Referenzen zu sehen; vertrauliche Beträge bleiben verborgen.",
@@ -878,15 +880,15 @@
     "perBtc": "{{value}} / BTC",
     "rateCacheSource": "Quelle des Kurs-Caches",
     "priceSource": "Preisquelle",
-    "provider": "Provider",
+    "provider": "Anbieter",
     "providerUnknown": "Unbekannt",
     "pairGranularity": "Paar / Granularität",
     "pairGranularityUnknown": "Unbekannt",
     "method": "Methode: {{method}}",
     "fallbackOnly": "Nur Rückfallwert",
-    "providerSample": "Provider-Sample",
+    "providerSample": "Anbieter-Sample",
     "fallbackOnlyBody": "Tägliche Kraken-Werte sind grobe Abdeckung und bleiben prüfbar, bis du eine bessere Quelle bestätigst.",
-    "providerSampleBody": "Minütliche Marktkerzen sind gesampelte Provider-Kurse, kein Beleg einer Exchange-Ausführung.",
+    "providerSampleBody": "Minütliche Marktkerzen sind gesampelte Anbieter-Kurse, kein Beleg einer Exchange-Ausführung.",
     "exactManualPrice": "Exakter manueller Preis",
     "openRateSettings": "Kurs-Einstellungen öffnen",
     "exactEvidence": "Beleg für exakte Bewertung",
@@ -976,7 +978,7 @@
     "note": "Notiz",
     "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext",
     "loanRole": "Darlehensrolle",
-    "loanRoleHint": "Markiere diese Zeile als Teil eines BTC-Darlehens – Kapital oder Sicherheit. Gilt sofort; die zugehörigen Gegenstücke verknüpfst du im Tab „Verknüpft“."
+    "loanRoleHint": "Markiere das als Teil eines BTC-Darlehens: Kapital oder Sicherheit. Gilt sofort; die passenden Teile verknüpfst du im Tab „Verknüpft“."
   },
   "linked": {
     "pairedMovement": "Gepaarte Bewegung",
@@ -991,7 +993,7 @@
     "pairKind": "Paar-Art",
     "unknown": "Unbekannt",
     "noPairedMovement": "Keine gepaarte Bewegung",
-    "noPairedMovementBody": "Wenn diese Tx das andere Leg einer Übertragung, eines Swaps oder eines Peg-in/out ist, erscheint das passende Leg hier. Du kannst auch eine manuelle Paarung aus der Swap-Kandidaten-Warteschlange erstellen.",
+    "noPairedMovementBody": "Ist diese Transaktion eine Seite einer Übertragung, eines Swaps oder Pegs, erscheint die andere Seite hier. Du kannst auch unter Übertragungen selbst eine verknüpfen.",
     "openPairingReview": "Abgleich-Werkzeuge öffnen",
     "loanLegs": "Darlehenslegs",
     "loanId": "Darlehen {{id}}",
@@ -1015,7 +1017,7 @@
     "editLinkTextAria": "Link-Text für {{name}} bearbeiten",
     "removeAttachment": "Anhang entfernen",
     "removeNamed": "{{name}} entfernen",
-    "emptyBody": "Hänge Quittungen, Rechnungen oder Notizen der Steuerberatung an. Hänge so viele an, wie du brauchst — lokale Dateien werden in den Anhang-Ordner kopiert, Links bleiben als Referenzen.",
+    "emptyBody": "Hänge Belege, Rechnungen oder Notizen der Steuerberatung an. Dateien werden in Kassiber kopiert; Links bleiben Links.",
     "pickerError": "Dateiauswahl konnte nicht geöffnet werden.",
     "pickerTitle": "Dateien an diese Transaktion anhängen",
     "nativePickerUnavailable": "Native Dateiauswahl in dieser Laufzeitumgebung nicht verfügbar",
@@ -1027,7 +1029,7 @@
     "couldNotRename": "Link konnte nicht umbenannt werden.",
     "linksDialog": {
       "title": "Links anhängen",
-      "description": "Eine URL pro Zeile. Links werden als Referenzen gespeichert — Kassiber ruft den Inhalt nicht ab und indexiert ihn nicht. Du kannst den Link-Text nach dem Anhängen bearbeiten.",
+      "description": "Eine URL pro Zeile. Kassiber speichert nur den Link und ruft ihn nie ab. Den Link-Text kannst du später bearbeiten.",
       "urls": "URLs",
       "placeholder": "https://btcpay.example/invoice/abc123\nhttps://drive.example/receipt-2026-04.pdf",
       "noUrls": "Noch keine URLs",
@@ -1073,7 +1075,7 @@
       "noFiatRecorded": "Kein Fiat-Preis für {{date}} erfasst. Füge einen manuellen Preis oder Wert hinzu, um diese Zeile in die Journalverarbeitung einzubeziehen.",
       "noPersistedSource": "Es ist noch keine gespeicherte Preisquelle verfügbar. Füge einen manuellen Preis hinzu oder wähle eine hinterlegte Preisquelle.",
       "missingOrUnderReview": "Die Preisquelle ist als fehlend oder in Prüfung markiert. Speichere eine geprüfte Quelle, bevor du die Journale ausführst.",
-      "readinessHint": "Das ist eine Warnung zur Preisbereitschaft aus der Transaktionszeile. Es ist keine aktive Journal-Quarantäne, sofern der Daemon keinen Quarantänegrund zurückgibt.",
+      "readinessHint": "Eine Preiswarnung für diese Transaktion. Sie ist nicht in Quarantäne, außer ein Quarantänegrund wird angezeigt.",
       "viewPricing": "Bewertung ansehen",
       "viewDetails": "Details ansehen",
       "viewLinked": "Verknüpfungen ansehen",
@@ -1081,7 +1083,7 @@
       "openPricing": "Bewertung öffnen",
       "exclude": "Ausnehmen"
     },
-    "quarantineHint": "Journal-quarantänisierte Transaktionen werden bei der Journalverarbeitung übersprungen und wirken sich erst auf Steuerberichte aus, wenn der Blocker behoben ist.",
+    "quarantineHint": "Transaktionen in Quarantäne bleiben aus Journalen und Steuerberichten draußen, bis sie gelöst sind.",
     "timeline": {
       "imported": "Importiert",
       "importedHint": "Transaktion aus einer Wallet, Exchange oder Importdatei gelesen.",

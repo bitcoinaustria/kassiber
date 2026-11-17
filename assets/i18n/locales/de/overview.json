@@ -9,7 +9,7 @@
     "mixedFiatBadge": "Gemischte Fiat",
     "refresh": "Bücher-Set aktualisieren",
     "booksLink": "Bücher",
-    "readonlyNote": "Diese schreibgeschützte Zusammenführung wahrt die Buch-Grenzen. Beim Öffnen eines Buchs oder einer Transaktion wird dieses Buch vor der Navigation aktiv gesetzt.",
+    "readonlyNote": "Schreibgeschützte Ansicht über alle Bücher. Beim Öffnen eines Buchs oder einer Transaktion wird zuerst zu diesem Buch gewechselt.",
     "couldNotLoad": "Bücher-Set-Übersicht konnte nicht geladen werden.",
     "fallbackTitle": "Bücher-Set",
     "metric": {
@@ -182,7 +182,62 @@
     "otherSources": "Sonstige Quellen",
     "empty": "Noch keine Wallet hält Bitcoin.",
     "lastSynced": "synced {{time}}",
-    "lastSyncedAt": "Zuletzt synced {{date}}"
+    "lastSyncedAt": "Zuletzt synced {{date}}",
+    "settingsAria": "Einstellungen für Bestände",
+    "sortLabel": "Sortieren nach",
+    "sort": {
+      "balance": "Guthaben",
+      "name": "Name",
+      "activity": "Letzte Aktivität"
+    },
+    "emptyLabel": "Leere Quellen",
+    "emptyMode": {
+      "fold": "In einer Zeile zusammenfassen",
+      "show": "Auflisten",
+      "hide": "Ausblenden"
+    },
+    "railsLabel": "Netzwerke",
+    "rail": {
+      "onchain": "On-chain",
+      "liquid": "Liquid",
+      "lightning": "Lightning",
+      "other": "Börsen und Dateien"
+    },
+    "limitLabel": "Angezeigte Quellen",
+    "limitAll": "Alle",
+    "emptySources_one": "{{count}} leere Quelle",
+    "emptySources_other": "{{count}} leere Quellen",
+    "hideEmpty": "Leere Quellen ausblenden",
+    "filteredOut_one": "{{count}} Quelle ausgefiltert",
+    "filteredOut_other": "{{count}} Quellen ausgefiltert",
+    "showAllRails": "Alle anzeigen",
+    "noneListed": "Keine Quelle passt zu diesem Filter.",
+    "openSource": "{{name}} öffnen",
+    "lastActivity": "Letzte Aktivität {{date}}",
+    "syncState": {
+      "syncing": "Sync läuft",
+      "error": "Sync fehlgeschlagen"
+    },
+    "shareBar": "Anteil an Bitcoin nach Quelle",
+    "layoutLabel": "Darstellung",
+    "layout": {
+      "list": "Liste",
+      "tiles": "Kacheln",
+      "table": "Tabelle",
+      "trend": "Verlauf, letzte 12 Monate"
+    },
+    "table": {
+      "source": "Quelle",
+      "network": "Netzwerk",
+      "bitcoin": "Bitcoin",
+      "value": "Wert",
+      "share": "Anteil",
+      "transactions": "Transaktionen",
+      "lastActivity": "Letzte Aktivität"
+    },
+    "transactions_one": "{{count}} Transaktion",
+    "transactions_other": "{{count}} Transaktionen",
+    "trendChange": "{{change}} in 12 Monaten"
   },
   "recentTx": {
     "title": "Letzte Transaktionen",
@@ -323,7 +378,7 @@
     "lastValueLabel": "Letzten Wert an der Achse anzeigen",
     "logChip": "log",
     "autoChip": "fit",
-    "moreSettings": "Weitere Einstellungen …",
+    "moreSettings": "Weitere Einstellungen…",
     "scaleMenuAria": "Skaleneinstellungen",
     "logScaleTitle": "Logarithmische Skala umschalten",
     "logTimeTitle": "Logarithmische Zeitachse (Power Law)",
@@ -339,7 +394,7 @@
     "outgoingActivity": "Ausgehende Aktivität",
     "incomingSliderAria": "Mindestgröße eingehender Zahlungspunkte in BTC",
     "outgoingSliderAria": "Mindestgröße ausgehender Aktivitätspunkte in BTC",
-    "mergedMarkersHint": "Punkte, die sich überlappen würden, werden zu einem zusammengefasst und mit der Anzahl beschriftet. Ausgeschaltet teilen sich nur noch Ereignisse einen Punkt, die exakt auf dieselbe Spalte fallen. Zoom mit dem Bereichsregler unter dem Diagramm hinein, um Ereignisse an verschiedenen Tagen aufzuteilen — fahr über einen zusammengefassten Punkt, um sie aufzulisten.",
+    "mergedMarkersHint": "Punkte, die sich überlappen würden, werden zu einem zusammengefasst und mit der Anzahl beschriftet. Aus: Nur Ereignisse in derselben Spalte teilen sich einen Punkt. Zoome hinein, um sie aufzuteilen, oder fahr über einen zusammengefassten Punkt, um sie aufzulisten.",
     "customMinTitle": "Klicke, um eine eigene BTC-Mindestgröße einzugeben",
     "customMinAria": "Eigene Marker-Mindestgröße in BTC"
   },
@@ -406,5 +461,28 @@
     "quarantines_one": "{{count}} Transaktion in Quarantäne ist ausgeschlossen. Kläre sie in der <queue>Quarantäneliste</queue>, bevor du dich auf den Betrag verlässt.",
     "quarantines_other": "{{count}} Transaktionen in Quarantäne sind ausgeschlossen. Kläre sie in der <queue>Quarantäneliste</queue>, bevor du dich auf den Betrag verlässt.",
     "exportDraft": "Unvollständiger Entwurf — Exporte bleiben zur Prüfung verfügbar."
+  },
+  "widgets": {
+    "tax": {
+      "title": "Steuerjahr {{year}}",
+      "openReports": "Berichte",
+      "realized": "Realisierte Gewinne heuer",
+      "unrealized": "Unrealisierte Gewinne",
+      "costBasis": "Anschaffungskosten",
+      "taxFree": "Steuerfrei (Altbestand)",
+      "taxable": "Steuerpflichtig (Neubestand)",
+      "basisIncomplete": "Die Anschaffungskosten sind unvollständig; Gewinne erscheinen erst, wenn das geklärt ist.",
+      "taxFreeNeedsJournals": "Verarbeite Journale, bevor du dich auf die steuerfreie Aufteilung verlässt.",
+      "taxFreeQuarantines_one": "Prüfe {{count}} Quarantäne, bevor du dich auf die steuerfreie Aufteilung verlässt.",
+      "taxFreeQuarantines_other": "Prüfe {{count}} Quarantänen, bevor du dich auf die steuerfreie Aufteilung verlässt."
+    },
+    "flows": {
+      "title": "Ein- und Ausgänge, letzte 12 Monate",
+      "chartAria": "Bitcoin pro Monat erhalten und ausgegeben",
+      "received": "Erhalten",
+      "spent": "Ausgegeben",
+      "fees": "Gebühren",
+      "fiatIncomplete": "Einige davon sind nicht in {{currency}} bewertet, daher sind die Summen in Bitcoin."
+    }
   }
 }

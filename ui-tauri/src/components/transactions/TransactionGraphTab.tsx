@@ -22,8 +22,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
-import liquidIcon from "@/assets/integrations/liquid.svg";
+import bitcoinIcon from "@shared/logos/integrations/bitcoin.svg";
+import liquidIcon from "@shared/logos/integrations/liquid.svg";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

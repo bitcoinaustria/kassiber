@@ -9,7 +9,7 @@
 
 - **Display name:** Strike
 - **Slug:** `strike`
-- **Logo:** `ui-tauri/src/assets/integrations/strike.jpg` — raster (no clean
+- **Logo:** `assets/logos/integrations/strike.jpg` — raster (no clean
   vector was sourced); a vector SVG would be preferable per the playbook.
 - **Spec status:** implemented
 - **Date / author:** 2026-06 (reference snapshot)

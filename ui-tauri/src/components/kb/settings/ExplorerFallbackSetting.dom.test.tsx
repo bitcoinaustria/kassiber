@@ -31,7 +31,7 @@ describe("ExplorerFallbackSetting", () => {
     const toggle = screen.getByRole("switch");
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     expect(document.body.textContent).toContain(
-      "third-party website, which learns the transaction or address",
+      "public website, which learns what you look up",
     );
   });
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import i18n from "@/i18n";
-import en from "@/i18n/locales/en/journals.json";
-import de from "@/i18n/locales/de/journals.json";
+import en from "@shared/i18n/locales/en/journals.json";
+import de from "@shared/i18n/locales/de/journals.json";
 import { normalizeQuarantineSnapshot } from "@/lib/normalizeUiSnapshots";
 
 import {

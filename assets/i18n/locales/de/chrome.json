@@ -4,12 +4,12 @@
     "reload": "Neu laden",
     "copy": "Diagnose kopieren",
     "copied": "Diagnose kopiert",
-    "copyFailed": "Diagnose konnte nicht kopiert werden. Nach dem Neuladen Entwicklerwerkzeuge → Protokoll öffnen.",
-    "details": "Der Fehler und die letzten redigierten Protokolle sind über „Diagnose kopieren“ verfügbar."
+    "copyFailed": "Diagnose konnte nicht kopiert werden. Lade neu und öffne dann Entwicklerwerkzeuge → Logs.",
+    "details": "„Diagnose kopieren“ kopiert den Fehler und die letzten geschwärzten Logs."
   },
   "notFound": {
     "title": "Seite nicht gefunden",
-    "message": "Unter {{path}} gibt es nichts. Der Link ist vielleicht veraltet oder zeigt auf eine umbenannte Seite.",
+    "message": "Unter {{path}} gibt es nichts. Der Link ist vielleicht veraltet, oder die Seite wurde umbenannt.",
     "backToOverview": "Zurück zur Übersicht"
   },
   "shell": {
@@ -68,8 +68,8 @@
       "updateTitle": "Kassiber v{{current}} → v{{latest}} ist auf GitHub verfügbar",
       "updateLabel": "Update verfügbar · v{{version}}",
       "updateDismiss": "Bis zum nächsten Start ausblenden",
-      "disabled": "Update-Prüfungen sind deaktiviert. Aktiviere sie unter Einstellungen → Privatsphäre, bevor Kassiber GitHub kontaktiert.",
-      "checkFailed": "Kassiber konnte GitHub nicht auf Updates prüfen. Bitte versuche es später erneut.",
+      "disabled": "Update-Prüfungen sind aus. Schalte sie unter Einstellungen → Privatsphäre ein, damit Kassiber GitHub kontaktieren darf.",
+      "checkFailed": "Kassiber konnte GitHub nicht erreichen, um nach Updates zu suchen. Versuche es später erneut.",
       "availablePrompt": "Kassiber v{{version}} ist verfügbar. Release-Seite auf GitHub öffnen?",
       "current": "Kassiber v{{version}} ist aktuell.",
       "openGitHub": "GitHub öffnen",
@@ -94,7 +94,7 @@
   "projects": {
     "menuLabel": "Bücher-Sets",
     "switchFailedTitle": "Bücher-Set konnte nicht gewechselt werden",
-    "switchFailedBody": "Kassiber konnte diesen Projektcontainer nicht öffnen."
+    "switchFailedBody": "Kassiber konnte dieses Bücher-Set nicht öffnen."
   },
   "routeMeta": {
     "activity": {
@@ -111,7 +111,7 @@
       "placeholder": "Wallets, Importe, Backends suchen…"
     },
     "booksOverview": {
-      "title": "Buchsatz-Übersicht",
+      "title": "Bücher-Set-Übersicht",
       "label": "Bücher durchsuchen",
       "placeholder": "Bücher, Wallets, Berichte suchen…"
     },
@@ -135,7 +135,7 @@
     },
     "logs": {
       "label": "Protokoll durchsuchen",
-      "placeholder": "Daemon-Fehler, Logs suchen…"
+      "placeholder": "Logs und Fehler durchsuchen…"
     },
     "settings": {
       "label": "Einstellungen durchsuchen",
@@ -295,16 +295,16 @@
       },
       "touchIdOff": {
         "title": "Touch-ID-Entsperrung ist aus",
-        "body": "Kassiber fragt nach dem Datenbank-Passwort, bis Touch ID wieder aktiviert ist.",
+        "body": "Kassiber fragt nach deiner Passphrase, bis du Touch ID wieder einschaltest.",
         "action": "Touch ID aktivieren"
       },
       "unlockCredentialRemains": {
         "title": "Eine gespeicherte Entsperrmethode ist noch vorhanden",
-        "body": "Der OS-Zugangsspeicher hat das Entfernen nicht bestätigt; sie kann diese Bücher eventuell noch entsperren."
+        "body": "Der System-Schlüsselbund hat das Entfernen nicht bestätigt; sie kann diese Bücher eventuell noch entsperren."
       },
       "backupRestoreFailed": {
         "title": "Backup-Wiederherstellung nicht abgeschlossen",
-        "body": "Deine Bücher entsprechen eventuell nicht dem Backup. Die Details zeigen, was passiert ist und wo die Sicherungskopie von vor der Wiederherstellung liegt.",
+        "body": "Deine Bücher passen eventuell nicht zum Backup. Die Details zeigen, was passiert ist und wo die Wiederherstellungskopie liegt.",
         "action": "Backups öffnen"
       },
       "backupRestoreWarning": {
@@ -313,8 +313,8 @@
       },
       "sourceFundsRescan": {
         "title": "Eine Wallet braucht einen vollständigen Rescan",
-        "body_one": "{{count}} Transaktion wurde gesynct, bevor Kassiber festhielt, welche Inputs ihr gehören, deshalb lässt sich ihre Mittelherkunft nicht nachverfolgen. Scanne ihre Wallet neu.",
-        "body_other": "{{count}} Transaktionen wurden gesynct, bevor Kassiber festhielt, welche Inputs ihnen gehören, deshalb lässt sich ihre Mittelherkunft nicht nachverfolgen. Scanne ihre Wallet neu."
+        "body_one": "{{count}} Transaktion wurde synchronisiert, bevor Kassiber erfasst hat, welche Inputs deine sind; ihre Mittelherkunft lässt sich daher nicht verfolgen. Scanne ihre Wallet neu.",
+        "body_other": "{{count}} Transaktionen wurden synchronisiert, bevor Kassiber erfasst hat, welche Inputs deine sind; ihre Mittelherkunft lässt sich daher nicht verfolgen. Scanne ihre Wallets neu."
       },
       "pricingRebuildFailed": {
         "title": "Neuaufbau der Preise fehlgeschlagen",
@@ -384,8 +384,8 @@
       },
       "workspaceRefreshed": {
         "title": "Alle Bücher aktualisiert",
-        "body_one": "{{synced}} von {{count}} Buch gesynct.",
-        "body_other": "{{synced}} von {{count}} Büchern gesynct."
+        "body_one": "{{synced}} von {{count}} Buch synchronisiert.",
+        "body_other": "{{synced}} von {{count}} Büchern synchronisiert."
       },
       "newActivity": {
         "title_one": "{{count}} neue Transaktion",
@@ -400,6 +400,9 @@
         "walletCount_other": "{{count}} neu",
         "moreWallets_one": "+{{count}} weitere Wallet",
         "moreWallets_other": "+{{count}} weitere Wallets"
+      },
+      "fileSaved": {
+        "title": "Datei gespeichert"
       }
     },
     "job": {
@@ -418,7 +421,14 @@
       "openMarketData": "Marktdaten öffnen",
       "openAllBooks": "Alle Bücher öffnen",
       "openTransactions": "Transaktionen öffnen",
-      "openConnection": "Verbindung öffnen"
+      "openConnection": "Verbindung öffnen",
+      "openFileLabel": "{{name}} öffnen",
+      "showInFinder": "Im Finder zeigen",
+      "showInExplorer": "Im Explorer zeigen",
+      "showInFolder": "Im Ordner zeigen",
+      "showInFinderLabel": "{{name}} im Finder zeigen",
+      "showInExplorerLabel": "{{name}} im Explorer zeigen",
+      "showInFolderLabel": "{{name}} im Ordner zeigen"
     },
     "feedback": {
       "reportSaveFailed": "Berichtsexport konnte nicht gespeichert werden",
@@ -427,7 +437,9 @@
       "reportOpenFailed": "Bericht konnte nicht geöffnet werden",
       "btcPriceRefreshed": "BTC-Preis aktualisiert",
       "btcPriceUnchanged": "Kein neuerer BTC-Preis; der gespeicherte bleibt",
-      "btcPriceFailed": "BTC-Preis konnte nicht aktualisiert werden"
+      "btcPriceFailed": "BTC-Preis konnte nicht aktualisiert werden",
+      "fileOpenFailed": "Die Datei konnte nicht geöffnet werden",
+      "fileRevealFailed": "Die Datei konnte nicht angezeigt werden"
     },
     "causeCount": "{{cause}} ({{count}})",
     "technicalRepeated": "{{message}} (×{{count}})",
@@ -485,25 +497,25 @@
   },
   "lock": {
     "touchIdNotSavedReason": "Touch-ID-Entsperrung ist nicht eingerichtet: {{reason}}",
-    "touchIdNotSavedKeychain": "macOS Keychain hat die gespeicherte Passphrase nicht gemeldet.",
-    "touchIdNotAcceptedKeychain": "macOS Keychain hat die gespeicherte Passphrase nicht akzeptiert.",
+    "touchIdNotSavedKeychain": "Der macOS-Schlüsselbund hat die gespeicherte Passphrase nicht geliefert.",
+    "touchIdNotAcceptedKeychain": "Der macOS-Schlüsselbund hat die Passphrase nicht angenommen.",
     "importRootOpening": "Kassiber öffnet noch den ausgewählten Ordner mit lokalen Büchern.",
-    "passphraseRequiredError": "Die Datenbank-Passphrase ist erforderlich.",
-    "touchIdNotFound": "Für diese Bücher wurde keine Touch-ID-Passphrase gefunden. Entsperre einmal mit der Passphrase, um sie erneut zu speichern.",
+    "passphraseRequiredError": "Gib deine Passphrase ein.",
+    "touchIdNotFound": "Für Touch ID ist keine Passphrase gespeichert. Entsperre einmal mit der Passphrase, um sie erneut zu speichern.",
     "title": "Bücher entsperren",
     "sessionTitle": "Deine Bücher sind gesperrt",
     "lead": {
       "encrypted": "Gib die Passphrase ein, um deine Bücher auf diesem Gerät zu entschlüsseln.",
-      "daemon-auth": "Kassiber braucht die Passphrase erneut, bevor es deine Bücher anzeigen kann.",
+      "daemon-auth": "Gib die Passphrase erneut ein, um sie anzuzeigen.",
       "session": "Solange Kassiber gesperrt ist, wird nichts aus deinen Büchern angezeigt."
     },
     "passphrase": "Passphrase",
     "touchIdUnavailableReason": "Touch-ID-Entsperrung ist nicht verfügbar: {{reason}}",
-    "touchIdUnavailable": "Touch-ID-Entsperrung ist für diese Desktop-Sitzung nicht verfügbar.",
+    "touchIdUnavailable": "Entsperren mit Touch ID ist gerade nicht verfügbar.",
     "touchIdNotSetUpReason": "Touch-ID-Entsperrung ist nicht eingerichtet: {{reason}}",
-    "touchIdNotSetUp": "Für diese Bücher ist keine Touch-ID-Passphrase gespeichert. Entsperre einmal mit der Passphrase, um sie erneut zu speichern.",
+    "touchIdNotSetUp": "Für Touch ID ist keine Passphrase gespeichert. Entsperre einmal mit der Passphrase, um sie erneut zu speichern.",
     "useTouchIdNextTime": "Beim nächsten Mal Touch ID verwenden",
-    "useTouchIdNextTimeBody": "Speichere einen eigenen Desktop-Keychain-Eintrag, den Kassiber nach Touch ID verwenden kann. Die gemerkte CLI-Entsperrung bleibt getrennt.",
+    "useTouchIdNextTimeBody": "Speichert deine Passphrase für diese App im macOS-Schlüsselbund, lesbar erst nach Touch ID. Das gespeicherte Entsperren der CLI ist davon getrennt.",
     "waitingForTouchId": "Warten auf Touch ID…",
     "touchIdLead": "Bestätige mit Touch ID im macOS-Dialog.",
     "unlockWithTouchId": "Mit Touch ID entsperren",
@@ -519,7 +531,7 @@
   },
   "importRoot": {
     "title": "Lokale Bücher werden geöffnet",
-    "body": "Das ausgewählte Kassiber-Datenverzeichnis wird wiederhergestellt.",
+    "body": "Der ausgewählte Kassiber-Datenordner wird geöffnet.",
     "backToSetup": "Zurück zum Setup",
     "couldNotOpen": "Der ausgewählte Ordner mit lokalen Büchern konnte nicht geöffnet werden."
   },
@@ -544,8 +556,8 @@
     "route": {
       "tor": "Tor",
       "proxy": "Proxy",
-      "torVia": ".onion-Endpunkt nur für dieses Backend über {{proxy}} geroutet.",
-      "torOnion": ".onion-Endpunkt; konfiguriere einen Backend-Proxy, damit Tor ihn auflösen kann.",
+      "torVia": ".onion-Adresse, nur für dieses Backend über {{proxy}} geroutet.",
+      "torOnion": ".onion-Adresse; richte für dieses Backend einen Proxy ein, damit Tor sie erreicht.",
       "proxyVia": "Dieses Backend wird nur über {{proxy}} geroutet."
     },
     "indicator": {
@@ -565,7 +577,7 @@
       "skipped": "Prüfung übersprungen",
       "offline": "Offline"
     },
-    "unsupportedTitle": "Gespeicherte HTTP-Explorer-Endpunkte werden hier aufgeführt, aber nicht aktiv aus der Shell geprüft. Die Verbindungsprüfung testet Electrum-/Fulcrum-Backends und freigegebene reine Anzeige-HTTP-Prüfungen.",
+    "unsupportedTitle": "HTTP-Explorer-Backends werden aufgeführt, aber von hier aus nicht geprüft. Die Verbindungsprüfung deckt Electrum-/Fulcrum-Backends ab.",
     "checkPassed": "Verbindungsprüfung erfolgreich.",
     "checkFailed": "Verbindungsprüfung fehlgeschlagen.",
     "coreReachable": "Bitcoin Core erreichbar.",
@@ -575,8 +587,8 @@
     "offlineMode": {
       "label": "Online",
       "on": "Der Offline-Modus ist an. Kassiber verbindet sich mit nichts außerhalb dieses Geräts, bis du ihn ausschaltest.",
-      "environment": "KASSIBER_NO_EGRESS blockiert Wallet- und Backend-Verbindungen für diesen Prozess. Schalte den Offline-Modus ein, um auch AI-Provider und Update-Prüfungen zu blockieren.",
-      "failed": "Der Offline-Modus konnte nicht geändert werden."
+      "environment": "Eine Umgebungsvariable (KASSIBER_NO_EGRESS) blockiert Wallet- und Backend-Verbindungen. Schalte den Offline-Modus ein, um auch KI-Anbieter und Update-Prüfungen zu blockieren.",
+      "failed": "Der Offline-Modus konnte nicht geändert werden. Versuche es erneut."
     }
   },
   "bookSwitcher": {
@@ -585,10 +597,10 @@
     "loading": "Bücher werden geladen…",
     "loadError": "Die Bücher konnten nicht geladen werden.",
     "noMatches": "Keine passenden Bücher.",
-    "empty": "In diesem Datenverzeichnis wurden keine Bücher gefunden.",
+    "empty": "In diesem Datenordner gibt es keine Bücher.",
     "manageBooks": "Bücher verwalten",
     "switchError": "Die Bücher konnten nicht gewechselt werden.",
-    "bookSetOverview": "Buchsatz-Übersicht",
+    "bookSetOverview": "Bücher-Set-Übersicht",
     "wallets_one": "{{count}} Wallet",
     "wallets_other": "{{count}} Wallets"
   },
@@ -631,13 +643,13 @@
   "firstSync": {
     "defaultTitle": "Dein Buch wird eingerichtet",
     "defaultTitleRefresh": "Dein Buch wird aktualisiert",
-    "body": "Erster Sync — deine Historie wird aus den konfigurierten Quellen aufgebaut. Das läuft einmalig und kann ein paar Minuten dauern.",
-    "bodyRefresh": "Aktualisierung aus deinen konfigurierten Quellen.",
+    "body": "Erster Sync: Deine Historie wird aus deinen Wallets und Importen aufgebaut. Das läuft einmalig und kann ein paar Minuten dauern.",
+    "bodyRefresh": "Deine Wallets und Importe werden aktualisiert.",
     "bodyFailed": "Die Aktualisierung wurde beendet, bevor alle Quellen fertig waren.",
     "preparing": "Quellenaktualisierung wird vorbereitet",
     "working": "Wird bearbeitet…",
     "keepUsing": "Du kannst Kassiber weiter nutzen, während das fertig wird.",
-    "failedHint": "Die fehlgeschlagene Quelle und Phase bleiben sichtbar, bis du diese Meldung schließt.",
+    "failedHint": "Die fehlgeschlagene Quelle bleibt aufgeführt, bis du diese Meldung schließt.",
     "closeFailure": "Schließen",
     "continueInBackground": "Im Hintergrund fortsetzen"
   },
@@ -681,5 +693,20 @@
     "label": "Meldungen",
     "region": "Meldungen ({hotkey})",
     "dismiss": "Schließen"
+  },
+  "demo": {
+    "badge": "Demo",
+    "region": "Demo-Buch",
+    "body": "Beispieldaten auf Regtest, getrennt von deinen eigenen Büchern. Es gibt keinen Sync-Server; „Demo zurücksetzen“ beginnt von vorn.",
+    "leave": "Demo verlassen",
+    "reset": "Demo zurücksetzen",
+    "more": "Weitere Demo-Aktionen",
+    "connectAgent": "Agent verbinden",
+    "preparing": "Demo-Buch wird vorbereitet…",
+    "startFailed": "Das Demo-Buch konnte nicht gestartet werden.",
+    "leaveFailed": "Die Demo konnte nicht verlassen werden.",
+    "resetDone": "Das Demo-Buch wurde zurückgesetzt.",
+    "tryEntry": "Demo-Buch ausprobieren",
+    "mcpHint": "In der Demo öffnet der Agent-Befehl nur das Demo-Buch und nutzt die eigenen Agent-Einstellungen der Demo."
   }
 }

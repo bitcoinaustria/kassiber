@@ -502,6 +502,8 @@
       "complete": "Showing {{count}} transactions",
       "loaded": "Showing {{count}} loaded transactions",
       "moreHint": "More transactions load automatically as you scroll.",
+      "loadedInline": "{{count}} shown · more load as you scroll",
+      "loadingMoreInline": "{{count}} shown · loading more…",
       "loadingMore": "Loading more transactions…",
       "scrollRegion": "Scrollable transaction table"
     }
@@ -671,7 +673,7 @@
       "openFundingTransaction": "Open the transaction that created this input, {{reference}}"
     },
     "legAria": "{{role}} graph leg",
-    "liquidBody": "Kassiber does not have public Liquid input/output references for this row yet. Configure or refresh a Liquid backend so the graph can use generic confidential strands.",
+    "liquidBody": "No public Liquid inputs or outputs are stored for this transaction yet. Add or refresh a Liquid backend to draw them.",
     "liquidGraphless": "Liquid graph not stored locally",
     "loading": "Loading graph",
     "loadingBody": "Reading the local transaction graph.",
@@ -747,7 +749,7 @@
       "bitcoin_reference_lookup_prevout_limit": "This transaction needs too many uncached previous transactions; the lookup was capped to avoid flooding the backend.",
       "bitcoin_reference_lookup_unavailable": "No configured Bitcoin backend can fetch public transaction references.",
       "confidential_values_hidden": "Amounts are confidential on at least one Liquid leg. References and ownership hints are available, but not value-sized strands or a fee rate.",
-      "custody_projection_stale": "Custody annotations are unavailable until journals are rebuilt.",
+      "custody_projection_stale": "Wallet ownership marks appear after journals are processed.",
       "graphless_import": "This source record does not carry Bitcoin input/output references.",
       "input_prevout_values_missing": "Input amounts come from the spent previous outputs, which are not stored locally. References and outputs still draw; fee and fee rate need those amounts.",
       "liquid_reference_graph_not_local": "Only the imported Liquid row is stored locally. Add a Liquid explorer backend to inspect public references; confidential amounts stay hidden.",
@@ -957,11 +959,11 @@
     "note": "Note",
     "notePlaceholder": "Receipt, invoice, counterparty, or review context",
     "loanRole": "Loan role",
-    "loanRoleHint": "Mark this row as a leg of a BTC loan — principal or collateral. Applies immediately; link the matching legs in the Linked tab."
+    "loanRoleHint": "Mark this as part of a BTC loan: principal or collateral. Applies right away; link the matching parts in the Linked tab."
   },
   "linked": {
     "pairedMovement": "Paired movement",
-    "unpairing": "Unpairing...",
+    "unpairing": "Unlinking…",
     "unpair": "Unpair",
     "outWallet": "Out wallet",
     "outAmount": "Out amount",
@@ -972,7 +974,7 @@
     "pairKind": "Pair kind",
     "unknown": "Unknown",
     "noPairedMovement": "No paired movement",
-    "noPairedMovementBody": "When this tx is the other leg of a transfer, swap, or peg-in/out, the matched leg shows up here. You can also create a manual pair from the swap candidate queue.",
+    "noPairedMovementBody": "If this transaction is one side of a transfer, swap or peg, the other side shows here. You can also link one by hand from Transfers.",
     "openPairingReview": "Open matching tools",
     "loanLegs": "Loan legs",
     "loanId": "Loan {{id}}",
@@ -980,7 +982,7 @@
     "loanLinked": "Linked",
     "loanLinkCandidates": "Marked loan legs",
     "loanLink": "Link",
-    "loanLinking": "Linking...",
+    "loanLinking": "Linking…",
     "noLoanLinks": "No linked loan leg.",
     "journalEntries": "Journal entries",
     "noJournalEntries": "No journal entries for this row yet. Process journals after metadata or pricing changes."
@@ -996,7 +998,7 @@
     "editLinkTextAria": "Edit link text for {{name}}",
     "removeAttachment": "Remove attachment",
     "removeNamed": "Remove {{name}}",
-    "emptyBody": "Attach receipts, invoices, or accountant notes. Add as many as you need — local files are copied into the attachments folder, links stay as references.",
+    "emptyBody": "Attach receipts, invoices or accountant notes. Files are copied into Kassiber; links are stored as links.",
     "pickerError": "Could not open file picker.",
     "pickerTitle": "Attach files to this transaction",
     "nativePickerUnavailable": "Native file picker not available in this runtime",
@@ -1008,7 +1010,7 @@
     "couldNotRename": "Could not rename link.",
     "linksDialog": {
       "title": "Attach links",
-      "description": "One URL per line. Links are stored as references — Kassiber does not fetch or index the content. You can edit the link text after attaching.",
+      "description": "One URL per line. Kassiber stores the link only and never opens it. You can edit the link text later.",
       "urls": "URLs",
       "placeholder": "https://btcpay.example/invoice/abc123\nhttps://drive.example/receipt-2026-04.pdf",
       "noUrls": "No URLs yet",
@@ -1035,7 +1037,7 @@
     "revertFieldAria": "Revert {{label}}",
     "revertEditAria": "Revert edit",
     "staleReports": "stale reports",
-    "loading": "Loading edit history...",
+    "loading": "Loading edit history…",
     "emptyTimeline": "No edit history yet",
     "confirmRevertField": "Revert {{label}}? This creates a new edit history entry.",
     "confirmRevertAll": "all fields in this edit",
@@ -1073,7 +1075,7 @@
       "noFiatRecorded": "No fiat price recorded for {{date}}. Add a manual price or value to include this row in journal processing.",
       "noPersistedSource": "No persisted pricing source is available yet. Add a manual price or choose a backed pricing source.",
       "missingOrUnderReview": "Pricing source is marked as missing or under review. Save a reviewed source before running journals.",
-      "readinessHint": "This is a pricing readiness warning from the transaction row. It is not an active journal quarantine unless the daemon returns a quarantine reason.",
+      "readinessHint": "A pricing warning for this transaction. It is not in quarantine unless a quarantine reason is shown.",
       "viewPricing": "View Pricing",
       "viewDetails": "View Details",
       "viewLinked": "View Linked",
@@ -1081,7 +1083,7 @@
       "openPricing": "Open Pricing",
       "exclude": "Exclude"
     },
-    "quarantineHint": "Journal-quarantined transactions are skipped during journal processing and don't affect tax reports until the blocker is resolved.",
+    "quarantineHint": "Quarantined transactions are left out of journals and tax reports until resolved.",
     "timeline": {
       "imported": "Imported",
       "importedHint": "Transaction read from a wallet, exchange, or import file.",
