@@ -273,6 +273,9 @@ pub struct DetailUi {
     /// With each, the draft that was submitted: only that becomes the saved baseline, so edits
     /// made while it saves stay dirty.
     pub saving_ids: std::collections::VecDeque<(String, Draft)>,
+    /// The transaction each side read in flight was sent for, per reply tag (replies with one tag
+    /// arrive in the order they were sent), so a reply after a tab switch is dropped.
+    pub read_ids: HashMap<&'static str, std::collections::VecDeque<String>>,
     /// `ui.loans.list` marks.
     pub loans: Option<Vec<Value>>,
     /// The host's row order for "Save & next" (`set_nav_list`).
@@ -304,6 +307,7 @@ impl Default for DetailUi {
             width: DEFAULT_WIDTH,
             maximized: false,
             saving_ids: Default::default(),
+            read_ids: HashMap::new(),
             drafts: HashMap::new(),
             loans: None,
             nav: vec![],
@@ -578,26 +582,50 @@ pub fn sync_edits(app: &mut App, d: &Draft) {
 }
 
 pub fn side_reads(app: &mut App, id: &str) {
-    app.send(
+    read_for(
+        app,
+        id,
         "ui.attachments.list",
         json!({ "transaction": id }),
         "txd.attachments",
     );
-    app.send(
+    read_for(
+        app,
+        id,
         "ui.transactions.history",
         json!({ "transaction": id, "limit": 25 }),
         "txd.history",
     );
-    app.send(
+    read_for(
+        app,
+        id,
         "ui.journals.events.list",
         json!({ "transaction": id, "limit": 20 }),
         "txd.events",
     );
-    app.send(
+    read_for(
+        app,
+        id,
         "ui.transactions.commercial_context",
         json!({ "transaction": id }),
         "txd.commercial",
     );
+}
+
+/// Sends one side read for transaction `id`, remembering which transaction its reply is for.
+pub(super) fn read_for(app: &mut App, id: &str, kind: &str, args: Value, tag: &'static str) {
+    app.detail
+        .read_ids
+        .entry(tag)
+        .or_default()
+        .push_back(id.to_owned());
+    app.send(kind, args, tag);
+}
+
+/// Whether a side read's reply is for the transaction shown now (it always drains its entry).
+fn read_is_current(app: &mut App, tag: &str) -> bool {
+    let sent_for = app.detail.read_ids.get_mut(tag).and_then(|q| q.pop_front());
+    sent_for.is_some_and(|id| app.detail.open.as_ref().and_then(|o| o.id()) == Some(id.as_str()))
 }
 
 // ---- Replies ----------------------------------------------------------------------------------
@@ -615,6 +643,14 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     // Every save reply drains its queued entry, even after the last tab closed.
     if tag == "txd.save" {
         actions::on_saved(app, r);
+        return;
+    }
+    // Side reads too, and only the shown transaction's reply lands.
+    if matches!(
+        tag,
+        "txd.attachments" | "txd.history" | "txd.events" | "txd.commercial"
+    ) && !read_is_current(app, tag)
+    {
         return;
     }
     if app.detail.open.is_none() {

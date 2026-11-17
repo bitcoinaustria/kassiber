@@ -823,7 +823,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     Some(t(body)),
                 );
                 if let Some(id) = rec_id(app) {
-                    app.send(
+                    super::read_for(
+                        app,
+                        &id,
                         "ui.attachments.list",
                         json!({ "transaction": id }),
                         "txd.attachments",
@@ -895,7 +897,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                         )),
                     );
                     if let Some(id) = rec_id(app) {
-                        app.send(
+                        super::read_for(
+                            app,
+                            &id,
                             "ui.attachments.list",
                             json!({ "transaction": id }),
                             "txd.attachments",
@@ -1100,6 +1104,36 @@ mod tests {
         app.detail.open = None;
         super::super::on_reply(&mut app, "txd.save", &ok(json!({})));
         assert!(app.detail.saving_ids.is_empty());
+    }
+
+    /// A side read sent for A that lands after switching to B is dropped, and drains its entry.
+    #[test]
+    fn a_side_read_for_another_transaction_is_dropped() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut b = super::super::Open::new("b", super::super::Tab::Details, vec![]);
+        b.record = Some(json!({ "id": "b" }));
+        app.detail.open = Some(Box::new(b));
+        for id in ["a", "b"] {
+            app.detail
+                .read_ids
+                .entry("txd.attachments")
+                .or_default()
+                .push_back(id.into());
+        }
+        let list = |n: &str| ok(json!({ "attachments": [{ "id": n }] }));
+        super::super::on_reply(&mut app, "txd.attachments", &list("for-a"));
+        assert!(app.detail.open.as_ref().unwrap().attachments.is_none());
+        super::super::on_reply(&mut app, "txd.attachments", &list("for-b"));
+        let got = app
+            .detail
+            .open
+            .as_ref()
+            .unwrap()
+            .attachments
+            .clone()
+            .unwrap();
+        assert_eq!(got[0]["id"], "for-b");
+        assert!(app.detail.read_ids["txd.attachments"].is_empty());
     }
 
     /// A reload sent for A that lands after switching to B leaves B's record and edits alone.
