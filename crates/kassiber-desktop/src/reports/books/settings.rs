@@ -107,25 +107,81 @@ pub fn open(app: &mut App, ws: &str, profile_id: &str, name: &str) {
     );
 }
 
-/// Fills the form from the saved settings (only once: a re-read never overwrites edits).
+/// What the form shows for saved settings `s`, field by field.
+#[derive(Clone, PartialEq)]
+struct Seeded {
+    country: String,
+    currency: String,
+    days: String,
+    method: String,
+    pool: String,
+    custom: String,
+    year: YearChoice,
+    zone: String,
+    coarse: bool,
+    rails: bool,
+}
+
+fn seeded(s: &Settings) -> Seeded {
+    let year = sm::choice_for(&s.tax_year_start, &s.presets);
+    Seeded {
+        country: s.tax_country.clone(),
+        currency: s.fiat_currency.clone(),
+        days: s.long_term_days.map(|d| d.to_string()).unwrap_or_default(),
+        method: s.method.clone(),
+        pool: s.pool.clone(),
+        custom: if year == YearChoice::Custom {
+            s.tax_year_start.clone()
+        } else {
+            String::new()
+        },
+        year,
+        zone: s.timezone.clone(),
+        coarse: s.require_coarse_review,
+        rails: s.rail_carrying_value,
+    }
+}
+
+/// Fills the form from the saved settings. A later read (e.g. after the CLI changed the book)
+/// refreshes every field the user has not edited since the last read; edited fields stay, so a
+/// re-read never overwrites edits and a review never proposes reverting an outside change.
 fn seed(app: &mut App, s: Settings) {
     let f = form(app);
-    if f.base.is_none() {
-        f.country = s.tax_country.clone();
-        f.currency = te(&s.fiat_currency);
-        f.days = te(&s.long_term_days.map(|d| d.to_string()).unwrap_or_default());
-        f.method = s.method.clone();
-        f.pool = s.pool.clone();
-        let choice = sm::choice_for(&s.tax_year_start, &s.presets);
-        f.custom = te(if choice == YearChoice::Custom {
-            &s.tax_year_start
-        } else {
-            ""
-        });
-        f.year = Some(choice);
-        f.zone = s.timezone.clone();
-        f.coarse = s.require_coarse_review;
-        f.rails = s.rail_carrying_value;
+    let new = seeded(&s);
+    let old = f.base.as_ref().map(seeded);
+    // A field takes the new value when there was no earlier read or it still shows the old one.
+    let first = old.is_none();
+    let untouched = |shown: bool| first || shown;
+    if untouched(old.as_ref().is_some_and(|o| f.country == o.country)) {
+        f.country = new.country.clone();
+    }
+    if untouched(old.as_ref().is_some_and(|o| f.currency.text == o.currency)) {
+        f.currency = te(&new.currency);
+    }
+    if untouched(old.as_ref().is_some_and(|o| f.days.text == o.days)) {
+        f.days = te(&new.days);
+    }
+    if untouched(old.as_ref().is_some_and(|o| f.method == o.method)) {
+        f.method = new.method.clone();
+    }
+    if untouched(old.as_ref().is_some_and(|o| f.pool == o.pool)) {
+        f.pool = new.pool.clone();
+    }
+    if untouched(
+        old.as_ref()
+            .is_some_and(|o| f.year.as_ref() == Some(&o.year) && f.custom.text == o.custom),
+    ) {
+        f.year = Some(new.year.clone());
+        f.custom = te(&new.custom);
+    }
+    if untouched(old.as_ref().is_some_and(|o| f.zone == o.zone)) {
+        f.zone = new.zone.clone();
+    }
+    if untouched(old.as_ref().is_some_and(|o| f.coarse == o.coarse)) {
+        f.coarse = new.coarse;
+    }
+    if untouched(old.as_ref().is_some_and(|o| f.rails == o.rails)) {
+        f.rails = new.rails;
     }
     f.base = Some(s);
     f.load_error = None;
@@ -1707,5 +1763,42 @@ pub fn on_key(app: &mut App, ev: &KeyEvent) -> bool {
             true
         }
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod reseed_tests {
+    use super::*;
+
+    fn saved(method: &str) -> Settings {
+        Settings {
+            profile_id: "p".into(),
+            tax_country: "generic".into(),
+            fiat_currency: "USD".into(),
+            method: method.into(),
+            pool: "global".into(),
+            tax_year_start: "01-01".into(),
+            timezone: "UTC".into(),
+            ..Default::default()
+        }
+    }
+
+    /// A fresh read after an outside change (the CLI set HIFO) refreshes untouched controls, so
+    /// a later review doesn't propose reverting it; a control the user edited keeps their value.
+    #[test]
+    fn a_fresh_read_refreshes_untouched_fields_only() {
+        let mut app = crate::app::tests::quiet_app();
+        seed(&mut app, saved("FIFO"));
+        seed(&mut app, saved("HIFO"));
+        assert_eq!(form(&mut app).method, "HIFO");
+        form(&mut app).method = "LIFO".into();
+        form(&mut app).pool = "wallet".into();
+        let mut later = saved("HIFO");
+        later.pool = "global".into();
+        later.fiat_currency = "GBP".into();
+        seed(&mut app, later);
+        let f = form(&mut app);
+        assert_eq!((f.method.as_str(), f.pool.as_str()), ("LIFO", "wallet"));
+        assert_eq!(f.currency.text, "GBP");
     }
 }
