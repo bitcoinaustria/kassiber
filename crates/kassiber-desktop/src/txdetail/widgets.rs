@@ -33,167 +33,11 @@ pub fn hint_named(tk: &Tk, name: String, body: String, color: Color) -> El {
         .child(ic(&I::INFO, tk.r(0.75), color.alpha(color.a * 0.6)))
 }
 
-/// shadcn `Button` variants (ui/button.tsx).
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Variant {
-    Default,
-    Outline,
-    Ghost,
-}
+pub use crate::ui::button::{Size, Variant, button, button_with, icon_button};
 
-/// shadcn `Button` sizes.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Size {
-    /// `h-9 px-4` (`px-3` with an icon), text-sm.
-    Default,
-    /// `h-8 px-3 gap-1.5` (`px-2.5` with an icon), text-sm.
-    Sm,
-    /// `h-7 px-2 gap-1 text-xs` (`px-1.5` with an icon, icon 0.75 rem).
-    Xs,
-}
-
-/// A shadcn `Button` with an optional leading icon and a label.
-pub fn button(
-    tk: &Tk,
-    key: impl Into<String>,
-    variant: Variant,
-    size: Size,
-    glyph: Option<&'static Icon>,
-    label: &str,
-    enabled: bool,
-) -> El {
-    button_with(tk, key, variant, size, glyph, None, label, enabled)
-}
-
-/// `button` with an explicit icon size (`size-3.5` on the icon).
-#[allow(clippy::too_many_arguments)]
-pub fn button_with(
-    tk: &Tk,
-    key: impl Into<String>,
-    variant: Variant,
-    size: Size,
-    glyph: Option<&'static Icon>,
-    glyph_size: Option<f32>,
-    label: &str,
-    enabled: bool,
-) -> El {
-    let (h, px, gap, font, icon) = match size {
-        Size::Default => (
-            tk.r(2.25),
-            if glyph.is_some() {
-                tk.r(0.75)
-            } else {
-                tk.r(1.0)
-            },
-            tk.r(0.5),
-            tk.tsm(500.0),
-            tk.r(1.0),
-        ),
-        Size::Sm => (
-            tk.r(2.0),
-            if glyph.is_some() {
-                tk.r(0.625)
-            } else {
-                tk.r(0.75)
-            },
-            tk.r(0.375),
-            tk.tsm(500.0),
-            tk.r(1.0),
-        ),
-        Size::Xs => (
-            tk.r(1.75),
-            if glyph.is_some() {
-                tk.r(0.375)
-            } else {
-                tk.r(0.5)
-            },
-            tk.r(0.25),
-            tk.txs(500.0),
-            tk.r(0.75),
-        ),
-    };
-    let (fg, icon_fg) = match variant {
-        Variant::Default => (tk.primary_fg, tk.primary_fg),
-        Variant::Outline => (tk.fg, tk.fg),
-        Variant::Ghost => (tk.fg, tk.muted_fg),
-    };
-    let mut b = button_surface(
-        tk,
-        row().key(key.into()).h(h).px(px).gap(gap).center(),
-        variant,
-    )
-    .role("button")
-    .label(label.to_owned())
-    .focusable(enabled)
-    .disabled(!enabled);
-    if !enabled {
-        b = b.opacity(0.5);
-    }
-    if let Some(g) = glyph {
-        b = b.child(ic(g, glyph_size.unwrap_or(icon), icon_fg));
-    }
-    b.child(text(label.to_owned()).font(font).color(fg))
-}
-
-/// A square shadcn icon button (`icon` 2.25 rem, `icon-sm` 2 rem, `icon-xs` 1.75 rem with a
-/// 0.75 rem glyph unless `glyph_size` says otherwise).
-pub fn icon_button(
-    tk: &Tk,
-    key: impl Into<String>,
-    variant: Variant,
-    side: f32,
-    glyph: &'static Icon,
-    glyph_size: f32,
-    label: String,
-) -> El {
-    let ink = if variant == Variant::Ghost {
-        tk.muted_fg
-    } else {
-        tk.fg
-    };
-    button_surface(tk, row().key(key.into()).size(side, side).center(), variant)
-        .role("button")
-        .label(label.clone())
-        .help(label)
-        .focusable(true)
-        .child(ic(glyph, glyph_size, ink))
-}
-
-/// Fill, border and hover of a shadcn button variant.
+/// Fill, border, hover and corners of a button variant on a caller-sized element.
 pub fn button_surface(tk: &Tk, el: El, variant: Variant) -> El {
-    let el = el.radius(tk.r(0.375));
-    match variant {
-        Variant::Default => el.fill(tk.primary).hover(tk.primary_fg.alpha(0.1)),
-        Variant::Outline => {
-            if tk.dark {
-                // `dark:border-input dark:bg-input/30` + a 1 px top highlight.
-                el.fill(tk.input.alpha(tk.input.a * 0.3))
-                    .border(1.0, tk.input)
-                    .box_shadow(rune::Shadow {
-                        y: 1.0,
-                        color: Color::WHITE.alpha(0.06),
-                        inset: true,
-                        ..Default::default()
-                    })
-                    .hover(tk.input.alpha(tk.input.a * 0.5))
-            } else {
-                el.fill(tk.card)
-                    .border(1.0, tk.border)
-                    .box_shadow(rune::Shadow {
-                        y: 1.0,
-                        blur: 2.0,
-                        color: Color::BLACK.alpha(0.05),
-                        ..Default::default()
-                    })
-                    .hover(tk.accent)
-            }
-        }
-        Variant::Ghost => el.hover(if tk.dark {
-            tk.accent.alpha(0.5)
-        } else {
-            tk.accent
-        }),
-    }
+    crate::ui::button::surface(tk, el.radius(tk.r(0.5)), variant)
 }
 
 /// `kb-surface-inset`: card fill, 1 px border at 70 %, 0.5 rem radius.
@@ -388,31 +232,22 @@ pub fn small_button(
     outline: bool,
     enabled: bool,
 ) -> El {
-    let mut r = row()
-        .key(key.into())
-        .h(tk.r(1.75))
-        .px(tk.r(0.5))
-        .gap(tk.r(0.375))
-        .center_y()
-        .radius(tk.r(0.375))
-        .role("button")
-        .label(label.to_owned())
-        .focusable(enabled)
-        .disabled(!enabled)
-        .opacity(if enabled { 1.0 } else { 0.5 });
-    if outline {
-        r = r.border(1.0, tk.input).fill(tk.background);
-    }
-    if enabled {
-        r = r.hover(tk.accent);
-    }
-    if let Some(g) = glyph {
-        r = r.child(ic(g, tk.r(0.875), tk.fg));
-    }
-    r.child(text(label.to_owned()).font(tk.txs(500.0)).color(tk.fg))
+    button(
+        tk,
+        key,
+        if outline {
+            Variant::Outline
+        } else {
+            Variant::Ghost
+        },
+        Size::Xs,
+        glyph,
+        label,
+        enabled,
+    )
 }
 
-/// A square icon button with a name.
+/// A square ghost icon button with a name.
 pub fn icon_btn(
     tk: &Tk,
     key: impl Into<String>,
@@ -420,17 +255,7 @@ pub fn icon_btn(
     label: String,
     size: f32,
 ) -> El {
-    row()
-        .key(key.into())
-        .size(size, size)
-        .center()
-        .radius(tk.r(0.375))
-        .hover(tk.accent)
-        .role("button")
-        .label(label.clone())
-        .help(label)
-        .focusable(true)
-        .child(ic(glyph, size * 0.5, tk.muted_fg))
+    icon_button(tk, key, Variant::Ghost, size, glyph, size * 0.5, label)
 }
 
 /// A `SelectTrigger` (`w-fit h-9 rounded-md border border-input px-3 py-2 text-sm`,

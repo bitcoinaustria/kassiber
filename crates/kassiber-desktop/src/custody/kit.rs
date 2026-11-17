@@ -97,19 +97,10 @@ pub fn btn(
     label: &str,
     enabled: bool,
 ) -> El {
-    widgets::button_with(
-        tk,
-        key,
-        variant,
-        Size::Sm,
-        glyph,
-        Some(tk.r(1.0)),
-        label,
-        enabled,
-    )
+    widgets::button(tk, key, variant, Size::Sm, glyph, label, enabled)
 }
 
-/// `Button size="sm"` with a 0.875 rem icon (`size-3.5`).
+/// `btn` (the web's `size-3.5` icon is the shared small-button icon).
 pub fn btn35(
     tk: &Tk,
     key: impl Into<String>,
@@ -118,19 +109,10 @@ pub fn btn35(
     label: &str,
     enabled: bool,
 ) -> El {
-    widgets::button_with(
-        tk,
-        key,
-        variant,
-        Size::Sm,
-        glyph,
-        Some(tk.r(0.875)),
-        label,
-        enabled,
-    )
+    btn(tk, key, variant, glyph, label, enabled)
 }
 
-/// `Button size="sm" className="h-7 gap-1.5 text-xs"` (the inline retry / check-again buttons).
+/// The extra-small button (the inline retry / check-again buttons).
 pub fn btn_xs(
     tk: &Tk,
     key: impl Into<String>,
@@ -139,18 +121,7 @@ pub fn btn_xs(
     label: &str,
     enabled: bool,
 ) -> El {
-    widgets::button_with(
-        tk,
-        key,
-        variant,
-        Size::Xs,
-        glyph,
-        Some(tk.r(0.875)),
-        label,
-        enabled,
-    )
-    .gap(tk.r(0.375))
-    .px(tk.r(0.625))
+    widgets::button(tk, key, variant, Size::Xs, glyph, label, enabled)
 }
 
 /// The default size (`h-9`).
@@ -175,34 +146,7 @@ pub fn btn_busy(
     label: &str,
     enabled: bool,
 ) -> El {
-    if !busy {
-        return btn(tk, key, variant, glyph, label, enabled);
-    }
-    let fg = if variant == Variant::Default {
-        tk.primary_fg
-    } else {
-        tk.fg
-    };
-    let mut b = widgets::button_surface(
-        tk,
-        row()
-            .key(key.into())
-            .h(tk.r(2.0))
-            .px(tk.r(0.625))
-            .gap(tk.r(0.375))
-            .center(),
-        variant,
-    )
-    .role("button")
-    .label(label.to_owned())
-    .busy(true)
-    .focusable(enabled)
-    .disabled(!enabled);
-    if !enabled {
-        b = b.opacity(0.5);
-    }
-    b.child(spinner(tk, tk.r(1.0), fg))
-        .child(text(label.to_owned()).font(tk.tsm(500.0)).color(fg))
+    crate::ui::button::button_busy(tk, key, variant, Size::Sm, busy, glyph, label, enabled)
 }
 
 /// A ghost/outline square icon button.

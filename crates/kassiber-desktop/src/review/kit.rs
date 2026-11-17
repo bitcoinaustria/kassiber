@@ -46,34 +46,7 @@ pub fn btn_busy(
     label: &str,
     enabled: bool,
 ) -> El {
-    if !busy {
-        return widgets::button(tk, key, variant, Size::Sm, glyph, label, enabled);
-    }
-    let (fg, icon_fg) = match variant {
-        Variant::Default => (tk.primary_fg, tk.primary_fg),
-        Variant::Outline => (tk.fg, tk.fg),
-        Variant::Ghost => (tk.fg, tk.muted_fg),
-    };
-    let mut b = widgets::button_surface(
-        tk,
-        row()
-            .key(key.into())
-            .h(tk.r(2.0))
-            .px(tk.r(0.625))
-            .gap(tk.r(0.375))
-            .center(),
-        variant,
-    )
-    .role("button")
-    .label(label.to_owned())
-    .busy(true)
-    .focusable(enabled)
-    .disabled(!enabled);
-    if !enabled {
-        b = b.opacity(0.5);
-    }
-    b.child(ic(&I::LOADER_CIRCLE, tk.r(1.0), icon_fg).looping(rune::LoopSpec::rotation(0.9)))
-        .child(text(label.to_owned()).font(tk.tsm(500.0)).color(fg))
+    crate::ui::button::button_busy(tk, key, variant, Size::Sm, busy, glyph, label, enabled)
 }
 
 /// `Button variant="link" size="sm" className="h-auto p-0 text-xs"`.

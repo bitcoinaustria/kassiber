@@ -309,8 +309,8 @@ pub enum Variant {
     Ghost,
 }
 
-/// shadcn `Button`: `size` default (`h-9 px-4`) or `sm` (`h-8 px-3 gap-1.5`), an optional
-/// leading glyph (`spin` animates it), disabled at 50 %.
+/// A button: `small` (2 rem) or the default size (2.25 rem), an optional leading glyph (its
+/// size is the shared button's; `spin` shows the spinner instead).
 #[allow(clippy::too_many_arguments)]
 pub fn button(
     tk: &Tk,
@@ -321,63 +321,14 @@ pub fn button(
     label: &str,
     enabled: bool,
 ) -> El {
-    let (h, px) = if small {
-        (
-            tk.r(2.0),
-            if glyph.is_some() {
-                tk.r(0.625)
-            } else {
-                tk.r(0.75)
-            },
-        )
-    } else {
-        (
-            tk.r(2.25),
-            if glyph.is_some() {
-                tk.r(0.75)
-            } else {
-                tk.r(1.0)
-            },
-        )
+    use crate::ui::button::{Size, Variant as V};
+    let v = match variant {
+        Variant::Secondary | Variant::Outline => V::Outline,
+        Variant::Ghost => V::Ghost,
     };
-    let ink = tk.fg;
-    let mut b = row()
-        .key(key.to_owned())
-        .h(h)
-        .px(px)
-        .gap(if small { tk.r(0.375) } else { tk.r(0.5) })
-        .center()
-        .radius(tk.r(0.375));
-    b = match variant {
-        Variant::Secondary => b.fill(tk.muted).hover(tk.muted.alpha(0.8)),
-        Variant::Outline => crate::txdetail::widgets::button_surface(
-            tk,
-            b,
-            crate::txdetail::widgets::Variant::Outline,
-        ),
-        Variant::Ghost => crate::txdetail::widgets::button_surface(
-            tk,
-            b,
-            crate::txdetail::widgets::Variant::Ghost,
-        ),
-    };
-    b = b
-        .role("button")
-        .label(label.to_owned())
-        .focusable(enabled)
-        .disabled(!enabled);
-    if !enabled {
-        b = b.opacity(0.5);
-    }
-    if let Some((g, size, spin)) = glyph {
-        let icon = ic(g, size, ink);
-        b = b.child(if spin {
-            icon.looping(rune::LoopSpec::rotation(0.9))
-        } else {
-            icon
-        });
-    }
-    b.child(text(label.to_owned()).font(tk.tsm(500.0)).color(ink))
+    let size = if small { Size::Sm } else { Size::Default };
+    let busy = glyph.is_some_and(|g| g.2);
+    crate::ui::button::button_busy(tk, key, v, size, busy, glyph.map(|g| g.0), label, enabled)
 }
 
 /// `Badge variant="outline"` (`rounded-md border px-2 py-0.5 text-xs font-medium`), optionally

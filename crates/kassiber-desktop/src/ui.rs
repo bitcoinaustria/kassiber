@@ -4,6 +4,7 @@ use rune::{Color, El, Icon, Shadow, TextStyle, col, el, icon, row, text};
 
 use crate::theme::{Tk, Tone};
 
+pub mod button;
 pub mod kit_menu;
 pub mod popup;
 pub mod table;
@@ -80,19 +81,17 @@ pub fn neutral_tone(tk: &Tk) -> Tone {
     }
 }
 
-/// A title-bar style ghost icon button (`size-8 rounded-md`, muted glyph, row-hover fill).
+/// A ghost icon button (`size-8`, muted glyph).
 pub fn icon_button(tk: &Tk, key: &str, glyph: &'static Icon, label: &str) -> El {
-    row()
-        .key(key.to_owned())
-        .size(tk.r(2.0), tk.r(2.0))
-        .center()
-        .radius(tk.r(0.375))
-        .hover(tk.row_hover)
-        .role("button")
-        .label(label.to_owned())
-        .help(label.to_owned())
-        .focusable(true)
-        .child(ic(glyph, tk.r(1.0), tk.sidebar_muted_fg))
+    button::icon_button(
+        tk,
+        key,
+        button::Variant::Ghost,
+        tk.r(2.0),
+        glyph,
+        tk.r(1.0),
+        label.to_owned(),
+    )
 }
 
 /// A small toggle chip (`px-1.5 py-0.5 rounded-md text-xs`), active = `bg-muted text-foreground`.
@@ -114,50 +113,30 @@ pub fn chip(tk: &Tk, key: &str, label: &str, active: bool) -> El {
         }))
 }
 
-/// A primary button (`h-8 gap-2`, primary fill).
+/// A primary button (`h-8`).
 pub fn primary_button(tk: &Tk, key: &str, glyph: Option<&'static Icon>, label: &str) -> El {
-    let mut r = row()
-        .key(key.to_owned())
-        .h(tk.r(2.0))
-        .px(tk.r(0.75))
-        .gap(tk.r(0.5))
-        .center_y()
-        .radius(tk.r(0.375))
-        .fill(tk.primary)
-        .hover(tk.primary_fg.alpha(0.1))
-        .role("button")
-        .label(label.to_owned())
-        .focusable(true);
-    if let Some(g) = glyph {
-        r = r.child(ic(g, tk.r(1.0), tk.primary_fg));
-    }
-    r.child(
-        text(label.to_owned())
-            .font(tk.tsm(500.0))
-            .color(tk.primary_fg),
+    button::button(
+        tk,
+        key,
+        button::Variant::Default,
+        button::Size::Sm,
+        glyph,
+        label,
+        true,
     )
 }
 
-/// An outline button.
+/// An outline button (`h-8`).
 pub fn outline_button(tk: &Tk, key: &str, glyph: Option<&'static Icon>, label: &str) -> El {
-    let mut r = row()
-        .key(key.to_owned())
-        .h(tk.r(2.0))
-        .px(tk.r(0.75))
-        .gap(tk.r(0.5))
-        .center_y()
-        .radius(tk.r(0.375))
-        .fill(tk.background)
-        .border(1.0, tk.input)
-        .border_layout()
-        .hover(tk.accent)
-        .role("button")
-        .label(label.to_owned())
-        .focusable(true);
-    if let Some(g) = glyph {
-        r = r.child(ic(g, tk.r(1.0), tk.fg));
-    }
-    r.child(text(label.to_owned()).font(tk.tsm(500.0)).color(tk.fg))
+    button::button(
+        tk,
+        key,
+        button::Variant::Outline,
+        button::Size::Sm,
+        glyph,
+        label,
+        true,
+    )
 }
 
 /// A 1 px rule.
@@ -285,22 +264,17 @@ pub fn outline_surface(tk: &Tk, el: El) -> El {
     }
 }
 
-/// `Button variant="outline" size="xs"`: `h-7 gap-1 rounded-md px-2 text-xs font-medium`.
+/// An extra-small outline button (`h-7`).
 pub fn button_xs_outline(tk: &Tk, key: &str, label: &str) -> El {
-    outline_surface(
+    button::button(
         tk,
-        row()
-            .key(key.to_owned())
-            .h(tk.r(1.75))
-            .px(tk.r(0.5))
-            .gap(tk.r(0.25))
-            .center()
-            .radius(tk.r(0.375))
-            .role("button")
-            .label(label.to_owned())
-            .focusable(true),
+        key,
+        button::Variant::Outline,
+        button::Size::Xs,
+        None,
+        label,
+        true,
     )
-    .child(text(label.to_owned()).font(tk.txs(500.0)).color(tk.fg))
 }
 
 /// shadcn `Switch` (ui/switch.tsx): `h-[1.15rem] w-8 rounded-full border border-transparent`,

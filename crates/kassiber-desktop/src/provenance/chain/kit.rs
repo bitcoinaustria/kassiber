@@ -507,46 +507,12 @@ pub fn btn(
     label: &str,
     enabled: bool,
 ) -> El {
-    w::button_with(
-        tk,
-        k,
-        variant,
-        Size::Sm,
-        glyph,
-        Some(tk.r(0.875)),
-        label,
-        enabled,
-    )
+    w::button(tk, k, variant, Size::Sm, glyph, label, enabled)
 }
 
 /// `Button variant="destructive" size="sm"`.
 pub fn btn_destructive(tk: &Tk, k: impl Into<String>, label: &str, enabled: bool) -> El {
-    let fill = if tk.dark {
-        tk.destructive.alpha(0.6)
-    } else {
-        tk.destructive
-    };
-    let mut b = row()
-        .key(k.into())
-        .h(tk.r(2.0))
-        .px(tk.r(0.75))
-        .center()
-        .radius(tk.r(0.375))
-        .fill(fill)
-        .hover(fill.alpha(0.9))
-        .role("button")
-        .label(label.to_owned())
-        .focusable(enabled)
-        .disabled(!enabled)
-        .child(
-            text(label.to_owned())
-                .font(tk.tsm(500.0))
-                .color(Color::WHITE),
-        );
-    if !enabled {
-        b = b.opacity(0.5);
-    }
-    b
+    w::button(tk, k, Variant::Destructive, Size::Sm, None, label, enabled)
 }
 
 /// An underlined link (`underline underline-offset-4`).
