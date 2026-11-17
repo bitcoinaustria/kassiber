@@ -1211,8 +1211,13 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
             c.advance(app.clock);
             changed = true;
         }
-        // The packets and slides step every 150 ms or so.
-        tx.wake_after(Duration::from_millis(150));
+        // The slide, the landing layer's flicker and the packets step between beats: redraw
+        // when the picture changes (a wake alone draws nothing new), and sleep until then.
+        if app.clock >= c.due {
+            changed = true;
+        }
+        c.due = chain::next_change(c, app.clock);
+        tx.wake_after(Duration::from_secs_f64((c.due - app.clock).max(0.0)));
     }
     changed
 }

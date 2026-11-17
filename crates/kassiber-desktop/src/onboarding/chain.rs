@@ -200,6 +200,8 @@ pub struct Loop {
     pub found: bool,
     /// App-clock time of the last beat (the slide runs from it).
     pub at: f64,
+    /// App-clock time the picture next changes (`next_change`): the start page redraws then.
+    pub due: f64,
 }
 
 impl Loop {
@@ -209,6 +211,7 @@ impl Loop {
             layers: (fill.clamp(0.0, 1.0) * f64::from(BLOCK_LAYERS)).round() as u32,
             found: false,
             at: 0.0,
+            due: 0.0,
         }
     }
     pub fn advance(&mut self, now: f64) {
@@ -223,6 +226,48 @@ impl Loop {
         }
         self.at = now;
     }
+}
+
+/// When the live artwork next looks different after `clock`: the next beat, slide step, step of
+/// a landing layer's flicker or packet phase, as `view` steps them. The start page wakes and
+/// redraws exactly then, so the stepped motion lands on time instead of on a polling grid.
+pub fn next_change(state: &Loop, clock: f64) -> f64 {
+    let since = clock - state.at;
+    let mut next = state.at + TICK;
+    let mut after = |t: f64| {
+        if t > clock && t < next {
+            next = t;
+        }
+    };
+    // The slide's four steps (`view`: step = ⌊since / SLIDE × 4⌋ + 1).
+    if state.layers == 0 && !state.found && state.tip > 0 {
+        for k in 1..4 {
+            after(state.at + SLIDE * f64::from(k) / 4.0);
+        }
+    }
+    // The landing layer's flicker: each transaction staggered 9 ms (capped at 0.3 s), hidden
+    // and shown in 72 ms phases.
+    if !state.found && state.layers > 0 && since < 0.66 {
+        for i in 0..=34 {
+            let start = state.at + (f64::from(i) * 0.009).min(0.3);
+            for phase in [0.0, 0.2, 0.4, 0.6] {
+                after(start + phase * 0.36);
+            }
+        }
+        after(state.at + 0.66);
+    }
+    // The pending packets' 1.8 s loop, 240 ms apart, three phases each.
+    if state.layers < BLOCK_LAYERS && !state.found {
+        for i in 0..PENDING_COUNT {
+            let offset = i as f64 * 0.24;
+            let u = (clock + offset).rem_euclid(1.8);
+            for edge in [0.63, 1.26, 1.8] {
+                after(clock - u + edge);
+            }
+        }
+    }
+    // Land just past the edge, so the frame drawn then shows the new step.
+    next + 1e-4
 }
 
 // ---- Rasterizing (ChainArtwork.tsx) -------------------------------------------------------------
@@ -615,6 +660,27 @@ mod tests {
         assert!(l.found);
         l.advance(4.0);
         assert_eq!((l.tip, l.layers, l.found), (1, 0, false));
+    }
+
+    /// The redraw lands on each slide step after a block is found, not on a polling grid.
+    #[test]
+    fn the_next_change_follows_the_slide_steps() {
+        let st = Loop {
+            tip: 2,
+            layers: 0,
+            found: false,
+            at: 10.0,
+            due: 0.0,
+        };
+        let a = next_change(&st, 10.0);
+        // The packets also step; the first change is no later than the first slide step.
+        assert!(a > 10.0 && a <= 10.15 + 2e-4, "{a}");
+        // Never past the next beat.
+        assert!(next_change(&st, 10.85) <= 10.0 + TICK + 2e-4);
+        // A landing layer's flicker asks for frames about every stagger step.
+        let landing = Loop { layers: 2, ..st };
+        let b = next_change(&landing, 10.05);
+        assert!(b - 10.05 <= 0.0091, "{}", b - 10.05);
     }
 
     #[test]
