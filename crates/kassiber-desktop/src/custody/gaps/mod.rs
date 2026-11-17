@@ -429,10 +429,7 @@ pub fn escape(app: &mut App) -> bool {
         d.select_open = false;
         return true;
     }
-    if d.dismiss.take().is_some() {
-        return true;
-    }
-    false
+    d.dismiss.take().is_some()
 }
 
 /// The journals or the book changed: read again what was read.
