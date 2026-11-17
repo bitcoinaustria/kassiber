@@ -4,6 +4,7 @@
 
 use rune::{Color, Cx, El, col, el, row, text};
 use serde_json::Value;
+use std::collections::VecDeque;
 
 use super::common::{self as c, Tone, sens, tnum};
 use super::reportable::{self, TableUi};
@@ -33,14 +34,40 @@ pub struct JournalsUi {
     pub verify: super::verify::Verify,
     /// The page's "⋯" menu (Reports, Check reproducibility) is open.
     pub menu: bool,
-    snapshot_inflight: bool,
+    /// The snapshot / entry reads in flight, in send order (the daemon answers in order): true
+    /// while current, false once a refresh or book switch made its answer obsolete (dropped).
+    snapshot_asked: VecDeque<bool>,
     stale_snapshot: bool,
-    events_inflight: bool,
+    events_asked: VecDeque<bool>,
     stale_events: bool,
 }
 
 impl JournalsUi {
+    /// Another book: the view starts over, but the reads still out keep their place, so their
+    /// answers are not shown as the new book's.
+    pub fn switch_book(&mut self) {
+        let snapshot_asked = self.snapshot_asked.iter().map(|_| false).collect();
+        let events_asked = self.events_asked.iter().map(|_| false).collect();
+        *self = JournalsUi {
+            snapshot_asked,
+            events_asked,
+            ..JournalsUi::default()
+        };
+    }
+
+    fn snapshot_inflight(&self) -> bool {
+        self.snapshot_asked.contains(&true)
+    }
+
+    fn events_inflight(&self) -> bool {
+        self.events_asked.contains(&true)
+    }
+
+    /// A refresh: what is shown stays up while it is re-read; the reads already out answer for
+    /// the book before it, so their answers are dropped and the reads asked again.
     pub fn invalidate(&mut self) {
+        self.snapshot_asked.iter_mut().for_each(|c| *c = false);
+        self.events_asked.iter_mut().for_each(|c| *c = false);
         // Keep showing what we have while the re-read runs, as React Query does.
         if !matches!(self.snapshot, Load::Ready(_)) {
             self.snapshot = Load::Idle;
@@ -328,8 +355,8 @@ fn count(n: f64) -> String {
 pub fn step(app: &mut App) -> bool {
     let mut changed = false;
     let ui = &app.reports.ledger.journals;
-    if ui.wants_snapshot() && !ui.snapshot_inflight {
-        app.reports.ledger.journals.snapshot_inflight = true;
+    if ui.wants_snapshot() && !ui.snapshot_inflight() {
+        app.reports.ledger.journals.snapshot_asked.push_back(true);
         if matches!(app.reports.ledger.journals.snapshot, Load::Idle) {
             app.reports.ledger.journals.snapshot = Load::Loading;
         }
@@ -344,9 +371,9 @@ pub fn step(app: &mut App) -> bool {
     let ui = &app.reports.ledger.journals;
     if ui.tab == Tab::Reportable
         && (matches!(ui.events, Load::Idle) || ui.stale_events)
-        && !ui.events_inflight
+        && !ui.events_inflight()
     {
-        app.reports.ledger.journals.events_inflight = true;
+        app.reports.ledger.journals.events_asked.push_back(true);
         if matches!(app.reports.ledger.journals.events, Load::Idle) {
             app.reports.ledger.journals.events = Load::Loading;
         }
@@ -364,7 +391,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     let ui = &mut app.reports.ledger.journals;
     match tag {
         "reports.ledger.journals" => {
-            ui.snapshot_inflight = false;
+            if ui.snapshot_asked.pop_front() != Some(true) {
+                return;
+            }
             ui.stale_snapshot = false;
             ui.snapshot = match (&r.error, r.data.is_null() || r.data.get("status").is_none()) {
                 (Some(e), _) => Load::Failed(e.clone()),
@@ -373,7 +402,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             };
         }
         "reports.ledger.events" => {
-            ui.events_inflight = false;
+            if ui.events_asked.pop_front() != Some(true) {
+                return;
+            }
             ui.stale_events = false;
             ui.events = match (
                 &r.error,
@@ -393,7 +424,7 @@ pub fn prime(app: &mut App) {
     step(app);
     crate::reports::pump_until(app, |a| {
         let j = &a.reports.ledger.journals;
-        !j.snapshot_inflight && !j.events_inflight
+        j.snapshot_asked.is_empty() && j.events_asked.is_empty()
     });
 }
 
@@ -1070,6 +1101,51 @@ fn entries(app: &App, cx: &mut Cx<App>, tk: &Tk, snap: &Snapshot, fallback_w: f3
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// A book refresh while the snapshot and entries are out (held by the refresh cycle, say):
+    /// those answers predate it, so they are dropped, both reads are asked again, and only the
+    /// fresh answers land.
+    #[test]
+    fn a_refresh_drops_the_journal_reads_asked_before_it() {
+        let mut app = crate::app::tests::quiet_app();
+        let reply = |data: Value| Reply {
+            kind: String::new(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        let snap = |n: f64| reply(json!({"status": {"journalEntryCount": n}}));
+        let events = |n: &str| reply(json!({"summary": {}, "n": n}));
+        // Shown and stale, so the refresh keeps them on screen while they are re-read.
+        app.reports.ledger.journals.snapshot = Load::Ready(Snapshot::parse(&json!({"status": {}})));
+        app.reports.ledger.journals.events = Load::Ready(json!({"summary": {}}));
+        app.reports.ledger.journals.tab = Tab::Reportable;
+        app.reports.ledger.journals.invalidate();
+        assert!(step(&mut app));
+        // The refresh lands while both are out.
+        app.reports.ledger.journals.invalidate();
+        assert!(step(&mut app), "asked again");
+        assert!(!step(&mut app), "once");
+        on_reply(&mut app, "reports.ledger.journals", &snap(1.0));
+        on_reply(&mut app, "reports.ledger.events", &events("before"));
+        let j = &app.reports.ledger.journals;
+        assert!(
+            j.stale_snapshot && j.stale_events,
+            "still waiting for the fresh reads"
+        );
+        on_reply(&mut app, "reports.ledger.journals", &snap(2.0));
+        on_reply(&mut app, "reports.ledger.events", &events("after"));
+        let j = &app.reports.ledger.journals;
+        match (&j.snapshot, &j.events) {
+            (Load::Ready(s), Load::Ready(e)) => {
+                assert_eq!(s.status.journal_entry_count, 2.0);
+                assert_eq!(e["n"], "after");
+            }
+            _ => panic!("the fresh answers land"),
+        }
+        assert!(!j.stale_snapshot && !j.stale_events);
+    }
 
     /// A USD book's journal amounts render in dollars: the daemon's `*Eur` names are historical.
     #[test]
