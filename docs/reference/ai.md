@@ -1962,7 +1962,8 @@ append-only edit/evidence audit trail and run only after consent. Commercial
 review writes (`ui_btcpay_provenance_review`, `ui_documents_create`) are also
 consent-gated. The virtual `ui_reports_export` maps a small report/format enum
 onto existing deterministic PDF/XLSX/CSV/audit-package exporters and likewise
-withholds managed paths from model context. Stale journals may also be
+withholds managed paths from model context. Its `year` reaches the capital-gains,
+E 1kv and summary exports; for the summary it selects the book's own tax year. Stale journals may also be
 refreshed automatically before read/report tools as local maintenance. Wallet
 sync before report reads is disabled by default; it runs automatically only
 after `ui_maintenance_configure` enables that active-profile setting, or when

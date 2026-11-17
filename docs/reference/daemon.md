@@ -31,9 +31,13 @@ Renderer authority is a separate subset under the [desktop invoke contract](#des
 
 
 `ui.reports.export_summary_pdf` writes a managed stakeholder summary PDF. It
-accepts optional `start` / `end` RFC3339 timestamps, optional `wallets` as an
-array of wallet ids or labels, and `include_snapshot` to prepend an as-of-now
-cover snapshot. The export response includes `data_integrity` (now with an
+accepts either an integer tax `year` (2009–2100), which the core resolves to
+the book's own tax year ([tax years](tax.md#tax-years)), or optional
+`start` / `end` RFC3339 timestamps, not both; optional `wallets` as an
+array of wallet ids or labels; and `include_snapshot` to prepend an as-of-now
+cover snapshot. Both desktops send the Reports page's `year`. With a `year`,
+`timeframe` adds `tax_year`, `first_day` and `last_day` (the local days the
+PDF shows); `start` and `end` stay the UTC instants it read. The export response includes `data_integrity` (now with an
 `internal_transfers` count + volume), period-end `wallet_holdings` /
 `holdings_totals`, current `snapshot_wallets` / `snapshot_totals` when
 requested, and `balance_history` so callers can reconcile the generated PDF

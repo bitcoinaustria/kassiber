@@ -504,13 +504,26 @@ pub fn export(app: &mut App, fmt: Fmt) {
         .is_some_and(|d| {
             model::region(d["jurisdictionCode"].as_str().unwrap_or("")) == model::Region::At
         });
-    let ui = &app.reports.report;
+    let (kind, args) = request(&app.reports.report, fmt, year, austrian);
+    let ui = &mut app.reports.report;
+    ui.status = None;
+    ui.done = None;
+    ui.active = Some(fmt);
+    ui.export_year = year;
+    ui.export_visit = ui.visit;
+    if app.send(kind, args, "reports.report.export").is_none() {
+        app.reports.report.active = None;
+    }
+}
+
+/// The export request for `fmt` over the page's `year`. Year-based exports send the year
+/// itself; the core cuts it with the book's tax calendar, as the page's own report does.
+fn request(ui: &Ui, fmt: Fmt, year: i32, austrian: bool) -> (&'static str, Value) {
     let picker = ui.wallets.as_ref().is_some_and(|w| w.len() > 1);
-    let (kind, args) = match fmt {
+    match fmt {
         Fmt::SummaryPdf => {
             let mut a = json!({
-                "start": format!("{year}-01-01T00:00:00Z"),
-                "end": format!("{year}-12-31T23:59:59Z"),
+                "year": year,
                 "include_snapshot": !ui.no_cover,
             });
             if picker {
@@ -542,15 +555,6 @@ pub fn export(app: &mut App, fmt: Fmt) {
         Fmt::Csv => ("ui.reports.export_csv", json!({})),
         Fmt::Xlsx => ("ui.reports.export_xlsx", json!({})),
         Fmt::Pdf => ("ui.reports.export_pdf", json!({})),
-    };
-    let ui = &mut app.reports.report;
-    ui.status = None;
-    ui.done = None;
-    ui.active = Some(fmt);
-    ui.export_year = year;
-    ui.export_visit = ui.visit;
-    if app.send(kind, args, "reports.report.export").is_none() {
-        app.reports.report.active = None;
     }
 }
 
@@ -1160,5 +1164,33 @@ mod transient_tests {
         assert_eq!(ui.year, Some(2025));
         assert_eq!(ui.active, Some(Fmt::Pdf));
         assert!(!ui.same_visit());
+    }
+
+    #[test]
+    fn the_summary_export_sends_the_pages_tax_year_not_utc_bounds() {
+        let mut ui = Ui::default();
+        let (kind, args) = request(&ui, Fmt::SummaryPdf, 2024, false);
+        assert_eq!(kind, "ui.reports.export_summary_pdf");
+        assert_eq!(args, json!({"year": 2024, "include_snapshot": true}));
+        // A wallet pick and the cover choice ride along; still no hand-built range.
+        ui.wallets = Some(vec![
+            WalletChoice {
+                id: "a".into(),
+                label: "A".into(),
+                chain: "bitcoin".into(),
+            },
+            WalletChoice {
+                id: "b".into(),
+                label: "B".into(),
+                chain: "bitcoin".into(),
+            },
+        ]);
+        ui.summary_wallets = vec!["b".into()];
+        ui.no_cover = true;
+        let (_, args) = request(&ui, Fmt::SummaryPdf, 2025, true);
+        assert_eq!(
+            args,
+            json!({"year": 2025, "include_snapshot": false, "wallets": ["b"]})
+        );
     }
 }

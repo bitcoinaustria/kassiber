@@ -131,7 +131,9 @@ pub(super) fn wallet_args(kind: &str, args: &Value) -> Result<Value> {
         Value::Null
     })
 }
-/// `ui.reports.export_summary_pdf` admits only its own four arguments.
+/// `ui.reports.export_summary_pdf` admits only its own arguments: an
+/// explicit `start`/`end` range or the book's tax `year`, the wallets and
+/// the cover snapshot.
 fn summary_args(raw: &Value) -> Result<()> {
     const KIND: &str = "ui.reports.export_summary_pdf";
     if let Value::Dict(fields) = raw {
@@ -139,7 +141,7 @@ fn summary_args(raw: &Value) -> Result<()> {
             .iter()
             .filter_map(|(k, _)| match k {
                 kassiber_pyjson::Key::Str(k)
-                    if !["start", "end", "wallets", "include_snapshot"]
+                    if !["start", "end", "year", "wallets", "include_snapshot"]
                         .iter()
                         .any(|a| k.as_str() == Some(a)) =>
                 {
@@ -179,6 +181,23 @@ fn summary_args(raw: &Value) -> Result<()> {
         return Err(validation(format!(
             "{KIND} include_snapshot must be a boolean"
         )));
+    }
+    match value(raw, "year") {
+        Value::Null => (),
+        Value::Int(year) if (2009..=2100).contains(&i64::try_from(year.clone()).unwrap_or(0)) => {
+            if !matches!(value(raw, "start"), Value::Null)
+                || !matches!(value(raw, "end"), Value::Null)
+            {
+                return Err(validation(format!(
+                    "{KIND} takes a year or a start/end range, not both"
+                )));
+            }
+        }
+        _ => {
+            return Err(validation(format!(
+                "{KIND} year must be an integer between 2009 and 2100"
+            )))
+        }
     }
     Ok(())
 }
@@ -871,5 +890,57 @@ mod tests {
         );
         assert_eq!(std::fs::read(first_path).unwrap(), bytes);
         assert!(reserved.is_dir());
+    }
+
+    #[test]
+    fn summary_export_takes_a_tax_year_or_a_range() {
+        let ok = |args: Value| summary_args(&args);
+        let year = |n: i64| ("year", Value::Int(n.into()));
+        assert!(ok(dict([year(2024)])).is_ok());
+        assert!(ok(dict([year(2024), ("wallets", Value::List(vec![s("w")]))])).is_ok());
+        assert!(ok(dict([("start", s("2024-01-01T00:00:00Z"))])).is_ok());
+        // A null range beside a year is no range.
+        assert!(ok(dict([
+            year(2024),
+            ("start", Value::Null),
+            ("end", Value::Null)
+        ]))
+        .is_ok());
+        for (args, message) in [
+            (
+                dict([year(2024), ("start", s("2024-01-01T00:00:00Z"))]),
+                "ui.reports.export_summary_pdf takes a year or a start/end range, not both",
+            ),
+            (
+                dict([year(2024), ("end", s("2024-12-31T23:59:59Z"))]),
+                "ui.reports.export_summary_pdf takes a year or a start/end range, not both",
+            ),
+            (
+                dict([("year", s("2024"))]),
+                "ui.reports.export_summary_pdf year must be an integer between 2009 and 2100",
+            ),
+            (
+                dict([("year", Value::Bool(true))]),
+                "ui.reports.export_summary_pdf year must be an integer between 2009 and 2100",
+            ),
+            (
+                dict([year(2008)]),
+                "ui.reports.export_summary_pdf year must be an integer between 2009 and 2100",
+            ),
+            (
+                dict([year(2101)]),
+                "ui.reports.export_summary_pdf year must be an integer between 2009 and 2100",
+            ),
+            (
+                dict([year(2024), ("tax_year", Value::Int(2024.into()))]),
+                "ui.reports.export_summary_pdf received unsupported arguments",
+            ),
+        ] {
+            let error = ok(args).unwrap_err();
+            assert_eq!(
+                (error.code.as_str(), error.message.as_str()),
+                ("validation", message)
+            );
+        }
     }
 }

@@ -309,9 +309,9 @@ pub fn report_export_target(arguments: &Value) -> Result<(&'static str, Value), 
         ])));
     };
     let allowed: &[&str] = match kind {
-        "ui.reports.export_pdf" | "ui.reports.export_csv" | "ui.reports.export_summary_pdf" => {
-            &["wallet"]
-        }
+        "ui.reports.export_pdf" | "ui.reports.export_csv" => &["wallet"],
+        // The book's tax year, resolved by the core like the Reports page's.
+        "ui.reports.export_summary_pdf" => &["wallet", "year"],
         "ui.reports.export_xlsx" => &["wallet", "verify"],
         "ui.reports.export_capital_gains_csv"
         | "ui.reports.export_austrian_e1kv_pdf"
