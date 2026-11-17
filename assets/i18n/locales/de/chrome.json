@@ -682,7 +682,9 @@
       "error": "Aktualisierung braucht Aufmerksamkeit"
     },
     "title": {
-      "checkingMarketRates": "Marktkurse werden geprüft"
+      "checkingMarketRates": "Marktkurse werden geprüft",
+      "fetchingBtcRate": "BTC-Marktkurs wird abgerufen.",
+      "fetchingPair": "{{pair}} wird abgerufen."
     },
     "refreshingSources": "Konfigurierte Quellen werden aktualisiert",
     "refreshRunning": "Aktualisierung läuft",

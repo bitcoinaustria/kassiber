@@ -36,11 +36,12 @@ fn refresh_rate(app: &mut App) {
     };
     if app.send("ui.rates.latest", args, "ov.rates").is_some() {
         app.busy.rate_refresh = true;
-        // OverviewDashboard.tsx hard-codes this progress text in English.
-        app.busy.progress = Some(match pair {
-            Some(p) => format!("Checking market rates · Fetching {p}."),
-            None => "Checking market rates · Fetching BTC market rate.".into(),
-        });
+        let title = crate::i18n::t("chrome:syncProgress.title.checkingMarketRates");
+        let step = match pair {
+            Some(p) => crate::i18n::tr("chrome:syncProgress.title.fetchingPair", &[("pair", &p)]),
+            None => crate::i18n::t("chrome:syncProgress.title.fetchingBtcRate"),
+        };
+        app.busy.progress = Some(format!("{title} · {step}"));
     }
 }
 

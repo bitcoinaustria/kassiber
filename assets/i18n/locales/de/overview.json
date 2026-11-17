@@ -409,6 +409,7 @@
     "expandAria": "Panel ausklappen"
   },
   "balanceChart": {
+    "noHistory": "Noch kein Saldoverlauf – synchronisiere oder importiere eine Wallet, um dieses Diagramm aufzubauen.",
     "title": "Guthaben & Performance",
     "fullscreen": "Vollbild",
     "srDescription": "Vergrößerte Ansicht des Guthabens über die Zeit, mit Hover-Scrubber und optionalem Modus nach Verbindung.",

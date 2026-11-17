@@ -1000,6 +1000,8 @@ pub fn on_unlinked(app: &mut App, result: UnlinkResult, differently: bool) {
                     spot,
                 ),
             );
+            // The dismissal is stored: journals and readiness follow, as for a manual pair.
+            super::request_refresh(app);
         }
         UnlinkResult::Pair { pair, mv } => {
             let listed = st(app).pairs.as_ref().and_then(|ps| {

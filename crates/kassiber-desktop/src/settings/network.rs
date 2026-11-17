@@ -31,6 +31,9 @@ pub struct BookNet {
     /// (args key, plan) of the last partition preview.
     pub part_preview: Option<(String, Value)>,
     pub part_key_sent: Option<String>,
+    /// The destination of each partition export in flight, oldest first (what the daemon
+    /// writes, whatever the field says by then).
+    pub part_exports: std::collections::VecDeque<String>,
     pub part_error: Option<String>,
     pub part_saved: bool,
     /// `toastopen`: Show in Finder for the partition just exported.
@@ -173,16 +176,28 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
             Some(e) => app.settings.bn.part_error = Some(e.clone()),
         },
-        "settings.part_export" => match &r.error {
-            None => {
-                app.settings.bn.part_pass = TextEdit::new("");
-                app.settings.bn.part_confirm = TextEdit::new("");
-                app.settings.bn.part_saved = true;
-                app.settings.bn.part_saved_actions =
-                    crate::toastopen::for_path(&app.settings.bn.part_dest.text, false);
+        "settings.part_export" => {
+            let written = app.settings.bn.part_exports.pop_front().unwrap_or_default();
+            // The form still describes this export only while it names the same destination.
+            let current = app.settings.bn.part_dest.text == written;
+            match &r.error {
+                None => {
+                    if current {
+                        app.settings.bn.part_pass = TextEdit::new("");
+                        app.settings.bn.part_confirm = TextEdit::new("");
+                    }
+                    app.settings.bn.part_saved = true;
+                    // Reveal/open the file the daemon wrote.
+                    app.settings.bn.part_saved_actions =
+                        crate::toastopen::for_path(&written, false);
+                }
+                Some(e) => {
+                    if current {
+                        app.settings.bn.part_error = Some(e.clone())
+                    }
+                }
             }
-            Some(e) => app.settings.bn.part_error = Some(e.clone()),
-        },
+        }
         _ => {}
     }
 }
@@ -969,14 +984,17 @@ fn partition(app: &App, tk: &Tk, inv: &Value) -> El {
                             a.settings.bn.part_saved = false;
                             let mut args = partition_args(a);
                             args["plan_id"] = json!(plan_id);
-                            args["file_path"] = json!(a.settings.bn.part_dest.text);
+                            let dest = a.settings.bn.part_dest.text.clone();
+                            args["file_path"] = json!(dest);
                             args["backup_passphrase"] = json!(a.settings.bn.part_pass.text);
-                            send(
+                            if send(
                                 a,
                                 "ui.networks.partition_export",
                                 args,
                                 "settings.part_export",
-                            );
+                            ) {
+                                a.settings.bn.part_exports.push_back(dest);
+                            }
                         }),
                     ),
             );

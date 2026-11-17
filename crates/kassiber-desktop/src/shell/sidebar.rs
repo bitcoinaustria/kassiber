@@ -878,8 +878,8 @@ pub fn view(app: &App, tk: &Tk, folded: bool, layer: &mut Vec<El>) -> El {
         .absolute(width - tk.r(0.5), 0.0)
         .paint_order(20)
         .role("button")
-        .label("Toggle Sidebar")
-        .help("Toggle Sidebar")
+        .label(crate::i18n::t("chrome:shell.toggleSidebar"))
+        .help(crate::i18n::t("chrome:shell.toggleSidebar"))
         .focusable(false)
         .cursor(rune::Cursor::ResizeColumn)
         .on_press(|s: &mut App| {

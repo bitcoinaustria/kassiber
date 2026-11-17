@@ -41,6 +41,9 @@ pub struct State {
     pub asking: bool,
     /// The book the pending assistant question was asked from (`beginAssistantHandoff`).
     pub ask_scope: Option<String>,
+    /// The page and book at the click of the question in flight; its prompt goes out under
+    /// them, not a page opened meanwhile.
+    pub ask_context: Option<crate::assistant::chat::Parked>,
     /// Open disclosures (`<details>`), keyed by section / `group-<id>` / `basis-<id>`.
     pub open: HashSet<String>,
     /// Bumped on every mount, book change and refetch: answers of older reads are dropped.
@@ -229,9 +232,11 @@ fn ask(app: &mut App, investigation: Option<&Value>) {
                 )
                 .is_some()
             {
+                let captured = crate::assistant::capture(app);
                 let s = st(app);
                 s.asking = true;
                 s.ask_scope = Some(key);
+                s.ask_context = captured;
             }
         }
         None => crate::assistant::hand_off(app, &t("privacyMirror:assistantPrompt")),
@@ -272,12 +277,14 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
             // its reads still in flight are dropped when they answer. A question still out
             // keeps its book, so its answer is dropped too rather than taken for a new one's.
             let (epoch, inflight) = (s.epoch + 1, std::mem::take(&mut s.inflight));
-            let (asking, ask_scope) = (s.asking, s.ask_scope.take());
+            let (asking, ask_scope, ask_context) =
+                (s.asking, s.ask_scope.take(), s.ask_context.take());
             *s = State {
                 epoch,
                 inflight,
                 asking,
                 ask_scope,
+                ask_context,
                 ..State::default()
             };
         }
@@ -351,6 +358,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         "provenance.mirror.ai_context" => {
             let asked_from = st(app).ask_scope.take();
+            let captured = st(app).ask_context.take();
             st(app).asking = false;
             // A book opened meanwhile never receives the question (`boundary.isCurrent()`).
             if asked_from.as_deref() != Some(scope_key(app).as_str())
@@ -362,7 +370,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                 Some(e) => st(app).action_error = Some(e.clone()),
                 None if r.data.is_object() => {
                     let prompt = crate::provenance::chain::handoff_prompt(&r.data);
-                    crate::assistant::hand_off(app, &prompt);
+                    crate::assistant::hand_off_captured(app, &prompt, captured);
                 }
                 None => {}
             }

@@ -575,28 +575,45 @@ pub fn decimal_text(s: &str) -> Option<String> {
 
 /// `metadataUpdateArgs(id, draft, baseline, sourceTags)`.
 pub fn save_args(id: &str, d: &Draft, base: &Draft, source_tags: &[String], scope: Value) -> Value {
-    let persist_label = d.label != "Unlabeled"
-        && !d.label.is_empty()
-        && (source_tags.iter().any(|x| x.eq_ignore_ascii_case(&d.label)) || d.label != base.label);
-    let mut tags: Vec<String> = Vec::new();
-    for tag in std::iter::once(if persist_label {
-        d.label.clone()
-    } else {
-        String::new()
-    })
-    .chain(d.tags.iter().cloned())
-    {
-        if !tag.is_empty() && !tags.contains(&tag) {
-            tags.push(tag);
+    let tags_of = |d: &Draft| {
+        let persist_label = d.label != "Unlabeled"
+            && !d.label.is_empty()
+            && (source_tags.iter().any(|x| x.eq_ignore_ascii_case(&d.label))
+                || d.label != base.label);
+        let mut tags: Vec<String> = Vec::new();
+        for tag in std::iter::once(if persist_label {
+            d.label.clone()
+        } else {
+            String::new()
+        })
+        .chain(d.tags.iter().cloned())
+        {
+            if !tag.is_empty() && !tags.contains(&tag) {
+                tags.push(tag);
+            }
         }
-    }
+        tags
+    };
+    // Only what this panel changed: an older tab's unchanged note, tags or exclusion must not
+    // overwrite what another tab (or the table) saved since. The core keeps omitted fields.
     let mut args = json!({
         "transaction": id,
-        "note": if d.note.trim().is_empty() { Value::Null } else { Value::String(d.note.clone()) },
-        "tags": tags,
-        "excluded": d.excluded,
         "expected_scope": scope,
     });
+    if d.note != base.note {
+        args["note"] = if d.note.trim().is_empty() {
+            Value::Null
+        } else {
+            Value::String(d.note.clone())
+        };
+    }
+    let tags = tags_of(d);
+    if tags != tags_of(base) {
+        args["tags"] = json!(tags);
+    }
+    if d.excluded != base.excluded {
+        args["excluded"] = json!(d.excluded);
+    }
     if d.review_status != base.review_status {
         args["review_status"] = json!(d.review_status);
     }
@@ -680,6 +697,21 @@ mod tests {
         let a = save_args("t1", &d, &base, &[], Value::Null);
         assert_eq!(a["fiat_value"], json!("1234.56789012345678901"));
         assert_eq!(a["pricing_external_ref"], Value::Null);
+    }
+
+    /// An older tab that only changed a tag sends only the tags: its stale note and exclusion
+    /// do not overwrite what was saved elsewhere since.
+    #[test]
+    fn a_save_sends_only_what_changed() {
+        let base = baseline(&row());
+        let mut d = base.clone();
+        d.tags = vec!["cold".into()];
+        let a = save_args("t1", &d, &base, &[], Value::Null);
+        assert_eq!(a["tags"], json!(["cold"]));
+        assert!(a.get("note").is_none() && a.get("excluded").is_none());
+        d.excluded = true;
+        let a = save_args("t1", &d, &base, &[], Value::Null);
+        assert_eq!(a["excluded"], json!(true));
     }
 
     #[test]

@@ -474,6 +474,8 @@ pub fn view(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
                         let p = &mut st(a).psbt;
                         p.busy = true;
                         p.outcome = Some((k1.clone(), Value::Null, false));
+                        let mount = st(a).mounts;
+                        st(a).psbt_asked.push_back((mount, k1.clone(), false));
                     }
                 })
             } else {
@@ -492,6 +494,8 @@ pub fn view(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
                         let p = &mut st(a).psbt;
                         p.busy = true;
                         p.outcome = Some((k2.clone(), Value::Null, true));
+                        let mount = st(a).mounts;
+                        st(a).psbt_asked.push_back((mount, k2.clone(), true));
                     }
                 })
             } else {
@@ -1002,6 +1006,20 @@ pub fn on_reply(app: &mut App, sub: &str, r: &Reply) {
         },
         "stage.dataset" => super::datasets::on_stage(app, r),
         "psbt.analyze" | "psbt.compare" => {
+            let Some((mount, key, compare)) = st(app).psbt_asked.pop_front() else {
+                return;
+            };
+            // Only the answer for the inputs (and the mount) the shown request was sent for: an
+            // earlier mount's or earlier inputs' result never fills this slot.
+            let current = mount == st(app).mounts
+                && st(app)
+                    .psbt
+                    .outcome
+                    .as_ref()
+                    .is_some_and(|(k, _, c)| *k == key && *c == compare);
+            if !current {
+                return;
+            }
             st(app).psbt.busy = false;
             match &r.error {
                 Some(e) => {
@@ -1019,5 +1037,56 @@ pub fn on_reply(app: &mut App, sub: &str, r: &Reply) {
         "psbt_entropy.get" => results::entropy_reply(app, Which::Psbt, "get", r),
         "psbt_entropy.cancel" => results::entropy_reply(app, Which::Psbt, "cancel", r),
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod answer_tests {
+    use super::*;
+
+    /// Comparing one pair, leaving, coming back and comparing another before the first answer:
+    /// the first answer does not fill the second comparison's result.
+    #[test]
+    fn an_earlier_comparison_does_not_fill_the_current_one() {
+        let mut app = crate::app::tests::quiet_app();
+        app.provenance
+            .chain
+            .psbt_asked
+            .push_back((0, "pair-1".into(), true));
+        app.provenance.chain.mounts = 1;
+        app.provenance
+            .chain
+            .psbt_asked
+            .push_back((1, "pair-2".into(), true));
+        app.provenance.chain.psbt.outcome = Some(("pair-2".into(), Value::Null, true));
+        let r = Reply {
+            kind: "ui.chain_analysis.psbt.compare".into(),
+            data: serde_json::json!({"findings": ["first"]}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "psbt.compare", &r);
+        assert!(
+            app.provenance
+                .chain
+                .psbt
+                .outcome
+                .as_ref()
+                .unwrap()
+                .1
+                .is_null()
+        );
+        on_reply(&mut app, "psbt.compare", &r);
+        assert!(
+            !app.provenance
+                .chain
+                .psbt
+                .outcome
+                .as_ref()
+                .unwrap()
+                .1
+                .is_null()
+        );
     }
 }

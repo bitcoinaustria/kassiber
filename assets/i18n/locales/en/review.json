@@ -572,6 +572,7 @@
       "inWalletKind": "To wallet type",
       "maxFee": "Fee up to (% of the amount)",
       "maxFeePlaceholder": "e.g. 0.01",
+      "maxFeeInvalid": "Enter the fee cap as a number, e.g. 0.01.",
       "minConfidence": "How sure the match is",
       "minStrong": "Likely or exact",
       "minExact": "Exact only",

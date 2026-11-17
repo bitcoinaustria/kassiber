@@ -409,6 +409,7 @@
     "expandAria": "Expand panel"
   },
   "balanceChart": {
+    "noHistory": "No balance history yet — sync or import a wallet to build this chart.",
     "title": "Balance & performance",
     "fullscreen": "fullscreen",
     "srDescription": "Expanded view of balance over time, with hover scrubber and optional by-connection composition mode.",

@@ -37,6 +37,8 @@ pub struct Check {
 #[derive(Default)]
 pub struct AiUi {
     pub checks: HashMap<String, Check>,
+    /// The provider of each check in flight, by reply tag, oldest first.
+    pub checking: HashMap<&'static str, std::collections::VecDeque<String>>,
     pub refusals: HashMap<String, &'static str>,
     pub updating: Option<String>,
     pub update_error: Option<String>,
@@ -202,17 +204,15 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "settings.ai_check_runtime" | "settings.ai_check_models" => {
-            // The reply names its provider; a failed one is matched to the pending check.
-            let name = if provider.is_empty() {
-                app.settings
-                    .ai
-                    .checks
-                    .iter()
-                    .find(|(_, c)| c.pending)
-                    .map(|(n, _)| n.clone())
-                    .unwrap_or_default()
-            } else {
-                provider
+            // The provider this check was sent for (a failed reply names none).
+            let asked = app
+                .settings
+                .ai
+                .checking
+                .get_mut(tag)
+                .and_then(|q| q.pop_front());
+            let Some(name) = asked.or((!provider.is_empty()).then_some(provider)) else {
+                return;
             };
             let cli = tag == "settings.ai_check_runtime";
             let c = app.settings.ai.checks.entry(name).or_default();
@@ -355,15 +355,19 @@ fn run_check(app: &mut App, name: &str) {
     c.pending = true;
     c.error = None;
     let args = json!({"provider": name, "base_url": url, "refresh": true});
-    if is_native_locator(&url) {
-        send(
-            app,
-            "ai.provider_runtime.status",
-            args,
-            "settings.ai_check_runtime",
-        );
+    let (kind, tag) = if is_native_locator(&url) {
+        ("ai.provider_runtime.status", "settings.ai_check_runtime")
     } else {
-        send(app, "ai.list_models", args, "settings.ai_check_models");
+        ("ai.list_models", "settings.ai_check_models")
+    };
+    if send(app, kind, args, tag) {
+        // Replies of one tag answer in order: the provider each was for, by tag.
+        app.settings
+            .ai
+            .checking
+            .entry(tag)
+            .or_default()
+            .push_back(name.to_owned());
     }
 }
 
