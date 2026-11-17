@@ -1233,41 +1233,26 @@ fn filters_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
     let f = &app.txs.filters;
     let n = f.active_count();
     let open = matches!(app.txs.popup, Some(Popup::Filters | Popup::FiltersSub(_)));
-    // Button outline sm, `h-9 gap-2` with an icon (`px-2.5`), `border-primary` while filtered.
-    let mut trigger = row()
-        .key("txs-filters")
-        .h(tk.r(2.25))
-        .px(tk.r(0.625) + 1.0)
-        .gap(tk.r(0.5))
-        .center_y()
-        .radius(tk.r(0.375))
-        .fill(outline_fill(tk))
-        .border(
-            1.0,
-            if n > 0 {
-                tk.primary
-            } else {
-                outline_border(tk)
-            },
-        )
-        .hover(outline_hover(tk))
-        .role("button")
-        .label(t("transactions:table.filter.menuAria"))
-        .focusable(true)
-        .menu_trigger(open, |a: &mut App| {
-            a.txs.popup = if matches!(a.txs.popup, Some(Popup::Filters | Popup::FiltersSub(_))) {
-                None
-            } else {
-                Some(Popup::Filters)
-            }
-        })
-        .child(ic(&I::SLIDERS_HORIZONTAL, tk.r(1.0), tk.fg))
-        .child(
-            text(t("transactions:table.filter.menuTrigger"))
-                .font(tk.tsm(500.0))
-                .color(tk.fg),
-        );
+    // Outline button with an icon, `border-primary` while filtered.
+    let mut trigger = crate::ui::button::button(
+        tk,
+        "txs-filters",
+        crate::ui::button::Variant::Outline,
+        crate::ui::button::Size::Default,
+        Some(&I::SLIDERS_HORIZONTAL),
+        &t("transactions:table.filter.menuTrigger"),
+        true,
+    )
+    .label(t("transactions:table.filter.menuAria"))
+    .menu_trigger(open, |a: &mut App| {
+        a.txs.popup = if matches!(a.txs.popup, Some(Popup::Filters | Popup::FiltersSub(_))) {
+            None
+        } else {
+            Some(Popup::Filters)
+        }
+    });
     if n > 0 {
+        trigger = trigger.border(1.0, tk.primary);
         // `grid min-w-4 place-items-center rounded-full bg-primary px-1 text-2xs font-semibold leading-4`.
         trigger = trigger.child(
             row()
@@ -1355,58 +1340,28 @@ fn filters_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
     trigger
 }
 
-fn outline_fill(tk: &Tk) -> Color {
-    if tk.dark {
-        tk.input.alpha(tk.input.a * 0.3)
-    } else {
-        tk.background
-    }
-}
-fn outline_border(tk: &Tk) -> Color {
-    if tk.dark { tk.input } else { tk.border }
-}
-fn outline_hover(tk: &Tk) -> Color {
-    if tk.dark {
-        tk.input.alpha(tk.input.a * 0.5)
-    } else {
-        tk.accent
-    }
-}
-
 /// Expand / Restore: a 2.25 rem outline icon button in both modes (its text is `sr-only`).
 fn expand_button(app: &App, tk: &Tk) -> El {
     let ex = app.txs.expanded;
-    row()
-        .key("txs-expand")
-        .size(tk.r(2.25), tk.r(2.25))
-        .center()
-        .radius(tk.r(0.375))
-        .fill(outline_fill(tk))
-        .border(1.0, outline_border(tk))
-        .hover(outline_hover(tk))
-        .role("button")
-        .label(if ex {
+    crate::ui::button::icon_button(
+        tk,
+        "txs-expand",
+        crate::ui::button::Variant::Outline,
+        tk.r(2.25),
+        if ex { &I::MINIMIZE_2 } else { &I::MAXIMIZE_2 },
+        tk.r(1.0),
+        if ex {
             t("transactions:table.expand.collapseAria")
         } else {
             t("transactions:table.expand.expandAria")
-        })
-        .help(if ex {
-            t("transactions:table.expand.collapseAria")
-        } else {
-            t("transactions:table.expand.expandAria")
-        })
-        .focusable(true)
-        .on_press_tx(|a: &mut App, tx: &mut Tx| {
-            a.txs.expanded = !a.txs.expanded;
-            a.txs.popup = None;
-            tx.scroll_to_instant("app-main", 0.0, 0.0);
-            tx.scroll_to_instant("txs-scroll", 0.0, 0.0);
-        })
-        .child(ic(
-            if ex { &I::MINIMIZE_2 } else { &I::MAXIMIZE_2 },
-            tk.r(1.0),
-            tk.fg,
-        ))
+        },
+    )
+    .on_press_tx(|a: &mut App, tx: &mut Tx| {
+        a.txs.expanded = !a.txs.expanded;
+        a.txs.popup = None;
+        tx.scroll_to_instant("app-main", 0.0, 0.0);
+        tx.scroll_to_instant("txs-scroll", 0.0, 0.0);
+    })
 }
 
 /// The table's actions as the expanded period nav shows them: chips, Filters, Restore.
@@ -1881,29 +1836,23 @@ pub fn confirm_dialog(app: &App, tk: &Tk, layer: &mut Vec<El>) {
                     .on_press(close),
                 )
                 .child(
-                    row()
-                        .key("txs-confirm-ok")
-                        .h(tk.r(2.0))
-                        .px(tk.r(0.75))
-                        .center()
-                        .radius(tk.r(0.375))
-                        .fill(tk.destructive)
-                        .role("button")
-                        .label(t("common:actions.confirm"))
-                        .focusable(true)
-                        .on_press(move |s: &mut App| {
-                            s.txs.confirm_exclude = None;
-                            s.send(
-                                "ui.transactions.metadata.update",
-                                json!({"transaction": id, "excluded": true}),
-                                "txs.exclude",
-                            );
-                        })
-                        .child(
-                            text(t("common:actions.confirm"))
-                                .font(tk.tsm(500.0))
-                                .color(Color::WHITE),
-                        ),
+                    crate::ui::button::button(
+                        tk,
+                        "txs-confirm-ok",
+                        crate::ui::button::Variant::Destructive,
+                        crate::ui::button::Size::Sm,
+                        None,
+                        &t("common:actions.confirm"),
+                        true,
+                    )
+                    .on_press(move |s: &mut App| {
+                        s.txs.confirm_exclude = None;
+                        s.send(
+                            "ui.transactions.metadata.update",
+                            json!({"transaction": id, "excluded": true}),
+                            "txs.exclude",
+                        );
+                    }),
                 ),
         );
     layer.push(

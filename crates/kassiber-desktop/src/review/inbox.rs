@@ -777,50 +777,34 @@ fn candidate_row(
     // picker on Transfers, where the alternatives are the choice.
     let first = if review {
         let href = format!("/transfers?link={}", s(c, "out_id"));
-        crate::txdetail::widgets::button_surface(
+        crate::ui::button::button(
             tk,
-            row()
-                .key(primary_key(c))
-                .h(tk.r(1.75))
-                .px(tk.r(0.625))
-                .gap(tk.r(0.25))
-                .center_y()
-                .radius(tk.r(0.375)),
+            primary_key(c),
             Var::Outline,
+            crate::ui::button::Size::Xs,
+            None,
+            &t("review:inbox.transfers.review"),
+            true,
         )
         .role("link")
         .label(tr(
             "review:inbox.transfers.reviewLabel",
             &[("route", &route)],
         ))
-        .focusable(true)
         .on_press(move |a: &mut App| a.navigate(&href))
-        .child(
-            text(t("review:inbox.transfers.review"))
-                .font(tk.txs(500.0))
-                .color(tk.fg),
-        )
     } else {
         let c1 = c.clone();
-        row()
-            .key(primary_key(c))
-            .h(tk.r(1.75))
-            .px(tk.r(0.625))
-            .gap(tk.r(0.25))
-            .center_y()
-            .radius(tk.r(0.375))
-            .fill(tk.primary)
-            .hover(tk.primary_fg.alpha(0.1))
-            .role("button")
-            .label(tr("review:inbox.transfers.pairLabel", &[("route", &route)]))
-            .focusable(true)
-            .on_press(move |a: &mut App| state::decide(a, &c1, true))
-            .child(ic(&I::CHECK, tk.r(0.875), tk.primary_fg))
-            .child(
-                text(t("review:inbox.transfers.pair"))
-                    .font(tk.txs(500.0))
-                    .color(tk.primary_fg),
-            )
+        crate::ui::button::button(
+            tk,
+            primary_key(c),
+            Var::Default,
+            crate::ui::button::Size::Xs,
+            Some(&I::CHECK),
+            &t("review:inbox.transfers.pair"),
+            true,
+        )
+        .label(tr("review:inbox.transfers.pairLabel", &[("route", &route)]))
+        .on_press(move |a: &mut App| state::decide(a, &c1, true))
     };
     let anchor = format!("rv-more-{key}");
     let open = app.review.popup == Some(Popup::MoveMenu(key.clone()));
