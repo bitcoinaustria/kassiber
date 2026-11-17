@@ -289,12 +289,16 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     }),
                     None,
                 ),
-                None => app.toast(
-                    ToastTone::Success,
-                    &t("review:activity.revert.title"),
-                    Some(t("review:activity.revert.body")),
-                    None,
-                ),
+                None => {
+                    app.toast(
+                        ToastTone::Success,
+                        &t("review:activity.revert.title"),
+                        Some(t("review:activity.revert.body")),
+                        None,
+                    );
+                    // The persisted inputs changed: the book's reads refresh.
+                    app.refresh_reads();
+                }
             }
             reload(app);
         }
