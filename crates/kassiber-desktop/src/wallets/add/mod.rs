@@ -46,6 +46,7 @@ pub enum Step {
 }
 
 /// `SetupFormState`.
+#[derive(Clone)]
 pub struct Form {
     pub label: TextEdit,
     pub report_provider: TextEdit,

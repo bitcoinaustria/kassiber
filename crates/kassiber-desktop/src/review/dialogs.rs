@@ -107,6 +107,11 @@ pub fn on_fix_reply(app: &mut App, tag: &str, r: &Reply) {
     };
     let token = state::take_t(app, tag);
     if state::fix_token(app) != Some(token) {
+        // The dialog was closed (or replaced) meanwhile: an applied fix still changed the book.
+        if tag == "review.fix.apply" && r.error.is_none() {
+            app.refresh_reads();
+            state::refetch_all(app);
+        }
         return;
     }
     let stale = state::stale(r);
@@ -248,6 +253,12 @@ pub fn on_prop_reply(app: &mut App, tag: &str, r: &Reply) {
     };
     let token = state::take_t(app, tag);
     if state::prop_token(app) != Some(token) {
+        // The dialog was closed (or replaced) meanwhile: an applied proposal still changed the
+        // book.
+        if tag == "review.prop.apply" && r.error.is_none() {
+            app.refresh_reads();
+            state::refetch_all(app);
+        }
         return;
     }
     let stale = state::stale(r);
