@@ -37,7 +37,7 @@
    ],
    "expect": {
     "exit": 0,
-    "stdout": "{\n  \"kind\": \"init\",\n  \"schema_version\": 1,\n  \"data\": {\n    \"version\": \"1.0.0\",\n    \"project_id\": null,\n    \"project_root\": null,\n    \"state_root\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_\",\n    \"data_root\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/data\",\n    \"database\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/data/kassiber.sqlite3\",\n    \"config_root\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/config\",\n    \"settings_file\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/config/settings.json\",\n    \"exports_root\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/exports\",\n    \"attachments_root\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/attachments\",\n    \"env_file\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/config/backends.env\"\n  }\n}\n",
+    "stdout": "{\n  \"kind\": \"init\",\n  \"schema_version\": 1,\n  \"data\": {\n    \"version\": \"0.22.78\",\n    \"project_id\": null,\n    \"project_root\": null,\n    \"state_root\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_\",\n    \"data_root\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/data\",\n    \"database\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/data/kassiber.sqlite3\",\n    \"config_root\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/config\",\n    \"settings_file\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/config/settings.json\",\n    \"exports_root\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/exports\",\n    \"attachments_root\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/attachments\",\n    \"env_file\": \"{tmp}/systmp/kassiber-r5-qh3nn8j_/config/backends.env\"\n  }\n}\n",
     "stderr": "",
     "changes": {
      "{tmp}/systmp/kassiber-r5-qh3nn8j_/attachments": {
@@ -2448,7 +2448,7 @@
           [
            4,
            "app_version",
-           "1.0.0"
+           "0.22.78"
           ]
          ]
         }
