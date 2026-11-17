@@ -15,6 +15,10 @@
 //! wallet; their txid is that wallet's on-chain lockup or claim, and the
 //! export does not say which wallet. They book only where the book has
 //! already observed that txid ([`route`]); otherwise they are held for review.
+//!
+//! Bull never exports a negative count. A row stating one is held for review
+//! (excluded, its magnitude booked with its stated direction) instead of
+//! refusing the file, and never changes a transaction the book already holds.
 use super::exchange::Columns;
 use super::*;
 
@@ -53,6 +57,9 @@ const LIGHTNING_ELSEWHERE: &str = "lightning_booked_in_other_wallet";
 pub(super) const REVIEW_LIGHTNING: &str = "lightning_network_unproven";
 /// Review reason: the payjoin amount may be negotiated rather than the net.
 pub(super) const REVIEW_PAYJOIN: &str = "payjoin_amount_unverified";
+/// Review reason: the row states a negative amount or fee. Also the skip
+/// reason where such a row could only match a transaction the book holds.
+pub(super) const REVIEW_NEGATIVE: &str = "negative_amount";
 
 fn app(message: String) -> AppError {
     AppError::new("app_error", message)
@@ -73,7 +80,7 @@ pub(super) fn parse_all(mut rows: Vec<csv::Row>) -> Result<Vec<csv::Row>, AppErr
     exchange::headers(&rows, REQUIRED, "Bull Bitcoin wallet")?;
     // v6.13+ prefixes formula-like cells with `'` for spreadsheets. Remove
     // exactly that guard so a guarded value parses as itself: a guarded
-    // negative amount still fails closed below.
+    // negative amount is still held for review below.
     let mut generation_c = false;
     for row in &mut rows {
         let headers = row.headers.clone();
@@ -109,10 +116,11 @@ fn folded(value: Option<String>) -> String {
     kassiber_pytext::casefold(kassiber_pytext::strip(&value.unwrap_or_default()))
 }
 
-/// `_bullbitcoin_wallet_sats(...)` as the digits of an exact, non-negative
-/// integer. Bull never exports a negative count; one is refused rather than
-/// read as its absolute value.
-fn sats(columns: &Columns, column: &str, default: bool) -> Result<String, AppError> {
+/// `_bullbitcoin_wallet_sats(...)` as the digits of an exact integer's
+/// magnitude, and whether it was negative (`-0` is not). Bull never exports a
+/// negative count, so the caller holds such a row for review rather than
+/// booking its absolute value.
+fn sats(columns: &Columns, column: &str, default: bool) -> Result<(String, bool), AppError> {
     let value = match river::number(columns.get(&[column]))? {
         Some(PriceNumber::Finite(value)) => value,
         Some(PriceNumber::Special(text)) if text.contains("sNaN") => {
@@ -130,7 +138,7 @@ fn sats(columns: &Columns, column: &str, default: bool) -> Result<String, AppErr
                 "cannot convert Infinity to integer",
             ));
         }
-        None if default => return Ok("0".into()),
+        None if default => return Ok(("0".into(), false)),
         None => {
             return Err(app(format!(
                 "Bull Bitcoin wallet CSV has a row with empty {column}"
@@ -144,12 +152,10 @@ fn sats(columns: &Columns, column: &str, default: bool) -> Result<String, AppErr
             "Bull Bitcoin wallet CSV has non-integer {column}: {value}"
         )));
     }
-    if value.is_negative() {
-        return Err(app(format!(
-            "Bull Bitcoin wallet CSV has negative {column}: {value}"
-        )));
-    }
-    Ok(integral.trim_start_matches('-').to_owned())
+    Ok((
+        integral.trim_start_matches('-').to_owned(),
+        value.is_negative(),
+    ))
 }
 
 fn btc(sats: &str) -> Result<String, AppError> {
@@ -248,13 +254,17 @@ fn record(row: csv::Row, index: usize, generation_c: bool) -> Result<Option<csv:
     if date.is_none() && status == "pending" {
         return Ok(Some(skipped(network, UNDATED_PENDING)));
     }
-    let mut amount = sats(&columns, "amount_sats", false)?;
-    let fee = sats(&columns, "fee_sats", true)?;
+    let (mut amount, negative_amount) = sats(&columns, "amount_sats", false)?;
+    let (fee, negative_fee) = sats(&columns, "fee_sats", true)?;
+    let negative: Vec<&str> = [("amount_sats", negative_amount), ("fee_sats", negative_fee)]
+        .into_iter()
+        .filter_map(|(column, negative)| negative.then_some(column))
+        .collect();
     // A transfer between the wallet's own addresses moves no principal; its
     // miner fee is a fee-only outflow, as a chain observer books it.
     let self_transfer = direction.is_none();
     if self_transfer {
-        if fee == "0" {
+        if fee == "0" && negative.is_empty() {
             return Ok(Some(skipped(network, SELF_WITHOUT_FEE)));
         }
         amount = "0".into();
@@ -311,6 +321,10 @@ fn record(row: csv::Row, index: usize, generation_c: bool) -> Result<Option<csv:
         if generation_c {
             fields.insert("export_generation".into(), json!("v6.13+"));
         }
+        // The cells above keep the stated sign; the record books magnitudes.
+        if !negative.is_empty() {
+            fields.insert("negative_columns".into(), json!(negative));
+        }
     }
     let (label, description) = if self_transfer {
         (
@@ -349,9 +363,17 @@ fn record(row: csv::Row, index: usize, generation_c: bool) -> Result<Option<csv:
             "type": kind,
             "generation_c": generation_c,
             "match_only": false,
-            // A payjoin amount is the wallet's net in v6.11-v6.12 and the
-            // negotiated amount in v6.13+: only an observation settles it.
-            "review": if payjoin { Some(REVIEW_PAYJOIN) } else { None },
+            // A negative count is nothing Bull exports: only the user can
+            // say what it means. A payjoin amount is the wallet's net in
+            // v6.11-v6.12 and the negotiated amount in v6.13+: only an
+            // observation settles it.
+            "review": if !negative.is_empty() {
+                Some(REVIEW_NEGATIVE)
+            } else if payjoin {
+                Some(REVIEW_PAYJOIN)
+            } else {
+                None
+            },
         },
     });
     if payjoin {
@@ -395,8 +417,9 @@ impl Routed {
             )
         })
     }
-    /// Plain-English warnings for the skipped and held rows.
-    pub(crate) fn warnings(&self, review: i64) -> Vec<String> {
+    /// Plain-English warnings for the skipped rows and the `review` rows held
+    /// for review, `negative` of them for a negative amount or fee.
+    pub(crate) fn warnings(&self, review: i64, negative: i64) -> Vec<String> {
         let mut out = Vec::new();
         for (reason, count) in &self.skipped {
             out.push(match *reason {
@@ -404,11 +427,16 @@ impl Routed {
                 SELF_WITHOUT_FEE => format!("Skipped {count} Bull Bitcoin wallet self-transfer row(s) without a miner fee."),
                 LIGHTNING_NOT_OBSERVED => format!("Left {count} Bull Bitcoin wallet Lightning row(s) out of this wallet: their lockup or claim txid is not among its transactions, so the export cannot prove this wallet paid or received them."),
                 LIGHTNING_ELSEWHERE => format!("Left {count} Bull Bitcoin wallet Lightning row(s) out: another wallet of this book already holds their txid."),
+                REVIEW_NEGATIVE => format!("Left {count} Bull Bitcoin wallet row(s) stating a negative amount or fee out: they match a transaction the book already holds, which they never change."),
                 other => format!("Skipped {count} Bull Bitcoin wallet row(s): {other}."),
             });
         }
-        if review > 0 {
-            out.push(format!("Held {review} Bull Bitcoin wallet row(s) out of accounting for review (tagged bullbitcoin-wallet-review); see the Bull Bitcoin wallet CSV import notes."));
+        if negative > 0 {
+            out.push(format!("Held {negative} Bull Bitcoin wallet row(s) stating a negative amount or fee out of accounting for review (tagged bullbitcoin-wallet-review and bullbitcoin-wallet-negative-amount): Bull never exports a negative count, so each is stored excluded with its magnitude and stated direction; check it and run `kassiber metadata include` only once it is confirmed."));
+        }
+        let other = review - negative;
+        if other > 0 {
+            out.push(format!("Held {other} Bull Bitcoin wallet row(s) out of accounting for review (tagged bullbitcoin-wallet-review); see the Bull Bitcoin wallet CSV import notes."));
         }
         out
     }
@@ -459,6 +487,10 @@ fn holders(conn: &Connection, profile: &str, external_id: &str) -> Result<Vec<St
 /// swap metadata). A Lightning or unfiltered wallet holds it for review,
 /// excluded from accounting, unless another wallet already holds the txid.
 /// `conn` is `None` for enrichment, which only ever matches.
+///
+/// A row stating a negative count keeps its review mark wherever it may be
+/// inserted, and is skipped (`negative_amount`) wherever it could only match
+/// a transaction the book holds, which it must never change.
 pub(crate) fn route(
     conn: Option<(&Connection, &str, &str)>,
     rows: Vec<csv::Row>,
@@ -480,6 +512,11 @@ pub(crate) fn route(
             continue;
         }
         if take_skipped(&row, &mut routed.skipped) {
+            continue;
+        }
+        let negative = row.data[MARK]["review"].as_str() == Some(REVIEW_NEGATIVE);
+        if negative && (conn.is_none() || lightning && on_chain_wallet) {
+            *routed.skipped.entry(REVIEW_NEGATIVE).or_default() += 1;
             continue;
         }
         if !lightning {
@@ -506,7 +543,9 @@ pub(crate) fn route(
                 continue;
             }
         }
-        mark(&mut row, "review", json!(REVIEW_LIGHTNING));
+        if !negative {
+            mark(&mut row, "review", json!(REVIEW_LIGHTNING));
+        }
         routed.rows.push(row);
     }
     Ok(routed)

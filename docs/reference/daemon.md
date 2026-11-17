@@ -602,8 +602,8 @@ contract, defaults to a `Binance` provider wallet in full mode, and returns
 unified mobile wallet transaction export as active wallet-scoped BTC/LBTC/
 Lightning activity, returns `bullbitcoin_wallet_rows`, skips failed/expired/
 refunded and undated pending rows, books self-transfer rows as fee-only
-outflows, holds unobserved payjoin and unproven Lightning rows excluded for
-review, and redacts exported preimages before raw metadata is stored. Results
+outflows, holds unobserved payjoin, unproven Lightning, and negative-count
+rows excluded for review, and redacts exported preimages before raw metadata is stored. Results
 may add `bullbitcoin_wallet_skipped`, `bullbitcoin_wallet_review`, and
 `warnings` (see [imports](imports.md#bull-bitcoin-wallet-csv)). Wallet config may include `bullbitcoin_wallet_network` (`bitcoin`,
 `liquid`, or `lightning`) to split one unified export into separate source

@@ -4690,20 +4690,206 @@ fn bull_wallet_generations_parse_and_formula_guard_is_stripped_exactly() {
     let aborted = bull_payjoin_send(100001).replace("completed", "aborted");
     let rows = bull_parsed(&[aborted, bull_chain_swap_out(1410)]).unwrap();
     assert!(rows.iter().all(|r| r.bull.as_ref().unwrap().generation_c));
-    // A guarded negative amount fails closed instead of becoming positive.
+    // A guarded or accounting-style negative count is held for review with
+    // its magnitude and stated direction; the raw row keeps the sign.
     for amount in ["'-150", "-150", "(150)"] {
         let row = bull_received('1').replacen("250000", amount, 1);
-        let error = bull_parsed(&[row]).err().unwrap();
-        assert_eq!(error.code, "app_error", "{amount}");
-        assert_eq!(
-            error.message, "Bull Bitcoin wallet CSV has negative amount_sats: -150",
+        let held = bull_parsed(&[row]).unwrap();
+        assert_eq!(held[0].fields["amount"], Sql::Integer(150_000), "{amount}");
+        assert_eq!(string(&held[0].fields, "direction"), "inbound", "{amount}");
+        assert!(held[0].bull.as_ref().unwrap().negative(), "{amount}");
+        let raw = string(&held[0].fields, "raw_json");
+        assert!(
+            raw.contains(r#""negative_columns": ["amount_sats"]"#),
+            "{amount}"
+        );
+        assert!(
+            raw.contains(&format!(
+                r#""amount_sats": "{}""#,
+                amount.trim_start_matches('\'')
+            )),
             "{amount}"
         );
     }
     let row = bull_received('1').replacen(",0,confirmed", ",'-2,confirmed", 1);
+    let held = bull_parsed(&[row]).unwrap();
+    assert_eq!(held[0].fields["fee"], Sql::Integer(2_000));
+    assert!(string(&held[0].fields, "raw_json").contains(r#""negative_columns": ["fee_sats"]"#));
+    assert!(held[0].bull.as_ref().unwrap().negative());
+    // `-0` is zero, not negative.
+    let zero = bull_received('1').replacen("250000", "-0", 1);
     assert_eq!(
-        bull_parsed(&[row]).err().unwrap().message,
-        "Bull Bitcoin wallet CSV has negative fee_sats: -2"
+        bull_parsed(&[zero]).unwrap()[0]
+            .bull
+            .as_ref()
+            .unwrap()
+            .review,
+        None
+    );
+}
+
+#[test]
+fn bull_wallet_negative_rows_are_held_for_review_and_never_change_a_holding() {
+    let conn = fixture();
+    bull_network(&conn, "bitcoin");
+    let negative = bull_received('2').replacen("250000", "-5000", 1);
+    // A self-transfer stating a negative count is held too, not skipped.
+    let own = format!(
+        "2026-06-04T08:00:00Z,onchain,self,-40000,0.00040000,0,confirmed,{},bitcoin,bc1qown,,,,,,,",
+        bull_txid('3')
+    );
+    let result = bull_import(&conn, &[bull_received('1'), negative.clone(), own]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(3))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "bullbitcoin_wallet_review"),
+        Some(&Py::from(2))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "bullbitcoin_wallet_skipped"),
+        None
+    );
+    let Some(Py::List(warnings)) = kassiber_envelope::get(&result, "warnings") else {
+        panic!("warnings: {result:?}")
+    };
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(kassiber_envelope::py_str(&warnings[0])
+        .contains("Held 2 Bull Bitcoin wallet row(s) stating a negative amount or fee"));
+    let (direction, amount, excluded, raw): (String, i64, i64, String) = conn
+        .query_row(
+            "SELECT direction,amount,excluded,raw_json FROM transactions WHERE external_id=?",
+            [bull_txid('2')],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        (direction.as_str(), amount, excluded),
+        ("inbound", 5_000_000, 1)
+    );
+    assert!(raw.contains(r#""amount_sats": "-5000""#), "{raw}");
+    assert!(
+        raw.contains(r#""negative_columns": ["amount_sats"]"#),
+        "{raw}"
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transactions WHERE excluded=0"),
+        1,
+        "only the plain receive books"
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE t.code IN ('bullbitcoin-wallet-review','bullbitcoin-wallet-negative-amount')"),
+        4
+    );
+    // Re-importing leaves the held row, and the user's inclusion, alone.
+    conn.execute_batch("UPDATE transactions SET excluded=0,description='checked'")
+        .unwrap();
+    let again = bull_import(&conn, &[negative]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&again, "bullbitcoin_wallet_skipped"),
+        Some(&kassiber_envelope::dict([("negative_amount", Py::from(1))]))
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transactions WHERE excluded=1"),
+        0
+    );
+    // A negative row never changes a transaction the wallet observed, not
+    // even metadata a plain Bull row would fill.
+    conn.execute_batch(&format!("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,external_id_kind,fingerprint,occurred_at,direction,asset,amount,fee,raw_json,created_at) VALUES('obs','ws','p','wallet','{}','txid','observed','2026-06-05T12:00:00Z','outbound','BTC',99705000,2381000,'{{\"txid\":\"x\"}}','2026-06-05')", bull_txid('6'))).unwrap();
+    let observed = bull_payjoin_send(100001).replacen(",100001,", ",-100001,", 1);
+    let result = bull_import(&conn, &[observed]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "bullbitcoin_wallet_review"),
+        None
+    );
+    let (amount, kind, boundary, raw, fingerprint): (i64, Option<String>, Option<String>, String, String) = conn
+        .query_row(
+            "SELECT amount,kind,privacy_boundary,raw_json,fingerprint FROM transactions WHERE id='obs'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        (amount, kind, boundary, raw.as_str(), fingerprint.as_str()),
+        (99_705_000, None, None, r#"{"txid":"x"}"#, "observed")
+    );
+    let Some(Py::List(warnings)) = kassiber_envelope::get(&result, "warnings") else {
+        panic!("warnings: {result:?}")
+    };
+    assert!(kassiber_envelope::py_str(&warnings[0]).contains("which they never change"));
+    // Other refusals still surface past a negative row.
+    let error = bull_import(
+        &conn,
+        &[
+            bull_received('2').replacen("250000", "-5000", 1),
+            bull_received('9').replace(",bitcoin,", ",signet,"),
+        ],
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.message,
+        "Unsupported Bull Bitcoin wallet network 'signet'"
+    );
+}
+
+#[test]
+fn bull_wallet_negative_rows_never_enrich_or_prove_lightning() {
+    let conn = fixture();
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('liquid','ws','p','Liquid','custom','{}','2025-01-01')").unwrap();
+    let claim = bull_txid('7');
+    conn.execute_batch(&format!("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,raw_json,created_at) VALUES('claim','ws','p','liquid','{claim}','f','2026-06-02T08:00:00Z','inbound','LBTC',79850000,0,'{{}}','2026-06-02')")).unwrap();
+    let receive = format!("2026-06-02T08:00:00Z,lightning_receive,incoming,-80000,0.00080000,150,completed,{claim},lightning,,ln7,,420,,,,{claim}");
+    let liquid = format!(
+        "2026-06-02T08:00:00Z,liquid,incoming,79850,0.00079850,(5),completed,{claim},liquid,lq1q,,,,,,,"
+    );
+    // Enrichment only ever matches, so it skips and counts negative rows,
+    // whether they would match directly or through a Lightning claim.
+    let file =
+        std::env::temp_dir().join(format!("kassiber-bull-negative-{}.csv", std::process::id()));
+    std::fs::write(&file, bull_csv(&[receive.clone(), liquid])).unwrap();
+    let rows = bull_wallet_rows(file.to_str().unwrap());
+    std::fs::remove_file(&file).unwrap();
+    let routed = bull_wallet_enrichment(rows.unwrap(), "liquid").unwrap();
+    assert!(routed.rows.is_empty());
+    assert_eq!(
+        routed.skipped_py(),
+        Some(kassiber_envelope::dict([("negative_amount", Py::from(2))]))
+    );
+    // A Liquid CSV wallet would only match the claim: skipped, not booked.
+    bull_network(&conn, "liquid");
+    let result = bull_import(&conn, std::slice::from_ref(&receive)).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "bullbitcoin_wallet_skipped"),
+        Some(&kassiber_envelope::dict([("negative_amount", Py::from(1))]))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+    // A Lightning wallet holds it, for the negative count first.
+    bull_network(&conn, "lightning");
+    let unseen = receive.replace(&claim, &bull_txid('d'));
+    let held = bull_import(&conn, &[unseen]).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&held, "bullbitcoin_wallet_review"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transaction_tags tt JOIN tags t ON t.id=tt.tag_id WHERE t.code='bullbitcoin-wallet-negative-amount'"),
+        1
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM tags WHERE code='bullbitcoin-wallet-lightning-network-unproven'"
+        ),
+        0
     );
 }
 

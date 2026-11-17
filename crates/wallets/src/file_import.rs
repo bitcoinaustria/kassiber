@@ -480,6 +480,10 @@ impl Bull {
             review: mark.get("review").and_then(Json::as_str).map(str::to_owned),
         })
     }
+    /// The row states a negative amount or fee.
+    fn negative(&self) -> bool {
+        self.review.as_deref() == Some(bull_wallet::REVIEW_NEGATIVE)
+    }
 }
 impl Record {
     fn insert_binding_error(&self) -> Option<&AppError> {
@@ -1613,16 +1617,33 @@ fn run(
             if let Some(network) = network {
                 extra.push(("bullbitcoin_wallet_network", s(network.as_str())));
             }
-            let routed = bull_wallet::Routed {
-                rows: Vec::new(),
-                skipped: skipped.clone(),
-            };
-            let held = match pairs.iter().find(|(key, _)| *key == kassiber_pyjson::Key::from("inserted_records")) {
+            let reviews: Vec<&Py> = match pairs.iter().find(|(key, _)| *key == kassiber_pyjson::Key::from("inserted_records")) {
                 Some((_, Py::List(items))) => items
                     .iter()
-                    .filter(|item| kassiber_envelope::get(item, "review").is_some())
-                    .count() as i64,
-                _ => 0,
+                    .filter_map(|item| kassiber_envelope::get(item, "review"))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            let held = reviews.len() as i64;
+            let negative = |review: Option<&str>| review == Some(bull_wallet::REVIEW_NEGATIVE);
+            let held_negative = reviews
+                .iter()
+                .filter(|review| matches!(review, Py::Str(text) if negative(text.as_str())))
+                .count() as i64;
+            // A negative row that met a transaction the wallet already holds
+            // left it unchanged: count it as left out.
+            let negative_rows = rows
+                .iter()
+                .filter(|row| negative(row.data[bull_wallet::MARK]["review"].as_str()))
+                .count() as i64;
+            let mut skipped = skipped.clone();
+            if negative_rows > held_negative {
+                *skipped.entry(bull_wallet::REVIEW_NEGATIVE).or_default() +=
+                    negative_rows - held_negative;
+            }
+            let routed = bull_wallet::Routed {
+                rows: Vec::new(),
+                skipped,
             };
             if held > 0 {
                 extra.push(("bullbitcoin_wallet_review", Py::from(held)));
@@ -1630,7 +1651,7 @@ fn run(
             if let Some(skipped) = routed.skipped_py() {
                 extra.push(("bullbitcoin_wallet_skipped", skipped));
             }
-            let warnings = routed.warnings(held);
+            let warnings = routed.warnings(held, held_negative);
             if !warnings.is_empty() {
                 extra.push((
                     "warnings",
@@ -1843,7 +1864,13 @@ fn insert_settled_records(
                     && string(&existing, "wallet_id") == wallet.id
                     && same_lnd_settlement(&existing, r)
             });
-            let changes = merge(&existing, r, &fp, settlement)?;
+            // A Bull row stating a negative count never changes a transaction
+            // the book already holds, not even its metadata.
+            let changes = if r.bull.as_ref().is_some_and(Bull::negative) {
+                Fields::new()
+            } else {
+                merge(&existing, r, &fp, settlement)?
+            };
             if changes.is_empty() {
                 unchanged += 1;
             } else {
@@ -2002,6 +2029,7 @@ fn bull_review_tag(
     let detail = match reason {
         bull_wallet::REVIEW_LIGHTNING => "Lightning network unproven",
         bull_wallet::REVIEW_PAYJOIN => "payjoin amount unverified",
+        bull_wallet::REVIEW_NEGATIVE => "negative amount or fee",
         other => other,
     };
     for (code, label) in [
