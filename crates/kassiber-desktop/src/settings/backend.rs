@@ -1483,7 +1483,7 @@ pub fn page(app: &App, tk: &Tk, overlays: &mut Vec<El>) -> super::subpage::Parts
             ))
             .font(tk.txs(400.0).mono())
             .color(tk.muted_fg)
-            .wrap(),
+            .wrap_anywhere(),
         );
     }
     body = body.child(
@@ -2100,7 +2100,7 @@ pub fn page(app: &App, tk: &Tk, overlays: &mut Vec<El>) -> super::subpage::Parts
                     text(f.test_log.clone())
                         .font(tk.txs(400.0).mono().lh(tk.r(1.25)))
                         .color(tk.fg)
-                        .wrap(),
+                        .wrap_anywhere(),
                 ),
         );
     }

@@ -202,13 +202,18 @@ fn explorer(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) {
                 .gap(tk.r(0.25))
                 .radius(tk.r(0.375))
                 .fill(tk.muted)
-                .child(text(txn).font(tk.txs(400.0).mono()).color(tk.fg).wrap())
                 .child(
+                    text(txn)
+                        .font(tk.txs(400.0).mono())
+                        .color(tk.fg)
+                        .wrap_anywhere(),
+                )
+                .children((!url.is_empty()).then(|| {
                     text(url)
                         .font(tk.txs(400.0).mono())
                         .color(tk.muted_fg)
-                        .wrap(),
-                ),
+                        .wrap_anywhere()
+                })),
         );
     if let Some(e) = &o.explorer_error {
         c = c.child(

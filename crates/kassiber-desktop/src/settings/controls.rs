@@ -555,7 +555,7 @@ pub fn copy_row(
     let d = text(shown)
         .font(tk.txs(400.0).mono())
         .color(tk.muted_fg)
-        .wrap();
+        .wrap_anywhere();
     let controls = value
         .map(|v| vec![copy_button(app, tk, key, v, copy_label)])
         .unwrap_or_default();

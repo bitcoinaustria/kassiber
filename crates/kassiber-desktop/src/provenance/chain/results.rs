@@ -1122,7 +1122,7 @@ fn job_view(app: &App, tk: &Tk, w: Which, job: &Value, e: &Entropy) -> El {
                     text(snapshot)
                         .font(tk.px(10.0, 400.0).mono())
                         .color(tk.muted_fg)
-                        .wrap(),
+                        .wrap_anywhere(),
                 ),
         );
     if status == "running" {
@@ -1585,7 +1585,7 @@ pub fn entropy_result(app: &App, tk: &Tk, w: Which, r: &Value, request: Option<&
                             text(i.clone())
                                 .font(small.mono())
                                 .color(tk.fg)
-                                .wrap()
+                                .wrap_anywhere()
                                 .w(0.0)
                                 .grow(1.0),
                         )
@@ -1593,7 +1593,7 @@ pub fn entropy_result(app: &App, tk: &Tk, w: Which, r: &Value, request: Option<&
                             text(o.clone())
                                 .font(small.mono())
                                 .color(tk.fg)
-                                .wrap()
+                                .wrap_anywhere()
                                 .w(0.0)
                                 .grow(1.0),
                         )
@@ -1601,7 +1601,7 @@ pub fn entropy_result(app: &App, tk: &Tk, w: Which, r: &Value, request: Option<&
                             text(format!("{n}/{total}"))
                                 .font(small.mono())
                                 .color(tk.fg)
-                                .wrap()
+                                .wrap_anywhere()
                                 .w(0.0)
                                 .grow(1.0),
                         ),

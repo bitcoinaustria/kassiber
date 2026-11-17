@@ -1102,7 +1102,7 @@ pub fn page(app: &App, tk: &Tk) -> super::subpage::Parts {
             text(f.base_url.text.trim().to_owned())
                 .font(tk.txs(400.0).mono())
                 .color(tk.muted_fg)
-                .wrap(),
+                .wrap_anywhere(),
         );
     }
     let name = f.name.text.trim();
@@ -1333,7 +1333,7 @@ fn provider_step(app: &App, tk: &Tk, f: &AiForm) -> El {
                             text(cmd)
                                 .font(tk.txs(400.0).mono())
                                 .color(tk.fg)
-                                .wrap()
+                                .wrap_anywhere()
                                 .grow(1.0)
                                 .min_w(0.0),
                         )

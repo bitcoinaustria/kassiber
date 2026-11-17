@@ -493,7 +493,12 @@ fn operation_view(tk: &Tk, op: &Value, hide: bool) -> El {
         t("assistant:review.op.custody_component")
     };
     let request = &op["request"];
-    let mono = |s: String| text(s).font(tk.txs(400.0).mono()).color(tk.fg).wrap();
+    let mono = |s: String| {
+        text(s)
+            .font(tk.txs(400.0).mono())
+            .color(tk.fg)
+            .wrap_anywhere()
+    };
     let mut li = col()
         .w_full()
         .gap(tk.r(0.25))
@@ -632,7 +637,7 @@ fn raw_json(app: &App, tk: &Tk, key: String, v: &Value) -> El {
                 text(body)
                     .font(tk.txs(400.0).mono())
                     .color(tk.muted_fg)
-                    .wrap(),
+                    .wrap_anywhere(),
             )
     })
 }
@@ -850,7 +855,7 @@ pub fn proposal_view(app: &App, tk: &Tk, key: &str, a: &Value, wide: bool) -> El
         ))
         .font(tk.t2xs(400.0).mono())
         .color(tk.muted_fg)
-        .wrap(),
+        .wrap_anywhere(),
     )
     .child(raw_json(app, tk, format!("{key}-raw"), a))
 }
@@ -1225,7 +1230,7 @@ pub fn pending_row(app: &App, tk: &Tk, r: &Consent, layer: &mut Vec<El>) -> El {
                     text(serde_json::to_string_pretty(&r.arguments_preview).unwrap_or_default())
                         .font(tk.t2xs(400.0).mono().lh(tk.r(1.25)))
                         .color(tk.fg)
-                        .wrap(),
+                        .wrap_anywhere(),
                 ),
         );
     }

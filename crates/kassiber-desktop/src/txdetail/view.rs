@@ -245,6 +245,9 @@ fn tab_bar(app: &App, tk: &Tk, o: &Open, sheet: bool, layer: &mut Vec<El>) -> El
         .child(tabs)
         .child(add);
     let mut right = row().gap(tk.r(0.125)).center_y();
+    if let Some(r) = &o.record {
+        right = right.children(super::header::record_actions(app, tk, r, true));
+    }
     let preview = !app.detail.tabs.get(active).is_some_and(|s| s.pinned);
     if preview && o.id().is_some() {
         right = right.child(

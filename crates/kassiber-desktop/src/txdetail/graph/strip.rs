@@ -173,7 +173,7 @@ fn exchange_summary(
             ))
             .font(tk.txs(400.0).mono())
             .color(tk.muted_fg)
-            .wrap(),
+            .wrap_anywhere(),
         );
     }
     out

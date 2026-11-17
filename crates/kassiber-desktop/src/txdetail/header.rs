@@ -213,6 +213,66 @@ fn now_rate(app: &App) -> Option<f64> {
     app.snapshot().map(|sn| sn.rate()).filter(|x| *x > 0.0)
 }
 
+/// The record's actions: "Ask about this" (AI on) and the explorer button. `in_bar` sizes them
+/// for the panel's tab bar (ghost, beside Keep open and Maximize).
+pub fn record_actions(app: &App, tk: &Tk, r: &Value, in_bar: bool) -> Vec<El> {
+    let mut out = Vec::new();
+    if app.prefs.ai_features {
+        out.push(
+            super::widgets::button(
+                tk,
+                "txd-ask",
+                if in_bar {
+                    super::widgets::Variant::Ghost
+                } else {
+                    super::widgets::Variant::Outline
+                },
+                if in_bar {
+                    super::widgets::Size::Xs
+                } else {
+                    super::widgets::Size::Sm
+                },
+                Some(&I::SPARKLES),
+                &t("assistant:panel.askAbout"),
+                true,
+            )
+            .on_press({
+                let (id, date, held) = (
+                    s(r, "id").to_owned(),
+                    opt_s(r, "date"),
+                    opt_s(r, "quarantineReason").is_some(),
+                );
+                move |a: &mut App| crate::assistant::ask_about(a, &id, date.as_deref(), held)
+            }),
+        );
+    }
+    if super::dialogs::explorer_target(app, r).is_some() {
+        let (variant, size, glyph) = if in_bar {
+            (super::widgets::Variant::Ghost, tk.r(1.75), tk.r(0.875))
+        } else {
+            (super::widgets::Variant::Outline, tk.r(2.25), tk.r(1.0))
+        };
+        out.push(
+            super::widgets::icon_button(
+                tk,
+                "txd-explorer",
+                variant,
+                size,
+                &I::EXTERNAL_LINK,
+                glyph,
+                t("transactions:detailHeader.openExplorer"),
+            )
+            .on_press(|a: &mut App| {
+                if let Some(o) = a.detail.open.as_mut() {
+                    o.explorer_open = true;
+                    o.explorer_error = None;
+                }
+            }),
+        );
+    }
+    out
+}
+
 pub fn header(app: &App, tk: &Tk, o: &Open, r: &Value, sheet: bool) -> El {
     let hide = app.prefs.hide_sensitive();
     let fl = draft::flow(r);
@@ -306,47 +366,12 @@ pub fn header(app: &App, tk: &Tk, o: &Open, r: &Value, sheet: bool) -> El {
         ));
     }
 
-    // Actions (right, `gap-2`): "Ask about this" (AI on) and the explorer button.
+    // Actions (right, `gap-2`): "Ask about this" (AI on) and the explorer button. Docked, they
+    // sit in the panel's tab bar (`record_actions`); only the sheet, which has no bar, keeps
+    // them here with its close button.
     let mut actions = row().gap(tk.r(0.5)).center_y();
-    if app.prefs.ai_features {
-        actions = actions.child(
-            super::widgets::button(
-                tk,
-                "txd-ask",
-                super::widgets::Variant::Outline,
-                super::widgets::Size::Sm,
-                Some(&I::SPARKLES),
-                &t("assistant:panel.askAbout"),
-                true,
-            )
-            .on_press({
-                let (id, date, held) = (
-                    s(r, "id").to_owned(),
-                    opt_s(r, "date"),
-                    opt_s(r, "quarantineReason").is_some(),
-                );
-                move |a: &mut App| crate::assistant::ask_about(a, &id, date.as_deref(), held)
-            }),
-        );
-    }
-    if super::dialogs::explorer_target(app, r).is_some() {
-        actions = actions.child(
-            super::widgets::icon_button(
-                tk,
-                "txd-explorer",
-                super::widgets::Variant::Outline,
-                tk.r(2.25),
-                &I::EXTERNAL_LINK,
-                tk.r(1.0),
-                t("transactions:detailHeader.openExplorer"),
-            )
-            .on_press(|a: &mut App| {
-                if let Some(o) = a.detail.open.as_mut() {
-                    o.explorer_open = true;
-                    o.explorer_error = None;
-                }
-            }),
-        );
+    if sheet {
+        actions = actions.children(record_actions(app, tk, r, false));
     }
     if sheet {
         actions = actions.child(
@@ -569,7 +594,7 @@ pub fn header(app: &App, tk: &Tk, o: &Open, r: &Value, sheet: bool) -> El {
                         .child(title)
                         .child(desc.mt(tk.r(0.25))),
                 )
-                .child(actions),
+                .children(sheet.then_some(actions)),
         )
         // `SheetHeader` keeps its `gap-1.5` between the two rows.
         .child(el().h(tk.r(0.375)))

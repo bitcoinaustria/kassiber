@@ -566,8 +566,38 @@ pub fn build(s: &Snapshot, evs: &[Event], period: Period) -> Series {
     // Base points.
     let mut series: Vec<&model::PortfolioPoint> = s.portfolio_series.iter().collect();
     series.sort_by(|a, b| a.date.cmp(&b.date));
-    let sampled = series;
-    let base: Vec<Pt> = sampled
+    let point = |day: Day, balance: f64, value: f64, basis: f64, price: f64| {
+        let date = day.iso();
+        let month = if resolved == Period::D30 {
+            day.month_day_ui()
+        } else {
+            day.month_year_ui()
+        };
+        let incomplete = incomplete_on_day(from, &date);
+        let avg = (!incomplete && balance > 0.0 && basis > 0.0).then(|| basis / balance);
+        let sort_ms = day.epoch_days() as f64 * DAY_MS + DAY_MS - 1.0;
+        Pt {
+            date,
+            month,
+            detail: day.long_ui(),
+            balance,
+            value_eur: value,
+            cost_basis: basis,
+            unrealized: value - basis,
+            basis_incomplete: incomplete,
+            price,
+            avg_cost: avg,
+            l_bal: Some(balance),
+            l_val: Some(value),
+            l_price: Some(price),
+            l_avg: avg,
+            brush_bal: balance,
+            sort_ms,
+            power_days: power_days(sort_ms),
+            ev: None,
+        }
+    };
+    let mut base: Vec<Pt> = series
         .iter()
         .map(|p| {
             let day = Day::parse(&p.date).unwrap_or(Day {
@@ -575,42 +605,46 @@ pub fn build(s: &Snapshot, evs: &[Event], period: Period) -> Series {
                 m: 1,
                 d: 1,
             });
-            let month = if resolved == Period::D30 {
-                day.month_day_ui()
-            } else {
-                day.month_year_ui()
-            };
-            let incomplete = incomplete_on_day(from, &p.date);
             let price = match p.price_eur {
                 Some(v) if v > 0.0 => v,
                 _ if p.balance_btc > 0.0 => p.value_eur / p.balance_btc,
                 _ => rate,
             };
-            let avg = (!incomplete && p.balance_btc > 0.0 && p.cost_basis_eur > 0.0)
-                .then(|| p.cost_basis_eur / p.balance_btc);
-            let sort_ms = day.epoch_days() as f64 * DAY_MS + DAY_MS - 1.0;
-            Pt {
-                date: p.date.get(0..10).unwrap_or(&p.date).to_owned(),
-                month,
-                detail: day.long_ui(),
-                balance: p.balance_btc,
-                value_eur: p.value_eur,
-                cost_basis: p.cost_basis_eur,
-                unrealized: p.value_eur - p.cost_basis_eur,
-                basis_incomplete: incomplete,
-                price,
-                avg_cost: avg,
-                l_bal: Some(p.balance_btc),
-                l_val: Some(p.value_eur),
-                l_price: Some(price),
-                l_avg: avg,
-                brush_bal: p.balance_btc,
-                sort_ms,
-                power_days: power_days(sort_ms),
-                ev: None,
-            }
+            point(day, p.balance_btc, p.value_eur, p.cost_basis_eur, price)
         })
         .collect();
+    // The series has a point only on days with a daily rate; a transaction on a day without one
+    // would move the line (and the navigator) only on the next rate day, after its dot. Such a
+    // day gets a point from the activity's running balance (the same book deltas) after the
+    // day's last transaction, priced at that transaction's rate.
+    let mut last_of_day: std::collections::BTreeMap<i64, &Event> = Default::default();
+    for e in evs {
+        last_of_day.insert(day_of_ms(e.t_ms).epoch_days(), e);
+    }
+    let known: std::collections::HashSet<String> = base.iter().map(|p| p.date.clone()).collect();
+    let mut filled: Vec<Pt> = Vec::new();
+    for (days, e) in last_of_day {
+        let day = Day::from_epoch_days(days);
+        let Some(balance) = e.post_balance.filter(|b| b.is_finite()) else {
+            continue;
+        };
+        if known.contains(&day.iso()) {
+            continue;
+        }
+        let end = days as f64 * DAY_MS + DAY_MS - 1.0;
+        let before = base[..base.partition_point(|p| p.sort_ms < end)].last();
+        let price = if e.price > 0.0 {
+            e.price
+        } else {
+            before.map(|p| p.price).unwrap_or(rate)
+        };
+        let basis = e.post_basis.or(before.map(|p| p.cost_basis)).unwrap_or(0.0);
+        filled.push(point(day, balance, balance * price, basis, price));
+    }
+    if !filled.is_empty() {
+        base.extend(filled);
+        base.sort_by(|a, b| a.sort_ms.total_cmp(&b.sort_ms));
+    }
 
     let draw_lines = resolved == Period::D30;
     let latest_balance = s.latest_balance_btc();
@@ -1213,6 +1247,48 @@ mod tests {
             },
         );
         assert_eq!((g.carry, g.first == g.end, g.more), (Some(99), true, true));
+    }
+
+    #[test]
+    fn a_transaction_on_a_day_without_a_rate_moves_the_line_that_day() {
+        // The series skips 2026-09-15 (no daily rate); the spend on it must still step the
+        // balance there, not on the next rate day, and its dot must sit on the stepped line.
+        let s: Snapshot = serde_json::from_value(serde_json::json!({
+            "portfolioSeries": [
+                {"date": "2026-09-01", "balanceBtc": 1.23, "valueEur": 80000.0, "costBasisEur": 50000.0, "priceEur": 65040.0},
+                {"date": "2026-09-28", "balanceBtc": 0.165, "valueEur": 11000.0, "costBasisEur": 6000.0, "priceEur": 66667.0},
+            ],
+            "activityTxs": [
+                {"id": "a", "date": "2026-09-15", "occurredAt": "2026-09-15T12:20:00Z", "type": "Withdrawal",
+                 "amountSat": -106_500_000.0, "eur": 71_000.0, "balanceBtc": 0.165, "costBasisEur": 6000.0},
+            ],
+        }))
+        .unwrap();
+        let evs = events(&s);
+        let series = build(&s, &evs, Period::Y1);
+        let line: Vec<(&str, f64)> = series
+            .points
+            .iter()
+            .filter(|p| !p.is_event())
+            .map(|p| (p.date.as_str(), p.balance))
+            .collect();
+        assert_eq!(
+            line,
+            vec![
+                ("2026-09-01", 1.23),
+                ("2026-09-15", 0.165),
+                ("2026-09-28", 0.165)
+            ]
+        );
+        let dot = series.points.iter().find(|p| p.is_event()).unwrap();
+        assert_eq!(dot.date, "2026-09-15");
+        assert_eq!(dot.ev.as_ref().unwrap().marker_bal, 0.165);
+        // Priced at the transaction's own rate.
+        let filled = series
+            .points
+            .iter()
+            .find(|p| !p.is_event() && p.date == "2026-09-15");
+        assert!((filled.unwrap().price - 71_000.0 / 1.065).abs() < 1e-6);
     }
 
     #[test]

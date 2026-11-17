@@ -276,7 +276,7 @@ fn section(tk: &Tk, label: &str, body: &str, plain: bool, error: bool) -> El {
                 text(body.to_owned())
                     .font(tk.t3xs(400.0).mono())
                     .color(if error { tk.destructive } else { tk.muted_fg })
-                    .wrap(),
+                    .wrap_anywhere(),
             )
     };
     col()

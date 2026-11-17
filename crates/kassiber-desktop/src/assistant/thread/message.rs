@@ -892,7 +892,7 @@ pub fn assistant(app: &App, tk: &Tk, m: &Msg, _page: bool, layer: &mut Vec<El>) 
                             text(pk.to_owned())
                                 .font(tk.txs(400.0).mono())
                                 .color(tk.muted_fg)
-                                .wrap(),
+                                .wrap_anywhere(),
                         ),
                 );
             }

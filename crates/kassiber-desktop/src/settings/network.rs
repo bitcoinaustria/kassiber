@@ -452,7 +452,7 @@ fn book_network(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
                 text(ci.to_owned())
                     .font(tk.txs(400.0).mono())
                     .color(tk.muted_fg)
-                    .wrap(),
+                    .wrap_anywhere(),
             );
         }
         let env = b["environment"]

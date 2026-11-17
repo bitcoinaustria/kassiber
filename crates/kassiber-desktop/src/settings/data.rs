@@ -362,7 +362,7 @@ fn backup(app: &App, tk: &Tk) -> El {
                     text(p["target_data_root"].as_str().unwrap_or("").to_owned())
                         .font(tk.txs(400.0).mono())
                         .color(tk.muted_fg)
-                        .wrap(),
+                        .wrap_anywhere(),
                 )
                 .child(
                     text(list(&p["target"]["books"]))
