@@ -227,19 +227,14 @@ fn state_icon(tk: &Tk, s: ToolStatus) -> El {
     e
 }
 
-/// A `Badge` (`secondary`, or `destructive` for errors): `px-1.5 py-0 text-3xs uppercase`.
+/// A status label (`secondary`, or the destructive ink for errors), uppercase.
 fn badge(tk: &Tk, label: &str, destructive: bool) -> El {
-    let (bg, fg) = if destructive {
-        (tk.destructive, Color::WHITE)
+    let fg = if destructive {
+        tk.destructive
     } else {
-        (tk.muted, tk.fg)
+        tk.muted_fg
     };
-    row()
-        .px(tk.r(0.375))
-        .radius(tk.r(0.375))
-        .border(1.0, Color::TRANSPARENT)
-        .fill(bg)
-        .child(text(label.to_uppercase()).font(tk.t3xs(500.0)).color(fg))
+    text(label.to_uppercase()).font(tk.t3xs(500.0)).color(fg)
 }
 
 /// `ToolInput` / `ToolOutput`: a labelled section (`border-t px-2 py-1.5`), plain text in a

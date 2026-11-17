@@ -89,43 +89,20 @@ fn cols_w(app: &App, cx: &Cx<App>) -> f32 {
         })
 }
 
-/// A ringed chip: `inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium`
-/// with a 1 pt inset ring (status and pricing styles).
+/// A status or pricing label in its style's ink (`crate::ui::tag`).
 fn ring_chip(tk: &Tk, c: Chip, glyph: Option<&'static rune::Icon>, label: String) -> El {
-    let mut r = row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.25))
-        .gap(tk.r(0.25))
-        .center_y()
-        .radius(tk.r(0.375))
-        .fill(c.bg)
-        .border(1.0, c.ring)
-        .min_w(0.0);
-    if let Some(g) = glyph {
-        r = r.child(ic(g, tk.r(0.75), c.fg));
-    }
-    r.child(text(label).font(tk.txs(500.0)).color(c.fg).truncate())
+    crate::ui::tag(tk, c.fg, glyph, label)
 }
 
-/// shadcn `Badge` with `rounded-md`: `border px-2 py-0.5 text-xs font-medium`; `secondary` is
-/// `bg-secondary` with a transparent border, `outline` is `border-border text-foreground`.
-fn badge(tk: &Tk, label: String, outline: bool, hidden: bool) -> El {
-    // Rune draws borders inside the box; the web's 1 pt border adds to it, hence the +1.
-    let r = row()
-        .px(tk.r(0.5) + 1.0)
-        .py(tk.r(0.125) + 1.0)
-        .radius(tk.r(0.375))
+/// A neutral label; `hidden` masks it (privacy mode).
+fn badge(tk: &Tk, label: String, _outline: bool, hidden: bool) -> El {
+    row()
+        .min_w(0.0)
         .center_y()
-        .min_w(0.0);
-    let r = if outline {
-        r.border(1.0, tk.border)
-    } else {
-        r.fill(tk.accent)
-    };
-    r.child(sensitive(label, tk.txs(500.0), tk.fg, hidden).truncate())
+        .child(sensitive(label, tk.txs(500.0), tk.muted_fg, hidden).truncate())
 }
 
-/// The loan badge: an outline `Badge` with `loanRoleBadgeClassName`'s border and text.
+/// The loan label in `loanRoleBadgeClassName`'s ink.
 fn loan_badge(tk: &Tk, role: &str) -> El {
     let (key, fam) = match role {
         "collateral_release" => ("returnedBadge", "emerald"),
@@ -135,12 +112,8 @@ fn loan_badge(tk: &Tk, role: &str) -> El {
     };
     let fg = tw(fam, if tk.dark { 400 } else { 700 });
     row()
-        .px(tk.r(0.5) + 1.0)
-        .py(tk.r(0.125) + 1.0)
         .gap(tk.r(0.25))
         .center_y()
-        .radius(tk.r(0.375))
-        .border(1.0, tw(fam, 500).alpha(0.4))
         .child(ic(&I::COINS, tk.r(0.75), fg))
         .child(
             text(t(&format!("transactions:table.row.collateral.{key}")))
@@ -539,12 +512,8 @@ fn build_row(app: &App, tk: &Tk, r: &Row, c: Cols) -> El {
             let cc = coarse_chip(tk);
             top = top.child(
                 row()
-                    .px(tk.r(0.375))
-                    .py(tk.r(0.125))
                     .gap(tk.r(0.25))
                     .center_y()
-                    .radius(tk.r(0.375))
-                    .fill(cc.bg)
                     .help(t("transactions:table.coarse.title"))
                     .child(ic(&I::TRIANGLE_ALERT, tk.r(0.75), cc.fg))
                     .child(

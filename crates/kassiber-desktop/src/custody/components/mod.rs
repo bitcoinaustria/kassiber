@@ -423,20 +423,14 @@ fn compact_id(v: &str) -> String {
     format!("{h}…{tl}")
 }
 
-/// shadcn `Badge` (`rounded-full border px-2 py-0.5 text-xs font-medium`).
+/// A label (`crate::ui::tag`): the text ink for `default`, muted otherwise.
 fn badge(tk: &Tk, label: String, variant: &str) -> El {
-    let (fg, bg, border) = match variant {
-        "default" => (tk.primary_fg, tk.primary, Color::TRANSPARENT),
-        "secondary" => (tk.fg, tk.muted, Color::TRANSPARENT),
-        _ => (tk.fg, Color::TRANSPARENT, tk.border),
+    let fg = if variant == "default" {
+        tk.fg
+    } else {
+        tk.muted_fg
     };
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(999.0)
-        .fill(bg)
-        .border(1.0, border)
-        .child(text(label).font(tk.txs(500.0)).color(fg))
+    crate::ui::tag(tk, fg, None, label)
 }
 
 /// The amber box of backend validation issues (`validationIssues`, the review's issues).

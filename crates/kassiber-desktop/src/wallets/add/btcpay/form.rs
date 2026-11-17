@@ -331,12 +331,12 @@ pub fn button(
     crate::ui::button::button_busy(tk, key, v, size, busy, glyph.map(|g| g.0), label, enabled)
 }
 
-/// `Badge variant="outline"` (`rounded-md border px-2 py-0.5 text-xs font-medium`), optionally
-/// in a tone, mono (`font-mono text-[11px]`) or struck through (`line-through opacity-60`).
+/// A label in a tone's ink (muted without one), optionally mono (`font-mono text-[11px]`) or
+/// struck through (`line-through opacity-60`); no fill or border.
 pub fn badge(tk: &Tk, label: &str, tone: Option<Tone>, mono: bool, struck: bool) -> El {
-    let (border, fill, ink) = match tone {
-        Some(t) => tone_colors(tk, t),
-        None => (tk.border, Color::TRANSPARENT, tk.fg),
+    let ink = match tone {
+        Some(t) => tone_colors(tk, t).2,
+        None => tk.muted_fg,
     };
     let font = if mono {
         tk.px(11.0 * tk.rem / 16.0, 500.0).mono()
@@ -356,27 +356,12 @@ pub fn badge(tk: &Tk, label: &str, tone: Option<Tone>, mono: bool, struck: bool)
     } else {
         t
     };
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .fill(fill)
-        .border(1.0, border)
-        .border_layout()
-        .opacity(if struck { 0.6 } else { 1.0 })
-        .child(t)
+    row().opacity(if struck { 0.6 } else { 1.0 }).child(t)
 }
 
-/// `Badge variant="secondary"`.
+/// A neutral label (`crate::ui::tag`).
 pub fn badge_secondary(tk: &Tk, label: &str) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .fill(tk.muted)
-        .border(1.0, Color::TRANSPARENT)
-        .border_layout()
-        .child(text(label.to_owned()).font(tk.txs(500.0)).color(tk.fg))
+    crate::ui::tag(tk, tk.muted_fg, None, label)
 }
 
 /// A link-styled inline button (`inline-flex items-center gap-1 text-xs underline`).

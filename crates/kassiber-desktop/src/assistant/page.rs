@@ -178,14 +178,8 @@ fn toolbar(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
             } else {
                 tc("assistant:page.generatingQueued", a.queued.len(), &[])
             };
-            left = left.child(
-                row()
-                    .radius(999.0)
-                    .fill(tk.primary.alpha(0.1))
-                    .px(tk.r(0.5))
-                    .py(tk.r(0.125))
-                    .child(text(label).font(tk.txs(500.0)).color(tk.primary).truncate()),
-            );
+            left = left
+                .child(row().child(text(label).font(tk.txs(500.0)).color(tk.primary).truncate()));
         } else {
             left = left.child(
                 text(tc("assistant:page.messageCount", a.messages.len(), &[]))

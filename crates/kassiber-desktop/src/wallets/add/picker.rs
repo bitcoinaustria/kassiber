@@ -239,18 +239,9 @@ fn source_row(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El {
     )
 }
 
-/// Badge `variant="outline"`: text-xs medium, a hairline, rounded-md, px-2 py-0.5.
+/// A muted "planned" label.
 fn planned_badge(tk: &Tk) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .border(1.0, tk.border)
-        .child(
-            text(t("connections:add.plannedLabel"))
-                .font(tk.txs(500.0))
-                .color(tk.fg),
-        )
+    crate::ui::tag(tk, tk.muted_fg, None, t("connections:add.plannedLabel"))
 }
 
 /// `renderSourceSummary` for `src`.

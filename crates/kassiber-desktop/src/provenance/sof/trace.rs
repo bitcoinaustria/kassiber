@@ -62,20 +62,13 @@ pub fn flow_preview(
         );
     if !model::arr(flow, "deferred_privacy_hops").is_empty() {
         let a = amber();
-        let (fill, border, ink) = kit::notice(tk, &a, a.c900, a.c200);
+        let (_, _, ink) = kit::notice(tk, &a, a.c900, a.c200);
         head = head.child(
-            row()
-                .px(tk.r(0.5))
-                .py(2.0)
-                .radius(999.0)
-                .fill(fill)
-                .border(1.0, border)
-                .border_layout()
-                .child(
-                    text(t("sourceFunds:flowPath.privacyHopDeferred"))
-                        .font(tk.txs(400.0))
-                        .color(ink),
-                ),
+            row().child(
+                text(t("sourceFunds:flowPath.privacyHopDeferred"))
+                    .font(tk.txs(400.0))
+                    .color(ink),
+            ),
         );
     }
     let mut out = col().w_full().min_w(0.0).gap(tk.r(0.5)).child(head);
@@ -512,18 +505,12 @@ fn status_pill(tk: &Tk, state: &str) -> El {
             kit::notice(tk, &a, a.c900, a.c200)
         }
     };
-    row()
-        .px(tk.r(0.5))
-        .py(2.0)
-        .radius(999.0)
-        .fill(fill)
-        .border(1.0, border)
-        .border_layout()
-        .child(
-            text(label_or_pretty("linkState", state))
-                .font(tk.txs(400.0))
-                .color(ink),
-        )
+    let _ = (fill, border);
+    row().child(
+        text(label_or_pretty("linkState", state))
+            .font(tk.txs(400.0))
+            .color(ink),
+    )
 }
 
 fn review_queue(app: &App, tk: &Tk) -> El {
