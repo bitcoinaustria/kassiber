@@ -164,19 +164,28 @@ pub fn on_probe(app: &mut App, r: &Reply) {
         .iter_mut()
         .find(|(_, p)| *p == Probe::Running)
     {
-        let ok = r.error.is_none() && r.data["ok"].as_bool().unwrap_or(true);
-        p.1 = if ok {
-            Probe::Ok
-        } else {
-            Probe::Failed(
-                r.error
-                    .clone()
-                    .or_else(|| r.data["error"].as_str().map(str::to_owned))
-                    .unwrap_or_else(|| t("chrome:network.checkFailed")),
-            )
+        p.1 = match (&r.error, probe_failure(&r.data)) {
+            (None, None) => Probe::Ok,
+            (Some(e), _) => Probe::Failed(e.clone()),
+            (None, Some(e)) => Probe::Failed(e.unwrap_or_else(|| t("chrome:network.checkFailed"))),
         };
     }
     next_probe(app);
+}
+
+/// Whether a probe's answer reports a failure, and its message: the HTTP, Electrum, BTCPay and
+/// Lightning checks answer `ok`, the Bitcoin Core check `reachable` with a nested `error`.
+fn probe_failure(data: &Value) -> Option<Option<String>> {
+    let ok = data["ok"]
+        .as_bool()
+        .or_else(|| data["reachable"].as_bool())
+        .unwrap_or(true);
+    (!ok).then(|| {
+        let e = &data["error"];
+        e.as_str()
+            .or_else(|| e["message"].as_str())
+            .map(str::to_owned)
+    })
 }
 
 pub fn on_offline_set(app: &mut App, r: &Reply) {
@@ -576,5 +585,23 @@ mod probe_tls_tests {
             "insecure": true, "certificate": "PEM"}));
         assert_eq!(el["trust_self_signed"], true);
         assert!(el.get("certificate").is_none());
+    }
+
+    /// A stopped Bitcoin Core node answers `reachable: false` with a nested error, not `ok`:
+    /// the check fails with that message instead of reading as healthy.
+    #[test]
+    fn a_core_probe_that_cannot_reach_its_node_fails() {
+        let down = json!({"reachable": false, "status": "unresponsive",
+            "error": {"code": "backend_unreachable", "message": "connection refused"}});
+        assert_eq!(
+            probe_failure(&down),
+            Some(Some("connection refused".into()))
+        );
+        assert_eq!(
+            probe_failure(&json!({"reachable": true, "status": "ok"})),
+            None
+        );
+        assert_eq!(probe_failure(&json!({"ok": false, "url": "u"})), Some(None));
+        assert_eq!(probe_failure(&json!({"ok": true})), None);
     }
 }
