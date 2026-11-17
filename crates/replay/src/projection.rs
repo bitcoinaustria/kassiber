@@ -18,10 +18,14 @@
 //! A value that fails its class's check is replaced whole, never kept.
 //! Codec tags are admitted only from `CODEC_TAGS`. `tests/projection_coverage.rs`
 //! fails when the loader hands the pipeline a column no schema classifies.
+use crate::pseudonym::Pseudonymizer;
 use crate::registry;
 use crate::swap;
-use serde_json::Value;
-use std::collections::BTreeSet;
+use crate::typed;
+use kassiber_pyjson::{Key, PyStr, Value as Py};
+use serde_json::{Map, Value};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The residual markers the custody engine interprets in leg and component
 /// `notes`, each with the source site that reads it
@@ -62,6 +66,9 @@ pub const MARKERS: &[(&str, &str)] = &[
 /// Local reference prefixes of `location_ref` (`network-fee:<review id>`,
 /// `reviewed-custody-suspense:<review id>`, written by `transfers/src/pair_spec.rs`).
 pub const LOCAL_REFS: &[&str] = &["network-fee", "reviewed-custody-suspense"];
+
+/// Codec wire tags a value may carry, and how their content is checked.
+const CODEC_TAGS: &[&str] = &["$decimal", "$float"];
 
 #[derive(Clone, Copy)]
 pub enum F {
@@ -1057,6 +1064,431 @@ pub fn field_names() -> BTreeSet<&'static str> {
     out
 }
 
+/// One projection run: the pseudonymizer, every identifier and enum value
+/// it replaced (so the book's own outputs map the same way), and every value
+/// it generated (so recomputed outputs can be checked against them).
+pub struct Projection<'a> {
+    p: &'a Pseudonymizer,
+    replaced: RefCell<BTreeMap<String, String>>,
+    generated: RefCell<BTreeSet<String>>,
+}
+
+impl<'a> Projection<'a> {
+    pub fn new(p: &'a Pseudonymizer) -> Self {
+        Self {
+            p,
+            replaced: RefCell::new(BTreeMap::new()),
+            generated: RefCell::new(BTreeSet::new()),
+        }
+    }
+
+    /// Every identifier and enum value the projection replaced, with its
+    /// replacement.
+    pub fn replacements(&self) -> BTreeMap<String, String> {
+        self.replaced.borrow().clone()
+    }
+
+    /// Every identifier and enum pseudonym the projection generated.
+    pub fn generated(&self) -> BTreeSet<String> {
+        self.generated.borrow().clone()
+    }
+
+    /// The keyed mapping of an identifier, local or outside.
+    pub fn id(&self, text: &str) -> String {
+        let id = self.p.id(text);
+        self.replaced
+            .borrow_mut()
+            .insert(text.to_owned(), id.clone());
+        self.generated.borrow_mut().insert(id.clone());
+        id
+    }
+
+    /// Authored text: a label pseudonym, never recorded.
+    fn text(&self, text: &str) -> String {
+        if text.is_empty() {
+            return String::new();
+        }
+        self.p.label(text)
+    }
+
+    /// An enum value outside its list: a label, recorded so outputs map.
+    pub fn enum_value(&self, text: &str) -> String {
+        let label = self.p.label(text);
+        self.replaced
+            .borrow_mut()
+            .insert(text.to_owned(), label.clone());
+        self.generated.borrow_mut().insert(label.clone());
+        label
+    }
+
+    pub fn snapshot(&self, snapshot: &Value) -> Result<Value, String> {
+        let Value::Object(fields) = snapshot else {
+            return Err("custody snapshot is not an object".into());
+        };
+        let rows = |name: &str, value: &Value| -> Value {
+            let schema = section(name).expect("schema");
+            match value {
+                Value::Array(rows) => {
+                    Value::Array(rows.iter().map(|r| self.object(schema, r)).collect())
+                }
+                Value::Null => Value::Null,
+                other => self.object(schema, other),
+            }
+        };
+        let mut out = Map::new();
+        for (name, value) in fields {
+            let projected = match name.as_str() {
+                "schema_version" => self.value(F::Int, value),
+                "operation" => self.value(F::Enum(&["custody"]), value),
+                "as_of" => self.value(F::Time, value),
+                "profile" => self.object(PROFILE, value),
+                "owned_index" => self.owned_index(value),
+                "ownership_warnings" => match value {
+                    Value::Array(items) => {
+                        Value::Array(items.iter().map(|v| self.value(F::Text, v)).collect())
+                    }
+                    _ => Value::Array(Vec::new()),
+                },
+                "anchors" => match value {
+                    Value::Object(rows) => Value::Object(
+                        rows.iter()
+                            .map(|(id, row)| {
+                                let id = self.id(id);
+                                (id, self.object(TRANSACTION, row))
+                            })
+                            .collect(),
+                    ),
+                    _ => Value::Object(Map::new()),
+                },
+                "components" => match value {
+                    Value::Array(components) => Value::Array(
+                        components
+                            .iter()
+                            .map(|component| {
+                                let mut out = Map::new();
+                                for part in [
+                                    "header",
+                                    "legs",
+                                    "allocations",
+                                    "economic_terms",
+                                    "commitments",
+                                ] {
+                                    let value = component.get(part).unwrap_or(&Value::Null);
+                                    out.insert(
+                                        part.into(),
+                                        rows(&format!("components.{part}"), value),
+                                    );
+                                }
+                                Value::Object(out)
+                            })
+                            .collect(),
+                    ),
+                    _ => Value::Array(Vec::new()),
+                },
+                "gap_worklist" => {
+                    let mut out = Map::new();
+                    out.insert(
+                        "large_book".into(),
+                        self.value(
+                            F::Bool,
+                            value.get("large_book").unwrap_or(&Value::Bool(false)),
+                        ),
+                    );
+                    out.insert(
+                        "rows".into(),
+                        rows(
+                            "gap_worklist.rows",
+                            value.get("rows").unwrap_or(&Value::Array(Vec::new())),
+                        ),
+                    );
+                    Value::Object(out)
+                }
+                "book_network" => match value {
+                    Value::Object(network) => {
+                        let mut out = Map::new();
+                        for part in ["binding", "observations", "references"] {
+                            if let Some(value) = network.get(part) {
+                                out.insert(
+                                    part.into(),
+                                    rows(&format!("book_network.{part}"), value),
+                                );
+                            }
+                        }
+                        Value::Object(out)
+                    }
+                    _ => Value::Null,
+                },
+                name if section(name).is_some() => rows(name, value),
+                other => return Err(format!("unclassified snapshot section {other}")),
+            };
+            out.insert(name.clone(), projected);
+        }
+        Ok(Value::Object(out))
+    }
+
+    /// One object by its schema: unnamed fields dropped, kept names emitted
+    /// from the schema.
+    pub fn object(&self, schema: Schema, value: &Value) -> Value {
+        match value {
+            Value::Object(fields) => Value::Object(
+                fields
+                    .iter()
+                    .filter_map(|(key, value)| {
+                        let (name, class) = schema.iter().find(|(name, _)| name == key)?;
+                        Some(((*name).to_owned(), self.value(*class, value)))
+                    })
+                    .collect(),
+            ),
+            Value::Array(items) => {
+                Value::Array(items.iter().map(|v| self.object(schema, v)).collect())
+            }
+            Value::Null => Value::Null,
+            other => Value::String(self.text(&other.to_string())),
+        }
+    }
+
+    /// One value by its class.
+    pub fn value(&self, class: F, value: &Value) -> Value {
+        match (class, value) {
+            (_, Value::Null) => Value::Null,
+            (F::Obj(schema), value) => self.object(schema, value),
+            (F::IntOr(schema) | F::Or(_, schema), Value::Array(_) | Value::Object(_)) => {
+                self.object(schema, value)
+            }
+            (F::Or(scalar, _), value) => self.value(*scalar, value),
+            (F::Doc(schema), Value::Object(_) | Value::Array(_)) => self.object(schema, value),
+            (F::Doc(schema), Value::String(text)) => Value::String(self.document(schema, text)),
+            (F::DocList(item), Value::String(text)) => {
+                Value::String(self.document_list(*item, text))
+            }
+            (F::DocList(item), Value::Array(items)) => {
+                Value::Array(items.iter().map(|v| self.value(*item, v)).collect())
+            }
+            (F::List(item), Value::Array(items)) => {
+                Value::Array(items.iter().map(|v| self.value(*item, v)).collect())
+            }
+            (_, Value::Array(items)) => {
+                Value::Array(items.iter().map(|v| self.value(class, v)).collect())
+            }
+            (_, Value::Object(tagged)) => self.tagged(class, tagged),
+            (_, Value::Bool(b)) => match class {
+                F::Bool | F::Int | F::Amount | F::Enum(_) | F::Parsed(_) | F::IntOr(_) => {
+                    Value::Bool(*b)
+                }
+                _ => Value::String(self.text(&b.to_string())),
+            },
+            (_, Value::Number(n)) => match class {
+                F::Amount | F::Int | F::Bool | F::IntOr(_) | F::Enum(_) | F::Parsed(_) => {
+                    typed::number(n).unwrap_or(Value::Null)
+                }
+                // Integer ids and years are typed values, not spellings.
+                F::Row | F::Time => match n.as_i64() {
+                    Some(n) => Value::from(n),
+                    None => Value::String(self.id(&n.to_string())),
+                },
+                _ => Value::String(self.text(&n.to_string())),
+            },
+            (_, Value::String(text)) => Value::String(self.string(class, text)),
+        }
+    }
+
+    /// A codec-tagged value: only `$decimal`/`$float` around a parsed amount.
+    fn tagged(&self, class: F, tagged: &Map<String, Value>) -> Value {
+        match tagged.iter().next() {
+            Some((tag, Value::String(text))) if tagged.len() == 1 && matches!(class, F::Amount) => {
+                match (CODEC_TAGS.iter().find(|t| **t == tag), typed::amount(text)) {
+                    (Some(tag), Some(amount)) => {
+                        let mut out = Map::new();
+                        out.insert((*tag).to_owned(), Value::String(amount));
+                        Value::Object(out)
+                    }
+                    _ => Value::Null,
+                }
+            }
+            _ => Value::Null,
+        }
+    }
+
+    /// One string by its class: parsed and printed again, mapped, or
+    /// pseudonymized. Never copied.
+    fn string(&self, class: F, text: &str) -> String {
+        if text.is_empty() {
+            return String::new();
+        }
+        if let F::Or(scalar, _) = class {
+            return self.string(*scalar, text);
+        }
+        let parsed = match class {
+            F::Amount => typed::amount(text),
+            F::Time => typed::time(text),
+            F::Int | F::IntOr(_) => typed::int(text),
+            F::Bool => typed::boolean(text).map(str::to_owned),
+            F::Enum(values) => values.iter().find(|v| **v == text).map(|v| (*v).to_owned()),
+            F::Parsed(parse) => parse(text),
+            F::Marker => MARKERS
+                .iter()
+                .find(|(marker, _)| *marker == text)
+                .map(|(marker, _)| (*marker).to_owned()),
+            _ => None,
+        };
+        if let Some(parsed) = parsed {
+            return parsed;
+        }
+        match class {
+            F::Row | F::External | F::Digest => self.id(text),
+            F::LocationRef => match text.split_once(':') {
+                Some((prefix, rest)) => match LOCAL_REFS.iter().find(|p| **p == prefix) {
+                    Some(prefix) => format!("{prefix}:{}", self.id(rest)),
+                    None => self.id(text),
+                },
+                None => self.id(text),
+            },
+            F::Enum(_) | F::Parsed(_) => self.enum_value(text),
+            _ => self.text(text),
+        }
+    }
+
+    /// A JSON document held as text, projected by `schema` and written back
+    /// in its own layout (Python's default or the compact form).
+    fn document(&self, schema: Schema, text: &str) -> String {
+        let Ok(parsed) = kassiber_pytext::loads(text) else {
+            return self.text(text);
+        };
+        let options = layout(&parsed, text);
+        let projected = match &parsed {
+            Py::Dict(_) | Py::List(_) => self.py_object(schema, &parsed),
+            _ => return self.text(text),
+        };
+        kassiber_pyjson::dumps(&projected, &options).unwrap_or_else(|_| self.text(text))
+    }
+
+    fn document_list(&self, item: F, text: &str) -> String {
+        match kassiber_pytext::loads(text) {
+            Ok(parsed @ Py::List(_)) => {
+                let options = layout(&parsed, text);
+                let Py::List(items) = &parsed else {
+                    unreachable!()
+                };
+                let projected = Py::List(items.iter().map(|v| self.py_value(item, v)).collect());
+                kassiber_pyjson::dumps(&projected, &options).unwrap_or_else(|_| "[]".into())
+            }
+            _ => "[]".into(),
+        }
+    }
+
+    fn py_object(&self, schema: Schema, value: &Py) -> Py {
+        match value {
+            Py::Dict(items) => Py::Dict(
+                items
+                    .iter()
+                    .filter_map(|(key, value)| {
+                        let Key::Str(name) = key else { return None };
+                        let name = name.as_str()?;
+                        let (name, class) = schema.iter().find(|(n, _)| *n == name)?;
+                        Some((Key::from(*name), self.py_value(*class, value)))
+                    })
+                    .collect(),
+            ),
+            Py::List(items) => Py::List(items.iter().map(|v| self.py_object(schema, v)).collect()),
+            Py::Null => Py::Null,
+            // A scalar where an object belongs: pseudonymized whole, as `object`
+            // does for JSON values.
+            other => match py_json(other) {
+                Some(json) => Py::Str(PyStr::from(self.text(&json.to_string()).as_str())),
+                None => Py::Null,
+            },
+        }
+    }
+
+    /// A document value, through the same classes as JSON values: objects
+    /// and lists keep their document shape, every scalar is projected by
+    /// `value` itself, so JSON held as text and JSON values cannot drift
+    /// apart (`json_held_as_text_projects_like_json_values`).
+    fn py_value(&self, class: F, value: &Py) -> Py {
+        match (class, value) {
+            (_, Py::Null) => Py::Null,
+            (
+                F::Obj(schema) | F::Doc(schema) | F::IntOr(schema) | F::Or(_, schema),
+                Py::Dict(_) | Py::List(_),
+            ) => self.py_object(schema, value),
+            (F::List(item) | F::DocList(item), Py::List(items)) => {
+                Py::List(items.iter().map(|v| self.py_value(*item, v)).collect())
+            }
+            (_, Py::List(items)) => {
+                Py::List(items.iter().map(|v| self.py_value(class, v)).collect())
+            }
+            // A document's exact decimal keeps its spelling, re-parsed.
+            (F::Amount, Py::Decimal(d)) => match typed::amount(&d.to_string()) {
+                Some(text) => text.parse().map(Py::Decimal).unwrap_or(Py::Null),
+                None => Py::Null,
+            },
+            (_, Py::Str(text)) if text.as_str().is_none() => {
+                Py::Str(PyStr::from(self.p.label("surrogate").as_str()))
+            }
+            (_, other) => match py_json(other) {
+                Some(json) => json_py(&self.value(class, &json)),
+                None => Py::Null,
+            },
+        }
+    }
+
+    /// The ownership index by shape: maps keyed by script, outpoint or txid,
+    /// scoped lists of `{key: [chain, network, id], matches}`, and
+    /// `[wallet_id, wallet_label]` pairs. Unknown sections are dropped.
+    pub fn owned_index(&self, value: &Value) -> Value {
+        let Value::Object(sections) = value else {
+            return Value::Null;
+        };
+        let item = |item: &Value| match item {
+            Value::Array(pair) if pair.len() == 2 => Value::Array(vec![
+                self.value(F::Row, &pair[0]),
+                self.value(F::Text, &pair[1]),
+            ]),
+            other => self.object(OWNED_MATCH, other),
+        };
+        let items = |value: &Value| match value {
+            Value::Array(values) => Value::Array(values.iter().map(item).collect()),
+            _ => Value::Array(Vec::new()),
+        };
+        let mut out = Map::new();
+        for (name, section) in sections {
+            let Some(section_name) = OWNED_SECTIONS.iter().find(|s| **s == name) else {
+                continue;
+            };
+            let projected = match section {
+                Value::Object(map) => Value::Object(
+                    map.iter()
+                        .map(|(id, values)| (self.id(id), items(values)))
+                        .collect(),
+                ),
+                Value::Array(entries) => Value::Array(
+                    entries
+                        .iter()
+                        .map(|entry| {
+                            let key = match entry.get("key") {
+                                Some(Value::Array(key)) if key.len() == 3 => Value::Array(vec![
+                                    self.value(F::Enum(CHAINS), &key[0]),
+                                    self.value(F::Enum(NETWORKS), &key[1]),
+                                    self.value(F::External, &key[2]),
+                                ]),
+                                _ => Value::Null,
+                            };
+                            let matches = items(entry.get("matches").unwrap_or(&Value::Null));
+                            let mut out = Map::new();
+                            out.insert("key".into(), key);
+                            out.insert("matches".into(), matches);
+                            Value::Object(out)
+                        })
+                        .collect(),
+                ),
+                _ => continue,
+            };
+            out.insert((*section_name).to_owned(), projected);
+        }
+        Value::Object(out)
+    }
+}
+
 const OWNED_SECTIONS: &[&str] = &[
     "by_script",
     "by_outpoint",
@@ -1065,6 +1497,68 @@ const OWNED_SECTIONS: &[&str] = &[
     "by_scoped_outpoint",
     "txid_wallets_by_scope",
 ];
+
+/// The layout a document was written in: Python's default or compact,
+/// ASCII-escaped or not. Only these four, never the book's own bytes.
+/// A document value as a JSON value, for `Projection::value`. `None` for
+/// what JSON cannot hold (bytes, non-finite floats, non-UTF-8 text).
+fn py_json(value: &Py) -> Option<Value> {
+    Some(match value {
+        Py::Null => Value::Null,
+        Py::Bool(b) => Value::Bool(*b),
+        Py::Int(n) => Value::Number(n.to_string().parse().ok()?),
+        Py::Float(n) => Value::Number(serde_json::Number::from_f64(*n)?),
+        Py::Decimal(d) => Value::Number(d.to_string().parse().ok()?),
+        Py::Str(text) => Value::String(text.as_str()?.to_owned()),
+        Py::List(items) => Value::Array(items.iter().map(py_json).collect::<Option<_>>()?),
+        Py::Dict(items) => Value::Object(
+            items
+                .iter()
+                .map(|(key, value)| match key {
+                    Key::Str(name) => Some((name.as_str()?.to_owned(), py_json(value)?)),
+                    _ => None,
+                })
+                .collect::<Option<_>>()?,
+        ),
+        _ => return None,
+    })
+}
+
+/// A projected JSON value back as a document value. Projected numbers are
+/// always 64-bit integers or finite floats.
+fn json_py(value: &Value) -> Py {
+    match value {
+        Value::Null => Py::Null,
+        Value::Bool(b) => Py::Bool(*b),
+        Value::Number(n) => match (n.as_i64(), n.as_u64(), n.as_f64()) {
+            (Some(n), _, _) => Py::Int(n.into()),
+            (_, Some(n), _) => Py::Int(n.into()),
+            (_, _, Some(n)) => Py::Float(n),
+            _ => Py::Null,
+        },
+        Value::String(text) => Py::Str(PyStr::from(text.as_str())),
+        Value::Array(items) => Py::List(items.iter().map(json_py).collect()),
+        Value::Object(items) => Py::Dict(
+            items
+                .iter()
+                .map(|(key, value)| (Key::from(key.as_str()), json_py(value)))
+                .collect(),
+        ),
+    }
+}
+
+fn layout(parsed: &Py, text: &str) -> kassiber_pyjson::Options {
+    use kassiber_pyjson::Options;
+    [
+        Options::new(),
+        Options::new().compact(),
+        Options::new().ensure_ascii(false),
+        Options::new().compact().ensure_ascii(false),
+    ]
+    .into_iter()
+    .find(|o| kassiber_pyjson::dumps(parsed, o).is_ok_and(|t| t == text))
+    .unwrap_or_else(Options::new)
+}
 
 /// Fields of `value` (rows of a section, or one document) that `schema`
 /// does not classify, recursively through nested objects and documents,
@@ -1115,4 +1609,237 @@ pub fn unclassified(schema: Schema, value: &Value) -> Vec<String> {
     out.sort();
     out.dedup();
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn project(schema: Schema, value: Value) -> String {
+        let p = Pseudonymizer::new([9; 32]);
+        Projection::new(&p).object(schema, &value).to_string()
+    }
+
+    #[test]
+    fn named_fields_are_generated_from_parsed_values_and_everything_else_is_dropped() {
+        let raw = json!({"password": "correct-horse", "credentials": "u:p", "txid": "SENTINEL-ALICE-x", "value": 5}).to_string();
+        let out = project(
+            TRANSACTION,
+            json!({
+                "raw_json": raw,
+                "username": "alice", "in_counterparty": "Alice", "out_description": "Bob",
+                "source_url": "node.private.example:50002", "$anything": "secret",
+                "account_code": "SENTINEL_ALICE_ACCOUNT", "kind": "alice_kind",
+                "amount": "1.5", "fee": "five", "occurred_at": "Tuesday with Alice",
+                "confirmed_at": "2001:db8::1", "id": "alice.private.example",
+                "external_id": "6f9d6b8a-5b7e-4c1a-9d0e-1f2a3b4c5d6e",
+            }),
+        );
+        for leaked in [
+            "correct-horse",
+            "credentials",
+            "SENTINEL",
+            "alice",
+            "Alice",
+            "Bob",
+            "node.private",
+            "secret",
+            "$anything",
+            "five",
+            "Tuesday",
+            "6f9d6b8a",
+            "db8",
+        ] {
+            assert!(!out.contains(leaked), "{leaked}: {out}");
+        }
+        assert!(
+            out.contains("\"amount\":\"1.5\"") && out.contains("\\\"value\\\":5"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn only_the_interpreted_markers_survive_in_notes() {
+        let kept = project(LEG, json!({"notes": "reviewed_residual:network_fee"}));
+        assert!(kept.contains("reviewed_residual:network_fee"), "{kept}");
+        for prose in ["private", "rent_for_alice", "reviewed_residual:alice"] {
+            let out = project(LEG, json!({"notes": prose}));
+            assert!(!out.contains(prose), "{prose}: {out}");
+        }
+    }
+
+    #[test]
+    fn local_ids_and_references_go_through_the_keyed_mapping() {
+        let p = Pseudonymizer::new([9; 32]);
+        let projection = Projection::new(&p);
+        let leg = projection.object(
+            LEG,
+            &json!({
+                "id": "leg-1", "wallet_id": "alice.private.example",
+                "location_ref": "network-fee:alice-review",
+            }),
+        );
+        let text = leg.to_string();
+        assert!(!text.contains("alice") && !text.contains("leg-1"), "{text}");
+        assert_eq!(
+            leg["location_ref"],
+            format!("network-fee:{}", p.id("alice-review"))
+        );
+        assert_eq!(leg["wallet_id"], p.id("alice.private.example"));
+        assert!(projection.generated().contains(&p.id("leg-1")));
+    }
+
+    #[test]
+    fn ownership_index_pairs_and_keys_are_projected_by_shape() {
+        const TXID: &str = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+        let p = Pseudonymizer::new([9; 32]);
+        let index = json!({
+            "txid_wallets": {TXID: [["w1", "Alice Savings"]]},
+            "txid_wallets_by_scope": [{"key": ["bitcoin", "main", TXID], "matches": [["w1", "Alice Savings"]]}],
+            "by_outpoint": {format!("{TXID}:0"): [{"wallet_id": "w1", "wallet_label": "Alice Savings", "source": "wallet_utxos", "secret": "x"}]},
+            "unknown_section": {"a": 1},
+        });
+        let out = Projection::new(&p).owned_index(&index).to_string();
+        for leaked in ["Alice", TXID, "secret", "unknown_section", "\"w1\""] {
+            assert!(!out.contains(leaked), "{leaked}: {out}");
+        }
+        assert!(out.contains("wallet_utxos"), "{out}");
+    }
+
+    #[test]
+    fn coverage_recurses_into_documents_and_flags_an_emptied_nested_schema() {
+        let row = json!({"raw_json": json!({"txid": "x", "vin": [{"prevout": {"scriptpubkey": "s"}}]}).to_string()});
+        assert!(unclassified(TRANSACTION, &row).is_empty());
+        // The same row against a transaction schema whose raw document is
+        // emptied reports every nested field.
+        const EMPTIED: Schema = &[("raw_json", F::Doc(&[]))];
+        assert_eq!(
+            unclassified(EMPTIED, &row),
+            vec![".raw_json.txid", ".raw_json.vin"]
+        );
+        const SHALLOW: Schema = &[(
+            "raw_json",
+            F::Doc(&[("txid", F::External), ("vin", F::Obj(&[]))]),
+        )];
+        assert_eq!(unclassified(SHALLOW, &row), vec![".raw_json.vin.prevout"]);
+    }
+
+    /// Fifth review: `status` in a `raw_json` held as text keeps Esplora's
+    /// object and a recognized provider status, value for value.
+    #[test]
+    fn text_held_raw_json_keeps_status_objects_and_known_statuses() {
+        let p = Pseudonymizer::new([5; 32]);
+        let projection = Projection::new(&p);
+        let parse = |text: &str| -> Value { serde_json::from_str(text).unwrap() };
+        let unconfirmed = parse(&projection.document(
+            RAW,
+            r#"{"status": {"confirmed": false, "block_height": 7}}"#,
+        ));
+        assert_eq!(
+            unconfirmed["status"],
+            serde_json::json!({"confirmed": false, "block_height": 7})
+        );
+        let refunded = parse(&projection.document(RAW, r#"{"status": "transaction.refunded"}"#));
+        assert_eq!(refunded["status"], "transaction.refunded");
+        let unknown = parse(&projection.document(RAW, r#"{"status": "alice.private.example"}"#));
+        assert!(
+            unknown["status"].as_str().unwrap().starts_with("label-"),
+            "{unknown}"
+        );
+    }
+
+    /// Every class: the match has no wildcard, so a new `F` variant fails to
+    /// compile here until it is listed (and so covered by the parity test).
+    fn every_class() -> Vec<F> {
+        static ITEM: F = F::External;
+        let classes = vec![
+            F::Row,
+            F::External,
+            F::Digest,
+            F::Amount,
+            F::Time,
+            F::Int,
+            F::Bool,
+            F::Enum(&["a", "transaction.refunded"]),
+            F::Parsed(swap::status),
+            F::Marker,
+            F::Text,
+            F::Doc(RAW),
+            F::Obj(RAW),
+            F::List(&ITEM),
+            F::IntOr(RAW),
+            F::LocationRef,
+            F::DocList(&ITEM),
+            F::Or(&SWAP_STATUS, RAW),
+        ];
+        for class in &classes {
+            match class {
+                F::Row
+                | F::External
+                | F::Digest
+                | F::Amount
+                | F::Time
+                | F::Int
+                | F::Bool
+                | F::Enum(_)
+                | F::Parsed(_)
+                | F::Marker
+                | F::Text
+                | F::Doc(_)
+                | F::Obj(_)
+                | F::List(_)
+                | F::IntOr(_)
+                | F::LocationRef
+                | F::DocList(_)
+                | F::Or(_, _) => {}
+            }
+        }
+        classes
+    }
+
+    /// Every class projects a document held as text (`raw_json`, evidence,
+    /// configuration) exactly as it projects the same JSON value, so no class
+    /// is classified but unimplemented on the text path.
+    #[test]
+    fn json_held_as_text_projects_like_json_values() {
+        const TXID: &str = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+        let samples = [
+            serde_json::json!(null),
+            serde_json::json!(true),
+            serde_json::json!(false),
+            serde_json::json!(0),
+            serde_json::json!(7),
+            serde_json::json!(-5),
+            serde_json::json!(1.5),
+            serde_json::json!("1.5"),
+            serde_json::json!("2024-05-01T00:00:00Z"),
+            serde_json::json!("transaction.refunded"),
+            serde_json::json!("a"),
+            serde_json::json!(TXID),
+            serde_json::json!(format!("{TXID}:1")),
+            serde_json::json!("reviewed_residual:network_fee"),
+            serde_json::json!("network-fee:x"),
+            serde_json::json!("Alice"),
+            serde_json::json!({"confirmed": false, "block_height": 7}),
+            serde_json::json!([{"confirmed": true}, {"txid": TXID}]),
+            serde_json::json!([1, "a", null]),
+            serde_json::json!({"$decimal": "1.50"}),
+            serde_json::json!("{\"confirmed\": false}"),
+            serde_json::json!("[\"ab\", \"transaction.refunded\"]"),
+        ];
+        let p = Pseudonymizer::new([9; 32]);
+        let projection = Projection::new(&p);
+        for (index, class) in every_class().into_iter().enumerate() {
+            let schema: Schema = Box::leak(Box::new([("f", class)]));
+            for sample in &samples {
+                let document = serde_json::json!({ "f": sample });
+                let as_value = projection.object(schema, &document);
+                let as_text: Value =
+                    serde_json::from_str(&projection.document(schema, &document.to_string()))
+                        .unwrap();
+                assert_eq!(as_text, as_value, "class #{index}, sample {sample}");
+            }
+        }
+    }
 }
