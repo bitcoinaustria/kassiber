@@ -960,6 +960,8 @@
     "rawWarning": "Rohe Logs sind sichtbar bis {{time}}. Jetzt erstellte Exporte sind mit einem Wasserzeichen versehen.",
     "rawWarningSoon": "bald",
     "recordsLine": "{{count}} Datensätze · RAM-Puffer {{size}} ({{percent}} %)",
+    "recordsCount_one": "{{count}} Datensatz",
+    "recordsCount_other": "{{count}} Datensätze",
     "renderingNewest": "{{count}} neueste werden angezeigt",
     "noMatching": "Keine passenden Log-Datensätze",
     "waiting": "Warte auf Aktivität…",

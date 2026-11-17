@@ -8,7 +8,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use rune::{Color, Cx, El, KeyEvent, ScrollPos, ScrollSpec, TextEdit, Tx, col, el, row, text};
+use rune::{Color, Cx, El, KeyEvent, ScrollPos, ScrollSpec, TextEdit, Tx, col, row, text};
 use rune_kit::{Placement, TextArea};
 
 use super::logstore::{self, LEVELS, Record, Store};
@@ -593,10 +593,8 @@ fn chip(
         .px(tk.r(0.5))
         .gap(tk.r(0.25))
         .center_y()
-        .radius(tk.r(0.125))
-        .border(1.0, tk.primary.alpha(0.4))
-        .fill(tk.primary.alpha(0.1))
-        .hover(tk.primary.alpha(0.05))
+        .radius(tk.r(0.375))
+        .hover(tk.accent)
         .role("button")
         .label(aria)
         .focusable(true)
@@ -604,11 +602,11 @@ fn chip(
         .child(
             text(label)
                 .font(tk.txs(400.0).mono())
-                .color(tk.primary)
+                .color(tk.fg)
                 .truncate()
                 .shrink(),
         )
-        .child(ic(&I::X, tk.r(0.75), tk.primary))
+        .child(ic(&I::X, tk.r(0.75), tk.muted_fg))
 }
 
 /// The card header's controls: the search (substring or regex) and one menu for the filters and
@@ -652,8 +650,8 @@ fn chips(app: &App, tk: &Tk) -> El {
     let s = &app.reports.diag.logs;
     let q = s.query.text.trim().to_owned();
     let mut left = row()
-        .w_full()
         .min_w(0.0)
+        .shrink()
         .gap(tk.r(0.25))
         .center_y()
         .flex_wrap();
@@ -1217,7 +1215,9 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     let limit = s.render_limit.min(MAX_RENDERED);
     let visible = &idx[idx.len().saturating_sub(limit)..];
     let popup = app.reports.diag.popup;
-    // Header: the RAM note; Export (its menu also copies the newest records and clears).
+    // One toolbar: the search and its active filters; the count (the RAM note on hover); the
+    // filter menu and Export (its menu also copies the newest records and clears). The log
+    // fills the rest; the page title already names it.
     let export = button(
         tk,
         "logs-export",
@@ -1226,7 +1226,8 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         Some(&I::DOWNLOAD),
         &t("common:actions.export"),
         true,
-    );
+    )
+    .help(t("review:logs.ramNote"));
     let export = crate::ui::popup::trigger(
         export,
         crate::ui::popup::Kind::Menu,
@@ -1236,37 +1237,42 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     if popup == Some(Popup::LogExport) {
         export_menu(tk, layer);
     }
-    let head = widgets::header(tk)
-        .child(widgets::description(tk, t("review:logs.ramNote")))
+    let mut count = tc(
+        "review:logs.recordsCount",
+        idx.len(),
+        &[("count", &idx.len().to_string())],
+    );
+    if visible.len() < idx.len() {
+        count = format!(
+            "{count} · {}",
+            tc(
+                "review:logs.renderingNewest",
+                visible.len(),
+                &[("count", &visible.len().to_string())],
+            )
+        );
+    }
+    let toolbar = row()
+        .key("logs-toolbar")
+        .w_full()
+        .gap(tk.r(0.5))
+        .center_y()
+        .child(header_controls(app, tk, layer))
+        .children(has_filters(s).then(|| chips(app, tk)))
+        .child(rune::el().grow(1.0))
+        .child(
+            text(count)
+                .font(tk.txs(400.0).features("'tnum' 1"))
+                .color(tk.muted_fg)
+                .truncate(),
+        )
         .child(export);
-    // The card fills the rest of the page panel: the Wallets card's header, the active filters,
-    // then the panel's terminal-style log.
-    let win_h = if app.shell.window_h > 0.0 {
-        app.shell.window_h
-    } else {
-        900.0
-    };
-    let page_h = win_h - 40.0 - tk.r(0.375) - 2.0;
-    let hair = tk.border.alpha(tk.border.a * 0.6);
     let mut card = widgets::surface(tk)
         .key("logs-card")
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .clip_rounded(tk.r(0.75))
-        .child(widgets::card_header(
-            tk,
-            t("nav:book.logs"),
-            Some(idx.len()),
-            header_controls(app, tk, layer),
-        ))
-        .children(has_filters(s).then(|| {
-            row()
-                .w_full()
-                .px(tk.card_pad())
-                .pb(tk.r(0.75))
-                .child(chips(app, tk))
-        }));
+        .clip_rounded(tk.r(0.75));
     if !s.redacted {
         let time = s
             .raw_until
@@ -1278,7 +1284,6 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
                 .px(tk.card_pad())
                 .py(tk.r(0.5))
                 .fill(tk.destructive.alpha(0.1))
-                .border_sides([1.0, 0.0, 0.0, 0.0], tk.destructive.alpha(0.3))
                 .child(
                     text(tr("review:logs.rawWarning", &[("time", &time)]))
                         .font(tk.tsm(400.0))
@@ -1287,51 +1292,12 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
                 ),
         );
     }
-    let fill = ((s.store.bytes as f64 / logstore::MAX_BYTES as f64) * 100.0)
-        .round()
-        .min(100.0) as usize;
-    card = card.child(
-        col()
-            .w_full()
-            .border_sides([1.0, 0.0, 0.0, 0.0], hair)
-            .child(
-                row()
-                    .w_full()
-                    .px(tk.card_pad())
-                    .py(tk.r(0.375))
-                    .center_y()
-                    .justify_between()
-                    .child(
-                        text(tc(
-                            "review:logs.recordsLine",
-                            idx.len(),
-                            &[
-                                ("count", &idx.len().to_string()),
-                                ("size", &logstore::format_bytes(s.store.bytes)),
-                                ("percent", &fill.to_string()),
-                            ],
-                        ))
-                        .font(tk.txs(400.0))
-                        .color(tk.muted_fg),
-                    )
-                    .children((visible.len() < idx.len()).then(|| {
-                        text(tc(
-                            "review:logs.renderingNewest",
-                            visible.len(),
-                            &[("count", &visible.len().to_string())],
-                        ))
-                        .font(tk.txs(400.0))
-                        .color(tk.muted_fg)
-                    })),
-            )
-            .child(
-                row()
-                    .w_full()
-                    .h(1.0)
-                    .child(el().h(1.0).grow(fill as f32).fill(tk.primary.alpha(0.6)))
-                    .child(el().h(1.0).grow((100 - fill) as f32).fill(hair)),
-            ),
-    );
+    let win_h = if app.shell.window_h > 0.0 {
+        app.shell.window_h
+    } else {
+        900.0
+    };
+    let page_h = win_h - 40.0 - tk.r(0.375) - 2.0;
     let mut viewport = col()
         .key("logs-viewport")
         .w_full()
@@ -1442,7 +1408,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     widgets::shell(tk)
         .h(page_h)
         .min_h(0.0)
-        .child(head)
+        .child(toolbar)
         .child(card)
 }
 

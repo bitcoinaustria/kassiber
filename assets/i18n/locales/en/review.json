@@ -960,6 +960,8 @@
     "rawWarning": "Raw logs are visible until {{time}}. Exports taken now are watermarked.",
     "rawWarningSoon": "soon",
     "recordsLine": "{{count}} records · RAM buffer {{size}} ({{percent}}%)",
+    "recordsCount_one": "{{count}} record",
+    "recordsCount_other": "{{count}} records",
     "renderingNewest": "rendering {{count}} newest",
     "noMatching": "No matching log records",
     "waiting": "Waiting for activity…",

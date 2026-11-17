@@ -21,20 +21,6 @@ pub fn shell(tk: &Tk) -> El {
         .fill(tk.background)
 }
 
-/// `pageDescriptionClassName`: `max-w-3xl text-sm text-muted-foreground`.
-pub fn description(tk: &Tk, s: String) -> El {
-    text(s)
-        .font(tk.tsm(400.0))
-        .color(tk.muted_fg)
-        .max_w(tk.r(48.0))
-        .wrap()
-}
-
-/// `pageHeaderClassName` at `sm`+: a row, items centred, space between, `gap-3`.
-pub fn header(tk: &Tk) -> El {
-    row().w_full().gap(tk.r(0.75)).center_y().justify_between()
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BadgeVariant {
     Outline,
@@ -470,28 +456,4 @@ pub fn menu_surface(tk: &Tk, content: El) -> El {
             color: Color::BLACK.alpha(if tk.dark { 0.8 } else { 0.55 }),
             ..Shadow::default()
         })
-}
-
-/// `SurfaceCardHeader` as the Wallets card uses it (`py-3.5 gap-4`, the card padding at the
-/// sides in place of `px-6`): the card's `h2`
-/// (`text-base font-medium`), a gray count badge, then the card's controls on the right.
-pub fn card_header(tk: &Tk, title: String, count: Option<usize>, right: El) -> El {
-    let mut left = row().grow(1.0).min_w(0.0).gap(tk.r(0.5)).center_y().child(
-        text(title)
-            .font(tk.tbase(500.0))
-            .color(tk.fg)
-            .role("heading")
-            .level(2),
-    );
-    if let Some(n) = count {
-        left = left.child(crate::ui::count(tk, n, tk.tbase(400.0)));
-    }
-    row()
-        .w_full()
-        .px(tk.card_pad())
-        .py(tk.r(0.875))
-        .gap(tk.r(1.0))
-        .center_y()
-        .child(left)
-        .child(right)
 }
