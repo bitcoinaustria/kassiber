@@ -25,6 +25,28 @@
       "activate": "Activate",
       "supersede": "Supersede",
       "undo": "Undo",
+      "confirmAction": {
+        "title": {
+          "activate": "Activate this component?",
+          "retire": "Retire this draft?",
+          "supersede": "Supersede this component?",
+          "undo": "Restore this revision as a draft?"
+        },
+        "description": {
+          "activate": "Checked against your book. Confirming makes this revision the active interpretation and supersedes any other active revision of this component.",
+          "retire": "Checked against your book. Confirming retires this draft. It stays in the audit trail and can be restored later with Undo.",
+          "supersede": "Checked against your book. Confirming supersedes this component, so it is no longer the active interpretation. It stays in the audit trail and can be restored later with Undo.",
+          "undo": "Checked against your book. Confirming saves this revision's content as a new draft revision. Nothing becomes active until you activate the draft."
+        },
+        "component": "Component",
+        "state": "State",
+        "restoredFrom": "Restored from",
+        "newRevision": "New revision",
+        "button": {
+          "retire": "Confirm and retire draft",
+          "supersede": "Confirm and supersede"
+        }
+      },
       "validationIssues": "Why this is not effective",
       "unknownIssue": "Unknown validation issue",
       "summary": {
@@ -976,7 +998,8 @@
     "sourcesSubHeading": "Choose the source type. Only watch-only or read-only flows belong here.",
     "actionConfigure": "Configure",
     "actionSetup": "Setup",
-    "actionPlanned": "Planned"
+    "actionPlanned": "Planned",
+    "actionSelected": "Selected"
   },
   "inbox": {
     "updating": "Updating the books…",

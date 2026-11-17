@@ -674,7 +674,23 @@
     "scannedNote": "Wallet-Material gescannt. Prüfe das eingefügte Feld, nachdem du es übernommen hast.",
     "couldNotStart": "Die Kamera konnte nicht gestartet werden.",
     "couldNotSwitch": "Die Kamera konnte nicht gewechselt werden.",
-    "useScannedText": "Gescannten Text verwenden"
+    "useScannedText": "Gescannten Text verwenden",
+    "messages": {
+      "emptyFrame": "Leerer QR-Frame ignoriert.",
+      "waitingBbqr": "Warte auf einen BBQR-Frame.",
+      "bbqrInSingle": "BBQR-Frame erkannt; wechsle zu Auto oder BBQR, um ihn zu sammeln.",
+      "hex": "BBQR-HEX-Inhalt konnte nicht dekodiert werden.",
+      "base32": "BBQR-Base32-Inhalt konnte nicht dekodiert werden.",
+      "base32Padding": "BBQR-Base32-Füllbits konnten nicht dekodiert werden.",
+      "malformed": "Fehlerhafte BBQR-Frames konnten nicht dekodiert werden.",
+      "empty": "Der gescannte BBQR-Inhalt war leer.",
+      "inflate": "Der BBQR-Inhalt konnte nicht entpackt werden.",
+      "notUtf8": "Der gescannte BBQR-Inhalt ist kein gültiger UTF-8-Text.",
+      "unsupportedEncoding": "Die BBQR-Kodierung {{encoding}} wird nicht unterstützt.",
+      "notWalletMaterial": "BBQR-Typ {{type}} ist kein Wallet-Export und kein Descriptor.",
+      "cameraNotFound": "Keine Kamera gefunden.",
+      "cameraDenied": "Der Kamerazugriff wurde verweigert. Erlaube Kassiber die Kamera in den Systemeinstellungen."
+    }
   },
   "add": {
     "title": "Verbindung hinzufügen",
@@ -757,7 +773,21 @@
         "p2tr": "Taproot · P2TR (bc1p…)"
       },
       "bareXpubResolved": "{{label}} wird als {{scriptType}} abgeleitet.",
-      "bareXpubAutoDetect": "{{label}} — Kassiber erkennt automatisch, mit welchen Adresstypen dieser Schlüssel genutzt wurde, und beobachtet sie."
+      "bareXpubAutoDetect": "{{label}} — Kassiber erkennt automatisch, mit welchen Adresstypen dieser Schlüssel genutzt wurde, und beobachtet sie.",
+      "material": {
+        "empty": "Leer",
+        "descriptorJson": "Descriptor-JSON-Export",
+        "bsms": "BSMS-Descriptor-Eintrag",
+        "outputDescriptor": "Output-Descriptor",
+        "ypub": "P2SH-verpacktes SegWit (BIP49)",
+        "zpub": "Natives SegWit (BIP84)",
+        "upub": "Testnet, P2SH-verpacktes SegWit",
+        "vpub": "Testnet, natives SegWit",
+        "bareXpub": "Reiner {{head}}",
+        "bareXpubHint": "Kassiber erkennt automatisch, welche Adresstypen dieser Key nutzt; wähle einen, um ihn festzulegen.",
+        "unrecognized": "Unbekanntes Format",
+        "unrecognizedHint": "Füge einen Descriptor, einen BSMS-Descriptor-Eintrag, Bitcoin-Core-Descriptor-JSON oder einen ypub/zpub/upub/vpub-Key ein."
+      }
     },
     "core": {
       "detect": "Meine Node erkennen",
@@ -1296,7 +1326,11 @@
       "line1": "Diese Verbindung wird in den Einstellungen als Backend eingerichtet.",
       "line2": "Wallets können dieses Backend dann namentlich verwenden, ohne dass Adresse oder Zugangsdaten hier erscheinen.",
       "loading": "Backends werden geladen…",
-      "localTitle": "Lokale Regtest-Infrastruktur"
+      "localTitle": "Lokale Regtest-Infrastruktur",
+      "endpoint": {
+        "configured": "Endpunkt konfiguriert",
+        "missing": "Endpunkt fehlt"
+      }
     },
     "notWired": "Das Setup für diese Quelle ist noch nicht verfügbar.",
     "validation": {
@@ -1318,7 +1352,8 @@
       "body": "{{title}} ist im Katalog erfasst, aber noch nicht verdrahtet."
     },
     "setupFailed": {
-      "fallback": "Verbindungs-Setup fehlgeschlagen."
+      "fallback": "Verbindungs-Setup fehlgeschlagen.",
+      "notFullySynced": "Die Verbindung wurde gespeichert, aber ihre Historie wurde nicht vollständig synchronisiert."
     },
     "summary": {
       "title": "Import-Zusammenfassung",
@@ -1439,6 +1474,407 @@
       "skipped_one": "{{count}} Eintrag wurde übersprungen, weil er kein BTC ist oder nur Fiat bewegt.",
       "skipped_other": "{{count}} Einträge wurden übersprungen, weil sie kein BTC sind oder nur Fiat bewegen.",
       "sessionNote": "Sync-Ergebnisse bleiben bis zum Neustart von Kassiber erhalten; das Buch speichert nur die importierten Transaktionen."
+    }
+  },
+  "catalog": {
+    "categories": {
+      "wallets": "Wallets",
+      "nodes": "Nodes",
+      "lightning": "Lightning",
+      "merchant": "Händler",
+      "exchanges": "Börsen",
+      "files": "Dateien"
+    },
+    "paths": {
+      "watchOnlyWallet": "Watch-only-Wallet",
+      "watchOnlyWalletGroup": "Watch-only-Wallet-Gruppe",
+      "walletExport": "Wallet-Export",
+      "nodeBackend": "Node-Backend",
+      "indexBackend": "Index-Backend",
+      "csvImport": "CSV-Import",
+      "lightningNode": "Lightning-Node",
+      "lightningApp": "Lightning-App",
+      "walletCsvImport": "Wallet-CSV-Import",
+      "greenfieldApi": "Greenfield-API",
+      "custodialPlatform": "Verwahrende Plattform",
+      "apiImport": "API-Import",
+      "supplementalCsv": "Ergänzende CSV",
+      "evidenceArchive": "Nachweisarchiv",
+      "taxPlatformMigration": "Umzug von einer Steuerplattform",
+      "spreadsheetImport": "Tabellenimport",
+      "customImport": "Eigener Import",
+      "csvJsonImport": "CSV/JSON-Import",
+      "labelImport": "Label-Import"
+    },
+    "formats": {
+      "descriptorBsmsXpub": "Descriptor/BSMS/xpub-Familie",
+      "addressList": "Adressliste",
+      "liquidDescriptor": "Liquid-Descriptor/-Export",
+      "samouraiDescriptors": "Samourai/Whirlpool-Descriptors",
+      "storesInvoicesPayouts": "Stores, Rechnungen & Auszahlungen",
+      "readOnlyApiKey": "API-Key nur zum Lesen",
+      "reportFile": "Berichtsdatei",
+      "coinTrackingCsv": "CoinTracking-Transaktions-CSV",
+      "blockpitCsv": "Blockpit-Transaktions-CSV",
+      "excelOrCsv": "Excel (.xlsx) oder CSV",
+      "csvTsvExcel": "CSV-, TSV- oder Excel-Export",
+      "genericCsvJson": "generisches CSV/JSON"
+    },
+    "sources": {
+      "descriptor": {
+        "title": "Wallet-Export",
+        "description": "Import aus Descriptor, BSMS, xpub-Familie oder Wallet-Export.",
+        "details": [
+          "Standardmäßig Mainnet",
+          "Nutzt ein konfiguriertes Bitcoin-Backend",
+          "Füge einen gängigen Wallet-Export oder Descriptor ein",
+          "ypub/zpub/upub/vpub-Keys und BSMS-Einträge werden in Descriptors umgewandelt",
+          "Kassiber speichert Empfangs- und Change-Zweige, wenn vorhanden"
+        ]
+      },
+      "address-list": {
+        "title": "Adressliste",
+        "description": "Beobachte eine flache Liste einzelner Adressen – z. B. einen Bitcoin-Core-Keypool aus der Zeit vor HD.",
+        "details": [
+          "Füge Adressen ein oder lade eine .txt/.csv-Datei, eine Adresse pro Zeile",
+          "Keine Ableitung: Jede Adresse wird gescannt, daher gibt es kein Gap-Limit",
+          "Nutze für große Listen Electrum/Fulcrum oder Bitcoin Core RPC – Esplora braucht eine Abfrage pro Adresse"
+        ]
+      },
+      "silent-payment": {
+        "description": "Watch-only-Empfang und -Buchhaltung nach BIP352 aus BIP392-sp()-Material.",
+        "details": [
+          "Akzeptiert Watch-only-Scan-Material und öffentliches Spend-Material",
+          "Braucht ein ausdrücklich gewähltes BIP352-fähiges Backend oder einen lokalen Scanner",
+          "Braucht eine Start-Height bzw. ein Startdatum für den Scan oder einen bestätigten Full-History-Scan",
+          "Kein Ausgeben, kein Signieren, keine PSBTs und kein Absender-Adressbuch"
+        ]
+      },
+      "liquid-descriptor": {
+        "title": "Liquid-Wallet-Export",
+        "description": "Liquid-Watch-only-Wallet-Export oder Elements-Descriptor.",
+        "details": [
+          "Füge einen gängigen Liquid-Wallet-Export oder Descriptor ein",
+          "Braucht ein konfiguriertes Liquid-Backend"
+        ]
+      },
+      "samourai": {
+        "description": "Watch-only-Import von Konto-Descriptors/xpubs aus Samourai und Whirlpool.",
+        "details": [
+          "Erstellt Unterquellen für eingefügte Deposit-, Badbank-, Premix- und Postmix-Konten",
+          "Exportiere öffentliche Konto-Descriptors/xpubs mit Sparrow oder einem anderen Descriptor-Tool",
+          "Speichert nur Watch-only-Sync-Ziele",
+          "Die Postmix-Suche startet mit einem erweiterten Gap-Limit"
+        ]
+      },
+      "wasabi": {
+        "description": "Füge Wasabi-RPC-Ausgaben mit CoinJoin- und Anonymitätsnachweisen ein.",
+        "details": [
+          "Lade die Wallet in Wasabi und kopiere dann das lokale RPC-JSON von Port 37128",
+          "Nutze Basic Auth in curl, wenn JsonRpcUser und JsonRpcPassword gesetzt sind",
+          "Füge gethistory sowie listcoins/listunspentcoins für den Anonymitätsstatus der Coins ein",
+          "CoinJoin-Nachweise werden zu Prüfhinweisen, nicht zu erfundener Herkunft"
+        ]
+      },
+      "bitcoin-core": {
+        "description": "Dein eigener Full Node über JSON-RPC für den Sync von Descriptors, xpubs und Adressen.",
+        "details": [
+          "Erkennt einen lokalen Node, wenn das Standard-Cookie verfügbar ist",
+          "Importiert Watch-only-Descriptors in eine Kassiber-Core-Wallet"
+        ]
+      },
+      "electrum": {
+        "title": "Electrum-Server",
+        "description": "Electrum-Protokoll über TCP/SSL (z. B. Fulcrum, ElectrumX). Nur Sync – keine Transaktionslinks.",
+        "details": [
+          "Wird in den Einstellungen mit ssl://host:50002 oder tcp://host:50001 konfiguriert",
+          "Funktioniert für die Aktualisierung von Bitcoin- und Liquid-Descriptors, wenn das Backend zur Chain passt"
+        ]
+      },
+      "esplora": {
+        "description": "HTTP-REST-API im Stil von Esplora / mempool.space. Liefert Sync und anklickbare Transaktionslinks.",
+        "details": [
+          "Kassiber bringt ein eingebautes Bitcoin-Backend mit Esplora/mempool-API mit",
+          "Füge in den Einstellungen einen selbst gehosteten Esplora-Endpunkt hinzu"
+        ]
+      },
+      "sparrow": {
+        "description": "Descriptor- oder xpub-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "specter": {
+        "description": "Descriptor-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "bluewallet": {
+        "description": "Export des Konto-xpub.",
+        "details": [
+          "Exportiere den Konto-xpub – niemals den Seed oder einen Private Key"
+        ]
+      },
+      "blockstream-green": {
+        "description": "Bitcoin-Singlesig-xpub-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "liana": {
+        "description": "Import eines Timelock-Multisig-Descriptors.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "nunchuk": {
+        "description": "Descriptor- oder BSMS-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "bitbox": {
+        "description": "Export des Konto-xpub.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "trezor": {
+        "description": "Export des Konto-xpub.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "coldcard": {
+        "description": "Descriptor- oder xpub-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "ledger": {
+        "description": "Konto-Export aus Ledger Live.",
+        "details": [
+          "BTC- und Liquid-BTC-Zeilen mit IN/OUT werden zu Wallet-Bewegungen",
+          "Ledger-Gegenwerte werden ignoriert, weil der Export sie als rein informativ kennzeichnet"
+        ]
+      },
+      "foundation-passport": {
+        "description": "Descriptor- oder xpub-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "core-ln": {
+        "description": "Read-only-Sync von CLN-Bookkeeper und Node-Buchhaltung.",
+        "details": [
+          "Verbindet sich über den lokalen RPC-Socket des Nodes oder einen lightning-cli-Wrapper, den du kontrollierst",
+          "Synchronisiert Bookkeeper-Ereignisse, Forwards, Zahlungen, Invoices, Channels und Zeilen der Node-Wallet",
+          "Zeigt den Routing-Gewinn und den Break-even-Status je Channel"
+        ]
+      },
+      "lnd": {
+        "description": "Read-only-Rentabilitätsdaten aus dem Lightning Network Daemon.",
+        "details": [
+          "Speichert Host, TLS-Zertifikat und ob ein Read-only-Macaroon vorhanden ist",
+          "Liest Channels, Forwards, Zahlungen, Invoices und Gebühren-Snapshots; verwirft Preimages, kodierte bolt11-Strings, Route-Hops und Route-Hints schon an der Grenze"
+        ]
+      },
+      "zeus": {
+        "description": "Oberfläche für Lightning-Nodes.",
+        "details": [
+          "Füge den zugrunde liegenden LND- oder Core-Lightning-Node hinzu"
+        ]
+      },
+      "phoenix": {
+        "description": "CSV-Import der Aktivität einer Lightning-Wallet.",
+        "details": [
+          "Vorzeichenbehaftete msat-Beträge bestimmen die Richtung",
+          "Der Phoenix-Typ bleibt als Tag erhalten"
+        ]
+      },
+      "bullbitcoin-wallet": {
+        "description": "CSV-Import aller Wallet-Transaktionen.",
+        "details": [
+          "Importiert Wallet-Zeilen für Bitcoin, Liquid, Lightning, Payjoin und Swaps",
+          "Nutze stattdessen Descriptor-Wallets, wenn sie deine Quelle der Wahrheit sind",
+          "Die Bull-Order-CSV bleibt unter Börsen für exakte Fiat-Bewertung verfügbar"
+        ]
+      },
+      "btcpay": {
+        "description": "Rechnungen, Zahlungen, Rückerstattungen und Auszahlungen für jeden Store, über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Erstelle mit einem Klick einen Key mit minimalen Rechten",
+          "Prüfe Store für Store, was der Key lesen kann",
+          "Erkenne Wallets, die du schon verfolgst, und Stores, die sich eine teilen",
+          "Buche Lightning-, LNURL- und Plugin-Zahlungen aus BTCPay, wenn Kassiber sie nicht beobachten kann",
+          "Nutze BTCPay CSV, wenn kein API-Zugriff verfügbar ist"
+        ]
+      },
+      "btcpay-csv": {
+        "description": "Manueller Import eines BTCPay-Wallet-Exports, wenn kein API-Sync verfügbar ist.",
+        "details": [
+          "Importiert einen lokalen CSV-Export der BTCPay-Wallet-Transaktionen",
+          "Kommentare werden zu Notizen und Labels zu Kassiber-Tags",
+          "Kann eine dateibasierte Quell-Wallet anlegen oder in eine bestehende Settlement-Wallet importieren",
+          "Nutze BTCPay Server für wiederholbaren Sync samt Herkunft aus Rechnungen und Payment Requests"
+        ]
+      },
+      "river": {
+        "description": "CSV-Import von Bitcoin Activity oder Account Activity.",
+        "details": [
+          "Account Activity erhält die BTC- und die Cash-Seite",
+          "Kauf- und Verkaufszeilen speichern den exakten Ausführungspreis von River"
+        ]
+      },
+      "bullbitcoin": {
+        "description": "Order-CSV-Import für exakte Ausführungspreise bei Kauf und Verkauf.",
+        "details": [
+          "Abgeschlossene Bitcoin-, Lightning- und Liquid-Orders behalten den exakten Fiat-Erlös",
+          "Buchweite Importe können passende Zeilen anreichern oder den gemeinsamen Export mit Abgleich-Markierungen importieren"
+        ]
+      },
+      "relai": {
+        "description": "Aktivitätsimport aus einer Bitcoin-only-App.",
+        "details": [
+          "Ein eigener Parser ist geplant"
+        ]
+      },
+      "pocket-bitcoin": {
+        "description": "Konto-CSV-Import für exakte Ausführungspreise bei Käufen.",
+        "details": [
+          "Konto-Exporte behalten die exakten Ausführungspreise von Pocket Bitcoin",
+          "Buchweite Importe können passende Wallet-Zeilen anreichern oder den vollständigen Export als Abgleichsnachweis aufbewahren"
+        ]
+      },
+      "swan-bitcoin": {
+        "description": "Import von Spar- und Broker-Aktivität einer Bitcoin-only-Plattform.",
+        "details": [
+          "Ein eigener Parser ist geplant"
+        ]
+      },
+      "strike": {
+        "description": "Import aus einer verwahrten Bitcoin-Wallet und Börse.",
+        "details": [
+          "BTC-Käufe und -Verkäufe sowie Lightning- und on-chain-Zeilen werden zu aktiver Plattformaktivität",
+          "Reine Fiat-Einzahlungen und Stornozeilen werden übersprungen",
+          "Zeilen nutzen Strike BTC Price als exakte CSV-Bewertung, wenn vorhanden"
+        ]
+      },
+      "21bitcoin": {
+        "description": "Import der Buchungshistorie einer verwahrenden Plattform mit exakten Handelspreisen.",
+        "details": [
+          "BTC-Handelszeilen werden zu aktiver Bewegung im verwahrten Guthaben",
+          "Kauf- und Verkaufszeilen speichern den exakten Ausführungspreis von 21bitcoin aus der CSV",
+          "Ein- und Auszahlungen ohne txid werden zu geprüften Kandidaten für Verwahrungsübertragungen"
+        ]
+      },
+      "coinfinity": {
+        "description": "Order-CSV-Import für exakte Ausführungspreise bei Kauf und Verkauf.",
+        "details": [
+          "BTC/EUR-Orderzeilen behalten die exakten Ausführungspreise von Coinfinity",
+          "Buchweite Importe können passende Zeilen anreichern oder den gemeinsamen Export mit Abgleich-Markierungen importieren"
+        ]
+      },
+      "bitpanda": {
+        "description": "Bitpanda-Verlauf über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit den Scopes Transaction und Trade (Read); ein Key, der handeln kann, wird abgelehnt",
+          "BTC-Käufe, -Verkäufe, Ein- und Auszahlungen sowie Rewards werden importiert; andere Assets werden übersprungen",
+          "Kassiber kontaktiert Bitpanda nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "kraken": {
+        "description": "Kraken-Trades und Ledger-Einträge über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key, der nur geschlossene Orders & Trades und Ledger-Einträge abfragen kann",
+          "In Fiat notierte BTC-Trades behalten Krakens exakten Ausführungspreis; Ein- und Auszahlungen werden als Wallet-Bewegungen importiert",
+          "Kassiber kontaktiert Kraken nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "coinbase": {
+        "description": "Coinbase-BTC-Konten über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht API-Key und Secret nur mit den Scopes wallet:accounts:read und wallet:transactions:read",
+          "Key-Dateien der Coinbase Developer Platform werden noch nicht unterstützt",
+          "Kassiber kontaktiert Coinbase nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "binance-api": {
+        "title": "Binance-API",
+        "description": "BTC-Käufe, Übertragungen und Einkünfte von Binance über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit Enable Reading; ein Key, der handeln, übertragen oder abheben kann, wird abgelehnt",
+          "BTC-Käufe mit Fiat behalten ihren exakten Ausführungswert; Ein- und Auszahlungen sowie BTC-Einkünfte werden ebenfalls importiert",
+          "Kassiber kontaktiert Binance nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "binance": {
+        "title": "Binance-CSV",
+        "description": "Ergänzende BTC-Zeilen aus Binance-Exporten.",
+        "details": [
+          "Mit Fiat finanzierte BTC-Auto-Invest-Zeilen behalten den exakten Ausführungswert",
+          "BTC-Dividenden- und Mining-Zeilen werden als Einkünfte importiert, ohne einen Fiat-Preis zu raten"
+        ]
+      },
+      "prior-tax-report": {
+        "title": "Früherer Steuerbericht",
+        "description": "Bewahre einen früheren Bericht von CoinTracking, Blockpit oder einer anderen Plattform als Nachweis auf.",
+        "details": [
+          "Kopiert den Originalbericht in Kassibers verwalteten Anhangspeicher",
+          "Erfasst Provider und Steuerjahr, ohne importierten Summen zu vertrauen",
+          "Nutze die Karten zum Umzug der Transaktionshistorie, um prüfbare Kassiber-Berichte neu aufzubauen"
+        ]
+      },
+      "cointracking": {
+        "description": "Übertrage deine Bitcoin-Transaktionshistorie in Kassiber.",
+        "details": [
+          "Nutze die vollständige CSV mit englischen Spaltennamen aus Transactions → Export → CSV",
+          "Füge die CSV und die Descriptor-Wallets in beliebiger Reihenfolge hinzu; der Sync gleicht Überschneidungen ab",
+          "Mit Chain-ID werden exakte Treffer ausgeschlossen; Kollisionen ohne ID bleiben in der Prüfung"
+        ]
+      },
+      "blockpit": {
+        "description": "Übertrage deine Bitcoin-Transaktionshistorie in Kassiber.",
+        "details": [
+          "Nutze die vollständige Transactions-CSV ohne aktive Filter; in Blockpit ausgeschlossene Zeilen fehlen darin",
+          "Füge die CSV und die Descriptor-Wallets in beliebiger Reihenfolge hinzu; der Sync gleicht Überschneidungen ab",
+          "Mit Chain-ID werden exakte Treffer ausgeschlossen; Kollisionen ohne ID bleiben in der Prüfung"
+        ]
+      },
+      "generic-ledger": {
+        "title": "Allgemeines Journal",
+        "description": "Tabellenvorlage zum Ausfüllen für manuelle Transaktionen.",
+        "details": [
+          "Lade die Vorlage herunter, trag deine Transaktionen ein und importier die Datei",
+          "Eine Bitcoin-Buchung pro Zeile; Buy/Sell/Income/Mining/Gift und mehr",
+          "Beträge in BTC (oder SATS); Fiat-Spalten in der Währung deines Buchs"
+        ]
+      },
+      "custom-import": {
+        "title": "Andere Börse oder anderer Broker",
+        "description": "Importiere einen Export von einer Plattform, die Kassiber noch nicht anführt.",
+        "details": [
+          "Kassiber liest die Spaltennamen der Datei selbst – kein Umformen nötig",
+          "Unbekannte Spalten? Ordne sie selbst zu oder lass den Assistenten eine Zuordnung vorschlagen",
+          "Jeder Import wird als Lauf gespeichert, den du rückgängig machen kannst, falls die Zuordnung falsch war"
+        ]
+      },
+      "csv": {
+        "title": "CSV-Import",
+        "description": "Einmaliger Import aus einer lokalen Datei.",
+        "details": [
+          "Nutze Kassibers generische Transaktionsspalten",
+          "Spezifische Parser werden bevorzugt, wenn verfügbar"
+        ]
+      },
+      "bip329": {
+        "title": "BIP329-Labels",
+        "description": "Import und Export von Wallet-Labels als JSONL.",
+        "details": [
+          "Labels werden lokal gespeichert und passenden Transaktionen zugeordnet"
+        ]
+      }
     }
   }
 }

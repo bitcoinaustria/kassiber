@@ -674,7 +674,23 @@
     "scannedNote": "Wallet material scanned. Review the pasted field after applying it.",
     "couldNotStart": "Could not start the camera.",
     "couldNotSwitch": "Could not switch camera.",
-    "useScannedText": "Use scanned text"
+    "useScannedText": "Use scanned text",
+    "messages": {
+      "emptyFrame": "Empty QR frame ignored.",
+      "waitingBbqr": "Waiting for a BBQR frame.",
+      "bbqrInSingle": "BBQR frame seen; switch to Auto or BBQR to collect it.",
+      "hex": "Could not decode BBQR HEX payload.",
+      "base32": "Could not decode BBQR Base32 payload.",
+      "base32Padding": "Could not decode BBQR Base32 padding bits.",
+      "malformed": "Could not decode malformed BBQR frames.",
+      "empty": "The scanned BBQR payload was empty.",
+      "inflate": "Could not decompress the BBQR payload.",
+      "notUtf8": "The scanned BBQR payload is not valid UTF-8 text.",
+      "unsupportedEncoding": "BBQR encoding {{encoding}} is not supported.",
+      "notWalletMaterial": "BBQR type {{type}} is not a wallet export or descriptor.",
+      "cameraNotFound": "Camera not found.",
+      "cameraDenied": "Camera access was denied. Allow Kassiber to use the camera in System Settings."
+    }
   },
   "add": {
     "title": "Add connection",
@@ -757,7 +773,21 @@
         "p2tr": "Taproot · P2TR (bc1p…)"
       },
       "bareXpubResolved": "{{label}} will be derived as {{scriptType}}.",
-      "bareXpubAutoDetect": "{{label}} — Kassiber will detect and watch whichever address types this key has been used with."
+      "bareXpubAutoDetect": "{{label}} — Kassiber will detect and watch whichever address types this key has been used with.",
+      "material": {
+        "empty": "Empty",
+        "descriptorJson": "Descriptor JSON export",
+        "bsms": "BSMS descriptor record",
+        "outputDescriptor": "Output descriptor",
+        "ypub": "P2SH-wrapped SegWit (BIP49)",
+        "zpub": "Native SegWit (BIP84)",
+        "upub": "Testnet P2SH-wrapped SegWit",
+        "vpub": "Testnet Native SegWit",
+        "bareXpub": "Bare {{head}}",
+        "bareXpubHint": "Kassiber auto-detects which address types this key uses; pick one to pin it.",
+        "unrecognized": "Unrecognized format",
+        "unrecognizedHint": "Paste a descriptor, BSMS descriptor record, Bitcoin Core descriptor JSON, or a ypub/zpub/upub/vpub key."
+      }
     },
     "core": {
       "detect": "Detect my node",
@@ -1296,7 +1326,11 @@
       "line1": "This connection is set up as a backend in Settings.",
       "line2": "Wallets can then use that backend by name, without showing its address or credentials here.",
       "loading": "Loading backends…",
-      "localTitle": "Local regtest infrastructure"
+      "localTitle": "Local regtest infrastructure",
+      "endpoint": {
+        "configured": "Configured endpoint",
+        "missing": "Missing endpoint"
+      }
     },
     "notWired": "Setup for this source is not available yet.",
     "validation": {
@@ -1318,7 +1352,8 @@
       "body": "{{title}} is tracked in the catalog but is not wired yet."
     },
     "setupFailed": {
-      "fallback": "Connection setup failed."
+      "fallback": "Connection setup failed.",
+      "notFullySynced": "The connection was saved, but its history was not fully synced."
     },
     "summary": {
       "title": "Import summary",
@@ -1439,6 +1474,407 @@
       "skipped_one": "{{count}} entry was skipped because it is not BTC or moves only fiat.",
       "skipped_other": "{{count}} entries were skipped because they are not BTC or move only fiat.",
       "sessionNote": "Sync results are kept until Kassiber restarts; the book stores only the imported transactions."
+    }
+  },
+  "catalog": {
+    "categories": {
+      "wallets": "Wallets",
+      "nodes": "Nodes",
+      "lightning": "Lightning",
+      "merchant": "Merchant",
+      "exchanges": "Exchanges",
+      "files": "Files"
+    },
+    "paths": {
+      "watchOnlyWallet": "Watch-only wallet",
+      "watchOnlyWalletGroup": "Watch-only wallet group",
+      "walletExport": "Wallet export",
+      "nodeBackend": "Node backend",
+      "indexBackend": "Index backend",
+      "csvImport": "CSV import",
+      "lightningNode": "Lightning node",
+      "lightningApp": "Lightning app",
+      "walletCsvImport": "Wallet CSV import",
+      "greenfieldApi": "Greenfield API",
+      "custodialPlatform": "Custodial platform",
+      "apiImport": "API import",
+      "supplementalCsv": "Supplemental CSV",
+      "evidenceArchive": "Evidence archive",
+      "taxPlatformMigration": "Tax-platform migration",
+      "spreadsheetImport": "Spreadsheet import",
+      "customImport": "Custom import",
+      "csvJsonImport": "CSV/JSON import",
+      "labelImport": "Label import"
+    },
+    "formats": {
+      "descriptorBsmsXpub": "descriptor/BSMS/xpub-family",
+      "addressList": "address list",
+      "liquidDescriptor": "Liquid descriptor/export",
+      "samouraiDescriptors": "Samourai/Whirlpool descriptors",
+      "storesInvoicesPayouts": "stores, invoices & payouts",
+      "readOnlyApiKey": "read-only API key",
+      "reportFile": "Report file",
+      "coinTrackingCsv": "CoinTracking transaction CSV",
+      "blockpitCsv": "Blockpit transaction CSV",
+      "excelOrCsv": "Excel (.xlsx) or CSV",
+      "csvTsvExcel": "CSV, TSV or Excel export",
+      "genericCsvJson": "generic csv/json"
+    },
+    "sources": {
+      "descriptor": {
+        "title": "Wallet export",
+        "description": "Descriptor, BSMS, xpub-family, or wallet export import.",
+        "details": [
+          "Mainnet by default",
+          "Uses a configured Bitcoin backend",
+          "Paste one common wallet export or descriptor",
+          "ypub/zpub/upub/vpub keys and BSMS records are converted to descriptors",
+          "Kassiber stores receive/change branches when present"
+        ]
+      },
+      "address-list": {
+        "title": "Address list",
+        "description": "Watch a flat list of individual addresses — e.g. a pre-HD Bitcoin Core keypool.",
+        "details": [
+          "Paste addresses or load a .txt/.csv file, one address per line",
+          "No derivation: every address is scanned, so there is no gap limit",
+          "Use Electrum/Fulcrum or Bitcoin Core RPC for large lists — Esplora is one lookup per address"
+        ]
+      },
+      "silent-payment": {
+        "description": "Watch-only BIP352 receiving/accounting from BIP392 sp() material.",
+        "details": [
+          "Accepts watch-only scan material and public spend material",
+          "Requires a BIP352-capable backend or local scanner selected explicitly",
+          "Needs a scan start height/date, or an acknowledged full-history scan",
+          "No spending, signing, PSBTs, or sender contact book"
+        ]
+      },
+      "liquid-descriptor": {
+        "title": "Liquid wallet export",
+        "description": "Liquid watch-only wallet export or Elements descriptor.",
+        "details": [
+          "Paste one common Liquid wallet export or descriptor",
+          "Requires a configured Liquid backend"
+        ]
+      },
+      "samourai": {
+        "description": "Watch-only Samourai and Whirlpool account descriptor/xpub import.",
+        "details": [
+          "Creates child sources for pasted Deposit, Badbank, Premix, and Postmix accounts",
+          "Use Sparrow or another descriptor tool to export public account descriptors/xpubs",
+          "Stores only watch-only sync targets",
+          "Postmix discovery starts with a widened gap limit"
+        ]
+      },
+      "wasabi": {
+        "description": "Paste Wasabi RPC outputs with CoinJoin and anonymity evidence.",
+        "details": [
+          "Load the wallet in Wasabi, then copy local RPC JSON from port 37128",
+          "Use Basic Auth in curl when JsonRpcUser and JsonRpcPassword are set",
+          "Paste gethistory plus listcoins/listunspentcoins for Coins anonymity state",
+          "CoinJoin evidence becomes review warnings, not fabricated provenance"
+        ]
+      },
+      "bitcoin-core": {
+        "description": "Your own full node over JSON-RPC for descriptor, xpub, and address sync.",
+        "details": [
+          "Detects a local node when the default cookie is available",
+          "Imports watch-only descriptors into a Kassiber Core wallet"
+        ]
+      },
+      "electrum": {
+        "title": "Electrum server",
+        "description": "Electrum protocol over TCP/SSL (e.g. Fulcrum, ElectrumX). Sync-only — no transaction links.",
+        "details": [
+          "Configured in Settings with ssl://host:50002 or tcp://host:50001",
+          "Works for Bitcoin and Liquid descriptor refresh when the backend matches the chain"
+        ]
+      },
+      "esplora": {
+        "description": "Esplora / mempool.space-type HTTP REST API. Syncs and provides clickable transaction links.",
+        "details": [
+          "Kassiber ships with a built-in Esplora/mempool-API Bitcoin backend",
+          "Use Settings to add a self-hosted Esplora endpoint"
+        ]
+      },
+      "sparrow": {
+        "description": "Descriptor or xpub export.",
+        "details": [
+          "Continue opens the Wallet export form for the exported material"
+        ]
+      },
+      "specter": {
+        "description": "Descriptor export.",
+        "details": [
+          "Continue opens the Wallet export form for the exported material"
+        ]
+      },
+      "bluewallet": {
+        "description": "Account xpub export.",
+        "details": [
+          "Export the account xpub — never the seed or a private key"
+        ]
+      },
+      "blockstream-green": {
+        "description": "Bitcoin singlesig xpub export.",
+        "details": [
+          "Continue opens the Wallet export form for the exported material"
+        ]
+      },
+      "liana": {
+        "description": "Timelock multisig descriptor import.",
+        "details": [
+          "Continue opens the Wallet export form for the exported material"
+        ]
+      },
+      "nunchuk": {
+        "description": "Descriptor or BSMS export.",
+        "details": [
+          "Continue opens the Wallet export form for the exported material"
+        ]
+      },
+      "bitbox": {
+        "description": "Account xpub export.",
+        "details": [
+          "Continue opens the Wallet export form for the exported material"
+        ]
+      },
+      "trezor": {
+        "description": "Account xpub export.",
+        "details": [
+          "Continue opens the Wallet export form for the exported material"
+        ]
+      },
+      "coldcard": {
+        "description": "Descriptor or xpub export.",
+        "details": [
+          "Continue opens the Wallet export form for the exported material"
+        ]
+      },
+      "ledger": {
+        "description": "Ledger Live account export.",
+        "details": [
+          "BTC and Liquid BTC IN/OUT rows become wallet movement",
+          "Ledger countervalues are ignored because the export marks them informational"
+        ]
+      },
+      "foundation-passport": {
+        "description": "Descriptor or xpub export.",
+        "details": [
+          "Continue opens the Wallet export form for the exported material"
+        ]
+      },
+      "core-ln": {
+        "description": "Read-only CLN bookkeeper and node accounting sync.",
+        "details": [
+          "Connects through the node's local RPC socket or a lightning-cli wrapper you control",
+          "Syncs bookkeeper events, forwards, payments, invoices, channels, and node wallet rows",
+          "Reports routing profit and per-channel break-even status"
+        ]
+      },
+      "lnd": {
+        "description": "Lightning Network Daemon read-only profitability data.",
+        "details": [
+          "Stores host, TLS certificate, and read-only macaroon presence",
+          "Reads channels, forwards, payments, invoices, and fee snapshots; drops preimages, encoded bolt11 strings, route hops, and route hints at the boundary"
+        ]
+      },
+      "zeus": {
+        "description": "Lightning node interface.",
+        "details": [
+          "Add the underlying LND or Core Lightning node"
+        ]
+      },
+      "phoenix": {
+        "description": "Lightning wallet CSV activity import.",
+        "details": [
+          "Signed msat amounts drive direction",
+          "Phoenix type is preserved as a tag"
+        ]
+      },
+      "bullbitcoin-wallet": {
+        "description": "Unified wallet transaction CSV import.",
+        "details": [
+          "Imports Bitcoin, Liquid, Lightning, payjoin, and swap wallet rows",
+          "Use descriptor wallets instead when they are your source of truth",
+          "Bull order CSV remains available under Exchanges for exact fiat pricing"
+        ]
+      },
+      "btcpay": {
+        "description": "Invoices, payments, refunds, and payouts for every store, through a read-only API key.",
+        "details": [
+          "Create a least-privilege key with one click",
+          "Check what the key can read, store by store",
+          "Recognise wallets you already track and stores that share one",
+          "Book Lightning, LNURL, and plugin payments from BTCPay when Kassiber cannot watch them",
+          "Use BTCPay CSV when API access is not available"
+        ]
+      },
+      "btcpay-csv": {
+        "description": "Manual BTCPay wallet export import when API sync is not available.",
+        "details": [
+          "Imports a local BTCPay wallet transaction CSV export",
+          "Comments become notes and labels become Kassiber tags",
+          "Can create a file-backed source wallet or import into an existing settlement wallet",
+          "Use BTCPay Server for repeatable sync plus invoice and payment-request provenance"
+        ]
+      },
+      "river": {
+        "description": "Bitcoin Activity or Account Activity CSV import.",
+        "details": [
+          "Account Activity preserves BTC and cash legs",
+          "Buy/sell rows store exact River execution pricing"
+        ]
+      },
+      "bullbitcoin": {
+        "description": "Order CSV import for exact buy/sell execution pricing.",
+        "details": [
+          "Completed Bitcoin, Lightning, and Liquid orders preserve exact fiat proceeds",
+          "Book-wide imports can enrich relevant rows or import the shared export with reconciliation flags"
+        ]
+      },
+      "relai": {
+        "description": "Bitcoin-only app activity import.",
+        "details": [
+          "Dedicated parser is planned"
+        ]
+      },
+      "pocket-bitcoin": {
+        "description": "Account CSV import for exact buy execution pricing.",
+        "details": [
+          "Account exports preserve exact Pocket Bitcoin execution pricing",
+          "Book-wide imports can enrich relevant wallet rows or keep the full export as reconciliation evidence"
+        ]
+      },
+      "swan-bitcoin": {
+        "description": "Bitcoin-only savings and broker activity import.",
+        "details": [
+          "Dedicated parser is planned"
+        ]
+      },
+      "strike": {
+        "description": "Custodial Bitcoin wallet and exchange import.",
+        "details": [
+          "BTC buys, sells, Lightning, and on-chain rows become active platform activity",
+          "Fiat-only funding and reversal rows are skipped",
+          "Rows use Strike BTC Price as exact CSV pricing when present"
+        ]
+      },
+      "21bitcoin": {
+        "description": "Custodial platform ledger import with exact trade pricing.",
+        "details": [
+          "BTC trade rows become active custodial balance activity",
+          "Buy/sell rows store exact 21bitcoin execution pricing from the CSV",
+          "Deposits and withdrawals without txids become reviewed custody-transfer candidates"
+        ]
+      },
+      "coinfinity": {
+        "description": "Order CSV import for exact buy/sell execution pricing.",
+        "details": [
+          "BTC/EUR order rows preserve exact Coinfinity execution pricing",
+          "Book-wide imports can enrich relevant rows or import the shared export with reconciliation flags"
+        ]
+      },
+      "bitpanda": {
+        "description": "Bitpanda history through a read-only API key.",
+        "details": [
+          "Needs a key with only the Transaction and Trade (Read) scopes; a key that can trade is refused",
+          "BTC buys, sells, deposits, withdrawals and rewards import; other assets are skipped",
+          "Kassiber contacts Bitpanda only when you test the key or press Sync now"
+        ]
+      },
+      "kraken": {
+        "description": "Kraken trades and ledger through a read-only API key.",
+        "details": [
+          "Needs a key that can only query closed orders & trades and ledger entries",
+          "Fiat-quoted BTC trades keep Kraken's exact execution price; deposits and withdrawals import as wallet movement",
+          "Kassiber contacts Kraken only when you test the key or press Sync now"
+        ]
+      },
+      "coinbase": {
+        "description": "Coinbase BTC accounts through a read-only API key.",
+        "details": [
+          "Needs an API key and secret with only the wallet:accounts:read and wallet:transactions:read scopes",
+          "Coinbase Developer Platform key files are not supported yet",
+          "Kassiber contacts Coinbase only when you test the key or press Sync now"
+        ]
+      },
+      "binance-api": {
+        "title": "Binance API",
+        "description": "Binance BTC buys, transfers and income through a read-only API key.",
+        "details": [
+          "Needs a key with only Enable Reading; a key that can trade, transfer or withdraw is refused",
+          "Fiat BTC buys keep their exact execution value; deposits, withdrawals and BTC income import too",
+          "Kassiber contacts Binance only when you test the key or press Sync now"
+        ]
+      },
+      "binance": {
+        "title": "Binance CSV",
+        "description": "BTC supplemental rows from Binance exports.",
+        "details": [
+          "BTC autoinvest rows funded by fiat preserve exact execution value",
+          "BTC dividend/mining rows import as income without guessing fiat price"
+        ]
+      },
+      "prior-tax-report": {
+        "title": "Prior tax report",
+        "description": "Preserve a CoinTracking, Blockpit, or other prior report as evidence.",
+        "details": [
+          "Copies the original report into Kassiber's managed attachment store",
+          "Records the provider and tax year without trusting imported totals",
+          "Use the transaction-history migration cards to rebuild auditable Kassiber reports"
+        ]
+      },
+      "cointracking": {
+        "description": "Move your Bitcoin transaction history into Kassiber.",
+        "details": [
+          "Use the complete English-header CSV from Transactions → Export → CSV",
+          "Add the CSV and descriptor wallets in either order; sync reconciles overlaps",
+          "With a chain ID, exact matches are excluded; ID-less collisions stay in review"
+        ]
+      },
+      "blockpit": {
+        "description": "Move your Bitcoin transaction history into Kassiber.",
+        "details": [
+          "Use the complete Transactions CSV with filters cleared; excluded Blockpit rows are absent",
+          "Add the CSV and descriptor wallets in either order; sync reconciles overlaps",
+          "With a chain ID, exact matches are excluded; ID-less collisions stay in review"
+        ]
+      },
+      "generic-ledger": {
+        "title": "Generic ledger",
+        "description": "Fill-in spreadsheet import for manual transactions.",
+        "details": [
+          "Download the template, fill in your transactions, import the file",
+          "One Bitcoin leg per row; Buy/Sell/Income/Mining/Gift and more",
+          "Amounts in BTC (or SATS); fiat columns in your book's currency"
+        ]
+      },
+      "custom-import": {
+        "title": "Other exchange or broker",
+        "description": "Import an export from a platform Kassiber doesn't list yet.",
+        "details": [
+          "Kassiber reads the file's own column names — no reshaping needed",
+          "Unrecognized columns? Map them yourself, or let the assistant propose a mapping",
+          "Every import is recorded as a run you can roll back if the mapping was wrong"
+        ]
+      },
+      "csv": {
+        "title": "CSV import",
+        "description": "One-shot import from a local file.",
+        "details": [
+          "Use Kassiber's generic transaction columns",
+          "Specific parsers are preferred when available"
+        ]
+      },
+      "bip329": {
+        "title": "BIP329 labels",
+        "description": "JSONL wallet label import and export.",
+        "details": [
+          "Labels are stored locally and bridged to matching transactions"
+        ]
+      }
     }
   }
 }

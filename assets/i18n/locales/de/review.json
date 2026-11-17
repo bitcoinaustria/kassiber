@@ -25,6 +25,28 @@
       "activate": "Aktivieren",
       "supersede": "Ablösen",
       "undo": "Rückgängig",
+      "confirmAction": {
+        "title": {
+          "activate": "Diese Komponente aktivieren?",
+          "retire": "Diesen Entwurf stilllegen?",
+          "supersede": "Diese Komponente ablösen?",
+          "undo": "Diese Revision als Entwurf wiederherstellen?"
+        },
+        "description": {
+          "activate": "Gegen dein Buch geprüft. Mit der Bestätigung wird diese Revision zur aktiven Interpretation und löst jede andere aktive Revision dieser Komponente ab.",
+          "retire": "Gegen dein Buch geprüft. Mit der Bestätigung wird dieser Entwurf stillgelegt. Er bleibt im Prüfpfad und kann später mit „Rückgängig“ wiederhergestellt werden.",
+          "supersede": "Gegen dein Buch geprüft. Mit der Bestätigung wird diese Komponente abgelöst und ist nicht mehr die aktive Interpretation. Sie bleibt im Prüfpfad und kann später mit „Rückgängig“ wiederhergestellt werden.",
+          "undo": "Gegen dein Buch geprüft. Mit der Bestätigung wird der Inhalt dieser Revision als neue Entwurfsrevision gespeichert. Aktiv wird nichts, bis du den Entwurf aktivierst."
+        },
+        "component": "Komponente",
+        "state": "Status",
+        "restoredFrom": "Wiederhergestellt aus",
+        "newRevision": "Neue Revision",
+        "button": {
+          "retire": "Bestätigen und Entwurf stilllegen",
+          "supersede": "Bestätigen und ablösen"
+        }
+      },
       "validationIssues": "Warum diese Komponente nicht wirksam ist",
       "unknownIssue": "Unbekanntes Validierungsproblem",
       "summary": {
@@ -976,7 +998,8 @@
     "sourcesSubHeading": "Wähle den Quelltyp. Nur Watch-only- oder Read-only-Abläufe gehören hierher.",
     "actionConfigure": "Konfigurieren",
     "actionSetup": "Einrichten",
-    "actionPlanned": "Geplant"
+    "actionPlanned": "Geplant",
+    "actionSelected": "Ausgewählt"
   },
   "inbox": {
     "updating": "Bücher werden aktualisiert…",
