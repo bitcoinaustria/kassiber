@@ -533,11 +533,17 @@ pub fn sample_indices(display: &[Pt], r: Range, max: usize) -> Vec<usize> {
     let step = (nbase - 2).div_ceil((max - 2).max(1));
     let mut out = Vec::with_capacity(max + 8);
     let mut ord = 0usize;
+    let mut last_balance: Option<f64> = None;
     for (i, p) in display.iter().enumerate().take(end + 1).skip(start) {
         let keep = if p.is_event() {
             true
         } else {
-            let k = ord == 0 || ord == nbase - 1 || ord.is_multiple_of(step);
+            // A day the balance changed is always kept: thinning it would move the step (and
+            // leave its activity dot off the line) to the next kept day. Only flat stretches
+            // are thinned.
+            let changed = last_balance.is_some_and(|b| b != p.balance);
+            last_balance = Some(p.balance);
+            let k = ord == 0 || ord == nbase - 1 || ord.is_multiple_of(step) || changed;
             ord += 1;
             k
         };
@@ -1289,6 +1295,40 @@ mod tests {
             .iter()
             .find(|p| !p.is_event() && p.date == "2026-09-15");
         assert!((filled.unwrap().price - 71_000.0 / 1.065).abs() < 1e-6);
+    }
+
+    #[test]
+    fn thinning_keeps_every_balance_change() {
+        // 400 daily points, the balance changing on day 202 (an odd day the regular stride
+        // would skip): the step stays on its own day.
+        let pts: Vec<Pt> = (0..400)
+            .map(|d| {
+                let b = if d < 202 { 1.0 } else { 0.5 };
+                Pt {
+                    date: String::new(),
+                    month: String::new(),
+                    detail: String::new(),
+                    balance: b,
+                    value_eur: 0.0,
+                    cost_basis: 0.0,
+                    unrealized: 0.0,
+                    basis_incomplete: false,
+                    price: 0.0,
+                    avg_cost: None,
+                    l_bal: Some(b),
+                    l_val: None,
+                    l_price: None,
+                    l_avg: None,
+                    brush_bal: b,
+                    sort_ms: d as f64 * DAY_MS,
+                    power_days: 1.0,
+                    ev: None,
+                }
+            })
+            .collect();
+        let kept = sample_indices(&pts, Range { start: 0, end: 399 }, 180);
+        assert!(kept.contains(&202));
+        assert!(kept.len() < 200, "flat stretches are still thinned");
     }
 
     #[test]
