@@ -1689,7 +1689,7 @@ fn notice(tk: &Tk, key: &str, success: bool, s: String) -> El {
         .child(text(s).font(tk.tsm(400.0)).color(fg).wrap())
 }
 
-fn fact(tk: &Tk, label: String, value: El) -> El {
+pub fn fact(tk: &Tk, label: String, value: El) -> El {
     row()
         .w_full()
         .gap(tk.r(1.0))
@@ -1705,7 +1705,6 @@ fn fact(tk: &Tk, label: String, value: El) -> El {
 
 /// `GuidedServerPreview`: every accounting fact the daemon will persist, labelled.
 pub fn server_preview(app: &App, tk: &Tk, result: &Value, activates: bool) -> El {
-    let hidden = app.prefs.hide_sensitive();
     let comps: Vec<Value> = result["components"].as_array().cloned().unwrap_or_else(|| {
         if result["component"].is_object() {
             vec![result["component"].clone()]
@@ -1763,283 +1762,289 @@ pub fn server_preview(app: &App, tk: &Tk, result: &Value, activates: bool) -> El
                 ),
         );
     for comp in &comps {
-        let ctype = comp["component_type"].as_str().unwrap_or("");
-        let mode = comp["conservation_mode"].as_str().unwrap_or("");
-        let mut head = row()
-            .w_full()
-            .gap(tk.r(0.5))
-            .center_y()
-            .flex_wrap()
-            .child(
-                text(model::t_or(
-                    &format!("review:swap.components.type.{ctype}"),
-                    ctype,
-                ))
-                .font(tk.tsm(500.0))
-                .color(tk.fg),
-            )
-            .child(
-                text("·")
-                    .font(tk.tsm(400.0))
-                    .color(tk.muted_fg)
-                    .a11y_hidden(),
-            )
-            .child(
-                text(t(&format!("review:swap.components.mode.{mode}")))
-                    .font(tk.tsm(400.0))
-                    .color(tk.muted_fg),
-            );
-        if comp["evidence_kind"].is_string() || comp["evidence_grade"].is_string() {
-            let ev = tr(
-                "review:swap.components.audit.evidence",
-                &[
-                    ("kind", comp["evidence_kind"].as_str().unwrap_or("—")),
-                    ("grade", comp["evidence_grade"].as_str().unwrap_or("—")),
-                ],
-            );
-            head = head.child(
-                row()
-                    .px(tk.r(0.5))
-                    .py(tk.r(0.125))
-                    .radius(999.0)
-                    .border(1.0, tk.border)
-                    .child(text(ev).font(tk.t2xs(400.0).mono()).color(tk.fg)),
-            );
-        }
-        let mut block = col().w_full().gap(tk.r(0.75)).child(head);
-        if let Some(p) = comp["conversion_policy"].as_str().filter(|p| !p.is_empty()) {
-            block = block.child(
-                text(tr("review:swap.components.audit.policy", &[("policy", p)]))
-                    .font(tk.txs(400.0))
-                    .color(tk.muted_fg),
-            );
-        }
-        if let Some(n) = comp["notes"].as_str().filter(|n| !n.is_empty()) {
-            block = block.child(
-                text(n.to_owned())
-                    .font(tk.tsm(400.0))
-                    .color(tk.muted_fg)
-                    .wrap(),
-            );
-        }
-        let legs = comp["legs"].as_array().cloned().unwrap_or_default();
-        let mut ol = col()
-            .w_full()
-            .radius(tk.r(0.375))
-            .border(1.0, tk.border)
-            .fill(tk.background.alpha(0.6))
-            .clip_rounded(tk.r(0.375));
-        for (i, leg) in legs.iter().enumerate() {
-            let asset = leg["asset"].as_str().unwrap_or("BTC");
-            let role = leg["role"].as_str().unwrap_or("");
-            let top = row()
-                .w_full()
-                .gap(tk.r(1.0))
-                .center_y()
-                .justify_between()
-                .flex_wrap()
-                .child(
-                    row()
-                        .gap(tk.r(0.5))
-                        .center_y()
-                        .child(role_dot(tk, role))
-                        .child(
-                            text(tr(
-                                "review:swap.components.form.leg.ordinal",
-                                &[("index", &(i + 1).to_string())],
-                            ))
-                            .font(tk.txs(400.0).mono())
-                            .color(tk.muted_fg),
-                        )
-                        .child(
-                            text(model::role_label(role))
-                                .font(tk.tsm(500.0))
-                                .color(tk.fg),
-                        ),
-                )
-                .child(sensitive(
-                    model::format_custody_msat_v(&leg["amount_msat"], asset),
-                    tk.tsm(400.0).mono().features("'tnum' 1"),
-                    tk.fg,
-                    hidden,
-                ));
-            let mut dl = col().w_full().gap(tk.r(0.25));
-            let mono = |s: String| {
-                text(s)
-                    .font(tk.txs(400.0).mono())
-                    .color(tk.fg)
-                    .wrap_anywhere()
-            };
-            let plain = |s: String| text(s).font(tk.txs(400.0)).color(tk.fg).wrap();
-            if let Some(v) = leg["transaction_id"].as_str() {
-                dl = dl.child(fact(
-                    tk,
-                    t("review:swap.components.form.review.transaction"),
-                    mono(v.to_owned()),
-                ));
-            }
-            if let Some(v) = leg["wallet_id"].as_str() {
-                dl = dl.child(fact(
-                    tk,
-                    t("review:swap.components.form.review.wallet"),
-                    mono(v.to_owned()),
-                ));
-            }
-            if let Some(v) = leg["occurred_at"].as_str() {
-                dl = dl.child(fact(
-                    tk,
-                    t("review:swap.components.form.review.occurredAt"),
-                    mono(v.to_owned()),
-                ));
-            }
-            if let Some(v) = leg["rail"].as_str().filter(|v| !v.is_empty()) {
-                dl = dl.child(fact(
-                    tk,
-                    t("review:swap.components.form.review.rail"),
-                    plain(v.to_owned()),
-                ));
-            }
-            let scope: Vec<&str> = [leg["chain"].as_str(), leg["network"].as_str()]
-                .into_iter()
-                .flatten()
-                .filter(|s| !s.is_empty())
-                .collect();
-            if !scope.is_empty() {
-                dl = dl.child(fact(
-                    tk,
-                    t("review:swap.components.form.review.network"),
-                    plain(scope.join(" · ")),
-                ));
-            }
-            let conserved: Vec<&str> =
-                [leg["exposure"].as_str(), leg["conservation_unit"].as_str()]
-                    .into_iter()
-                    .flatten()
-                    .filter(|s| !s.is_empty())
-                    .collect();
-            if !conserved.is_empty() {
-                dl = dl.child(fact(
-                    tk,
-                    t("review:swap.components.form.review.conserved"),
-                    plain(conserved.join(" / ")),
-                ));
-            }
-            if !leg["valuation_amount"].is_null() && leg.get("valuation_amount").is_some() {
-                let amount = match &leg["valuation_amount"] {
-                    Value::String(s) => s.clone(),
-                    o => o.to_string(),
-                };
-                dl = dl.child(fact(
-                    tk,
-                    t("review:swap.components.form.review.valuation"),
-                    row()
-                        .gap(tk.r(0.25))
-                        .child(sensitive(amount, tk.txs(400.0).mono(), tk.fg, hidden))
-                        .child(mono(
-                            leg["valuation_unit"].as_str().unwrap_or("").to_owned(),
-                        )),
-                ));
-            }
-            if let Some(v) = leg["notes"].as_str().filter(|v| !v.is_empty()) {
-                dl = dl.child(fact(
-                    tk,
-                    t("review:swap.components.form.review.notes"),
-                    plain(v.to_owned()),
-                ));
-            }
-            let mut li = col()
-                .w_full()
-                .padding(tk.r(0.75))
-                .gap(tk.r(0.5))
-                .child(top)
-                .child(dl);
-            if i > 0 {
-                li = li.border_sides([1.0, 0.0, 0.0, 0.0], tk.border);
-            }
-            ol = ol.child(li);
-        }
-        block = block.child(ol);
-        let allocs = comp["allocations"].as_array().cloned().unwrap_or_default();
-        if !allocs.is_empty() {
-            let mut ul = col().w_full().gap(tk.r(0.25));
-            for a in &allocs {
-                let si = legs
-                    .iter()
-                    .position(|l| l["id"] == a["source_leg_id"])
-                    .map(|i| i as i64)
-                    .unwrap_or(-1);
-                let ki = legs
-                    .iter()
-                    .position(|l| l["id"] == a["sink_leg_id"])
-                    .map(|i| i as i64)
-                    .unwrap_or(-1);
-                let asset = |i: i64| {
-                    legs.get(i.max(0) as usize)
-                        .filter(|_| i >= 0)
-                        .and_then(|l| l["asset"].as_str())
-                        .unwrap_or("BTC")
-                        .to_owned()
-                };
-                let mask = |s: String| {
-                    if hidden {
-                        crate::theme::MASK.to_owned()
-                    } else {
-                        s
-                    }
-                };
-                ul = ul.child(
-                    text(tr(
-                        "review:swap.components.form.review.allocationEdge",
-                        &[
-                            ("source", &(si + 1).to_string()),
-                            ("sink", &(ki + 1).to_string()),
-                            (
-                                "sourceAmount",
-                                &mask(model::format_custody_msat_v(
-                                    &a["source_amount_msat"],
-                                    &asset(si),
-                                )),
-                            ),
-                            (
-                                "sinkAmount",
-                                &mask(model::format_custody_msat_v(
-                                    &a["sink_amount_msat"],
-                                    &asset(ki),
-                                )),
-                            ),
-                        ],
-                    ))
-                    .font(tk.txs(400.0).mono().features("'tnum' 1"))
-                    .color(tk.fg)
-                    .wrap(),
-                );
-            }
-            block = block.child(
-                col()
-                    .w_full()
-                    .gap(tk.r(0.25))
-                    .child(
-                        text(t("review:swap.components.form.review.allocations").to_uppercase())
-                            .font(tk.t2xs(500.0).tracking(0.14 * tk.r(0.694)))
-                            .color(tk.muted_fg)
-                            .role("heading"),
-                    )
-                    .child(ul),
-            );
-        }
-        if let Some(issues) = comp["validation"]["issues"]
-            .as_array()
-            .filter(|i| !i.is_empty())
-        {
-            block = block.child(super::issue_box(
-                tk,
-                &t("review:swap.components.form.review.issues"),
-                issues.iter().map(model::backend_issue_text).collect(),
-            ));
-        }
-        c = c.child(block);
+        c = c.child(component_preview(app, tk, comp));
     }
     c
+}
+
+/// One planned component as the daemon resolved it: type and mode, evidence, policy, notes,
+/// every leg with its exact amount and references, the allocations, and open issues.
+pub fn component_preview(app: &App, tk: &Tk, comp: &Value) -> El {
+    let hidden = app.prefs.hide_sensitive();
+    let ctype = comp["component_type"].as_str().unwrap_or("");
+    let mode = comp["conservation_mode"].as_str().unwrap_or("");
+    let mut head = row()
+        .w_full()
+        .gap(tk.r(0.5))
+        .center_y()
+        .flex_wrap()
+        .child(
+            text(model::t_or(
+                &format!("review:swap.components.type.{ctype}"),
+                ctype,
+            ))
+            .font(tk.tsm(500.0))
+            .color(tk.fg),
+        )
+        .child(
+            text("·")
+                .font(tk.tsm(400.0))
+                .color(tk.muted_fg)
+                .a11y_hidden(),
+        )
+        .child(
+            text(t(&format!("review:swap.components.mode.{mode}")))
+                .font(tk.tsm(400.0))
+                .color(tk.muted_fg),
+        );
+    if comp["evidence_kind"].is_string() || comp["evidence_grade"].is_string() {
+        let ev = tr(
+            "review:swap.components.audit.evidence",
+            &[
+                ("kind", comp["evidence_kind"].as_str().unwrap_or("—")),
+                ("grade", comp["evidence_grade"].as_str().unwrap_or("—")),
+            ],
+        );
+        head = head.child(
+            row()
+                .px(tk.r(0.5))
+                .py(tk.r(0.125))
+                .radius(999.0)
+                .border(1.0, tk.border)
+                .child(text(ev).font(tk.t2xs(400.0).mono()).color(tk.fg)),
+        );
+    }
+    let mut block = col().w_full().gap(tk.r(0.75)).child(head);
+    if let Some(p) = comp["conversion_policy"].as_str().filter(|p| !p.is_empty()) {
+        block = block.child(
+            text(tr("review:swap.components.audit.policy", &[("policy", p)]))
+                .font(tk.txs(400.0))
+                .color(tk.muted_fg),
+        );
+    }
+    if let Some(n) = comp["notes"].as_str().filter(|n| !n.is_empty()) {
+        block = block.child(
+            text(n.to_owned())
+                .font(tk.tsm(400.0))
+                .color(tk.muted_fg)
+                .wrap(),
+        );
+    }
+    let legs = comp["legs"].as_array().cloned().unwrap_or_default();
+    let mut ol = col()
+        .w_full()
+        .radius(tk.r(0.375))
+        .border(1.0, tk.border)
+        .fill(tk.background.alpha(0.6))
+        .clip_rounded(tk.r(0.375));
+    for (i, leg) in legs.iter().enumerate() {
+        let asset = leg["asset"].as_str().unwrap_or("BTC");
+        let role = leg["role"].as_str().unwrap_or("");
+        let top = row()
+            .w_full()
+            .gap(tk.r(1.0))
+            .center_y()
+            .justify_between()
+            .flex_wrap()
+            .child(
+                row()
+                    .gap(tk.r(0.5))
+                    .center_y()
+                    .child(role_dot(tk, role))
+                    .child(
+                        text(tr(
+                            "review:swap.components.form.leg.ordinal",
+                            &[("index", &(i + 1).to_string())],
+                        ))
+                        .font(tk.txs(400.0).mono())
+                        .color(tk.muted_fg),
+                    )
+                    .child(
+                        text(model::role_label(role))
+                            .font(tk.tsm(500.0))
+                            .color(tk.fg),
+                    ),
+            )
+            .child(sensitive(
+                model::format_custody_msat_v(&leg["amount_msat"], asset),
+                tk.tsm(400.0).mono().features("'tnum' 1"),
+                tk.fg,
+                hidden,
+            ));
+        let mut dl = col().w_full().gap(tk.r(0.25));
+        let mono = |s: String| {
+            text(s)
+                .font(tk.txs(400.0).mono())
+                .color(tk.fg)
+                .wrap_anywhere()
+        };
+        let plain = |s: String| text(s).font(tk.txs(400.0)).color(tk.fg).wrap();
+        if let Some(v) = leg["transaction_id"].as_str() {
+            dl = dl.child(fact(
+                tk,
+                t("review:swap.components.form.review.transaction"),
+                mono(v.to_owned()),
+            ));
+        }
+        if let Some(v) = leg["wallet_id"].as_str() {
+            dl = dl.child(fact(
+                tk,
+                t("review:swap.components.form.review.wallet"),
+                mono(v.to_owned()),
+            ));
+        }
+        if let Some(v) = leg["occurred_at"].as_str() {
+            dl = dl.child(fact(
+                tk,
+                t("review:swap.components.form.review.occurredAt"),
+                mono(v.to_owned()),
+            ));
+        }
+        if let Some(v) = leg["rail"].as_str().filter(|v| !v.is_empty()) {
+            dl = dl.child(fact(
+                tk,
+                t("review:swap.components.form.review.rail"),
+                plain(v.to_owned()),
+            ));
+        }
+        let scope: Vec<&str> = [leg["chain"].as_str(), leg["network"].as_str()]
+            .into_iter()
+            .flatten()
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !scope.is_empty() {
+            dl = dl.child(fact(
+                tk,
+                t("review:swap.components.form.review.network"),
+                plain(scope.join(" · ")),
+            ));
+        }
+        let conserved: Vec<&str> = [leg["exposure"].as_str(), leg["conservation_unit"].as_str()]
+            .into_iter()
+            .flatten()
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !conserved.is_empty() {
+            dl = dl.child(fact(
+                tk,
+                t("review:swap.components.form.review.conserved"),
+                plain(conserved.join(" / ")),
+            ));
+        }
+        if !leg["valuation_amount"].is_null() && leg.get("valuation_amount").is_some() {
+            let amount = match &leg["valuation_amount"] {
+                Value::String(s) => s.clone(),
+                o => o.to_string(),
+            };
+            dl = dl.child(fact(
+                tk,
+                t("review:swap.components.form.review.valuation"),
+                row()
+                    .gap(tk.r(0.25))
+                    .child(sensitive(amount, tk.txs(400.0).mono(), tk.fg, hidden))
+                    .child(mono(
+                        leg["valuation_unit"].as_str().unwrap_or("").to_owned(),
+                    )),
+            ));
+        }
+        if let Some(v) = leg["notes"].as_str().filter(|v| !v.is_empty()) {
+            dl = dl.child(fact(
+                tk,
+                t("review:swap.components.form.review.notes"),
+                plain(v.to_owned()),
+            ));
+        }
+        let mut li = col()
+            .w_full()
+            .padding(tk.r(0.75))
+            .gap(tk.r(0.5))
+            .child(top)
+            .child(dl);
+        if i > 0 {
+            li = li.border_sides([1.0, 0.0, 0.0, 0.0], tk.border);
+        }
+        ol = ol.child(li);
+    }
+    block = block.child(ol);
+    let allocs = comp["allocations"].as_array().cloned().unwrap_or_default();
+    if !allocs.is_empty() {
+        let mut ul = col().w_full().gap(tk.r(0.25));
+        for a in &allocs {
+            let si = legs
+                .iter()
+                .position(|l| l["id"] == a["source_leg_id"])
+                .map(|i| i as i64)
+                .unwrap_or(-1);
+            let ki = legs
+                .iter()
+                .position(|l| l["id"] == a["sink_leg_id"])
+                .map(|i| i as i64)
+                .unwrap_or(-1);
+            let asset = |i: i64| {
+                legs.get(i.max(0) as usize)
+                    .filter(|_| i >= 0)
+                    .and_then(|l| l["asset"].as_str())
+                    .unwrap_or("BTC")
+                    .to_owned()
+            };
+            let mask = |s: String| {
+                if hidden {
+                    crate::theme::MASK.to_owned()
+                } else {
+                    s
+                }
+            };
+            ul = ul.child(
+                text(tr(
+                    "review:swap.components.form.review.allocationEdge",
+                    &[
+                        ("source", &(si + 1).to_string()),
+                        ("sink", &(ki + 1).to_string()),
+                        (
+                            "sourceAmount",
+                            &mask(model::format_custody_msat_v(
+                                &a["source_amount_msat"],
+                                &asset(si),
+                            )),
+                        ),
+                        (
+                            "sinkAmount",
+                            &mask(model::format_custody_msat_v(
+                                &a["sink_amount_msat"],
+                                &asset(ki),
+                            )),
+                        ),
+                    ],
+                ))
+                .font(tk.txs(400.0).mono().features("'tnum' 1"))
+                .color(tk.fg)
+                .wrap(),
+            );
+        }
+        block = block.child(
+            col()
+                .w_full()
+                .gap(tk.r(0.25))
+                .child(
+                    text(t("review:swap.components.form.review.allocations").to_uppercase())
+                        .font(tk.t2xs(500.0).tracking(0.14 * tk.r(0.694)))
+                        .color(tk.muted_fg)
+                        .role("heading"),
+                )
+                .child(ul),
+        );
+    }
+    if let Some(issues) = comp["validation"]["issues"]
+        .as_array()
+        .filter(|i| !i.is_empty())
+    {
+        block = block.child(super::issue_box(
+            tk,
+            &t("review:swap.components.form.review.issues"),
+            issues.iter().map(model::backend_issue_text).collect(),
+        ));
+    }
+    block
 }
 
 /// The form's scrolling body.

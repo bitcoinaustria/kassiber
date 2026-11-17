@@ -262,6 +262,12 @@ pub const SCENES: &[crate::app::Scene] = &[
     ("custody-comps-preview", |a| {
         sub(super::components::SCENES, "custody-comps-preview", a)
     }),
+    ("custody-comps-confirm", |a| {
+        sub(super::components::SCENES, "custody-comps-confirm", a)
+    }),
+    ("custody-comps-confirm-de", |a| {
+        sub(super::components::SCENES, "custody-comps-confirm-de", a)
+    }),
     ("custody-sugg", |a| {
         sub(super::suggestions::SCENES, "custody-sugg", a)
     }),

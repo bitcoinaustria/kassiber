@@ -70,6 +70,21 @@ pub enum Action {
     Undo,
 }
 
+/// A component action's server plan, shown until the owner confirms or cancels it.
+pub struct Confirm {
+    pub id: String,
+    pub action: Action,
+    /// The plan request's arguments; confirming sends them again pinned to the plan.
+    pub args: Value,
+    /// The daemon's dry run (`ui.transfers.components.plan`), rendered as returned.
+    pub plan: Value,
+    pub input_version: i64,
+    /// The book the plan was made in (`expected_scope`).
+    pub scope: String,
+    /// The apply is out (the dialog stays open, busy, until it answers).
+    pub applying: bool,
+}
+
 #[derive(Default)]
 pub struct State {
     pub components: Option<Vec<Value>>,
@@ -84,6 +99,10 @@ pub struct State {
     pub action_error: Option<String>,
     /// The component an action is running for, and its plan args while the plan is out.
     pub pending: Option<(String, Action, Value)>,
+    /// The book the plan in flight was asked in.
+    plan_scope: String,
+    /// The action's plan, awaiting the owner's explicit confirmation.
+    pub confirm: Option<Confirm>,
     /// The revision editor's component (`editingComponent`).
     pub editing: Option<Value>,
     pub creating: bool,
@@ -126,6 +145,19 @@ pub fn reload(app: &mut App) {
 }
 
 pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
+    // A plan is only confirmable in the book it was made in.
+    let mut changed = false;
+    let scope = app.expected_scope().to_string();
+    if app
+        .custody
+        .comps
+        .confirm
+        .as_ref()
+        .is_some_and(|c| !c.applying && c.scope != scope)
+    {
+        app.custody.comps.confirm = None;
+        changed = true;
+    }
     if let Some(f) = app.custody.comps.form.as_mut()
         && f.reveal_review
         && f.reviewed.is_some()
@@ -133,7 +165,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         f.reveal_review = false;
         tx.scroll_into_view("cc-review");
     }
-    form::poll(app)
+    form::poll(app) || changed
 }
 
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
@@ -152,37 +184,37 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                 }
             }
         }
+        // The plan is only shown: nothing applies until the owner confirms it (`confirm`).
         "custody.comps.act_plan" => {
-            let Some((id, action, args)) = app.custody.comps.pending.clone() else {
+            let scope = app.expected_scope().to_string();
+            let s = &mut app.custody.comps;
+            let Some((id, action, args)) = s.pending.take() else {
                 return;
             };
             if r.error.is_some() {
-                app.custody.comps.action_error = Some(model::mutation_error(&r.error_detail));
-                app.custody.comps.pending = None;
+                s.action_error = Some(model::mutation_error(&r.error_detail));
                 return;
             }
-            let Some(version) = r.data["input_version"].as_i64() else {
-                app.custody.comps.action_error =
-                    Some(t("review:swap.components.backendError.unexpected"));
-                app.custody.comps.pending = None;
+            if s.plan_scope != scope {
+                s.action_error = Some(t("review:swap.components.form.previewChanged"));
+                return;
+            }
+            let Some(input_version) = plan_version(&args, &id, &r.data) else {
+                s.action_error = Some(t("review:swap.components.backendError.unexpected"));
                 return;
             };
-            let mut apply = args.clone();
-            apply["expected_input_version"] = json!(version);
-            apply["expected_scope"] = app.expected_scope();
-            app.custody.comps.pending = Some((id, action, args));
-            if app
-                .send(
-                    "ui.transfers.components.apply",
-                    apply,
-                    "custody.comps.act_apply",
-                )
-                .is_none()
-            {
-                app.custody.comps.pending = None;
-            }
+            s.confirm = Some(Confirm {
+                id,
+                action,
+                args,
+                plan: r.data.clone(),
+                input_version,
+                scope,
+                applying: false,
+            });
         }
         "custody.comps.act_apply" => {
+            app.custody.comps.confirm = None;
             let action = app.custody.comps.pending.take().map(|p| p.1);
             if r.error.is_some() {
                 app.custody.comps.action_error = Some(model::mutation_error(&r.error_detail));
@@ -205,10 +237,15 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     }
 }
 
-/// Escape closes the innermost overlay: a select, then the editor (not mid-submit).
+/// Escape closes the innermost overlay: a select, an action's confirmation, then the editor
+/// (neither mid-submit).
 pub fn escape(app: &mut App) -> bool {
     let s = &mut app.custody.comps;
     if s.popup.take().is_some() {
+        return true;
+    }
+    if s.confirm.is_some() {
+        cancel_action(app);
         return true;
     }
     if s.form.is_some() {
@@ -282,9 +319,10 @@ pub fn open_creator(app: &mut App) {
     s.editing = None;
 }
 
-/// `mutateComponent`: plan, then apply at the planned input version.
+/// `mutateComponent`: ask the daemon for the action's plan. Its reply is shown for explicit
+/// confirmation (`confirm_action`); only that applies it, at the planned input version.
 fn mutate(app: &mut App, c: &Value, action: Action) {
-    if app.custody.comps.pending.is_some() {
+    if app.custody.comps.pending.is_some() || app.custody.comps.confirm.is_some() {
         return;
     }
     let id = c["id"].as_str().unwrap_or("").to_owned();
@@ -303,6 +341,7 @@ fn mutate(app: &mut App, c: &Value, action: Action) {
     app.custody.comps.action_error = None;
     let mut send = args.clone();
     send["expected_scope"] = app.expected_scope();
+    app.custody.comps.plan_scope = app.expected_scope().to_string();
     if app
         .send(
             "ui.transfers.components.plan",
@@ -312,6 +351,63 @@ fn mutate(app: &mut App, c: &Value, action: Action) {
         .is_some()
     {
         app.custody.comps.pending = Some((id, action, args));
+    }
+}
+
+/// The plan's input version, when the plan answers the action that was asked for this component.
+fn plan_version(args: &Value, id: &str, plan: &Value) -> Option<i64> {
+    let planned_id = if args["action"] == "undo" {
+        &plan["source_component_id"]
+    } else {
+        &plan["component_id"]
+    };
+    (plan["action"] == args["action"]
+        && planned_id.as_str() == Some(id)
+        && plan["component"].is_object())
+    .then(|| plan["input_version"].as_i64())
+    .flatten()
+    .filter(|v| (0..=9_007_199_254_740_991).contains(v))
+}
+
+/// The apply of a shown plan: its own request, pinned to the plan's input version and the book.
+fn apply_args(c: &Confirm, expected_scope: Value) -> Value {
+    let mut apply = c.args.clone();
+    apply["expected_input_version"] = json!(c.input_version);
+    apply["expected_scope"] = expected_scope;
+    apply
+}
+
+/// The owner confirmed the shown plan: apply exactly it, pinned to its input version and book.
+/// The daemon recomputes the effects and refuses if the book or its input changed meanwhile.
+pub fn confirm_action(app: &mut App) {
+    let expected_scope = app.expected_scope();
+    let scope = expected_scope.to_string();
+    let s = &mut app.custody.comps;
+    let Some(c) = s.confirm.as_mut() else { return };
+    if c.applying || s.pending.is_some() {
+        return;
+    }
+    if c.scope != scope {
+        s.confirm = None;
+        s.action_error = Some(t("review:swap.components.form.previewChanged"));
+        return;
+    }
+    let apply = apply_args(c, expected_scope);
+    c.applying = true;
+    let pending = (c.id.clone(), c.action, c.args.clone());
+    app.custody.comps.pending = Some(pending);
+    app.send(
+        "ui.transfers.components.apply",
+        apply,
+        "custody.comps.act_apply",
+    );
+}
+
+/// Cancel (or Escape, or the backdrop) discards the plan; not while it applies.
+pub fn cancel_action(app: &mut App) {
+    let s = &mut app.custody.comps;
+    if s.confirm.as_ref().is_some_and(|c| !c.applying) {
+        s.confirm = None;
     }
 }
 
@@ -1002,7 +1098,162 @@ pub fn resolver(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El
     if st(app).form.is_some() {
         editor_dialog(app, cx, tk, layer);
     }
+    if st(app).confirm.is_some() {
+        confirm_dialog(app, tk, layer);
+    }
     page
+}
+
+/// An action's key in `review:swap.components.confirmAction.*`.
+fn action_key(a: Action) -> &'static str {
+    match a {
+        Action::Activate => "activate",
+        Action::Retire => "retire",
+        Action::Supersede => "supersede",
+        Action::Undo => "undo",
+    }
+}
+
+fn state_label(state: &str) -> String {
+    model::t_or(&format!("review:swap.components.state.{state}"), state)
+}
+
+/// The confirmation of a component action: the daemon's plan as it returned it (the state
+/// change, the book version it was checked against, and the component with its exact legs,
+/// allocations and open issues), then Cancel or the one button that applies exactly that plan.
+fn confirm_dialog(app: &App, tk: &Tk, layer: &mut Vec<El>) {
+    let Some(c) = st(app).confirm.as_ref() else {
+        return;
+    };
+    let key = action_key(c.action);
+    let title = t(&format!("review:swap.components.confirmAction.title.{key}"));
+    let p = &c.plan;
+    let comp = &p["component"];
+    let mono = |s: String| {
+        text(s)
+            .font(tk.txs(400.0).mono())
+            .color(tk.fg)
+            .wrap_anywhere()
+    };
+    let plain = |s: String| text(s).font(tk.txs(400.0)).color(tk.fg).wrap();
+    let revision = |v: &Value| {
+        tc(
+            "review:swap.components.revision",
+            v.as_u64().unwrap_or(0) as usize,
+            &[],
+        )
+    };
+    let mut facts = col().w_full().gap(tk.r(0.375));
+    if c.action == Action::Undo {
+        facts = facts
+            .child(form::fact(
+                tk,
+                t("review:swap.components.confirmAction.restoredFrom"),
+                mono(p["source_component_id"].as_str().unwrap_or("—").to_owned()),
+            ))
+            .child(form::fact(
+                tk,
+                t("review:swap.components.confirmAction.newRevision"),
+                mono(comp["id"].as_str().unwrap_or("—").to_owned()),
+            ))
+            .child(form::fact(
+                tk,
+                t("review:swap.components.confirmAction.state"),
+                plain(format!(
+                    "{} · {}",
+                    revision(&comp["revision"]),
+                    state_label(comp["state"].as_str().unwrap_or(""))
+                )),
+            ));
+    } else {
+        facts = facts
+            .child(form::fact(
+                tk,
+                t("review:swap.components.confirmAction.component"),
+                mono(p["component_id"].as_str().unwrap_or("—").to_owned()),
+            ))
+            .child(form::fact(
+                tk,
+                t("review:swap.components.confirmAction.state"),
+                plain(format!(
+                    "{} · {} → {}",
+                    revision(&comp["revision"]),
+                    state_label(p["current_state"].as_str().unwrap_or("")),
+                    state_label(p["resulting_state"].as_str().unwrap_or(""))
+                )),
+            ));
+    }
+    let facts = facts.child(
+        text(tr(
+            "review:swap.components.form.inputVersion",
+            &[("version", &p["input_version"].to_string())],
+        ))
+        .font(tk.txs(400.0))
+        .color(tk.muted_fg),
+    );
+    let win_h = if app.shell.window_h > 0.0 {
+        app.shell.window_h
+    } else {
+        900.0
+    };
+    // The dialog's height less its header, facts and footer: the component scrolls.
+    let body_h = (win_h - crate::shell::dialog_top(tk, win_h) - tk.r(18.0)).max(tk.r(8.0));
+    let body = col()
+        .key("cc-confirm-body")
+        .w_full()
+        .max_h(body_h)
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(form::component_preview(app, tk, comp));
+    let confirm_label = t(match c.action {
+        Action::Activate => "review:swap.components.form.confirmActivation",
+        Action::Retire => "review:swap.components.confirmAction.button.retire",
+        Action::Supersede => "review:swap.components.confirmAction.button.supersede",
+        Action::Undo => "review:swap.components.form.confirmDraft",
+    });
+    let mut confirm = kit::btn_busy(
+        tk,
+        "cc-confirm-apply",
+        Var::Default,
+        c.applying,
+        None,
+        &confirm_label,
+        !c.applying,
+    )
+    .h(tk.r(2.25))
+    .px(tk.r(1.0));
+    if !c.applying {
+        confirm = confirm.on_press(confirm_action);
+    }
+    let footer = kit::dialog_footer(tk)
+        .child(
+            kit::btn_md(
+                tk,
+                "cc-confirm-cancel",
+                Var::Outline,
+                None,
+                &t("common:actions.cancel"),
+                !c.applying,
+            )
+            .on_press(cancel_action),
+        )
+        .child(confirm);
+    let content = col()
+        .w_full()
+        .gap(tk.r(1.0))
+        .label(title.clone())
+        .child(kit::dialog_header(
+            tk,
+            title,
+            Some(t(&format!(
+                "review:swap.components.confirmAction.description.{key}"
+            ))),
+        ))
+        .child(facts)
+        .child(body)
+        .child(footer);
+    kit::dialog(app, tk, layer, "cc-confirm", 40.0, content, cancel_action);
 }
 
 /// The editor or creator dialog: header, the form's scrolling body, its pinned footer
@@ -1202,6 +1453,21 @@ fn settle_form(a: &mut App) {
     }
 }
 
+/// The first component's action as its state allows, asked for its plan (a dry run: a read):
+/// the confirmation shows, and nothing is applied.
+fn confirm_scene(a: &mut App) {
+    tab(a);
+    let Some(c) = first(a) else { return };
+    let action = match c["state"].as_str().unwrap_or("") {
+        "draft" if c["validation"]["activatable"].as_bool() != Some(false) => Action::Activate,
+        "draft" => Action::Retire,
+        "active" => Action::Supersede,
+        _ => Action::Undo,
+    };
+    mutate(a, &c, action);
+    settle_form(a);
+}
+
 fn revise(a: &mut App) {
     tab(a);
     if let Some(c) = first(a) {
@@ -1269,4 +1535,130 @@ pub const SCENES: &[crate::app::Scene] = &[
         form::submit(a, false);
         settle_form(a);
     }),
+    // An action's server plan, awaiting explicit confirmation.
+    ("custody-comps-confirm", confirm_scene),
+    ("custody-comps-confirm-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        confirm_scene(a);
+    }),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::tests::quiet_app;
+
+    fn sent(app: &App, kind: &str) -> usize {
+        app.pending.values().filter(|(_, k, _)| k == kind).count()
+    }
+
+    fn reply(data: Value) -> Reply {
+        Reply {
+            kind: "ui.transfers.components.plan".into(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    fn supersede_plan(id: &str) -> Value {
+        json!({
+            "schema_version": 1,
+            "input_version": 42,
+            "action": "supersede",
+            "component_id": id,
+            "current_state": "active",
+            "resulting_state": "superseded",
+            "reason": "desktop_custody_review_supersede",
+            "component": {"id": id, "revision": 2, "state": "active", "legs": [], "allocations": []},
+            "dry_run": true,
+            "requires_explicit_confirmation": true,
+        })
+    }
+
+    /// The plan is shown, never applied on its own: only the explicit confirmation sends the
+    /// apply, pinned to the plan's input version and the book.
+    #[test]
+    fn a_plan_waits_for_explicit_confirmation() {
+        let mut app = quiet_app();
+        let c = json!({"id": "comp-1", "state": "active"});
+        mutate(&mut app, &c, Action::Supersede);
+        assert_eq!(sent(&app, "ui.transfers.components.plan"), 1);
+        on_reply(
+            &mut app,
+            "custody.comps.act_plan",
+            &reply(supersede_plan("comp-1")),
+        );
+        assert_eq!(
+            sent(&app, "ui.transfers.components.apply"),
+            0,
+            "a plan reply does not apply"
+        );
+        let shown = app
+            .custody
+            .comps
+            .confirm
+            .as_ref()
+            .expect("the plan is shown");
+        assert_eq!(shown.input_version, 42);
+        assert!(app.custody.comps.pending.is_none());
+        let apply = apply_args(shown, app.expected_scope());
+        assert_eq!(apply["expected_input_version"], 42);
+        assert_eq!(apply["action"], "supersede");
+        assert_eq!(apply["component_id"], "comp-1");
+        assert_eq!(apply["expected_scope"], app.expected_scope());
+
+        confirm_action(&mut app);
+        assert_eq!(
+            sent(&app, "ui.transfers.components.apply"),
+            1,
+            "confirm applies"
+        );
+        assert!(
+            app.custody
+                .comps
+                .confirm
+                .as_ref()
+                .is_some_and(|c| c.applying)
+        );
+        escape(&mut app);
+        assert!(
+            app.custody.comps.confirm.is_some(),
+            "Escape does not drop a plan while it applies"
+        );
+        // A second press while it applies sends nothing more.
+        confirm_action(&mut app);
+        assert_eq!(sent(&app, "ui.transfers.components.apply"), 1);
+    }
+
+    #[test]
+    fn cancel_discards_the_plan_without_applying() {
+        let mut app = quiet_app();
+        mutate(&mut app, &json!({"id": "comp-1"}), Action::Supersede);
+        on_reply(
+            &mut app,
+            "custody.comps.act_plan",
+            &reply(supersede_plan("comp-1")),
+        );
+        assert!(escape(&mut app), "Escape closes the confirmation");
+        assert!(app.custody.comps.confirm.is_none());
+        confirm_action(&mut app);
+        assert_eq!(sent(&app, "ui.transfers.components.apply"), 0);
+    }
+
+    /// A plan for another component or action is not confirmable.
+    #[test]
+    fn a_mismatched_plan_is_refused() {
+        let mut app = quiet_app();
+        mutate(&mut app, &json!({"id": "comp-1"}), Action::Supersede);
+        on_reply(
+            &mut app,
+            "custody.comps.act_plan",
+            &reply(supersede_plan("comp-2")),
+        );
+        assert!(app.custody.comps.confirm.is_none());
+        assert!(app.custody.comps.action_error.is_some());
+        assert_eq!(sent(&app, "ui.transfers.components.apply"), 0);
+    }
+}
