@@ -319,12 +319,22 @@ fn kept_tag(tag: &str) -> bool {
 
 /// Every book-bound write carries the open book as `expected_scope` (docs/reference/daemon.md):
 /// the daemon refuses it with `stale_context` instead of acting on another book. A caller that
-/// bound its own scope keeps it; nothing is added while the open book is unknown.
+/// bound its own scope keeps it; nothing is added while the open book is unknown, or when a
+/// book-management request names another book (`ui.profiles.*` with a `profile_id`: the Books
+/// page managing an inactive book, which the open book's scope would make the daemon refuse).
 pub fn scope_args(kind: &str, args: Value, scope: &Value) -> Value {
     let Value::Object(mut map) = args else {
         return args;
     };
     if map.contains_key("expected_scope") || !kinds::is_book_mutation(kind) {
+        return Value::Object(map);
+    }
+    // Book management (`ui.profiles.*`) addresses its book by `profile_id`; other kinds act on the
+    // open book whatever they carry, so they stay bound.
+    if kind.starts_with("ui.profiles.")
+        && let Some(target) = map.get("profile_id").and_then(Value::as_str)
+        && scope["profile_id"].as_str() != Some(target)
+    {
         return Value::Object(map);
     }
     let id = |k: &str| scope[k].as_str().is_some_and(|s| !s.trim().is_empty());
@@ -2239,6 +2249,17 @@ pub(crate) mod tests {
             scope_args("ui.profiles.switch", json!({"profile_id": "p"}), &scope)
                 .get("expected_scope")
                 .is_none()
+        );
+        // A request naming another book (the Books page editing an inactive book) is not bound to
+        // the open one; naming the open book still is.
+        assert!(
+            scope_args("ui.profiles.update", json!({"profile_id": "p2"}), &scope)
+                .get("expected_scope")
+                .is_none()
+        );
+        assert_eq!(
+            scope_args("ui.profiles.update", json!({"profile_id": "p"}), &scope)["expected_scope"],
+            scope
         );
         let unknown = json!({"workspace_id": null, "profile_id": null});
         assert!(
