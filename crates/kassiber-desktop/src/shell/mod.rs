@@ -1119,16 +1119,17 @@ fn skip_link(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
         layer.push(
             row()
                 .key("sh-skip-pill")
-                .absolute(tk.r(1.0), tk.r(1.0))
-                .px(tk.r(0.75))
-                .py(tk.r(0.5))
-                .radius(tk.r(0.375))
-                .fill(tk.background)
-                .border(2.0, tk.ring)
+                // Below the title bar, clear of the window controls, in the popovers' style.
+                .absolute(tk.r(0.75), 40.0 + tk.r(0.5))
+                .px(tk.r(0.625))
+                .py(tk.r(0.375))
+                .radius(tk.r(0.5))
+                .fill(tk.popover)
+                .border(1.0, tk.ring)
                 .border_layout()
                 .a11y_hidden()
                 .inert()
-                .child(text(label.clone()).font(tk.tsm(400.0)).color(tk.fg)),
+                .child(text(label.clone()).font(tk.txs(500.0)).color(tk.fg)),
         );
     }
     row()
@@ -1145,7 +1146,9 @@ fn skip_link(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
 
 /// Every frame: whether the skip link has focus (Rune reports focus to handlers and polls).
 pub fn skip_link_poll(app: &mut App, tx: &mut rune::Tx) -> bool {
-    let focused = tx.focused() == Some(SKIP_KEY);
+    // Shown for keyboard focus only (`:focus-visible`): focus that lands on it by itself (a
+    // window opening) or from the pointer shows nothing.
+    let focused = tx.focused() == Some(SKIP_KEY) && tx.focus_visible();
     let changed = focused != app.shell.skip_focused;
     app.shell.skip_focused = focused;
     changed
