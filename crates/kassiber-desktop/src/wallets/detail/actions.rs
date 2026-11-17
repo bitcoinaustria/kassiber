@@ -925,7 +925,14 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "wallets.detail.rollback_plan" => {
-            if let Some(rb) = app.wallets.detail.rollback.as_mut() {
+            // A plan installs only into the dialog of the batch it describes: a cancelled
+            // dialog's late plan must not stand in for another batch's deletions. Errors carry
+            // no batch; they land only while this dialog still waits for its plan.
+            let planned = r.data["batch"]["id"].as_str();
+            if let Some(rb) = app.wallets.detail.rollback.as_mut()
+                && rb.plan_pending
+                && (r.error.is_some() || planned.is_some_and(|p| Some(p) == s(&rb.batch, "id")))
+            {
                 rb.plan_pending = false;
                 match &r.error {
                     Some(e) => rb.error = Some(e.clone()),
@@ -1036,5 +1043,32 @@ mod tests {
         on_reply(&mut app, "wallets.detail.core_test", &reply);
         assert!(!app.wallets.detail.syncing && app.wallets.detail.sync_error.is_none());
         assert!(app.wallets.detail.core_test_wallet.is_none());
+    }
+
+    /// A rollback plan for import A that arrives after the dialog moved to import B is not shown
+    /// as B's plan (confirm would delete B on A's numbers); B's own plan is.
+    #[test]
+    fn a_rollback_plan_installs_only_for_its_batch() {
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.detail.rollback = Some(super::super::Rollback {
+            batch: serde_json::json!({"id": "b", "source_name": "b.csv"}),
+            plan: None,
+            plan_pending: true,
+            pending: false,
+            error: None,
+        });
+        let plan = |id: &str| Reply {
+            kind: "ui.imports.rollback".into(),
+            data: serde_json::json!({"batch": {"id": id}, "transactions_to_delete": 3}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "wallets.detail.rollback_plan", &plan("a"));
+        let rb = app.wallets.detail.rollback.as_ref().unwrap();
+        assert!(rb.plan.is_none() && rb.plan_pending);
+        on_reply(&mut app, "wallets.detail.rollback_plan", &plan("b"));
+        let rb = app.wallets.detail.rollback.as_ref().unwrap();
+        assert!(rb.plan.is_some() && !rb.plan_pending);
     }
 }
