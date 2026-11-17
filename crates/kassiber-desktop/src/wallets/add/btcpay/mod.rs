@@ -69,6 +69,9 @@ pub struct State {
     pub manual_wallet: String,
     pub show_errors: bool,
     pub discover_pending: bool,
+    /// The instance (its request arguments) each discovery in flight was for, oldest first.
+    /// Kept across a fresh draft, so an earlier draft's answer is recognized.
+    pub discovering: std::collections::VecDeque<String>,
     pub key_guide_pending: bool,
     /// An authorize URL to open on the next poll.
     pub open_url: Option<String>,
@@ -99,6 +102,7 @@ impl Default for State {
             manual_wallet: String::new(),
             show_errors: false,
             discover_pending: false,
+            discovering: Default::default(),
             key_guide_pending: false,
             open_url: None,
             select: None,
@@ -272,7 +276,16 @@ fn draft(app: &App, label: &str) -> (Option<&'static str>, Vec<Value>) {
 
 /// A fresh draft (the setup step opened).
 pub fn reset(app: &mut App) {
-    app.wallets.add.btcpay = State::default();
+    let discovering = std::mem::take(&mut app.wallets.add.btcpay.discovering);
+    app.wallets.add.btcpay = State {
+        discovering,
+        ..State::default()
+    };
+}
+
+/// The instance a discovery is for, as its request arguments.
+fn instance_key(a: &App) -> Option<String> {
+    instance(a).map(|i| Value::Object(i.args()).to_string())
 }
 
 fn reset_plan(a: &mut App) {
@@ -363,14 +376,18 @@ fn run_discovery(a: &mut App) {
         return;
     }
     stm(a).plan_error = None;
+    let args = Value::Object(inst.args());
+    let key = args.to_string();
     if a.send(
         "ui.connections.btcpay.discover",
-        Value::Object(inst.args()),
+        args,
         "wallets.btcpay.discover",
     )
     .is_some()
     {
-        stm(a).discover_pending = true;
+        let s = stm(a);
+        s.discover_pending = true;
+        s.discovering.push_back(key);
     }
 }
 
@@ -402,7 +419,14 @@ fn open_authorize(a: &mut App) {
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
         "wallets.btcpay.discover" => {
-            stm(app).discover_pending = false;
+            let asked = stm(app).discovering.pop_front();
+            let pending = !st(app).discovering.is_empty();
+            stm(app).discover_pending = pending;
+            // The server, key or saved instance changed since it was asked (or the draft
+            // started over): this plan is not the current instance's.
+            if asked.is_none() || asked != instance_key(app) {
+                return;
+            }
             let parsed: Option<Plan> = if r.error.is_none() && !r.data.is_null() {
                 serde_json::from_value(r.data.clone()).ok()
             } else {
@@ -2008,3 +2032,29 @@ pub const SCENES: &[crate::app::Scene] = &[
         s.show_errors = true;
     }),
 ];
+
+#[cfg(test)]
+mod discovery_tests {
+    use super::*;
+
+    /// Discovery of instance A answering after the server changed: A's plan is not installed
+    /// for the current instance.
+    #[test]
+    fn an_earlier_instances_plan_is_not_installed() {
+        let mut app = crate::app::tests::quiet_app();
+        stm(&mut app)
+            .discovering
+            .push_back("{\"server_url\":\"https://a.example\"}".into());
+        stm(&mut app).discover_pending = true;
+        let plan = Reply {
+            kind: "ui.connections.btcpay.discover".into(),
+            data: json!({"stores": []}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "wallets.btcpay.discover", &plan);
+        assert!(st(&app).plan.is_none());
+        assert!(!st(&app).discover_pending);
+    }
+}

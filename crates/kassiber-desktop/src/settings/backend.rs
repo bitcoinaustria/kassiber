@@ -816,6 +816,16 @@ fn test_connection(app: &mut App) {
         return;
     }
     f.test = "testing";
+    let (kind, args, tag) = test_request(app, &d);
+    let key = format!("{kind}{args}");
+    if send(app, kind, args, tag) {
+        app.settings.backend_tests.push_back(key);
+    }
+}
+
+/// The test request for the form's current values: (kind, args, reply tag).
+fn test_request(app: &App, d: &Derived) -> (&'static str, Value, &'static str) {
+    let f = &app.settings.backend;
     if d.is_electrum {
         let mut args = json!({"url": d.effective_url, "trust_self_signed": f.e_ssl && f.trust_ssl});
         if f.e_ssl && !f.trust_ssl && !f.certificate.text.trim().is_empty() {
@@ -824,12 +834,11 @@ fn test_connection(app: &mut App) {
         if let Some(p) = &d.proxy_value {
             args["proxy"] = json!(p);
         }
-        send(
-            app,
+        (
             "ui.backends.electrum.test",
             args,
             "settings.backend_test_electrum",
-        );
+        )
     } else if d.is_rpc {
         let mut config = json!({"insecure": d.http_tls && f.trust_ssl});
         if d.http_tls && !f.trust_ssl {
@@ -848,12 +857,11 @@ fn test_connection(app: &mut App) {
         if let Some(p) = &d.proxy_value {
             args["proxy"] = json!(p);
         }
-        send(
-            app,
+        (
             "ui.backends.bitcoinrpc.test",
             args,
             "settings.backend_test_rpc",
-        );
+        )
     } else {
         let mut args = json!({"url": d.effective_url, "insecure": d.http_tls && f.trust_ssl});
         if d.http_tls && !f.trust_ssl && !f.certificate.text.trim().is_empty() {
@@ -862,13 +870,17 @@ fn test_connection(app: &mut App) {
         if let Some(p) = &d.proxy_value {
             args["proxy"] = json!(p);
         }
-        send(
-            app,
-            "ui.backends.http.test",
-            args,
-            "settings.backend_test_http",
-        );
+        ("ui.backends.http.test", args, "settings.backend_test_http")
     }
+}
+
+/// Whether a test reply belongs to the form's current values (else the form was edited, or
+/// another form opened, since it was sent: its result says nothing about these values).
+fn test_is_current(app: &mut App) -> bool {
+    let asked = app.settings.backend_tests.pop_front();
+    let d = derive(app);
+    let (kind, args, _) = test_request(app, &d);
+    asked.as_deref() == Some(format!("{kind}{args}").as_str())
 }
 
 /// `save`: tests first unless the last test of these values passed.
@@ -1000,6 +1012,24 @@ fn delete(app: &mut App) {
 }
 
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
+    if matches!(
+        tag,
+        "settings.backend_test_electrum"
+            | "settings.backend_test_http"
+            | "settings.backend_test_rpc"
+    ) && !test_is_current(app)
+    {
+        // A test of other values: no result for these, and nothing is saved from it.
+        let f = &mut app.settings.backend;
+        if f.test == "testing" {
+            f.test = "idle";
+        }
+        if f.save_after_test {
+            f.save_after_test = false;
+            f.saving = false;
+        }
+        return;
+    }
     let f = &mut app.settings.backend;
     match tag {
         "settings.backend_test_electrum" | "settings.backend_test_http" => {
@@ -2251,5 +2281,35 @@ mod tests {
         };
         open_edit(&mut app, &b);
         assert!(derive(&app).show_auth);
+    }
+}
+
+#[cfg(test)]
+mod stale_test_tests {
+    use super::*;
+
+    /// "Connect and save" tested endpoint A; the form changed before A answered: A's success
+    /// is no result for the current values and saves nothing.
+    #[test]
+    fn an_earlier_values_test_saves_nothing() {
+        let mut app = crate::app::tests::quiet_app();
+        app.settings
+            .backend_tests
+            .push_back("ui.backends.http.test{\"url\":\"A\"}".into());
+        let f = &mut app.settings.backend;
+        f.test = "testing";
+        f.save_after_test = true;
+        f.saving = true;
+        let ok = Reply {
+            kind: "ui.backends.http.test".into(),
+            data: json!({"ok": true}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "settings.backend_test_http", &ok);
+        let f = &app.settings.backend;
+        assert_eq!(f.test, "idle");
+        assert!(!f.save_after_test && !f.saving, "nothing saved");
     }
 }

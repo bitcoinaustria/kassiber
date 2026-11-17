@@ -239,6 +239,9 @@ pub struct Ui {
     pub agents: ai::Agents,
     pub terminal: desktop::Terminal,
     pub backend: backend::BackendForm,
+    /// The request (kind + arguments) of each backend connection test in flight, oldest first;
+    /// kept outside the form, which starts over when it opens.
+    pub backend_tests: std::collections::VecDeque<String>,
     pub aiform: aiform::AiForm,
     /// The tested values (`aiform::TestRun::target`) of each provider test in flight, oldest
     /// first; kept outside the form, which starts over each time it opens.
