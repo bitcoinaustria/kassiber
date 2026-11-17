@@ -8,6 +8,7 @@
 //! - `list`: routes/Connections.tsx (+ components/kb/wallets/Wallets*).
 //! - `imports`: routes/Imports.tsx (+ shadcnblocks/settings-integrations4).
 //! - `detail`: routes/ConnectionDetail.tsx (wallet detail and its panels).
+//! - `coverage`: lib/sourceCoverage.ts.
 //! - `node`: routes/NodeConnectionDetail.tsx (+ ConnectionDetail's NodeConnectionContainer).
 //! - `add`: components/kb/AddConnectionDialog.tsx (both steps, every setup form);
 //!   `add::btcpay` and `add::exchange` the BTCPay / exchange setup panels and ExchangeSyncCard.
@@ -15,6 +16,7 @@
 pub mod add;
 pub mod common;
 pub mod conn;
+pub mod coverage;
 pub mod detail;
 pub mod imports;
 pub mod list;

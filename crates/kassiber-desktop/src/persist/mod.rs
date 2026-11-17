@@ -230,7 +230,7 @@ fn apply_sort(app: &mut App, table: &str, sort: Option<&Sort>) {
                     "label" => WKey::Label,
                     "kind" => WKey::Kind,
                     "transactions" => WKey::Transactions,
-                    "last" => WKey::Last,
+                    "coverage" => WKey::Coverage,
                     "taxFree" => WKey::TaxFree,
                     "balance" => WKey::Balance,
                     _ => return None,
@@ -328,7 +328,7 @@ fn capture(app: &App, store: &mut Store) -> UiPrefs {
                 WKey::Label => "label",
                 WKey::Kind => "kind",
                 WKey::Transactions => "transactions",
-                WKey::Last => "last",
+                WKey::Coverage => "coverage",
                 WKey::TaxFree => "taxFree",
                 WKey::Balance => "balance",
             }

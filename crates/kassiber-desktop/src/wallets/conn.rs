@@ -30,8 +30,10 @@ pub struct Conn {
     pub observed_assets: Vec<String>,
     /// BTC (float).
     pub balance: f64,
-    /// "synced" | "syncing" | "idle" | "error".
+    /// "synced" | "syncing" | "idle" | "behind" | "error" (`behind`: the source does not cover today).
     pub status: String,
+    /// Source coverage for today (`coverage`, `ui.overview.snapshot`; `crate::wallets::coverage`).
+    pub coverage: Option<Value>,
     pub sync_mode: Option<String>,
     pub sync_source: Option<String>,
     pub source_format: Option<String>,
@@ -83,6 +85,7 @@ impl Conn {
                 .unwrap_or_default(),
             balance: f(v, "balance").unwrap_or(0.0),
             status: s(v, "status").unwrap_or_else(|| "idle".into()),
+            coverage: v.get("coverage").filter(|x| x.is_object()).cloned(),
             sync_mode: s(v, "syncMode"),
             sync_source: s(v, "syncSource"),
             source_format: s(v, "sourceFormat"),
@@ -383,7 +386,7 @@ pub fn status_dot(tk: &Tk, status: &str) -> Color {
     let h = |s: &str| rune::color::hex(s).expect("hex");
     match status {
         "synced" => h("#10b981"),
-        "syncing" => h("#f59e0b"),
+        "syncing" | "behind" => h("#f59e0b"),
         "error" => h("#ef4444"),
         _ => tk.muted_fg.alpha(0.5),
     }
@@ -399,8 +402,8 @@ pub fn status_style(tk: &Tk, status: &str) -> (Color, Color, Color) {
             h("#34d399"),
             h("#34d399").alpha(0.2),
         ),
-        ("syncing", false) => (h("#fffbeb"), h("#b45309"), h("#d97706").alpha(0.2)),
-        ("syncing", true) => (
+        ("syncing" | "behind", false) => (h("#fffbeb"), h("#b45309"), h("#d97706").alpha(0.2)),
+        ("syncing" | "behind", true) => (
             h("#78350f").alpha(0.3),
             h("#fbbf24"),
             h("#fbbf24").alpha(0.2),

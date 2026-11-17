@@ -765,6 +765,7 @@
     "synced": "Synced",
     "syncing": "Syncing",
     "idle": "Idle",
+    "behind": "Behind",
     "error": "Error"
   },
   "protocol": {

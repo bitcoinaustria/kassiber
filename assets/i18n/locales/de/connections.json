@@ -16,6 +16,7 @@
     "balanceQuarantines_other": "{{count}} Quarantänen · Buchsicht kann sich nach Prüfung ändern",
     "totalTransactions": "Transaktionen gesamt",
     "totalTransactionsDetail": "Über Wallets importiert",
+    "upToDateNotUpToDate": "{{count}} noch nicht aktuell",
     "openTransactions": "Alle Wallet-Transaktionen öffnen",
     "openReview": "Transaktionsprüfung öffnen",
     "taxFreeBalance": "Steuerfreies Guthaben",
@@ -26,10 +27,6 @@
     "taxFreeQuarantines_other": "{{count}} Quarantänen",
     "taxFreeBlockedJournals": "Verarbeite Journale, bevor du dich auf dieses Guthaben verlässt",
     "taxFreeBlockedQuarantines": "Prüfe Quarantänen, bevor du dich auf dieses Guthaben verlässt",
-    "upToDate": "Aktuell",
-    "upToDateAllSources": "Alle konfigurierten Quellen",
-    "upToDateRefreshingNow": "{{count}} werden gerade aktualisiert",
-    "upToDateNotUpToDate": "{{count}} noch nicht aktuell",
     "needsAttention": "Benötigt Aufmerksamkeit",
     "needsAttentionFailed": "Fehlgeschlagene Quelle(n)",
     "needsAttentionNoFailed": "Keine fehlgeschlagenen Quellen",
@@ -1543,6 +1540,146 @@
       "failed": "{{time}} · fehlgeschlagen",
       "skipped_one": "{{count}} Eintrag wurde übersprungen, weil er kein BTC ist oder nur Fiat bewegt.",
       "skipped_other": "{{count}} Einträge wurden übersprungen, weil sie kein BTC sind oder nur Fiat bewegen."
+    }
+  },
+  "coverage": {
+    "column": "Abdeckung",
+    "mode": {
+      "live": "Live",
+      "file": "Datei",
+      "hybrid": "API + CSV",
+      "manual": "Manuell"
+    },
+    "modeLong": {
+      "live": "Live-Sync",
+      "file": "Datei-Snapshot",
+      "hybrid": "API + CSV",
+      "manual": "Manuelle Einträge"
+    },
+    "state": {
+      "current": "Aktuell",
+      "behind": "Im Rückstand",
+      "never_imported": "Noch nichts",
+      "sync_failed": "Sync fehlgeschlagen",
+      "unknown": "Unbekannt",
+      "syncFailed": "Sync fehlgeschlagen",
+      "neverSynced": "{{mode}} · noch nie gesynct",
+      "neverImported": "{{mode}} · noch nichts importiert",
+      "behindFor": "Im Rückstand für {{period}}",
+      "stateFor": "{{state}} für {{period}}"
+    },
+    "line": {
+      "synced": "{{mode}} · gesynct {{when}}",
+      "coversThrough": "{{mode}} · deckt bis {{date}} ab",
+      "noActivityAfter": "{{mode}} · keine Aktivität nach {{date}}",
+      "closedOn": "{{mode}} · geschlossen am {{date}}",
+      "manual": "Manuelle Einträge",
+      "unknown": "{{mode}} · keine datierten Zeilen"
+    },
+    "filter": {
+      "needsAction": "Handlungsbedarf",
+      "needsActionFor": "Handlungsbedarf für {{period}}",
+      "clear": "Filter „Handlungsbedarf“ entfernen"
+    },
+    "metric": {
+      "label": "Aktuelle Abdeckung",
+      "allCurrent": "Alle Quellen aktuell",
+      "needsAction_one": "{{count}} mit Handlungsbedarf",
+      "needsAction_other": "{{count}} mit Handlungsbedarf",
+      "refreshingNow": "{{count}} werden gerade aktualisiert"
+    },
+    "card": {
+      "title": "Abdeckung",
+      "window": "Deckt {{from}} – {{through}} ab",
+      "windowThrough": "Deckt bis {{through}} ab",
+      "windowNone": "Noch kein datierter Verlauf",
+      "imports_one": "{{count}} Import, zuletzt {{date}}",
+      "imports_other": "{{count}} Importe, zuletzt {{date}}",
+      "lastSync": "Gesynct {{when}}",
+      "lastSyncCounts": "Gesynct {{when}} ({{imported}} neu, {{fetched}} abgerufen)",
+      "lastSyncFailed": "Letzter Sync fehlgeschlagen {{when}}: {{message}}",
+      "hybridNote": "Die API hält die jüngste Aktivität aktuell; CSV-Dateien decken den Verlauf vor {{date}} ab.",
+      "hybridNoteNoLimit": "Die API hält die jüngste Aktivität aktuell; CSV-Dateien decken älteren Verlauf ab, den die API nicht liefert.",
+      "fileNote": "Eine Datei ist ein Snapshot: Sie deckt die Zeilen ab, die sie enthält. Lade einen neueren Export herunter, um weiterzukommen.",
+      "fileChanged": "Diese Datei hat sich seit dem letzten Import möglicherweise geändert (Größe oder Zeit weichen ab).",
+      "syncNow": "Sync starten",
+      "importNewer": "Neueren Export importieren",
+      "importOlder": "Ältere CSV importieren",
+      "attest": "Keine Aktivität nach …",
+      "attestEdit": "Angabe bearbeiten",
+      "attestClear": "Angabe entfernen",
+      "reviewError": "Sync-Fehler ansehen",
+      "attestedNoActivity": "Deine Angabe: keine Aktivität nach {{date}}.",
+      "attestedClosed": "Deine Angabe: Konto am {{date}} geschlossen.",
+      "importResult": "{{imported}} neue Zeilen, {{present}} schon vorhanden, deckt jetzt bis {{date}} ab.",
+      "importResultNoDate": "{{imported}} neue Zeilen, {{present}} schon vorhanden.",
+      "importNothingNew": "Nichts Neues – jede Zeile dieser Datei ist schon vorhanden.",
+      "howToRefresh": "So bekommst du einen neueren Export",
+      "providerGuide": "Export-Anleitung von {{provider}} öffnen",
+      "attestationGap": "Deine Angabe beginnt nach dem abgedeckten Verlauf: Für {{from}} – {{through}} liegt keine Angabe vor. Gib den Tag an, an dem der Verlauf endet, oder importiere einen neueren Export.",
+      "checkFile": "Dateiinhalt prüfen",
+      "fileCheck": {
+        "same": "Die Datei entspricht dem letzten Import.",
+        "different": "Die Datei weicht vom letzten Import ab – importiere sie, um diese Quelle aktuell zu machen.",
+        "unknown": "Kein Vergleich möglich: Für den letzten Import gibt es keinen Fingerabdruck (er war zu groß oder stammt aus der Zeit vor Fingerabdrücken), oder die Datei ist nicht lesbar."
+      }
+    },
+    "attestDialog": {
+      "title": "Angeben, dass nach einem Datum nichts passiert ist",
+      "body": "Das schließt die Abdeckungslücke nur ab dem Datum. Wähle den Tag, an dem der Verlauf endet ({{wallet}}); ein späteres Datum lässt die Tage dazwischen offen. Es erzeugt keine Transaktionen, Guthaben oder steuerlichen Tatsachen, und du kannst es jederzeit entfernen.",
+      "kind": "Angabe",
+      "kindNoActivity": "Keine Aktivität nach",
+      "kindClosed": "Konto geschlossen am",
+      "date": "Datum",
+      "note": "Notiz (optional)",
+      "notePlaceholder": "Woher du es weißt, z. B. alles in Cold Storage verschoben",
+      "confirm": "Angabe speichern",
+      "cancel": "Abbrechen",
+      "clearTitle": "Angabe entfernen?",
+      "clearBody": "Abdeckungswarnungen für {{wallet}} erscheinen wieder dort, wo der Verlauf endet.",
+      "clearConfirm": "Angabe entfernen",
+      "failed": "Die Angabe konnte nicht gespeichert werden"
+    },
+    "scanWarnings": {
+      "incomplete_by_construction": "Eine Adressliste sieht nur die eingegebenen Adressen; andere Adressen derselben Wallet fehlen.",
+      "never_synced": "Noch nie gesynct.",
+      "no_transactions": "Noch keine Transaktionen.",
+      "undated_transactions": "Einige Transaktionen haben kein Datum.",
+      "history_starts_after_first_funding": "Der Verlauf beginnt nach der ersten Einzahlung; frühere Transaktionen fehlen.",
+      "other": "Abdeckungswarnung: {{code}}"
+    },
+    "report": {
+      "title": "Quellen im Rückstand für diesen Zeitraum",
+      "body": "Diese Quellen reichen nicht bis zum Periodenende, daher ist dieser Bericht vorläufig:",
+      "action": "Verbindungen öffnen",
+      "unknownTitle": "Abdeckung der Quellen unbekannt",
+      "unknownBody": "Kassiber konnte nicht lesen, wie weit die Quellen für diesen Zeitraum reichen; dieser Bericht ist daher möglicherweise vorläufig."
+    },
+    "choice": {
+      "title": "Wie soll Kassiber {{provider}} lesen?",
+      "api": "Mit einem Nur-Lese-Key verbinden",
+      "apiDetail": "Bleibt beim Sync von selbst aktuell.",
+      "file": "Eine Datei importieren",
+      "fileDetail": "Ein Snapshot, den du später neu importierst.",
+      "recommended": "Empfohlen",
+      "note": "Verbinde für die laufende Nutzung; importiere eine CSV für älteren Verlauf, den die API nicht liefert. Das andere kannst du später zur selben Quelle hinzufügen."
+    },
+    "attach": {
+      "body": "Eine {{provider}}-Wallet namens {{wallet}} enthält bereits CSV-Verlauf. Den Key dort hinzufügen, damit eine Quelle beides hält?",
+      "button": "Key zu {{wallet}} hinzufügen"
+    },
+    "refreshHints": {
+      "river": "In River: Account → Activity → Download CSV.",
+      "strike": "In Strike: Einstellungen → Berichte → Kontoaktivität, CSV.",
+      "21bitcoin": "In der 21bitcoin-App: Profil → Transaktionsverlauf → Exportieren.",
+      "pocketbitcoin": "In Pocket: Konto → Export → CSV.",
+      "coinfinity": "In Coinfinity: Bestellungen → CSV exportieren.",
+      "bullbitcoin": "In Bull Bitcoin: Orders → Export CSV.",
+      "binance": "In Binance: Orders → Export, für die benötigten Monate.",
+      "phoenix": "In Phoenix: Einstellungen → Zahlungen exportieren (CSV).",
+      "cointracking": "In CoinTracking: Transaktionen → Export → CSV, Filter zurückgesetzt.",
+      "blockpit": "In Blockpit: Transaktionen → CSV exportieren, Filter zurückgesetzt.",
+      "generic": "Exportiere den neuesten Verlauf beim Anbieter, ab deiner letzten Datei."
     }
   },
   "catalog": {
