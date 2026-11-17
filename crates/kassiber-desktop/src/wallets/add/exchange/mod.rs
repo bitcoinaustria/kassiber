@@ -50,8 +50,11 @@ pub struct State {
     pub outcome: Option<Outcome>,
     pub link_error: Option<String>,
     pub test_pending: bool,
-    /// The credentials the in-flight test sent.
-    pub test_sent: Option<Credentials>,
+    /// Each test in flight, oldest first: the form it was sent from (`form`) and the
+    /// credentials it sent. Kept across a reset, so a closed form's answer is recognized.
+    pub tests: std::collections::VecDeque<(u64, Credentials)>,
+    /// Counts form resets (each open of Add connection starts a new form).
+    pub form: u64,
     pub show_errors: bool,
     pub sync: SyncState,
     /// Scene harness: `wallets-detail-exchange-card` mounts `card_scene_view` full-page.
@@ -106,10 +109,15 @@ fn tested(s: &State) -> bool {
 }
 
 pub fn reset(app: &mut App, exchange: &str) {
-    let sync = std::mem::take(&mut stm(app).sync);
+    let s = stm(app);
+    let sync = std::mem::take(&mut s.sync);
+    let tests = std::mem::take(&mut s.tests);
+    let form = s.form + 1;
     app.wallets.add.exchange = State {
         exchange: exchange.to_owned(),
         sync,
+        tests,
+        form,
         ..State::default()
     };
 }
@@ -144,7 +152,8 @@ fn run_test(a: &mut App) {
     {
         let s = stm(a);
         s.test_pending = true;
-        s.test_sent = Some(c);
+        let form = s.form;
+        s.tests.push_back((form, c));
     }
 }
 
@@ -152,8 +161,14 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
         "wallets.exchange.test" => {
             let s = stm(app);
+            let Some((form, sent)) = s.tests.pop_front() else {
+                return;
+            };
+            // A test from a form since closed: not this form's result.
+            if form != s.form {
+                return;
+            }
             s.test_pending = false;
-            let sent = s.test_sent.take().unwrap_or_default();
             s.outcome = Some(match &r.error {
                 None => Outcome {
                     credentials: sent,
@@ -905,3 +920,50 @@ pub const SCENES: &[crate::app::Scene] = &[
         synthetic_sync(a);
     }),
 ];
+
+#[cfg(test)]
+mod test_reply_tests {
+    use super::*;
+
+    fn ok() -> Reply {
+        Reply {
+            kind: "ui.connections.exchange.test".into(),
+            data: json!({"ok": true, "read_only": true}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// A test for credentials A still out when Add connection closes and reopens: its answer
+    /// is not the new form's result; the new form's own test is.
+    #[test]
+    fn a_closed_forms_test_answer_is_not_the_new_forms_result() {
+        let mut app = crate::app::tests::quiet_app();
+        reset(&mut app, "kraken");
+        let a = Credentials {
+            exchange: "kraken".into(),
+            api_key: "A".into(),
+            api_secret: "a".into(),
+        };
+        let form = stm(&mut app).form;
+        stm(&mut app).tests.push_back((form, a));
+        reset(&mut app, "kraken");
+        let b = Credentials {
+            exchange: "kraken".into(),
+            api_key: "B".into(),
+            api_secret: "b".into(),
+        };
+        let form = stm(&mut app).form;
+        let s = stm(&mut app);
+        s.test_pending = true;
+        s.tests.push_back((form, b));
+        on_reply(&mut app, "wallets.exchange.test", &ok());
+        assert!(st(&app).outcome.is_none(), "A's answer dropped");
+        assert!(st(&app).test_pending);
+        on_reply(&mut app, "wallets.exchange.test", &ok());
+        let o = st(&app).outcome.as_ref().unwrap();
+        assert_eq!(o.credentials.api_key, "B");
+        assert!(!st(&app).test_pending);
+    }
+}

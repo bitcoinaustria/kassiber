@@ -129,6 +129,11 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                         ),
                     };
                     app.toast(ToastTone::Success, &title, Some(body), None);
+                    // These two change how the book's rows are priced and held: its reads
+                    // (readiness, journals state) refresh.
+                    if matches!(what, "coarse" | "rails") {
+                        app.refresh_reads();
+                    }
                 }
                 (Some(e), Some((what, _))) => {
                     let title = match what {

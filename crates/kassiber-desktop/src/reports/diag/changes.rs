@@ -179,12 +179,17 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     }),
                     None,
                 ),
-                None => app.toast(
-                    ToastTone::Success,
-                    &t("review:activity.revert.title"),
-                    Some(t("review:activity.revert.body")),
-                    None,
-                ),
+                None => {
+                    app.toast(
+                        ToastTone::Success,
+                        &t("review:activity.revert.title"),
+                        Some(t("review:activity.revert.body")),
+                        None,
+                    );
+                    // The persisted inputs changed: the book's reads (reports, overview,
+                    // transactions) refresh, as the detail panel's revert does.
+                    app.refresh_reads();
+                }
             }
             // The mutation invalidates the history: both lists read again.
             refetch(app);

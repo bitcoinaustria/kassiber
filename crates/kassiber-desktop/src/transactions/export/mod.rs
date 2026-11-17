@@ -273,6 +273,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         ask_save(w, tx);
         return true;
     }
+    let generation = app.book_generation;
     let e = &mut app.txs.export;
     if !e.open || e.wallets.is_none() {
         return false;
@@ -280,7 +281,9 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     let Some(args) = preview_args(e) else {
         return false;
     };
-    let key = args.to_string();
+    // The book refresh generation is part of the key: after an edit or exclusion the same
+    // choices preview again, and an answer from before the refresh no longer matches.
+    let key = preview_key(&args, generation);
     if key != e.preview_key {
         e.preview_key = key;
         e.due = app.clock + 0.3;
@@ -305,6 +308,11 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         ));
     }
     false
+}
+
+/// A preview's key: its arguments in the book generation they are read in.
+fn preview_key(args: &Value, generation: u64) -> String {
+    format!("{args}#{generation}")
 }
 
 /// `quarantineExportBlock`: the daemon's refusal to write a file with quarantined rows.
@@ -577,7 +585,7 @@ fn pump(app: &mut App, done: fn(&App) -> bool) {
 fn settle(app: &mut App) {
     pump(app, |a| a.txs.export.wallets.is_some());
     if let Some(args) = preview_args(&app.txs.export) {
-        let key = args.to_string();
+        let key = preview_key(&args, app.book_generation);
         app.txs.export.preview_key = key.clone();
         app.txs.export.queue.push_back(key);
         app.send("ui.exports.preview", args, "txs.export.preview");
@@ -726,5 +734,16 @@ mod tests {
         assert_eq!(preview_args(&e), Some(json!({"export": "labels"})));
         e.excluded.insert("w1".into());
         assert_eq!(preview_args(&e), None);
+    }
+}
+
+#[cfg(test)]
+mod preview_key_tests {
+    /// The same choices after a book refresh are a different preview.
+    #[test]
+    fn a_refresh_changes_the_preview_key() {
+        let args = serde_json::json!({"format": "csv"});
+        assert_ne!(super::preview_key(&args, 1), super::preview_key(&args, 2));
+        assert_eq!(super::preview_key(&args, 2), super::preview_key(&args, 2));
     }
 }
