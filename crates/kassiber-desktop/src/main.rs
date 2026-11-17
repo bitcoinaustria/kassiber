@@ -9,6 +9,7 @@
 #![cfg_attr(all(windows, not(feature = "tooling")), windows_subsystem = "windows")]
 
 mod app;
+mod art;
 mod assistant;
 mod chart;
 #[cfg(test)]
@@ -263,12 +264,13 @@ fn poll_app(app: &mut App, clock: f64, tx: &mut Tx) -> bool {
     changed |= txdetail::graph::poll(app, tx);
     changed |= custody::poll(app, tx);
     changed |= provenance::poll(app, tx);
-    changed |= onboarding::poll(app, tx);
+    changed |= onboarding::poll(app);
     changed |= demo::poll(app, tx);
     changed |= persist::poll(app, tx);
     changed |= native::poll(app, tx);
     changed |= secrets::poll(app, tx);
     changed |= shell::wordmark::poll(app, tx);
+    changed |= art::poll(app, tx);
     changed |= shell::skip_link_poll(app, tx);
     changed |= shell::search::poll(app, tx);
     changed |= nav::poll(app, tx);
@@ -462,6 +464,7 @@ fn all_scenes() -> &'static [crate::app::Scene] {
         transactions::EXPORT_SCENES,
         toastopen::SCENES,
         osleaks::SCENES,
+        art::SCENES,
     ] {
         all.extend_from_slice(area);
     }

@@ -236,9 +236,8 @@ fn start(app: &App, tk: &Tk, layer: &mut Vec<El>, panel_h: f32) -> El {
         .role("heading")
         .level(1)
         .wrap();
-    let left_w = if lg { (inner_w - gap) / 2.1 } else { inner_w };
     let left = col()
-        .w(left_w)
+        .w(inner_w)
         .gap(tk.r(2.25))
         .child(crate::shell::wordmark::animated(
             app,
@@ -250,24 +249,12 @@ fn start(app: &App, tk: &Tk, layer: &mut Vec<El>, panel_h: f32) -> El {
         .child(headline)
         .child(actions);
 
-    let art_h = if lg { tk.r(30.0) } else { tk.r(14.0) };
-    let art_w = if lg {
-        (inner_w - gap) * 1.1 / 2.1
-    } else {
-        inner_w
-    };
-    let state = ui.chain;
-    let art = super::chain::view(
-        super::chain::Paint {
-            tk,
-            mined: 3,
-            state,
-            since_beat: (app.clock - state.at).max(0.0),
-            clock: app.clock,
-            live: true,
-        },
-        art_w,
-        art_h,
+    // The chain spans the page as a band above the content.
+    let art = crate::art::calm::view(
+        tk,
+        app.clock,
+        inner_w,
+        if lg { tk.r(17.0) } else { tk.r(11.0) },
     );
 
     let mut highlights = row().gap(tk.r(1.5)).role("list");
@@ -299,14 +286,7 @@ fn start(app: &App, tk: &Tk, layer: &mut Vec<El>, panel_h: f32) -> El {
         .child(highlights)
         .child(language_select(app, tk, layer));
 
-    let grid = if lg {
-        col()
-            .gap(gap)
-            .child(row().w(inner_w).gap(gap).center_y().child(left).child(art))
-            .child(footer)
-    } else {
-        col().gap(gap).child(art).child(left).child(footer)
-    };
+    let grid = col().gap(gap).child(art).child(left).child(footer);
     col()
         .key("onb-start")
         .w_full()
