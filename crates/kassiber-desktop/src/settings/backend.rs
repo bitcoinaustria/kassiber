@@ -616,7 +616,11 @@ fn derive(app: &App) -> Derived {
     let is_lnd = preset.is_some_and(|p| p.protocol == "lnd") || init_kind.as_deref() == Some("lnd");
     let is_btcpay =
         preset.is_some_and(|p| p.protocol == "btcpay") || init_kind.as_deref() == Some("btcpay");
-    let show_auth = preset.is_some_and(|p| p.protocol == "bitcoinrpc") || is_lnd || is_btcpay;
+    // A stored Core backend on a non-preset URL edits as `custom`: its kind, not the preset,
+    // decides that it has credentials, or saving any field would clear them.
+    let is_core = preset.is_some_and(|p| p.protocol == "bitcoinrpc")
+        || init_kind.as_deref() == Some("bitcoinrpc");
+    let show_auth = is_core || is_lnd || is_btcpay;
     let effective_url = if is_electrum {
         electrum_url(&f.e_host.text, &f.e_port.text, f.e_ssl)
     } else if is_cln {
@@ -2224,5 +2228,28 @@ pub fn page(app: &App, tk: &Tk, overlays: &mut Vec<El>) -> super::subpage::Parts
             btn_lg(tk, "set-be-save", &save_label, Btn::Primary, ok).press_if(ok, save),
         ],
         scroll_key: "set-be-scroll".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A Core backend on a non-preset URL edits as `custom`; its credentials stay part of the
+    /// form, so saving a name change doesn't clear them.
+    #[test]
+    fn a_custom_url_core_backend_keeps_its_credentials_in_the_form() {
+        let mut app = crate::app::tests::quiet_app();
+        let b = crate::settings::model::Backend {
+            id: "core".into(),
+            name: "My node".into(),
+            url: "http://10.0.0.5:8332".into(),
+            kind: Some("bitcoinrpc".into()),
+            auth: "basic".into(),
+            username: Some("rpcuser".into()),
+            ..Default::default()
+        };
+        open_edit(&mut app, &b);
+        assert!(derive(&app).show_auth);
     }
 }
