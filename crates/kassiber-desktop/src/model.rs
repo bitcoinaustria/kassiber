@@ -47,6 +47,10 @@ pub struct Snapshot {
     pub fiat: Fiat,
     pub balance_summary: Option<BalanceSummary>,
     pub status: Option<BookStatus>,
+    /// A number unique to each parsed snapshot (a refresh with the same counts is another
+    /// snapshot): caches derived from one key by it.
+    #[serde(skip)]
+    pub rev: u64,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -290,7 +294,9 @@ pub struct BookStatus {
 
 impl Snapshot {
     pub fn parse(data: &serde_json::Value) -> Result<Snapshot, String> {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         let mut s: Snapshot = Snapshot::deserialize(data).map_err(|e| e.to_string())?;
+        s.rev = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         s.fiat.completeness.normalize();
         s.balance_series.retain(|v| v.is_finite());
         Ok(s)
@@ -833,5 +839,19 @@ mod tests {
         });
         assert!(readiness(&s, 0).reprocess);
         assert_eq!(readiness(&s, 2).title, "Sources block reports");
+    }
+}
+
+#[cfg(test)]
+mod rev_tests {
+    /// Two reads of the same counts are two snapshots: the chart's caches key by `rev`.
+    #[test]
+    fn each_parsed_snapshot_has_its_own_revision() {
+        let v = serde_json::json!({"portfolioSeries": [], "txs": []});
+        let (a, b) = (
+            super::Snapshot::parse(&v).unwrap(),
+            super::Snapshot::parse(&v).unwrap(),
+        );
+        assert_ne!(a.rev, b.rev);
     }
 }

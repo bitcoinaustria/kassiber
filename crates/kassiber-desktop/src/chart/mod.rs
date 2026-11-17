@@ -230,7 +230,7 @@ impl ChartUi {
     }
 }
 
-type SnapKey = (usize, usize, usize, usize, Period, crate::i18n::Lang);
+type SnapKey = (usize, usize, usize, usize, usize, Period, crate::i18n::Lang);
 
 /// Per-snapshot work: events, the whole history's points, the navigator's mini line, years
 /// and ranges. Built once per data (or period) change, never per frame.
@@ -341,8 +341,11 @@ pub struct Sums {
 
 fn snap_key(s: &Snapshot, p: Period) -> SnapKey {
     // The language is part of the key: the pipeline bakes tick and detail dates into its points.
+    // The snapshot's revision: a refresh that changes values but not counts (a corrected
+    // price, reprocessed journals) is a new snapshot at the same address.
     (
         s as *const Snapshot as usize,
+        s.rev as usize,
         s.portfolio_series.len(),
         s.activity_txs.len(),
         s.txs.len(),
