@@ -198,7 +198,6 @@ pub fn select_menu(
 pub type Action = Rc<dyn Fn(&mut App, &mut Tx)>;
 
 pub enum Entry {
-    Label(String, bool),
     Sep,
     Item {
         key: String,
@@ -252,25 +251,6 @@ pub fn menu(
     };
     for e in entries {
         match e {
-            Entry::Label(l, small) => {
-                let st = if small {
-                    tk.txs(500.0).mono()
-                } else {
-                    tk.tsm(500.0)
-                };
-                let h = if small {
-                    tk.r(0.375) * 2.0 + tk.r(1.0)
-                } else {
-                    row_h(tk)
-                };
-                p.add(
-                    row().w_full().h(h).px(tk.r(0.5)).center_y().child(
-                        text(l)
-                            .font(st)
-                            .color(if small { tk.muted_fg } else { tk.fg }),
-                    ),
-                );
-            }
             Entry::Sep => p.add(el().h(1.0).w_full().my(tk.r(0.25)).fill(tk.border)),
             Entry::Item {
                 key,

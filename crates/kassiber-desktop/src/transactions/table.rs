@@ -1063,18 +1063,15 @@ fn check(key: &str, label: String, checked: bool, on: impl Fn(&mut App) + 'stati
 }
 
 fn status_entries(f: &Filters) -> Vec<Entry> {
-    let mut e = vec![
-        Entry::Label(t("transactions:table.filter.statusLabel")),
-        check(
-            "txs-f-status-all",
-            t("transactions:table.filter.allStatuses"),
-            f.status.is_none(),
-            |a| {
-                a.txs.filters.status = None;
-                changed(a);
-            },
-        ),
-    ];
+    let mut e = vec![check(
+        "txs-f-status-all",
+        t("transactions:table.filter.allStatuses"),
+        f.status.is_none(),
+        |a| {
+            a.txs.filters.status = None;
+            changed(a);
+        },
+    )];
     for s in Status::ALL {
         e.push(check(
             &format!("txs-f-status-{}", s.label()),
@@ -1090,18 +1087,15 @@ fn status_entries(f: &Filters) -> Vec<Entry> {
 }
 
 fn flow_entries(f: &Filters) -> Vec<Entry> {
-    let mut e = vec![
-        Entry::Label(t("transactions:table.filter.flowLabel")),
-        check(
-            "txs-f-flow-all",
-            t("transactions:table.filter.allFlows"),
-            f.flow.is_none(),
-            |a| {
-                a.txs.filters.flow = None;
-                changed(a);
-            },
-        ),
-    ];
+    let mut e = vec![check(
+        "txs-f-flow-all",
+        t("transactions:table.filter.allFlows"),
+        f.flow.is_none(),
+        |a| {
+            a.txs.filters.flow = None;
+            changed(a);
+        },
+    )];
     for fl in Flow::ALL {
         e.push(check(
             &format!("txs-f-flow-{}", fl.label()),
@@ -1117,18 +1111,15 @@ fn flow_entries(f: &Filters) -> Vec<Entry> {
 }
 
 fn network_entries(f: &Filters) -> Vec<Entry> {
-    let mut e = vec![
-        Entry::Label(t("transactions:table.filter.networkLabel")),
-        check(
-            "txs-f-net-all",
-            t("transactions:table.filter.allNetworks"),
-            f.payment.is_none(),
-            |a| {
-                a.txs.filters.payment = None;
-                changed(a);
-            },
-        ),
-    ];
+    let mut e = vec![check(
+        "txs-f-net-all",
+        t("transactions:table.filter.allNetworks"),
+        f.payment.is_none(),
+        |a| {
+            a.txs.filters.payment = None;
+            changed(a);
+        },
+    )];
     for p in PAYMENTS.iter() {
         e.push(check(
             &format!("txs-f-net-{p}"),
@@ -1145,20 +1136,17 @@ fn network_entries(f: &Filters) -> Vec<Entry> {
 
 fn wallet_entries(app: &App) -> Vec<Entry> {
     let f = &app.txs.filters;
-    let mut e = vec![
-        Entry::Label(t("transactions:table.filter.walletLabel")),
-        check(
-            "txs-f-wallet-all",
-            t("transactions:table.filter.allWallets"),
-            f.leg_wallet().is_none(),
-            |a| {
-                if a.txs.filters.leg_wallet().is_some() {
-                    a.txs.filters.breakdown = None;
-                }
-                changed(a);
-            },
-        ),
-    ];
+    let mut e = vec![check(
+        "txs-f-wallet-all",
+        t("transactions:table.filter.allWallets"),
+        f.leg_wallet().is_none(),
+        |a| {
+            if a.txs.filters.leg_wallet().is_some() {
+                a.txs.filters.breakdown = None;
+            }
+            changed(a);
+        },
+    )];
     for w in app.txs.wallet_options() {
         let checked = f.leg_wallet() == Some(w.as_str());
         let key = w.clone();
@@ -1176,7 +1164,6 @@ fn wallet_entries(app: &App) -> Vec<Entry> {
 
 fn fee_entries(f: &Filters) -> Vec<Entry> {
     vec![
-        Entry::Label(t("transactions:table.filter.feesLabel")),
         check(
             "txs-f-fees-all",
             t("transactions:table.filter.allFees"),
@@ -1245,8 +1232,6 @@ fn filters_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
             _ => None,
         };
         let entries = vec![
-            Entry::Label(t("transactions:table.filter.menuLabel")),
-            Entry::Sep,
             Entry::Sub {
                 name: "status",
                 label: t("transactions:table.filter.statusTrigger"),

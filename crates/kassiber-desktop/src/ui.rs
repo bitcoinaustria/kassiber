@@ -158,6 +158,43 @@ pub fn tag(tk: &Tk, ink: Color, glyph: Option<&'static Icon>, label: impl Into<S
     )
 }
 
+/// A segmented control: options side by side in one muted track, the chosen one raised.
+/// `items` come from `segment`.
+pub fn segmented(tk: &Tk, items: Vec<El>) -> El {
+    row()
+        .padding(2.0)
+        .gap(2.0)
+        .center_y()
+        .radius(tk.r(0.5))
+        .fill(tk.muted.alpha(0.6))
+        .role("group")
+        .children(items)
+}
+
+/// One option of `segmented` (attach its `on_press`).
+pub fn segment(tk: &Tk, key: &str, label: String, on: bool) -> El {
+    let mut r = row()
+        .key(key.to_owned())
+        .h(tk.r(1.5))
+        .px(tk.r(0.5))
+        .center()
+        .radius(tk.r(0.375))
+        .role("button")
+        .checked(on)
+        .label(label.clone())
+        .focusable(true);
+    r = if on {
+        r.fill(tk.background)
+    } else {
+        r.hover(tk.background.alpha(0.5))
+    };
+    r.child(
+        text(label)
+            .font(tk.txs(500.0))
+            .color(if on { tk.fg } else { tk.muted_fg }),
+    )
+}
+
 /// A count beside a heading: plain muted figures, no box.
 pub fn count(tk: &Tk, n: usize, style: rune::TextStyle) -> El {
     text(n.to_string())

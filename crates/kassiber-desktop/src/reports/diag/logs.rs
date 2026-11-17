@@ -705,63 +705,70 @@ fn filter_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
     let s = &app.reports.diag.logs;
     let counts = s.store.level_counts();
     let total = s.store.records.len();
-    let mut e = vec![
-        Entry::Label(t("review:logsControls.filterLogsLabel"), false),
-        Entry::Check {
-            key: "logs-lvl-all".into(),
-            glyph: None,
-            label: t("review:logsControls.allLevels"),
-            mono: false,
-            upper: false,
-            trailing: Some(total.to_string()),
-            checked: s.level.is_none(),
-            on: Rc::new(|a, _| a.reports.diag.logs.level = None),
-        },
-    ];
+    let mut e = vec![Entry::Check {
+        key: "logs-lvl-all".into(),
+        glyph: None,
+        label: t("review:logsControls.allLevels"),
+        mono: false,
+        upper: false,
+        trailing: Some(total.to_string()),
+        checked: s.level.is_none(),
+        on: Rc::new(|a, _| a.reports.diag.logs.level = None),
+    }];
+    // Only the levels there are records of (and the chosen one).
     for (i, l) in LEVELS.iter().enumerate() {
+        if counts[i] == 0 && s.level != Some(*l) {
+            continue;
+        }
+        let mut name = (*l).to_owned();
+        if let Some(f) = name.get_mut(0..1) {
+            f.make_ascii_uppercase();
+        }
         e.push(Entry::Check {
             key: format!("logs-lvl-{l}"),
             glyph: None,
-            label: (*l).to_owned(),
+            label: name,
             mono: false,
-            upper: true,
+            upper: false,
             trailing: Some(counts[i].to_string()),
             checked: s.level == Some(*l),
             on: Rc::new(move |a, _| a.reports.diag.logs.level = Some(*l)),
         });
     }
-    e.push(Entry::Sep);
-    e.push(Entry::Label(t("review:logsControls.module"), false));
-    e.push(Entry::Check {
-        key: "logs-mod-all".into(),
-        glyph: None,
-        label: t("review:logsControls.allModules"),
-        mono: false,
-        upper: false,
-        trailing: Some(total.to_string()),
-        checked: s.module.is_none(),
-        on: Rc::new(|a, _| a.reports.diag.logs.module = None),
-    });
-    for (i, (m, n)) in s.store.module_counts().into_iter().enumerate() {
-        let checked = s.module.as_deref() == Some(m.as_str());
-        let mm = m.clone();
+    let modules = s.store.module_counts();
+    if modules.len() > 1 || s.module.is_some() {
+        e.push(Entry::Sep);
         e.push(Entry::Check {
-            key: format!("logs-mod-{i}"),
+            key: "logs-mod-all".into(),
             glyph: None,
-            label: m,
-            mono: true,
+            label: t("review:logsControls.allModules"),
+            mono: false,
             upper: false,
-            trailing: Some(n.to_string()),
-            checked,
-            on: Rc::new(move |a, _| {
-                let s = &mut a.reports.diag.logs;
-                s.module = if s.module.as_deref() == Some(mm.as_str()) {
-                    None
-                } else {
-                    Some(mm.clone())
-                };
-            }),
+            trailing: Some(total.to_string()),
+            checked: s.module.is_none(),
+            on: Rc::new(|a, _| a.reports.diag.logs.module = None),
         });
+        for (i, (m, n)) in modules.into_iter().enumerate() {
+            let checked = s.module.as_deref() == Some(m.as_str());
+            let mm = m.clone();
+            e.push(Entry::Check {
+                key: format!("logs-mod-{i}"),
+                glyph: None,
+                label: m,
+                mono: true,
+                upper: false,
+                trailing: Some(n.to_string()),
+                checked,
+                on: Rc::new(move |a, _| {
+                    let s = &mut a.reports.diag.logs;
+                    s.module = if s.module.as_deref() == Some(mm.as_str()) {
+                        None
+                    } else {
+                        Some(mm.clone())
+                    };
+                }),
+            });
+        }
     }
     e.extend(settings_entries(s));
     if has_filters(s) {
@@ -794,7 +801,6 @@ fn filter_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
 fn settings_entries(s: &State) -> Vec<Entry> {
     vec![
         Entry::Sep,
-        Entry::Label(t("review:logsControls.logSettingsLabel"), false),
         Entry::Check {
             key: "logs-set-regex".into(),
             glyph: Some(&I::REGEX),
