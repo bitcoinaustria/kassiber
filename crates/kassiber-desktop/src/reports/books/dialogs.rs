@@ -226,8 +226,13 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         if tag == "reports.books.update" {
             super::settings::apply_failed(app, r);
         }
-        // The update may have landed before a failed rename: show what the book holds now.
+        // The update may have landed before a failed rename: show what the book holds now,
+        // and refresh what the applied settings changed (its settings, the book's reads).
         if tag == "reports.books.rename_profile" {
+            if matches!(app.reports.books.dialog, Some(Dialog::Settings { .. })) {
+                super::settings::applied(app);
+                app.refresh_reads();
+            }
             app.send("ui.profiles.snapshot", Value::Null, "app.profiles");
         }
         return;
