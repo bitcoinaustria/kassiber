@@ -1459,23 +1459,13 @@ fn wallet_row(
     let id = c.id.clone();
     r = r.on_press(move |a: &mut App| a.navigate(&format!("/connections/{id}")));
     r = r.child(cell(next(), tk.r(0.5), tk.r(1.5)).child(name_row));
-    // Kind: `Badge variant="outline" rounded-md`.
-    r = r.child(
-        cell(next(), tk.r(0.5), tk.r(0.5)).child(
-            row()
-                .px(tk.r(0.5))
-                .py(tk.r(0.125))
-                .radius(tk.r(0.375))
-                .border(1.0, tk.border)
-                .border_layout()
-                .center_y()
-                .child(
-                    text(super::conn::category_display(c.category_label()))
-                        .font(tk.txs(500.0))
-                        .color(tk.fg),
-                ),
-        ),
-    );
+    // Kind: a muted label.
+    r = r.child(cell(next(), tk.r(0.5), tk.r(0.5)).child(crate::ui::tag(
+        tk,
+        tk.muted_fg,
+        None,
+        super::conn::category_display(c.category_label()),
+    )));
     r = r.child(
         cell(next(), tk.r(0.5), tk.r(0.5))
             .justify_end()

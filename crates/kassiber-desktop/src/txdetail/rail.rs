@@ -414,18 +414,7 @@ pub fn history(app: &App, tk: &Tk, o: &Open) -> El {
         );
     }
     if !events.is_empty() {
-        ends = ends.child(
-            row()
-                .px(tk.r(0.5))
-                .py(tk.r(0.125))
-                .radius(tk.r(0.375))
-                .fill(tk.muted)
-                .child(
-                    text(events.len().to_string())
-                        .font(tk.txs(500.0))
-                        .color(tk.fg),
-                ),
-        );
+        ends = ends.child(crate::ui::count(tk, events.len(), tk.txs(500.0)));
     }
     summary = summary.child(ends.child(ic(
         if open {

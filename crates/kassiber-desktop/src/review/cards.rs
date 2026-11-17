@@ -497,22 +497,12 @@ fn card(app: &App, cx: &mut Cx<App>, tk: &Tk, snap: &Snap, g: &Group, layer: &mu
         .flex_wrap()
         .child(text(copy.title.clone()).font(tk.tsm(600.0)).color(tk.fg));
     if g.blocks_reports {
-        let (bg, fg) = if tk.dark {
-            (kit::tw("red-950").alpha(0.5), kit::tw("red-200"))
-        } else {
-            (kit::tw("red-100"), kit::tw("red-800"))
-        };
         head = head.child(
-            row()
-                .px(tk.r(0.5))
-                .py(tk.r(0.125))
-                .radius(999.0)
-                .fill(bg)
-                .child(
-                    text(t("journals:quarantine.panel.blocksReports"))
-                        .font(tk.txs(500.0))
-                        .color(fg),
-                ),
+            row().child(
+                text(t("journals:quarantine.panel.blocksReports"))
+                    .font(tk.txs(500.0))
+                    .color(tk.destructive),
+            ),
         );
     }
     if rows.root_count > 0 {

@@ -1507,21 +1507,16 @@ fn recent_row(
             .min_w(0.0),
         );
     if r.status != TxStatus::Confirmed {
-        let (sb, sf, sr) = status_chip(tk, r.status);
+        let (_, sf, _) = status_chip(tk, r.status);
         meta = meta.child(
-            row()
-                .px(tk.r(0.25))
-                .radius(tk.r(0.375))
-                .fill(sb)
-                .border(1.0, sr)
-                .child(
-                    text(status_text(r.status))
-                        .font(TextStyle {
-                            weight: 500.0,
-                            ..small
-                        })
-                        .color(sf),
-                ),
+            row().child(
+                text(status_text(r.status))
+                    .font(TextStyle {
+                        weight: 500.0,
+                        ..small
+                    })
+                    .color(sf),
+            ),
         );
     }
     if !scope.is_empty() {

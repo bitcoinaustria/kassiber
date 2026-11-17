@@ -154,19 +154,14 @@ fn asset_icon(app: &App, cx: &Cx<App>, tk: &Tk, r: &AssetRow) -> El {
     }
 }
 
-/// The amber "Synthetic sample" pill on scene-injected rows.
+/// The amber "Synthetic sample" label on scene-injected rows.
 fn synthetic_pill(tk: &Tk) -> El {
     let tone = &tk.warn;
-    row()
-        .px(tk.r(0.25))
-        .radius(tk.r(0.25))
-        .fill(tone.bg)
-        .border(1.0, tone.border)
-        .child(
-            text(synthetic_badge())
-                .font(tk.t2xs(500.0))
-                .color(tone.text),
-        )
+    row().child(
+        text(synthetic_badge())
+            .font(tk.t2xs(500.0))
+            .color(tone.text),
+    )
 }
 
 /// The four-column grid of a holding row: `1.5rem | 1fr | 6.5rem | 2.5rem`.

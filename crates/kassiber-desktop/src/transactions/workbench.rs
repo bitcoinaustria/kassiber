@@ -1166,14 +1166,7 @@ fn tooltip(app: &App, tk: &Tk, b: &Bar, c: &str) -> El {
         let review = st["review"].as_f64().unwrap_or(0.0) as usize;
         let failed = st["failed"].as_f64().unwrap_or(0.0) as usize;
         if missing + review + failed > 0 {
-            let chip = |label: String, fg: Color| {
-                row()
-                    .px(tk.r(0.375))
-                    .py(tk.r(0.125))
-                    .radius(tk.r(0.375))
-                    .fill(fg.alpha(0.1))
-                    .child(text(label).font(tk.txs(400.0)).color(fg))
-            };
+            let chip = |label: String, fg: Color| text(label).font(tk.txs(400.0)).color(fg);
             let mut chips = row().gap(tk.r(0.25)).flex_wrap().pt(tk.r(0.125));
             if missing > 0 {
                 chips = chips.child(chip(

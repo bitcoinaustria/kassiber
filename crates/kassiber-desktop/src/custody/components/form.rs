@@ -1805,14 +1805,7 @@ pub fn component_preview(app: &App, tk: &Tk, comp: &Value) -> El {
                 ("grade", comp["evidence_grade"].as_str().unwrap_or("—")),
             ],
         );
-        head = head.child(
-            row()
-                .px(tk.r(0.5))
-                .py(tk.r(0.125))
-                .radius(999.0)
-                .border(1.0, tk.border)
-                .child(text(ev).font(tk.t2xs(400.0).mono()).color(tk.fg)),
-        );
+        head = head.child(text(ev).font(tk.t2xs(400.0).mono()).color(tk.muted_fg));
     }
     let mut block = col().w_full().gap(tk.r(0.75)).child(head);
     if let Some(p) = comp["conversion_policy"].as_str().filter(|p| !p.is_empty()) {

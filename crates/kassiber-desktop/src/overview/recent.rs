@@ -203,19 +203,14 @@ fn row_el(app: &App, tk: &Tk, s: &Snapshot, r: &RecentRow, i: usize, slot: &Slot
     if r.status != TxStatus::Confirmed {
         let sc = status_chip(tk, r.status);
         meta = meta.child(
-            row()
-                .px(tk.r(0.25))
-                .radius(tk.r(0.375))
-                .fill(sc.bg)
-                .border(1.0, sc.ring)
-                .child(
-                    text(super::l10n::status(r.status))
-                        .font(TextStyle {
-                            weight: 500.0,
-                            ..small
-                        })
-                        .color(sc.fg),
-                ),
+            row().child(
+                text(super::l10n::status(r.status))
+                    .font(TextStyle {
+                        weight: 500.0,
+                        ..small
+                    })
+                    .color(sc.fg),
+            ),
         );
     }
     let (primary, secondary) = amounts(app, s, r);

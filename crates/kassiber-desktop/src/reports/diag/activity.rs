@@ -677,14 +677,8 @@ fn toolbar(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
     crate::reports::ledger::common::page_header(tk, left, right)
 }
 
-fn chip(tk: &Tk, label: String, ink: Color, fill: Color) -> El {
-    row()
-        .px(tk.r(0.375))
-        .h(tk.r(1.25))
-        .center_y()
-        .radius(tk.r(0.25))
-        .fill(fill)
-        .child(text(label).font(tk.txs(400.0)).color(ink).single_line())
+fn chip(tk: &Tk, label: String, ink: Color, _fill: Color) -> El {
+    crate::ui::tag(tk, ink, None, label)
 }
 
 /// A row's "⋯" menu: open the transaction, undo the whole edit.

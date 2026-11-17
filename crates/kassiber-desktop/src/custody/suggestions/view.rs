@@ -73,13 +73,8 @@ fn tint_chip(
             tw(&format!("{hue}-800")),
         )
     };
-    let mut r = row()
-        .px(tk.r(0.375))
-        .gap(tk.r(0.25))
-        .center_y()
-        .radius(999.0)
-        .border(1.0, border)
-        .fill(fill);
+    let _ = (fill, border);
+    let mut r = row().gap(tk.r(0.25)).center_y();
     if let Some(g) = glyph {
         r = r.child(ic(g, tk.r(0.75), ink));
     }

@@ -451,10 +451,6 @@ fn tab_bar(app: &App, tk: &Tk, sheet: bool, layer: &mut Vec<El>) -> El {
                 row()
                     .gap(tk.r(0.25))
                     .center_y()
-                    .radius(999.0)
-                    .fill(tk.primary.alpha(0.1))
-                    .px(tk.r(0.375))
-                    .py(tk.r(0.125))
                     .child(crate::ui::dot(tk.r(0.375), tk.primary).a11y_hidden())
                     .child(text(label).font(tk.t2xs(500.0)).color(tk.primary)),
             );

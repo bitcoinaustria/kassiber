@@ -376,13 +376,8 @@ fn chip(
     bg: Color,
     border: Color,
 ) -> El {
-    let mut r = row()
-        .px(tk.r(0.375))
-        .gap(tk.r(0.25))
-        .center_y()
-        .radius(999.0)
-        .fill(bg)
-        .border(1.0, border);
+    let _ = (bg, border);
+    let mut r = row().gap(tk.r(0.25)).center_y();
     if let Some(g) = glyph {
         r = r.child(ic(g, tk.r(0.75), fg));
     }
