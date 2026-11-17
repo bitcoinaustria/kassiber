@@ -774,11 +774,7 @@ fn filters(app: &App, tk: &Tk, layer: &mut Vec<El>, count: usize) -> El {
                 ),
         );
     }
-    let count_badge = crate::ui::count(
-        tk,
-        count,
-        if sm { tk.tbase(400.0) } else { tk.tsm(400.0) },
-    );
+    let count_badge = crate::ui::count(tk, count, if sm { tk.tbase(400.0) } else { tk.tsm(400.0) });
     let head = row()
         .w_full()
         .px(if sm { tk.card_pad() } else { tk.r(0.75) })
