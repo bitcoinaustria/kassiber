@@ -128,7 +128,15 @@ snapshots (`period_start_year`/`period_end_year`, their classification
 and gain summaries, and the filed-report impact checks that recompute
 them, so a later change inside a filed tax year flags it and one outside
 does not). A book on its country's calendar year keeps each reader's
-established cut, so its outputs are unchanged. The holding period is not
+established cut, so its outputs are unchanged. The summary PDF given a
+`year` (`ui.reports.export_summary_pdf`, as the desktop sends the Reports
+page's year) covers that tax year with `BookCalendar::bounds` itself, for
+every book: its first local midnight through the second before the next
+year's, shown by its local first and last days and registered under that
+tax year. A generic book on the UTC calendar year gets exactly the
+1 January–31 December UTC range the desktops used to send; a calendar-year
+book in a country's zone (Vienna, Berlin) gets that zone's calendar year,
+as its Reports page counts it. The holding period is not
 affected: a generic book still counts whole days.
 
 Every **existing United Kingdom book** changes with nothing chosen. Its

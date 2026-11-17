@@ -18218,7 +18218,10 @@ gate does, and every envelope inserts `pages` between `file` and `bytes`.
 `ui.reports.export_summary_pdf` are native in that design: the model is
 Python's `build_summary_pdf_report_data` (parity for 23 fixture cases), the
 daemon kind admits only `start`, `end`, `wallets` and `include_snapshot` with
-Python's messages, the managed name is `kassiber-summary-report-…pdf`, both
+Python's messages, plus the Rust-only tax `year` (exclusive with `start` /
+`end`; resolved through the book's calendar, [tax years](tax.md#tax-years)),
+which the CLI leaf does not take, so its frozen argparse grammar stays
+Python's, the managed name is `kassiber-summary-report-…pdf`, both
 admit source freshness first and register the saved `summary.pdf` marker over
 the period's years and wallets. The envelope keeps Python's keys and title;
 `pages`, `bytes` and the content hash are the new PDF's.

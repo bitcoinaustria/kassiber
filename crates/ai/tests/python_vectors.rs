@@ -372,6 +372,23 @@ fn report_export_targets_match_python() {
     }
 }
 
+/// Rust-only: the summary PDF also takes the book's tax `year`, which the
+/// core resolves through the book's calendar (Python dropped it).
+#[test]
+fn summary_report_export_forwards_the_tax_year() {
+    use kassiber_ai::mutate::report_export_target;
+    let arguments = kassiber_pytext::loads(
+        r#"{"report":"summary","format":"pdf","year":2024,"wallet":"w","verify":true}"#,
+    )
+    .unwrap();
+    let (kind, args) = report_export_target(&arguments).unwrap();
+    assert_eq!(kind, "ui.reports.export_summary_pdf");
+    assert_eq!(
+        args,
+        kassiber_pytext::loads(r#"{"year":2024,"wallets":["w"]}"#).unwrap()
+    );
+}
+
 #[test]
 fn strict_wallet_sync_arguments_match_python() {
     use kassiber_ai::mutate::strict_wallets_sync_args;

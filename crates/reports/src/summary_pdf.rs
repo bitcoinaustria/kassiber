@@ -88,6 +88,51 @@ fn period(args: &Value, now: &str) -> Result<(i64, i64)> {
     Ok((start, end))
 }
 
+/// The book's tax year a `year` argument selects: what the Reports page
+/// cuts that year with (`kassiber_setup::book_settings::calendar`), its
+/// first local midnight through the last second before the next year's,
+/// plus its first and last local day for the document to show.
+struct TaxYear {
+    year: i64,
+    start: i64,
+    end: i64,
+    first_day: String,
+    last_day: String,
+}
+
+/// The tax year the summary covers, when `args` names one. `year` and an
+/// explicit `start`/`end` range exclude each other.
+fn tax_year(conn: &Connection, profile: &Value, args: &Value) -> Result<Option<TaxYear>> {
+    let year = match value(args, "year") {
+        Value::Null => return Ok(None),
+        Value::Int(n) => i32::try_from(n.clone())
+            .ok()
+            .filter(|y| (2009..=2100).contains(y))
+            .ok_or_else(|| {
+                AppError::new("validation", "year must be a plausible four-digit year")
+            })?,
+        _ => return Err(AppError::new("validation", "year must be an integer")),
+    };
+    if truthy(value(args, "start")) || truthy(value(args, "end")) {
+        return Err(AppError::new(
+            "validation",
+            "year cannot be combined with start or end",
+        ));
+    }
+    let book = kassiber_setup::book_settings::calendar(conn, profile)?;
+    let (start, next) = book
+        .bounds(year)
+        .map_err(|error| AppError::new("internal_error", error.to_string()))?;
+    let (first, last) = book.days(year);
+    Ok(Some(TaxYear {
+        year: i64::from(year),
+        start: start + kassiber_rates::time::UNIX,
+        end: next + kassiber_rates::time::UNIX - 1_000_000,
+        first_day: first.iso(),
+        last_day: last.iso(),
+    }))
+}
+
 fn all_wallets(conn: &Connection, profile: &Value) -> Result<Vec<Wallet>> {
     Ok(full_csv::listed(conn, &text(profile, "id"), None)?
         .into_iter()
@@ -1002,7 +1047,10 @@ pub fn model(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
-    let (start, end) = if truthy(value(args, "end")) {
+    let tax_year = tax_year(conn, profile, args)?;
+    let (start, end) = if let Some(t) = &tax_year {
+        (t.start, t.end)
+    } else if truthy(value(args, "end")) {
         period(args, "")?
     } else {
         period(args, &sources.now(conn)?)?
@@ -1055,21 +1103,32 @@ pub fn model(
     } else {
         Value::Null
     };
-    let label = format!("{} to {}", &stamp(start)?[..10], &stamp(end)?[..10]);
+    let mut timeframe = vec![("start", s(stamp(start)?)), ("end", s(stamp(end)?))];
+    match &tax_year {
+        // A tax year is shown by its own local days; its bounds stay the
+        // UTC instants the reads used.
+        Some(t) => timeframe.extend([
+            ("label", s(format!("{} to {}", t.first_day, t.last_day))),
+            ("tax_year", Value::Int(t.year.into())),
+            ("first_day", s(t.first_day.as_str())),
+            ("last_day", s(t.last_day.as_str())),
+        ]),
+        None => timeframe.push((
+            "label",
+            s(format!(
+                "{} to {}",
+                &stamp(start)?[..10],
+                &stamp(end)?[..10]
+            )),
+        )),
+    }
     Ok(dict([
         ("workspace", value(workspace, "label").clone()),
         ("profile", value(profile, "label").clone()),
         ("fiat_currency", value(profile, "fiat_currency").clone()),
         ("generated_at", s(generated_at.as_str())),
         ("title", s(title)),
-        (
-            "timeframe",
-            dict([
-                ("start", s(stamp(start)?)),
-                ("end", s(stamp(end)?)),
-                ("label", s(label)),
-            ]),
-        ),
+        ("timeframe", dict(timeframe)),
         (
             "wallets",
             Value::List(
@@ -1118,6 +1177,131 @@ pub fn model(
         ),
         ("snapshot", snapshot),
     ]))
+}
+
+#[cfg(test)]
+mod tax_year_tests {
+    use super::*;
+
+    struct Fixed;
+    impl kassiber_setup::Sources for Fixed {
+        fn uuid(&self, _: &Connection) -> Result<String> {
+            Ok("00000000-0000-0000-0000-000000000001".into())
+        }
+        fn now(&self, _: &Connection) -> Result<String> {
+            Ok("2026-01-02T03:04:05Z".into())
+        }
+    }
+
+    /// The test book with three disposals, a gain of 1, 10 and 100 each,
+    /// either side of 1 July and of New Year.
+    fn book() -> Connection {
+        let conn = crate::same_time_rate_book();
+        for (id, at, gain) in [
+            ("march", "2024-03-15T12:00:00Z", 1.0),
+            ("august", "2024-08-15T12:00:00Z", 10.0),
+            ("next_march", "2025-03-15T12:00:00Z", 100.0),
+        ] {
+            conn.execute("INSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,occurred_at,entry_type,asset,quantity,proceeds,cost_basis,gain_loss,created_at) VALUES(?1,'ws','p','x','w',?2,'disposal','BTC',-1000,?3,0,?3,'t')", kassiber_store::rusqlite::params![id, at, gain]).unwrap();
+        }
+        conn
+    }
+
+    fn summary(conn: &Connection, args: Value) -> Result<Value> {
+        let workspace = rows(conn, "SELECT * FROM workspaces WHERE id='ws'", [])?.remove(0);
+        let profile = rows(conn, "SELECT * FROM profiles WHERE id='p'", [])?.remove(0);
+        model(conn, &workspace, &profile, &args, &Fixed)
+    }
+
+    fn period(report: &Value) -> (String, String, f64) {
+        let timeframe = value(report, "timeframe");
+        let Value::Float(realized) = value(value(report, "metrics"), "realized_pnl") else {
+            panic!("realized_pnl is a float")
+        };
+        (text(timeframe, "start"), text(timeframe, "end"), *realized)
+    }
+
+    #[test]
+    fn a_tax_year_summary_covers_the_books_own_tax_year() {
+        let conn = book();
+        conn.execute(
+            "INSERT INTO settings(key,value) VALUES('tax.calendar.profile.p','{\"tax_year_start\":\"07-01\",\"timezone\":\"Australia/Sydney\"}')",
+            [],
+        )
+        .unwrap();
+        let report = summary(&conn, dict([("year", Value::Int(2024.into()))])).unwrap();
+        // Sydney's 1 July 2024 through 30 June 2025: the August and the
+        // following March disposals, not the March before.
+        assert_eq!(
+            period(&report),
+            (
+                "2024-06-30T14:00:00Z".into(),
+                "2025-06-30T13:59:59Z".into(),
+                110.0
+            )
+        );
+        let timeframe = value(&report, "timeframe");
+        assert_eq!(text(timeframe, "label"), "2024-07-01 to 2025-06-30");
+        assert_eq!(value(timeframe, "tax_year"), &Value::Int(2024.into()));
+        assert_eq!(text(timeframe, "first_day"), "2024-07-01");
+        assert_eq!(text(timeframe, "last_day"), "2025-06-30");
+    }
+
+    #[test]
+    fn a_calendar_year_book_keeps_the_utc_calendar_year() {
+        let conn = book();
+        let by_year = summary(&conn, dict([("year", Value::Int(2024.into()))])).unwrap();
+        assert_eq!(
+            period(&by_year),
+            (
+                "2024-01-01T00:00:00Z".into(),
+                "2024-12-31T23:59:59Z".into(),
+                11.0
+            )
+        );
+        // The same figures as the range the desktop used to send.
+        let by_range = summary(
+            &conn,
+            dict([
+                ("start", s("2024-01-01T00:00:00Z")),
+                ("end", s("2024-12-31T23:59:59Z")),
+            ]),
+        )
+        .unwrap();
+        assert_eq!(period(&by_range), period(&by_year));
+        assert_eq!(
+            value(&by_range, "timeframe"),
+            &dict([
+                ("start", s("2024-01-01T00:00:00Z")),
+                ("end", s("2024-12-31T23:59:59Z")),
+                ("label", s("2024-01-01 to 2024-12-31")),
+            ])
+        );
+        for key in ["metrics", "realized_pnl_periods", "flow_periods"] {
+            assert_eq!(value(&by_range, key), value(&by_year, key), "{key}");
+        }
+    }
+
+    #[test]
+    fn a_tax_year_excludes_a_range_and_must_be_plausible() {
+        let conn = book();
+        let error = summary(
+            &conn,
+            dict([
+                ("year", Value::Int(2024.into())),
+                ("start", s("2024-01-01T00:00:00Z")),
+            ]),
+        )
+        .unwrap_err();
+        assert_eq!(
+            (error.code.as_str(), error.message.as_str()),
+            ("validation", "year cannot be combined with start or end")
+        );
+        for bad in [Value::Int(1999.into()), s("2024"), Value::Bool(true)] {
+            let error = summary(&conn, dict([("year", bad)])).unwrap_err();
+            assert_eq!(error.code, "validation");
+        }
+    }
 }
 
 #[cfg(test)]

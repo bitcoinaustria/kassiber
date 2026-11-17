@@ -134,8 +134,7 @@ describe("Reports exports", () => {
     expect(await exportWith("Export Summary as PDF")).toEqual({
       kind: "ui.reports.export_summary_pdf",
       args: {
-        start: "2025-01-01T00:00:00Z",
-        end: "2025-12-31T23:59:59Z",
+        year: 2025,
         include_snapshot: true,
         wallets: ["w1", "w2"],
       },

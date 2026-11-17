@@ -443,8 +443,7 @@ function ReportsView({
     const args =
       format === "summary_pdf"
         ? {
-            start: `${exportYear}-01-01T00:00:00Z`,
-            end: `${exportYear}-12-31T23:59:59Z`,
+            year: exportYear,
             include_snapshot: summarySnapshot,
             ...(showWalletPicker ? { wallets: summaryWalletIds } : {}),
           }
