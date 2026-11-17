@@ -162,7 +162,7 @@
   {
     "id": "graph-public-lookup",
     "file": "crates/journals/src/transaction_graph.rs",
-    "find": "    if !allow_public_lookup {",
+    "find": "    if mode == LookupMode::Local {",
     "replace": "    if false {",
     "expect_failing": [
       "kassiber/black_box:test_local_graphs_match_wire_bytes"
