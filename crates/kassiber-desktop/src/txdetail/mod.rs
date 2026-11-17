@@ -612,6 +612,11 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         return;
     }
+    // Every save reply drains its queued entry, even after the last tab closed.
+    if tag == "txd.save" {
+        actions::on_saved(app, r);
+        return;
+    }
     if app.detail.open.is_none() {
         return;
     }
@@ -620,9 +625,15 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             let keep = tag == "txd.reload";
             let record = r.data.get("transaction").filter(|v| v.is_object()).cloned();
             let o = app.detail.open.as_mut().unwrap();
-            let fits = record
-                .as_ref()
-                .is_some_and(|rec| keep || matches_query(rec, &o.query));
+            // A reload re-reads the transaction shown when it was sent; after a tab switch the
+            // reply is for another transaction and must not replace this one.
+            let fits = record.as_ref().is_some_and(|rec| {
+                if keep {
+                    o.id() == Some(draft::s(rec, "id"))
+                } else {
+                    matches_query(rec, &o.query)
+                }
+            });
             if r.error.is_none() && fits {
                 // `shownEnvelope.workspaceId/profileId`: the book this reading came from.
                 let (w, p) = (&r.data["workspaceId"], &r.data["profileId"]);
@@ -675,7 +686,6 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         "txd.history" if r.error.is_none() => set(app, |o| o.history = Some(r.data.clone())),
         "txd.events" if r.error.is_none() => set(app, |o| o.events = Some(r.data.clone())),
         "txd.commercial" if r.error.is_none() => set(app, |o| o.commercial = Some(r.data.clone())),
-        "txd.save" => actions::on_saved(app, r),
         "txd.explain" => {
             if let Some((_, load)) = app.detail.open.as_mut().and_then(|o| o.explain.as_mut()) {
                 *load = match &r.error {

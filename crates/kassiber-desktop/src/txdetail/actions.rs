@@ -1079,6 +1079,46 @@ mod tests {
         assert!(app.detail.drafts.contains_key("a") && !app.detail.drafts.contains_key("b"));
         assert!(app.detail.saving_ids.is_empty());
     }
+
+    fn ok(data: Value) -> Reply {
+        Reply {
+            kind: "ui.transactions.resolve".into(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Saving A and closing the last tab: the reply still drains A's entry, so B's later save
+    /// reply finds B, not A.
+    #[test]
+    fn a_save_reply_drains_after_the_last_tab_closes() {
+        let mut app = crate::app::tests::quiet_app();
+        let draft = super::super::Open::new("a", super::super::Tab::Details, vec![]).draft;
+        app.detail.saving_ids.push_back(("a".into(), draft));
+        app.detail.open = None;
+        super::super::on_reply(&mut app, "txd.save", &ok(json!({})));
+        assert!(app.detail.saving_ids.is_empty());
+    }
+
+    /// A reload sent for A that lands after switching to B leaves B's record and edits alone.
+    #[test]
+    fn a_reload_reply_for_another_transaction_is_ignored() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut b = super::super::Open::new("b", super::super::Tab::Details, vec![]);
+        b.record = Some(json!({ "id": "b" }));
+        b.draft.note = "unsaved".into();
+        app.detail.open = Some(Box::new(b));
+        super::super::on_reply(
+            &mut app,
+            "txd.reload",
+            &ok(json!({ "transaction": { "id": "a" } })),
+        );
+        let o = app.detail.open.as_ref().unwrap();
+        assert_eq!(o.id(), Some("b"));
+        assert_eq!(o.draft.note, "unsaved");
+    }
 }
 
 /// "Explain" on a Tax calculation row: opens the dialog and reads the tax engine's calculation
