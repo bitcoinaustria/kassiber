@@ -206,6 +206,12 @@ thread_local! {
     static RUNNING: RefCell<HashMap<String, f64>> = RefCell::new(HashMap::new());
 }
 
+/// The book state starts over (lock, book switch): plans still running belong to requests that
+/// will not be answered here, so a later identical plan must not join them.
+pub fn forget_running() {
+    RUNNING.with(|r| r.borrow_mut().clear());
+}
+
 fn finished(key: &str) -> Option<Value> {
     FINISHED.with(|f| {
         f.borrow()
@@ -1502,5 +1508,20 @@ mod preview_tests {
         on_preview_reply(&mut app, Owner::Link, "plan", &reply, "failed");
         assert!(RUNNING.with(|r| !r.borrow().contains_key(&key)));
         assert!(preview_mut(&mut app, Owner::Link).queue.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod reset_tests {
+    use super::*;
+
+    /// A lock or book switch orphans a running plan: the same plan asked again later must not
+    /// join it (and wait forever).
+    #[test]
+    fn a_book_reset_forgets_running_plans() {
+        let mut app = crate::app::tests::quiet_app();
+        RUNNING.with(|r| r.borrow_mut().insert("[\"w\",\"p\",7,\"ops\"]".into(), 0.0));
+        app.reset_book_state();
+        assert!(RUNNING.with(|r| r.borrow().is_empty()));
     }
 }

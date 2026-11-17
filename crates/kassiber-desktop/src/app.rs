@@ -1291,7 +1291,7 @@ impl App {
         }
     }
 
-    fn reset_book_state(&mut self) {
+    pub(crate) fn reset_book_state(&mut self) {
         let ids: Vec<String> = self
             .pending
             .iter()
@@ -1325,6 +1325,10 @@ impl App {
         self.wallets = Default::default();
         self.review = Default::default();
         self.custody = Default::default();
+        // Registries outside the app state go with it: plans still running and revealed wallet
+        // material waiting for the clipboard.
+        crate::custody::unlink::common::forget_running();
+        crate::wallets::detail::forget_pending_copy();
         self.provenance = Default::default();
         let diag = std::mem::take(&mut self.reports.diag);
         self.reports = Default::default();

@@ -1108,7 +1108,19 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             sof.busy.remove("attach");
             let ty = sof.attaching.pop_front().unwrap_or_default();
             invalidate(app);
-            reviewed_toast(app, true, &ty);
+            match &r.error {
+                // The review stands; the evidence did not attach (e.g. deleted meanwhile).
+                Some(e) => app.toast(
+                    ToastTone::Warning,
+                    &t("sourceFunds:toast.evidenceAttachFailed"),
+                    Some(tr(
+                        "sourceFunds:toast.evidenceAttachFailedBody",
+                        &[("error", e)],
+                    )),
+                    Some("sof"),
+                ),
+                None => reviewed_toast(app, true, &ty),
+            }
         }
         "create_link" => {
             sof.busy.remove("create_link");

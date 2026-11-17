@@ -1003,6 +1003,12 @@ thread_local! {
     static PENDING_COPY: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
 }
 
+/// Drops revealed material still waiting for the clipboard (the book state starts over: lock,
+/// book switch).
+pub fn forget_pending_copy() {
+    PENDING_COPY.with(|p| p.borrow_mut().take());
+}
+
 /// Hands revealed material to the clipboard once (called from `poll`, which has a `Tx`).
 pub fn take_pending_copy(app: &App, tx: &mut rune::Tx) {
     if let Some(m) = PENDING_COPY.with(|p| p.borrow_mut().take()) {

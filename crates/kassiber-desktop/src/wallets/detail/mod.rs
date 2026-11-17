@@ -941,6 +941,11 @@ pub fn notices_enc(s: &str) -> String {
         .collect()
 }
 
+/// Drops revealed wallet material still waiting for the clipboard (lock, book switch).
+pub fn forget_pending_copy() {
+    actions::forget_pending_copy();
+}
+
 #[cfg(test)]
 mod transient_tests {
     use super::*;

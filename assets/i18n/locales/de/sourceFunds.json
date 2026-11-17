@@ -383,6 +383,8 @@
     "linkRejected": "Verknüpfung abgelehnt",
     "linkReviewedBody": "{{type}} geprüft.",
     "linkRejectedBody": "{{type}} abgelehnt.",
+    "evidenceAttachFailed": "Verknüpfung angenommen, Nachweis nicht angehängt",
+    "evidenceAttachFailedBody": "Die Verknüpfung ist angenommen, der gewählte Nachweis konnte aber nicht angehängt werden: {{error}}",
     "manualLinkAdded": "Manuelle Verknüpfung hinzugefügt",
     "manualLinkBody": "Der geprüfte Fluss wurde aktualisiert.",
     "gapMarked": "Lücke als geprüft markiert",
