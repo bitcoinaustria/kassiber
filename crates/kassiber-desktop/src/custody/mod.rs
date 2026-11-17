@@ -124,9 +124,12 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         app.custody.scope = scope;
         if !first {
             let processing = app.custody.processing;
+            let sugg = std::mem::take(&mut app.custody.sugg);
             app.custody = Ui {
                 scope: app.custody.scope.clone(),
                 processing,
+                // Its requests still out are dropped when they answer, not taken as the new book's.
+                sugg: suggestions::restart(sugg),
                 ..Ui::default()
             };
             changed = true;

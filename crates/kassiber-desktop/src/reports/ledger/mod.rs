@@ -94,7 +94,7 @@ fn invalidate_on_change(app: &mut App) -> bool {
         drop = true;
         // Per-book view state resets with the book, as the route remounts in the web.
         ui.journals = JournalsUi::default();
-        ui.exit = ExitUi::default();
+        ui.exit.switch_book();
     }
     if book.is_some() {
         ui.book = book;

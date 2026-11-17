@@ -141,7 +141,9 @@ pub struct Ui {
     pub reports: HashMap<i32, Load<Value>>,
     /// Years whose cached read is stale and must be fetched again (kept on screen meanwhile).
     pub stale: Vec<i32>,
-    pub queue: VecDeque<i32>,
+    /// The years of the reads in flight, in send order. None: asked before a book switch,
+    /// dropped when it answers.
+    pub queue: VecDeque<Option<i32>>,
     pub wallets: Option<Vec<WalletChoice>>,
     pub wallets_requested: bool,
     pub cases: Vec<(String, String)>,
@@ -232,7 +234,7 @@ fn send_report(app: &mut App, key: i32) {
     } else {
         json!({"year": key})
     };
-    app.reports.report.queue.push_back(key);
+    app.reports.report.queue.push_back(Some(key));
     app.send("ui.reports.capital_gains", args, "reports.report.cg");
 }
 
@@ -257,6 +259,7 @@ fn step(app: &mut App) -> bool {
             visit: ui.visit,
             export_visit: ui.export_visit,
             asked: ui.asked,
+            queue: ui.queue.iter().map(|_| None).collect(),
             ..Ui::default()
         };
         changed = true;
@@ -364,7 +367,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
         "reports.report.cg" => {
             let ui = &mut app.reports.report;
-            let Some(key) = ui.queue.pop_front() else {
+            let Some(Some(key)) = ui.queue.pop_front() else {
                 return;
             };
             let next = match (&r.error, r.data.is_object()) {
@@ -1148,7 +1151,7 @@ mod transient_tests {
             .report
             .reports
             .insert(2025, Load::Ready(json!({ "year": 2025 })));
-        app.reports.report.queue.push_back(2025);
+        app.reports.report.queue.push_back(Some(2025));
         let failed = Reply {
             kind: "ui.reports.capital_gains".into(),
             data: Value::Null,
@@ -1161,6 +1164,47 @@ mod transient_tests {
             app.reports.report.reports.get(&2025),
             Some(Load::Failed(_))
         ));
+    }
+
+    /// Another book opens (outside a session start) while the old book's year is being read,
+    /// and the page reads the same year of the new one: the old figures never show as the new
+    /// book's, and the new read lands.
+    #[test]
+    fn a_book_switch_drops_the_old_books_report() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route("/reports".into());
+        let reply = |data: Value| Reply {
+            kind: "ui.reports.capital_gains".into(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        app.reads.insert(
+            "ui.profiles.snapshot".into(),
+            reply(json!({ "activeProfileId": "b" })),
+        );
+        app.reports.report.book = Some("a".into());
+        app.reports.report.queue.push_back(Some(0));
+        step(&mut app);
+        on_reply(
+            &mut app,
+            "reports.report.cg",
+            &reply(json!({ "book": "a" })),
+        );
+        assert!(matches!(
+            app.reports.report.reports.get(&0),
+            Some(Load::Loading)
+        ));
+        on_reply(
+            &mut app,
+            "reports.report.cg",
+            &reply(json!({ "book": "b" })),
+        );
+        match app.reports.report.reports.get(&0) {
+            Some(Load::Ready(v)) => assert_eq!(v["book"], "b"),
+            _ => panic!("the new book's report lands"),
+        }
     }
 
     /// Profitability run for A, then for B before A answers: A's numbers never show as B's,

@@ -74,11 +74,12 @@ pub struct TxUi {
     pub loading_more: bool,
     /// The args (JSON) of the rows on screen; a change starts a fresh load.
     pub list_key: String,
-    /// In-flight list requests in send order: (args key, is a next-page load).
-    pub queue: VecDeque<(String, bool)>,
+    /// In-flight list requests in send order: (args key, is a next-page load). None: asked
+    /// before a book switch, dropped when it answers.
+    pub queue: VecDeque<(Option<String>, bool)>,
     pub dash: Option<Dash>,
     pub dash_key: String,
-    pub dash_queue: VecDeque<String>,
+    pub dash_queue: VecDeque<Option<String>>,
     pub dash_failed: bool,
     pub candidates: Candidates,
     /// transaction id → loan role.
@@ -522,11 +523,20 @@ fn step(app: &mut App) -> bool {
         .map(str::to_owned);
     if book.is_some() && app.txs.book.is_some() && book != app.txs.book {
         let sort = app.txs.filters.sort;
+        let old = std::mem::take(&mut app.txs);
         app.txs = TxUi {
             filters: Filters {
                 sort,
                 ..Filters::default()
             },
+            // Reads still out keep their place, so their answers are dropped rather than taken
+            // as the new book's (the args do not name the book).
+            queue: old
+                .queue
+                .into_iter()
+                .map(|(_, more)| (None, more))
+                .collect(),
+            dash_queue: old.dash_queue.iter().map(|_| None).collect(),
             ..TxUi::default()
         };
         changed = true;
@@ -569,7 +579,7 @@ fn step(app: &mut App) -> bool {
     let dash = dash_args(&app.txs).to_string();
     if dash != app.txs.dash_key {
         app.txs.dash_key = dash.clone();
-        app.txs.dash_queue.push_back(dash.clone());
+        app.txs.dash_queue.push_back(Some(dash.clone()));
         app.send(
             "ui.transactions.dashboard",
             serde_json::from_str(&dash).unwrap_or(Value::Null),
@@ -586,7 +596,7 @@ fn step(app: &mut App) -> bool {
             list_args(&ui.filters, ui.resolved(), ui.years(), fiat, &ui.candidates).to_string();
         if args != app.txs.list_key {
             app.txs.list_key = args.clone();
-            app.txs.queue.push_back((args.clone(), false));
+            app.txs.queue.push_back((Some(args.clone()), false));
             app.txs.refreshing = !app.txs.rows.is_empty();
             app.txs.loading_more = false;
             if app.txs.rows.is_empty() {
@@ -616,7 +626,7 @@ pub fn load_more(app: &mut App) {
     args["cursor"] = json!(cursor);
     let key = ui.list_key.clone();
     app.txs.loading_more = true;
-    app.txs.queue.push_back((key, true));
+    app.txs.queue.push_back((Some(key), true));
     app.send("ui.transactions.list", args, "txs.list");
 }
 
@@ -693,8 +703,8 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
 }
 
 fn on_dash(app: &mut App, r: &Reply) {
-    let key = app.txs.dash_queue.pop_front().unwrap_or_default();
-    if key != app.txs.dash_key {
+    let key = app.txs.dash_queue.pop_front().flatten();
+    if key.as_ref() != Some(&app.txs.dash_key) {
         return;
     }
     if r.error.is_some() {
@@ -740,7 +750,7 @@ fn on_dash(app: &mut App, r: &Reply) {
 
 fn on_list(app: &mut App, r: &Reply) {
     let (key, more) = app.txs.queue.pop_front().unwrap_or_default();
-    if key != app.txs.list_key {
+    if key.as_ref() != Some(&app.txs.list_key) {
         return; // a superseded filter's answer
     }
     if more {
@@ -892,3 +902,57 @@ pub fn open_export_primed(app: &mut App) {
 
 /// The export dialog's headless scenes (registered in main.rs's scene list).
 pub const EXPORT_SCENES: &[crate::app::Scene] = export::SCENES;
+
+#[cfg(test)]
+mod switch_tests {
+    use super::*;
+    use crate::app::Route;
+
+    fn reply(data: Value) -> Reply {
+        Reply {
+            kind: "ui.transactions.list".into(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Another book opens (outside a session start) while the old book's reads are out, and
+    /// the screen asks the same of the new one: the old answers are dropped, the new ones land.
+    #[test]
+    fn a_book_switch_drops_the_old_books_reads() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = Route("/transactions".into());
+        app.reads.insert(
+            "ui.profiles.snapshot".into(),
+            reply(json!({ "activeProfileId": "b" })),
+        );
+        app.txs.book = Some("a".into());
+        app.txs.loans_requested = true;
+        let dash = dash_args(&app.txs).to_string();
+        app.txs.dash_queue.push_back(Some(dash));
+        app.txs.queue.push_back((Some("{}".into()), false));
+        step(&mut app);
+        assert_eq!(app.txs.book.as_deref(), Some("b"));
+        on_reply(&mut app, "txs.dash", &reply(json!({ "summary": "a" })));
+        assert!(app.txs.dash.is_none(), "the old book's dashboard");
+        on_reply(&mut app, "txs.dash", &reply(json!({ "summary": "b" })));
+        assert_eq!(app.txs.dash.as_ref().unwrap().summary, json!("b"));
+        // The list goes out once the period is resolved.
+        step(&mut app);
+        on_reply(
+            &mut app,
+            "txs.list",
+            &reply(json!({ "txs": [{ "id": "a1" }] })),
+        );
+        assert!(app.txs.rows.is_empty(), "the old book's rows");
+        on_reply(
+            &mut app,
+            "txs.list",
+            &reply(json!({ "txs": [{ "id": "b1" }] })),
+        );
+        assert_eq!(app.txs.rows.len(), 1);
+        assert_eq!(app.txs.rows[0].id, "b1");
+    }
+}

@@ -86,7 +86,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     if surface_open(app, Surface::Changes) {
         changed |= changes::poll(app);
     } else if !app.reports.diag.chg.args_key.is_empty() {
-        app.reports.diag.chg = Default::default();
+        app.reports.diag.chg.close();
     }
     if path != "/egress" {
         // Leaving unmounts the monitor; coming back refetches at once.

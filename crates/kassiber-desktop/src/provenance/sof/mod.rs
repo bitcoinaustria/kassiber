@@ -397,6 +397,9 @@ pub struct Sof {
     /// Mutations in flight, by tag.
     pub busy: HashSet<&'static str>,
     pub pending_save: Option<Written>,
+    /// For each source being created, in send order, the link it gets once created: the form
+    /// as it was submitted, not as it reads when the source comes back.
+    pub source_links: std::collections::VecDeque<Value>,
 }
 
 // ---- Scope and requests -----------------------------------------------------------------------
@@ -1431,40 +1434,7 @@ pub fn create_source_link(app: &mut App) {
         "amount": s.amount.text,
         "description": s.description.text,
     });
-    if s.attachment_id != NO_ATTACHMENT {
-        a["attachment_id"] = json!(s.attachment_id);
-    }
-    if send(
-        app,
-        "ui.source_funds.sources.create",
-        a,
-        "provenance.sof.create_source",
-    ) {
-        app.provenance.sof.busy.insert("create_source");
-    }
-}
-
-/// Step 2: link the new source to the transaction it funds.
-fn on_source_created(app: &mut App, r: &Reply) {
-    app.provenance.sof.busy.remove("create_source");
-    if let Some(e) = &r.error {
-        app.toast(
-            ToastTone::Error,
-            &t("sourceFunds:header.title"),
-            Some(e.clone()),
-            Some("sof"),
-        );
-        return;
-    }
-    let Some(id) = r.data["id"].as_str().map(str::to_owned) else {
-        return;
-    };
-    let Some(c) = app.provenance.sof.case.as_ref() else {
-        return;
-    };
-    let s = &c.source;
-    let mut a = json!({
-        "from_source": id,
+    let mut link = json!({
         "to_transaction": if s.to_transaction.is_empty() { c.selected_target() } else { s.to_transaction.clone() },
         "link_type": s.link_type,
         "state": "reviewed",
@@ -1476,7 +1446,36 @@ fn on_source_created(app: &mut App, r: &Reply) {
     });
     if s.attachment_id != NO_ATTACHMENT {
         a["attachment_id"] = json!(s.attachment_id);
+        link["attachment_id"] = json!(s.attachment_id);
     }
+    if send(
+        app,
+        "ui.source_funds.sources.create",
+        a,
+        "provenance.sof.create_source",
+    ) {
+        app.provenance.sof.source_links.push_back(link);
+        app.provenance.sof.busy.insert("create_source");
+    }
+}
+
+/// Step 2: link the new source to the transaction it funds.
+fn on_source_created(app: &mut App, r: &Reply) {
+    app.provenance.sof.busy.remove("create_source");
+    let link = app.provenance.sof.source_links.pop_front();
+    if let Some(e) = &r.error {
+        app.toast(
+            ToastTone::Error,
+            &t("sourceFunds:header.title"),
+            Some(e.clone()),
+            Some("sof"),
+        );
+        return;
+    }
+    let (Some(id), Some(mut a)) = (r.data["id"].as_str().map(str::to_owned), link) else {
+        return;
+    };
+    a["from_source"] = json!(id);
     if send(
         app,
         "ui.source_funds.links.create",
@@ -2006,5 +2005,44 @@ pub fn prime(app: &mut App) {
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+#[cfg(test)]
+mod source_link_tests {
+    use super::*;
+
+    /// "Applies to" changed while the source is being created: its link still goes to the
+    /// transaction that was submitted.
+    #[test]
+    fn a_source_link_uses_the_submitted_form() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut case = Case::new(&Draft::default(), "tx-a");
+        case.source.to_transaction = "tx-a".into();
+        case.source.amount = TextEdit::new("0.5");
+        app.provenance.sof.case = Some(case);
+        create_source_link(&mut app);
+        let c = app.provenance.sof.case.as_mut().unwrap();
+        c.source.to_transaction = "tx-b".into();
+        c.source.amount = TextEdit::new("0.9");
+        let link = app
+            .provenance
+            .sof
+            .source_links
+            .front()
+            .expect("snapshot")
+            .clone();
+        assert_eq!(link["to_transaction"], "tx-a");
+        assert_eq!(link["allocation_amount"], "0.5");
+        let reply = Reply {
+            kind: "ui.source_funds.sources.create".into(),
+            data: json!({ "id": "src-1" }),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_source_created(&mut app, &reply);
+        assert!(app.provenance.sof.source_links.is_empty());
+        assert!(app.provenance.sof.busy.contains("create_link"));
     }
 }

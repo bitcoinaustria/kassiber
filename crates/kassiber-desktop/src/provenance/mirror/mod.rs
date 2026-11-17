@@ -269,11 +269,15 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         let s = st(app);
         if !same_book {
             // Another book: nothing of the old one stays (the web remounts on a new key), and
-            // its reads still in flight are dropped when they answer.
+            // its reads still in flight are dropped when they answer. A question still out
+            // keeps its book, so its answer is dropped too rather than taken for a new one's.
             let (epoch, inflight) = (s.epoch + 1, std::mem::take(&mut s.inflight));
+            let (asking, ask_scope) = (s.asking, s.ask_scope.take());
             *s = State {
                 epoch,
                 inflight,
+                asking,
+                ask_scope,
                 ..State::default()
             };
         }
@@ -393,6 +397,44 @@ pub fn prime(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An assistant question is out when another book opens: it stays the old book's, so a new
+    /// question waits for it and its answer is never handed off as the new book's.
+    #[test]
+    fn a_question_from_the_old_book_stays_the_old_books() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route(ROUTE.into());
+        app.prefs.ai_features = true;
+        let reply = |data: Value| Reply {
+            kind: "ui.profiles.snapshot".into(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        let book = |app: &mut App, p: &str| {
+            let snapshot = reply(json!({ "activeWorkspaceId": "w", "activeProfileId": p }));
+            app.reads.insert("ui.profiles.snapshot".into(), snapshot);
+            scope_key(app)
+        };
+        let a = book(&mut app, "a");
+        let s = st(&mut app);
+        s.mounted_for = Some(a.clone());
+        s.book = Some(a.clone());
+        s.asking = true;
+        s.ask_scope = Some(a.clone());
+        book(&mut app, "b");
+        poll(&mut app, &mut Tx::default());
+        ask(&mut app, Some(&json!({ "query": {} })));
+        assert_eq!(app.provenance.mirror.ask_scope.as_deref(), Some(a.as_str()));
+        on_reply(
+            &mut app,
+            "provenance.mirror.ai_context",
+            &reply(json!({ "prompt": "a" })),
+        );
+        assert!(!app.provenance.mirror.asking);
+        assert!(app.provenance.mirror.ask_scope.is_none());
+    }
 
     #[test]
     fn headline_follows_personal_relevance_then_population() {

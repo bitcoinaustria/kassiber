@@ -42,10 +42,22 @@ pub struct State {
     pub confirm: Option<(Value, Option<Value>)>,
     pub reverting: bool,
     was_processing: bool,
-    pending: Vec<(String, bool)>,
+    /// History reads in flight, in send order: (args, is a next page). None: asked before the
+    /// surface closed, dropped when it answers.
+    pending: Vec<(Option<String>, bool)>,
 }
 
 impl State {
+    /// The surface closed: its state goes, but the reads still out keep their place so a
+    /// reopened surface does not take their answers for its own.
+    pub fn close(&mut self) {
+        let pending = self.pending.iter().map(|&(_, more)| (None, more)).collect();
+        *self = State {
+            pending,
+            ..State::default()
+        };
+    }
+
     pub fn source(&self) -> Source {
         self.source.unwrap_or(Source::All)
     }
@@ -78,7 +90,7 @@ pub fn poll(app: &mut App) -> bool {
     s.error = false;
     s.events.clear();
     s.next_cursor = None;
-    s.pending.push((k.clone(), false));
+    s.pending.push((Some(k.clone()), false));
     app.send(
         "ui.activity.history",
         serde_json::from_str(&k).unwrap_or(Value::Null),
@@ -92,7 +104,7 @@ fn refetch(app: &mut App) {
     let k = args(s).to_string();
     s.args_key = k.clone();
     s.fetching = true;
-    s.pending.push((k.clone(), false));
+    s.pending.push((Some(k.clone()), false));
     app.send(
         "ui.activity.history",
         serde_json::from_str(&k).unwrap_or(Value::Null),
@@ -116,7 +128,7 @@ fn load_more(app: &mut App) {
     a["cursor"] = json!(cursor);
     s.fetching_next = true;
     s.fetching = true;
-    s.pending.push((s.args_key.clone(), true));
+    s.pending.push((Some(s.args_key.clone()), true));
     app.send("ui.activity.history", a, "reports.diag.chg.history");
 }
 
@@ -125,11 +137,11 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         "reports.diag.chg.history" => {
             let s = &mut app.reports.diag.chg;
             let (k, more) = if s.pending.is_empty() {
-                (String::new(), false)
+                (None, false)
             } else {
                 s.pending.remove(0)
             };
-            if k != s.args_key {
+            if k.as_ref() != Some(&s.args_key) {
                 s.fetching = !s.pending.is_empty();
                 return;
             }
@@ -846,4 +858,40 @@ pub fn sample_events() -> Vec<Value> {
             {"id": "f-4", "field": "kind", "label": "Kind", "family": "tax", "before_label": "receive", "after_label": "gift", "diff": {}, "redacted": true}
         ]}),
     ]
+}
+
+#[cfg(test)]
+mod close_tests {
+    use super::*;
+
+    fn reply(id: &str) -> Reply {
+        Reply {
+            kind: "ui.activity.history".into(),
+            data: json!({ "events": [{ "id": id }] }),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Closed while a next page was loading and opened again: that page is not taken for the
+    /// reopened list's first page, which still lands.
+    #[test]
+    fn a_page_asked_before_closing_is_dropped() {
+        let mut app = crate::app::tests::quiet_app();
+        poll(&mut app);
+        on_reply(&mut app, "reports.diag.chg.history", &reply("first"));
+        let s = &mut app.reports.diag.chg;
+        s.next_cursor = Some("c".into());
+        load_more(&mut app);
+        app.reports.diag.chg.close();
+        poll(&mut app);
+        on_reply(&mut app, "reports.diag.chg.history", &reply("old page"));
+        assert!(app.reports.diag.chg.events.is_empty(), "the old page");
+        assert!(app.reports.diag.chg.loading);
+        on_reply(&mut app, "reports.diag.chg.history", &reply("new"));
+        let s = &app.reports.diag.chg;
+        assert_eq!(s.events, [json!({ "id": "new" })]);
+        assert!(!s.loading && !s.fetching);
+    }
 }

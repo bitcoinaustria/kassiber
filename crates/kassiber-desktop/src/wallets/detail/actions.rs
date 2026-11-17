@@ -294,6 +294,7 @@ fn start_sync(app: &mut App, c: &Conn, force_full: bool) {
     };
     if app.send("ui.wallets.sync", args, tag).is_some() {
         app.wallets.detail.syncing = true;
+        app.wallets.detail.sync_wallet = Some(c.id.clone());
     }
 }
 
@@ -689,14 +690,26 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
         "wallets.detail.sync" | "wallets.detail.sync_full" => {
             app.wallets.detail.syncing = false;
-            let label = conn(app).map(|c| c.label).unwrap_or_default();
+            // Its notice names the wallet it was for; its error shows only on that wallet's page.
+            let sent_for = app.wallets.detail.sync_wallet.take();
+            let here = sent_for
+                .as_ref()
+                .is_none_or(|w| *w == app.wallets.detail.wallet);
+            let label = match &sent_for {
+                Some(w) => crate::wallets::conn::find(app, w),
+                None => conn(app),
+            }
+            .map(|c| c.label)
+            .unwrap_or_default();
             let force = tag == "wallets.detail.sync_full";
             match &r.error {
                 Some(e) => {
-                    app.wallets.detail.sync_error = Some(e.clone());
-                    app.wallets.detail.cert_problem =
-                        problem_from_code(r.error_detail.get("code").and_then(Value::as_str))
-                            .or_else(|| problem_from_text(Some(e)));
+                    if here {
+                        app.wallets.detail.sync_error = Some(e.clone());
+                        app.wallets.detail.cert_problem =
+                            problem_from_code(r.error_detail.get("code").and_then(Value::as_str))
+                                .or_else(|| problem_from_text(Some(e)));
+                    }
                     app.toast(
                         ToastTone::Error,
                         &tr(
@@ -724,19 +737,21 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                         // A journal step that did not finish gets its own notice (`recordJournalStep`).
                         crate::shell::maint::record_journal_step(app, &r.data["journals"]);
                     } else {
-                        app.wallets.detail.sync_error = Some(msg);
-                        // The wallet's own result: its code, else the daemon's fixed text.
-                        let res = r
-                            .data
-                            .get("results")
-                            .and_then(Value::as_array)
-                            .and_then(|a| {
-                                a.iter().find(|x| s(x, "wallet") == Some(label.as_str()))
+                        if here {
+                            app.wallets.detail.sync_error = Some(msg);
+                            // The wallet's own result: its code, else the daemon's fixed text.
+                            let res =
+                                r.data
+                                    .get("results")
+                                    .and_then(Value::as_array)
+                                    .and_then(|a| {
+                                        a.iter().find(|x| s(x, "wallet") == Some(label.as_str()))
+                                    });
+                            app.wallets.detail.cert_problem = res.and_then(|x| {
+                                problem_from_code(s(x, "code"))
+                                    .or_else(|| problem_from_text(s(x, "message")))
                             });
-                        app.wallets.detail.cert_problem = res.and_then(|x| {
-                            problem_from_code(s(x, "code"))
-                                .or_else(|| problem_from_text(s(x, "message")))
-                        });
+                        }
                         app.toast(
                             ToastTone::Error,
                             &tr(
@@ -755,10 +770,10 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             // The rescan was asked for one wallet: after navigating to another, the probe's
             // result starts nothing (an exact action, never carried to another wallet).
             let sent_for = app.wallets.detail.core_test_wallet.take();
+            app.wallets.detail.core_testing = false;
             if sent_for.as_deref() != Some(app.wallets.detail.wallet.as_str()) {
                 return;
             }
-            app.wallets.detail.core_testing = false;
             let Some(c) = conn(app) else { return };
             let birthday = super::wallet_detail(app, &c)
                 .and_then(|w| s(w, "birthday"))
@@ -1043,6 +1058,47 @@ mod tests {
         on_reply(&mut app, "wallets.detail.core_test", &reply);
         assert!(!app.wallets.detail.syncing && app.wallets.detail.sync_error.is_none());
         assert!(app.wallets.detail.core_test_wallet.is_none());
+    }
+
+    /// Wallet A's sync answers after the page moved to wallet B: B's page stays busy until it
+    /// does (no second sync starts meanwhile), and the failure names A without showing as B's.
+    #[test]
+    fn a_sync_for_another_wallet_answers_as_that_wallets() {
+        let mut app = crate::app::tests::quiet_app();
+        let snapshot = Reply {
+            kind: "ui.overview.snapshot".into(),
+            data: serde_json::json!({ "connections": [
+                { "id": "a", "label": "Alpha" },
+                { "id": "b", "label": "Beta" },
+            ] }),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        app.reads.insert("ui.overview.snapshot".into(), snapshot);
+        app.wallets.detail.wallet = "a".into();
+        app.wallets.detail.syncing = true;
+        app.wallets.detail.sync_wallet = Some("a".into());
+        let b = Conn {
+            id: "b".into(),
+            label: "Beta".into(),
+            ..Default::default()
+        };
+        super::super::load(&mut app, &b);
+        assert!(super::super::sync_running(&app), "A's sync still runs");
+        let reply = Reply {
+            kind: "ui.wallets.sync".into(),
+            data: Value::Null,
+            error: Some("backend unreachable".into()),
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "wallets.detail.sync", &reply);
+        let d = &app.wallets.detail;
+        assert!(!d.syncing && d.sync_wallet.is_none());
+        assert!(d.sync_error.is_none(), "not B's error");
+        let toast = app.toasts.last().expect("a notice");
+        assert_eq!(toast.body.as_deref(), Some("Alpha"));
     }
 
     /// A rollback plan for import A that arrives after the dialog moved to import B is not shown

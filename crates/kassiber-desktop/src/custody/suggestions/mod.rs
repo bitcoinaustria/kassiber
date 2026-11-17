@@ -79,6 +79,8 @@ pub struct Undo {
 }
 
 struct Pending {
+    /// The book (`State::epoch`) it was sent in.
+    epoch: u64,
     pair: bool,
     keys: Vec<String>,
     label: String,
@@ -136,9 +138,12 @@ pub struct State {
     pub selected: HashSet<String>,
     run: u64,
     was_refreshing: bool,
-    /// Suggest reads in flight: the run a post-recalculation read belongs to.
-    sq: VecDeque<Option<u64>>,
+    /// Suggest reads in flight: the book each was sent in, and the run a post-recalculation
+    /// read belongs to.
+    sq: VecDeque<(u64, Option<u64>)>,
     pending: VecDeque<Pending>,
+    /// Bumped by a book switch (`restart`): answers to what an earlier book asked are dropped.
+    epoch: u64,
     undo_run: Option<UndoRun>,
     many: Option<DismissMany>,
     pub bulk: Option<Bulk>,
@@ -165,6 +170,19 @@ impl State {
 
 fn st(app: &mut App) -> &mut State {
     &mut app.custody.sugg
+}
+
+/// Another book: the card starts over. Requests still out keep their entries, so each answer
+/// pops its own and is dropped (the epoch moved on) instead of answering the new book's.
+pub fn restart(old: State) -> State {
+    State {
+        sq: old.sq,
+        pending: old.pending,
+        epoch: old.epoch + 1,
+        token: old.token,
+        toks: old.toks,
+        ..State::default()
+    }
 }
 
 /// `refreshing`: the journals are recalculating, or about to.
@@ -200,7 +218,8 @@ fn load(app: &mut App, run: Option<u64>) {
         if s.live.is_none() {
             s.loading = true;
         }
-        s.sq.push_back(run);
+        let epoch = s.epoch;
+        s.sq.push_back((epoch, run));
     }
 }
 
@@ -266,10 +285,12 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     changed
 }
 
-fn send_tok(app: &mut App, kind: &str, args: Value, tag: &'static str, token: u64) {
-    if app.send(kind, args, tag).is_some() {
+fn send_tok(app: &mut App, kind: &str, args: Value, tag: &'static str, token: u64) -> bool {
+    let sent = app.send(kind, args, tag).is_some();
+    if sent {
         st(app).toks.entry(tag).or_default().push_back(token);
     }
+    sent
 }
 
 fn take_tok(app: &mut App, tag: &'static str) -> u64 {
@@ -277,7 +298,7 @@ fn take_tok(app: &mut App, tag: &'static str) -> u64 {
         .toks
         .get_mut(tag)
         .and_then(VecDeque::pop_front)
-        .unwrap_or(0)
+        .unwrap_or(u64::MAX)
 }
 
 fn failed_text(r: &Reply) -> String {
@@ -290,7 +311,12 @@ fn failed_text(r: &Reply) -> String {
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
         "custody.sugg.suggest" => {
-            let run = st(app).sq.pop_front().flatten();
+            let Some((epoch, run)) = st(app).sq.pop_front() else {
+                return;
+            };
+            if epoch != app.custody.sugg.epoch {
+                return; // asked in another book
+            }
             let s = st(app);
             s.loading = false;
             match &r.error {
@@ -312,7 +338,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         "custody.sugg.pair" | "custody.sugg.dismiss" => on_decision(app, r),
         "custody.sugg.dismiss_many" => on_dismiss_many(app, r),
-        "custody.sugg.unpair" | "custody.sugg.undismiss" => on_undo_step(app, r),
+        "custody.sugg.unpair" | "custody.sugg.undismiss" => on_undo_step(app, tag, r),
         "custody.sugg.bulk.cases" | "custody.sugg.bulk.plan" | "custody.sugg.bulk.apply" => {
             on_bulk(app, tag, r)
         }
@@ -437,7 +463,13 @@ pub fn decide(app: &mut App, c: &Value, pair: bool) {
     if app.send(kind, args, tag).is_some() {
         let s = st(app);
         s.saving += 1;
-        s.pending.push_back(Pending { pair, keys, label });
+        let epoch = s.epoch;
+        s.pending.push_back(Pending {
+            epoch,
+            pair,
+            keys,
+            label,
+        });
     } else {
         hide(app, &keys, false);
     }
@@ -447,6 +479,9 @@ fn on_decision(app: &mut App, r: &Reply) {
     let Some(p) = st(app).pending.pop_front() else {
         return;
     };
+    if p.epoch != app.custody.sugg.epoch {
+        return; // decided in another book
+    }
     let s = st(app);
     s.saving = s.saving.saturating_sub(1);
     match &r.error {
@@ -513,10 +548,14 @@ fn dismiss_next(app: &mut App) {
     match next {
         Some(c) => {
             let args = json!({ "tx_out": s(&c, "out_id"), "tx_in": s(&c, "in_id"), "reason": super::model::DISMISS_REASON, "expected_scope": app.expected_scope() });
-            if app
-                .send("ui.transfers.dismiss", args, "custody.sugg.dismiss_many")
-                .is_none()
-            {
+            let epoch = app.custody.sugg.epoch;
+            if !send_tok(
+                app,
+                "ui.transfers.dismiss",
+                args,
+                "custody.sugg.dismiss_many",
+                epoch,
+            ) {
                 finish_many(app, Some(t("review:inbox.transfers.failed")));
             }
         }
@@ -525,6 +564,9 @@ fn dismiss_next(app: &mut App) {
 }
 
 fn on_dismiss_many(app: &mut App, r: &Reply) {
+    if take_tok(app, "custody.sugg.dismiss_many") != app.custody.sugg.epoch {
+        return; // a run in another book
+    }
     if r.error.is_some() {
         return finish_many(app, Some(failed_text(r)));
     }
@@ -585,26 +627,39 @@ fn undo_next(app: &mut App) {
         run.current.decisions.get(run.undone.len()).cloned()
     };
     let scope = app.expected_scope();
+    let epoch = app.custody.sugg.epoch;
     match next {
         Some(Decision::Pair { id, .. }) => {
-            app.send(
+            send_tok(
+                app,
                 "ui.transfers.unpair",
                 json!({ "pair_id": id, "expected_scope": scope }),
                 "custody.sugg.unpair",
+                epoch,
             );
         }
         Some(Decision::Dismiss { id, .. }) => {
-            app.send(
+            send_tok(
+                app,
                 "ui.transfers.dismissals.delete",
                 json!({ "dismissal_id": id, "expected_scope": scope }),
                 "custody.sugg.undismiss",
+                epoch,
             );
         }
         None => finish_undo(app, None),
     }
 }
 
-fn on_undo_step(app: &mut App, r: &Reply) {
+fn on_undo_step(app: &mut App, tag: &str, r: &Reply) {
+    let tag = if tag == "custody.sugg.unpair" {
+        "custody.sugg.unpair"
+    } else {
+        "custody.sugg.undismiss"
+    };
+    if take_tok(app, tag) != app.custody.sugg.epoch {
+        return; // an undo in another book
+    }
     if r.error.is_some() {
         return finish_undo(app, Some(failed_text(r)));
     }
@@ -834,3 +889,71 @@ pub fn close_popup(app: &mut App) {
 
 /// Named states for `--scene` (see `view::scenes`).
 pub const SCENES: &[crate::app::Scene] = view::SCENES;
+
+#[cfg(test)]
+mod switch_tests {
+    use super::*;
+
+    fn reply(data: Value) -> Reply {
+        Reply {
+            kind: "ui.transfers.suggest".into(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    fn asked(app: &mut App, label: &str) {
+        let s = st(app);
+        let epoch = s.epoch;
+        s.sq.push_back((epoch, None));
+        s.saving += 1;
+        s.pending.push_back(Pending {
+            epoch,
+            pair: false,
+            keys: vec![label.into()],
+            label: label.into(),
+        });
+    }
+
+    /// Another book opens while a suggest read and a decision are out, and the new book asks
+    /// the same: the old answers are dropped, the new ones land on what asked for them.
+    #[test]
+    fn a_book_switch_drops_the_old_books_answers() {
+        let mut app = crate::app::tests::quiet_app();
+        app.custody.scope = "old book".into();
+        asked(&mut app, "old");
+        crate::custody::poll(&mut app, &mut Tx::default());
+        asked(&mut app, "new");
+        on_reply(
+            &mut app,
+            "custody.sugg.suggest",
+            &reply(json!({ "candidates": [1] })),
+        );
+        assert!(app.custody.sugg.live.is_none(), "the old book's list");
+        on_reply(
+            &mut app,
+            "custody.sugg.suggest",
+            &reply(json!({ "candidates": [2] })),
+        );
+        assert_eq!(app.custody.sugg.live, Some(vec![json!(2)]));
+        on_reply(
+            &mut app,
+            "custody.sugg.dismiss",
+            &reply(json!({ "id": "d-old" })),
+        );
+        assert!(app.custody.sugg.undo.is_none());
+        assert_eq!(
+            app.custody.sugg.saving, 1,
+            "the new decision is still saving"
+        );
+        on_reply(
+            &mut app,
+            "custody.sugg.dismiss",
+            &reply(json!({ "id": "d-new" })),
+        );
+        let undo = app.custody.sugg.undo.as_ref().expect("undo offered");
+        assert!(matches!(&undo.decisions[..], [Decision::Dismiss { id, .. }] if id == "d-new"));
+    }
+}

@@ -427,13 +427,21 @@ pub fn submitting(app: &App) -> bool {
 /// Opens the dialog; `initial_source` opens straight on that source's setup step
 /// (`initialSourceId`, with the `xpub` → `descriptor` alias).
 pub fn open(app: &mut App, initial_source: Option<&str>) {
+    // A running submit keeps its dialog, as `close` does: its answers still need the job (an
+    // assistant request can open the dialog at any time).
+    if submitting(app) {
+        app.ov.add_open = true;
+        return;
+    }
     crate::overview::open_add_connection(app);
     let btcpay = std::mem::take(&mut app.wallets.add.btcpay);
     let exchange = std::mem::take(&mut app.wallets.add.exchange);
+    let ledger = ledger_preview::restart(std::mem::take(&mut app.wallets.add.ledger));
     let deferred = app.wallets.add.deferred;
     app.wallets.add = State {
         btcpay,
         exchange,
+        ledger,
         focus_search: true,
         opened: true,
         deferred,

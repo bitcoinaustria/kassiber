@@ -112,7 +112,12 @@ fn mount_key(app: &App) -> String {
 fn mount(app: &mut App) {
     let search = model::parse_search(&model::raw_search(&app.route.0));
     let query = model::search_query(&search);
+    // Queries still out stay listed and the version keeps counting, so an earlier mount's
+    // reply is dropped instead of taking this mount's place.
+    let old = &mut app.provenance.chain;
     let mut s = State {
+        inflight: std::mem::take(&mut old.inflight),
+        version: old.version,
         mounted_for: Some(mount_key(app)),
         tab: search.tab.unwrap_or("findings"),
         workspace: search.workspace.unwrap_or_default(),
@@ -286,7 +291,7 @@ pub fn valid(q: &Query) -> bool {
 /// The Run button (the form's submit).
 pub fn run(app: &mut App) {
     let q = app.provenance.chain.query.clone();
-    if !app.provenance.chain.inflight.is_empty() {
+    if running(app) {
         return;
     }
     if !valid(&q) {
@@ -319,7 +324,8 @@ pub fn execute(app: &mut App, next: Query) {
 
 /// Whether a query is in flight (`run.isPending`).
 pub fn running(app: &App) -> bool {
-    !app.provenance.chain.inflight.is_empty()
+    let s = &app.provenance.chain;
+    s.inflight.contains(&s.version)
 }
 
 /// The error banner (`reportError`).
@@ -523,7 +529,12 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
 pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     if app.route.path() != "/chain-analysis" {
         if app.provenance.chain.mounted_for.is_some() {
-            app.provenance.chain = State::default();
+            let old = std::mem::take(&mut app.provenance.chain);
+            app.provenance.chain = State {
+                inflight: old.inflight,
+                version: old.version,
+                ..State::default()
+            };
         }
         return false;
     }
@@ -613,5 +624,44 @@ pub fn settle(app: &mut App) {
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+#[cfg(test)]
+mod remount_tests {
+    use super::*;
+
+    /// A query from before leaving the workbench answers after it was opened again: it is
+    /// dropped, and the new mount's own query still lands.
+    #[test]
+    fn an_earlier_mounts_query_reply_is_dropped() {
+        let mut app = crate::app::tests::quiet_app();
+        app.provenance.chain.mounted_for = Some("old".into());
+        app.provenance.chain.version = 4;
+        app.provenance.chain.inflight.push_back(4);
+        app.navigate("/overview");
+        let mut tx = Tx::default();
+        poll(&mut app, &mut tx);
+        let s = &mut app.provenance.chain;
+        assert_eq!(s.inflight, [4], "the old query stays listed");
+        // The new mount's query.
+        s.version += 1;
+        s.inflight.push_back(s.version);
+        let reply = |n: u64| Reply {
+            kind: "ui.chain_analysis.query".into(),
+            data: json!({ "n": n }),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "provenance.chain.query", &reply(1));
+        assert!(
+            app.provenance.chain.result.is_none(),
+            "the old answer is dropped"
+        );
+        assert!(running(&app));
+        on_reply(&mut app, "provenance.chain.query", &reply(2));
+        assert!(app.provenance.chain.result.is_some());
+        assert!(!running(&app));
     }
 }

@@ -2047,6 +2047,12 @@ See [tax countries](docs/reference/tax-countries.md) and
 - [ ] Ship the Rune app in releases: point the prerelease workflow, the
   Homebrew cask and the Linux channels at `crates/kassiber-desktop/packaging/`
   instead of the Tauri bundle, and run its Linux and Windows packaging natively.
+- [ ] Desktop reply routing left after the #773 sweep: the custody book-switch
+  reset (`custody/mod.rs`) still drops the link/unlink preview, rules and
+  components queues (only an outside book change, nothing user-started, hits
+  it); `wallets/add` pending flags (`preview_pending`, `core_detect_pending`,
+  `core_test_pending`, template/export) apply any answer, even after
+  `reset_form`.
 - [ ] Decide when `ui-tauri/` retires. Until then it is the parity reference
   (`crates/kassiber-desktop/parity/`) and its kind lists are checked against
   the desktop's (`src/kinds/tests.rs`, which skips when `ui-tauri/` is absent).

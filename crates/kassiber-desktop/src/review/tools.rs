@@ -49,6 +49,13 @@ pub struct State {
     save: Option<String>,
 }
 
+/// Another book: the tools start over. Comparisons still out stay listed under a refresh cycle
+/// no read has, so each answer pops its own entry and is dropped.
+pub fn restart(app: &mut App) {
+    let old = std::mem::take(&mut app.review.tools);
+    st(app).queue = old.queue.into_iter().map(|(k, _)| (k, u64::MAX)).collect();
+}
+
 fn st(app: &mut App) -> &mut State {
     &mut app.review.tools
 }
@@ -1896,6 +1903,25 @@ mod tests {
         );
         let generation = app.book_generation;
         st(&mut app).queue.push_back((k.clone(), generation));
+        on_reply(&mut app, "review.tools.compare", &reply(2));
+        assert_eq!(app.review.tools.cache[&k]["matched"], 2);
+    }
+
+    /// Another book while a comparison is out: its answer is dropped, and the new book's own
+    /// comparison of the same file still lands.
+    #[test]
+    fn a_comparison_from_before_a_book_switch_is_dropped() {
+        let mut app = crate::app::tests::quiet_app();
+        let generation = app.book_generation;
+        let k = "k".to_owned();
+        st(&mut app).queue.push_back((k.clone(), generation));
+        restart(&mut app);
+        st(&mut app).queue.push_back((k.clone(), generation));
+        on_reply(&mut app, "review.tools.compare", &reply(1));
+        assert!(
+            !app.review.tools.cache.contains_key(&k),
+            "the old book's result"
+        );
         on_reply(&mut app, "review.tools.compare", &reply(2));
         assert_eq!(app.review.tools.cache[&k]["matched"], 2);
     }

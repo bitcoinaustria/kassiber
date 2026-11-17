@@ -127,6 +127,8 @@ pub struct Undo {
 }
 
 struct Pending {
+    /// The mount it was sent from (`Quarantine::generation`).
+    mount: u64,
     pair: bool,
     keys: Vec<String>,
     label: String,
@@ -153,8 +155,9 @@ pub struct Transfers {
     pub error: Option<String>,
     run: u64,
     was_refreshing: bool,
-    /// Suggest reads in flight: the run a post-recalculation read belongs to.
-    sq: VecDeque<Option<u64>>,
+    /// Suggest reads in flight: the mount each was sent from, and the run a
+    /// post-recalculation read belongs to.
+    sq: VecDeque<(u64, Option<u64>)>,
     pending: VecDeque<Pending>,
     undo_run: Option<UndoRun>,
     /// Suggestions ticked to set aside together, by key.
@@ -301,8 +304,9 @@ pub fn card_mut<'a>(app: &'a mut App, key: &str) -> &'a mut Card {
     app.review.rv.cards.entry(key.to_owned()).or_default()
 }
 
-fn send_tok(app: &mut App, kind: &str, args: Value, tag: &'static str, token: u64) {
-    if app.send(kind, args, tag).is_some() {
+fn send_tok(app: &mut App, kind: &str, args: Value, tag: &'static str, token: u64) -> bool {
+    let sent = app.send(kind, args, tag).is_some();
+    if sent {
         app.review
             .rv
             .tokens
@@ -310,6 +314,7 @@ fn send_tok(app: &mut App, kind: &str, args: Value, tag: &'static str, token: u6
             .or_default()
             .push_back(token);
     }
+    sent
 }
 
 fn take_tok(app: &mut App, tag: &'static str) -> u64 {
@@ -346,17 +351,38 @@ fn same_scope(a: Option<&Value>, b: Option<&Value>) -> bool {
 
 // ---- Reads --------------------------------------------------------------------------------------
 
+/// The screen starts over (a remount, another book) with requests possibly still out: their
+/// entries stay, so each answer pops its own, and the bumped counters drop what an earlier
+/// mount asked. Returns the old state.
+pub fn restart(app: &mut App) -> Review {
+    let mut old = std::mem::take(&mut app.review.rv);
+    let r = rv(app);
+    r.q.queue = std::mem::take(&mut old.q.queue);
+    // Their refetch is gone with the old state.
+    r.q.wqueue = old.q.wqueue.iter().map(|&(g, _)| (g, false)).collect();
+    r.q.generation = old.q.generation + 1;
+    r.q.wgen = old.q.wgen + 1;
+    r.tr.sq = std::mem::take(&mut old.tr.sq);
+    r.tr.pending = std::mem::take(&mut old.tr.pending);
+    r.token = old.token + 1;
+    r.tokens = std::mem::take(&mut old.tokens);
+    r.linkback = std::mem::take(&mut old.linkback);
+    r.sync_pending = old.sync_pending;
+    r.sync_label = std::mem::take(&mut old.sync_label);
+    old
+}
+
 /// The screen mounts: what was read stays shown while everything is read again; the screen's own
 /// choices (folds, ticks, typed prices, dialogs) start over, as a remount does.
 pub fn mount(app: &mut App) {
-    let old = std::mem::take(&mut app.review.rv);
+    let old = restart(app);
     let processing = app.busy.processing;
     let r = rv(app);
     r.q.pages = old.q.pages;
-    r.q.generation = old.q.generation + 1;
-    r.q.wgen = old.q.wgen + 1;
+    // A journal refresh queued for this book still runs.
+    r.refresh_due = old.refresh_due;
+    r.refresh_pending = old.refresh_pending;
     r.tr.live = old.tr.live;
-    r.token = old.token + 1;
     r.was_processing = processing;
     r.tr.was_refreshing = processing;
     // Mounted while a run is already going, it shows nothing until the run is done rather than
@@ -377,7 +403,8 @@ fn load_suggest(app: &mut App, run: Option<u64>) {
         if r.tr.live.is_none() {
             r.tr.loading = true;
         }
-        r.tr.sq.push_back(run);
+        let g = r.q.generation;
+        r.tr.sq.push_back((g, run));
     }
 }
 
@@ -627,7 +654,12 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
         "review.suggest" => {
-            let run = rv(app).tr.sq.pop_front().flatten();
+            let Some((g, run)) = rv(app).tr.sq.pop_front() else {
+                return;
+            };
+            if g != app.review.rv.q.generation {
+                return; // asked by an earlier mount
+            }
             let tr = &mut rv(app).tr;
             tr.loading = false;
             match &r.error {
@@ -709,7 +741,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             refetch_all(app);
             app.process_journals();
         }
-        "review.unpair" | "review.undismiss" => on_undo_step(app, r),
+        "review.unpair" | "review.undismiss" => on_undo_step(app, tag, r),
         "review.sync" => {
             rv(app).sync_pending = false;
             let label = std::mem::take(&mut rv(app).sync_label);
@@ -926,9 +958,15 @@ pub fn decide(app: &mut App, c: &Value, pair: bool) {
         )
     };
     if app.send(kind, args, tag).is_some() {
+        let mount = app.review.rv.q.generation;
         let tr = &mut rv(app).tr;
         tr.saving += 1;
-        tr.pending.push_back(Pending { pair, keys, label });
+        tr.pending.push_back(Pending {
+            mount,
+            pair,
+            keys,
+            label,
+        });
     } else {
         hide(app, &keys, false);
     }
@@ -938,6 +976,13 @@ fn on_decision(app: &mut App, r: &Reply) {
     let Some(p) = rv(app).tr.pending.pop_front() else {
         return;
     };
+    if p.mount != app.review.rv.q.generation {
+        // Decided on an earlier mount: the screen moved on, the book still reprocesses.
+        if r.error.is_none() {
+            request_refresh(app);
+        }
+        return;
+    }
     rv(app).tr.saving = app.review.rv.tr.saving.saturating_sub(1);
     match &r.error {
         Some(e) => {
@@ -1025,15 +1070,26 @@ fn dismiss_next(app: &mut App) {
         return finish_dismiss_selected(app, None);
     };
     let args = json!({ "tx_out": s(&c, "out_id"), "tx_in": s(&c, "in_id"), "reason": model::DISMISS_REASON });
-    if app
-        .send("ui.transfers.dismiss", args, "review.dismiss.sel")
-        .is_none()
-    {
+    let mount = app.review.rv.q.generation;
+    if !send_tok(
+        app,
+        "ui.transfers.dismiss",
+        args,
+        "review.dismiss.sel",
+        mount,
+    ) {
         finish_dismiss_selected(app, Some(t("review:inbox.transfers.failed")));
     }
 }
 
 fn on_dismiss_selected(app: &mut App, r: &Reply) {
+    if take_tok(app, "review.dismiss.sel") != app.review.rv.q.generation {
+        // A run of an earlier mount: the book still reprocesses.
+        if r.error.is_none() {
+            request_refresh(app);
+        }
+        return;
+    }
     if let Some(e) = &r.error {
         return finish_dismiss_selected(
             app,
@@ -1107,26 +1163,43 @@ fn undo_next(app: &mut App) {
         };
         run.current.decisions.get(run.undone.len()).cloned()
     };
+    let mount = app.review.rv.q.generation;
     match next {
         Some(Decision::Pair { id, .. }) => {
-            app.send(
+            send_tok(
+                app,
                 "ui.transfers.unpair",
                 json!({ "pair_id": id }),
                 "review.unpair",
+                mount,
             );
         }
         Some(Decision::Dismiss { id, .. }) => {
-            app.send(
+            send_tok(
+                app,
                 "ui.transfers.dismissals.delete",
                 json!({ "dismissal_id": id }),
                 "review.undismiss",
+                mount,
             );
         }
         None => finish_undo(app, None),
     }
 }
 
-fn on_undo_step(app: &mut App, r: &Reply) {
+fn on_undo_step(app: &mut App, tag: &str, r: &Reply) {
+    let tag = if tag == "review.unpair" {
+        "review.unpair"
+    } else {
+        "review.undismiss"
+    };
+    if take_tok(app, tag) != app.review.rv.q.generation {
+        // An undo of an earlier mount: the book still reprocesses.
+        if r.error.is_none() {
+            request_refresh(app);
+        }
+        return;
+    }
     if let Some(e) = &r.error {
         finish_undo(
             app,
@@ -1440,4 +1513,89 @@ pub fn stale(r: &Reply) -> bool {
 }
 pub fn scopes_match(a: Option<&Value>, b: Option<&Value>) -> bool {
     same_scope(a, b)
+}
+
+#[cfg(test)]
+mod remount_tests {
+    use super::*;
+
+    fn reply(data: Value) -> Reply {
+        Reply {
+            kind: "ui.journals.quarantine".into(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Left and opened again before the first read answered: that answer is dropped, and the new
+    /// mount's own read still lands.
+    #[test]
+    fn an_earlier_mounts_read_does_not_take_the_new_ones_place() {
+        let mut app = crate::app::tests::quiet_app();
+        mount(&mut app);
+        mount(&mut app);
+        on_reply(&mut app, "review.att", &reply(json!({ "n": 1 })));
+        assert!(
+            app.review.rv.q.pages.is_empty(),
+            "the old answer is dropped"
+        );
+        assert!(app.review.rv.q.loading);
+        on_reply(&mut app, "review.att", &reply(json!({ "n": 2 })));
+        assert_eq!(app.review.rv.q.pages, [json!({ "n": 2 })]);
+        assert!(!app.review.rv.q.loading);
+        // The suggest reads pair up the same way.
+        on_reply(
+            &mut app,
+            "review.suggest",
+            &reply(json!({ "candidates": [1] })),
+        );
+        assert!(app.review.rv.tr.loading);
+        on_reply(
+            &mut app,
+            "review.suggest",
+            &reply(json!({ "candidates": [2] })),
+        );
+        assert_eq!(app.review.rv.tr.live, Some(vec![json!(2)]));
+    }
+
+    /// A decision sent before a remount answers after a new one was sent: the new decision's
+    /// Undo carries its own id.
+    #[test]
+    fn an_earlier_mounts_decision_does_not_answer_the_new_one() {
+        let mut app = crate::app::tests::quiet_app();
+        let pending = |app: &mut App, label: &str| {
+            let mount = app.review.rv.q.generation;
+            let tr = &mut rv(app).tr;
+            tr.saving += 1;
+            tr.pending.push_back(Pending {
+                mount,
+                pair: false,
+                keys: vec![label.into()],
+                label: label.into(),
+            });
+        };
+        mount(&mut app);
+        pending(&mut app, "old");
+        rv(&mut app).refresh_due = Some(5.0);
+        mount(&mut app);
+        assert_eq!(
+            app.review.rv.refresh_due,
+            Some(5.0),
+            "the queued journal refresh stays"
+        );
+        pending(&mut app, "new");
+        on_reply(&mut app, "review.dismiss", &reply(json!({ "id": "d-old" })));
+        assert!(app.review.rv.tr.undo.is_none());
+        assert_eq!(
+            app.review.rv.tr.saving, 1,
+            "the new decision is still saving"
+        );
+        on_reply(&mut app, "review.dismiss", &reply(json!({ "id": "d-new" })));
+        let undo = app.review.rv.tr.undo.as_ref().expect("undo offered");
+        assert_eq!(undo.label, "new");
+        assert!(matches!(&undo.decisions[..], [Decision::Dismiss { id, .. }] if id == "d-new"));
+        assert_eq!(app.review.rv.tr.saving, 0);
+    }
 }

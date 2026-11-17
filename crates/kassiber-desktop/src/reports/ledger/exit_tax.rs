@@ -57,8 +57,9 @@ pub struct ExitUi {
     pub cache: HashMap<String, Load<Value>>,
     /// Keys whose cached answer is stale (re-read, still shown meanwhile).
     stale: Vec<String>,
-    /// Preview requests in flight, in send order (the daemon answers in order).
-    queue: VecDeque<String>,
+    /// Preview requests in flight, in send order (the daemon answers in order). None: asked
+    /// before a book switch, dropped when it answers.
+    queue: VecDeque<Option<String>>,
     pub popup: Option<Popup>,
     /// The calendar's month on screen: (year, month 0–11).
     pub month: (i32, u32),
@@ -100,6 +101,16 @@ impl ExitUi {
         };
     }
 
+    /// Another book: everything starts over, but the previews still out keep their place, so
+    /// their answers are not cached as the new book's (the args do not name the book).
+    pub fn switch_book(&mut self) {
+        let queue = self.queue.iter().map(|_| None).collect();
+        *self = ExitUi {
+            queue,
+            ..ExitUi::default()
+        };
+    }
+
     pub fn invalidate(&mut self) {
         self.cache.retain(|_, v| matches!(v, Load::Ready(_)));
         self.stale = self.cache.keys().cloned().collect();
@@ -128,14 +139,14 @@ fn want(app: &mut App, key: String) -> bool {
     let ui = &mut app.reports.ledger.exit;
     let fresh = !ui.cache.contains_key(&key);
     let stale = ui.stale.contains(&key);
-    if (!fresh && !stale) || ui.queue.contains(&key) {
+    if (!fresh && !stale) || ui.queue.iter().flatten().any(|k| *k == key) {
         return false;
     }
     ui.stale.retain(|k| k != &key);
     if fresh {
         ui.cache.insert(key.clone(), Load::Loading);
     }
-    ui.queue.push_back(key.clone());
+    ui.queue.push_back(Some(key.clone()));
     let args: Value = serde_json::from_str(&key).unwrap_or(Value::Null);
     app.send(
         "ui.reports.exit_tax_preview",
@@ -168,7 +179,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
         "reports.ledger.exit.preview" => {
             let ui = &mut app.reports.ledger.exit;
-            let Some(key) = ui.queue.pop_front() else {
+            let Some(Some(key)) = ui.queue.pop_front() else {
                 return;
             };
             let load = match &r.error {
@@ -1856,6 +1867,48 @@ mod tests {
         assert_eq!(first_weekday(2026, 10), 6);
         assert_eq!(first_weekday(2025, 10), 5);
         assert_eq!(civil(days_from_civil(2026, 11, 15)), (2026, 11, 15));
+    }
+
+    /// Another book opens (outside a session start) while the old book's estimate is being
+    /// read, and the page asks the same of the new one: the old estimate is not cached as the
+    /// new book's, and the new one lands.
+    #[test]
+    fn a_book_switch_drops_the_old_books_preview() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route("/exit-tax".into());
+        let reply = |data: Value| Reply {
+            kind: "ui.reports.exit_tax_preview".into(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        app.reads.insert(
+            "ui.profiles.snapshot".into(),
+            reply(json!({ "activeProfileId": "b" })),
+        );
+        app.reports.ledger.book = Some("a".into());
+        let today = app.reports.ledger.exit.today_key();
+        app.reports.ledger.exit.queue.push_back(Some(today.clone()));
+        crate::reports::ledger::poll(&mut app, &mut Tx::default());
+        on_reply(
+            &mut app,
+            "reports.ledger.exit.preview",
+            &reply(json!({ "book": "a" })),
+        );
+        assert!(matches!(
+            app.reports.ledger.exit.cache.get(&today),
+            Some(Load::Loading)
+        ));
+        on_reply(
+            &mut app,
+            "reports.ledger.exit.preview",
+            &reply(json!({ "book": "b" })),
+        );
+        match app.reports.ledger.exit.cache.get(&today) {
+            Some(Load::Ready(v)) => assert_eq!(v["book"], "b"),
+            _ => panic!("the new book's estimate lands"),
+        }
     }
 
     #[test]

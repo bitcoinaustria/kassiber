@@ -46,6 +46,16 @@ impl State {
     }
 }
 
+/// The dialog opens afresh: previews still out keep their entries and the counter its count,
+/// so their answers are dropped instead of taken for the next file's.
+pub fn restart(old: State) -> State {
+    State {
+        generation: old.generation,
+        in_flight: old.in_flight,
+        ..State::default()
+    }
+}
+
 /// Stores `source` and starts its preview read (None clears it).
 pub fn set_source(app: &mut App, source: Option<Source>) {
     let st = &mut app.wallets.add.ledger;
@@ -520,6 +530,34 @@ fn table(tk: &Tk, rows: &[&Value], lang: Lang, hidden: bool) -> El {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A file's preview is still out when the dialog is closed and opened on another file: the
+    /// old preview never shows for the new file, whose own still lands.
+    #[test]
+    fn a_preview_from_before_reopening_is_dropped() {
+        let mut app = crate::app::tests::quiet_app();
+        let file = |name: &str| Source {
+            filename: name.into(),
+            bytes_b64: "AA==".into(),
+            importable: true,
+        };
+        let reply = |rows: u64| Reply {
+            kind: "ui.wallets.ledger_preview".into(),
+            data: json!({ "rows": rows }),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        crate::wallets::add::open(&mut app, Some("generic-ledger"));
+        set_source(&mut app, Some(file("a.csv")));
+        crate::wallets::add::open(&mut app, Some("generic-ledger"));
+        set_source(&mut app, Some(file("b.csv")));
+        on_reply(&mut app, "wallets.ledger.preview", &reply(1));
+        assert!(app.wallets.add.ledger.data.is_none(), "a.csv's preview");
+        assert!(app.wallets.add.ledger.fetching());
+        on_reply(&mut app, "wallets.ledger.preview", &reply(2));
+        assert_eq!(app.wallets.add.ledger.data, Some(json!({ "rows": 2 })));
+    }
 
     #[test]
     fn numbers_trim_and_group_per_locale() {

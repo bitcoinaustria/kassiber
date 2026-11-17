@@ -2107,6 +2107,25 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
 mod tests {
     use super::*;
 
+    /// The assistant opens the dialog while a submit runs: the job and its dialog stay, so the
+    /// running request's answer still finds it.
+    #[test]
+    fn opening_the_dialog_keeps_a_running_submit() {
+        let mut app = crate::app::tests::quiet_app();
+        app.ov.add_open = true;
+        stm(&mut app).job = Some(Job {
+            stage: Stage::Create,
+            label: "Cold".into(),
+            syncs: VecDeque::new(),
+            done: None,
+            stay_open: false,
+        });
+        super::super::open(&mut app, Some("descriptor"));
+        let job = st(&app).job.as_ref().expect("the job runs on");
+        assert_eq!((&job.stage, job.label.as_str()), (&Stage::Create, "Cold"));
+        assert!(app.ov.add_open);
+    }
+
     #[test]
     fn backend_names_slug_like_the_web() {
         assert_eq!(backend_name_from_label("My Node #1"), "my-node-1");

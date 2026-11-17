@@ -78,8 +78,10 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         let first = app.review.scope.is_empty();
         app.review.scope = scope;
         if !first {
-            app.review.rv = state::Review::default();
-            app.review.tools = tools::State::default();
+            // Requests still out keep their entries, so their answers are dropped instead of
+            // landing on the new book's.
+            state::restart(app);
+            tools::restart(app);
             app.review.seen.clear();
             changed = true;
         }

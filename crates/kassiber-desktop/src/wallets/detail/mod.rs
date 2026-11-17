@@ -225,6 +225,8 @@ pub struct State {
     pub rollback: Option<Rollback>,
     /// `ui.wallets.sync` in flight (a user's Refresh / Full rescan).
     pub syncing: bool,
+    /// The wallet that sync is for: after navigating to another, its answer only notifies.
+    pub sync_wallet: Option<String>,
     /// The pre-rescan Bitcoin Core coverage probe in flight.
     pub core_testing: bool,
     /// The wallet that probe is for: its reply continues a rescan only for that wallet.
@@ -380,6 +382,7 @@ impl State {
             backends: k.backends,
             encrypted: k.encrypted,
             syncing: k.syncing,
+            sync_wallet: k.sync_wallet,
             core_testing: k.core_testing,
             core_test_wallet: k.core_test_wallet,
             tx_visible: txs::PAGE,
@@ -423,10 +426,17 @@ fn send_reads(app: &mut App, id: &str) {
 /// Starts every read the page makes on mount for `c` (all local).
 fn load(app: &mut App, c: &Conn) {
     let id = c.id.clone();
+    // A sync or probe still out keeps its flags and its wallet: its answer then lands on the
+    // wallet it was for, and nothing new starts before it.
+    let old = std::mem::take(&mut app.wallets.detail);
     app.wallets.detail = State {
         wallet: id.clone(),
         tx_visible: txs::PAGE,
         utxo_visible: coins::PAGE,
+        syncing: old.syncing,
+        sync_wallet: old.sync_wallet,
+        core_testing: old.core_testing,
+        core_test_wallet: old.core_test_wallet,
         ..State::default()
     };
     app.send("status", Value::Null, "wallets.detail.status");
