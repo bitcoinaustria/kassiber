@@ -1433,7 +1433,9 @@ order evidence, and it does not contain fiat execution prices.
 Use this importer when the Bull wallet export is the source of wallet history.
 Create one Kassiber wallet per Bull network from the same CSV so BTC, Liquid,
 and Lightning rows stay separate. This lets the swap matcher see BTC/LBTC swap
-legs as different wallets instead of two rows inside one mixed wallet:
+legs as different wallets instead of two rows inside one mixed wallet. The
+Lightning wallet only holds Lightning rows for review until an observed
+Bitcoin or Liquid wallet proves where they were paid from or to (see below):
 
 ```bash
 kassiber wallets create \
@@ -1456,15 +1458,51 @@ kassiber wallets sync --wallet "Bull Bitcoin Wallet - Liquid"
 
 Behavior:
 
-- `bullbitcoin_wallet_network=bitcoin` imports only Bitcoin on-chain/payjoin and
-  Bitcoin-side chain-swap rows as `BTC`
-- `bullbitcoin_wallet_network=liquid` imports only Liquid and Liquid-side
-  chain-swap rows as `LBTC`
-- `bullbitcoin_wallet_network=lightning` imports Lightning rows as `BTC`
-- Lightning rows derive Kassiber's `payment_hash` from a valid exported
-  preimage, or retain a 64-hex payment identifier as typed importer evidence;
-  exact matching still requires compatible provenance, unique cardinality, and
+- `bullbitcoin_wallet_network=bitcoin` imports Bitcoin on-chain/payjoin and
+  Bitcoin-side chain-swap rows as `BTC`; `bullbitcoin_wallet_network=liquid`
+  imports Liquid and Liquid-side chain-swap rows as `LBTC`
+- every row matches an existing transaction of the wallet by txid, direction
+  and asset whatever its amounts, so re-importing the same transactions (from
+  the same or another app version) never inserts a second row. A transaction
+  the wallet observed on-chain keeps its own amount, fee and confirmation; the
+  Bull row adds only metadata (kind and description where empty, payment
+  hash, payjoin privacy boundary)
+- Lightning rows are Boltz swaps paid from or received into the Bull Bitcoin
+  or Liquid wallet. Their `txid` is that wallet's on-chain lockup or claim,
+  and the export does not say which wallet it was (`send_network` and
+  `receive_network` are only filled for chain swaps). A Bitcoin or Liquid
+  wallet takes a Lightning row only as a match against a transaction it
+  already holds under that txid, normally an observed descriptor/xpub
+  transaction, which proves the network; the observed L-BTC/BTC movement
+  keeps its amounts and pairs with any Lightning wallet of the book through
+  the usual payment-hash swap matching. Otherwise the Bitcoin/Liquid import
+  leaves it out and counts it under `lightning_not_observed_in_wallet`. A
+  `bullbitcoin_wallet_network=lightning` wallet (or one without a network)
+  holds unproven Lightning rows **excluded from accounting** and tagged
+  `bullbitcoin-wallet-review` and `bullbitcoin-wallet-lightning-network-unproven`,
+  unless another wallet of the book already holds the txid
+  (`lightning_booked_in_other_wallet`)
+- the `payment_hash` comes only from a valid exported preimage (SHA-256; Bull
+  exports preimages on `lightning_send` rows only). The on-chain txid is never
+  used as a payment hash, so `lightning_receive` rows carry none. Exact
+  matching still requires compatible provenance, unique cardinality, and
   whole-row amount coverage
+- payjoin rows: v6.11–v6.12 export the wallet's net amount, v6.13+ the
+  negotiated amount, and a file rarely shows which. Matched to an observed
+  transaction, the observation's amounts win. Without one, the row is
+  imported **excluded from accounting** and tagged `bullbitcoin-wallet-review`
+  and `bullbitcoin-wallet-payjoin-amount-unverified` rather than booked with a
+  guessed number. Re-importing the txid with a smaller amount replaces the
+  stored one: the wallet net is never above the negotiated amount
+- `direction=self` rows (a send between the wallet's own addresses) book their
+  miner fee as a fee-only outflow (`outbound`, amount 0, kind `fee`), as a
+  chain observer books a send-to-self; one without a fee is skipped
+  (`self_without_fee`)
+- pending rows the app exported without a date are skipped and counted
+  (`undated_pending`); they import from a later export once confirmed. An
+  undated row with any other status still refuses the file
+- amounts and fees are exact non-negative integer sats; a negative count
+  refuses the file rather than being read as its absolute value
 - chain-swap metadata such as `swap_id`, `send_network`, `receive_network`,
   `send_txid`, and `receive_txid` is preserved in redacted raw metadata and
   feeds `provider_swap_id` review for cooperative Taproot/key-path flows where
@@ -1476,14 +1514,43 @@ Behavior:
   [transfer matching](tax.md))
 - `preimage` is not stored in raw metadata; the importer records that it was
   redacted
-- `direction=self` rows and `status=failed` / `status=expired` /
-  `status=refunded` rows are skipped because they are not standalone taxable
-  wallet movements. Bull's CSV currently collapses a refunded chain swap to a
-  single canonical swap row and does not export the refund txid as its own leg,
-  so Bull CSV alone cannot prove or book the refund round trip. Use descriptor
-  chain sync (for script-path HTLC refund evidence) or provider/SDK metadata
-  that carries both the lockup and refund legs before pairing it as
-  `swap-refund`.
+- `status=failed` / `status=expired` / `status=refunded` rows are skipped
+  because they are not standalone taxable wallet movements. Bull's CSV
+  currently collapses a refunded chain swap to a single canonical swap row and
+  does not export the refund txid as its own leg, so Bull CSV alone cannot
+  prove or book the refund round trip. Use descriptor chain sync (for
+  script-path HTLC refund evidence) or provider/SDK metadata that carries both
+  the lockup and refund legs before pairing it as `swap-refund`
+- the import result reports skipped rows as `bullbitcoin_wallet_skipped`
+  (`{reason: count}`), rows held for review as `bullbitcoin_wallet_review`, and
+  plain-English `warnings`; wallet refreshes report enrichment skips per route
+
+Resolve a held row by attaching the export to the observing descriptor/xpub
+wallet (`attach-bullbitcoin-wallet`, below), whose sync proves the network and
+the amounts, or — after checking the amount against the wallet — by including
+it with `kassiber metadata include`. Leave the other copy excluded if the same
+transaction is also booked elsewhere.
+
+The export omits by design (upstream, not fixable from the CSV) wallet
+transactions that the app matched to a Bull exchange order, such as buy-order
+payouts into the wallet or sell-order funding sends. Import the Bull order
+history (`import-bull`, above) or sync the wallet's descriptor to cover them.
+
+App versions. Every release from v6.11.0 to v6.15.0 writes the same header in
+three formatter generations:
+
+| Generation | App versions | Differences Kassiber handles |
+| --- | --- | --- |
+| A | v6.11.x | the first export |
+| B | v6.12.x | adds `refunded` (skipped); Lightning swap dates are completion time |
+| C | v6.13.0–v6.15.0 | adds `aborted` (a payjoin that landed as a plain payment; imported); a chain swap's outgoing fee is the real on-chain fee instead of the provider's lockup fee; cells starting with `=`, `+`, `-`, `@`, tab or CR get a leading `'` (stripped before parsing); payjoin amounts are the negotiated amount |
+
+Only the `'` formula guard and the `aborted` status identify a generation-C
+file (raw metadata then records `export_generation: "v6.13+"`). Nothing
+distinguishes A from B, or a C file without those markers, so Kassiber never
+guesses a version: a re-imported chain swap's outgoing fee is replaced only
+from a provable generation-C file and never on an observed transaction, and a
+payjoin keeps the smaller (net) amount whichever file came first.
 
 If BTC and Liquid descriptors are already the book's source of wallet history,
 do not also import the same Bull wallet CSV rows into separate active wallets,
@@ -1506,8 +1573,10 @@ kassiber wallets sync --wallet "Liquid descriptor"
 ```
 
 The next wallet refresh keeps the descriptor/file source authoritative and uses
-matching Bull rows only to backfill safe metadata such as swap kind, redacted
-raw Bull route data, and Lightning payment hashes. Unmatched Bull rows are left
+Bull rows matched by txid only to backfill safe metadata such as an empty kind,
+the payjoin privacy boundary, and Lightning payment hashes; observed amounts,
+fees and confirmations always win. Lightning rows join the refresh of the
+wallet whose observed lockup/claim txid they name. Unmatched Bull rows are left
 uninserted in this mode.
 
 If the CSV was imported first and descriptors are added later, map the Bull CSV

@@ -449,6 +449,37 @@ struct Record {
     economics: bool,
     tolerance: i64,
     deferred: Option<AppError>,
+    /// A Bull Bitcoin wallet-history row (`bull_wallet::MARK`).
+    bull: Option<Bull>,
+}
+/// How a Bull Bitcoin wallet-history row books: it matches a transaction of
+/// the wallet by txid whatever its amounts, because an observation's own
+/// amounts win, and it never inserts a second row for that txid.
+#[derive(Clone, Debug, Default)]
+struct Bull {
+    /// Bull's `type` (`onchain`, `payjoin_send`, `chain_swap`, ...).
+    kind: String,
+    /// The export is provably v6.13 or later.
+    generation_c: bool,
+    /// Book only as a match; never insert.
+    match_only: bool,
+    /// Insert excluded from accounting and tagged for this review reason.
+    review: Option<String>,
+}
+impl Bull {
+    fn from_row(row: &Json) -> Option<Self> {
+        let mark = row.get(bull_wallet::MARK)?.as_object()?;
+        Some(Self {
+            kind: mark
+                .get("type")
+                .and_then(Json::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            generation_c: mark.get("generation_c") == Some(&Json::Bool(true)),
+            match_only: mark.get("match_only") == Some(&Json::Bool(true)),
+            review: mark.get("review").and_then(Json::as_str).map(str::to_owned),
+        })
+    }
 }
 impl Record {
     fn insert_binding_error(&self) -> Option<&AppError> {
@@ -829,6 +860,7 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
             .and_then(Json::as_i64)
             .unwrap_or(0),
         deferred,
+        bull: Bull::from_row(row),
     })
 }
 /// `_validate_import_price_currency(profile, normalized)`.
@@ -947,7 +979,7 @@ fn change(id: &str, wallet: &str, r: &Record, fields: Vec<String>) -> Py {
 fn find(conn: &Connection, wallet: &str, r: &Record, fp: &str) -> Result<Option<Fields>, AppError> {
     let routing = string(&r.fields, "kind") == "routing_income";
     let relax = string(&r.fields, "pricing_source_kind") == "exchange_execution" || r.ignore_fee;
-    let mut statement=conn.prepare("SELECT *, (SELECT authority_version FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_authority_version, (SELECT graph_hash FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_graph_hash, (SELECT quantity_hash FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_quantity_hash FROM transactions WHERE fingerprint=? OR (wallet_id=? AND external_id=? AND ?!='' AND direction=? AND asset=? AND ((? AND kind='routing_income') OR (amount=? AND (fee=? OR ?)))) ORDER BY (fingerprint=?) DESC,CASE WHEN ? AND kind='routing_income' THEN 2 WHEN fee=? THEN 1 ELSE 0 END DESC,created_at DESC LIMIT 1").map_err(database_error)?;
+    let mut statement=conn.prepare("SELECT *, (SELECT authority_version FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_authority_version, (SELECT graph_hash FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_graph_hash, (SELECT quantity_hash FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_quantity_hash FROM transactions WHERE fingerprint=? OR (wallet_id=? AND external_id=? AND ?!='' AND direction=? AND asset=? AND ((? AND kind='routing_income') OR (amount=? AND (fee=? OR ?)) OR ?)) ORDER BY (fingerprint=?) DESC,CASE WHEN ? AND kind='routing_income' THEN 2 WHEN fee=? THEN 1 ELSE 0 END DESC,created_at DESC LIMIT 1").map_err(database_error)?;
     let columns = statement
         .column_names()
         .iter()
@@ -966,6 +998,7 @@ fn find(conn: &Connection, wallet: &str, r: &Record, fp: &str) -> Result<Option<
                 r.fields["amount"],
                 r.fields["fee"],
                 relax,
+                r.bull.is_some(),
                 fp,
                 routing,
                 r.fields["fee"],
@@ -1038,6 +1071,24 @@ fn integer_or_zero(value: Option<&Sql>) -> i64 {
 fn merge(existing: &Fields, r: &Record, fp: &str, settlement: bool) -> Result<Fields, AppError> {
     let mut updates = Fields::new();
     let incoming = &r.fields;
+    let stored: Json = Json::Object(
+        existing
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    match v {
+                        Sql::Integer(n) => json!(n),
+                        Sql::Text(v) => json!(v),
+                        Sql::Real(n) => json!(n),
+                        _ => Json::Null,
+                    },
+                )
+            })
+            .collect(),
+    );
+    let committed = kassiber_custody::evidence::current_observation(&stored)
+        .map_err(|e| AppError::new("internal_error", e))?;
     let raw: Json = serde_json::from_str(&string(existing, "raw_json")).unwrap_or(Json::Null);
     let raw_incoming: Json =
         serde_json::from_str(&string(incoming, "raw_json")).unwrap_or(Json::Null);
@@ -1101,7 +1152,18 @@ fn merge(existing: &Fields, r: &Record, fp: &str, settlement: bool) -> Result<Fi
     {
         updates.insert("occurred_at".into(), incoming["occurred_at"].clone());
     }
+    if let Some(bull) = &r.bull {
+        bull_quantities(existing, r, bull, committed, &raw, &mut updates);
+    }
+    // A Bull row matched by txid keeps the stored quantities unless it just
+    // corrected them, so the stored fingerprint must keep hashing them.
+    let same_quantities = r.bull.is_none()
+        || ["amount", "fee"].iter().all(|key| {
+            integer_or_zero(updates.get(*key).or(existing.get(*key)))
+                == integer_or_zero(incoming.get(*key))
+        });
     if string(existing, "fingerprint") != fp
+        && same_quantities
         && updates
             .get("occurred_at")
             .unwrap_or(&existing["occurred_at"])
@@ -1109,7 +1171,10 @@ fn merge(existing: &Fields, r: &Record, fp: &str, settlement: bool) -> Result<Fi
     {
         updates.insert("fingerprint".into(), Sql::Text(fp.into()));
     }
-    let confirmed = !truthy(existing.get("confirmed_at")) && truthy(incoming.get("confirmed_at"));
+    // An observation's own confirmation state wins over a Bull export's.
+    let confirmed = !(r.bull.is_some() && committed)
+        && !truthy(existing.get("confirmed_at"))
+        && truthy(incoming.get("confirmed_at"));
     // `authoritative_confirmation_changed` for a live LND settlement.
     let settled = settlement
         && incoming
@@ -1246,24 +1311,6 @@ fn merge(existing: &Fields, r: &Record, fp: &str, settlement: bool) -> Result<Fi
             .iter()
             .any(|k| graph.get(k).is_some_and(Json::is_array))
     };
-    let stored: Json = Json::Object(
-        existing
-            .iter()
-            .map(|(k, v)| {
-                (
-                    k.clone(),
-                    match v {
-                        Sql::Integer(n) => json!(n),
-                        Sql::Text(v) => json!(v),
-                        Sql::Real(n) => json!(n),
-                        _ => Json::Null,
-                    },
-                )
-            })
-            .collect(),
-    );
-    let committed = kassiber_custody::evidence::current_observation(&stored)
-        .map_err(|e| AppError::new("internal_error", e))?;
     let graph_upgrade = graph_upgrade(&raw, &raw_incoming);
     // `_may_replace_observation_payload`: a native settlement keeps full power
     // over its own evidence.
@@ -1274,6 +1321,36 @@ fn merge(existing: &Fields, r: &Record, fp: &str, settlement: bool) -> Result<Fi
         updates.insert("raw_json".into(), incoming["raw_json"].clone());
     }
     Ok(updates)
+}
+/// Re-importing a Bull row whose transaction the book holds only from an
+/// earlier Bull export (never an observation, whose quantities win) keeps the
+/// more accurate figures: a payjoin's smaller amount, which is the wallet's
+/// net (v6.11-v6.12) rather than the negotiated amount (v6.13+) that is never
+/// below it, and a chain swap's outgoing fee from a provable v6.13+ export,
+/// which reports the on-chain fee rather than the provider's lockup fee.
+fn bull_quantities(
+    existing: &Fields,
+    r: &Record,
+    bull: &Bull,
+    committed: bool,
+    raw: &Json,
+    updates: &mut Fields,
+) {
+    if committed || raw.get("source") != Some(&json!("bullbitcoin_wallet_csv")) {
+        return;
+    }
+    let stored = |key: &str| integer_or_zero(existing.get(key));
+    let incoming = |key: &str| integer_or_zero(r.fields.get(key));
+    if bull.kind.starts_with("payjoin_") && incoming("amount") < stored("amount") {
+        updates.insert("amount".into(), r.fields["amount"].clone());
+    }
+    if bull.kind == "chain_swap"
+        && bull.generation_c
+        && string(&r.fields, "direction") == "outbound"
+        && incoming("fee") != stored("fee")
+    {
+        updates.insert("fee".into(), r.fields["fee"].clone());
+    }
 }
 fn graph_upgrade(old: &Json, new: &Json) -> bool {
     let version = |v: &Json| {
@@ -1461,17 +1538,23 @@ fn run(
         wasabi::rows(&bundle.records)?
     } else if request.format == Format::Ledger {
         ledger::load(&request.file, column_map)?
+    } else if request.format == Format::BullWallet {
+        bull_wallet::parse_all(csv::load(&request.file)?)?
     } else {
         request.format.load(&request.file)?
     };
-    // A Bull Bitcoin wallet imports only the rows of its configured network.
+    // A Bull Bitcoin wallet imports only the rows of its configured network,
+    // and Lightning rows only where the book proves their network.
     let (rows, bull_wallet) = if request.format == Format::BullWallet {
         let total = rows.len();
-        let network = bull_wallet_network(conn, wallet.as_ref().expect("wallet import"))?;
-        (
-            bull_wallet::filter(rows, network.as_deref()),
-            Some((total, network)),
-        )
+        let wallet = wallet.as_ref().expect("wallet import");
+        let network = bull_wallet_network(conn, wallet)?;
+        let routed = bull_wallet::route(
+            Some((conn, &request.profile_id, &wallet.id)),
+            rows,
+            network.as_deref(),
+        )?;
+        (routed.rows, Some((total, network, routed.skipped)))
     } else {
         (rows, None)
     };
@@ -1518,7 +1601,7 @@ fn run(
             .map_err(database_error)?;
     }
     let result = result.map(|mut outcome| {
-        if let (Some((total, network)), Py::Dict(pairs)) = (&bull_wallet, &mut outcome) {
+        if let (Some((total, network, skipped)), Py::Dict(pairs)) = (&bull_wallet, &mut outcome) {
             let at = pairs
                 .iter()
                 .position(|(key, _)| matches!(key, kassiber_pyjson::Key::Str(k) if k.as_str() == Some("input_format")))
@@ -1529,6 +1612,30 @@ fn run(
             ];
             if let Some(network) = network {
                 extra.push(("bullbitcoin_wallet_network", s(network.as_str())));
+            }
+            let routed = bull_wallet::Routed {
+                rows: Vec::new(),
+                skipped: skipped.clone(),
+            };
+            let held = match pairs.iter().find(|(key, _)| *key == kassiber_pyjson::Key::from("inserted_records")) {
+                Some((_, Py::List(items))) => items
+                    .iter()
+                    .filter(|item| kassiber_envelope::get(item, "review").is_some())
+                    .count() as i64,
+                _ => 0,
+            };
+            if held > 0 {
+                extra.push(("bullbitcoin_wallet_review", Py::from(held)));
+            }
+            if let Some(skipped) = routed.skipped_py() {
+                extra.push(("bullbitcoin_wallet_skipped", skipped));
+            }
+            let warnings = routed.warnings(held);
+            if !warnings.is_empty() {
+                extra.push((
+                    "warnings",
+                    Py::List(warnings.into_iter().map(s).collect()),
+                ));
             }
             for (offset, (key, value)) in extra.into_iter().enumerate() {
                 pairs.insert(at + offset, (kassiber_pyjson::Key::from(key), value));
@@ -1719,6 +1826,7 @@ fn insert_settled_records(
                 economics: r.economics,
                 tolerance: r.tolerance,
                 deferred: None,
+                bull: None,
             };
             idless
                 .fields
@@ -1789,7 +1897,7 @@ fn insert_settled_records(
                 ));
             }
             skipped += 1;
-        } else if match_existing_only {
+        } else if match_existing_only || r.bull.as_ref().is_some_and(|b| b.match_only) {
             skipped += 1;
         } else {
             // After "Reset book data" the re-observed row takes its old id
@@ -1832,19 +1940,31 @@ fn insert_settled_records(
             if fiat.is_empty() {
                 fields.insert("fiat_currency".into(), Sql::Text(currency.clone()));
             }
+            let review = r.bull.as_ref().and_then(|b| b.review.as_deref());
+            if review.is_some() {
+                fields.insert("excluded".into(), Sql::Integer(1));
+            }
             insert(conn, "transactions", &fields)?;
+            if let Some(reason) = review {
+                bull_review_tag(conn, (profile, workspace), &id, reason, ids)?;
+            }
             if reclaimed.is_some()
                 && kassiber_setup::book_reset::settle_claim(conn, &id)?
                     == kassiber_setup::book_reset::Settled::BoundWithMetadata
             {
                 reset_rebound += 1;
             }
-            imported.push(change(
+            let mut inserted = change(
                 &id,
                 &wallet.label,
                 r,
                 vec!["metadata".into(), "pricing".into(), "transaction".into()],
-            ));
+            );
+            if let Some(reason) = review {
+                kassiber_envelope::set(&mut inserted, "excluded", Py::Bool(true));
+                kassiber_envelope::set(&mut inserted, "review", s(reason));
+            }
+            imported.push(inserted);
             inserted_ids.push(id);
         }
         if index % 200 == 0 || index == total {
@@ -1869,6 +1989,54 @@ fn insert_settled_records(
         inserted_ids,
         reset,
     })
+}
+/// Tag a Bull Bitcoin wallet row held out of accounting for review: the
+/// shared `bullbitcoin-wallet-review` tag, plus one naming the reason.
+fn bull_review_tag(
+    conn: &Connection,
+    (profile, workspace): (&String, &String),
+    transaction: &str,
+    reason: &str,
+    ids: &mut Ids<'_>,
+) -> Result<(), AppError> {
+    let detail = match reason {
+        bull_wallet::REVIEW_LIGHTNING => "Lightning network unproven",
+        bull_wallet::REVIEW_PAYJOIN => "payjoin amount unverified",
+        other => other,
+    };
+    for (code, label) in [
+        (
+            "bullbitcoin-wallet-review".to_owned(),
+            "Bull Bitcoin wallet review".to_owned(),
+        ),
+        (
+            format!("bullbitcoin-wallet-{}", reason.replace('_', "-")),
+            format!("Bull Bitcoin wallet {detail}"),
+        ),
+    ] {
+        let found: Option<String> = conn
+            .query_row(
+                "SELECT id FROM tags WHERE profile_id=? AND code=?",
+                [profile.as_str(), code.as_str()],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(database_error)?;
+        let tag = match found {
+            Some(id) => id,
+            None => {
+                let id = ids.next(conn)?;
+                conn.execute("INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES(?,?,?,?,?,?)",params![id,workspace,profile,code,label,ids.time(conn)?]).map_err(database_error)?;
+                id
+            }
+        };
+        conn.execute(
+            "INSERT OR IGNORE INTO transaction_tags(transaction_id,tag_id) VALUES(?,?)",
+            [transaction, tag.as_str()],
+        )
+        .map_err(database_error)?;
+    }
+    Ok(())
 }
 fn apply(
     conn: &Connection,
@@ -2184,14 +2352,19 @@ pub(crate) fn import_records(
     Ok(dict(result))
 }
 
-/// Bull Bitcoin wallet-history rows of `file`, before any network filter.
+/// Bull Bitcoin wallet-history rows of `file`, before any network filter,
+/// including the rows a wallet counts as skipped.
 pub(crate) fn bull_wallet_rows(file: &str) -> Result<Vec<csv::Row>, AppError> {
-    Format::BullWallet.load(file)
+    bull_wallet::parse_all(csv::load(file)?)
 }
 
-/// `filter_bullbitcoin_wallet_records` for one normalized network.
-pub(crate) fn bull_wallet_filter(rows: Vec<csv::Row>, network: &str) -> Vec<csv::Row> {
-    bull_wallet::filter(rows, Some(network))
+/// The rows an enriched wallet of `network` matches, Lightning rows included
+/// (an observed lockup/claim proves the wallet), and those it skips.
+pub(crate) fn bull_wallet_enrichment(
+    rows: Vec<csv::Row>,
+    network: &str,
+) -> Result<bull_wallet::Routed, AppError> {
+    bull_wallet::route(None, rows, Some(network))
 }
 
 /// `normalize_btcpay_record` over CSV-shaped Greenfield wallet rows.
