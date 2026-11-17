@@ -308,19 +308,6 @@ pub fn badge_secondary(tk: &Tk, label: &str, glyph: Option<&'static Icon>) -> El
     crate::ui::tag(tk, tk.muted_fg, glyph, label)
 }
 
-/// A label in `ink` (`crate::ui::tag`; the border is no longer drawn). A neutral `tk.fg` ink
-/// reads muted.
-pub fn badge_outline(
-    tk: &Tk,
-    label: &str,
-    glyph: Option<&'static Icon>,
-    ink: Color,
-    _border: Color,
-) -> El {
-    let ink = if ink == tk.fg { tk.muted_fg } else { ink };
-    crate::ui::tag(tk, ink, glyph, label)
-}
-
 /// Amber ink (`text-amber-700 dark:text-amber-300`).
 pub fn amber(tk: &Tk) -> Color {
     rune::color::hex(if tk.dark { "#fcd34d" } else { "#b45309" }).unwrap_or(tk.fg)

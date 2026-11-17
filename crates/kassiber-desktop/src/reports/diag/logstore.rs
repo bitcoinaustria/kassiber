@@ -22,8 +22,9 @@ pub const BRIDGE_INTERVAL: f64 = 4.0;
 pub const BRIDGE_BACKOFF: f64 = 30.0;
 pub const PAGE_LIMIT: usize = 500;
 
-/// The transport wrapper's source (`withDaemonLogging(tauriDaemon, "daemon:tauri")`).
-pub const TRANSPORT: &str = "daemon:tauri";
+/// The source of the app's own daemon-request records (the web shell called it
+/// `daemon:tauri`).
+pub const TRANSPORT: &str = "desktop";
 
 pub const LEVELS: [&str; 5] = ["error", "warning", "info", "debug", "trace"];
 
