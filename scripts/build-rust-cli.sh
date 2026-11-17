@@ -5,8 +5,8 @@
 #
 # Release CI and the local Linux/Windows packaging runs share this script, so a
 # locally verified binary and the published one come from the same command.
-# macOS keeps scripts/build-macos-arm64-app.sh for the local app, which
-# runs the same cargo invocation.
+# The local macOS app (scripts/build-macos-arm64-app.sh) builds its CLI through
+# this script too.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
