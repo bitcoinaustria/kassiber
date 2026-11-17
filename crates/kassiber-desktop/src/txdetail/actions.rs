@@ -5,7 +5,10 @@ use rune::{FileDialogOptions, Tx};
 use serde_json::{Value, json};
 
 use super::draft::{self, s};
-use super::{Reuse, close, open, reload, toast_err, toast_ok};
+use super::{
+    Reuse, Target, close, is_active, open, panel_mut, reload, reload_to, send_for, send_to,
+    toast_err, toast_ok,
+};
 use crate::app::{App, Reply};
 use crate::i18n::{t, tc, tr};
 
@@ -169,13 +172,21 @@ pub fn loan_mark(app: &mut App, role: Option<&'static str>) {
         o.busy.loan = true;
     }
     match role {
-        Some(r) => app.send(
+        Some(r) => send_for(
+            app,
             "ui.loans.mark",
             json!({ "txid": id, "as": r }),
             "txd.loan_mark",
+            Value::Null,
         ),
-        None => app.send("ui.loans.unmark", json!({ "txid": id }), "txd.loan_unmark"),
-    };
+        None => send_for(
+            app,
+            "ui.loans.unmark",
+            json!({ "txid": id }),
+            "txd.loan_unmark",
+            Value::Null,
+        ),
+    }
 }
 
 pub fn loan_link(app: &mut App, target: &str) {
@@ -183,10 +194,12 @@ pub fn loan_link(app: &mut App, target: &str) {
     if let Some(o) = app.detail.open.as_mut() {
         o.busy.link = Some(target.to_owned());
     }
-    app.send(
+    send_for(
+        app,
         "ui.loans.link",
         json!({ "txids": [id, target] }),
         "txd.loan_link",
+        json!(target),
     );
 }
 
@@ -198,16 +211,24 @@ pub fn unpair(app: &mut App, pair_id: &str) {
     if let Some(o) = app.detail.open.as_mut() {
         o.busy.unpair = true;
     }
-    app.send(
+    send_for(
+        app,
         "ui.transfers.unpair",
         json!({ "pair_id": pair_id }),
         "txd.unpair",
+        json!(pair_id),
     );
 }
 
 // ---- Attachments (§5.1) ------------------------------------------------------------------------
 
 pub fn attach_file(app: &mut App, tx: &mut Tx) {
+    // The file goes to the transaction shown when the picker opened, whatever is shown when it
+    // returns.
+    let to = super::active_target(app, Value::Null);
+    if to.tx.is_empty() {
+        return;
+    }
     if let Some(o) = app.detail.open.as_mut() {
         o.busy.attach = true;
         o.attach_error = None;
@@ -216,22 +237,24 @@ pub fn attach_file(app: &mut App, tx: &mut Tx) {
         title: t("transactions:attachments.pickerTitle"),
         ..Default::default()
     };
-    tx.open_file(options, |a: &mut App, result, _tx| match result {
+    tx.open_file(options, move |a: &mut App, result, _tx| match result {
         Ok(Some(path)) => {
-            let Some(id) = rec_id(a) else { return };
-            a.send(
+            let id = to.tx.clone();
+            send_to(
+                a,
+                to,
                 "ui.attachments.add",
                 json!({ "transaction": id, "file_path": path.to_string_lossy() }),
                 "txd.attach_file",
             );
         }
         Ok(None) => {
-            if let Some(o) = a.detail.open.as_mut() {
+            if let Some(o) = panel_mut(a, &to) {
                 o.busy.attach = false;
             }
         }
         Err(e) => {
-            if let Some(o) = a.detail.open.as_mut() {
+            if let Some(o) = panel_mut(a, &to) {
                 o.busy.attach = false;
                 let msg = e.to_string();
                 o.attach_error = Some(if msg.is_empty() {
@@ -293,11 +316,15 @@ pub fn attach_links(app: &mut App) {
     }
     o.busy.links = urls.len();
     o.links_error = None;
+    // The batch size, for the toast when the panel is gone by the last reply.
+    let n = urls.len();
     for u in urls {
-        app.send(
+        send_for(
+            app,
             "ui.attachments.add",
             json!({ "transaction": id, "url": u }),
             "txd.attach_link",
+            json!(n),
         );
     }
 }
@@ -343,18 +370,22 @@ pub fn commit_rename(app: &mut App) {
         o.rename = None;
         return;
     }
-    app.send(
+    send_for(
+        app,
         "ui.attachments.rename",
         json!({ "attachment": att, "label": label }),
         "txd.rename",
+        json!(att),
     );
 }
 
 pub fn remove_attachment(app: &mut App, att: &str) {
-    app.send(
+    send_for(
+        app,
         "ui.attachments.remove",
         json!({ "attachment": att }),
         "txd.remove",
+        json!(att),
     );
 }
 
@@ -468,10 +499,12 @@ pub fn open_reuse(app: &mut App, candidates: &[(String, String)]) {
         });
     }
     if let Some(src) = first {
-        app.send(
+        send_for(
+            app,
             "ui.attachments.list",
             json!({ "transaction": src }),
             "txd.reuse_list",
+            json!(src),
         );
     }
 }
@@ -482,10 +515,12 @@ pub fn pick_reuse_source(app: &mut App, src: &str) {
         r.list = None;
         r.selected.clear();
     }
-    app.send(
+    send_for(
+        app,
         "ui.attachments.list",
         json!({ "transaction": src }),
         "txd.reuse_list",
+        json!(src),
     );
 }
 
@@ -503,10 +538,12 @@ pub fn copy_evidence(app: &mut App) {
     }
     // The dialog hides at once (`busy.reuse`) and reappears with the selection on error.
     o.busy.reuse = true;
-    app.send(
+    send_for(
+        app,
         "ui.attachments.copy",
         json!({ "transaction": id, "source_transaction": src, "attachments": sel }),
         "txd.copy",
+        Value::Null,
     );
 }
 
@@ -528,7 +565,13 @@ pub fn revert(app: &mut App, event: &str, field: Option<&str>, label: &str) {
     if let Some(o) = app.detail.open.as_mut() {
         o.revert_confirm = None;
     }
-    app.send("ui.transactions.history.revert", args, "txd.revert");
+    send_for(
+        app,
+        "ui.transactions.history.revert",
+        args,
+        "txd.revert",
+        Value::Null,
+    );
 }
 
 pub fn process_journals(app: &mut App) {
@@ -549,7 +592,13 @@ pub fn commercial_review(app: &mut App, link: &str, state: &str, kind: Option<&s
         o.busy.commercial = true;
         o.commercial_error = None;
     }
-    app.send("ui.btcpay.provenance.review", args, "txd.commercial_review");
+    send_for(
+        app,
+        "ui.btcpay.provenance.review",
+        args,
+        "txd.commercial_review",
+        json!(link),
+    );
 }
 
 // ---- Acquisition review (§5.6) -----------------------------------------------------------------
@@ -560,21 +609,26 @@ pub fn acq_preview(app: &mut App) {
         o.acq_error = None;
         o.acq_preview = None;
     }
-    app.send("ui.review.cases", json!({ "limit": 1 }), "txd.acq_cases");
+    send_for(
+        app,
+        "ui.review.cases",
+        json!({ "limit": 1 }),
+        "txd.acq_cases",
+        Value::Null,
+    );
 }
 
-fn acq_plan(app: &mut App, cases: &Value) {
-    let Some(id) = rec_id(app) else { return };
-    let kind = app.detail.open.as_ref().and_then(|o| o.acq_kind.clone());
+/// The second step of the acquisition preview, for the panel that asked (gone: nothing).
+fn acq_plan(app: &mut App, to: Target, cases: &Value) {
+    let Some(o) = panel_mut(app, &to) else { return };
+    let kind = o.acq_kind.clone();
+    o.acq_scope = Some(cases.clone());
     let args = json!({
         "expected_scope": { "workspace_id": cases["workspace_id"], "profile_id": cases["profile_id"] },
         "expected_input_version": cases["input_version"],
-        "operations": [{ "type": "kind_override", "transaction_id": id, "kind": kind, "reason": "Reviewed acquisition classification" }],
+        "operations": [{ "type": "kind_override", "transaction_id": to.tx, "kind": kind, "reason": "Reviewed acquisition classification" }],
     });
-    if let Some(o) = app.detail.open.as_mut() {
-        o.acq_scope = Some(cases.clone());
-    }
-    app.send("ui.review.plan", args, "txd.acq_plan");
+    send_to(app, to, "ui.review.plan", args, "txd.acq_plan");
 }
 
 pub fn acq_apply(app: &mut App) {
@@ -595,7 +649,7 @@ pub fn acq_apply(app: &mut App) {
         "artifact": artifact,
         "idempotency_key": key,
     });
-    app.send("ui.review.apply", args, "txd.acq_apply");
+    send_for(app, "ui.review.apply", args, "txd.acq_apply", Value::Null);
 }
 
 // ---- Split payout (§5.5) -------------------------------------------------------------------------
@@ -643,16 +697,26 @@ pub fn split_submit(app: &mut App) {
         o.busy.split = true;
         o.split_error = None;
     }
-    app.send("ui.transfers.payouts.create", args, "txd.split");
+    send_for(
+        app,
+        "ui.transfers.payouts.create",
+        args,
+        "txd.split",
+        Value::Null,
+    );
 }
 
 // ---- Replies -----------------------------------------------------------------------------------------
 
-pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
+/// Replies of the panel's mutations. `to` is the panel each was sent for: its UI state updates
+/// there, shown or parked, and nowhere when that panel is gone; toasts and book refreshes still
+/// follow the write.
+pub fn on_reply(app: &mut App, tag: &str, to: Option<Target>, r: &Reply) {
+    let to = to.unwrap_or_else(Target::nowhere);
     let err = r.error.clone();
     match tag {
         "txd.loan_mark" | "txd.loan_unmark" => {
-            if let Some(o) = app.detail.open.as_mut() {
+            if let Some(o) = panel_mut(app, &to) {
                 o.busy.loan = false;
             }
             match err {
@@ -680,7 +744,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             app.refresh_reads();
         }
         "txd.loan_link" => {
-            if let Some(o) = app.detail.open.as_mut() {
+            if let Some(o) = panel_mut(app, &to)
+                && o.busy.link.as_deref() == to.key.as_str()
+            {
                 o.busy.link = None;
             }
             match err {
@@ -702,10 +768,12 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             app.send("ui.loans.list", Value::Null, "txd.loans");
         }
         "txd.unpair" => {
-            if let Some(o) = app.detail.open.as_mut() {
+            if let Some(o) = panel_mut(app, &to) {
                 o.busy.unpair = false;
+                // Only the pair that was removed leaves the record.
                 if err.is_none()
                     && let Some(rec) = o.record.as_mut()
+                    && s(&rec["pair"], "id") == to.key.as_str().unwrap_or_default()
                     && let Some(m) = rec.as_object_mut()
                 {
                     m.remove("pair");
@@ -724,15 +792,16 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "txd.attach_file" => {
-            let ok = err.is_none();
-            if let Some(o) = app.detail.open.as_mut() {
+            if let Some(o) = panel_mut(app, &to) {
                 o.busy.attach = false;
                 match &err {
                     Some(e) => o.attach_error = Some(e.clone()),
                     None => upsert(o, &r.data),
                 }
+            } else if let Some(e) = &err {
+                app.toast(crate::app::ToastTone::Error, e, None, Some("txd-err"));
             }
-            if ok {
+            if err.is_none() {
                 toast_ok(
                     app,
                     "transactions:notification.filesAttached.title",
@@ -741,27 +810,46 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "txd.attach_link" => {
-            let mut done = None;
-            if let Some(o) = app.detail.open.as_mut() {
-                o.busy.links = o.busy.links.saturating_sub(1);
-                match &err {
-                    Some(e) => {
-                        o.links_error = Some(if e.is_empty() {
-                            t("transactions:attachments.linksDialog.couldNotAdd")
-                        } else {
-                            e.clone()
-                        })
+            let active = is_active(app, &to);
+            // The batch's last reply: the dialog closes (or the toast follows a gone panel).
+            let done = match panel_mut(app, &to) {
+                Some(o) => {
+                    o.busy.links = o.busy.links.saturating_sub(1);
+                    match &err {
+                        Some(e) => {
+                            o.links_error = Some(if e.is_empty() {
+                                t("transactions:attachments.linksDialog.couldNotAdd")
+                            } else {
+                                e.clone()
+                            })
+                        }
+                        None => upsert(o, &r.data),
                     }
-                    None => upsert(o, &r.data),
+                    let done = o.busy.links == 0 && o.links_error.is_none();
+                    if done {
+                        o.links_open = false;
+                    }
+                    done
                 }
-                if o.busy.links == 0 && o.links_error.is_none() {
-                    o.links_open = false;
-                    done = Some(());
+                None => {
+                    if let Some(e) = &err {
+                        app.toast(crate::app::ToastTone::Error, e, None, Some("txd-err"));
+                    }
+                    let more = app
+                        .detail
+                        .targets
+                        .get("txd.attach_link")
+                        .and_then(|q| q.front())
+                        .is_some_and(|n| n.panel == to.panel);
+                    err.is_none() && !more
                 }
-            }
-            if done.is_some() {
-                let n = parse_links(&app.detail.links.text).0.len();
-                app.detail.links = rune::TextEdit::new("");
+            };
+            if done {
+                // The links field belongs to the shown panel's dialog.
+                if active {
+                    app.detail.links = rune::TextEdit::new("");
+                }
+                let n = to.key.as_u64().unwrap_or(1) as usize;
                 toast_ok(
                     app,
                     "transactions:notification.linksAttached.title",
@@ -770,13 +858,13 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "txd.rename" => {
-            let ok = err.is_none();
-            if let Some(o) = app.detail.open.as_mut() {
+            let att = to.key.as_str().unwrap_or_default().to_owned();
+            if let Some(o) = panel_mut(app, &to) {
+                let editing = o.rename.as_ref().is_some_and(|(id, _)| *id == att);
                 match &err {
-                    Some(e) => {
-                        let id = o.rename.as_ref().map(|r| r.0.clone()).unwrap_or_default();
+                    Some(e) if editing => {
                         o.rename = Some((
-                            id,
+                            att.clone(),
                             Some(if e.is_empty() {
                                 t("transactions:attachments.couldNotRename")
                             } else {
@@ -784,13 +872,18 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                             }),
                         ));
                     }
+                    Some(_) => {}
                     None => {
-                        o.rename = None;
+                        if editing {
+                            o.rename = None;
+                        }
                         upsert(o, &r.data);
                     }
                 }
+            } else if let Some(e) = &err {
+                app.toast(crate::app::ToastTone::Error, e, None, Some("txd-err"));
             }
-            if ok {
+            if err.is_none() {
                 toast_ok(
                     app,
                     "transactions:notification.linkTextUpdated.title",
@@ -803,15 +896,15 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             None => {
                 let rec = attachment_of(&r.data);
                 let is_url = is_url(&rec);
-                let id = attachment_id(&rec);
-                if let Some(list) = app
-                    .detail
-                    .open
-                    .as_mut()
-                    .and_then(|o| o.attachments.as_mut())
-                {
-                    list.retain(|a| attachment_id(a) != id);
-                }
+                let id = match attachment_id(&rec) {
+                    id if id.is_empty() => to.key.as_str().unwrap_or_default().to_owned(),
+                    id => id,
+                };
+                let shown = panel_mut(app, &to).map(|o| {
+                    if let Some(list) = o.attachments.as_mut() {
+                        list.retain(|a| attachment_id(a) != id);
+                    }
+                });
                 let body = if is_url {
                     "transactions:notification.attachmentRemoved.linkBody"
                 } else {
@@ -822,14 +915,8 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     "transactions:notification.attachmentRemoved.title",
                     Some(t(body)),
                 );
-                if let Some(id) = rec_id(app) {
-                    super::read_for(
-                        app,
-                        &id,
-                        "ui.attachments.list",
-                        json!({ "transaction": id }),
-                        "txd.attachments",
-                    );
+                if shown.is_some() {
+                    refresh_attachments(app, to);
                 }
             }
         },
@@ -859,7 +946,10 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         },
         "txd.reuse_list" => {
-            if let Some(re) = app.detail.open.as_mut().and_then(|o| o.reuse.as_mut()) {
+            // Only the dialog still showing the source that was read.
+            if let Some(re) = panel_mut(app, &to).and_then(|o| o.reuse.as_mut())
+                && re.source.as_deref() == to.key.as_str()
+            {
                 re.list = Some(
                     r.data["attachments"]
                         .as_array()
@@ -870,20 +960,17 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         "txd.copy" => {
             let copied = r.data["copied"].as_u64().unwrap_or(0) as usize;
-            if let Some(o) = app.detail.open.as_mut() {
+            let shown = panel_mut(app, &to).map(|o| {
                 o.busy.reuse = false;
-                match &err {
-                    Some(_) => {}
-                    None => {
-                        o.reuse = None;
-                        if let Some(list) = r.data["attachments"].as_array() {
-                            for a in list {
-                                upsert(o, a);
-                            }
+                if err.is_none() {
+                    o.reuse = None;
+                    if let Some(list) = r.data["attachments"].as_array() {
+                        for a in list {
+                            upsert(o, a);
                         }
                     }
                 }
-            }
+            });
             match err {
                 Some(e) => app.toast(crate::app::ToastTone::Error, &e, None, Some("txd-err")),
                 None => {
@@ -896,14 +983,8 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                             &[],
                         )),
                     );
-                    if let Some(id) = rec_id(app) {
-                        super::read_for(
-                            app,
-                            &id,
-                            "ui.attachments.list",
-                            json!({ "transaction": id }),
-                            "txd.attachments",
-                        );
+                    if shown.is_some() {
+                        refresh_attachments(app, to);
                     }
                 }
             }
@@ -917,36 +998,46 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     Some(t("transactions:notification.editReverted.body")),
                 );
                 // The reverted value is the new baseline.
-                if let Some(id) = rec_id(app) {
-                    app.detail.drafts.remove(&id);
+                if !to.tx.is_empty() {
+                    app.detail.drafts.remove(&to.tx);
                 }
-                reload(app);
+                if panel_mut(app, &to).is_some() {
+                    reload_to(app, to);
+                }
                 app.refresh_reads();
             }
         },
         "txd.commercial_review" => {
-            if let Some(o) = app.detail.open.as_mut() {
+            let shown = panel_mut(app, &to).map(|o| {
                 o.busy.commercial = false;
                 o.commercial_error = err.clone();
-            }
-            if err.is_none() {
-                reload(app);
-                app.refresh_reads();
+            });
+            match err {
+                None => {
+                    if shown.is_some() {
+                        reload_to(app, to);
+                    }
+                    app.refresh_reads();
+                }
+                Some(e) if shown.is_none() => {
+                    app.toast(crate::app::ToastTone::Error, &e, None, Some("txd-err"))
+                }
+                Some(_) => {}
             }
         }
         "txd.acq_cases" => match err {
-            Some(e) => acq_fail(app, e),
-            None => acq_plan(app, &r.data),
+            Some(e) => acq_fail(app, &to, e),
+            None => acq_plan(app, to, &r.data),
         },
         "txd.acq_plan" => match err {
-            Some(e) => acq_fail(app, e),
+            Some(e) => acq_fail(app, &to, e),
             None => {
                 let artifact = r
                     .data
                     .get("artifact")
                     .cloned()
                     .unwrap_or_else(|| r.data.clone());
-                let Some(o) = app.detail.open.as_mut() else {
+                let Some(o) = panel_mut(app, &to) else {
                     return;
                 };
                 let scope = o.acq_scope.clone().unwrap_or(Value::Null);
@@ -962,19 +1053,18 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         },
         "txd.acq_apply" => match err {
-            Some(e) => acq_fail(app, e),
+            Some(e) => acq_fail(app, &to, e),
             None => {
-                if let Some(o) = app.detail.open.as_mut() {
+                if let Some(o) = panel_mut(app, &to) {
                     o.busy.acq = false;
                     o.acq_preview = None;
+                    reload_to(app, to);
                 }
-                reload(app);
                 app.refresh_reads();
             }
         },
         "txd.split" => {
-            let ok = err.is_none();
-            if let Some(o) = app.detail.open.as_mut() {
+            let shown = panel_mut(app, &to).map(|o| {
                 o.busy.split = false;
                 match &err {
                     Some(e) => o.split_error = Some(format!("Could not record split payout: {e}")),
@@ -983,19 +1073,38 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                             Some("Split payout recorded; reprocessing journals to apply it.".into())
                     }
                 }
-            }
-            if ok {
-                app.process_journals();
+            });
+            match err {
+                None => app.process_journals(),
+                Some(e) if shown.is_none() => {
+                    app.toast(crate::app::ToastTone::Error, &e, None, Some("txd-err"))
+                }
+                Some(_) => {}
             }
         }
         _ => {}
     }
 }
 
-fn acq_fail(app: &mut App, e: String) {
-    if let Some(o) = app.detail.open.as_mut() {
-        o.busy.acq = false;
-        o.acq_error = Some(e);
+/// Re-reads the attachment list of the panel `to` names.
+fn refresh_attachments(app: &mut App, to: Target) {
+    let id = to.tx.clone();
+    send_to(
+        app,
+        to,
+        "ui.attachments.list",
+        json!({ "transaction": id }),
+        "txd.attachments",
+    );
+}
+
+fn acq_fail(app: &mut App, to: &Target, e: String) {
+    match panel_mut(app, to) {
+        Some(o) => {
+            o.busy.acq = false;
+            o.acq_error = Some(e);
+        }
+        None => app.toast(crate::app::ToastTone::Error, &e, None, Some("txd-err")),
     }
 }
 
@@ -1106,19 +1215,51 @@ mod tests {
         assert!(app.detail.saving_ids.is_empty());
     }
 
+    fn shown(id: &str) -> Box<super::super::Open> {
+        let mut o = super::super::Open::new(id, super::super::Tab::Details, vec![]);
+        o.record = Some(json!({ "id": id }));
+        Box::new(o)
+    }
+
+    /// Tab A parked, tab B shown.
+    fn two_tabs(app: &mut App, a: Box<super::super::Open>, b: Box<super::super::Open>) {
+        app.detail.tabs = vec![
+            super::super::TabSlot {
+                parked: Some(a),
+                pinned: true,
+                label: "A".into(),
+            },
+            super::super::TabSlot {
+                parked: None,
+                pinned: true,
+                label: "B".into(),
+            },
+        ];
+        app.detail.active_tab = 1;
+        app.detail.open = Some(b);
+    }
+
+    fn fail(e: &str) -> Reply {
+        Reply {
+            error: Some(e.into()),
+            ..ok(Value::Null)
+        }
+    }
+
     /// A side read sent for A that lands after switching to B is dropped, and drains its entry.
     #[test]
     fn a_side_read_for_another_transaction_is_dropped() {
         let mut app = crate::app::tests::quiet_app();
-        let mut b = super::super::Open::new("b", super::super::Tab::Details, vec![]);
-        b.record = Some(json!({ "id": "b" }));
-        app.detail.open = Some(Box::new(b));
-        for id in ["a", "b"] {
+        // A's panel was replaced (a coin-trail step, say): its read has nowhere to land.
+        let gone = shown("a").target(Value::Null);
+        app.detail.open = Some(shown("b"));
+        let b = super::super::active_target(&app, Value::Null);
+        for to in [gone, b] {
             app.detail
-                .read_ids
+                .targets
                 .entry("txd.attachments")
                 .or_default()
-                .push_back(id.into());
+                .push_back(to);
         }
         let list = |n: &str| ok(json!({ "attachments": [{ "id": n }] }));
         super::super::on_reply(&mut app, "txd.attachments", &list("for-a"));
@@ -1133,25 +1274,228 @@ mod tests {
             .clone()
             .unwrap();
         assert_eq!(got[0]["id"], "for-b");
-        assert!(app.detail.read_ids["txd.attachments"].is_empty());
+        assert!(app.detail.targets["txd.attachments"].is_empty());
     }
 
-    /// A reload sent for A that lands after switching to B leaves B's record and edits alone.
+    /// Attaching a link on A, then switching to B before the reply: the new attachment lands on
+    /// A's parked panel, never on B (whose Remove could then delete it by id).
+    #[test]
+    fn an_attachment_reply_after_a_tab_switch_lands_on_its_own_tab() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut a = shown("a");
+        a.busy.links = 1;
+        a.links_open = true;
+        let to = a.target(json!(1));
+        two_tabs(&mut app, a, shown("b"));
+        app.detail.links = rune::TextEdit::new("typed on B");
+        app.detail
+            .targets
+            .entry("txd.attach_link")
+            .or_default()
+            .push_back(to);
+        super::super::on_reply(
+            &mut app,
+            "txd.attach_link",
+            &ok(json!({ "attachment": { "id": "att-1", "attachment_type": "url" } })),
+        );
+        let b = app.detail.open.as_ref().unwrap();
+        assert!(b.attachments.is_none(), "B shows nothing of A's");
+        assert_eq!(app.detail.links.text, "typed on B", "B's dialog text stays");
+        let a = app.detail.tabs[0].parked.as_ref().unwrap();
+        assert_eq!(a.attachments.as_ref().unwrap()[0]["id"], "att-1");
+        assert_eq!(a.busy.links, 0);
+        assert!(!a.links_open, "A's dialog closed");
+        assert!(app.detail.targets["txd.attach_link"].is_empty());
+    }
+
+    /// A removal on A that lands after switching to B leaves B's list alone and re-reads A's.
+    #[test]
+    fn a_removal_reply_after_a_tab_switch_updates_its_own_tab() {
+        let mut app = crate::app::tests::quiet_app();
+        let same = json!([{ "id": "att-1" }, { "id": "att-2" }]);
+        let mut a = shown("a");
+        a.attachments = same.as_array().cloned();
+        let mut b = shown("b");
+        b.attachments = same.as_array().cloned();
+        let to = a.target(json!("att-1"));
+        two_tabs(&mut app, a, b);
+        app.detail
+            .targets
+            .entry("txd.remove")
+            .or_default()
+            .push_back(to.clone());
+        super::super::on_reply(
+            &mut app,
+            "txd.remove",
+            &ok(json!({ "attachment": { "id": "att-1" } })),
+        );
+        assert_eq!(
+            app.detail
+                .open
+                .as_ref()
+                .unwrap()
+                .attachments
+                .as_ref()
+                .unwrap()
+                .len(),
+            2
+        );
+        let a = app.detail.tabs[0].parked.as_ref().unwrap();
+        assert_eq!(a.attachments.as_ref().unwrap().len(), 1);
+        // The follow-up list read is A's.
+        assert_eq!(app.detail.targets["txd.attachments"].front(), Some(&to));
+    }
+
+    /// A opened with a `:` query (which the record need not echo) and B opened before A's
+    /// resolve reply: the reply resolves A's panel, never B's record or draft.
+    #[test]
+    fn a_resolve_reply_for_another_tabs_colon_query_leaves_the_shown_tab() {
+        let mut app = crate::app::tests::quiet_app();
+        let a = Box::new(super::super::Open::new(
+            "wallet:abc:0",
+            super::super::Tab::Details,
+            vec![],
+        ));
+        let to = a.target(Value::Null);
+        assert!(to.tx.is_empty(), "sent while A resolves");
+        let mut b = shown("b");
+        b.draft.note = "unsaved".into();
+        two_tabs(&mut app, a, b);
+        app.detail
+            .targets
+            .entry("txd.resolve")
+            .or_default()
+            .push_back(to);
+        super::super::on_reply(
+            &mut app,
+            "txd.resolve",
+            &ok(json!({ "transaction": { "id": "a-row" } })),
+        );
+        let b = app.detail.open.as_ref().unwrap();
+        assert_eq!(b.id(), Some("b"));
+        assert_eq!(b.draft.note, "unsaved");
+        let a = app.detail.tabs[0].parked.as_ref().unwrap();
+        assert_eq!(
+            a.id(),
+            Some("a-row"),
+            "the colon query resolves its own tab"
+        );
+        assert!(!a.loading);
+        // A's side reads follow, for A.
+        assert_eq!(
+            app.detail.targets["txd.history"]
+                .front()
+                .map(|t| t.tx.as_str()),
+            Some("a-row")
+        );
+    }
+
+    /// A resolve sent by a panel that was replaced since (Retry, a coin-trail step) is dropped.
+    #[test]
+    fn a_resolve_reply_for_a_replaced_panel_is_dropped() {
+        let mut app = crate::app::tests::quiet_app();
+        let old = super::super::Open::new("wallet:abc:0", super::super::Tab::Details, vec![]);
+        let to = old.target(Value::Null);
+        app.detail.open = Some(Box::new(super::super::Open::new(
+            "wallet:abc:0",
+            super::super::Tab::Details,
+            vec![],
+        )));
+        app.detail
+            .targets
+            .entry("txd.resolve")
+            .or_default()
+            .push_back(to);
+        super::super::on_reply(
+            &mut app,
+            "txd.resolve",
+            &ok(json!({ "transaction": { "id": "stale" } })),
+        );
+        let o = app.detail.open.as_ref().unwrap();
+        assert!(
+            o.record.is_none() && o.loading,
+            "the new panel waits for its own reply"
+        );
+    }
+
+    /// An acquisition preview started on A continues for A after switching to B: the plan step
+    /// names A's transaction and its failure lands on A.
+    #[test]
+    fn an_acquisition_preview_follows_its_own_tab() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut a = shown("a");
+        a.busy.acq = true;
+        a.acq_kind = Some("gift_in".into());
+        let to = a.target(Value::Null);
+        two_tabs(&mut app, a, shown("b"));
+        app.detail
+            .targets
+            .entry("txd.acq_cases")
+            .or_default()
+            .push_back(to.clone());
+        let cases = json!({ "workspace_id": "w", "profile_id": "p", "input_version": "v1" });
+        super::super::on_reply(&mut app, "txd.acq_cases", &ok(cases.clone()));
+        assert!(app.detail.open.as_ref().unwrap().acq_scope.is_none());
+        assert_eq!(
+            app.detail.tabs[0].parked.as_ref().unwrap().acq_scope,
+            Some(cases)
+        );
+        assert_eq!(app.detail.targets["txd.acq_plan"].front(), Some(&to));
+        super::super::on_reply(&mut app, "txd.acq_plan", &fail("refused"));
+        let a = app.detail.tabs[0].parked.as_ref().unwrap();
+        assert!(!a.busy.acq);
+        assert_eq!(a.acq_error.as_deref(), Some("refused"));
+        assert!(app.detail.open.as_ref().unwrap().acq_error.is_none());
+    }
+
+    /// An explanation read for A's row that lands after switching to B stays off B's dialog,
+    /// and one for a reference the dialog no longer shows is dropped.
+    #[test]
+    fn an_explanation_lands_only_on_the_dialog_that_asked() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut a = shown("a");
+        a.explain = Some((json!("ref-a"), crate::app::Load::Loading));
+        let to = a.target(json!("ref-a"));
+        let mut b = shown("b");
+        b.explain = Some((json!("ref-b"), crate::app::Load::Loading));
+        let b_old = b.target(json!("ref-b-old"));
+        two_tabs(&mut app, a, b);
+        let q = app.detail.targets.entry("txd.explain").or_default();
+        q.push_back(to);
+        q.push_back(b_old);
+        super::super::on_reply(&mut app, "txd.explain", &ok(json!({ "for": "a" })));
+        super::super::on_reply(&mut app, "txd.explain", &ok(json!({ "for": "old" })));
+        let a = app.detail.tabs[0].parked.as_ref().unwrap();
+        assert!(matches!(&a.explain, Some((_, crate::app::Load::Ready(v))) if v["for"] == "a"));
+        let b = app.detail.open.as_ref().unwrap();
+        assert!(matches!(&b.explain, Some((_, crate::app::Load::Loading))));
+    }
+
+    /// A reload sent for A that lands after switching to B refreshes A's parked panel and
+    /// leaves B's record and edits alone.
     #[test]
     fn a_reload_reply_for_another_transaction_is_ignored() {
         let mut app = crate::app::tests::quiet_app();
-        let mut b = super::super::Open::new("b", super::super::Tab::Details, vec![]);
-        b.record = Some(json!({ "id": "b" }));
+        let a = shown("a");
+        let to = a.target(Value::Null);
+        let mut b = shown("b");
         b.draft.note = "unsaved".into();
-        app.detail.open = Some(Box::new(b));
+        two_tabs(&mut app, a, b);
+        app.detail
+            .targets
+            .entry("txd.reload")
+            .or_default()
+            .push_back(to);
         super::super::on_reply(
             &mut app,
             "txd.reload",
-            &ok(json!({ "transaction": { "id": "a" } })),
+            &ok(json!({ "transaction": { "id": "a", "fresh": true } })),
         );
         let o = app.detail.open.as_ref().unwrap();
         assert_eq!(o.id(), Some("b"));
         assert_eq!(o.draft.note, "unsaved");
+        let a = app.detail.tabs[0].parked.as_ref().unwrap();
+        assert_eq!(a.record.as_ref().unwrap()["fresh"], true);
     }
 }
 
@@ -1162,10 +1506,12 @@ pub fn open_explanation(app: &mut App, reference: Value) {
         return;
     };
     o.explain = Some((reference.clone(), crate::app::Load::Loading));
-    app.send(
+    send_for(
+        app,
         "ui.reports.explain_capital_gain",
         json!({ "reference": reference }),
         "txd.explain",
+        reference,
     );
 }
 

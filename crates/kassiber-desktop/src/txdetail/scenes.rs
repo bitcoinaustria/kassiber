@@ -523,7 +523,8 @@ fn xfer_trade(a: &mut App, id: &str, de: bool) {
         return;
     }
     let row = strike_row(id);
-    super::load_record(a, row.clone(), false);
+    let panel = a.detail.open.as_ref().map_or(0, |o| o.serial);
+    super::load_record(a, panel, row.clone(), false);
     super::settle(a);
     let graph = json!({
         "transaction": {"id": id, "chain": "bitcoin", "network": "regtest", "externalId": row["externalId"], "txid": row["externalId"],

@@ -133,6 +133,9 @@ pub struct Reuse {
 }
 
 pub struct Open {
+    /// This panel's identity for the requests it sends: unique per `Open`, so a reply finds the
+    /// panel (active or parked) that asked, and a replaced panel (coin trail, retry) hears none.
+    pub serial: u64,
     /// What the caller asked for (id, txid or explorer id).
     pub query: String,
     pub tab: Tab,
@@ -186,10 +189,13 @@ pub struct Open {
     pub explain: Option<(Value, crate::app::Load<Value>)>,
 }
 
+static NEXT_SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
 impl Open {
     fn new(query: &str, tab: Tab, trail: Vec<String>) -> Open {
         let empty = draft::baseline(&Value::Null);
         Open {
+            serial: NEXT_SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             query: query.to_owned(),
             tab,
             record: None,
@@ -240,6 +246,16 @@ impl Open {
         self.record.as_ref().map(|r| draft::s(r, "id"))
     }
 
+    /// A request target for this panel and the transaction it shows; `key` is what else the
+    /// reply must still match.
+    pub fn target(&self, key: Value) -> Target {
+        Target {
+            panel: self.serial,
+            tx: self.id().unwrap_or_default().to_owned(),
+            key,
+        }
+    }
+
     pub fn dirty(&self) -> draft::Dirty {
         draft::diff(&self.draft, &self.base)
     }
@@ -252,6 +268,27 @@ pub struct TabSlot {
     /// Kept open (`pinDetail`); a page's preview (false) is replaced by the next row it opens.
     pub pinned: bool,
     pub label: String,
+}
+
+/// Which panel a request was sent for: its `Open::serial`, the transaction it showed (empty
+/// while it resolves) and what else the reply must still match (the reuse source, the explained
+/// reference, …; `Null` when nothing).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Target {
+    pub panel: u64,
+    pub tx: String,
+    pub key: Value,
+}
+
+impl Target {
+    /// A target no panel matches.
+    pub fn nowhere() -> Target {
+        Target {
+            panel: 0,
+            tx: String::new(),
+            key: Value::Null,
+        }
+    }
 }
 
 pub struct DetailUi {
@@ -273,9 +310,11 @@ pub struct DetailUi {
     /// With each, the draft that was submitted: only that becomes the saved baseline, so edits
     /// made while it saves stay dirty.
     pub saving_ids: std::collections::VecDeque<(String, Draft)>,
-    /// The transaction each side read in flight was sent for, per reply tag (replies with one tag
-    /// arrive in the order they were sent), so a reply after a tab switch is dropped.
-    pub read_ids: HashMap<&'static str, std::collections::VecDeque<String>>,
+    /// The panel each request in flight was sent for, per reply tag (replies with one tag arrive
+    /// in the order they were sent, a stale-context re-read keeping its place), so a reply after a
+    /// tab switch lands on its own panel, active or parked, or is dropped with it. Saves keep
+    /// `saving_ids`; the shared loan list and attachment opening need none.
+    pub targets: HashMap<&'static str, std::collections::VecDeque<Target>>,
     /// `ui.loans.list` marks.
     pub loans: Option<Vec<Value>>,
     /// The host's row order for "Save & next" (`set_nav_list`).
@@ -307,7 +346,7 @@ impl Default for DetailUi {
             width: DEFAULT_WIDTH,
             maximized: false,
             saving_ids: Default::default(),
-            read_ids: HashMap::new(),
+            targets: HashMap::new(),
             drafts: HashMap::new(),
             loans: None,
             nav: vec![],
@@ -460,10 +499,14 @@ fn open_inner(app: &mut App, id: &str, tab: Tab, trail: Vec<String>, follow_from
     let mut o = Open::new(id, tab, trail);
     o.follow_from = follow_from;
     app.detail.open = Some(Box::new(o));
-    app.send(
+    // The reply goes to this panel only: a query with `:` resolves to a record that need not
+    // carry it, so the record alone cannot tell which panel asked.
+    send_for(
+        app,
         "ui.transactions.resolve",
         json!({ "query": id }),
         "txd.resolve",
+        Value::Null,
     );
     if app.detail.loans.is_none() {
         app.send("ui.loans.list", Value::Null, "txd.loans");
@@ -529,16 +572,9 @@ pub fn retry(app: &mut App) {
     }
 }
 
-fn matches_query(r: &Value, q: &str) -> bool {
-    let q = q.to_lowercase();
-    ["id", "externalId", "explorerId", "txnId"]
-        .iter()
-        .any(|k| draft::s(r, k).to_lowercase() == q)
-        || q.contains(':')
-}
-
-/// Loads a resolved record into the panel: baseline, text fields, side reads, the graph.
-fn load_record(app: &mut App, record: Value, keep_draft: bool) {
+/// Loads a resolved record into panel `panel` (active or parked): baseline, text fields (the
+/// active panel's), side reads, the graph.
+fn load_record(app: &mut App, panel: u64, record: Value, keep_draft: bool) {
     let id = draft::s(&record, "id").to_owned();
     let base = app
         .detail
@@ -546,7 +582,12 @@ fn load_record(app: &mut App, record: Value, keep_draft: bool) {
         .get(&id)
         .cloned()
         .unwrap_or_else(|| draft::baseline(&record));
-    let Some(o) = app.detail.open.as_mut() else {
+    let active = app.detail.open.as_ref().is_some_and(|o| o.serial == panel);
+    let any_tx = Target {
+        panel,
+        ..Target::nowhere()
+    };
+    let Some(o) = panel_mut(app, &any_tx) else {
         return;
     };
     let same_row = o.id() == Some(id.as_str());
@@ -562,11 +603,19 @@ fn load_record(app: &mut App, record: Value, keep_draft: bool) {
     if reset {
         o.base = base.clone();
         o.draft = base;
-        let d = o.draft.clone();
-        sync_edits(app, &d);
+        // A parked panel's text fields are rebound from its draft when it comes to the front.
+        if active {
+            let d = o.draft.clone();
+            sync_edits(app, &d);
+        }
     }
     if !same_row || !keep_draft {
-        side_reads(app, &id);
+        let to = Target {
+            panel,
+            tx: id.clone(),
+            key: Value::Null,
+        };
+        side_reads(app, &to);
         graph::ensure(app, &id);
     }
 }
@@ -581,51 +630,82 @@ pub fn sync_edits(app: &mut App, d: &Draft) {
     ui.source = TextEdit::new(d.manual_source.clone());
 }
 
-pub fn side_reads(app: &mut App, id: &str) {
-    read_for(
-        app,
-        id,
-        "ui.attachments.list",
-        json!({ "transaction": id }),
-        "txd.attachments",
-    );
-    read_for(
-        app,
-        id,
-        "ui.transactions.history",
-        json!({ "transaction": id, "limit": 25 }),
-        "txd.history",
-    );
-    read_for(
-        app,
-        id,
-        "ui.journals.events.list",
-        json!({ "transaction": id, "limit": 20 }),
-        "txd.events",
-    );
-    read_for(
-        app,
-        id,
-        "ui.transactions.commercial_context",
-        json!({ "transaction": id }),
-        "txd.commercial",
-    );
+/// The side reads of the panel and transaction `to` names.
+pub fn side_reads(app: &mut App, to: &Target) {
+    let id = to.tx.clone();
+    let reads = [
+        (
+            "ui.attachments.list",
+            json!({ "transaction": id }),
+            "txd.attachments",
+        ),
+        (
+            "ui.transactions.history",
+            json!({ "transaction": id, "limit": 25 }),
+            "txd.history",
+        ),
+        (
+            "ui.journals.events.list",
+            json!({ "transaction": id, "limit": 20 }),
+            "txd.events",
+        ),
+        (
+            "ui.transactions.commercial_context",
+            json!({ "transaction": id }),
+            "txd.commercial",
+        ),
+    ];
+    for (kind, args, tag) in reads {
+        send_to(app, to.clone(), kind, args, tag);
+    }
 }
 
-/// Sends one side read for transaction `id`, remembering which transaction its reply is for.
-pub(super) fn read_for(app: &mut App, id: &str, kind: &str, args: Value, tag: &'static str) {
-    app.detail
-        .read_ids
-        .entry(tag)
-        .or_default()
-        .push_back(id.to_owned());
+// ---- Request targets ---------------------------------------------------------------------------
+
+/// Sends a request whose reply belongs to the panel `to` names, remembering it under `tag`.
+pub(super) fn send_to(app: &mut App, to: Target, kind: &str, args: Value, tag: &'static str) {
+    app.detail.targets.entry(tag).or_default().push_back(to);
     app.send(kind, args, tag);
 }
 
-/// Whether a side read's reply is for the transaction shown now (it always drains its entry).
-fn read_is_current(app: &mut App, tag: &str) -> bool {
-    let sent_for = app.detail.read_ids.get_mut(tag).and_then(|q| q.pop_front());
-    sent_for.is_some_and(|id| app.detail.open.as_ref().and_then(|o| o.id()) == Some(id.as_str()))
+/// `send_to` for the panel shown now.
+pub(super) fn send_for(app: &mut App, kind: &str, args: Value, tag: &'static str, key: Value) {
+    let to = active_target(app, key);
+    send_to(app, to, kind, args, tag);
+}
+
+/// The shown panel as a request target (one no panel matches when none is shown).
+pub(super) fn active_target(app: &App, key: Value) -> Target {
+    match &app.detail.open {
+        Some(o) => o.target(key),
+        None => Target {
+            key,
+            ..Target::nowhere()
+        },
+    }
+}
+
+/// The panel a reply of `tag` was sent for (always drains its entry; None for untracked tags).
+fn take_target(app: &mut App, tag: &str) -> Option<Target> {
+    app.detail.targets.get_mut(tag)?.pop_front()
+}
+
+/// The panel `to` names, shown or parked, while it still shows `to`'s transaction (any, when
+/// it was sent while the panel resolved).
+pub(super) fn panel_mut<'a>(app: &'a mut App, to: &Target) -> Option<&'a mut Open> {
+    let ui = &mut app.detail;
+    std::iter::once(ui.open.as_deref_mut())
+        .chain(ui.tabs.iter_mut().map(|t| t.parked.as_deref_mut()))
+        .flatten()
+        .find(|o| o.serial == to.panel && (to.tx.is_empty() || o.id() == Some(to.tx.as_str())))
+}
+
+/// Whether `to` names the panel shown now.
+pub(super) fn is_active(app: &App, to: &Target) -> bool {
+    app.detail
+        .open
+        .as_ref()
+        .is_some_and(|o| o.serial == to.panel)
 }
 
 // ---- Replies ----------------------------------------------------------------------------------
@@ -645,117 +725,124 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         actions::on_saved(app, r);
         return;
     }
-    // Side reads too, and only the shown transaction's reply lands.
-    if matches!(
-        tag,
-        "txd.attachments" | "txd.history" | "txd.events" | "txd.commercial"
-    ) && !read_is_current(app, tag)
-    {
-        return;
-    }
-    if app.detail.open.is_none() {
-        return;
-    }
+    // Every other reply drains its panel's entry (even with no panel left) and lands only on
+    // the panel it was sent for, shown or parked.
+    let target = take_target(app, tag);
     match tag {
         "txd.resolve" | "txd.reload" => {
-            let keep = tag == "txd.reload";
-            let record = r.data.get("transaction").filter(|v| v.is_object()).cloned();
-            let o = app.detail.open.as_mut().unwrap();
-            // A reload re-reads the transaction shown when it was sent; after a tab switch the
-            // reply is for another transaction and must not replace this one.
-            let fits = record.as_ref().is_some_and(|rec| {
-                if keep {
-                    o.id() == Some(draft::s(rec, "id"))
-                } else {
-                    matches_query(rec, &o.query)
-                }
-            });
-            if r.error.is_none() && fits {
-                // `shownEnvelope.workspaceId/profileId`: the book this reading came from.
-                let (w, p) = (&r.data["workspaceId"], &r.data["profileId"]);
-                o.scope = (w.is_string() && p.is_string())
-                    .then(|| json!({"workspace_id": w, "profile_id": p}));
-            }
-            // The Review page drops a row it cannot read, with a notice (QuarantineDashboard).
-            if let (Some(e), false, Some(_)) = (&r.error, keep, review_host(app)) {
-                let title = t("journals:quarantine.detail.resolveError");
-                let body = if e.is_empty() {
-                    title.clone()
-                } else {
-                    e.clone()
-                };
-                app.toast(
-                    ToastTone::Error,
-                    &title,
-                    Some(body),
-                    Some("quarantine-resolve"),
-                );
-                close(app);
+            let Some(to) = target else { return };
+            on_resolved(app, &to, tag == "txd.reload", r);
+        }
+        "txd.attachments" | "txd.history" | "txd.events" | "txd.commercial"
+            if r.error.is_none() =>
+        {
+            let Some(o) = target.as_ref().and_then(|to| panel_mut(app, to)) else {
                 return;
-            }
-            match (&r.error, record) {
-                (None, Some(rec)) if fits => load_record(app, rec, keep),
-                (None, Some(_)) => {}
-                (Some(e), _) if !keep => {
-                    let o = app.detail.open.as_mut().unwrap();
-                    o.loading = false;
-                    o.error = Some(e.clone());
+            };
+            match tag {
+                "txd.attachments" => {
+                    o.attachments = Some(
+                        r.data["attachments"]
+                            .as_array()
+                            .cloned()
+                            .unwrap_or_default(),
+                    )
                 }
-                (None, None) if !keep => {
-                    let o = app.detail.open.as_mut().unwrap();
-                    o.loading = false;
-                    o.error = Some(t("transactions:route.resolveError.body"));
-                }
-                _ => {}
+                "txd.history" => o.history = Some(r.data.clone()),
+                "txd.events" => o.events = Some(r.data.clone()),
+                _ => o.commercial = Some(r.data.clone()),
             }
         }
-        "txd.attachments" if r.error.is_none() => {
-            if let Some(o) = app.detail.open.as_mut() {
-                o.attachments = Some(
-                    r.data["attachments"]
-                        .as_array()
-                        .cloned()
-                        .unwrap_or_default(),
-                );
-            }
-        }
-        "txd.history" if r.error.is_none() => set(app, |o| o.history = Some(r.data.clone())),
-        "txd.events" if r.error.is_none() => set(app, |o| o.events = Some(r.data.clone())),
-        "txd.commercial" if r.error.is_none() => set(app, |o| o.commercial = Some(r.data.clone())),
+        "txd.attachments" | "txd.history" | "txd.events" | "txd.commercial" => {}
         "txd.explain" => {
-            if let Some((_, load)) = app.detail.open.as_mut().and_then(|o| o.explain.as_mut()) {
+            let Some(to) = target else { return };
+            // Only the dialog still explaining the reference that was asked.
+            if let Some((reference, load)) = panel_mut(app, &to).and_then(|o| o.explain.as_mut())
+                && *reference == to.key
+            {
                 *load = match &r.error {
                     Some(e) => crate::app::Load::Failed(e.clone()),
                     None => crate::app::Load::Ready(r.data.clone()),
                 };
             }
         }
-        _ => actions::on_reply(app, tag, r),
+        _ => actions::on_reply(app, tag, target, r),
     }
 }
 
-fn set(app: &mut App, f: impl FnOnce(&mut Open)) {
-    if let Some(o) = app.detail.open.as_mut() {
-        f(o);
+/// A `ui.transactions.resolve` reply for the panel `to` names: the first reading (`resolve`) or
+/// a re-read of the transaction it shows (`reload`, which keeps unrelated edits).
+fn on_resolved(app: &mut App, to: &Target, keep: bool, r: &Reply) {
+    let active = is_active(app, to);
+    let record = r.data.get("transaction").filter(|v| v.is_object()).cloned();
+    let Some(o) = panel_mut(app, to) else {
+        return;
+    };
+    // A re-read must still be of the transaction the panel shows.
+    let fits = record
+        .as_ref()
+        .is_some_and(|rec| !keep || o.id() == Some(draft::s(rec, "id")));
+    if r.error.is_none() && fits {
+        // `shownEnvelope.workspaceId/profileId`: the book this reading came from.
+        let (w, p) = (&r.data["workspaceId"], &r.data["profileId"]);
+        o.scope =
+            (w.is_string() && p.is_string()).then(|| json!({"workspace_id": w, "profile_id": p}));
+    }
+    // The Review page drops the row it shows when it cannot read it, with a notice
+    // (QuarantineDashboard).
+    if let (Some(e), false, true, Some(_)) = (&r.error, keep, active, review_host(app)) {
+        let title = t("journals:quarantine.detail.resolveError");
+        let body = if e.is_empty() {
+            title.clone()
+        } else {
+            e.clone()
+        };
+        app.toast(
+            ToastTone::Error,
+            &title,
+            Some(body),
+            Some("quarantine-resolve"),
+        );
+        close(app);
+        return;
+    }
+    let failed = match (&r.error, record) {
+        (None, Some(rec)) if fits => {
+            load_record(app, to.panel, rec, keep);
+            None
+        }
+        (Some(e), _) if !keep => Some(e.clone()),
+        (None, None) if !keep => Some(t("transactions:route.resolveError.body")),
+        _ => None,
+    };
+    if let Some(e) = failed
+        && let Some(o) = panel_mut(app, to)
+    {
+        o.loading = false;
+        o.error = Some(e);
     }
 }
 
 /// Re-reads the open row after a write (keeps unrelated edits) and the side panels.
 pub fn reload(app: &mut App) {
-    let Some(id) = app
-        .detail
-        .open
-        .as_ref()
-        .and_then(|o| o.id().map(str::to_owned))
-    else {
+    let to = active_target(app, Value::Null);
+    reload_to(app, to);
+}
+
+/// `reload` for the panel `to` names, shown or parked.
+pub(super) fn reload_to(app: &mut App, to: Target) {
+    if to.tx.is_empty() {
         return;
-    };
-    app.send(
+    }
+    let query = to.tx.clone();
+    send_to(
+        app,
+        to.clone(),
         "ui.transactions.resolve",
-        json!({ "query": id }),
+        json!({ "query": query }),
         "txd.reload",
     );
-    side_reads(app, &id);
+    side_reads(app, &to);
 }
 
 // ---- Keys (TransactionDetailSheet.tsx:324-369) -----------------------------------------------
