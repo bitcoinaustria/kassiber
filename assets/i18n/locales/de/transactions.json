@@ -1224,5 +1224,25 @@
       "label": "Marktkurs",
       "phrase": "einem Marktkurs"
     }
+  },
+  "splitPayout": {
+    "title": "Geteilte Übertragung / Swap klären",
+    "body": "Ein Teil dieser {{asset}}-Ausgabe ging an eine eigene Wallet zurück, ein Teil an einen Swap oder eine direkte Auszahlung. Erfasse den Auszahlungsanteil; der Rest wird als Eigenübertragung in derselben Transaktion statt als unplausible Gebühr aufgelöst — sofern der passende eigene Eingang importiert ist, sonst wird er als ausgehende Veräußerung gebucht.",
+    "outLabel": "Swap-/Auszahlungsanteil ({{asset}})",
+    "outboundTotal": "Ausgehende Summe: {{amount}} {{asset}}",
+    "payoutLabel": "Erhaltene Auszahlung ({{asset}})",
+    "payoutAsset": "Auszahlungs-Asset",
+    "taxPolicy": "Steuerliche Behandlung",
+    "policyTaxable": "Steuerpflichtige Veräußerung",
+    "policyCarrying": "Buchwertfortführung (keine Veräußerung)",
+    "counterparty": "Gegenpartei (optional)",
+    "counterpartyPlaceholder": "Empfänger oder Börse",
+    "notes": "Notizen (optional)",
+    "submit": "Auszahlung erfassen & neu verarbeiten",
+    "carryingHint": "Buchwertfortführung zwischen verschiedenen Assets wird für österreichische Bücher unterstützt; wähle sonst steuerpflichtig.",
+    "positiveAmount": "Gib einen positiven BTC-Betrag ein",
+    "exceedsOutbound": "Darf die ausgehende Summe ({{total}}) nicht übersteigen",
+    "recordFailed": "Split-Auszahlung konnte nicht erfasst werden: {{error}}",
+    "recorded": "Split-Auszahlung erfasst; die Journale werden neu verarbeitet, um sie anzuwenden."
   }
 }

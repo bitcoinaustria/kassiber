@@ -39,6 +39,7 @@
     "confirmed": "Bestätigt",
     "unconfirmed": "Unbestätigt",
     "failed": "Fehlgeschlagen",
+    "unpriced": "Ohne Preis",
     "connected": "Verbunden",
     "disconnected": "Getrennt",
     "enabled": "Aktiviert",

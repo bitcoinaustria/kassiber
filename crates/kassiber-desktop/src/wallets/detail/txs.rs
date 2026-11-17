@@ -434,7 +434,7 @@ fn table(app: &App, tk: &Tk, c: &Conn, rows: &[Value], width: f32) -> El {
             chars(
                 &r.fiat
                     .map(|x| crate::format::fiat(x.abs(), r.fiat_cur.as_deref().unwrap_or(&cur)))
-                    .unwrap_or_else(|| "Unpriced".into()),
+                    .unwrap_or_else(|| t("common:state.unpriced")),
             ) * 5.7
         })
         .fold(hdr("connections:detail.transactionsTable.value"), f32::max)
@@ -563,7 +563,7 @@ fn table(app: &App, tk: &Tk, c: &Conn, rows: &[Value], width: f32) -> El {
         );
         if show_value {
             let v = match r.fiat {
-                None => "Unpriced".to_owned(),
+                None => t("common:state.unpriced"),
                 Some(x) => crate::format::fiat(x.abs(), r.fiat_cur.as_deref().unwrap_or(&cur)),
             };
             tr_ = tr_.child(
@@ -682,7 +682,7 @@ fn row_label(r: &RowData, hide: bool, cur: &str) -> String {
         }
     };
     let value = match r.fiat {
-        None => "Unpriced".to_owned(),
+        None => t("common:state.unpriced"),
         Some(x) => crate::format::fiat(x.abs(), r.fiat_cur.as_deref().unwrap_or(cur)),
     };
     format!(

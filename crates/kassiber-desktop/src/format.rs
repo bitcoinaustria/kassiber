@@ -119,7 +119,7 @@ pub fn book_currency(app: &crate::app::App) -> String {
 /// `formatFiatAmount`: currency style with the currency's two fraction digits.
 pub fn fiat(value: f64, cur: &str) -> String {
     if !value.is_finite() {
-        return "Unpriced".into();
+        return crate::i18n::t("common:state.unpriced");
     }
     currency_with(value, cur, 2, 0)
 }
@@ -127,7 +127,7 @@ pub fn fiat(value: f64, cur: &str) -> String {
 /// `formatWholeFiatAmount`: no fraction digits.
 pub fn fiat_whole(value: f64, cur: &str) -> String {
     if !value.is_finite() {
-        return "Unpriced".into();
+        return crate::i18n::t("common:state.unpriced");
     }
     currency_with(value.round(), cur, 0, 0)
 }
@@ -135,7 +135,7 @@ pub fn fiat_whole(value: f64, cur: &str) -> String {
 /// `formatCompactFiatAmount` / compact currency notation with no fraction digits.
 pub fn fiat_compact(value: f64, cur: &str) -> String {
     if !value.is_finite() {
-        return "Unpriced".into();
+        return crate::i18n::t("common:state.unpriced");
     }
     let l = loc(cur);
     let abs = value.abs();

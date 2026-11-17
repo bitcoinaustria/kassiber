@@ -50,7 +50,53 @@
     "clearAll": "Alle entfernen"
   },
   "table": {
-    "balanceOverlap": "Gemeinsamer Outpoint · Wallet-Anteile überschneiden sich"
+    "balanceOverlap": "Gemeinsamer Outpoint · Wallet-Anteile überschneiden sich",
+    "columns": {
+      "connection": "Verbindung",
+      "transactions": "Transaktionen",
+      "lastActivity": "Letzte Aktivität",
+      "composition": "Anteil",
+      "taxFree": "Steuerfrei",
+      "balance": "Guthaben"
+    },
+    "category": {
+      "onChain": "On-chain",
+      "liquid": "Liquid",
+      "lightning": "Lightning",
+      "nwc": "NWC",
+      "ecash": "Ecash",
+      "btcpay": "BTCPay",
+      "exchange": "Börse",
+      "custodial": "Verwahrende Plattform",
+      "csv": "CSV",
+      "bip329": "BIP329",
+      "custom": "Eigene",
+      "infrastructure": "Infrastruktur"
+    },
+    "never": "nie",
+    "emptyNoWallets": "Noch keine Wallets — füge eine Wallet hinzu, um mit dem Sync oder dem Import der Historie zu beginnen.",
+    "emptyFiltered": "Keine Wallets oder Quellen passen zu deinen Filtern.",
+    "meta": {
+      "defaultBackend": "Standard-Backend",
+      "firstPartyInfra": "eigene Infrastruktur",
+      "addresses_one": "{{count}} Adresse",
+      "addresses_other": "{{count}} Adressen",
+      "channels_one": "{{count}} Kanal",
+      "channels_other": "{{count}} Kanäle",
+      "gapLimit": "Gap Limit {{gap}}",
+      "deprecated": "veraltet"
+    },
+    "share": {
+      "firstParty": "Eigene Infrastruktur",
+      "hidden": "Wallet-Anteil verborgen",
+      "below": "<{{percent}} % des Gesamtguthabens",
+      "ofTotal": "{{percent}} % des Gesamtguthabens"
+    },
+    "backendEndpoint": "Backend-Endpunkt",
+    "backendDefault": "Standard",
+    "backendConfigured": "Konfiguriert",
+    "wallets_one": "{{count}} Wallet",
+    "wallets_other": "{{count}} Wallets"
   },
   "detail": {
     "notFound": "Keine Verbindung für {{id}} gefunden.",

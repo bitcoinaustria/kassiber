@@ -28,8 +28,51 @@ use crate::ui::{ic, outline_button, primary_button};
 const TRUSTED_RELEASE_URL_PREFIX: &str = "https://github.com/bitcoinaustria/kassiber/releases/";
 const SIDECAR_UPDATE_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_SIDECAR_OUTPUT_BYTES: usize = 256 * 1024;
-pub const UPDATE_CHECKS_DISABLED_MESSAGE: &str =
-    "GitHub update checks are disabled. Enable them in Settings > Privacy.";
+
+/// Why a check failed. The check runs on a worker thread, so the reason travels as a value and
+/// becomes text (`message`) in the UI language only where the dialog shows it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UpdateError {
+    /// The consent file says no (`update_checks_disabled`).
+    Disabled,
+    /// No answer, or an error without a message.
+    Unreachable,
+    /// The CLI's (English) reason.
+    Failed(String),
+    InvalidResponse,
+    UnexpectedKind,
+    EmptyResponse,
+    UntrustedUrl,
+    StartFailed,
+    ReadFailed,
+    TimedOut,
+    TooLarge,
+    RunFailed,
+    Headless,
+}
+
+impl UpdateError {
+    pub fn message(&self) -> String {
+        let key = match self {
+            UpdateError::Disabled => "chrome:shell.version.error.disabled",
+            UpdateError::Unreachable => "chrome:shell.version.error.unreachable",
+            UpdateError::Failed(reason) => {
+                return tr("chrome:shell.version.error.failed", &[("reason", reason)]);
+            }
+            UpdateError::InvalidResponse => "chrome:shell.version.error.invalidResponse",
+            UpdateError::UnexpectedKind => "chrome:shell.version.error.unexpectedKind",
+            UpdateError::EmptyResponse => "chrome:shell.version.error.emptyResponse",
+            UpdateError::UntrustedUrl => "chrome:shell.version.error.untrustedUrl",
+            UpdateError::StartFailed => "chrome:shell.version.error.startFailed",
+            UpdateError::ReadFailed => "chrome:shell.version.error.readFailed",
+            UpdateError::TimedOut => "chrome:shell.version.error.timedOut",
+            UpdateError::TooLarge => "chrome:shell.version.error.tooLarge",
+            UpdateError::RunFailed => "chrome:shell.version.error.runFailed",
+            UpdateError::Headless => "chrome:shell.version.error.headless",
+        };
+        t(key)
+    }
+}
 /// `APP_UPDATE_START_DELAY_MS`, `APP_UPDATE_PERIOD_MS`.
 pub const START_DELAY: f64 = 10.0;
 pub const PERIOD: f64 = 24.0 * 60.0 * 60.0;
@@ -74,35 +117,33 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-fn cli_error_message(e: &CliError) -> String {
+fn cli_error(e: &CliError) -> UpdateError {
     if e.code == "update_checks_disabled" {
-        return UPDATE_CHECKS_DISABLED_MESSAGE.into();
+        return UpdateError::Disabled;
     }
     if e.message.is_empty() {
-        "Could not reach GitHub to check for updates.".into()
+        UpdateError::Unreachable
     } else {
-        format!("Could not check for updates: {}.", e.message)
+        UpdateError::Failed(e.message.clone())
     }
 }
 
 /// `update_check_from_envelope`: success and failure envelopes alike.
-pub fn from_envelope(body: &[u8]) -> Result<AppUpdate, String> {
+pub fn from_envelope(body: &[u8]) -> Result<AppUpdate, UpdateError> {
     if body.iter().all(u8::is_ascii_whitespace) {
-        return Err("Could not reach GitHub to check for updates.".into());
+        return Err(UpdateError::Unreachable);
     }
-    let env: CliEnvelope = serde_json::from_slice(body)
-        .map_err(|_| "The Kassiber CLI returned an invalid update response.".to_owned())?;
+    let env: CliEnvelope =
+        serde_json::from_slice(body).map_err(|_| UpdateError::InvalidResponse)?;
     if let Some(e) = env.error {
-        return Err(cli_error_message(&e));
+        return Err(cli_error(&e));
     }
     if env.kind != "update" {
-        return Err("The Kassiber CLI returned an unexpected response kind.".into());
+        return Err(UpdateError::UnexpectedKind);
     }
-    let d = env
-        .data
-        .ok_or_else(|| "The Kassiber CLI returned an empty update response.".to_owned())?;
+    let d = env.data.ok_or(UpdateError::EmptyResponse)?;
     if d.update_available && !d.release_url.starts_with(TRUSTED_RELEASE_URL_PREFIX) {
-        return Err("The update check returned an untrusted release URL.".into());
+        return Err(UpdateError::UntrustedUrl);
     }
     Ok(AppUpdate {
         current_version: d.current_version,
@@ -121,7 +162,7 @@ pub fn run_cli_check(
     program: &std::path::Path,
     cwd: &std::path::Path,
     preference: Option<&std::path::Path>,
-) -> Result<AppUpdate, String> {
+) -> Result<AppUpdate, UpdateError> {
     let mut cmd = Command::new(program);
     if let Some(p) = preference {
         cmd.env(crate::settings::prefpath::UPDATE_CHECKS.env, p);
@@ -133,11 +174,8 @@ pub fn run_cli_check(
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|_| "Could not start the Kassiber CLI to check for updates.".to_owned())?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "Could not read the Kassiber CLI update output.".to_owned())?;
+        .map_err(|_| UpdateError::StartFailed)?;
+    let stdout = child.stdout.take().ok_or(UpdateError::ReadFailed)?;
     let (send, recv) = channel();
     std::thread::spawn(move || {
         let mut body = Vec::new();
@@ -152,41 +190,38 @@ pub fn run_cli_check(
         Ok(Err(_)) => {
             let _ = child.kill();
             let _ = child.wait();
-            return Err("Could not read the Kassiber CLI update output.".into());
+            return Err(UpdateError::ReadFailed);
         }
         Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => {
             let _ = child.kill();
             let _ = child.wait();
-            return Err("The update check timed out.".into());
+            return Err(UpdateError::TimedOut);
         }
     };
     if body.len() > MAX_SIDECAR_OUTPUT_BYTES {
         let _ = child.kill();
         let _ = child.wait();
-        return Err("The Kassiber CLI returned an unexpectedly large update response.".into());
+        return Err(UpdateError::TooLarge);
     }
-    child
-        .wait()
-        .map_err(|_| "Could not run the Kassiber CLI update check.".to_owned())?;
+    child.wait().map_err(|_| UpdateError::RunFailed)?;
     from_envelope(&body)
 }
 
 /// `check_app_update`: the fail-closed consent gate before anything is spawned (the CLI reads
 /// the same file again before it connects).
-fn check_blocking() -> Result<AppUpdate, String> {
+fn check_blocking() -> Result<AppUpdate, UpdateError> {
     if !crate::settings::effects::read_update_checks() {
-        return Err(UPDATE_CHECKS_DISABLED_MESSAGE.into());
+        return Err(UpdateError::Disabled);
     }
     let preference = crate::settings::effects::update_preference_path();
-    let cmd = super::cli::kassiber_command()
-        .map_err(|(m, _)| format!("Could not check for updates: {m}."))?;
+    let cmd = super::cli::kassiber_command().map_err(|(m, _)| UpdateError::Failed(m))?;
     run_cli_check(&cmd.program, &cmd.cwd, preference.as_deref())
 }
 
 pub struct Job {
     manual: bool,
     generation: u64,
-    rx: Receiver<Result<AppUpdate, String>>,
+    rx: Receiver<Result<AppUpdate, UpdateError>>,
 }
 
 /// A message box the web shows through the native dialog plugin (`showDialog`).
@@ -238,7 +273,7 @@ fn start(app: &mut App, manual: bool) {
     let generation = app.native.update.generation;
     if rune::is_headless() || cfg!(test) {
         // Never from agent tooling or tests: no process, no network.
-        let _ = send.send(Err("Update checks don't run in headless mode.".into()));
+        let _ = send.send(Err(UpdateError::Headless));
     } else {
         std::thread::Builder::new()
             .name("kassiber-update-check".into())
@@ -327,7 +362,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     changed
 }
 
-fn finish(app: &mut App, job: &Job, r: Result<AppUpdate, String>) {
+fn finish(app: &mut App, job: &Job, r: Result<AppUpdate, UpdateError>) {
     if !job.manual {
         // Quiet: errors drop; a result counts only while the schedule that asked still runs
         // and consent still holds.
@@ -342,6 +377,7 @@ fn finish(app: &mut App, job: &Job, r: Result<AppUpdate, String>) {
     let u = match r {
         Ok(u) => u,
         Err(reason) => {
+            let reason = reason.message();
             let body = if reason.trim().is_empty() {
                 t("chrome:shell.version.checkFailed")
             } else {
@@ -553,15 +589,20 @@ mod tests {
                 br#"{"kind":"error","error":{"code":"update_checks_disabled","message":"x"}}"#
             )
             .unwrap_err(),
-            UPDATE_CHECKS_DISABLED_MESSAGE
+            UpdateError::Disabled
         );
+        crate::i18n::set_lang(crate::i18n::Lang::En);
         assert_eq!(
-            from_envelope(br#"{"kind":"error","schema_version":1,"error":{"code":"network","message":"GitHub is unreachable","hint":null,"details":null,"retryable":true,"debug":null}}"#).unwrap_err(),
+            from_envelope(br#"{"kind":"error","schema_version":1,"error":{"code":"network","message":"GitHub is unreachable","hint":null,"details":null,"retryable":true,"debug":null}}"#).unwrap_err().message(),
             "Could not check for updates: GitHub is unreachable."
         );
         assert_eq!(
-            from_envelope(b"   \n").unwrap_err(),
+            from_envelope(b"   \n").unwrap_err().message(),
             "Could not reach GitHub to check for updates."
+        );
+        assert_eq!(
+            UpdateError::Disabled.message(),
+            "GitHub update checks are disabled. Enable them in Settings > Privacy."
         );
     }
 
@@ -580,12 +621,15 @@ mod tests {
         let big = dir.join("big");
         std::fs::write(&big, "#!/bin/sh\nhead -c 300000 /dev/zero\n").unwrap();
         std::fs::set_permissions(&big, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::i18n::set_lang(crate::i18n::Lang::En);
         assert_eq!(
-            run_cli_check(&big, &dir, None).unwrap_err(),
+            run_cli_check(&big, &dir, None).unwrap_err().message(),
             "The Kassiber CLI returned an unexpectedly large update response."
         );
         assert_eq!(
-            run_cli_check(&dir.join("missing"), &dir, None).unwrap_err(),
+            run_cli_check(&dir.join("missing"), &dir, None)
+                .unwrap_err()
+                .message(),
             "Could not start the Kassiber CLI to check for updates."
         );
         // The CLI is told which consent file the app read.

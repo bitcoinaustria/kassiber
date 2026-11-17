@@ -745,7 +745,7 @@ fn close_revert(a: &mut App) {
     }
 }
 
-// ---- Split payout card (§5.5; its strings are hard-coded English in the web too) ----------------
+// ---- Split payout card (§5.5; its copy lives under `transactions:splitPayout`) -----------------
 
 pub fn split_card(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) -> Option<El> {
     // `isSplitTransferQuarantine`: the Review page's reason when it hosts the sheet.
@@ -779,13 +779,16 @@ pub fn split_card(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) 
     let mut out_field = input(
         &app.detail.split_out,
         "txd-split-out",
-        format!("Swap/payout portion ({asset})"),
+        tr("transactions:splitPayout.outLabel", &[("asset", &asset)]),
         format!("{outbound}"),
     );
     out_field = out_field.child(
-        text(format!("Outbound total: {outbound} {asset}"))
-            .font(tk.t2xs(400.0))
-            .color(tk.muted_fg),
+        text(tr(
+            "transactions:splitPayout.outboundTotal",
+            &[("amount", &outbound.to_string()), ("asset", &asset)],
+        ))
+        .font(tk.t2xs(400.0))
+        .color(tk.muted_fg),
     );
     if let Some(e) = &out_err {
         out_field = out_field.child(text(e.clone()).font(tk.t2xs(400.0)).color(tk.destructive));
@@ -793,7 +796,10 @@ pub fn split_card(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) 
     let mut pay_field = input(
         &app.detail.split_payout,
         "txd-split-payout",
-        format!("Payout received ({})", o.split_asset),
+        tr(
+            "transactions:splitPayout.payoutLabel",
+            &[("asset", &o.split_asset)],
+        ),
         "0.00000000".into(),
     );
     if let Some(e) = &pay_err {
@@ -817,11 +823,11 @@ pub fn split_card(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) 
         );
     }
     let policy_label = |p: &str| {
-        if p == "taxable" {
-            "Taxable disposal".to_owned()
+        t(if p == "taxable" {
+            "transactions:splitPayout.policyTaxable"
         } else {
-            "Carrying value (no disposal)".to_owned()
-        }
+            "transactions:splitPayout.policyCarrying"
+        })
     };
     if o.select == Some(Select::SplitPolicy) {
         select_menu(
@@ -849,32 +855,113 @@ pub fn split_card(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) 
         tk,
         "txd-split-submit",
         None,
-        if o.busy.split {
-            "Saving…"
+        &t(if o.busy.split {
+            "common:state.saving"
         } else {
-            "Record payout & reprocess"
-        },
+            "transactions:splitPayout.submit"
+        }),
         true,
         ok,
     );
     if ok {
         submit = submit.on_press(super::actions::split_submit);
     }
-    let mut c = col()
+    let c = col()
         .key("txd-split")
         .w_full()
         .padding(tk.r(0.75))
         .gap(tk.r(0.625))
         .radius(tk.r(0.375))
         .border(1.0, tk.warn.border)
-        .fill(tk.warn.bg)
-        .child(text("Resolve split transfer / swap").font(tk.tsm(600.0)).color(tk.fg))
-        .child(text(format!("Part of this {asset} spend returned to an owned wallet and part went to a swap or direct payout. Record the payout portion; the remainder resolves as a same-transaction self-transfer instead of an implausible fee — provided the matching owned inbound is imported, otherwise it books as an outbound disposal.")).font(tk.txs(400.0)).color(tk.fg).wrap())
-        .child(row().w_full().gap(tk.r(0.5)).items_start().child(out_field).child(col().gap(tk.r(0.25)).grow(1.0).child(text("Payout asset").font(tk.txs(500.0)).color(tk.fg)).child(select_trigger(tk, "txd-split-asset", "Payout asset", &o.split_asset, true).select_trigger(o.select == Some(Select::SplitAsset), |a: &mut App| toggle_select(a, Select::SplitAsset)))))
-        .child(row().w_full().gap(tk.r(0.5)).items_start().child(pay_field).child(col().gap(tk.r(0.25)).grow(1.0).child(text("Tax policy").font(tk.txs(500.0)).color(tk.fg)).child(select_trigger(tk, "txd-split-policy", "Tax policy", &policy_label(&o.split_policy), true).select_trigger(o.select == Some(Select::SplitPolicy), |a: &mut App| toggle_select(a, Select::SplitPolicy)))))
-        .child(row().w_full().gap(tk.r(0.5)).child(input(&app.detail.split_counterparty, "txd-split-counterparty", "Counterparty (optional)".into(), "recipient or exchange".into())).child(input(&app.detail.split_notes, "txd-split-notes", "Notes (optional)".into(), String::new())))
+        .fill(tk.warn.bg);
+    let payout_asset = t("transactions:splitPayout.payoutAsset");
+    let tax_policy = t("transactions:splitPayout.taxPolicy");
+    let mut c = c
+        .child(
+            text(t("transactions:splitPayout.title"))
+                .font(tk.tsm(600.0))
+                .color(tk.fg),
+        )
+        .child(
+            text(tr("transactions:splitPayout.body", &[("asset", &asset)]))
+                .font(tk.txs(400.0))
+                .color(tk.fg)
+                .wrap(),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(tk.r(0.5))
+                .items_start()
+                .child(out_field)
+                .child(
+                    col()
+                        .gap(tk.r(0.25))
+                        .grow(1.0)
+                        .child(text(payout_asset.clone()).font(tk.txs(500.0)).color(tk.fg))
+                        .child(
+                            select_trigger(
+                                tk,
+                                "txd-split-asset",
+                                &payout_asset,
+                                &o.split_asset,
+                                true,
+                            )
+                            .select_trigger(o.select == Some(Select::SplitAsset), |a: &mut App| {
+                                toggle_select(a, Select::SplitAsset)
+                            }),
+                        ),
+                ),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(tk.r(0.5))
+                .items_start()
+                .child(pay_field)
+                .child(
+                    col()
+                        .gap(tk.r(0.25))
+                        .grow(1.0)
+                        .child(text(tax_policy.clone()).font(tk.txs(500.0)).color(tk.fg))
+                        .child(
+                            select_trigger(
+                                tk,
+                                "txd-split-policy",
+                                &tax_policy,
+                                &policy_label(&o.split_policy),
+                                true,
+                            )
+                            .select_trigger(
+                                o.select == Some(Select::SplitPolicy),
+                                |a: &mut App| toggle_select(a, Select::SplitPolicy),
+                            ),
+                        ),
+                ),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(tk.r(0.5))
+                .child(input(
+                    &app.detail.split_counterparty,
+                    "txd-split-counterparty",
+                    t("transactions:splitPayout.counterparty"),
+                    t("transactions:splitPayout.counterpartyPlaceholder"),
+                ))
+                .child(input(
+                    &app.detail.split_notes,
+                    "txd-split-notes",
+                    t("transactions:splitPayout.notes"),
+                    String::new(),
+                )),
+        )
         .child(submit)
-        .child(text("Cross-asset carrying value is supported for Austrian books; otherwise choose taxable.").font(tk.t2xs(400.0)).color(tk.muted_fg));
+        .child(
+            text(t("transactions:splitPayout.carryingHint"))
+                .font(tk.t2xs(400.0))
+                .color(tk.muted_fg),
+        );
     if let Some(e) = &o.split_error {
         c = c.child(
             text(e.clone())

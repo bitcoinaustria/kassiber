@@ -39,6 +39,7 @@
     "confirmed": "Confirmed",
     "unconfirmed": "Unconfirmed",
     "failed": "Failed",
+    "unpriced": "Unpriced",
     "connected": "Connected",
     "disconnected": "Disconnected",
     "enabled": "Enabled",

@@ -665,7 +665,7 @@ pub fn split_errors(app: &App, outbound: f64) -> (Option<String>, Option<String>
         }
         match v.parse::<f64>() {
             Ok(x) if x > 0.0 && x.is_finite() => None,
-            _ => Some("Enter a positive BTC amount".into()),
+            _ => Some(t("transactions:splitPayout.positiveAmount")),
         }
     };
     let mut out = check(&app.detail.split_out.text);
@@ -673,7 +673,10 @@ pub fn split_errors(app: &App, outbound: f64) -> (Option<String>, Option<String>
         && let Ok(x) = app.detail.split_out.text.trim().parse::<f64>()
         && x > outbound + 1e-12
     {
-        out = Some(format!("Cannot exceed the outbound total ({outbound})"));
+        out = Some(tr(
+            "transactions:splitPayout.exceedsOutbound",
+            &[("total", &outbound.to_string())],
+        ));
     }
     (out, check(&app.detail.split_payout.text))
 }
@@ -1066,11 +1069,11 @@ pub fn on_reply(app: &mut App, tag: &str, to: Option<Target>, r: &Reply) {
             let shown = panel_mut(app, &to).map(|o| {
                 o.busy.split = false;
                 match &err {
-                    Some(e) => o.split_error = Some(format!("Could not record split payout: {e}")),
-                    None => {
-                        o.split_msg =
-                            Some("Split payout recorded; reprocessing journals to apply it.".into())
+                    Some(e) => {
+                        o.split_error =
+                            Some(tr("transactions:splitPayout.recordFailed", &[("error", e)]))
                     }
+                    None => o.split_msg = Some(t("transactions:splitPayout.recorded")),
                 }
             });
             match err {

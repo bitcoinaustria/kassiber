@@ -3,8 +3,8 @@
 //! `ui.reports.exit_tax_preview` read; the body shows readiness, the headline liability, the
 //! collection timing, the deemed-disposal lots, wallet holdings, the Steuerberater handoff
 //! (PDF / XLSX export, then the native Save As), the FMV sources (ExitTaxFmvCard.tsx) and the
-//! assumptions. The screen does no tax math. Most copy is English hard-coded in the web, and stays
-//! so here.
+//! assumptions. The screen does no tax math. Its copy lives under `overview:exitTax`; the
+//! assumptions and review gate are the daemon's own (English) text.
 
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
@@ -21,9 +21,10 @@ use crate::theme::Tk;
 use crate::txdetail::widgets::{self as w, Variant};
 use crate::ui::{ic, surface};
 
+/// The destination classes the preview takes, with their label keys.
 const DESTINATIONS: [(&str, &str); 2] = [
-    ("eu_eea", "EU / EEA member state"),
-    ("third_country", "Third country (non-EU/EEA)"),
+    ("eu_eea", "overview:exitTax.destination.euEea"),
+    ("third_country", "overview:exitTax.destination.thirdCountry"),
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -173,7 +174,8 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             let load = match &r.error {
                 Some(e) => Load::Failed(e.clone()),
                 None if r.data.is_object() => Load::Ready(r.data.clone()),
-                None => Load::Failed("Unknown error.".into()),
+                // Empty: the view says "Unknown error." in the reader's language.
+                None => Load::Failed(String::new()),
             };
             // A failed re-read of a shown answer keeps the answer, as React Query does.
             if !(matches!(load, Load::Failed(_))
@@ -191,7 +193,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     ui.status = Some(ExportStatus {
                         tone: Tone::Error,
                         message: if e.is_empty() {
-                            "Export failed.".into()
+                            t("overview:exitTax.exportFailed")
                         } else {
                             e.clone()
                         },
@@ -255,7 +257,7 @@ fn ask_save(app: &mut App, fmt: &'static str, path: String, tx: &mut Tx) {
         .unwrap_or("")
         .to_owned();
     let mut options = FileDialogOptions {
-        title: "Save Kassiber report export".into(),
+        title: t("reports:files.saveDialogTitle"),
         file_name: Some(name),
         ..Default::default()
     };
@@ -266,7 +268,7 @@ fn ask_save(app: &mut App, fmt: &'static str, path: String, tx: &mut Tx) {
         .as_deref()
     {
         Some("pdf") => options.filter("PDF", &["pdf"]),
-        Some("xlsx") => options.filter("Excel workbook", &["xlsx"]),
+        Some("xlsx") => options.filter(t("transactions:dashboard.export.formats.xlsx"), &["xlsx"]),
         Some("csv") => options.filter("CSV", &["csv"]),
         _ => options,
     };
@@ -303,10 +305,9 @@ fn saved(app: &mut App, fmt: &str, export_path: String, answer: Result<Option<St
                 .collect();
             ExportStatus {
                 tone: Tone::Success,
-                message: format!(
-                    "Saved {} handoff — {}",
-                    fmt.to_uppercase(),
-                    basename(&saved)
+                message: tr(
+                    "overview:exitTax.handoff.saved",
+                    &[("format", &fmt.to_uppercase()), ("file", basename(&saved))],
                 ),
                 path: Some(export_path).filter(|p| !p.is_empty()),
                 actions,
@@ -403,27 +404,53 @@ fn first_weekday(y: i32, m0: u32) -> u32 {
     ((days_from_civil(y, m0 + 1, 1) + 3).rem_euclid(7)) as u32
 }
 
-const MONTHS: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
-const WEEKDAYS: [&str; 7] = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+/// The calendar's month names and Monday-first weekday initials (`Intl` in the web's UI
+/// locale: en-US, de-AT with `Jänner`).
+fn months(l: Lang) -> [&'static str; 12] {
+    match l {
+        Lang::En => [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ],
+        Lang::De => [
+            "Jänner",
+            "Februar",
+            "März",
+            "April",
+            "Mai",
+            "Juni",
+            "Juli",
+            "August",
+            "September",
+            "Oktober",
+            "November",
+            "Dezember",
+        ],
+    }
+}
+
+fn weekdays(l: Lang) -> [&'static str; 7] {
+    match l {
+        Lang::En => ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
+        Lang::De => ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+    }
+}
 
 /// `formatDisplay`: `Intl.DateTimeFormat(uiLocale, {day: "2-digit", month: "short", year:
 /// "numeric"})`, en-US `Nov 15, 2026`, de-AT `15. Nov. 2026`.
 pub fn format_display(v: &str, l: Lang) -> String {
     if v.is_empty() {
-        return "Pick a date".into();
+        return t("overview:exitTax.pickDate");
     }
     let (y, m, d) = parse_iso(v);
     match l {
@@ -492,26 +519,36 @@ fn calendar(app: &App, tk: &Tk) -> El {
         .pb(tk.r(0.5))
         .center_y()
         .justify_between()
-        .child(nav("et-cal-prev", &I::CHEVRON_LEFT, "Previous month", -1))
+        .child(nav(
+            "et-cal-prev",
+            &I::CHEVRON_LEFT,
+            &t("overview:exitTax.calendar.previousMonth"),
+            -1,
+        ))
         .child(
-            text(format!("{} {vy}", MONTHS[vm as usize]))
+            text(format!("{} {vy}", months(lang())[vm as usize]))
                 .font(tk.tsm(500.0))
                 .color(tk.fg),
         )
-        .child(nav("et-cal-next", &I::CHEVRON_RIGHT, "Next month", 1));
-    let weekdays = row().w(grid_w).gap(gap).children(WEEKDAYS.iter().map(|d| {
+        .child(nav(
+            "et-cal-next",
+            &I::CHEVRON_RIGHT,
+            &t("overview:exitTax.calendar.nextMonth"),
+            1,
+        ));
+    let weekdays = row().w(grid_w).gap(gap).children(weekdays(lang()).map(|d| {
         row()
             .w(cell_w)
             .py(tk.r(0.25))
             .center()
-            .child(text(*d).font(tk.txs(500.0)).color(tk.muted_fg))
+            .child(text(d).font(tk.txs(500.0)).color(tk.muted_fg))
     }));
     let first = first_weekday(vy, vm);
     let n = days_in_month(vy, vm);
     let mut weeks = col()
         .gap(gap)
         .role("grid")
-        .label(format!("{} {vy}", MONTHS[vm as usize]))
+        .label(format!("{} {vy}", months(lang())[vm as usize]))
         .focus_group();
     let mut week = row().gap(gap);
     let mut slot = 0;
@@ -575,7 +612,7 @@ fn calendar(app: &App, tk: &Tk) -> El {
     )
     .radius(tk.r(0.375))
     .role("dialog")
-    .label("Departure date")
+    .label(t("overview:exitTax.departureDate"))
 }
 
 // ---- View ---------------------------------------------------------------------------------
@@ -592,14 +629,23 @@ fn btc(sats: &Value) -> String {
     format!("{:.8} BTC", sats.as_f64().unwrap_or(0.0) / 1e8)
 }
 
+/// A tax rate (a fraction) with one decimal in the UI language: en `27.5%`, de-AT `27,5 %`.
+fn percent(rate: f64) -> String {
+    let v = format!("{:.1}", rate * 100.0);
+    match lang() {
+        Lang::En => format!("{v}%"),
+        Lang::De => format!("{} %", v.replace('.', ",")),
+    }
+}
+
 /// shadcn `Select` trigger (`h-8 w-[220px]`).
 fn destination_trigger(app: &App, tk: &Tk) -> El {
     let ui = &app.reports.ledger.exit;
     let label = DESTINATIONS
         .iter()
         .find(|(v, _)| *v == ui.destination)
-        .map(|(_, l)| *l)
-        .unwrap_or("");
+        .map(|(_, key)| t(key))
+        .unwrap_or_default();
     let open = ui.popup == Some(Popup::Destination);
     // `SelectTrigger` sets no text colour either: it takes the label's muted ink.
     let (fill, hover) = if tk.dark {
@@ -624,8 +670,8 @@ fn destination_trigger(app: &App, tk: &Tk) -> El {
         .fill(fill)
         .hover(hover)
         .role("combobox")
-        .label(label)
-        .a11y_value(label)
+        .label(label.clone())
+        .a11y_value(label.clone())
         .focusable(true)
         .child(
             text(label)
@@ -654,7 +700,8 @@ fn destination_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
     let mut p = crate::ui::popup::Popup::listbox("et-destination", |a: &mut App| {
         a.reports.ledger.exit.popup = None
     });
-    for (v, label) in DESTINATIONS {
+    for (v, key) in DESTINATIONS {
+        let label = t(key);
         let checked = v == ui.destination;
         p.item(
             row()
@@ -668,7 +715,7 @@ fn destination_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
                 .focus_highlight(tk.accent)
                 .role("option")
                 .checked(checked)
-                .label(label)
+                .label(label.clone())
                 .on_press_tx(move |a: &mut App, tx: &mut rune::Tx| {
                     let ui = &mut a.reports.ledger.exit;
                     ui.destination = v.into();
@@ -676,7 +723,12 @@ fn destination_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
                     // The destination re-lays out the form around the trigger.
                     crate::ui::popup::refocus(tx, "et-destination");
                 })
-                .child(text(label).font(tk.tsm(400.0)).color(tk.fg).grow(1.0))
+                .child(
+                    text(label.clone())
+                        .font(tk.tsm(400.0))
+                        .color(tk.fg)
+                        .grow(1.0),
+                )
                 .child(if checked {
                     row()
                         .absolute(220.0 - tk.r(0.5) * 2.0 - tk.r(1.5), 0.0)
@@ -695,7 +747,10 @@ fn destination_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
     // The selected row lands over the trigger: back up by the trigger, the list's padding and
     // the rows above it.
     let gap = -(tk.r(2.0) + tk.r(0.25) + tk.r(2.0) * current as f32);
-    let list = col().w(220.0).padding(tk.r(0.25)).label("Destination");
+    let list = col()
+        .w(220.0)
+        .padding(tk.r(0.25))
+        .label(t("overview:exitTax.destination.label"));
     p.mount(
         tk,
         layer,
@@ -737,7 +792,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     let mut controls = row().gap(tk.r(0.75)).items_end().flex_wrap().child(
         col()
             .gap(tk.r(0.25))
-            .child(field_label("Departure date"))
+            .child(field_label(&t("overview:exitTax.departureDate")))
             .child(date_button),
     );
     if let Some(r) = report {
@@ -756,17 +811,15 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         col()
             .key("et-destination-field")
             .gap(tk.r(0.25))
-            .child(field_label("Destination"))
+            .child(field_label(&t("overview:exitTax.destination.label")))
             .child(destination_trigger(app, tk)),
     );
-    let description = text(
-        "Estimate the Austrian Wegzugsbesteuerung on your Bitcoin if you give up tax residence — a deemed disposal at fair market value. Hand the draft to your Steuerberater.",
-    )
-    .font(tk.tsm(400.0))
-    .color(tk.muted_fg)
-    .wrap()
-    .max_w(tk.r(48.0))
-    .shrink();
+    let description = text(t("overview:exitTax.description"))
+        .font(tk.tsm(400.0))
+        .color(tk.muted_fg)
+        .wrap()
+        .max_w(tk.r(48.0))
+        .shrink();
     let header = if ww >= 640.0 {
         // The description keeps its `max-w-3xl`; the controls wrap into what is left, as the
         // browser's flex row resolves it.
@@ -824,14 +877,14 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
                         .center_y()
                         .child(ic(&I::TRIANGLE_ALERT, tk.r(1.0), tk.destructive))
                         .child(
-                            text("Could not load the exit-tax estimate")
+                            text(t("overview:exitTax.loadFailed"))
                                 .font(tk.tsm(500.0))
                                 .color(tk.destructive),
                         ),
                 )
                 .child(
                     text(if e.is_empty() {
-                        "Unknown error.".to_owned()
+                        t("overview:exitTax.unknownError")
                     } else {
                         e.clone()
                     })
@@ -948,12 +1001,20 @@ fn body(app: &App, cx: &Cx<App>, tk: &Tk, r: &Value, ww: f32) -> El {
 
     // Headline liability.
     let rate = totals["estimatedTaxRate"].as_f64();
-    let lead = match rate {
-        Some(x) => format!("{:.1}% of ", x * 100.0),
-        None => "on ".into(),
+    let key = match (rate.is_some(), is_at) {
+        (true, true) => "overview:exitTax.headline.rateNeu",
+        (true, false) => "overview:exitTax.headline.rate",
+        (false, true) => "overview:exitTax.headline.onNeu",
+        (false, false) => "overview:exitTax.headline.on",
     };
+    // `{{gain}}` stays in the sentence so the (possibly blurred) amount sits where the language
+    // puts it.
+    let sentence = tr(key, &[("rate", &rate.map(percent).unwrap_or_default())]);
+    let (lead, tail) = sentence
+        .split_once("{{gain}}")
+        .map(|(a, b)| (a.to_owned(), b.to_owned()))
+        .unwrap_or((sentence.clone(), String::new()));
     let gain = m(&totals["taxableGain"]);
-    let tail = format!(" taxable {}gain", if is_at { "Neubestand " } else { "" });
     let sub = if hidden {
         row()
             .flex_wrap()
@@ -972,10 +1033,10 @@ fn body(app: &App, cx: &Cx<App>, tk: &Tk, r: &Value, ww: f32) -> El {
     let headline_left = col()
         .min_w(0.0)
         .child(
-            text("ESTIMATED EXIT TAX")
+            text(t("overview:exitTax.headline.title").to_uppercase())
                 .font(tk.txs(500.0).tracking(0.025 * tk.r(0.75)))
                 .color(tk.muted_fg)
-                .label("Estimated exit tax"),
+                .label(t("overview:exitTax.headline.title")),
         )
         .child(sens(m(&totals["estimatedTax"]), tnum(t4xl(tk)), tk.fg, hidden).mt(tk.r(0.25)))
         .child(sub);
@@ -1005,19 +1066,19 @@ fn body(app: &App, cx: &Cx<App>, tk: &Tk, r: &Value, ww: f32) -> El {
                 .w_full()
                 .gap(tk.r(0.75))
                 .child(dd(
-                    if is_at {
-                        "Neubestand gain"
+                    &t(if is_at {
+                        "overview:exitTax.headline.neuGain"
                     } else {
-                        "Taxable gain"
-                    },
+                        "overview:exitTax.headline.taxableGain"
+                    }),
                     dval(m(&totals["neuGain"]), true),
                 ))
                 .child(dd(
-                    if is_at {
-                        "Altbestand (excluded)"
+                    &t(if is_at {
+                        "overview:exitTax.headline.altExcluded"
                     } else {
-                        "Excluded holdings"
-                    },
+                        "overview:exitTax.headline.excludedHoldings"
+                    }),
                     dval(m(&totals["altMarketValue"]), true),
                 )),
         )
@@ -1026,11 +1087,11 @@ fn body(app: &App, cx: &Cx<App>, tk: &Tk, r: &Value, ww: f32) -> El {
                 .w_full()
                 .gap(tk.r(0.75))
                 .child(dd(
-                    "Method",
+                    &t("overview:exitTax.headline.method"),
                     dval(r["method"].as_str().unwrap_or("").to_owned(), false),
                 ))
                 .child(dd(
-                    "Jurisdiction",
+                    &t("overview:exitTax.headline.jurisdiction"),
                     dval(
                         r["jurisdictionCode"].as_str().unwrap_or("").to_owned(),
                         false,
@@ -1054,15 +1115,15 @@ fn body(app: &App, cx: &Cx<App>, tk: &Tk, r: &Value, ww: f32) -> El {
         (
             c::sky(),
             &I::CLOCK,
-            "Assessed but deferred until you sell",
-            "For an EU/EEA move the tax is assessed but, on application, not collected until you actually dispose of the assets (Nichtfestsetzung, § 27 Abs 6 Z 1 lit a).",
+            t("overview:exitTax.timing.deferredTitle"),
+            t("overview:exitTax.timing.deferredBody"),
         )
     } else {
         (
             amber,
             &I::TRIANGLE_ALERT,
-            "Due immediately on departure",
-            "For a third-country (non-EU/EEA) move the deemed-disposal tax falls due at departure.",
+            t("overview:exitTax.timing.dueTitle"),
+            t("overview:exitTax.timing.dueBody"),
         )
     };
     out = out.child(
@@ -1127,9 +1188,10 @@ fn body(app: &App, cx: &Cx<App>, tk: &Tk, r: &Value, ww: f32) -> El {
                 .padding(tk.r(0.75))
                 .radius(tk.r(0.5))
                 .fill(tk.muted.alpha(0.2))
-                .border(1.0, tk.border).border_layout()
+                .border(1.0, tk.border)
+                .border_layout()
                 .child(
-                    text("Historical note. Exit taxation has a dark lineage: the “Reichsfluchtsteuer” (Reich flight tax) began in 1931 as a Weimar-era capital-flight levy, but from 1933 the Nazi regime turned it into an instrument to strip Jews and others of their assets as they fled persecution.")
+                    text(t("overview:exitTax.historicalNote"))
                         .font(tk.txs(400.0).lh(tk.r(0.75) * 1.625))
                         .color(tk.muted_fg)
                         .wrap()
@@ -1257,24 +1319,22 @@ fn lots(app: &App, cx: &Cx<App>, tk: &Tk, r: &Value, is_at: bool, ccy: &str) -> 
             let neu = lot["regime"].as_str() == Some("neu");
             let regime = if neu {
                 Cell::Badge(
-                    (if is_at {
-                        "Neubestand · taxable"
+                    t(if is_at {
+                        "overview:exitTax.lots.neuTaxable"
                     } else {
-                        "Taxable"
-                    })
-                    .into(),
+                        "overview:exitTax.lots.taxable"
+                    }),
                     tk.primary,
                     tk.primary.alpha(0.15),
                     Color::TRANSPARENT,
                 )
             } else {
                 Cell::Badge(
-                    (if is_at {
-                        "Altbestand · tax-free"
+                    t(if is_at {
+                        "overview:exitTax.lots.altTaxFree"
                     } else {
-                        "Tax-free"
-                    })
-                    .into(),
+                        "overview:exitTax.lots.taxFree"
+                    }),
                     tk.muted_fg,
                     Color::TRANSPARENT,
                     tk.border,
@@ -1301,28 +1361,29 @@ fn lots(app: &App, cx: &Cx<App>, tk: &Tk, r: &Value, is_at: bool, ccy: &str) -> 
                 num(if neu {
                     money(&lot["gain"], ccy)
                 } else {
-                    "excluded".into()
+                    t("overview:exitTax.lots.excluded")
                 }),
                 Cell::Text(kz, tnum(tk.tsm(400.0)), tk.muted_fg),
             ]
         })
         .collect();
     let labels = [
-        "Asset",
-        "Regime",
-        "Quantity",
-        "Cost basis",
-        "Market value",
-        "Gain",
-        "Kennzahl",
+        t("overview:exitTax.columns.asset"),
+        t("overview:exitTax.columns.regime"),
+        t("overview:exitTax.columns.quantity"),
+        t("overview:exitTax.columns.costBasis"),
+        t("overview:exitTax.columns.marketValue"),
+        t("overview:exitTax.columns.gain"),
+        t("overview:exitTax.columns.kennzahl"),
     ];
+    let labels: Vec<&str> = labels.iter().map(String::as_str).collect();
     table_section(
         app,
         cx,
         tk,
         "et-lots",
         &I::LANDMARK,
-        "Deemed disposal at fair market value",
+        &t("overview:exitTax.lots.title"),
         &COLS,
         &labels,
         body,
@@ -1354,15 +1415,21 @@ fn holdings(app: &App, cx: &Cx<App>, tk: &Tk, r: &Value, ccy: &str) -> El {
             ]
         })
         .collect();
+    let labels = [
+        t("overview:exitTax.columns.wallet"),
+        t("overview:exitTax.columns.asset"),
+        t("overview:exitTax.columns.quantity"),
+        t("overview:exitTax.columns.marketValue"),
+    ];
     table_section(
         app,
         cx,
         tk,
         "et-holdings",
         &I::INFO,
-        "Wallet holdings (context)",
+        &t("overview:exitTax.holdings.title"),
         &COLS,
-        &["Wallet", "Asset", "Quantity", "Market value"],
+        &labels.iter().map(String::as_str).collect::<Vec<_>>(),
         body,
         480.0,
     )
@@ -1406,9 +1473,13 @@ fn handoff(app: &App, tk: &Tk, ui: &ExitUi, incomplete: bool) -> El {
         .key("et-handoff")
         .w_full()
         .padding(tk.card_pad())
-        .child(section_title(tk, &I::DOWNLOAD, "Steuerberater handoff"))
+        .child(section_title(
+            tk,
+            &I::DOWNLOAD,
+            &t("overview:exitTax.handoff.title"),
+        ))
         .child(
-            text("Export the estimate for your tax adviser to review and stamp.")
+            text(t("overview:exitTax.handoff.body"))
                 .font(tk.txs(400.0))
                 .color(tk.muted_fg)
                 .wrap()
@@ -1429,12 +1500,17 @@ fn handoff(app: &App, tk: &Tk, ui: &ExitUi, incomplete: bool) -> El {
             .w_full()
             .mt(tk.r(0.75))
             .gap(tk.r(0.5))
-            .child(button("pdf", Variant::Default, &I::FILE_TEXT, "Export PDF"))
+            .child(button(
+                "pdf",
+                Variant::Default,
+                &I::FILE_TEXT,
+                &t("overview:exitTax.handoff.exportPdf"),
+            ))
             .child(button(
                 "xlsx",
                 Variant::Outline,
                 &I::FILE_SPREADSHEET,
-                "Export XLSX",
+                &t("overview:exitTax.handoff.exportXlsx"),
             )),
     );
     if let Some(st) = &ui.status {
@@ -1461,6 +1537,7 @@ fn handoff(app: &App, tk: &Tk, ui: &ExitUi, incomplete: bool) -> El {
                 .wrap_anywhere(),
         );
         // `canOpenExportedFiles()`: the desktop opens the managed file with the system handler.
+        let open = t("common:actions.open");
         let mut acts = row().mt(tk.r(0.25)).gap(tk.r(0.75)).center_y();
         if let (true, Some(path)) = (ok, st.path.clone()) {
             acts = acts.child(
@@ -1469,14 +1546,14 @@ fn handoff(app: &App, tk: &Tk, ui: &ExitUi, incomplete: bool) -> El {
                     .gap(tk.r(0.25))
                     .center_y()
                     .role("button")
-                    .label("Open")
+                    .label(open.clone())
                     .focusable(true)
                     .cursor(rune::Cursor::Pointer)
                     .on_press(move |a: &mut App| open_export(a, &path))
                     .child(ic(&I::FOLDER_OPEN, tk.r(0.75), ink))
                     .child(c::underlined(
                         tk,
-                        text("Open").font(tk.txs(400.0)).color(ink),
+                        text(open).font(tk.txs(400.0)).color(ink),
                         ink,
                     )),
             );
@@ -1695,7 +1772,11 @@ fn assumptions(tk: &Tk, r: &Value) -> El {
         .key("et-assumptions")
         .w_full()
         .padding(tk.card_pad())
-        .child(section_title(tk, &I::SHIELD_CHECK, "Assumptions & review"))
+        .child(section_title(
+            tk,
+            &I::SHIELD_CHECK,
+            &t("overview:exitTax.assumptions.title"),
+        ))
         .child(list)
         .child(
             row()

@@ -123,6 +123,15 @@ pub fn format_btc8(v: f64) -> String {
     format!("{v:.8}")
 }
 
+/// A share with `places` decimals in the UI language's notation (de-AT: decimal comma).
+fn decimal(v: f64, places: usize) -> String {
+    let s = format!("{v:.places$}");
+    match crate::i18n::lang() {
+        crate::i18n::Lang::En => s,
+        crate::i18n::Lang::De => s.replace('.', ","),
+    }
+}
+
 /// `formatBtc(value, {precision})` from lib/currency: `₿ 0.123`.
 fn display_btc(v: f64, precision: usize) -> String {
     format!("₿ {:.*}", precision, v)
@@ -135,24 +144,25 @@ fn ts_ms(s: &str) -> Option<f64> {
 /// `activityLabel`: never / just now / Nm / Nh / Nd ago, then the ISO date.
 fn activity_label(c: &Conn) -> String {
     let Some(secs) = c.last_transaction_at.as_deref().and_then(ts_ms) else {
-        return "never".into();
+        return t("connections:table.never");
     };
     let now = crate::format::now_secs();
     let diff = (now - secs).max(0.0).floor() as i64;
     if diff < 60 {
-        return "just now".into();
+        return t("overview:marketRate.justNow");
     }
+    let ago = |key: &str, n: i64| tr(key, &[("count", &n.to_string())]);
     let m = diff / 60;
     if m < 60 {
-        return format!("{m}m ago");
+        return ago("overview:marketRate.minutesAgo", m);
     }
     let h = m / 60;
     if h < 24 {
-        return format!("{h}h ago");
+        return ago("overview:marketRate.hoursAgo", h);
     }
     let d = h / 24;
     if d < 30 {
-        return format!("{d}d ago");
+        return ago("overview:marketRate.daysAgo", d);
     }
     crate::format::Day::from_epoch_days((secs / 86400.0).floor() as i64).iso()
 }
@@ -864,8 +874,11 @@ fn filters(app: &App, tk: &Tk, layer: &mut Vec<El>, count: usize) -> El {
             chips = chips.child(
                 chip(
                     "wallets-chip-kind",
-                    k.clone(),
-                    tr("connections:filters.clearKind", &[("kind", k)]),
+                    super::conn::category_display(k),
+                    tr(
+                        "connections:filters.clearKind",
+                        &[("kind", &super::conn::category_display(k))],
+                    ),
                 )
                 .on_press(|a: &mut App| a.wallets.list.kind = None),
             );
@@ -1071,15 +1084,16 @@ fn filters_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
         )];
         for (i, k) in kind_options().into_iter().enumerate() {
             let key = format!("wallets-filter-kind-{}", i + 1);
+            let label = super::conn::category_display(k);
             items.push((
                 radio(
                     key.clone(),
-                    k.to_owned(),
+                    label.clone(),
                     st.kind.as_deref() == Some(k),
                     Rc::new(move |a: &mut App| a.wallets.list.kind = Some(k.to_owned())),
                 ),
                 key,
-                k.to_owned(),
+                label,
                 st.kind.as_deref() == Some(k),
             ));
         }
@@ -1180,24 +1194,16 @@ fn columns(tk: &Tk, table_w: f32, tax_col: bool, lg: bool) -> Vec<f32> {
     let mut w: Vec<f32> = pct.iter().map(|p| table_w * p / sum).collect();
     // No header label is cut: each column gets at least its label, its sort glyph and the
     // table kit's padding, taken from the Connection column.
-    let labels: Vec<(&str, bool)> = if tax_col {
-        vec![
-            ("Kind", true),
-            ("Transactions", true),
-            ("Last activity", true),
-            ("Composition", false),
-            ("Tax-free", true),
-            ("Balance", true),
-        ]
-    } else {
-        vec![
-            ("Kind", true),
-            ("Transactions", true),
-            ("Last activity", true),
-            ("Composition", false),
-            ("Balance", true),
-        ]
-    };
+    let mut labels: Vec<(String, bool)> = vec![
+        (t("connections:filters.kind"), true),
+        (t("connections:table.columns.transactions"), true),
+        (t("connections:table.columns.lastActivity"), true),
+        (t("connections:table.columns.composition"), false),
+    ];
+    if tax_col {
+        labels.push((t("connections:table.columns.taxFree"), true));
+    }
+    labels.push((t("connections:table.columns.balance"), true));
     let mut deficit = 0.0;
     for (i, (label, sortable)) in labels.iter().enumerate() {
         let k = i + 1;
@@ -1264,7 +1270,7 @@ fn table(
     head = head.child(sort_head(
         app,
         tk,
-        "Connection",
+        &t("connections:table.columns.connection"),
         SortKey::Label,
         false,
         next(),
@@ -1273,7 +1279,7 @@ fn table(
     head = head.child(sort_head(
         app,
         tk,
-        "Kind",
+        &t("connections:filters.kind"),
         SortKey::Kind,
         false,
         next(),
@@ -1282,7 +1288,7 @@ fn table(
     head = head.child(sort_head(
         app,
         tk,
-        "Transactions",
+        &t("connections:table.columns.transactions"),
         SortKey::Transactions,
         true,
         next(),
@@ -1291,7 +1297,7 @@ fn table(
     head = head.child(sort_head(
         app,
         tk,
-        "Last activity",
+        &t("connections:table.columns.lastActivity"),
         SortKey::Last,
         true,
         next(),
@@ -1306,14 +1312,17 @@ fn table(
                 .px(tk.r(0.5))
                 .center_y()
                 .justify_end()
-                .child(crate::ui::table::th_text(tk, "Composition")),
+                .child(crate::ui::table::th_text(
+                    tk,
+                    t("connections:table.columns.composition"),
+                )),
         );
     }
     if tax_col {
         head = head.child(sort_head(
             app,
             tk,
-            "Tax-free",
+            &t("connections:table.columns.taxFree"),
             SortKey::TaxFree,
             true,
             next(),
@@ -1323,7 +1332,7 @@ fn table(
     head = head.child(sort_head(
         app,
         tk,
-        "Balance",
+        &t("connections:table.columns.balance"),
         SortKey::Balance,
         true,
         next(),
@@ -1331,12 +1340,12 @@ fn table(
     ));
     let mut body = col().w(table_w);
     if rows.is_empty() {
-        let msg = if total_count == 0 {
-            "No wallets yet — add a wallet to start syncing or importing history."
+        let msg = t(if total_count == 0 {
+            "connections:table.emptyNoWallets"
         } else {
-            "No wallets or sources match your filters."
-        };
-        body = body.child(crate::ui::table::empty_text(tk, msg));
+            "connections:table.emptyFiltered"
+        });
+        body = body.child(crate::ui::table::empty_text(tk, &msg));
     }
     let overlap = snapshot(app)
         .and_then(|s| s.pointer("/balanceSummary/duplicateOutpointAdjustmentBtc"))
@@ -1418,35 +1427,40 @@ fn wallet_row(
             meta.push(e.clone());
         }
         if c.is_default_backend {
-            meta.push("default backend".into());
+            meta.push(t("connections:table.meta.defaultBackend"));
         }
-        meta.push("first-party infra".into());
+        meta.push(t("connections:table.meta.firstPartyInfra"));
     }
     if let Some(a) = c.addresses {
-        meta.push(format!("{a} addresses"));
+        meta.push(tc("connections:table.meta.addresses", a as usize, &[]));
     }
     if let Some(ch) = c.channels {
-        meta.push(format!("{ch} channels"));
+        meta.push(tc("connections:table.meta.channels", ch as usize, &[]));
     }
     if let Some(g) = c.gap {
-        meta.push(format!("gap limit {g}"));
+        meta.push(tr(
+            "connections:table.meta.gapLimit",
+            &[("gap", &g.to_string())],
+        ));
     }
     if c.deprecated {
-        meta.push("deprecated".into());
+        meta.push(t("connections:table.meta.deprecated"));
     }
     let comp_title = if backend {
-        "First-party infrastructure".to_owned()
+        t("connections:table.share.firstParty")
     } else if hidden {
-        "Wallet share hidden".to_owned()
+        t("connections:table.share.hidden")
     } else if overlap {
         t("connections:table.balanceOverlap")
     } else if pct < 0.1 {
-        "<0.1% of total balance".to_owned()
+        tr(
+            "connections:table.share.below",
+            &[("percent", &decimal(0.1, 1))],
+        )
     } else {
-        format!(
-            "{:.*}% of total balance",
-            if pct < 10.0 { 1 } else { 0 },
-            pct
+        tr(
+            "connections:table.share.ofTotal",
+            &[("percent", &decimal(pct, if pct < 10.0 { 1 } else { 0 }))],
         )
     };
     let mut i = 0;
@@ -1506,7 +1520,7 @@ fn wallet_row(
                 .border_layout()
                 .center_y()
                 .child(
-                    text(c.category_label().to_owned())
+                    text(super::conn::category_display(c.category_label()))
                         .font(tk.txs(500.0))
                         .color(tk.fg),
                 ),
@@ -1536,7 +1550,7 @@ fn wallet_row(
             text(
                 c.sync_source
                     .clone()
-                    .unwrap_or_else(|| "Backend endpoint".into()),
+                    .unwrap_or_else(|| t("connections:table.backendEndpoint")),
             )
             .font(tk.txs(400.0))
             .color(tk.muted_fg)
@@ -1570,7 +1584,11 @@ fn wallet_row(
                     text("—").font(tk.tsm(400.0)).color(tk.muted_fg)
                 } else {
                     sensitive(
-                        if has_tax_free { "Yes" } else { "No" },
+                        t(if has_tax_free {
+                            "common:answer.yes"
+                        } else {
+                            "common:answer.no"
+                        }),
                         tk.tsm(500.0),
                         if has_tax_free { tk.fg } else { tk.muted_fg },
                         hidden,
@@ -1582,17 +1600,17 @@ fn wallet_row(
         col()
             .items_end()
             .child(
-                text(if c.is_default_backend {
-                    "Default"
+                text(t(if c.is_default_backend {
+                    "connections:table.backendDefault"
                 } else {
-                    "Configured"
-                })
+                    "connections:table.backendConfigured"
+                }))
                 .font(tk.tsm(500.0).features("'tnum' 1"))
                 .color(tk.fg),
             )
             .child(
                 text(if !c.wallet_refs.is_empty() {
-                    format!("{} wallets", crate::format::count(c.wallet_refs.len()))
+                    tc("connections:table.wallets", c.wallet_refs.len(), &[])
                 } else {
                     c.backend_kind.clone().unwrap_or_default()
                 })

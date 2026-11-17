@@ -3,9 +3,10 @@
 //! conditions), and the sync result sentences.
 //!
 //! Ports `hooks/useWalletSyncAction.ts`, `hooks/useJournalProcessingAction.ts`,
-//! `lib/syncProgress.ts` and the parts of `lib/syncResults.ts` those use. The phase labels,
-//! progress labels and run summaries are hard-coded English in the web (not in the bundles), so
-//! they stay English here; titles, toasts and the journal phases come from the bundles.
+//! `lib/syncProgress.ts` and the parts of `lib/syncResults.ts` those use. The web hard-codes the
+//! phase labels, progress labels and run summaries in English; here they come from the bundles
+//! (`chrome:syncProgress`) like the titles, toasts and journal phases. The `details` lines no
+//! surface renders stay English, and the daemon's own reasons and messages pass through as sent.
 
 use std::collections::HashMap;
 
@@ -48,12 +49,14 @@ impl Maint {
     /// `routeProgressFromActiveMaintenance`'s label: "Title: detail" (the progress line's
     /// live region and the title bar's status detail).
     pub fn route_label(&self) -> String {
+        let in_progress;
         let detail = if !self.label.trim().is_empty() {
             self.label.trim()
         } else if !self.body.trim().is_empty() {
             self.body.trim()
         } else {
-            "In progress"
+            in_progress = t("chrome:syncProgress.inProgress");
+            in_progress.as_str()
         };
         let title = compact_title(&self.title);
         if !title.is_empty() && title.to_lowercase() != detail.to_lowercase() {
@@ -113,22 +116,22 @@ pub fn milestone_phase(phase: &str) -> &str {
     }
 }
 
-/// `PHASE_LABELS`.
+/// `PHASE_LABELS`; an unknown phase shows its own (daemon) name.
 pub fn phase_label(phase: &str) -> String {
-    match milestone_phase(phase) {
-        "discovery" => "Discovering wallet history",
-        "backend_fetch" => "Fetching source history",
-        "decode_enrich" => "Decoding and enriching transactions",
-        "import" | "importing" => "Importing transactions",
-        "rate_coverage" => "Checking market-rate coverage",
-        "auto_pair" => "Pairing swaps and transfers",
-        "journal_refresh" => "Refreshing journals",
-        "rate_limited" => "Waiting out rate limit",
-        "done" => "Refresh complete",
-        "error" => "Refresh needs attention",
+    let key = match milestone_phase(phase) {
+        "discovery" => "chrome:syncProgress.phase.discovery",
+        "backend_fetch" => "chrome:syncProgress.phase.backendFetch",
+        "decode_enrich" => "chrome:syncProgress.phase.decodeEnrich",
+        "import" | "importing" => "chrome:syncProgress.phase.import",
+        "rate_coverage" => "chrome:syncProgress.phase.rateCoverage",
+        "auto_pair" => "chrome:syncProgress.phase.autoPair",
+        "journal_refresh" => "chrome:syncProgress.phase.journalRefresh",
+        "rate_limited" => "chrome:syncProgress.phase.rateLimited",
+        "done" => "chrome:syncProgress.phase.done",
+        "error" => "chrome:syncProgress.phase.error",
         other => return other.replace('_', " "),
-    }
-    .to_owned()
+    };
+    t(key)
 }
 
 /// `PHASE_PROGRESS_FRACTIONS`.
@@ -241,13 +244,13 @@ pub fn progress_value(p: &Value, previous: f64) -> f64 {
     85f64.min(previous + 10.0)
 }
 
-fn unit(p: &Value) -> &'static str {
-    match phase(p) {
-        Some("discovery") => "addresses probed",
-        Some("backend_fetch") => "scan targets checked",
-        Some("decode_enrich") => "transactions scanned",
-        _ => "rows scanned",
-    }
+fn unit(p: &Value) -> String {
+    t(match phase(p) {
+        Some("discovery") => "chrome:syncProgress.unit.addresses",
+        Some("backend_fetch") => "chrome:syncProgress.unit.scanTargets",
+        Some("decode_enrich") => "chrome:syncProgress.unit.transactions",
+        _ => "chrome:syncProgress.unit.rows",
+    })
 }
 
 /// `progressLabel`: "Wallet: Phase · 3 / 10".
@@ -255,7 +258,7 @@ pub fn progress_label(p: &Value) -> String {
     let src = source(p);
     let ph = phase(p)
         .map(phase_label)
-        .unwrap_or_else(|| "Refreshing configured sources".into());
+        .unwrap_or_else(|| t("chrome:syncProgress.refreshingSources"));
     let prefix = if src.is_empty() {
         String::new()
     } else {
@@ -280,7 +283,7 @@ fn progress_body(p: &Value) -> String {
     };
     let ph = phase(p)
         .map(phase_label)
-        .unwrap_or_else(|| "refresh is running".into());
+        .unwrap_or_else(|| t("chrome:syncProgress.refreshRunning"));
     match numbers(p) {
         (Some(done), Some(total)) if total > 0.0 => format!(
             "{prefix}{ph}; {} / {} {}.",
@@ -302,14 +305,16 @@ fn gap_label(p: &Value) -> Option<String> {
     }
     let gap = num(p, "gap_limit").filter(|g| *g > 0.0)?.floor();
     Some(match num(p, "unused_streak").filter(|u| *u >= 0.0) {
-        Some(u) => format!(
-            "Unused gap {} / {}",
-            fmt_count(u.floor().min(gap)),
-            fmt_count(gap)
+        Some(u) => tr(
+            "chrome:syncProgress.gap.unused",
+            &[
+                ("unused", &fmt_count(u.floor().min(gap))),
+                ("gap", &fmt_count(gap)),
+            ],
         ),
-        None => format!(
-            "Stops after {} consecutive unused addresses",
-            fmt_count(gap)
+        None => tr(
+            "chrome:syncProgress.gap.stopsAfter",
+            &[("gap", &fmt_count(gap))],
         ),
     })
 }
@@ -326,20 +331,20 @@ fn source_type_label(p: &Value) -> Option<&'static str> {
 }
 
 /// `activeSyncTitle`.
-fn active_title(p: &Value) -> &'static str {
+fn active_title(p: &Value) -> String {
     let ph = phase(p);
     let st = s(p, "source_type");
-    if ph == Some("rate_limited") {
-        "Waiting out rate limit"
+    t(if ph == Some("rate_limited") {
+        "chrome:syncProgress.phase.rateLimited"
     } else if ph == Some("auto_pair") {
-        "Pairing swaps and transfers"
+        "chrome:syncProgress.phase.autoPair"
     } else if st == Some("journals") || ph == Some("journal_refresh") {
-        "Refreshing journals"
+        "chrome:syncProgress.phase.journalRefresh"
     } else if st == Some("market_rates") || ph == Some("rate_coverage") {
-        "Checking market rates"
+        "chrome:syncProgress.title.checkingMarketRates"
     } else {
-        "Refreshing book"
-    }
+        "chrome:notifications.job.bookRefresh"
+    })
 }
 
 /// `activeSyncMaintenanceProgress`'s detail lines.
@@ -400,10 +405,10 @@ pub fn active_sync(p: &Value, previous: f64) -> Maint {
     let src = source(p);
     let ph = phase(p)
         .map(phase_label)
-        .unwrap_or_else(|| "Refreshing configured sources".into());
+        .unwrap_or_else(|| t("chrome:syncProgress.refreshingSources"));
     Maint {
         job: Job::BookRefresh,
-        title: active_title(p).to_owned(),
+        title: active_title(p),
         body: if src.is_empty() {
             progress_body(p)
         } else {
@@ -558,77 +563,76 @@ fn observability(r: &Value) -> Option<String> {
     }
     let n = |k: &str| r.get(k).and_then(Value::as_f64).unwrap_or(0.0);
     let mut parts: Vec<String> = Vec::new();
+    // A count in the sentence (`{{count}}`), grouped as the language groups it.
+    let counted = |key: &str, v: f64| tr(key, &[("count", &fmt_count(v))]);
+    let plural = |key: &str, v: f64| tc(key, v.max(0.0).round() as usize, &[]);
     if r["force_full"].as_bool() == Some(true) {
-        parts.push("full rescan".into());
+        parts.push(t("chrome:syncProgress.observed.fullRescan"));
     }
     if s(r, "observer_route") == Some("compatibility") {
+        // The daemon's reason code, read as words; the fallback is ours.
         let reason = s(r, "observer_compatibility_reason")
-            .unwrap_or("capability fallback")
-            .replace('_', " ");
-        parts.push(format!("compatibility observer ({reason})"));
+            .map(|x| x.replace('_', " "))
+            .unwrap_or_else(|| t("chrome:syncProgress.observed.capabilityFallback"));
+        parts.push(tr(
+            "chrome:syncProgress.observed.compatibility",
+            &[("reason", &reason)],
+        ));
     }
     let (imported, updated, unchanged) = (n("imported"), n("updated"), n("unchanged"));
     if imported != 0.0 || updated != 0.0 || unchanged != 0.0 {
         let rows: Vec<String> = [
-            (imported, "imported"),
-            (updated, "updated"),
-            (unchanged, "unchanged"),
+            (imported, "chrome:syncProgress.observed.imported"),
+            (updated, "chrome:syncProgress.observed.updated"),
+            (unchanged, "chrome:syncProgress.observed.unchanged"),
         ]
         .iter()
         .filter(|(v, _)| *v != 0.0)
-        .map(|(v, w)| format!("{} {w}", fmt_count(*v)))
+        .map(|(v, key)| counted(key, *v))
         .collect();
         parts.push(rows.join(", "));
     } else if let Some(f) = num(r, "records_fetched") {
-        parts.push(format!("{} source rows", fmt_count(f)));
+        parts.push(counted("chrome:syncProgress.observed.sourceRows", f));
     }
     if let Some(c) = num(r, "scripts_checked").filter(|c| *c > 0.0) {
-        parts.push(format!("{} scripts checked", fmt_count(c)));
+        parts.push(counted("chrome:syncProgress.observed.scriptsChecked", c));
     } else if let Some(c) = num(r, "target_count").filter(|c| *c > 0.0) {
-        parts.push(format!("{} targets", fmt_count(c)));
+        parts.push(counted("chrome:syncProgress.observed.targets", c));
     }
     if num(r, "reconciliation_rows").is_some_and(|v| v > 0.0) && n("reconciliation_changed") > 0.0 {
         if n("matched") != 0.0 {
-            parts.push(format!(
-                "{} migration overlaps matched",
-                fmt_count(n("matched"))
+            parts.push(counted(
+                "chrome:syncProgress.observed.overlapsMatched",
+                n("matched"),
             ));
         }
         if n("ambiguous") != 0.0 {
-            parts.push(format!(
-                "{} migration overlaps need review",
-                fmt_count(n("ambiguous"))
+            parts.push(counted(
+                "chrome:syncProgress.observed.overlapsReview",
+                n("ambiguous"),
             ));
         }
         let re = n("reactivated");
         if re != 0.0 {
-            parts.push(format!(
-                "{} migration row{} reactivated",
-                fmt_count(re),
-                if re == 1.0 { "" } else { "s" }
-            ));
+            parts.push(plural("chrome:syncProgress.observed.reactivated", re));
         }
     }
     let sup = n("observer_superseded");
     if sup != 0.0 {
-        parts.push(format!(
-            "{} obsolete projection{} retired",
-            fmt_count(sup),
-            if sup == 1.0 { "" } else { "s" }
-        ));
+        parts.push(plural("chrome:syncProgress.observed.retired", sup));
     }
     if r["utxos_skipped_unchanged"].as_bool() == Some(true) {
-        parts.push("UTXOs unchanged".into());
+        parts.push(t("chrome:syncProgress.observed.utxosUnchanged"));
     } else if r["utxos_refreshed"].as_bool() == Some(true) {
-        parts.push("UTXOs refreshed".into());
+        parts.push(t("chrome:syncProgress.observed.utxosRefreshed"));
     }
     match r["journal_invalidated"].as_bool() {
-        Some(false) => parts.push("journals unchanged".into()),
-        Some(true) => parts.push("journals marked stale".into()),
+        Some(false) => parts.push(t("chrome:syncProgress.observed.journalsUnchanged")),
+        Some(true) => parts.push(t("chrome:syncProgress.observed.journalsStale")),
         None => {}
     }
     if let Some(ms) = num(r, "elapsed_ms").filter(|m| *m >= 0.0) {
-        parts.push(format!("{} ms", fmt_count(ms.round())));
+        parts.push(counted("chrome:syncProgress.observed.elapsed", ms.round()));
     }
     let out = parts.join(" · ");
     (!out.is_empty()).then_some(out)
@@ -640,22 +644,44 @@ fn describe_single(result: Option<&Value>, label: &str) -> String {
         return tr("connections:detail.sync.missingResult", &[("label", label)]);
     };
     let wallet = s(r, "wallet").unwrap_or(label);
+    // The daemon's message, reason or code, as sent.
     let detail = result_detail(r);
-    let with = |a: &str| match &detail {
-        Some(d) => format!("{wallet} {a}: {d}"),
-        None => format!("{wallet} {a}."),
+    let with = |plain: &str, detailed: &str| match &detail {
+        Some(d) => tr(detailed, &[("wallet", wallet), ("detail", d)]),
+        None => tr(plain, &[("wallet", wallet)]),
     };
     match s(r, "status").unwrap_or("") {
-        "error" => with("refresh failed"),
-        "skipped" => with("refresh skipped"),
+        "error" => with(
+            "chrome:syncProgress.result.failed",
+            "chrome:syncProgress.result.failedDetail",
+        ),
+        "skipped" => with(
+            "chrome:syncProgress.result.skipped",
+            "chrome:syncProgress.result.skippedDetail",
+        ),
         "synced" => match observability(r) {
-            Some(o) => format!("{wallet} refreshed: {o}."),
-            None => format!("{wallet} refreshed."),
+            Some(o) => tr(
+                "chrome:syncProgress.result.refreshedDetail",
+                &[("wallet", wallet), ("detail", &o)],
+            ),
+            None => tr(
+                "chrome:syncProgress.result.refreshed",
+                &[("wallet", wallet)],
+            ),
         },
-        "queued" => format!("{wallet} refresh queued."),
-        "rate_limited" => with("refresh cooling down"),
-        "partially_stale" => with("partially refreshed"),
-        other => format!("{wallet} refresh {other}."),
+        "queued" => tr("chrome:syncProgress.result.queued", &[("wallet", wallet)]),
+        "rate_limited" => with(
+            "chrome:syncProgress.result.coolingDown",
+            "chrome:syncProgress.result.coolingDownDetail",
+        ),
+        "partially_stale" => with(
+            "chrome:syncProgress.result.partial",
+            "chrome:syncProgress.result.partialDetail",
+        ),
+        other => tr(
+            "chrome:syncProgress.result.other",
+            &[("wallet", wallet), ("status", other)],
+        ),
     }
 }
 
@@ -688,16 +714,16 @@ fn summarize_results(results: &[Value]) -> String {
             .count()
     };
     let parts: Vec<String> = [
-        (n("synced"), "refreshed"),
-        (n("skipped"), "skipped"),
-        (n("error"), "failed"),
+        (n("synced"), "chrome:syncProgress.summary.refreshed"),
+        (n("skipped"), "chrome:syncProgress.summary.skipped"),
+        (n("error"), "chrome:syncProgress.summary.failed"),
     ]
     .iter()
     .filter(|(c, _)| *c > 0)
-    .map(|(c, w)| format!("{c} {w}"))
+    .map(|(c, key)| tr(key, &[("count", &count(*c))]))
     .collect();
     let summary = if parts.is_empty() {
-        "No source changes returned.".to_owned()
+        t("chrome:syncProgress.summary.noChanges")
     } else {
         parts.join(", ")
     };
@@ -776,10 +802,7 @@ pub fn summarize_run(data: &Value) -> String {
     if completed.is_empty() {
         let enqueued = arr(data, "enqueued").len();
         if enqueued > 0 {
-            return format!(
-                "{enqueued} source{} queued.",
-                if enqueued == 1 { "" } else { "s" }
-            );
+            return tc("chrome:syncProgress.summary.queued", enqueued, &[]);
         }
         return summarize_results(&arr(data, "results"));
     }
@@ -798,25 +821,15 @@ pub fn summarize_run(data: &Value) -> String {
         .map(|j| positive(j["result"]["auto_pair"]["remaining"].get("total")))
         .sum();
     let pair_problem = jobs.iter().find(|j| auto_pair_problem(j));
-    let plural = |n: usize| if n == 1 { "" } else { "s" };
+    let counted = |key: &str, n: usize| tr(key, &[("count", &count(n))]);
     let parts: Vec<String> = [
-        (done > 0).then(|| format!("{done} completed")),
-        (cooling > 0).then(|| format!("{cooling} cooling down")),
-        (failed > 0).then(|| format!("{failed} needs attention")),
-        pair_problem.map(|_| "automatic pairing skipped".to_owned()),
-        (paired > 0).then(|| format!("{paired} pair{} applied", plural(paired))),
-        (review > 0).then(|| {
-            format!(
-                "{review} swap/transfer candidate{} to review",
-                plural(review)
-            )
-        }),
-        (quarantined > 0).then(|| {
-            format!(
-                "{quarantined} quarantined transaction{}",
-                plural(quarantined)
-            )
-        }),
+        (done > 0).then(|| counted("chrome:syncProgress.summary.completed", done)),
+        (cooling > 0).then(|| counted("chrome:syncProgress.summary.coolingDown", cooling)),
+        (failed > 0).then(|| counted("chrome:syncProgress.summary.needsAttention", failed)),
+        pair_problem.map(|_| t("chrome:syncProgress.summary.pairingSkipped")),
+        (paired > 0).then(|| tc("chrome:syncProgress.summary.pairsApplied", paired, &[])),
+        (review > 0).then(|| tc("chrome:syncProgress.summary.candidates", review, &[])),
+        (quarantined > 0).then(|| tc("chrome:syncProgress.summary.quarantined", quarantined, &[])),
         journal_step_needs_attention(&data["journals"])
             .then(|| describe_journal_step(&data["journals"]))
             .flatten(),
@@ -825,7 +838,7 @@ pub fn summarize_run(data: &Value) -> String {
     .flatten()
     .collect();
     let summary = if parts.is_empty() {
-        "No source changes returned.".to_owned()
+        t("chrome:syncProgress.summary.noChanges")
     } else {
         parts.join(", ")
     };
@@ -848,7 +861,9 @@ pub fn summarize_run(data: &Value) -> String {
     match (first_problem, detail.is_empty(), pair_detail) {
         (Some(j), false, _) => format!(
             "{summary}: {}: {detail}",
-            s(j, "source_label").unwrap_or("Source")
+            s(j, "source_label")
+                .map(str::to_owned)
+                .unwrap_or_else(|| t("chrome:syncProgress.summary.source"))
         ),
         (_, _, Some(d)) => format!("{summary}: {d}"),
         _ => summary,
@@ -976,8 +991,8 @@ pub fn start_refresh(app: &mut App, force_full: bool) {
         }),
         value: Some(STARTING_VALUE),
         indeterminate: false,
-        // `startingSyncProgress`: hard-coded English in the web.
-        label: "Preparing source refresh".into(),
+        // `startingSyncProgress`.
+        label: t("chrome:firstSync.preparing"),
         details: vec![
             t("overview:bookRefresh.configuredSourcesQueued"),
             t("overview:bookRefresh.autoPairIncluded"),
@@ -1308,6 +1323,10 @@ mod tests {
             m.route_label(),
             "Waiting out rate limit: Hot: Waiting out rate limit"
         );
+        set_lang(Lang::De);
+        assert_ne!(phase_label("backend_fetch"), "Fetching source history");
+        assert_ne!(summarize_run(&json!({})), "No source changes returned.");
+        set_lang(Lang::En);
     }
 
     #[test]

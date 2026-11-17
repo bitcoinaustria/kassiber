@@ -155,12 +155,12 @@ pub(super) fn amounts(app: &App, s: &Snapshot, r: &RecentRow) -> (String, String
             format::btc(r.amount_btc, 8, true),
             r.amount_fiat
                 .map(|v| format::fiat(v.abs(), &cur))
-                .unwrap_or_else(|| "Unpriced".into()),
+                .unwrap_or_else(|| t("common:state.unpriced")),
         ),
         Currency::Fiat => (
             r.amount_fiat
                 .map(|v| format::signed_fiat(v, &cur))
-                .unwrap_or_else(|| "Unpriced".into()),
+                .unwrap_or_else(|| t("common:state.unpriced")),
             format::btc(r.amount_btc, 8, false),
         ),
     }

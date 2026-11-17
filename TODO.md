@@ -2047,9 +2047,6 @@ See [tax countries](docs/reference/tax-countries.md) and
 - [ ] Ship the Rune app in releases: point the prerelease workflow, the
   Homebrew cask and the Linux channels at `crates/kassiber-desktop/packaging/`
   instead of the Tauri bundle, and run its Linux and Windows packaging natively.
-- [ ] Translate the desktop's remaining English literals (wallets table, exit-tax
-  page, refresh progress, update-check errors, detail split-payout card,
-  "Unpriced"), found in review of #773.
 - [ ] Decide when `ui-tauri/` retires. Until then it is the parity reference
   (`crates/kassiber-desktop/parity/`) and its kind lists are checked against
   the desktop's (`src/kinds/tests.rs`, which skips when `ui-tauri/` is absent).

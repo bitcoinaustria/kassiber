@@ -30,8 +30,10 @@ const W_ACTIONS: f32 = 48.0;
 const W_TABLE: f32 = 1080.0;
 /// A row with a pricing summary: p-2, a 1.5 rem chip, 0.25 rem, two 1 rem lines, p-2, the border.
 const ROW_EST: f32 = 69.3;
-/// `MISSING_FIAT_LABEL`: the web hard-codes it (lib/currency.ts), so it stays untranslated here too.
-const UNPRICED: &str = "Unpriced";
+/// `MISSING_FIAT_LABEL` (lib/currency.ts), translated.
+fn unpriced() -> String {
+    t("common:state.unpriced")
+}
 
 /// Which optional columns the viewport shows (`md:` / `lg:` / `xl:` on the web).
 #[derive(Clone, Copy)]
@@ -422,7 +424,7 @@ fn build_row(app: &App, tk: &Tk, r: &Row, c: Cols) -> El {
         if fiat {
             match r.signed_fiat(flow) {
                 Some(v) => format::signed_fiat(v, &cur),
-                None => UNPRICED.into(),
+                None => unpriced(),
             }
         } else {
             format::btc(sbtc, 8, true)
@@ -430,7 +432,7 @@ fn build_row(app: &App, tk: &Tk, r: &Row, c: Cols) -> El {
     } else if fiat {
         r.shown_fiat()
             .map(|v| format::fiat(v, &cur))
-            .unwrap_or_else(|| UNPRICED.into())
+            .unwrap_or_else(unpriced)
     } else {
         format!("₿{:.8}", r.shown_btc())
     };
@@ -439,14 +441,14 @@ fn build_row(app: &App, tk: &Tk, r: &Row, c: Cols) -> El {
     } else {
         r.shown_fiat()
             .map(|v| format::fiat(v, &cur))
-            .unwrap_or_else(|| UNPRICED.into())
+            .unwrap_or_else(unpriced)
     };
     // A recorded pair fee on its own line, in the display currency.
     let fee_line = r.paired.as_ref().filter(|p| p.fee_btc > 0.0).map(|p| {
         let amount = if fiat {
             p.fee_fiat
                 .map(|v| format::fiat(v, &cur))
-                .unwrap_or_else(|| UNPRICED.into())
+                .unwrap_or_else(unpriced)
         } else {
             format!("₿{:.8}", p.fee_btc)
         };

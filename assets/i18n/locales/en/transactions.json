@@ -1224,5 +1224,25 @@
       "label": "Market rate",
       "phrase": "a market rate"
     }
+  },
+  "splitPayout": {
+    "title": "Resolve split transfer / swap",
+    "body": "Part of this {{asset}} spend returned to an owned wallet and part went to a swap or direct payout. Record the payout portion; the remainder resolves as a same-transaction self-transfer instead of an implausible fee — provided the matching owned inbound is imported, otherwise it books as an outbound disposal.",
+    "outLabel": "Swap/payout portion ({{asset}})",
+    "outboundTotal": "Outbound total: {{amount}} {{asset}}",
+    "payoutLabel": "Payout received ({{asset}})",
+    "payoutAsset": "Payout asset",
+    "taxPolicy": "Tax policy",
+    "policyTaxable": "Taxable disposal",
+    "policyCarrying": "Carrying value (no disposal)",
+    "counterparty": "Counterparty (optional)",
+    "counterpartyPlaceholder": "recipient or exchange",
+    "notes": "Notes (optional)",
+    "submit": "Record payout & reprocess",
+    "carryingHint": "Cross-asset carrying value is supported for Austrian books; otherwise choose taxable.",
+    "positiveAmount": "Enter a positive BTC amount",
+    "exceedsOutbound": "Cannot exceed the outbound total ({{total}})",
+    "recordFailed": "Could not record split payout: {{error}}",
+    "recorded": "Split payout recorded; reprocessing journals to apply it."
   }
 }

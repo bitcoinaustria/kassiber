@@ -452,8 +452,12 @@ pub fn header(app: &App, tk: &Tk, o: &Open, r: &Value, sheet: bool) -> El {
             ),
         );
     } else {
-        // `MISSING_FIAT_LABEL` is a hard-coded English constant in the web too (lib/currency.ts).
-        secondary = secondary.child(text("Unpriced").font(sec).color(tk.warn.solid));
+        // `MISSING_FIAT_LABEL` (lib/currency.ts), translated.
+        secondary = secondary.child(
+            text(t("common:state.unpriced"))
+                .font(sec)
+                .color(tk.warn.solid),
+        );
     }
     if let Some(nv) = now_part {
         secondary = words(secondary, "· ");

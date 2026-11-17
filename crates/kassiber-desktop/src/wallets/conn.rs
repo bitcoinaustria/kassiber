@@ -267,6 +267,26 @@ pub const CATEGORY_ORDER: [&str; 12] = [
     "Infrastructure",
 ];
 
+/// A category label ([`CATEGORY_ORDER`], the filter's and sort's stable id) in the UI language.
+pub fn category_display(label: &str) -> String {
+    let key = match label {
+        "On-chain" => "connections:table.category.onChain",
+        "Liquid" => "connections:table.category.liquid",
+        "Lightning" => "connections:table.category.lightning",
+        "NWC" => "connections:table.category.nwc",
+        "Ecash" => "connections:table.category.ecash",
+        "BTCPay" => "connections:table.category.btcpay",
+        "Exchange" => "connections:table.category.exchange",
+        "Custodial platform" => "connections:table.category.custodial",
+        "CSV" => "connections:table.category.csv",
+        "BIP329" => "connections:table.category.bip329",
+        "Custom" => "connections:table.category.custom",
+        "Infrastructure" => "connections:table.category.infrastructure",
+        other => return other.to_owned(),
+    };
+    crate::i18n::t(key)
+}
+
 /// `connectionKindCategoryLabels`.
 pub fn kind_category_label(kind: &str) -> &'static str {
     match kind {
