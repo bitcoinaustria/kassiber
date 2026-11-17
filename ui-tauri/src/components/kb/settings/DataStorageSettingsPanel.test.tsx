@@ -23,7 +23,7 @@ const renderPanel = (
 describe("DataStorageSettingsPanel regtest reset", () => {
   it("hides the regtest reset control by default (production app)", () => {
     const html = renderPanel();
-    expect(html).toContain("Delete books");
+    expect(html).toContain("Delete book set");
     expect(html).not.toContain("Reset & rebuild");
     expect(html).not.toContain("Reset regtest demo environment");
   });
@@ -47,13 +47,13 @@ describe("DataStorageSettingsPanel database size", () => {
     });
     expect(html).toContain("Database size");
     expect(html).toContain("5.0 MiB");
-    expect(html).toContain("Plus 2.0 KiB in the write-ahead log");
+    expect(html).toContain("Plus 2.0 KiB of recent changes");
   });
 
   it("stays quiet about an empty log, and says when the size is unknown", () => {
     const empty = renderPanel({ storage: { database_bytes: 1000, wal_bytes: 0 } });
     expect(empty).toContain("1000 B");
-    expect(empty).not.toContain("write-ahead log");
+    expect(empty).not.toContain("recent changes");
     expect(renderPanel({ storage: { database_bytes: null, wal_bytes: null } })).toContain(
       "Unknown",
     );

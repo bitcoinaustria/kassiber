@@ -15,6 +15,20 @@ pub fn entry(normalized: &str) -> Option<&'static Country> {
     })
 }
 
+/// `profile` with the holding period the book is taxed with
+/// (`kassiber_setup::profiles::effective_long_term_days`): a day-count
+/// country's stored zero or absent days read as its default, as the
+/// journals read them, so no report states a period they did not use.
+pub fn taxed_days(profile: &crate::Value) -> crate::Value {
+    let mut taxed = profile.clone();
+    crate::replace(
+        &mut taxed,
+        "tax_long_term_days",
+        kassiber_setup::profiles::effective_long_term_days(profile),
+    );
+    taxed
+}
+
 /// Whether the registry knows the country.
 pub fn known(normalized: &str) -> bool {
     entry(normalized).is_some()

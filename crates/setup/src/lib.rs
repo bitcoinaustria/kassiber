@@ -5,6 +5,7 @@ pub mod backend_certificates;
 mod backend_runtime;
 pub mod backends;
 pub mod book_reset;
+pub mod book_settings;
 pub mod context;
 pub mod core_credentials;
 pub mod networks;
@@ -17,6 +18,7 @@ pub mod projects;
 pub mod references;
 pub mod sensitive;
 pub mod views;
+pub mod wallet_backend_lookup;
 mod workspace_desktop;
 pub mod workspaces;
 
@@ -254,5 +256,6 @@ pub(crate) fn reads_only(command: &str) -> bool {
             | "snapshot"
             | "options"
             | "public_defaults"
+            | "settings"
     )
 }

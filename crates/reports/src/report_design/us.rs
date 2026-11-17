@@ -338,10 +338,10 @@ pub(crate) fn method(data: &Value, lang: Lang) -> Vec<Fact> {
             "pool_scope",
             t("method.pool_scope"),
             Cell::Text(
-                t(if scope == "global" {
-                    "us.pool.global"
-                } else {
-                    "us.pool.wallet"
+                t(match scope.as_str() {
+                    "global" => "us.pool.global",
+                    "global_then_wallet" => "us.pool.global_then_wallet",
+                    _ => "us.pool.wallet",
                 })
                 .into(),
             ),
@@ -480,6 +480,19 @@ mod tests {
         let keys: Vec<&str> = facts.iter().map(|f| f.key).collect();
         assert_eq!(keys, ["long_term_rule", "pool_scope", "forms"]);
         assert!(matches!(&facts[1].value, Cell::Text(t) if t.starts_with("Per wallet")));
+        // The transition scope says both halves and the allocation between.
+        let mut transition = data();
+        replace(&mut transition, "pool_scope", s("global_then_wallet"));
+        for (lang, words) in [
+            (Lang::En, ["through 2024", "Rev. Proc. 2024-28"]),
+            (Lang::De, ["bis 2024", "Rev. Proc. 2024-28"]),
+        ] {
+            let facts = method(&transition, lang);
+            let Cell::Text(text) = &facts[1].value else {
+                panic!("{:?}", facts[1].value)
+            };
+            assert!(words.iter().all(|w| text.contains(w)), "{text}");
+        }
     }
 
     #[test]
@@ -492,6 +505,21 @@ mod tests {
             ("country_layer", data()),
         ]);
         let document = crate::report_design::full(&model);
+        let lead = |document: &crate::report_design::Document| {
+            let holdings = document.sections.iter().find(|s| s.id == "holdings");
+            holdings.unwrap().lead.clone()
+        };
+        assert_eq!(lead(&document), Lang::En.t("holdings.current_lead_wallet"));
+        // A transition book's holdings are its wallets' own lots, not an
+        // allocation at the average basis.
+        let mut transition = data();
+        replace(&mut transition, "pool_scope", s("global_then_wallet"));
+        let mut transition_model = model.clone();
+        replace(&mut transition_model, "country_layer", transition);
+        assert_eq!(
+            lead(&crate::report_design::full(&transition_model)),
+            Lang::En.t("holdings.current_lead_wallet")
+        );
         let ids: Vec<&str> = document.sections.iter().map(|s| s.id).collect();
         let income = ids.iter().position(|id| *id == "income").unwrap();
         assert_eq!(

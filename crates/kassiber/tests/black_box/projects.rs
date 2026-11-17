@@ -31,14 +31,31 @@ fn sandbox() -> Sandbox {
     sandbox
 }
 
-/// The default state root the desktop daemon resolves without --data-root.
+/// Where macOS keeps the default state root, under the sandbox's home.
+const MACOS_ROOT: &str = "home/Library/Application Support/at.bitcoinaustria.kassiber";
+
+/// The default state root the desktop daemon resolves without --data-root:
+/// `$XDG_DATA_HOME/kassiber` on Linux, under the sandbox's home on macOS.
 fn state_root(sandbox: &Sandbox) -> std::path::PathBuf {
-    sandbox.path("xdg-data/kassiber")
+    sandbox.path(if cfg!(target_os = "macos") {
+        MACOS_ROOT
+    } else {
+        "xdg-data/kassiber"
+    })
 }
 
 fn transcript(name: &str) -> Transcript {
     let mut t = Transcript::new(name);
     t.mask(|text| mask_after(text, "database_instance_id\" | value=t:\"", 32, "<random>"));
+    // The goldens spell the root the Linux way.
+    if cfg!(target_os = "macos") {
+        t.mask(|text| {
+            text.replace(
+                &format!("<SANDBOX>/{MACOS_ROOT}"),
+                "<SANDBOX>/xdg-data/kassiber",
+            )
+        });
+    }
     t
 }
 

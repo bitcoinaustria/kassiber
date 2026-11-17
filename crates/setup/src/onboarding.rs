@@ -335,7 +335,10 @@ impl Config {
                 dict([
                     ("fiat_currency", val(&profile, "fiat_currency")),
                     ("tax_country", val(&profile, "tax_country")),
-                    ("tax_long_term_days", val(&profile, "tax_long_term_days")),
+                    (
+                        "tax_long_term_days",
+                        super::profiles::effective_long_term_days(&profile),
+                    ),
                     ("gains_algorithm", val(&profile, "gains_algorithm")),
                 ]),
             ),

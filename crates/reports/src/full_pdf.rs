@@ -136,7 +136,7 @@ pub fn model(
         )
     };
     let mut profile_fields = raw(
-        profile,
+        &crate::country::taxed_days(profile),
         &[
             "label",
             "fiat_currency",

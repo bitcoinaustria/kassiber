@@ -2,8 +2,8 @@ import { isValidElement, type ReactNode } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { BookNetworkSettings } from "./BookNetworkSettings";
 import { NetworkPartitionSettings } from "./NetworkPartitionSettings";
-import enSettings from "@/i18n/locales/en/settings.json";
-import deSettings from "@/i18n/locales/de/settings.json";
+import enSettings from "@shared/i18n/locales/en/settings.json";
+import deSettings from "@shared/i18n/locales/de/settings.json";
 
 const locale = vi.hoisted(() => ({ translate: undefined as undefined | ((key: string) => string) }));
 

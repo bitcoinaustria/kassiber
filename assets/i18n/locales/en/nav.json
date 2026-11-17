@@ -1,0 +1,36 @@
+{
+  "book": {
+    "overview": "Overview",
+    "transactions": "Transactions",
+    "ledger": "Journals",
+    "wallets": "Wallets",
+    "reports": "Reports",
+    "privacyMirror": "Privacy Mirror",
+    "assistant": "Assistant",
+    "reconcile": "Reconcile",
+    "egress": "Network Monitor",
+    "sourceFunds": "Source of funds",
+    "custodyGaps": "Missing wallets",
+    "swaps": "Transfers",
+    "activity": "Activity",
+    "logs": "Logs",
+    "exitTax": "Exit Tax",
+    "settings": "Settings",
+    "chainAnalysis": "Chain Analysis",
+    "review": "Review"
+  },
+  "section": {
+    "main": "Main"
+  },
+  "badge": {
+    "journals": "Journals need processing",
+    "review": "{{count}} left to review"
+  },
+  "openBook": {
+    "title": "Active book changed",
+    "body": "{{book}} is now active. Opening {{page}}.",
+    "fallbackBook": "Selected book",
+    "fallbackPage": "page"
+  },
+  "devLocked": "Early-stage feature. Turn it on in Settings → Desktop → Developer tools."
+}

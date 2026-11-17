@@ -1,6 +1,6 @@
-import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
-import lightningIcon from "@/assets/integrations/lightning.svg";
-import liquidIcon from "@/assets/integrations/liquid.svg";
+import bitcoinIcon from "@shared/logos/integrations/bitcoin.svg";
+import lightningIcon from "@shared/logos/integrations/lightning.svg";
+import liquidIcon from "@shared/logos/integrations/liquid.svg";
 
 /** The Bitcoin rail a leg moved on: the chain, Lightning or Liquid. */
 export type SwapRail = "onchain" | "lightning" | "liquid";

@@ -5,9 +5,15 @@
 //! for the European zones, the EU summer time in force since 1996 (one hour
 //! ahead from 01:00 UTC on the last Sunday of March to 01:00 UTC on the last
 //! Sunday of October). That is what tzdata 2026e says for every supported
-//! zone from 1996 on, and what it projects for later years. Bitcoin is
-//! younger than that, so an earlier instant has no calendar here and a
-//! caller fails closed on it instead of guessing an offset.
+//! European zone from 1996 on, and what it projects for later years. The
+//! southern zones (south-eastern Australia since 2008, New Zealand since
+//! mid-2007) keep the summer time their tzdata POSIX rule states
+//! (`AEST-10AEDT,M10.1.0,M4.1.0/3`, `NZST-12NZDT,M9.5.0,M4.1.0/3`), and
+//! India, South Africa, Queensland, the Northern Territory and (since April
+//! 2009) Western Australia a fixed offset; `tests/data/zoneinfo_added.txt`
+//! checks them against tzdata 2026f. Bitcoin is younger than every rule's
+//! start, so an earlier instant has no calendar here and a caller fails
+//! closed on it instead of guessing an offset.
 
 /// A proleptic Gregorian calendar date.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -133,6 +139,51 @@ enum Summer {
     /// The EU rule: one hour ahead from 01:00 UTC on the last Sunday of
     /// March until 01:00 UTC on the last Sunday of October.
     Eu,
+    /// One hour ahead from `start` until `end`, each a Sunday of a month at
+    /// a local standard time, as a POSIX TZ rule states it. A southern zone
+    /// starts after it ends within a calendar year.
+    Rule { start: Change, end: Change },
+}
+
+/// A summer-time change: the `week`th Sunday of `month` (5 is the last), at
+/// `seconds` after local standard-time midnight (the POSIX `Mm.w.0/time`,
+/// with an end time given in summer time already moved back an hour).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Change {
+    pub month: u32,
+    pub week: u32,
+    pub seconds: i32,
+}
+
+impl Change {
+    /// The UTC instant (µs) of the change in `year` for a zone `standard`
+    /// seconds east of UTC.
+    fn instant(self, year: i32, standard: i32) -> i64 {
+        let first = Date {
+            year,
+            month: self.month,
+            day: 1,
+        }
+        .to_days();
+        // 1970-01-01 was a Thursday: (days + 4) mod 7 is 0 on Sundays.
+        let mut sunday =
+            first + (7 - (first + 4).rem_euclid(7)).rem_euclid(7) + 7 * i64::from(self.week - 1);
+        if sunday >= first + i64::from(month_length(year, self.month)) {
+            sunday -= 7;
+        }
+        (sunday * SECONDS_PER_DAY + i64::from(self.seconds) - i64::from(standard)) * US_PER_SECOND
+    }
+
+    /// The POSIX `Mm.w.0` week number and the local wall-clock time of the
+    /// change in the clock it is read on: `standard` for a start, summer
+    /// time for an end.
+    pub fn posix(self, end: bool) -> (u32, u32, i32) {
+        (
+            self.month,
+            self.week,
+            self.seconds + if end { 3600 } else { 0 },
+        )
+    }
 }
 
 /// An IANA time zone the registry supports.
@@ -166,6 +217,50 @@ const fn eu(name: &'static str, standard: i32) -> Zone {
     }
 }
 
+/// 2008-01-01T00:00:00Z: south-eastern Australia's current rule (first
+/// Sunday of October to first Sunday of April) describes every later
+/// instant; the 2007-08 summer began on another Sunday.
+const AU_RULE_SINCE_US: i64 = 1_199_145_600 * US_PER_SECOND;
+/// 2007-06-01T00:00:00Z: New Zealand's current rule (last Sunday of
+/// September to first Sunday of April) describes every later instant.
+const NZ_RULE_SINCE_US: i64 = 1_180_656_000 * US_PER_SECOND;
+/// 2009-04-01T00:00:00Z: Western Australia's summer-time trial ended on 29
+/// March 2009.
+const PERTH_SINCE_US: i64 = 1_238_544_000 * US_PER_SECOND;
+
+/// South-eastern Australia's summer time: 02:00 standard time on the first
+/// Sunday of October to 03:00 summer time on the first Sunday of April.
+const AU_SUMMER: Summer = Summer::Rule {
+    start: Change {
+        month: 10,
+        week: 1,
+        seconds: 2 * 3600,
+    },
+    end: Change {
+        month: 4,
+        week: 1,
+        seconds: 2 * 3600,
+    },
+};
+
+const fn fixed(name: &'static str, standard: i32, since_us: i64) -> Zone {
+    Zone {
+        name,
+        standard,
+        summer: Summer::None,
+        since_us,
+    }
+}
+
+const fn australian(name: &'static str, standard: i32) -> Zone {
+    Zone {
+        name,
+        standard,
+        summer: AU_SUMMER,
+        since_us: AU_RULE_SINCE_US,
+    }
+}
+
 /// Every zone a registry country may name.
 pub const ZONES: &[Zone] = &[
     UTC,
@@ -183,6 +278,36 @@ pub const ZONES: &[Zone] = &[
         summer: Summer::None,
         since_us: EU_RULE_SINCE_US,
     },
+    // India and South Africa have kept one offset since the 1940s;
+    // Queensland and the Northern Territory since 1992 and 1944.
+    fixed("Asia/Kolkata", 5 * 3600 + 1800, EU_RULE_SINCE_US),
+    fixed("Africa/Johannesburg", 2 * 3600, EU_RULE_SINCE_US),
+    fixed("Australia/Brisbane", 10 * 3600, EU_RULE_SINCE_US),
+    fixed("Australia/Darwin", 9 * 3600 + 1800, EU_RULE_SINCE_US),
+    fixed("Australia/Perth", 8 * 3600, PERTH_SINCE_US),
+    australian("Australia/Sydney", 10 * 3600),
+    australian("Australia/Melbourne", 10 * 3600),
+    australian("Australia/Hobart", 10 * 3600),
+    australian("Australia/Adelaide", 9 * 3600 + 1800),
+    Zone {
+        name: "Pacific/Auckland",
+        standard: 12 * 3600,
+        // 02:00 standard time on the last Sunday of September to 03:00
+        // summer time on the first Sunday of April.
+        summer: Summer::Rule {
+            start: Change {
+                month: 9,
+                week: 5,
+                seconds: 2 * 3600,
+            },
+            end: Change {
+                month: 4,
+                week: 1,
+                seconds: 2 * 3600,
+            },
+        },
+        since_us: NZ_RULE_SINCE_US,
+    },
 ];
 
 /// The zone named `name`.
@@ -199,9 +324,12 @@ pub struct OutOfRange {
 
 impl std::fmt::Display for OutOfRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let since = zone(self.zone)
+            .map(|zone| Date::from_days(zone.since_us.div_euclid(US_PER_DAY)).iso())
+            .unwrap_or_else(|| "1996-01-01".into());
         write!(
             f,
-            "Kassiber has no {} calendar for the instant {} µs after 1970-01-01 UTC (it starts on 1996-01-01)",
+            "Kassiber has no {} calendar for the instant {} µs after 1970-01-01 UTC (it starts on {since})",
             self.zone, self.us
         )
     }
@@ -232,6 +360,33 @@ impl Zone {
         self.summer == Summer::Eu
     }
 
+    /// The zone's own summer-time rule (not the EU's): its start and end
+    /// changes.
+    pub fn summer_rule(&self) -> Option<(Change, Change)> {
+        match self.summer {
+            Summer::Rule { start, end } => Some((start, end)),
+            Summer::None | Summer::Eu => None,
+        }
+    }
+
+    /// The first instant (µs) the zone's calendar describes.
+    pub fn since_us(&self) -> i64 {
+        self.since_us
+    }
+
+    /// The UTC instant (µs) of local midnight on `day`. No supported zone
+    /// changes its clocks around midnight, so the time exists once.
+    pub fn local_midnight(&self, day: Date) -> Result<i64, OutOfRange> {
+        let local = day.to_days() * US_PER_DAY;
+        let guess = local - i64::from(self.standard) * US_PER_SECOND;
+        let offset = i64::from(self.offset_s(guess)?);
+        let start = local - offset * US_PER_SECOND;
+        // Recheck at the found instant, in case the guess fell on the other
+        // side of a change.
+        let offset = i64::from(self.offset_s(start)?);
+        Ok(local - offset * US_PER_SECOND)
+    }
+
     /// The UTC offset in seconds at the instant `us`.
     pub fn offset_s(&self, us: i64) -> Result<i32, OutOfRange> {
         if us < self.since_us {
@@ -247,6 +402,25 @@ impl Zone {
                 let summer =
                     last_sunday_one_utc(year, 3) <= us && us < last_sunday_one_utc(year, 10);
                 self.standard + if summer { 3600 } else { 0 }
+            }
+            Summer::Rule { start, end } => {
+                // Every change is months away from New Year, so the UTC
+                // year is the local one.
+                let year = Date::from_days(us.div_euclid(US_PER_DAY)).year;
+                let (start, end) = (
+                    start.instant(year, self.standard),
+                    end.instant(year, self.standard),
+                );
+                let summer = if start < end {
+                    start <= us && us < end
+                } else {
+                    !(end <= us && us < start)
+                };
+                if summer {
+                    self.standard + 3600
+                } else {
+                    self.standard
+                }
             }
         })
     }
@@ -288,6 +462,71 @@ mod tests {
             checked += 1;
         }
         assert_eq!(checked, 196);
+    }
+
+    /// Offsets Python's zoneinfo gives with tzdata 2026f for the zones
+    /// added with Australia, New Zealand, India and South Africa: every hour
+    /// of each year from the zone's calendar start through 2040, written as
+    /// the instants where the offset changes.
+    const ZONEINFO_ADDED: &str = include_str!("../tests/data/zoneinfo_added.txt");
+
+    #[test]
+    fn added_zones_match_zoneinfo() {
+        let mut checked = 0;
+        for line in ZONEINFO_ADDED.lines().filter(|line| !line.starts_with('#')) {
+            let fields: Vec<&str> = line.split(' ').collect();
+            let (name, us, offset): (&str, i64, i32) = (
+                fields[0],
+                fields[1].parse().unwrap(),
+                fields[2].parse().unwrap(),
+            );
+            let zone = zone(name).unwrap();
+            assert_eq!(zone.offset_s(us), Ok(offset), "{line}");
+            checked += 1;
+        }
+        assert!(checked > 400, "{checked}");
+        // Before a rule's start there is no calendar.
+        let sydney = zone("Australia/Sydney").unwrap();
+        assert!(sydney.offset_s(AU_RULE_SINCE_US - 1).is_err());
+        assert!(sydney
+            .local_date(AU_RULE_SINCE_US - 1)
+            .unwrap_err()
+            .to_string()
+            .ends_with("(it starts on 2008-01-01)"));
+    }
+
+    #[test]
+    fn local_midnights_follow_the_zone() {
+        let sydney = zone("Australia/Sydney").unwrap();
+        // 1 July 2024 is winter in Sydney: midnight is 14:00 UTC the day
+        // before; 1 January 2025 is summer: 13:00 UTC.
+        let utc = |text: &str| {
+            let date = date(&text[..10]);
+            (date.to_days() * SECONDS_PER_DAY + text[11..13].parse::<i64>().unwrap() * 3600)
+                * US_PER_SECOND
+        };
+        assert_eq!(
+            sydney.local_midnight(date("2024-07-01")),
+            Ok(utc("2024-06-30T14"))
+        );
+        assert_eq!(
+            sydney.local_midnight(date("2025-01-01")),
+            Ok(utc("2024-12-31T13"))
+        );
+        let berlin = zone("Europe/Berlin").unwrap();
+        assert_eq!(
+            berlin.local_midnight(date("2025-07-01")),
+            Ok(utc("2025-06-30T22"))
+        );
+        assert_eq!(
+            UTC.local_midnight(date("2025-04-06")),
+            Ok(utc("2025-04-06T00"))
+        );
+        let kolkata = zone("Asia/Kolkata").unwrap();
+        assert_eq!(
+            kolkata.local_midnight(date("2025-04-01")),
+            Ok(utc("2025-03-31T18") + 30 * 60 * US_PER_SECOND)
+        );
     }
 
     #[test]

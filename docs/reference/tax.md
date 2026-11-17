@@ -10,7 +10,12 @@ Books carry tax defaults through the internal `profile` row:
 - `tax_long_term_days` (generic policy only; Austrian Altbestand handling is wallet-specific)
 - `gains_algorithm`
 - `bitcoin_rail_carrying_value` (default on; controls the generic default treatment for BTC-equivalent rail changes)
-- `cost_basis_pool_scope` (country-policy allowlisted; every current policy permits only `global`)
+- `cost_basis_pool_scope` (country-policy allowlisted: `global` everywhere
+  but the United States, which also offers `wallet` (its default) and
+  `global_then_wallet`, and Germany, which allows only `wallet`)
+
+and, beside the row, the book's own tax calendar where its country lets it
+choose one ([book settings](#book-settings)).
 
 Current policies:
 
@@ -18,14 +23,163 @@ Current policies:
 - `at` -> Austrian accounting in the same engine (Austrian normalization, the regime tracker, and moving-average defaults for new wallets), with the report crate (`crates/reports`) keeping the current disposal-category / Kennzahl mapping
 
 Tax countries come from one registry ([tax countries](tax-countries.md)).
-The United States (`us`) is implemented there as a **preview** country
-([specification](tax-country-us.md)). Germany, Switzerland, the United
-Kingdom, Spain, Ireland and Japan are researched as future preview countries
-(not selectable yet):
-[Germany](tax-country-de.md), [Switzerland](tax-country-ch.md),
+Every country other than `generic` and `at` is a selectable **preview**
+country: the United States ([specification](tax-country-us.md)),
+[Germany](tax-country-de.md), [Switzerland](tax-country-ch.md), the
 [United Kingdom](tax-country-gb.md), [Spain](tax-country-es.md),
-[Ireland](tax-country-ie.md) and [Japan](tax-country-jp.md), each with worked
-test vectors and open questions for a tax adviser.
+[Ireland](tax-country-ie.md), [Japan](tax-country-jp.md), and, with generic
+rules on their legal tax years, [Australia](tax-country-au.md),
+[New Zealand](tax-country-nz.md), [India](tax-country-in.md) and
+[South Africa](tax-country-za.md).
+
+## Book settings
+
+Every setting of any book, not only the open one, is read and changed in one
+place:
+
+- `kassiber profiles settings [--profile P]` and the read kind
+  `ui.profiles.settings {"profile_id"}` return the book's settings and the
+  choices its country allows: `tax_country` (and `tax_country_preview`),
+  `fiat_currency` (`fiat_currency_locked` where the country fixes it),
+  `tax_long_term_days` (`tax_long_term_days_editable` for a day-count
+  holding period), `gains_algorithm` and `gains_algorithms`,
+  `cost_basis_pool_scope`, `cost_basis_pool_scopes` and
+  `method_pool_scopes` (the scopes each method has), `require_coarse_review`,
+  `bitcoin_rail_carrying_value`, `tax_year_start` (`MM-DD`),
+  `tax_year_start_default`, `tax_year_editable`, `tax_year_presets`,
+  `timezone`, `timezone_default`, `timezones` and `calendar_is_default`,
+  and `calendar_invalid` when the stored calendar cannot be used
+  ([tax years](#tax-years)).
+- `kassiber profiles configure` and `ui.profiles.update` change any of
+  `label` (CLI), `fiat_currency`, `tax_country`, `tax_long_term_days`,
+  `gains_algorithm`, `cost_basis_pool_scope`, `require_coarse_review`,
+  `bitcoin_rail_carrying_value`, `tax_year_start` and `timezone` (`default`
+  returns either to the country's). The whole result is validated against the
+  registry before anything is written. `--dry-run` / `"dry_run": true` writes
+  nothing and returns the preview: `changes` (`field`, `from`, `to`),
+  `journals` (`reprocess`, `processed`, `transactions`), `filed_reports`,
+  `readiness` (`journals_stale_until_reprocessed`,
+  `price_currency_mismatch_holds`, `filed_reports_may_be_impacted`,
+  `tax_years_regrouped`), `price_currency_holds` when the currency changes,
+  `tax_calendar_reset` when a region switch drops the book's own calendar,
+  and `settings` (the projection above, after the change). Applying bumps the
+  journal input version whenever anything the journals read changes, as
+  `profiles set` does.
+
+A day-count book's `tax_long_term_days` of `0` is not a zero-day holding
+period: the journals read zero (or no value) as the country's default (365
+for a generic book), a change to `0` stores that default, and every
+projection and label (`profiles get`, the book settings, the desktop's
+`taxPolicy` and `taxLongTermDays`, the Overview and readiness, and the
+reports' settings) shows the days the book is taxed with, so a book stored
+with `0` reads 365.
+
+Refusals are typed: `method_scope_unsupported` (a method the engine has no
+form of in the pool scope, refused when the setting is saved, not when the
+journals run), `tax_year_start_invalid`, `tax_year_start_locked`,
+`timezone_unknown` and `timezone_locked`, beside `validation` for values
+the country does not offer.
+
+### Tax years
+
+A book's tax year starts on its country's `tax_year_start` in its
+`timezone` ([registry](tax-countries.md#the-registry)). Countries with a
+legal tax year Kassiber files for keep theirs: Austria, Germany,
+Switzerland, Spain, Ireland, Japan and the United States the calendar year,
+the United Kingdom 6 April, Australia 1 July, New Zealand and India 1 April,
+South Africa 1 March. A **generic** book may choose its own start: the
+presets `calendar` (1 January, the default), `uk` (6 April), `april`
+(1 April), `july` (1 July) and `march` (1 March), or any `MM-DD` but
+`02-29`. It may also choose any zone of the registry's calendars
+(`kassiber_tax_countries::SUPPORTED_ZONES`; UTC by default), and an
+Australian book the zone of its state. A tax year is named by the calendar
+year of its first day and labelled `2024-25` when it does not start on
+1 January.
+
+The choice is stored only when it differs from the country's, under the
+per-book setting `tax.calendar.profile.<id>` (no schema change, so existing
+books, their requests and their stored rows are unchanged). A region switch
+that the stored choice no longer fits drops it (`tax_calendar_reset`). A
+stored choice the country no longer allows (a registry change, a
+hand-edited row), or one that cannot be read, fails closed wherever the
+calendar is computed with (journal processing, every reader above), but
+the book's settings still open: `profiles settings`, `ui.profiles.settings`
+and `profiles get` show it as stored with `calendar_invalid` (`code`,
+`message`, `hint`, the stored `tax_year_start` and `timezone`) and
+`calendar_is_default` false, and `profiles configure` /
+`ui.profiles.update` with `tax_year_start` and `timezone` `default` resets
+it and marks the journals stale. Any other change through `profiles set`
+drops it, as a region switch does. A network partition export
+(`networks split`, `ui.networks.partition_export`) copies the book's
+calendar with it.
+`kassiber_tax_countries::BookCalendar` is the one helper that says which
+tax year an instant belongs to and where a year begins and ends: the tax
+engine computes the yearly totals and `journal_tax_summary.year` with it
+(a generic book's request names `tax_year_start` and `timezone` only when
+they differ from the UTC calendar year), and the readers that cut years
+themselves go through `kassiber_reports::tax_years::Cut`: the tax summary
+and review figures, the desktop capital-gains view (`taxYear` with the
+start, zone and `yearLabel`), the capital-gains CSV, the year handoff
+(`tax_year`), the cross-check, the export ranges `this_tax_year` and
+`last_tax_year`, the Overview's realized figure (tax-year to date,
+`realizedTaxYearStart`, each entry by its instant, so an entry stored in
+any UTC offset falls in its own year), and saved and filed report
+snapshots (`period_start_year`/`period_end_year`, their classification
+and gain summaries, and the filed-report impact checks that recompute
+them, so a later change inside a filed tax year flags it and one outside
+does not). A book on its country's calendar year keeps each reader's
+established cut, so its outputs are unchanged. The summary PDF given a
+`year` (`ui.reports.export_summary_pdf`, as the desktop sends the Reports
+page's year) covers that tax year with `BookCalendar::bounds` itself, for
+every book: its first local midnight through the second before the next
+year's, shown by its local first and last days and registered under that
+tax year. A generic book on the UTC calendar year gets exactly the
+1 January–31 December UTC range the desktops used to send; a calendar-year
+book in a country's zone (Vienna, Berlin) gets that zone's calendar year,
+as its Reports page counts it. The holding period is not
+affected: a generic book still counts whole days.
+
+Every **existing United Kingdom book** changes with nothing chosen. Its
+engine already computed `journal_tax_summary.year` by the 6 April year,
+while these readers cut the calendar year in London; they now follow the
+engine's year. This is an intended alignment, and these outputs of a UK
+book change: the tax summary's years, the review figures and the review's
+tax-year list, the capital-gains CSV's `year` filter, the year handoff's
+period and `tax_year` key ("2024" now means 2024-04-06 to 2025-04-05,
+re-exported handoffs included), the cross-check year, the `this_tax_year`
+and `last_tax_year` export ranges, the desktop gains view, the Overview's
+realized figure (from 6 April in London instead of the UTC calendar year),
+and the period a saved or filed report's summaries cover. A snapshot saved
+before keeps its stored calendar-year summaries, so an impact check of it
+compares those with its tax year's figures and reports the difference
+(`review_required` for a filed one); a new export records the tax-year
+figures. The same holds for a generic book that chose its own
+start. Custody gap reviews still match the filed reports they may affect
+by the calendar year of the gap's dates.
+
+### Pool scopes
+
+`global` pools each asset across every wallet of the book; `wallet` takes a
+disposal's lots only from the wallet that disposes, and a move carries its
+lots (or, under the moving average, its average cost) to the destination
+([engine](tax-engine.md#countries-and-pool-scopes)). The engine computes the lot methods
+(FIFO, LIFO, HIFO, LOFO) and the plain `MOVING_AVERAGE` per wallet, and
+Germany's `MOVING_AVERAGE_FIFO_PERIOD` per wallet only; Austria's moving
+average, the UK's share matching and Japan's averages have the global pool
+only. `global_then_wallet` (United States, lot methods) is the global pool
+through 2024 and the wallet pool from 2025-01-01, with the safe-harbor
+allocation of the remaining basis to the wallets on that day
+([the 2025 transition](tax-country-us.md#the-2025-transition)).
+
+The generic country offers `global` only for now. The engine and every
+check already handle a generic `wallet` book, but two frozen fusion-builder
+vectors (`tests/fixtures/custody_fusion_builder.json`,
+`profile-cost_basis_pool_scope-0` and `ordering-pool-before-row`) pin a
+generic `wallet` profile as refused; enabling it is adding `wallet` to the
+generic registry entry's `pool_scopes` together with the reviewed
+regeneration of those two vectors, which needs owner sign-off. An Austrian
+per-wallet pool stays behind the
+[plan-16 legal gate](../plan/16-cost-basis-pools-and-employment-compensation.md).
 
 ## Implementation boundary
 
@@ -50,11 +204,13 @@ Review plans, validation and apply build their journal state through the
 same custody, fusion, engine and render steps as `journals process`, for
 every tax country ([review builds](r4-journal-pipeline.md#review-builds-through-the-same-path)).
 
-Engine calls pool each asset across the wallets of a profile, so a same-asset
-move can carry basis between owned wallets. Wallet identity is
-preserved through each entry's exchange label and per-wallet balances.
-Per-wallet portfolio basis is an allocation at the asset's average residual
-basis, not a claim about which physical lots remain in a wallet.
+Under the global pool scope, engine calls pool each asset across the wallets
+of a profile, so a same-asset move can carry basis between owned wallets.
+Wallet identity is preserved through each entry's exchange label and
+per-wallet balances. Per-wallet portfolio basis is then an allocation at the
+asset's average residual basis, not a claim about which physical lots
+remain in a wallet; under the wallet scope it is each wallet's own
+([pool scopes](#pool-scopes)).
 
 ## Journal processing
 

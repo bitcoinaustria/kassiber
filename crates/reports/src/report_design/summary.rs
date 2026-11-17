@@ -97,7 +97,7 @@ pub fn summary(model: &Value) -> Document {
     let journals = value(integrity, "journals");
     let metrics = value(report, "metrics");
     let input_version = int(journals, "journal_input_version");
-    let period_end = lang.date(&text(timeframe, "end"));
+    let period_end = lang.date(&shown_day(timeframe, "end"));
     let mut sections = Vec::new();
 
     // 1. Scope
@@ -119,9 +119,13 @@ pub fn summary(model: &Value) -> Document {
         fact(
             "period_start",
             t("scope.period_start"),
-            day(timeframe, "start"),
+            Cell::Date(shown_day(timeframe, "start")),
         ),
-        fact("period_end", t("scope.period_end"), day(timeframe, "end")),
+        fact(
+            "period_end",
+            t("scope.period_end"),
+            Cell::Date(shown_day(timeframe, "end")),
+        ),
         Fact {
             display: Some(wallets.join(", ")),
             ..fact(
@@ -367,11 +371,15 @@ pub fn summary(model: &Value) -> Document {
     let holdings = Section {
         id: "holdings",
         title: t("holdings.title").into(),
-        lead: t(if text(profile, "cost_basis_pool_scope") == "wallet" {
-            "holdings.lead_wallet"
-        } else {
-            "holdings.lead"
-        })
+        // `global_then_wallet` books identify lots per wallet too: from 2025
+        // the engine books each wallet's own lots (the US transition).
+        lead: t(
+            if super::per_wallet_scope(&text(profile, "cost_basis_pool_scope")) {
+                "holdings.lead_wallet"
+            } else {
+                "holdings.lead"
+            },
+        )
         .into(),
         page_break: false,
         landscape: false,
@@ -759,7 +767,10 @@ pub fn summary(model: &Value) -> Document {
         method.push(fact(
             "long_term_days",
             t("method.long_term_days"),
-            Cell::Count(int(profile, "tax_long_term_days")),
+            Cell::Count(int(
+                &crate::country::taxed_days(profile),
+                "tax_long_term_days",
+            )),
         ));
     }
     let blocks = vec![
@@ -795,7 +806,7 @@ pub fn summary(model: &Value) -> Document {
         period: lang.tf(
             "doc.period",
             &[
-                ("start", &lang.date(&text(timeframe, "start"))),
+                ("start", &lang.date(&shown_day(timeframe, "start"))),
                 ("end", &period_end),
             ],
         ),
@@ -821,6 +832,7 @@ pub fn summary_model(
     let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
     require_context(conn, &profile, false)?;
     let report = summary_pdf::model(conn, &workspace, &profile, args, sources)?;
+    let taxed = crate::country::taxed_days(&profile);
     let mut settings = dict(
         [
             "fiat_currency",
@@ -829,21 +841,32 @@ pub fn summary_model(
             "tax_country",
             "tax_long_term_days",
         ]
-        .map(|key| (key, value(&profile, key).clone())),
+        .map(|key| (key, value(&taxed, key).clone())),
     );
-    // Only a narrower pool scope is named, so global books keep their model.
+    // Only a narrower pool scope is named, so global books keep their model;
+    // a `global_then_wallet` book is named too, since it is not global from 2025.
     let scope = kassiber_pytext::lower(kassiber_pytext::strip(&text(
         &profile,
         "cost_basis_pool_scope",
     )));
-    if scope == "wallet" {
+    if super::per_wallet_scope(&scope) {
         replace(&mut settings, "cost_basis_pool_scope", s(scope));
     }
     let mut kennzahlen = Vec::new();
     if super::austrian_rules(&text(&profile, "tax_country")) {
         let timeframe = value(&report, "timeframe");
-        let first: i64 = text(timeframe, "start")[..4].parse().unwrap_or(0);
-        let last: i64 = text(timeframe, "end")[..4].parse().unwrap_or(0);
+        // A tax-year summary is that year's; a range covers the years its
+        // bounds name.
+        let (first, last) = match value(timeframe, "tax_year") {
+            Value::Int(year) => {
+                let year = i64::try_from(year.clone()).unwrap_or(0);
+                (year, year)
+            }
+            _ => (
+                text(timeframe, "start")[..4].parse().unwrap_or(0),
+                text(timeframe, "end")[..4].parse().unwrap_or(0),
+            ),
+        };
         for year in first..=last {
             let annual = crate::austrian::report(
                 conn,
@@ -877,6 +900,10 @@ pub(crate) fn prepare(
     let snapshot_on = truthy(snapshot);
     let title = text(report, "title");
     let year = |key: &str| -> Result<Value> {
+        // A tax-year summary is registered under its tax year.
+        if let Value::Int(year) = value(timeframe, "tax_year") {
+            return Ok(Value::Int(year.clone()));
+        }
         let head: String = text(timeframe, key).chars().take(4).collect();
         kassiber_pytext::parse_int(&head)
             .map(Value::Int)
@@ -953,6 +980,46 @@ pub(crate) fn prepare(
     })
 }
 
+/// The period's first (`start`) or last (`end`) day as the document shows
+/// it: a tax year's own local days, else the bound's UTC date.
+fn shown_day(timeframe: &Value, key: &str) -> String {
+    let local = if key == "start" {
+        "first_day"
+    } else {
+        "last_day"
+    };
+    let raw = match value(timeframe, local) {
+        Value::Str(_) => text(timeframe, local),
+        _ => text(timeframe, key),
+    };
+    raw.chars().take(10).collect()
+}
+
 fn timeframe_value(timeframe: &Value, key: &str) -> Value {
     value(timeframe, key).clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_tax_year_shows_its_local_days_and_a_range_its_utc_dates() {
+        let range = dict([
+            ("start", s("2024-01-01T00:00:00Z")),
+            ("end", s("2024-12-31T23:59:59Z")),
+        ]);
+        assert_eq!(shown_day(&range, "start"), "2024-01-01");
+        assert_eq!(shown_day(&range, "end"), "2024-12-31");
+        // Sydney's 2024-25 tax year starts before 1 July in UTC.
+        let tax_year = dict([
+            ("start", s("2024-06-30T14:00:00Z")),
+            ("end", s("2025-06-30T13:59:59Z")),
+            ("tax_year", Value::Int(2024.into())),
+            ("first_day", s("2024-07-01")),
+            ("last_day", s("2025-06-30")),
+        ]);
+        assert_eq!(shown_day(&tax_year, "start"), "2024-07-01");
+        assert_eq!(shown_day(&tax_year, "end"), "2025-06-30");
+    }
 }

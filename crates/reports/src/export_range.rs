@@ -18,6 +18,10 @@ const PRESETS: &[&str] = &[
     "this_year",
     "last_year",
 ];
+/// The book's own tax years (the calendar year where it has none, as
+/// `this_year`). Accepted beside [`PRESETS`], whose list the unknown-range
+/// hint keeps.
+const TAX_YEAR_PRESETS: &[&str] = &["this_tax_year", "last_tax_year"];
 const DAY: i64 = 86_400;
 /// The datetime range CPython represents, in seconds since 1970.
 const MIN: i64 = -62_135_596_800;
@@ -142,8 +146,16 @@ fn month_length(year: i64, month: i64) -> i64 {
 }
 
 /// The zone a request names, or the book calendar.
-fn zone(profile: &Value, timezone: &Value, tzpath: &[PathBuf]) -> Result<Zone> {
+fn zone(
+    profile: &Value,
+    timezone: &Value,
+    book: Option<&kassiber_tax_countries::BookCalendar>,
+    tzpath: &[PathBuf],
+) -> Result<Zone> {
     if !truthy(timezone) {
+        if let Some(book) = book {
+            return book_zone(Some(book.timezone), tzpath);
+        }
         // `_period_for_profile`: lower-cased, deliberately not stripped.
         let country = value(profile, "tax_country");
         let country = if truthy(country) {
@@ -180,6 +192,20 @@ pub fn book_zone(zone: Option<&str>, tzpath: &[PathBuf]) -> Result<Zone> {
             // Berlin but 01:00 in London and Dublin.
             Some(rule) if rule.eu_summer_time() => {
                 Ok(Zone::eu(key, i64::from(rule.standard_offset_s())))
+            }
+            // A southern zone keeps its own rule (Sydney, Auckland).
+            Some(rule) if rule.summer_rule().is_some() => {
+                let (start, end) = rule.summer_rule().unwrap();
+                let posix = |change: kassiber_tax_countries::calendar::Change, end: bool| {
+                    let (month, week, seconds) = change.posix(end);
+                    (i64::from(month), i64::from(week), i64::from(seconds))
+                };
+                Ok(Zone::posix_rule(
+                    key,
+                    i64::from(rule.standard_offset_s()),
+                    posix(start, false),
+                    posix(end, true),
+                ))
             }
             // A zone without summer time (Tokyo) keeps its standard offset.
             Some(rule) => Ok(Zone::pinned(
@@ -279,6 +305,25 @@ pub fn resolve(
     now: i64,
     tzpath: &[PathBuf],
 ) -> Result<Option<Range>> {
+    resolve_for_book(
+        profile, None, preset, first_day, last_day, timezone, now, tzpath,
+    )
+}
+
+/// [`resolve`] for a book with its own tax calendar (`tax_years::book_cut`):
+/// its zone is the book calendar, and `this_tax_year` / `last_tax_year`
+/// are its tax years.
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_for_book(
+    profile: &Value,
+    book: Option<&kassiber_tax_countries::BookCalendar>,
+    preset: &Value,
+    first_day: &Value,
+    last_day: &Value,
+    timezone: &Value,
+    now: i64,
+    tzpath: &[PathBuf],
+) -> Result<Option<Range>> {
     let preset = if truthy(preset) {
         kassiber_pytext::lower(kassiber_pytext::strip(&py_str(preset)))
     } else {
@@ -294,7 +339,7 @@ pub fn resolve(
         ))
         .with_hint("Send either a preset or custom from/to days, not both."));
     }
-    let zone = zone(profile, timezone, tzpath)?;
+    let zone = zone(profile, timezone, book, tzpath)?;
     let (preset, first, last) = if preset == "custom" || (preset.is_empty() && days) {
         if matches!(first_day, Value::Null) || matches!(last_day, Value::Null) {
             return Err(validation(
@@ -306,6 +351,25 @@ pub fn resolve(
             return Err(validation("The range ends before it starts".into()));
         }
         ("custom".to_owned(), first, last)
+    } else if TAX_YEAR_PRESETS.contains(&preset.as_str()) {
+        let offset = zone
+            .utc_offset(now)
+            .ok_or_else(|| AppError::new("internal_error", "zone has no offset"))?;
+        let today = civil_from_days((now + offset).div_euclid(DAY));
+        let start = book.map_or((1, 1), |book| book.tax_year_start);
+        let date = kassiber_tax_countries::calendar::Date::new(
+            today.0 as i32,
+            today.1 as u32,
+            today.2 as u32,
+        )
+        .ok_or_else(|| AppError::new("internal_error", "date value out of range"))?;
+        let year = kassiber_tax_countries::years::tax_year(date, start)
+            - i32::from(preset == "last_tax_year");
+        let (first, last) = kassiber_tax_countries::years::tax_year_bounds(year, start);
+        let as_tuple = |d: kassiber_tax_countries::calendar::Date| {
+            (i64::from(d.year), i64::from(d.month), i64::from(d.day))
+        };
+        (preset, as_tuple(first), as_tuple(last))
     } else if PRESETS.contains(&preset.as_str()) {
         let offset = zone
             .utc_offset(now)
@@ -548,5 +612,74 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.message, "Unknown timezone 'Europe'");
+    }
+
+    /// Without tzdata, the southern zones follow their own rule, as the
+    /// registry's calendar does (itself checked against tzdata 2026f).
+    #[test]
+    fn southern_zones_without_tzdata_follow_the_registry() {
+        for key in [
+            "Australia/Sydney",
+            "Australia/Adelaide",
+            "Pacific/Auckland",
+            "Asia/Kolkata",
+        ] {
+            let rule = book_zone(Some(key), &[]).unwrap();
+            let calendar = kassiber_tax_countries::calendar::zone(key).unwrap();
+            let since = calendar.since_us() / 1_000_000;
+            for at in (since..since + 40 * 365 * DAY).step_by(3 * 3600 + 7) {
+                assert_eq!(
+                    rule.utc_offset(at),
+                    Some(i64::from(calendar.offset_s(at * 1_000_000).unwrap())),
+                    "{key} {at}"
+                );
+            }
+        }
+    }
+
+    /// `this_tax_year` and `last_tax_year` are the book's own tax years.
+    #[test]
+    fn tax_year_presets_follow_the_book() {
+        let au = kassiber_tax_countries::lookup("au")
+            .unwrap()
+            .default_calendar();
+        // 2026-11-16T00:00:00Z.
+        let now = days_from_civil(2026, 11, 16) * DAY;
+        let profile = dict([("tax_country", s("au"))]);
+        let range = |preset: &str, book| {
+            resolve_for_book(
+                &profile,
+                book,
+                &s(preset),
+                &Value::Null,
+                &Value::Null,
+                &Value::Null,
+                now,
+                &[],
+            )
+            .unwrap()
+            .unwrap()
+        };
+        let this = range("this_tax_year", Some(&au));
+        assert_eq!((this.first, this.last), ((2026, 7, 1), (2027, 6, 30)));
+        assert_eq!(this.timezone, "Australia/Sydney");
+        // Sydney's 1 July 2026 begins at 14:00 UTC on 30 June.
+        assert_eq!(this.start, days_from_civil(2026, 6, 30) * DAY + 14 * 3600);
+        let last = range("last_tax_year", Some(&au));
+        assert_eq!((last.first, last.last), ((2025, 7, 1), (2026, 6, 30)));
+        // A book without its own calendar: the calendar year.
+        let plain = resolve_for_book(
+            &dict([("tax_country", s("generic"))]),
+            None,
+            &s("this_tax_year"),
+            &Value::Null,
+            &Value::Null,
+            &Value::Null,
+            now,
+            &[],
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!((plain.first, plain.last), ((2026, 1, 1), (2026, 12, 31)));
     }
 }

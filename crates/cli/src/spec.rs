@@ -103,6 +103,9 @@ pub const RUST_ONLY_LEAVES: &[&str] = &[
     "wallets.sync-bitpanda",
     "journals.verify",
     "backends.trust-certificate",
+    "projects.demo",
+    "profiles.settings",
+    "profiles.configure",
 ];
 /// Backend kinds only the Rust backend accepts, extra `--kind` choices of
 /// `backends create` and `backends update`.

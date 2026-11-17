@@ -1,0 +1,1880 @@
+{
+  "dashboard": {
+    "eyebrow": "Wallets und Quellen",
+    "title": "Wallets",
+    "addWallet": "Wallet hinzufügen"
+  },
+  "metrics": {
+    "totalBalance": "Gesamtguthaben",
+    "walletBalance": "Wallet-Guthaben",
+    "balanceChain": "Beobachteter On-chain-Bestand",
+    "balanceBooks": "Verarbeitetes Buchguthaben",
+    "balanceTransactions": "Vorläufiges Transaktionsguthaben",
+    "balanceMixed": "On-chain, wo verfügbar, sonst Buchguthaben",
+    "balanceNeedsJournals": "Journale ausstehend · diese vorläufige Summe kann sich ändern",
+    "balanceQuarantines_one": "{{count}} Quarantäne · Buchsicht kann sich nach Prüfung ändern",
+    "balanceQuarantines_other": "{{count}} Quarantänen · Buchsicht kann sich nach Prüfung ändern",
+    "totalTransactions": "Transaktionen gesamt",
+    "totalTransactionsDetail": "Über Wallets importiert",
+    "openTransactions": "Alle Wallet-Transaktionen öffnen",
+    "openReview": "Transaktionsprüfung öffnen",
+    "taxFreeBalance": "Steuerfreies Guthaben",
+    "taxFreeCurrent": "Aktuell",
+    "taxFreeTaxable": "Steuerpflichtig {{taxable}}",
+    "taxFreeNeedsJournals": "Journale nötig",
+    "taxFreeQuarantines_one": "{{count}} Quarantäne",
+    "taxFreeQuarantines_other": "{{count}} Quarantänen",
+    "taxFreeBlockedJournals": "Verarbeite Journale, bevor du dich auf dieses Guthaben verlässt",
+    "taxFreeBlockedQuarantines": "Prüfe Quarantänen, bevor du dich auf dieses Guthaben verlässt",
+    "upToDate": "Aktuell",
+    "upToDateAllSources": "Alle konfigurierten Quellen",
+    "upToDateRefreshingNow": "{{count}} werden gerade aktualisiert",
+    "upToDateNotUpToDate": "{{count}} noch nicht aktuell",
+    "needsAttention": "Benötigt Aufmerksamkeit",
+    "needsAttentionFailed": "Fehlgeschlagene Quelle(n)",
+    "needsAttentionNoFailed": "Keine fehlgeschlagenen Quellen",
+    "balanceNoMarketRate": "Kein Marktkurs · Fiat-Wert nicht verfügbar"
+  },
+  "filters": {
+    "heading": "Wallets und Quellen",
+    "menu": "Filter",
+    "filterByStatus": "Nach Status filtern",
+    "filterByKind": "Nach Typ filtern",
+    "status": "Status",
+    "kind": "Typ",
+    "allStatuses": "Alle Status",
+    "allKinds": "Alle Typen",
+    "label": "Filter:",
+    "clearStatus": "Status-Filter {{status}} entfernen",
+    "clearKind": "Typ-Filter {{kind}} entfernen",
+    "clearAll": "Alle entfernen"
+  },
+  "table": {
+    "balanceOverlap": "Gemeinsamer Outpoint · Wallet-Anteile überschneiden sich"
+  },
+  "detail": {
+    "notFound": "Keine Verbindung für {{id}} gefunden.",
+    "backToWallets": "Zurück zu den Wallets",
+    "moreActions": "Weitere Aktionen",
+    "fullRescan": "Vollständiger Rescan",
+    "refresh": "Aktualisieren",
+    "refreshing": "Wird aktualisiert",
+    "refreshAction": "{{action}} {{label}}",
+    "metric": {
+      "balance": "Guthaben",
+      "transactions": "Transaktionen",
+      "lastSync": "Letzter Sync",
+      "gapLimit": "Gap Limit",
+      "utxos": "UTXOs",
+      "utxosConfirmed": "Alle bestätigt",
+      "utxosNone": "Keine unverbrauchten Coins",
+      "utxosPending_one": "{{count}} unbestätigt",
+      "utxosPending_other": "{{count}} unbestätigt",
+      "utxosUnsupported": "Für diese Quelle nicht erfasst",
+      "activitySpan": "{{from}} – {{to}}",
+      "noActivity": "Noch keine Aktivität"
+    },
+    "source": {
+      "live": "Live-Sync-Quelle",
+      "file": "Datei-Import-Quelle",
+      "wallet": "Wallet-Quelle"
+    },
+    "reconcile": {
+      "onChainInventory": "On-chain-Bestand",
+      "watchOnlyTruth": "Watch-only-Quelle der Wahrheit",
+      "recordedInBooks": "Im Buch erfasst",
+      "feedsTaxReports": "Speist Steuer & Berichte",
+      "onChainNotInBooks": "{{amount}} on-chain, nicht im Buch",
+      "inBooksNotOnChain": "{{amount}} im Buch, nicht on-chain",
+      "inboundExcluded": "Ein Eingang ist ausgeschlossen oder der Sync ist veraltet — aktualisiere oder blende ausgeschlossene Transaktionen wieder ein.",
+      "manualOrDuplicate": "Wahrscheinlich ein manueller oder doppelter Eintrag oder eine Ausgabe, die nicht per Sync erfasst wurde — aktualisiere oder prüfe diese Zeilen."
+    },
+    "samourai": {
+      "title": "Samourai Wallet",
+      "group": "Gruppe",
+      "privacyBoundary": "Privacy-Grenze",
+      "description": "Watch-only-Importstatus von Samourai/Whirlpool.",
+      "source": "Quelle",
+      "section": "Bereich",
+      "script": "Script",
+      "root": "Root",
+      "gap": "Gap",
+      "sections": "Bereiche",
+      "minimumMixCount": "Mix-Anzahl",
+      "minimumMixCountValue": "mindestens {{value}} · {{confidence}}",
+      "observedMixes": "Beobachtete Mixes",
+      "observedMixesValue": "{{value}} · {{confidence}}",
+      "targetMixes": "Ziel-Mixes",
+      "pool": "Pool",
+      "poolValue": "{{value}} Sats",
+      "coins": "Coins",
+      "minimumConfidence": "Minimum",
+      "importedConfidence": "importiert",
+      "groupFallback": "Samourai-Gruppe",
+      "toxicChange": "Toxic-Change-Ausgaben bleiben meldepflichtig und brauchen normale Bewertungsnachweise.",
+      "postmixNote": "Postmix-Zeilen ohne exakte Whirlpool-Metadaten werden mit mindestens einem Mix angezeigt; Kassiber beansprucht keine exakte Sat-Herkunft über andere Teilnehmer.",
+      "stale": "Die Samourai-Daten sind veraltet. Aktualisiere, bevor du dich auf Wallet-Details, Berichte oder Mittelherkunft verlässt.",
+      "refreshSource": "Samourai-Quelle aktualisieren",
+      "sectionLabel": {
+        "deposit": "Deposit",
+        "badbank": "Badbank / Toxic Change",
+        "premix": "Premix",
+        "postmix": "Postmix",
+        "ricochet": "Ricochet"
+      },
+      "sourceLabel": {
+        "sourceSet": "Descriptor-/xpub-Set",
+        "imported": "Importiert"
+      }
+    },
+    "btcpayProvenance": {
+      "title": "BTCPay-Herkunft",
+      "description": "BTCPay-Kommentare und -Labels werden beim Sync zu passenden Transaktionen ergänzt. Guthaben kommen weiterhin aus der Wallet selbst.",
+      "instance": "Instanz",
+      "store": "Store",
+      "paymentMethod": "Zahlungsmethode",
+      "footer": "Füge weitere Routen über <strong>Wallet hinzufügen</strong> → <em>BTCPay Server</em> → <em>Vorhandene Wallets zuordnen</em> hinzu oder via <code>kassiber wallets attach-btcpay</code>. Verwende Bearbeiten, um einzelne Routen aus dieser Wallet zu entfernen."
+    },
+    "recentTransactions": {
+      "title": "Letzte Transaktionen",
+      "empty": "Für diese Wallet wurden noch keine Transaktionen importiert.",
+      "refreshNow": "Jetzt aktualisieren",
+      "importFile": "Datei importieren"
+    },
+    "balanceHistory": {
+      "title": "Guthabenverlauf",
+      "asOf": "Stand {{month}}",
+      "since": "seit {{month}}",
+      "rangeLabel": "Zeitraum des Guthabenverlaufs",
+      "range": {
+        "1y": "1J",
+        "3y": "3J",
+        "all": "Alle"
+      }
+    },
+    "tabs": {
+      "transactions": "Transaktionen",
+      "coins": "Coins",
+      "details": "Details"
+    },
+    "attention": {
+      "review_one": "{{count}} Transaktion muss geprüft werden",
+      "review_other": "{{count}} Transaktionen müssen geprüft werden",
+      "prices_one": "{{count}} ohne Preis",
+      "prices_other": "{{count}} ohne Preis",
+      "openReview": "Prüfung öffnen",
+      "openPrices": "Ohne Preis anzeigen"
+    },
+    "transactionsTable": {
+      "date": "Datum",
+      "type": "Typ",
+      "description": "Beschreibung",
+      "amount": "Betrag",
+      "value": "Wert",
+      "status": "Status",
+      "showing": "{{shown}} von {{total}}",
+      "showMore_one": "{{count}} weitere anzeigen",
+      "showMore_other": "{{count}} weitere anzeigen",
+      "openAll": "In Transaktionen öffnen"
+    },
+    "coins": {
+      "title": "Coin-Verteilung",
+      "partial": "Umfasst die ältesten {{loaded}} von {{total}} Coins",
+      "extremes": "Größter {{largest}} · Median {{median}} · kleinster {{smallest}}",
+      "bySize": "Nach Größe",
+      "byAge": "Nach Alter seit Bestätigung",
+      "count_one": "{{count}} Coin",
+      "count_other": "{{count}} Coins",
+      "bandTitle_one": "{{count}} Coin · {{amount}} · {{share}} % der Coins",
+      "bandTitle_other": "{{count}} Coins · {{amount}} · {{share}} % der Coins",
+      "size": {
+        "below": "Unter {{max}}",
+        "between": "{{min}} – {{max}}",
+        "atLeast": "Ab {{min}}"
+      },
+      "age": {
+        "unconfirmed": "Unbestätigt",
+        "month": "Unter einem Monat",
+        "year": "1–12 Monate",
+        "threeYears": "1–3 Jahre",
+        "older": "Über 3 Jahre"
+      }
+    },
+    "connectionDetails": {
+      "title": "Verbindungsdetails",
+      "syncMode": "Sync-Modus",
+      "backend": "Backend",
+      "account": "Konto",
+      "network": "Netzwerk",
+      "scriptTypes": "Beobachtet",
+      "descriptorMaterial": "Wallet-Export",
+      "created": "Erstellt",
+      "kassiberId": "Kassiber-ID"
+    },
+    "reveal": {
+      "menuItem": "Wallet-Export kopieren",
+      "title": "Wallet-Export-Material kopieren",
+      "description": "Gib die Datenbank-Passphrase erneut ein, um das für {{label}} gespeicherte Wallet-Export-Material zu kopieren.",
+      "descriptionEncrypted": "Gib die Datenbank-Passphrase erneut ein, um das für {{label}} gespeicherte Wallet-Export-Material zu kopieren.",
+      "descriptionPlaintext": "Dieses Buch ist nicht verschlüsselt. Bestätige das Kopieren des für {{label}} gespeicherten Wallet-Export-Materials.",
+      "descriptorWithChange": "Empfang + Wechsel",
+      "descriptorOnly": "Watch-only-Material",
+      "includesChange": "Der Change-Descriptor wird in der nächsten Zeile mitkopiert.",
+      "passphrase": "Datenbank-Passphrase",
+      "helper": "Kassiber kopiert das rohe gespeicherte Wallet-Export-Material, ohne Feldnamen oder Tabellenformatierung.",
+      "plaintextChallenge": "Tippe COPY LOCAL SECRET zur Bestätigung",
+      "plaintextHelper": "Diese Bücher haben keine Passphrase. Dieser Zusatzschritt verhindert, dass du den Descriptor versehentlich kopierst.",
+      "copy": "Kopieren",
+      "copying": "Wird kopiert…",
+      "copied": "Kopiert",
+      "copiedInline": "In die Zwischenablage kopiert.",
+      "copiedTitle": "Wallet-Export kopiert",
+      "copiedBody": "Wallet-Export-Material für {{label}} kopiert.",
+      "errorMissingDescriptor": "Diese Wallet hat kein Wallet-Export-Material gespeichert.",
+      "errorPlaintextAck": "Tippe {{ack}}, um dieses lokale Secret zu kopieren.",
+      "couldNotCopy": "Wallet-Export-Material konnte nicht kopiert werden."
+    },
+    "backendDetail": {
+      "notConfigured": "Nicht konfiguriert"
+    },
+    "syncMode": {
+      "backendDescriptor": "Watch-only-Descriptor",
+      "backendAddresses": "Watch-only-Adressen",
+      "backendSilentPayment": "Silent-Payments-Watch-only",
+      "fileImport": "Datei-Import",
+      "btcpay": "BTCPay-Anreicherung",
+      "notConfigured": "Manuell / nicht konfiguriert"
+    },
+    "deprecatedBadge": "Veraltet",
+    "edit": {
+      "title": "Verbindung bearbeiten",
+      "descriptionEncrypted": "Bestätige diese Änderung mit der lokalen Datenbank-Passphrase.",
+      "descriptionPlaintext": "Diese Bücher sind nicht verschlüsselt. Tippe das Bestätigungswort ein, um fortzufahren.",
+      "label": "Label",
+      "syncBackend": "Sync-Backend",
+      "keepCurrentBackend": "Aktuelles Backend behalten",
+      "keepCurrentBackendNamed": "Aktuelles Backend behalten ({{name}})",
+      "useDefaultBitcoinBackend": "Standard-Bitcoin-Backend verwenden",
+      "backendOptionDefault": " (Standard)",
+      "liquidBackendHelper": "Liquid-Wallet-Quellen benötigen ein ausdrückliches Liquid-Backend.",
+      "backendHelper": "Wähle ein Backend nur für diese Wallet-Quelle.",
+      "descriptorOrXpub": "Wallet-Export oder xpub",
+      "materialPlaceholder": "Füge einen neuen Descriptor oder einen Extended Public Key zum Überschreiben ein",
+      "detected": "Erkannt: {{label}}",
+      "detectedWithHint": "Erkannt: {{label}} — {{hint}}",
+      "materialHelper": "Lass das Feld leer, außer du musst das gespeicherte Wallet-Material ändern.",
+      "scriptTypesLabel": "Zu beobachtende Adresstypen",
+      "scriptTypesHelper": "Kassiber beobachtet Empfangs- und Wechseladressen für jeden gewählten Typ. Ein neuer Typ scannt diese Wallet neu.",
+      "errorSelectScriptType": "Wähle mindestens einen Adresstyp zum Beobachten.",
+      "gapLimit": "Gap Limit",
+      "gapLimitHelper": "Erhöhe das für Wallets mit langen Folgen ungenutzter Adressen, bis 5.000. Größere Werte brauchen länger zum Synchronisieren.",
+      "birthday": "Wallet-Geburtstag",
+      "birthdayHelper": "Das echte erste Nutzungsdatum der Wallet, wenn ein Backend historische Abdeckung benötigt.",
+      "birthdayCoreHelper": "Verwende das echte erste Nutzungsdatum. Eine geprunte Node kann nur die noch vorhandene Historie neu scannen.",
+      "btcpayInstance": "BTCPay-Instanz",
+      "keepCurrentInstance": "Aktuelle Instanz behalten",
+      "btcpayStoreId": "BTCPay-Store-ID",
+      "storeIdPlaceholder": "Leer lassen, um die aktuelle Store-ID zu behalten",
+      "btcpayWallet": "BTCPay-Wallet",
+      "paymentMethodPlaceholder": "Leer lassen, um BTC-CHAIN zu behalten",
+      "sourceFile": "Quelldatei",
+      "sourceFilePlaceholder": "Leer lassen, um die aktuelle Datei zu behalten",
+      "browse": "Durchsuchen…",
+      "selectExportFileTitle": "Exportdatei von {{label}} auswählen",
+      "provenanceRoutes": "BTCPay-Herkunftsrouten",
+      "provenanceRoutesHelper": "Entferne nur bei den Store-/Zahlungsmethode-Verknüpfungen das Häkchen, die diese Wallet nicht mehr anreichern soll.",
+      "keepProvenanceRoute": "Route behalten",
+      "clearProvenance": "BTCPay-Herkunftsrouten leeren",
+      "clearProvenanceHelper": "Entfernt alle {{count}} gespeicherten Routen. Guthaben kommen weiterhin aus der Wallet selbst. Routen fügst du über „Wallet hinzufügen“ erneut hinzu.",
+      "deprecated": "Veraltete Wallet",
+      "deprecatedHelper": "Behält die Historie, überspringt diese Wallet aber bei „Alle aktualisieren“ und der Hintergrund-Aktualisierung. Manuell aktualisieren geht weiterhin.",
+      "passphrase": "Passphrase",
+      "plaintextChallenge": "Challenge für Klartext-Änderung",
+      "saving": "Wird gespeichert…",
+      "errorEnterLabel": "Gib ein Verbindungslabel ein.",
+      "errorChangeNothing": "Ändere das Label oder aktualisiere mindestens ein Feld.",
+      "errorGapPositive": "Das Gap Limit muss eine positive Ganzzahl sein.",
+      "errorGapMax": "Das Gap Limit muss {{max}} oder niedriger sein.",
+      "errorPlaintextAck": "Tippe {{ack}}, um die Änderung zu bestätigen.",
+      "renamed": "{{from}} wurde in {{to}} umbenannt.",
+      "updated": "{{label}} wurde aktualisiert.",
+      "changedTitle": "Verbindung geändert",
+      "couldNotChange": "Verbindung konnte nicht geändert werden."
+    },
+    "delete": {
+      "title": "Verbindung entfernen",
+      "description": "Entfernt {{label}} und die damit importierten Transaktionen. Tippe zur Bestätigung {{challenge}} und den genauen Namen der Verbindung.",
+      "challengePassphrase": "der Datenbank-Passphrase",
+      "challengePlaintext": "der Klartext-Challenge für lokales Löschen",
+      "passphrase": "Passphrase",
+      "plaintextChallenge": "Challenge für Klartext-Löschung",
+      "connectionLabel": "Verbindungslabel",
+      "removing": "Wird entfernt…",
+      "errorConfirmLabel": "Tippe {{label}}, um das Entfernen zu bestätigen.",
+      "errorPlaintextAck": "Tippe {{ack}}, um die lokale Löschung zu bestätigen.",
+      "removedTitle": "Verbindung entfernt",
+      "removedBody": "{{label}} und die lokalen Transaktionen wurden entfernt.",
+      "couldNotRemove": "Verbindung konnte nicht entfernt werden."
+    },
+    "auth": {
+      "enterPassphrase": "Gib die Datenbank-Passphrase ein."
+    },
+    "sync": {
+      "failedFallback": "Verbindungs-Aktualisierung fehlgeschlagen.",
+      "missingResult": "{{label}}: Es wurde kein Ergebnis zurückgegeben. Prüfe den Verbindungsstatus.",
+      "backendRequiredTitle": "Offline — Wallet-Sync ist aus",
+      "backendRequiredBody": "Füge ein Backend hinzu, um diese Wallet zu synchronisieren. Kassiber fügt keines automatisch hinzu.",
+      "addBackend": "Backend hinzufügen",
+      "rescanCoverageFailed": "Es konnte nicht geprüft werden, ob Bitcoin Core diese Wallet erneut scannen kann.",
+      "rescanBirthdayRequired": "Gib das echte erste Nutzungsdatum der Wallet ein, bevor du mit dieser geprunten Node erneut scannst.",
+      "rescanPrunedBlocked": "Diese Wallet beginnt am {{birthday}}, aber die Node hat Blöcke nur ab etwa {{retained}}. Die normale Aktualisierung funktioniert; ein vollständiger Rescan braucht eine ungeprunte Node oder ein anderes Backend.",
+      "retainedDateUnknown": "einem unbekannten Datum"
+    },
+    "utxoTransaction": {
+      "notOpenedTitle": "Transaktion nicht geöffnet",
+      "couldNotResolve": "Kassiber konnte diese UTXO-Transaktion nicht auflösen.",
+      "notFoundTitle": "Transaktion nicht gefunden",
+      "notFoundBody": "Für diesen UTXO gibt es noch keine passende importierte Kassiber-Transaktion."
+    },
+    "imports": {
+      "title": "Importe",
+      "description": "Datei-Importe, die in dieser Verbindung gelandet sind.",
+      "summary_one": "{{count}} Transaktion · {{date}}",
+      "summary_other": "{{count}} Transaktionen · {{date}}",
+      "mapped": "Spalten zugeordnet",
+      "rollback": "Zurücknehmen",
+      "rolledBackTitle": "Import zurückgenommen",
+      "rolledBackBody_one": "{{count}} Transaktion aus {{file}} gelöscht.",
+      "rolledBackBody_other": "{{count}} Transaktionen aus {{file}} gelöscht.",
+      "confirmTitle": "Diesen Import zurücknehmen?",
+      "confirmBody_one": "Das löscht die {{count}} Transaktion, die {{file}} erstellt hat. Zeilen, die nur ergänzt wurden, bleiben erhalten — und die Verbindung selbst auch.",
+      "confirmBody_other": "Das löscht die {{count}} Transaktionen, die {{file}} erstellt hat. Zeilen, die nur ergänzt wurden, bleiben erhalten — und die Verbindung selbst auch.",
+      "alsoRemoved": "Ebenfalls gelöscht: {{items}}.",
+      "cancel": "Abbrechen",
+      "confirmAction": "Transaktionen löschen",
+      "loadingPlan": "Wird geprüft…"
+    }
+  },
+  "node": {
+    "header": {
+      "backToWallets": "Zurück zu den Wallets",
+      "refresh": "Aktualisieren",
+      "refreshing": "Wird aktualisiert",
+      "refreshAction": "{{action}} {{label}}"
+    },
+    "noSnapshot": {
+      "title": "Noch kein Node-Snapshot",
+      "description": "Noch keine Node-Daten. Aktualisiere, um Channels, Guthaben und Routing zu laden.",
+      "errorDescription": "Kassiber konnte keinen Node-Snapshot laden: {{message}}"
+    },
+    "loadingSnapshot": {
+      "title": "Node-Snapshot wird geladen",
+      "description": "Kassiber ruft Channels, Liquidität und Routing-Aktivität von diesem Lightning-Node ab."
+    },
+    "tabs": {
+      "overview": "Überblick",
+      "channels": "Channels",
+      "activity": "Aktivität",
+      "profitability": "Rentabilität",
+      "accounting": "Buchhaltung"
+    },
+    "hero": {
+      "operatorView": "Operator-Ansicht",
+      "snapshotLine": "{{channels}} aktive Channels · {{forwards}} Forwards · {{peers}} Peers",
+      "canSend": "Sendbar",
+      "canReceive": "Empfangbar",
+      "onchainReserve": "On-chain-Reserve",
+      "netRouting": "30-Tage Routing netto",
+      "remoteCapacity": "Remote-Channel-Guthaben",
+      "localShare": "Sendeseite",
+      "remoteShare": "Empfangsseite",
+      "capacity": "{{value}} Kapazität",
+      "liquidityAria": "{{local}} sat sendbar und {{remote}} sat empfangbar",
+      "viewTransactions": "Aktivität ansehen",
+      "openReports": "Berichte",
+      "signal": {
+        "balanced": "Ausgeglichene Liquidität",
+        "lowReceive": "Niedrige Empfangskapazität",
+        "lowSend": "Niedriges Sendeguthaben",
+        "noActiveChannels": "Keine aktiven Channels"
+      }
+    },
+    "metrics": {
+      "localBalance": "Sendbar",
+      "localBalanceDetail": "{{sat}} sat · {{eur}}",
+      "inboundLiquidity": "Empfangbar",
+      "totalCapacity": "Gesamtkapazität {{capacity}}",
+      "channels": "Channels",
+      "channelsDetail": "{{peers}} Peers · {{closed}} geschlossen",
+      "onChain": "On-chain-Reserve",
+      "localInChannels": "{{percent}} % lokal in Channels",
+      "noChannelLiquidity": "Keine Channel-Liquidität"
+    },
+    "activity": {
+      "title": "Lightning-Aktivität",
+      "description": "Invoices, Zahlungen und geroutete Forwards aus diesem Node-Snapshot.",
+      "invoices": "Invoices",
+      "paid": "bezahlt",
+      "payments": "Zahlungen",
+      "completed": "abgeschlossen",
+      "forwards": "Forwards",
+      "snapshotWindow": "Snapshot-Fenster",
+      "exceptions": "Ausnahmen",
+      "failedExpired": "fehlgeschlagen oder abgelaufen"
+    },
+    "accounting": {
+      "title": "Buchhaltungsstatus",
+      "description": "Wie der Node-Snapshot in Kassibers Transaktions- und Journalflächen abgebildet ist.",
+      "imported": "Importiert",
+      "transactions": "Transaktionen",
+      "bookedInvoices": "Gebuchte Invoices",
+      "finalized": "settled und final",
+      "nodeEvents": "Node-Ereignisse",
+      "auditTrail": "Aktivitätsnachweis",
+      "viewTransactions": "Transaktionen ansehen",
+      "openJournals": "Journale"
+    },
+    "routing": {
+      "title": "Routing-Zusammenfassung",
+      "description": "{{window}} · {{forwards}} Forwards · {{payments}} Zahlungen · {{rebalances}} Rebalances",
+      "revenue": "Einnahmen",
+      "paymentFees": "Zahlungsgebühren",
+      "rebalanceFees": "Rebalance-Gebühren",
+      "onChainCosts": "On-chain-Kosten",
+      "netProfit": "Nettogewinn"
+    },
+    "profitabilityReport": {
+      "title": "Lightning-Routing-Rentabilität",
+      "description": "Routing-Einnahmen abzüglich Zahlungs-, Rebalance- und On-chain-Kosten, pro Lightning-Verbindung. Die Channel-Spalte zeigt, ob das Routing angenommene Öffnungskosten von {{cost}} sat wieder eingespielt hat.",
+      "unsupported": "Keine konfigurierte Lightning-Verbindung meldet Unterstützung für Routing-Rentabilität.",
+      "connection": "Verbindung",
+      "run": "Bericht ausführen",
+      "idle": "Noch nicht ausgeführt. Dies kontaktiert die Node.",
+      "loading": "Routing-Rentabilität wird gelesen…",
+      "errorFallback": "Routing-Rentabilität ist für diese Verbindung noch nicht verfügbar.",
+      "empty": "Keine Routing-Daten verfügbar.",
+      "windowSummary": "{{window}} · {{forwards}} Forwards · {{payments}} Zahlungen · {{rebalances}} Rebalances",
+      "revenue": "Einnahmen",
+      "paymentFees": "Zahlungsgebühren",
+      "rebalanceFees": "Rebalance-Gebühren",
+      "onChainCosts": "On-chain-Kosten",
+      "netProfit": "Nettogewinn",
+      "peer": "Peer",
+      "capacity": "Kapazität",
+      "earnedRouting": "Verdientes Routing",
+      "openCost": "Öffnungskosten",
+      "coversOpenCost": "Deckt Öffnungskosten",
+      "noChannels": "Keine Channels gemeldet.",
+      "yes": "Ja",
+      "notYet": "Noch nicht"
+    },
+    "channelEconomics": {
+      "title": "Channel-Ökonomie",
+      "description": "Verdientes Routing pro Channel verglichen mit der Standardannahme von {{cost}} sat Öffnungskosten.",
+      "peer": "Peer",
+      "forwards": "Forwards",
+      "earned": "Verdient",
+      "openCost": "Öffnungskosten",
+      "state": "Zustand",
+      "covered": "Gedeckt",
+      "notYet": "Noch nicht",
+      "empty": "Keine Channel-Ökonomie gemeldet."
+    },
+    "channels": {
+      "title": "Channels",
+      "showClosed": "Geschlossene anzeigen ({{value}})",
+      "hideClosed": "Geschlossene ausblenden ({{value}})",
+      "description": "Kapazität, lokales und entferntes Guthaben sowie Gebühren pro Channel. Wähle eine Zeile für Details.",
+      "empty": "Der Node meldet keine Channels.",
+      "peer": "Peer",
+      "balance": "Guthaben",
+      "capacity": "Kapazität",
+      "feePolicy": "Gebührenpolitik",
+      "state": "Zustand",
+      "openDetail": "Channel-Details für {{peer}} öffnen",
+      "private": "Privat",
+      "remoteOpened": "Remote geöffnet",
+      "privatePeer": "privater Peer",
+      "unannouncedPeer": "unangekündigter Channel",
+      "balanceAria": "{{local}} sat lokal von {{capacity}} sat Kapazität",
+      "localLabel": "lokal",
+      "remoteLabel": "remote",
+      "shareOfNode": "{{percent}} % des Nodes",
+      "ppm": "{{value}} ppm",
+      "baseMsat": "Basis {{value}} msat",
+      "forwardsEarned": "{{value}} Forwards · {{earned}}",
+      "closedFallback": "geschlossen"
+    },
+    "channelState": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "pendingOpen": "Öffnung ausstehend",
+      "pendingClose": "Schließung ausstehend",
+      "closed": "Geschlossen",
+      "forceClosed": "Zwangsgeschlossen"
+    },
+    "closeKind": {
+      "cooperative": "Kooperative Schließung",
+      "force": "Erzwungene Schließung",
+      "breach": "Breach-Schließung"
+    },
+    "channelDetail": {
+      "locallyInitiated": "Lokal initiiert",
+      "remoteOpened": "Remote geöffnet",
+      "private": "Privat",
+      "capacity": "Kapazität {{capacity}}",
+      "shareOfNode": "{{percent}} % des Nodes",
+      "localBalance": "{{value}} lokal",
+      "remoteBalance": "{{value}} remote",
+      "peer": "Peer",
+      "alias": "Alias",
+      "publicKey": "Public Key",
+      "publicKeyHidden": "Verborgen für unangekündigten Channel",
+      "visibility": "Sichtbarkeit",
+      "privateVisibility": "Privat (nicht angekündigt). Der Peer erscheint als Alias; sein Public Key wird nicht angezeigt.",
+      "channel": "Channel",
+      "shortChannelId": "Short Channel ID",
+      "shortChannelIdPending": "Bestätigung ausstehend",
+      "fundingOutpoint": "Funding-Outpoint",
+      "openFundingTx": "Funding-Transaktion auf mempool.space öffnen",
+      "opened": "Geöffnet",
+      "closed": "Geschlossen",
+      "lastActivity": "Letzte Aktivität",
+      "inFlightHtlcs": "HTLCs in Bearbeitung",
+      "routing": "Routing",
+      "feeRate": "Gebührensatz",
+      "feeRateValue": "{{value}} ppm",
+      "baseFee": "Basisgebühr",
+      "baseFeeValue": "{{value}} msat",
+      "forwardsWindow": "Forwards (Zeitfenster)",
+      "earnedRouting": "Verdientes Routing"
+    },
+    "identity": {
+      "title": "Node-Identität",
+      "description": "Read-only-Metadaten vom Lightning-Node.",
+      "alias": "Alias",
+      "publicKey": "Public Key",
+      "network": "Netzwerk",
+      "implementation": "Implementierung",
+      "blockHeight": "Blockhöhe",
+      "connectionKind": "Verbindungstyp",
+      "kassiberId": "Kassiber-ID"
+    },
+    "syncStatus": {
+      "title": "Sync-Status",
+      "description": "Read-only-Sync-Zustand für diese Lightning-Verbindung.",
+      "status": "Status",
+      "lastRefresh": "Letzte Aktualisierung",
+      "lastSyncAt": "Letzter Sync am",
+      "lastTransaction": "Letzte Transaktion",
+      "importedTransactions": "Importierte Transaktionen"
+    },
+    "forwards": {
+      "title": "Letzte Forwards",
+      "description": "Durch diesen Node geroutete Zahlungen, neueste zuerst, auch fehlgeschlagene und laufende.",
+      "time": "Zeit",
+      "route": "Route",
+      "amount": "Betrag",
+      "fee": "Gebühr",
+      "status": "Status",
+      "feeMsat": "+ {{value}} msat",
+      "feeSat": "+ {{value}} sat"
+    },
+    "forwardStatus": {
+      "settled": "Abgewickelt",
+      "failed": "Fehlgeschlagen",
+      "offered": "In Bearbeitung"
+    },
+    "sync": {
+      "stillScanning": "{{label}} lädt noch Node-Daten. Große Channel-Historien brauchen einen Moment.",
+      "failedFallback": "Node-Aktualisierung fehlgeschlagen."
+    }
+  },
+  "utxos": {
+    "title": "UTXOs",
+    "countOf": "{{returned}} von {{total}}",
+    "loading": "Coin-Bestand wird geladen…",
+    "summary": {
+      "allConfirmed": "{{count}} aktive Outputs · alle bestätigt",
+      "withPending": "{{count}} aktive Outputs · {{pending}} ausstehend"
+    },
+    "couldNotLoadTitle": "UTXO-Bestand konnte nicht geladen werden",
+    "unavailableTitle": "UTXO-Bestand nicht verfügbar",
+    "liquidNeedsUnblinding": "Liquid-UTXOs müssen unblinded werden",
+    "unsupportedFallback": "Diese Wallet-Quelle stellt keinen Watch-only-UTXO-Bestand bereit.",
+    "noneTitle": "Keine UTXOs bekannt",
+    "noneBody": "Aktualisiere diese Quelle, um den UTXO-Bestand von Kassiber zu aktualisieren.",
+    "staleWithDate": "Zuletzt aktualisiert {{date}}. Aktualisiere diese Quelle, um den UTXO-Bestand zu aktualisieren.",
+    "stale": "Aktualisiere diese Quelle, um den UTXO-Bestand zu aktualisieren.",
+    "column": {
+      "outpoint": "Outpoint",
+      "amount": "Betrag",
+      "status": "Status",
+      "address": "Adresse",
+      "location": "Ort",
+      "confirmed": "Bestätigt"
+    },
+    "copyOutpoint": "Outpoint kopieren",
+    "copyAddress": "Adresse kopieren",
+    "watchTarget": "Watch-Ziel",
+    "locationLabel": "{{branch}} #{{index}}",
+    "confLabel": "{{count}} Best.",
+    "confirmedLabel": "bestätigt",
+    "mempool": "Mempool",
+    "openLocalTransaction": "Lokale Transaktionsdetails für {{outpoint}} öffnen",
+    "openExplorer": "UTXO-Transaktion auf {{explorer}} öffnen",
+    "transportedRows": "{{returned}} übertragene Zeilen von insgesamt {{total}} aktiven UTXOs werden angezeigt.",
+    "loadedRows": "{{loaded}} von {{total}} aktiven UTXOs geladen.",
+    "showMore_one": "{{count}} weitere anzeigen",
+    "showMore_other": "{{count}} weitere anzeigen",
+    "refresh": "Aktualisieren",
+    "refreshing": "Wird aktualisiert",
+    "dialog": {
+      "title": "UTXO-Transaktion im Browser öffnen?",
+      "description": "Das öffnet {{explorer}} außerhalb von Kassiber. Der Explorer kann deine IP-Adresse und die angefragte Transaktions-ID sehen.",
+      "explorerFallback": "den konfigurierten Explorer",
+      "opening": "Wird geöffnet…",
+      "openExplorer": "Explorer öffnen",
+      "couldNotOpen": "Der Explorer konnte nicht im Standardbrowser geöffnet werden."
+    }
+  },
+  "scanner": {
+    "title": "Wallet-Export scannen",
+    "scanTitle": "{{title}} scannen",
+    "description": "Scanne einen Output-Descriptor, einen xpub-Familien-Export oder eine BBQR-Sequenz von einem Wallet-Display.",
+    "mode": {
+      "auto": "Auto",
+      "single": "Einzel-QR",
+      "bbqr": "BBQR"
+    },
+    "status": {
+      "startingCamera": "Kamera wird gestartet.",
+      "cameraIdle": "Kamera ist im Leerlauf.",
+      "previewUnavailable": "Kamera-Vorschau nicht verfügbar.",
+      "cameraUnavailable": "Kamera nicht verfügbar.",
+      "walletScanned": "Wallet-QR gescannt.",
+      "scanFailed": "Scan fehlgeschlagen.",
+      "bbqrFrames": "BBQR {{received}} / {{total}} Frames gescannt.",
+      "bbqrComplete": "BBQR vollständig: {{received}} / {{total}} Frames gescannt.",
+      "lookingBbqr": "Suche nach BBQR-Frames.",
+      "lookingSingle": "Suche nach einem einzelnen QR.",
+      "lookingWallet": "Suche nach einem Wallet-QR."
+    },
+    "preview": {
+      "ready": "Bereit zur Verwendung",
+      "cameraBlocked": "Kamera blockiert",
+      "startingCamera": "Kamera wird gestartet",
+      "bbqrProgress": "BBQR {{received}}/{{total}}",
+      "collectingBbqr": "BBQR wird gesammelt",
+      "scanningQr": "QR wird gescannt",
+      "scanningWallet": "Wallet-QR wird gescannt"
+    },
+    "bbqrType": "BBQR-Typ {{type}}",
+    "cameraFallback": "Kamera {{index}}",
+    "scannedNote": "Wallet-Material gescannt. Prüfe das eingefügte Feld, nachdem du es übernommen hast.",
+    "couldNotStart": "Die Kamera konnte nicht gestartet werden.",
+    "couldNotSwitch": "Die Kamera konnte nicht gewechselt werden.",
+    "useScannedText": "Gescannten Text verwenden",
+    "messages": {
+      "emptyFrame": "Leerer QR-Frame ignoriert.",
+      "waitingBbqr": "Warte auf einen BBQR-Frame.",
+      "bbqrInSingle": "BBQR-Frame erkannt; wechsle zu Auto oder BBQR, um ihn zu sammeln.",
+      "hex": "BBQR-HEX-Inhalt konnte nicht dekodiert werden.",
+      "base32": "BBQR-Base32-Inhalt konnte nicht dekodiert werden.",
+      "base32Padding": "BBQR-Base32-Füllbits konnten nicht dekodiert werden.",
+      "malformed": "Fehlerhafte BBQR-Frames konnten nicht dekodiert werden.",
+      "empty": "Der gescannte BBQR-Inhalt war leer.",
+      "inflate": "Der BBQR-Inhalt konnte nicht entpackt werden.",
+      "notUtf8": "Der gescannte BBQR-Inhalt ist kein gültiger UTF-8-Text.",
+      "unsupportedEncoding": "Die BBQR-Kodierung {{encoding}} wird nicht unterstützt.",
+      "notWalletMaterial": "BBQR-Typ {{type}} ist kein Wallet-Export und kein Descriptor.",
+      "cameraNotFound": "Keine Kamera gefunden.",
+      "cameraDenied": "Der Kamerazugriff wurde verweigert. Erlaube Kassiber die Kamera in den Systemeinstellungen."
+    }
+  },
+  "add": {
+    "title": "Verbindung hinzufügen",
+    "setupTitle": "{{title}} einrichten",
+    "description": "Wähle eine Watch-only-Wallet, einen Node, eine Börse oder eine Datei.",
+    "setupDescription": "Gib ein, was Kassiber braucht, um diese Verbindung zu lesen.",
+    "openingScanner": "Scanner wird geöffnet",
+    "plannedLabel": "Geplant",
+    "docs": "Doku",
+    "searchPlaceholder": "Quellen suchen (z. B. river, descriptor, btcpay)…",
+    "noSearchMatch": "Keine Quellen passen zu dieser Suche.",
+    "noFilterMatch": "Keine Quellen passen zu diesem Filter.",
+    "trademarkDisclaimer": "Marken Dritter gehören ihren Eigentümern; sie kennzeichnen Quellen, ohne eine Verbindung nahezulegen.",
+    "continue": "Weiter",
+    "back": "Zurück",
+    "submit": {
+      "openBackendSettings": "Backend-Einstellungen öffnen",
+      "refreshing": "Wird aktualisiert…",
+      "importingSamourai": "Samourai wird importiert…",
+      "importing": "Wird importiert…",
+      "previewingLabels": "Labels werden geprüft…",
+      "previewLabels": "Labels prüfen",
+      "importingLabels": "Labels werden importiert…",
+      "saving": "Wird gespeichert…",
+      "saveWalletMapping": "Wallet-Zuordnung speichern",
+      "createConnections": "Verbindungen erstellen",
+      "importTransactions": "Transaktionen importieren",
+      "importPricing": "Bewertung importieren",
+      "archiveReport": "Bericht archivieren",
+      "createAndScan": "Erstellen & scannen",
+      "createConnection": "Verbindung erstellen",
+      "setupBtcpayAccount": "BTCPay-Account einrichten"
+    },
+    "field": {
+      "connectionLabel": "Verbindungslabel",
+      "backend": "Backend",
+      "selectBackend": "Backend auswählen",
+      "backendOptionDefault": " (Standard)",
+      "noBackendConfigured": "Es ist kein passendes Backend konfiguriert.",
+      "openBackendSettings": "Backend-Einstellungen öffnen",
+      "browse": "Durchsuchen…",
+      "browseDots": "Durchsuchen…",
+      "selectExportFileTitle": "Exportdatei von {{title}} auswählen",
+      "chooseExportTitle": "Export von {{title}} wählen",
+      "filePickerUnavailableTitle": "Dateiauswahl nicht verfügbar",
+      "filePickerUnavailableBody": "{{message}} Füge stattdessen den Dateipfad ein.",
+      "filePickerFallback": "Die native Dateiauswahl konnte nicht geöffnet werden."
+    },
+    "descriptor": {
+      "walletExport": "Wallet-Export",
+      "scanHint": "Füge einen Output-Descriptor, einen xpub-Familien-Export oder eine BBQR-Sequenz ein oder scanne sie.",
+      "scan": "Scannen",
+      "gapLimit": "Gap Limit",
+      "gapLimitHelper": "Standard: 40 ungenutzte Adressen pro Branch. Erhöhe ihn für ältere oder stark genutzte Wallets, bis 5.000; größere Werte brauchen länger zum Scannen.",
+      "birthday": "Wallet-Geburtstag",
+      "birthdayHelper": "Optional. Speichert das erste Nutzungsdatum der Wallet für spätere Aktualisierungen.",
+      "birthdayHelperCore": "Bitcoin Core scannt ab diesem Datum statt ab dem ersten Block. Pflicht, wenn die Node geprunt ist.",
+      "scanAfter": "Wallet nach dem Setup scannen",
+      "deriving": "Wird abgeleitet…",
+      "previewAddresses": "Adressen-Vorschau",
+      "previewHint": "Leitet die ersten 5 Empfangsadressen ab, ohne zu speichern.",
+      "firstDerived": "Erste abgeleitete Adressen",
+      "branchChange": "change/0",
+      "branchReceive": "recv/{{index}}",
+      "copyAddress": "Adresse kopieren",
+      "copied": "Kopiert",
+      "copy": "Kopieren",
+      "detected": "Erkannt: {{label}}",
+      "detectedWithHint": "Erkannt: {{label}} — {{hint}}",
+      "couldNotDerive": "Adressen konnten nicht abgeleitet werden.",
+      "autoDetectUnavailable": "Script-Typen konnten nicht automatisch erkannt werden: {{reason}}. Wähle einen Script-Typ manuell.",
+      "autoDetectUnavailableReasonUnknown": "Backend-Prüfung wurde nicht ausgeführt",
+      "scriptTypeLabel": "Script-Typ",
+      "scriptTypeHelperAuto": "Lass „Automatisch erkennen“ stehen, dann beobachtet Kassiber jeden Adresstyp mit On-Chain-Historie – oder leg dich auf einen fest.",
+      "scriptTypeDetect": "Automatisch erkennen",
+      "scriptType": {
+        "p2wpkh": "Native SegWit · P2WPKH (bc1q…)",
+        "p2shp2wpkh": "Nested SegWit · P2SH-P2WPKH (3…)",
+        "p2pkh": "Legacy · P2PKH (1…)",
+        "p2tr": "Taproot · P2TR (bc1p…)"
+      },
+      "bareXpubResolved": "{{label}} wird als {{scriptType}} abgeleitet.",
+      "bareXpubAutoDetect": "{{label}} — Kassiber erkennt automatisch, mit welchen Adresstypen dieser Schlüssel genutzt wurde, und beobachtet sie.",
+      "material": {
+        "empty": "Leer",
+        "descriptorJson": "Descriptor-JSON-Export",
+        "bsms": "BSMS-Descriptor-Eintrag",
+        "outputDescriptor": "Output-Descriptor",
+        "ypub": "P2SH-verpacktes SegWit (BIP49)",
+        "zpub": "Natives SegWit (BIP84)",
+        "upub": "Testnet, P2SH-verpacktes SegWit",
+        "vpub": "Testnet, natives SegWit",
+        "bareXpub": "Reiner {{head}}",
+        "bareXpubHint": "Kassiber erkennt automatisch, welche Adresstypen dieser Key nutzt; wähle einen, um ihn festzulegen.",
+        "unrecognized": "Unbekanntes Format",
+        "unrecognizedHint": "Füge einen Descriptor, einen BSMS-Descriptor-Eintrag, Bitcoin-Core-Descriptor-JSON oder einen ypub/zpub/upub/vpub-Key ein."
+      }
+    },
+    "core": {
+      "detect": "Meine Node erkennen",
+      "noneDetected": "Keine lokale Node erkannt.",
+      "detectedNodes": "Erkannte Nodes",
+      "detectFailed": "Lokale Node konnte nicht erkannt werden.",
+      "url": "RPC-URL",
+      "network": "Netzwerk",
+      "networkMain": "Mainnet",
+      "networkTest": "Testnet",
+      "networkSignet": "Signet",
+      "networkRegtest": "Regtest",
+      "authMode": "Authentifizierung",
+      "authCookiefile": "Cookie-Datei",
+      "authBasic": "Benutzername und Passwort",
+      "authCookiefileBitcoinConf": "Cookie-Datei aus bitcoin.conf",
+      "authBasicBitcoinConf": "Benutzername/Passwort aus bitcoin.conf",
+      "cookiefile": "Pfad zur Cookie-Datei",
+      "username": "RPC-Benutzername",
+      "password": "RPC-Passwort",
+      "test": "Verbindung testen",
+      "testOk": "{{network}} erreichbar bei Block {{blocks}}.",
+      "testOkDetailed": "{{network}}: {{status}} bei Block {{blocks}}/{{headers}} mit {{peers}} Peers.",
+      "testFailed": "Bitcoin Core hat nicht geantwortet.",
+      "candidateMeta": "{{status}} · {{blocks}}/{{headers}} · {{peers}} Peers · {{auth}}",
+      "credentialUnknown": "RPC-Zugangsdaten",
+      "walletRpcUnavailable": "Wallet-RPC ist nicht verfügbar; Kassiber braucht es für Watch-only-Descriptor-Sync.",
+      "blockFiltersUnavailable": "Block-Filter (BIP158) sind auf dieser Node aus. Der Sync funktioniert auch ohne sie.",
+      "prunedWarning": "Diese Node ist gepruned; Wallet-Geburtstage müssen innerhalb des Prune-Horizonts liegen.",
+      "prunedWarningWithDate": "Diese Node ist gepruned und bewahrt Blöcke ungefähr ab {{retained}} auf. Die Wallet-spezifische Abdeckung wird vor dem Scan geprüft.",
+      "coverageProbeFailed": "Die historische Abdeckung von Bitcoin Core konnte nicht geprüft werden.",
+      "coverageChecking": "Es wird geprüft, ob Bitcoin Core die Historie dieser Wallet aufbewahrt…",
+      "coverageIdle": "Kassiber hat diese Node noch nicht kontaktiert.",
+      "coverageCheck": "Node-Abdeckung prüfen",
+      "birthdayRequiredForPruned": "Gib das echte erste Nutzungsdatum der Wallet ein; diese Bitcoin-Core-Node ist gepruned.",
+      "coverageBirthdayRequired": "Diese Node ist gepruned und bewahrt Blöcke ungefähr ab {{retained}} auf. Gib das echte erste Nutzungsdatum der Wallet ein, um die vollständige Historie zu prüfen.",
+      "coverageVerificationRequired": "Diese Node ist gepruned und bewahrt Blöcke ungefähr ab {{retained}} auf. Core prüft den Wallet-Geburtstag {{birthday}} während des Scans; Kassiber bestätigt die Abdeckung erst nach einem erfolgreichen Rescan.",
+      "coverageFullHistory": "Full Node: Die vollständige Wallet-Historie ist für einen Rescan verfügbar.",
+      "coverageAvailablePruned": "Geprunte Node, aber diese Wallet ist abgedeckt: Geburtstag {{birthday}}, Blöcke ungefähr ab {{retained}} vorhanden.",
+      "coverageBlocked": "Diese Wallet beginnt am {{birthday}}, aber die Node bewahrt Blöcke nur ungefähr ab {{retained}} auf. Erstelle sie ohne Scan oder wähle eine ungeprunte Core-Node bzw. ein Archiv-Backend.",
+      "retainedDateUnknown": "einem unbekannten Datum",
+      "birthdayUnknown": "einem unbekannten Datum",
+      "initialBlockDownloadWarning": "Core ist noch im Initial Block Download.",
+      "status": {
+        "synchronized": "synchronisiert",
+        "synchronizing": "noch synchronisierend",
+        "connecting": "beim Verbinden",
+        "unresponsive": "nicht erreichbar",
+        "unknown": "erreichbar"
+      },
+      "addedBody": "{{label}} ist für Bitcoin-Core-Sync bereit.",
+      "errorUrl": "Gib die RPC-URL ein.",
+      "errorCookiefile": "Gib den Pfad zur Cookie-Datei ein.",
+      "errorUsername": "Gib den RPC-Benutzernamen ein.",
+      "errorPassword": "Gib das RPC-Passwort ein."
+    },
+    "addressList": {
+      "addresses": "Adressen",
+      "helper": "Füge Adressen ein oder lade eine .txt/.csv-Datei, eine pro Zeile. Jede Adresse wird gescannt; es gibt kein Gap Limit.",
+      "placeholder": "bc1q…\n1…\n3…",
+      "loadFile": "Datei laden…",
+      "summary_one": "{{count}} Adresse erkannt",
+      "summary_other": "{{count}} Adressen erkannt",
+      "summaryDuplicates_one": "{{count}} Duplikat entfernt",
+      "summaryDuplicates_other": "{{count}} Duplikate entfernt",
+      "summaryInvalid_one": "{{count}} übersprungen",
+      "summaryInvalid_other": "{{count}} übersprungen",
+      "invalidHint": "Einträge, die keine Mainnet-Adressen sind, werden übersprungen, z. B. {{samples}}.",
+      "privateKeysPurged_one": "{{count}} privaten Schlüssel entfernt – Kassiber ist Watch-only, füge niemals private Schlüssel ein.",
+      "privateKeysPurged_other": "{{count}} private Schlüssel entfernt – Kassiber ist Watch-only, füge niemals private Schlüssel ein.",
+      "publicKeysPurged_one": "{{count}} erweiterten/öffentlichen Schlüssel entfernt – nutze für xpubs die Quelle „Wallet export“.",
+      "publicKeysPurged_other": "{{count}} erweiterte/öffentliche Schlüssel entfernt – nutze für xpubs die Quelle „Wallet export“.",
+      "scanAfter": "Adressen nach dem Setup scannen",
+      "errorNeedAddress": "Füge mindestens eine Mainnet-Bitcoin-Adresse ein oder lade sie.",
+      "fileReadFailed": "Die ausgewählte Datei konnte nicht gelesen werden.",
+      "addedBody_one": "{{label}} mit {{count}} Adresse erstellt.",
+      "addedBody_other": "{{label}} mit {{count}} Adressen erstellt."
+    },
+    "silentPayments": {
+      "backend": "SP-fähiges Backend",
+      "backendHelper": "Kassiber kann diese Unterstützung nicht erkennen. Wähle ein Backend nur, wenn sein Betreiber Silent-Payments-Scanning (BIP352) zusagt oder du in den Backend-Einstellungen einen lokalen Scanner dafür eingerichtet hast. Normale Esplora-, Electrum- und Bitcoin-Core-Backends können das nicht.",
+      "material": "Silent-Payments-Material",
+      "materialHelper": "Füge watch-only BIP392-sp()-Material ein, z. B. sp(spscan1q...) oder Scan-Privatschlüssel plus öffentlichen Spend-Schlüssel. Spend-private-Formen werden abgelehnt.",
+      "scanMode": "Scan-Modus",
+      "scanModeHelper": "Lokale Scanner-Datei liest ein JSON-Ergebnis, das dein Scanner/Indexer auf diesem Gerät erzeugt hat; Kassiber speichert oder betreibt den Index nicht selbst. Serverunterstütztes Backend lässt das ausgewählte SP-fähige Backend scannen; das kann genug offenlegen, um diese Silent-Payments-Wallet zu korrelieren, und Zahlungen übersehen, wenn Scan-Kandidaten ausgelassen werden.",
+      "scanModeLocal": "Lokale Scanner-Datei",
+      "scanModeServer": "Serverunterstütztes Backend",
+      "startHeight": "Start-Height",
+      "startDate": "Startdatum",
+      "startDateHelper": "Nutze Height oder Datum, wenn du den Wallet-Birthday kennst.",
+      "fullHistory": "Stattdessen vollständige Historie scannen",
+      "fullHistoryAck": "Mir ist bewusst, dass ein Full-History-Scan lange dauern kann und Reports unvollständig bleiben, bis der Bereich fertig ist.",
+      "serverAck": "Mir ist bewusst, dass dieses ausgewählte Backend genug erfahren kann, um diese Silent-Payments-Wallet zu korrelieren, und dass unvollständige oder ausgelassene Scan-Kandidaten Reports unvollständig machen können. Nicht auf ein anderes Backend ausweichen.",
+      "scanAfter": "Silent Payments nach dem Setup scannen",
+      "addedBody": "{{label}} als watch-only Silent-Payments-Quelle erstellt.",
+      "addedBodyScanning": "{{label}} als watch-only Silent-Payments-Quelle erstellt und Scan gestartet.",
+      "errorMaterial": "Füge watch-only Silent-Payments-Material ein.",
+      "errorStartPoint": "Setze eine Start-Height/ein Startdatum oder wähle und bestätige Full-History-Scanning.",
+      "errorStartHeight": "Start-Height muss eine ganze Zahl sein.",
+      "errorFullHistoryAck": "Bestätige die Warnung zum Full-History-Scan.",
+      "errorServerAck": "Bestätige die Datenschutzwarnung zum serverunterstützten Scan."
+    },
+    "exportFile": {
+      "label": "Pfad zur Exportdatei",
+      "btcpayLabel": "Pfad zum BTCPay-CSV-Export",
+      "btcpayHelper": "Wähle einen BTCPay-CSV-Export der Wallet-Transaktionen. Kassiber importiert Kommentare als Notizen und Labels als Tags.",
+      "cointrackingLabel": "CoinTracking-CSV-Export",
+      "cointrackingHelper": "Stelle CoinTracking auf Englisch und wähle Transaktionen → Export → CSV. Exportiere die gesamte Historie.",
+      "blockpitLabel": "Blockpit-Transaktions-CSV",
+      "blockpitHelper": "Entferne in Blockpit alle Transaktionsfilter und lade dann die CSV herunter. Englische und deutsche Labels werden akzeptiert; in Blockpit ausgeschlossene Einträge fehlen im Export.",
+      "wasabiLabel": "Pfad zum Wasabi-JSON-Bundle",
+      "wasabiHelper": "Wähle ein bereinigtes lokales Bundle mit Wasabi gethistory sowie listcoins/listunspentcoins-Daten. Kassiber importiert es als Watch-only-Buchhaltungsnachweis."
+    },
+    "fileFilter": {
+      "phoenixCsv": "Phoenix CSV",
+      "riverCsv": "River CSV",
+      "bullbitcoinCsv": "Bull Bitcoin CSV",
+      "bullbitcoinWalletCsv": "Bull Bitcoin Wallet CSV",
+      "coinfinityCsv": "Coinfinity CSV",
+      "pocketbitcoinCsv": "Pocket Bitcoin CSV",
+      "twentyonebitcoinCsv": "21bitcoin CSV",
+      "strikeCsv": "Strike CSV",
+      "ledgerliveCsv": "Ledger Live CSV",
+      "cointrackingCsv": "CoinTracking-Transaktionen (CSV)",
+      "blockpitCsv": "Blockpit-Transaktionen (CSV)",
+      "binanceSupplementalCsv": "Binance Supplemental CSV",
+      "btcpayCsv": "BTCPay CSV",
+      "wasabiBundle": "Wasabi-JSON-Bundle",
+      "samouraiSourceSet": "Samourai-Descriptor-Source-Set",
+      "csvOrJson": "CSV oder JSON",
+      "genericLedger": "Excel- oder CSV-Journal",
+      "priorTaxReport": "Früherer Steuerbericht"
+    },
+    "priorReport": {
+      "provider": "Berichtsanbieter",
+      "providerPlaceholder": "CoinTracking oder Blockpit",
+      "taxYear": "Steuerjahr",
+      "taxYearHelper": "Optional. Das sind Nachweis-Metadaten, kein importiertes Steuerergebnis.",
+      "fileLabel": "Pfad zur Steuerberichtsdatei",
+      "fileHelper": "Kassiber legt eine Kopie als Anhang ab und übernimmt weder Summen noch Tranchenzuordnungen des Berichts.",
+      "errorProvider": "Gib den Berichtsanbieter ein.",
+      "errorFile": "Wähle die Datei des früheren Steuerberichts.",
+      "errorYear": "Das Steuerjahr muss vierstellig sein.",
+      "archivedTitle": "Früherer Bericht archiviert",
+      "archivedBody": "{{label}} wurde als lokaler Nachweis gespeichert."
+    },
+    "genericLedger": {
+      "templateHint": "Neu hier? Lade die Vorlage herunter, trag deine Transaktionen ein und importier die Datei.",
+      "downloadXlsx": "Excel-Vorlage herunterladen",
+      "downloadCsv": "Lieber CSV",
+      "templateWorking": "Wird vorbereitet…",
+      "saveTemplateTitle": "Journal-Vorlage speichern",
+      "templateReadyTitle": "Vorlage bereit",
+      "templateReadyBody": "Trag deine Transaktionen ein und importier die Datei hier.",
+      "templateFailedBody": "Vorlage konnte nicht erstellt werden: {{message}}",
+      "preview": {
+        "loading": "Datei wird gelesen…",
+        "failed": "Diese Datei konnte nicht gelesen werden.",
+        "ready": "{{mapped}} von {{rows}} Zeilen bereit",
+        "errorCount": "{{count}} brauchen Aufmerksamkeit",
+        "more": "+{{count}} weitere",
+        "colDate": "Datum",
+        "colKind": "Art",
+        "colAmount": "Betrag",
+        "colValue": "Wert",
+        "problemRow": "Zeile {{row}}: {{message}}",
+        "detected": "Erkannt: {{columns}}",
+        "notRecognized": "Diese Spalten wurden nicht erkannt.",
+        "notRecognizedHint": "Lade die Vorlage herunter, fülle sie aus und importiere stattdessen diese.",
+        "submitBlocked": "Behebe die Probleme in der Vorschau, bevor du dieses Journal importierst."
+      }
+    },
+    "defaultLabel": {
+      "importedFile": "Importierte Datei"
+    },
+    "samourai": {
+      "intro": "Importiere nur öffentliches Samourai-Kontomaterial. Leere Konten werden übersprungen; nutze alle vier, wenn verfügbar, damit Kassiber die vollständige Whirlpool-Historie scannen kann. Hol dir diese aus Sparrow oder einem anderen Descriptor-Tool, nachdem es die Samourai-Konten wiederhergestellt hat; füge nur die öffentlichen Descriptors oder die Konto-xpub-Familien-Keys ein.",
+      "depositLabel": "Deposit-Descriptor oder xpub",
+      "depositHelper": "Füge den Descriptor des Deposit-Kontos, einen ypub oder zpub ein. Ein nackter xpub ist für Deposit mehrdeutig; verwende im Zweifel einen Descriptor.",
+      "badbankLabel": "Badbank-Descriptor oder xpub",
+      "badbankHelper": "Füge den Descriptor des Badbank-/Toxic-Change-Kontos oder den Konto-xpub ein.",
+      "premixLabel": "Premix-Descriptor oder xpub",
+      "premixHelper": "Füge den Descriptor des Premix-Kontos oder den Konto-xpub ein.",
+      "postmixLabel": "Postmix-Descriptor oder xpub",
+      "postmixHelper": "Füge den Descriptor des Postmix-Kontos oder den Konto-xpub ein; Postmix-Scans brauchen eventuell ein höheres Gap Limit.",
+      "gapLimit": "Gap Limit",
+      "gapLimitHelper": "Postmix hält mindestens 40 ungenutzte Adressen pro Branch. Erhöhe das für alte Wallets mit langen Folgen ungenutzter Adressen, bis 5.000.",
+      "scanAfter": "Importierte Quellen nach dem Setup scannen",
+      "errorNeedMaterial": "Füge mindestens einen Samourai-Descriptor oder xpub ein.",
+      "importedTitle": "Samourai-Import hinzugefügt",
+      "importedBody": "{{label}} hat {{value}} Watch-only-Quellen erstellt.",
+      "importedBodyScanning": "{{label}} hat {{value}} Watch-only-Quellen erstellt und den Scan gestartet."
+    },
+    "wasabi": {
+      "importSource": "Importquelle",
+      "pasteRpc": "RPC-Ausgaben einfügen",
+      "bundleFile": "Bundle-Datei",
+      "rpcIntro1": "Starte Wasabi, lade die Wallet und kopiere dann JSON vom lokalen RPC-Endpunkt. Standard-RPC ist <code>{{endpoint}}</code>; ersetze <code>{{placeholder}}</code> durch den Namen der geladenen Wasabi-Wallet.",
+      "rpcIntro2": "Wenn <code>{{user}}</code> und <code>{{password}}</code> in Wasabi gesetzt sind, füge <code>{{auth}}</code> zum curl-Befehl hinzu. Kassiber speichert den eingefügten Snapshot, keine Live-Wasabi-RPC-Verbindung.",
+      "historyLabel": "gethistory-JSON",
+      "historyHelper": "Erforderlich. Akzeptiert das rohe result-Array oder ein JSON-RPC-Antwortobjekt mit result.",
+      "coinsLabel": "listcoins- oder listunspentcoins-JSON",
+      "coinsHelper": "Empfohlen für den Anonymitätsstatus von Coins/UTXOs.",
+      "walletInfoLabel": "getwalletinfo-JSON",
+      "walletInfoHelper": "Optionale sichere Wallet-Metadaten.",
+      "additionalLabel": "Weitere Wasabi-Bereiche",
+      "additionalHelper": "Optionales JSON-Objekt mit den Bereichen <code>{{listkeys}}</code>, <code>{{listpayments}}</code> oder <code>{{walletJson}}</code>. Führe diese Wasabi-RPC-Methoden auf die gleiche Weise aus und füge die Antworten unter den passenden Keys ein.",
+      "importAfter": "Nach dem Setup importieren"
+    },
+    "fileWallet": {
+      "fileFormat": "Dateiformat",
+      "formatCsv": "CSV",
+      "formatJson": "JSON",
+      "importAfter": "Nach dem Setup importieren"
+    },
+    "btcpayCsv": {
+      "importBehavior": "Importverhalten",
+      "createWallet": "BTCPay-Wallet erstellen",
+      "importIntoExisting": "In Wallet importieren",
+      "createWalletHelper": "Erstellt aus diesem CSV-Export eine dateibasierte BTCPay-Wallet-Quelle.",
+      "existingWalletHelper": "Nutze das, wenn ein Descriptor, Node oder eine andere Kassiber-Wallet die Settlement-Transaktionen bereits verfolgt.",
+      "walletToImport": "Kassiber-Wallet",
+      "walletToImportHelper": "Wähle die Wallet, die die BTCPay-Settlement-Wallet bereits abbildet.",
+      "chooseWallet": "Wallet wählen",
+      "noWalletsYet": "Noch keine Nicht-BTCPay-Wallets",
+      "errorChooseWallet": "Wähle die Wallet, die diesen BTCPay-CSV-Import erhalten soll.",
+      "errorCreateWalletFirst": "Erstelle zuerst eine Settlement-Wallet oder wechsle zum Erstellen einer BTCPay-Wallet-Quelle.",
+      "importedTitle": "BTCPay CSV importiert",
+      "importedBody": "BTCPay-CSV-Zeilen in {{wallet}} importiert."
+    },
+    "bullWallet": {
+      "importBehavior": "Importverhalten",
+      "createBullWallets": "Bull-Wallets erstellen",
+      "mapExistingWallets": "Vorhandene Wallets zuordnen",
+      "networks": "Bull-Wallet-Netzwerke",
+      "networksHelperCreate": "Kassiber erstellt pro Netzwerk eine Quell-Wallet, damit Bitcoin- und Liquid-Swap-Legs sauber gepaart werden können.",
+      "networksHelperMap": "Kassiber behält deinen Descriptor oder deine Wallet-Quelle als maßgeblich und reichert nur passende Zeilen aus Bull an.",
+      "networkBitcoin": "Bitcoin",
+      "networkBitcoinHelper": "BTC-on-chain- und Payjoin-Zeilen",
+      "networkLiquid": "Liquid",
+      "networkLiquidHelper": "LBTC-Wallet- und Swap-Zeilen",
+      "networkLightning": "Lightning",
+      "networkLightningHelper": "Lightning-Sende-/Empfangs-Zeilen",
+      "walletMapping": "Wallet-Zuordnung",
+      "walletMappingHelper": "Verknüpfe jedes ausgewählte Bull-Netzwerk mit der Kassiber-Wallet, die diese Transaktionen bereits verfolgt.",
+      "selectToMap": "Wähle mindestens ein Bull-Netzwerk zum Zuordnen.",
+      "exportNetwork": "Export-Netzwerk",
+      "kassiberWallet": "Kassiber-Wallet",
+      "noWalletsYet": "Noch keine Wallets",
+      "selectWallet": "Wallet auswählen",
+      "refreshAfter": "Nach dem Setup aktualisieren",
+      "mappingSavedTitle": "Bull-Wallet-Zuordnung gespeichert",
+      "mappedBody_one": "{{count}} Wallet verwendet Bull-Export-Metadaten bei der Aktualisierung.",
+      "mappedBody_other": "{{count}} Wallets verwenden Bull-Export-Metadaten bei der Aktualisierung.",
+      "mappedBodyRefreshed_one": "{{count}} Wallet verwendet Bull-Export-Metadaten bei der Aktualisierung und wurde aktualisiert.",
+      "mappedBodyRefreshed_other": "{{count}} Wallets verwenden Bull-Export-Metadaten bei der Aktualisierung und wurden aktualisiert.",
+      "sourcesBody_one": "{{count}} Bull-Wallet-Quelle konfiguriert.",
+      "sourcesBody_other": "{{count}} Bull-Wallet-Quellen konfiguriert.",
+      "sourcesBodyImported_one": "{{count}} Bull-Wallet-Quelle konfiguriert und importiert.",
+      "sourcesBodyImported_other": "{{count}} Bull-Wallet-Quellen konfiguriert und importiert.",
+      "errorPickExport": "Wähle den Bull-Bitcoin-Wallet-Export.",
+      "errorSelectNetwork": "Wähle mindestens ein Bull-Wallet-Netzwerk.",
+      "errorCreateWalletsFirst": "Erstelle oder importiere zuerst die Ziel-Wallets.",
+      "errorChooseWalletEach": "Wähle für jedes ausgewählte Bull-Netzwerk eine Kassiber-Wallet."
+    },
+    "enrichment": {
+      "importMode": "Importmodus",
+      "importModeHelperFull": "Importiert jede {{title}}-Zeile als ausgeschlossenen Nachweis und markiert passende, fehlende oder mehrdeutige Wallet-Nachweise für dieses Buch.",
+      "importModeHelperRelevant": "Reichert nur {{title}}-Zeilen an, die eindeutig zu vorhandenen Transaktionen irgendwo in diesem Buch passen.",
+      "relevantOnly": "Nur relevante",
+      "fullImport": "Vollständiger Import mit Markierungen",
+      "csvPath": "CSV-Pfad",
+      "csvPathHelper": "Verwende den gemeinsamen {{title}}-Export für dieses Buch; der Vollmodus hält Zeilen ausgeschlossen, bis sie geprüft sind.",
+      "walletToEnrich": "Anzureichernde Wallet",
+      "walletToEnrichHelper": "Es werden nur Zeilen übernommen, die zu Transaktionen passen, die bereits in dieser Wallet sind.",
+      "chooseWallet": "Wallet wählen",
+      "finishedTitle": "Import abgeschlossen",
+      "finishedBody": "{{scope}} hat {{updated}} Zeilen aktualisiert und {{skipped}} übersprungen.",
+      "bookScope": "Buch",
+      "errorChooseWallet": "Wähle die anzureichernde Wallet.",
+      "errorPickExportFile": "Wähle die Exportdatei.",
+      "errorNoFormat": "Die ausgewählte Quelle definiert kein Importformat."
+    },
+    "btcpay": {
+      "introTitle": "BTCPay Server verbinden",
+      "introBody": "Kassiber liest Rechnungen, Zahlungen, Rückerstattungen und Auszahlungen deiner Stores über die Greenfield-API. Es erstellt keine Rechnungen, ändert deinen Store nicht und bewegt keine Guthaben.",
+      "savedInstance": "Gespeicherte Instanz",
+      "newInstance": "Neue Instanz",
+      "instance": "BTCPay-Instanz",
+      "selectInstance": "Instanz auswählen",
+      "instanceName": "Name der Instanz",
+      "instanceNameHelper": "Jeder API-Key wird als eigene Instanz gespeichert. Für einen zweiten Key, etwa pro Store-Inhaber, fügst du eine weitere Instanz hinzu. Ein Key kann auch mehrere Stores abdecken.",
+      "serverUrl": "Server-URL",
+      "serverUrlPlaceholder": "https://btcpay.example.com",
+      "serverUrlHelper": "Die Adresse, unter der du BTCPay öffnest. Pfade wie /api/v1 oder eine Store-Seite werden automatisch entfernt.",
+      "apiKey": "API-Key",
+      "apiKeyHelper": "Füge den Key ein, den BTCPay nach deiner Freigabe anzeigt. Kassiber speichert ihn verschlüsselt mit diesem Buch.",
+      "keyStepTitle": "1 · API-Key erstellen",
+      "keyStepBody": "Wähle, was der Key lesen darf. Du kannst ihn mit einem Klick in BTCPay erstellen und genau diese Berechtigungen freigeben.",
+      "presets": {
+        "read_only": {
+          "title": "Nur lesen",
+          "body": "Rechnungen, Zahlungen, Rückerstattungen, Auszahlungen und Payment Requests. Reicht, um Lightning- und Plugin-Zahlungen zu verbuchen und Stores zu erklären, deren Wallet du schon führst. Ab BTCPay Server 2.4 importiert er auch den on-chain Wallet-Verlauf jedes Stores. Der Key kann deinen Store nicht ändern."
+        },
+        "wallet_history": {
+          "title": "Nur lesen plus BTCPay-Wallet-Verlauf",
+          "body": "Für BTCPay Server 2.3 und älter: importiert zusätzlich die on-chain Wallet jedes Stores so, wie BTCPay sie führt, mit Labels, Kommentaren und Auszahlungsgebühren. Diese Versionen bieten das nur mit der Berechtigung „Stores ändern“ an, die auch ändern könnte, wohin dein Store Zahlungen empfängt. Ab 2.4 wähle „Nur lesen“."
+        }
+      },
+      "permissionsLabel": "Berechtigungen",
+      "openAuthorize": "BTCPay öffnen und Key erstellen",
+      "openingAuthorize": "BTCPay wird geöffnet…",
+      "authorizeNeedsUrl": "Gib zuerst die Server-URL ein.",
+      "scope": {
+        "label": "Stores, die dieser Key lesen darf",
+        "all": {
+          "title": "Alle meine Stores",
+          "body": "Ein Key für alle Stores, auf die du Zugriff hast, auch für später hinzugefügte."
+        },
+        "single": {
+          "title": "Ein Store",
+          "body": "BTCPay fragt nach dem Store. Für jeden weiteren Store fügst du eine weitere Instanz hinzu."
+        }
+      },
+      "authorizeHintAll": "BTCPay öffnet sich im Browser. Melde dich an, bestätige und kopiere den Key hierher.",
+      "authorizeHintSingle": "BTCPay öffnet sich im Browser. Melde dich an, wähle den Store, bestätige und kopiere den Key hierher.",
+      "authorizeFailed": "Die BTCPay-Freigabeseite konnte nicht geöffnet werden.",
+      "manualToggle": "Key manuell erstellen",
+      "manualSteps": {
+        "signIn": "Melde dich bei BTCPay Server mit dem Konto an, dem die Stores gehören.",
+        "openKeys": "Öffne Account → Manage Account → API Keys und wähle Generate Key.",
+        "permissions": "Benenne ihn „Kassiber“ und aktiviere nur: {{permissions}}.",
+        "storesAll": "Lass die Berechtigung für alle Stores aktiv, damit ein Key alle Stores abdeckt, und erstelle den Key.",
+        "storesSingle": "Beschränke die Berechtigung auf den Store, den Kassiber lesen soll, und erstelle den Key.",
+        "copy": "Kopiere den Key in Kassiber. BTCPay listet ihn auf der Seite API Keys, falls du ihn wieder brauchst."
+      },
+      "discoverStepTitle": "2 · Key prüfen",
+      "checkKey": "Key und Stores prüfen",
+      "checking": "Wird geprüft…",
+      "discoveryFailed": "BTCPay konnte nicht geprüft werden.",
+      "storesFound_one": "{{count}} Store · {{methods}} Zahlungsmethoden",
+      "storesFound_other": "{{count}} Stores · {{methods}} Zahlungsmethoden",
+      "server": {
+        "version": "BTCPay Server {{version}}",
+        "versionUnknown": "BTCPay Server",
+        "synced": "Synchronisiert",
+        "notSynced": "Wird noch synchronisiert",
+        "transport": {
+          "https": "HTTPS",
+          "tor": "Tor-Onion",
+          "loopback": "Dieser Computer",
+          "http": "Unverschlüsseltes HTTP"
+        }
+      },
+      "key": {
+        "title": "API-Key",
+        "labelled": "Key „{{label}}“",
+        "scope": {
+          "all_stores": "Alle Stores",
+          "selected_stores_one": "{{count}} ausgewählter Store",
+          "selected_stores_other": "{{count}} ausgewählte Stores",
+          "no_stores": "Keine Stores",
+          "unknown": "Store-Zugriff unbekannt"
+        },
+        "risk": {
+          "read_only": "Nur lesen",
+          "can_write": "Kann Daten ändern",
+          "can_modify_store": "Kann den Store ändern",
+          "server_admin": "Server-Adminrechte",
+          "unknown": "Berechtigungen unbekannt"
+        },
+        "excess": "Mehr als Kassiber braucht: {{permissions}}",
+        "readOnlyExplainer": "Dieser Key kann den on-chain Wallet-Verlauf von BTCPay nicht lesen. Importiere ihn mit einem Key mit Wallet-Verlauf oder ordne den Store einer Wallet zu, die Kassiber schon führt. Lightning- und Plugin-Zahlungen, Rechnungen, Rückerstattungen und Auszahlungen funktionieren mit diesem Key.",
+        "upgrade": "Stattdessen einen Key mit Wallet-Verlauf erstellen",
+        "siblings": "Mit diesem Server auch verbunden über: {{names}}"
+      },
+      "warning": {
+        "server_not_synced": "BTCPay Server synchronisiert seinen Node noch; aktuelle Zahlungen können fehlen.",
+        "unencrypted_transport": "Diese Verbindung nutzt http://. API-Key und Store-Daten werden unverschlüsselt übertragen; verwende https:// oder eine Onion-Adresse.",
+        "key_server_admin": "Dieser Key hat serverweite Adminrechte. Kassiber liest nur Store-Daten; erstelle einen eingeschränkten Key und widerrufe diesen.",
+        "key_can_modify_store": "Dieser Key kann den Store ändern, auch die Wallet, in die Kund:innen zahlen. Kassiber braucht das nur für den eigenen Wallet-Verlauf von BTCPay.",
+        "key_can_write": "Dieser Key kann Daten wie Rechnungen oder Auszahlungen erstellen oder ändern. Ein Nur-lesen-Key ist sicherer.",
+        "store_catalog_unavailable": "Der Key kann die Zahlungsmethoden von {{store}} nicht auflisten. Füge „View your stores“ hinzu, damit Kassiber die verwendeten Wallets erkennt.",
+        "no_store_access": "Der Key sieht keinen Store. Gib „View your stores“ für die Stores frei, die Kassiber lesen soll.",
+        "shared_store_wallet": "Mehrere Stores zahlen in dieselbe Wallet ein. Kassiber importiert diese Wallet einmal und behält die Rechnungen jedes Stores.",
+        "stale_store_data_one": "Die Daten von {{count}} eingerichteten Store sind älter als ein Tag oder die letzte Aktualisierung ist fehlgeschlagen.",
+        "stale_store_data_other": "Die Daten von {{count}} eingerichteten Stores sind älter als ein Tag oder die letzte Aktualisierung ist fehlgeschlagen."
+      },
+      "storesTitle": "3 · Pro Store festlegen, was Kassiber tut",
+      "storesBody": "Kassiber schlägt für jede Zahlungsmethode ein Setup vor. Guthaben werden pro Wallet nur einmal importiert.",
+      "capability": {
+        "store_catalog": "Zahlungsmethoden",
+        "invoices": "Rechnungen",
+        "payouts": "Rückerstattungen & Auszahlungen",
+        "payment_requests": "Payment Requests",
+        "wallet_history": "Wallet-Verlauf"
+      },
+      "capabilityMissing": "Kein Zugriff",
+      "noMethods": "Für diesen Key sind keine aktiven Zahlungsmethoden sichtbar.",
+      "rail": {
+        "onchain": "On-chain",
+        "liquid": "Liquid",
+        "lightning": "Lightning",
+        "lnurl": "LNURL",
+        "plugin": "Plugin",
+        "other_asset": "Anderes Asset"
+      },
+      "settlement": {
+        "btc_onchain": "Kund:innen zahlen in die on-chain Wallet dieses Stores ein.",
+        "liquid_onchain": "Kund:innen zahlen in die Liquid-Wallet dieses Stores ein.",
+        "lightning": "Lightning-Zahlungen landen im Lightning-Node des Stores oder in einer Plugin-Wallet (zum Beispiel Boltz, Breez, Blink, Strike oder Nostr Wallet Connect). Wenn Kassiber sich nicht damit verbinden kann, bilden die Zahlungen aus BTCPay das Guthaben.",
+        "lnurl": "LNURL- und Lightning-Address-Zahlungen laufen über die Lightning-Verbindung des Stores.",
+        "bark": "Zahlungen landen in der Bark-Wallet (Ark) des Stores. Mit dem Bark-Plugin ab 0.10 und einem Key, der die Wallet ansehen darf, importiert Kassiber die ganze Wallet samt Gebühren; bei älteren Plugins verbucht es stattdessen die Zahlungen aus BTCPay.",
+        "plugin": "Stammt von einem BTCPay-Plugin. Wenn es in Bitcoin abrechnet, verbucht Kassiber seine Zahlungen aus BTCPay.",
+        "non_bitcoin": "Kassiber führt nur Bitcoin und Liquid Bitcoin; diese Zahlungen werden übersprungen."
+      },
+      "action": {
+        "wallet_source": "BTCPay-Wallet-Verlauf importieren",
+        "existing_wallet": "Einer geführten Wallet zuordnen",
+        "payment_ledger": "Zahlungen aus BTCPay verbuchen",
+        "provenance_only": "Nur Rechnungen und Auszahlungen",
+        "skip": "Überspringen"
+      },
+      "actionLabel": "Was Kassiber mit {{method}} in {{store}} macht",
+      "walletLabel": "Wallet, die {{method}} für {{store}} empfängt",
+      "selectWallet": "Wallet auswählen",
+      "noWallets": "Noch keine passenden Wallets",
+      "recommended": "Vorschlag",
+      "reason": {
+        "already_configured": "Bereits in Kassiber eingerichtet.",
+        "configured_via_other_key": "Bereits über einen anderen API-Key für diesen Server eingerichtet.",
+        "non_bitcoin_asset": "Kassiber führt nur Bitcoin und Liquid Bitcoin.",
+        "disabled": "Diese Zahlungsmethode ist in BTCPay deaktiviert.",
+        "lightning_settles_elsewhere": "Mit diesem Buch ist bereits ein Lightning-Node verbunden, daher behält Kassiber diese Rechnungen und verknüpft sie über den Payment Hash. Verbuche stattdessen die Zahlungen aus BTCPay, wenn dieser Node nicht zu diesem Store gehört.",
+        "lightning_payment_ledger": "Kassiber kann den Lightning-Node oder die Wallet dieses Stores nicht beobachten und verbucht daher die abgeschlossenen Zahlungen und Auszahlungen aus BTCPay als Guthaben.",
+        "plugin_payment_ledger": "Plugin-Zahlungsmethode: Kassiber verbucht die abgeschlossenen Zahlungen und Auszahlungen aus BTCPay als Guthaben.",
+        "import_bark_wallet_history": "Importiert die ganze Bark-Wallet des Stores aus BTCPay: Zahlungen, Überweisungen, Refreshes und ihre Gebühren.",
+        "bark_payment_ledger": "Kassiber verbucht die abgeschlossenen Bark-Zahlungen und Auszahlungen aus BTCPay als Guthaben. Sobald das Bark-Plugin den Wallet-Verlauf bereitstellt (ab 0.10) und der Key die Wallet ansehen darf, wechselt die nächste Synchronisierung zur ganzen Bark-Wallet und behält die bereits verbuchten Zahlungen.",
+        "bark_wallet_history_unavailable": "Das Bark-Plugin dieses Stores stellt keinen Wallet-Verlauf bereit: Dafür braucht es Plugin 0.10 oder neuer und eine für den Store eingerichtete Bark-Wallet.",
+        "plugin_rail": "Plugin-Zahlungsmethode in einer Währung, die Kassiber nicht als Bitcoin bestätigen kann; die Rechnungen bleiben als Datensätze erhalten.",
+        "not_ledger_rail": "Nur Lightning- und Bitcoin-Plugin-Zahlungsmethoden können aus den Zahlungen von BTCPay verbucht werden.",
+        "network_mismatch": "Die Wallet dieses Stores liegt in einem anderen Netzwerk als dieses Buch.",
+        "wallet_recognised": "Kassiber führt die Wallet, in die dieser Store einzahlt, bereits.",
+        "shared_wallet_already_imported": "Ein anderer Store importiert bereits dieselbe Wallet.",
+        "shared_wallet": "Ein anderer Store in diesem Setup zahlt in dieselbe Wallet ein; sie wird einmal importiert.",
+        "import_btcpay_wallet_history": "Importiert den BTCPay-Wallet-Verlauf dieses Stores.",
+        "read_only_key_upgrade": "Dieser Key kann den BTCPay-Wallet-Verlauf nicht lesen. Erstelle einen Key, der das kann (ab BTCPay Server 2.4 den Nur-lesen-Key mit „Wallets ansehen“), um die Store-Wallet aus BTCPay zu importieren, oder ordne sie einer Wallet zu, die Kassiber schon führt.",
+        "wallet_history_permission_missing": "Benötigt einen Key mit Zugriff auf den BTCPay-Wallet-Verlauf.",
+        "invoices_permission_missing": "Der Key kann die Rechnungen dieses Stores nicht lesen.",
+        "not_on_chain": "Nur on-chain Bitcoin und Liquid können als Wallet importiert werden.",
+        "payouts_permission_missing": "Der Key kann keine Auszahlungen lesen, daher würden die Zahlungen aus BTCPay allein das Guthaben zu hoch ausweisen. Behalte nur die Rechnungen oder verwende einen Key, der Auszahlungen lesen kann.",
+        "configured_balance_source": "Kassiber bezieht das Guthaben dieser Zahlungsmethode bereits aus einer hier eingerichteten Wallet. Archiviere diese Wallet, um die Zahlungsmethode anders einzurichten.",
+        "mapped_to_wallet": "Diese Zahlungsmethode ist einer Wallet zugeordnet, die Kassiber führt. Überspringe zuerst die Zuordnung, damit die Wallet nicht doppelt gezählt wird."
+      },
+      "notice": {
+        "recognised": "Als deine Wallet „{{wallet}}“ erkannt.",
+        "sharedWith": "Dieselbe Wallet wie {{stores}}.",
+        "configuredVia": "Bereits mit dem Key {{names}} eingerichtet.",
+        "lightningLinks": "Zahlungen werden über den Payment Hash mit {{wallets}} verknüpft.",
+        "alreadyConfigured": "Eingerichtet",
+        "ledgerScope": "Verbucht, was über BTCPay läuft: abgeschlossene Zahlungen als Eingang, abgeschlossene Auszahlungen und Rückerstattungen als Ausgang. Abhebungen außerhalb von BTCPay, etwa geschlossene Channels oder Überträge vom Node, erfasst du gesondert.",
+        "ledgerShared": "{{methods}} werden für diesen Store in einem gemeinsamen Ledger verbucht.",
+        "ledgerSameAs": "Wird im selben Ledger wie {{method}} verbucht."
+      },
+      "manualTitle": "Store manuell eingeben",
+      "manualBody": "Dieser Key kann keine Stores auflisten. Gib die Store-ID aus den BTCPay-Store-Einstellungen ein.",
+      "storeId": "Store-ID",
+      "paymentMethodId": "Zahlungsmethoden-ID",
+      "summary": {
+        "title": "Was gespeichert wird",
+        "wallet_source_one": "{{count}} Wallet aus BTCPay importiert",
+        "wallet_source_other": "{{count}} Wallets aus BTCPay importiert",
+        "existing_wallet_one": "{{count}} Store-Wallet einer geführten Wallet zugeordnet",
+        "existing_wallet_other": "{{count}} Store-Wallets geführten Wallets zugeordnet",
+        "payment_ledger_one": "{{count}} Zahlungsmethode aus den Zahlungen von BTCPay verbucht",
+        "payment_ledger_other": "{{count}} Zahlungsmethoden aus den Zahlungen von BTCPay verbucht",
+        "provenance_only_one": "{{count}} Zahlungsmethode als Rechnungen und Auszahlungen",
+        "provenance_only_other": "{{count}} Zahlungsmethoden als Rechnungen und Auszahlungen",
+        "skip_one": "{{count}} übersprungen",
+        "skip_other": "{{count}} übersprungen"
+      },
+      "issue": {
+        "discover_first": "Prüfe zuerst den Key, damit Kassiber die Stores planen kann.",
+        "no_routes": "Wähle mindestens eine Zahlungsmethode zum Einrichten.",
+        "choose_wallet": "Wähle für jede zugeordnete Store-Wallet eine Wallet.",
+        "no_wallets": "Füge zuerst die Wallet hinzu, die das Guthaben empfängt, und ordne sie dann hier zu.",
+        "manual_store_id": "Gib die BTCPay-Store-ID ein."
+      },
+      "errorChooseInstance": "Wähle eine BTCPay-Instanz.",
+      "errorInstanceName": "Der Name der Instanz ist erforderlich.",
+      "errorServerUrl": "Gib die Server-URL ein, beginnend mit https://.",
+      "errorApiKey": "Der API-Key ist erforderlich.",
+      "refreshAfter": "Nach dem Setup aktualisieren",
+      "accountSavedTitle": "BTCPay-Verbindung gespeichert",
+      "accountSavedBody": "{{count}} Zahlungsmethode(n) eingerichtet; {{wallets}} Wallet(s) beziehen ihr Guthaben aus BTCPay. Rechnungen, Rückerstattungen und Auszahlungen wurden für die ausgewählten Stores geladen. Kassiber erhält keine Live-Updates; synchronisiere erneut, um neue Aktivität zu übernehmen.",
+      "provenancePartial": "Für einige Stores konnten noch keine Rechnungen geladen werden: {{message}}",
+      "manualCsvAlternative": "Stattdessen manuellen CSV-Import verwenden",
+      "staleNote": "BTCPay benachrichtigt Kassiber nicht über neue Rechnungen, Zahlungen oder Auszahlungen. Die Store-Daten sind so aktuell wie die letzte Synchronisierung; synchronisiere, bevor du eine Periode abschließt oder einen Bericht einreichst.",
+      "storeSync": {
+        "never": "Noch nicht synchronisiert",
+        "at": "Synchronisiert {{when}}",
+        "failed": "Letzte Aktualisierung fehlgeschlagen",
+        "stale": "Älter als ein Tag"
+      }
+    },
+    "bip329": {
+      "labelFilePath": "Pfad zur Label-Datei",
+      "selectLabelFileTitle": "BIP329-Label-Datei auswählen",
+      "labelFileFilter": "BIP329 JSONL",
+      "errorPickFile": "Wähle die BIP329-Label-Datei.",
+      "labelsImportedTitle": "Labels importiert",
+      "labelsImportedBody": "{{count}} Labels verarbeitet. {{added}} Transaktions-Tags hinzugefügt; {{skipped}} mehrdeutige übersprungen.",
+      "exportModeLabel": "Exportmodus",
+      "exportModeStored": "Gespeicherte Labels",
+      "exportModeSynthesized": "Kassiber-Labels",
+      "exportModeAll": "Gespeicherte + Kassiber-Labels",
+      "exportWalletLabel": "Exportumfang",
+      "exportWalletProfile": "Gesamtes Profil",
+      "exportButton": "Labels exportieren",
+      "exporting": "Labels werden exportiert…",
+      "exportSaveTitle": "BIP329-Labels speichern",
+      "exportReadyTitle": "Labels exportiert",
+      "exportReadyBody": "{{count}} Label-Datensätze nach {{path}} geschrieben.",
+      "preview": {
+        "exact": "Eindeutig",
+        "ambiguous": "Mehrdeutig",
+        "unmatched": "Ohne Treffer",
+        "preserved": "Bewahrt",
+        "conflicts": "{{count}} Konflikte",
+        "duplicates": "{{count}} Duplikate",
+        "tagAdditions": "{{count}} Tags",
+        "ambiguousSkipped": "{{count}} übersprungen"
+      }
+    },
+    "backendSettings": {
+      "line1": "Diese Verbindung wird in den Einstellungen als Backend eingerichtet.",
+      "line2": "Wallets können dieses Backend dann namentlich verwenden, ohne dass Adresse oder Zugangsdaten hier erscheinen.",
+      "loading": "Backends werden geladen…",
+      "localTitle": "Lokale Regtest-Infrastruktur",
+      "endpoint": {
+        "configured": "Endpunkt konfiguriert",
+        "missing": "Endpunkt fehlt"
+      }
+    },
+    "notWired": "Das Setup für diese Quelle ist noch nicht verfügbar.",
+    "validation": {
+      "labelRequired": "Das Verbindungslabel ist erforderlich.",
+      "pasteWalletMaterial": "Füge einen Wallet-Export, einen Descriptor oder einen Extended Public Key ein.",
+      "gapPositive": "Das Gap Limit muss eine positive Ganzzahl sein.",
+      "gapMax": "Das Gap Limit muss {{max}} oder niedriger sein.",
+      "birthdayInvalid": "Wähle ein gültiges Geburtstagsdatum.",
+      "chooseBackend": "Wähle ein Backend."
+    },
+    "added": {
+      "title": "Verbindung hinzugefügt",
+      "titlePlural": "Verbindungen hinzugefügt",
+      "body": "{{label}} ist konfiguriert.",
+      "bodyImported": "{{label}} ist konfiguriert und importiert.",
+      "bodyRefreshed": "{{label}} ist konfiguriert und aktualisiert."
+    },
+    "planned": {
+      "body": "{{title}} ist im Katalog erfasst, aber noch nicht verdrahtet."
+    },
+    "setupFailed": {
+      "fallback": "Verbindungs-Setup fehlgeschlagen.",
+      "notFullySynced": "Die Verbindung wurde gespeichert, aber ihre Historie wurde nicht vollständig synchronisiert."
+    },
+    "summary": {
+      "title": "Import-Zusammenfassung",
+      "matchedBook": "Mit diesem Buch abgeglichen",
+      "matchedWallet": "Mit der ausgewählten Wallet abgeglichen",
+      "changed": "{{value}} geändert",
+      "metric": {
+        "rowsRead": "Gelesene Zeilen",
+        "inserted": "Eingefügt",
+        "updated": "Aktualisiert",
+        "unchanged": "Unverändert",
+        "matched": "Zugeordnet",
+        "coinsObserved": "Beobachtete Coins",
+        "activeCoins": "Aktive Coins",
+        "paymentsInCoinjoin": "Zahlungen im CoinJoin",
+        "unmatched": "Nicht zugeordnet",
+        "ambiguous": "Mehrdeutig",
+        "excluded": "Ausgeschlossen"
+      },
+      "recordBook": "Buch",
+      "recordBullOrder": "Bull-Order",
+      "matchedWalletRecord": "Zugeordnete Wallet {{wallet}}",
+      "changedFields": "Geändert {{fields}}",
+      "changedMetadata": "Metadaten geändert",
+      "moreUpdated_one": "{{count}} weitere aktualisierte Transaktion",
+      "moreUpdated_other": "{{count}} weitere aktualisierte Transaktionen",
+      "noChange": "Nichts geändert. Die Zeilen sind vielleicht schon bewertet, oder sie passten zu keiner oder zu mehreren Transaktionen."
+    },
+    "progress": {
+      "importing": "{{wallet}} wird importiert…",
+      "rows": "{{processed}} / {{total}} Zeilen"
+    }
+  },
+  "journalStep": {
+    "processed_one": "Journale aktualisiert; {{count}} Transaktion in Quarantäne.",
+    "processed_other": "Journale aktualisiert; {{count}} Transaktionen in Quarantäne.",
+    "processedClear": "Journale aktualisiert; nichts in Quarantäne.",
+    "current": "Die Journale waren bereits aktuell.",
+    "deferred": "Eine andere Aktualisierung lief, daher wurden die Journale nicht aktualisiert; berechne neu, sobald sie fertig ist.",
+    "disabled": "Die Journale wurden nicht aktualisiert, weil die Journal-Aktualisierung in den Aktualisierungseinstellungen ausgeschaltet ist.",
+    "failed": "Die Journale konnten nicht aktualisiert werden: {{message}}",
+    "cancelled": "Die Journal-Aktualisierung wurde abgebrochen.",
+    "autoPaired_one": "{{count}} eindeutiges Transfer-Paar zugeordnet.",
+    "autoPaired_other": "{{count}} eindeutige Transfer-Paare zugeordnet.",
+    "attentionTitle": "Journale brauchen Aufmerksamkeit",
+    "autoPairSkipped": "Die automatische Zuordnung wurde übersprungen: {{message}}"
+  },
+  "exchange": {
+    "intro": "Kassiber liest deinen {{provider}}-Verlauf über einen API-Key, der nur lesen darf. Kassiber handelt nie, hebt nie ab und bewegt kein Guthaben, und kontaktiert {{provider}} nur, wenn du den Key testest oder „Sync starten“ drückst.",
+    "guide": {
+      "title": "API-Key nur zum Lesen erstellen",
+      "kraken": "Öffne in Kraken Einstellungen → API und erstelle einen neuen Key. Kopiere den API-Key und den Private Key; Kraken zeigt den Private Key nur einmal an.",
+      "coinbase": "Öffne in Coinbase Einstellungen → API und erstelle einen Key für deine BTC-Wallet. Kopiere den API-Key und sein Secret. Kassiber signiert mit diesem Key und Secret; Key-Dateien der Coinbase Developer Platform werden noch nicht unterstützt.",
+      "binance": "Öffne in Binance Konto → API-Verwaltung, erstelle einen systemgenerierten Key und bearbeite seine Beschränkungen. Kopiere den API-Key und den Secret Key; Binance zeigt das Secret nur einmal an. Kassiber lehnt einen Key ab, der mehr als lesen darf.",
+      "bitpanda": "Öffne in Bitpanda Kontoeinstellungen → API-Keys → Neuer API-Key. Bitpanda zeigt den Key nur einmal an, und er läuft spätestens nach einem Jahr ab. Kassiber lehnt einen Key ab, der handeln darf.",
+      "grant": "Nur einschalten",
+      "deny": "Ausgeschaltet lassen",
+      "open": "API-Key-Seite von {{provider}} öffnen"
+    },
+    "field": {
+      "apiKey": "API-Key",
+      "secret": {
+        "kraken": "Private Key",
+        "coinbase": "API-Secret",
+        "binance": "Secret Key"
+      },
+      "stored": "Kassiber speichert den Key mit diesem Buch (verschlüsselt, wenn das Buch es ist) und zeigt ihn nie wieder an."
+    },
+    "test": {
+      "button": "Verbindung testen",
+      "pending": "Wird getestet…",
+      "explain": "Beim Verbindungstest kontaktiert Kassiber {{provider}} zum ersten Mal: Es signiert ein bis drei Leseanfragen mit diesem Key. Gespeichert wird erst, wenn du die Verbindung hinzufügst.",
+      "okReadOnly": "Der Key funktioniert, und {{provider}} bestätigt, dass er nur lesen darf.",
+      "okUnknown": "Der Key funktioniert. {{provider}} gibt nicht an, was ein Key sonst noch darf; prüfe daher, dass nur die oben genannten Leserechte eingeschaltet sind.",
+      "changed": "Der Key hat sich seit dem letzten Test geändert. Teste ihn erneut, bevor du die Verbindung hinzufügst."
+    },
+    "issue": {
+      "api_key": "Füge den API-Key ein.",
+      "api_secret": "Füge das Secret zu diesem Key ein.",
+      "test_first": "Teste die Verbindung, bevor du sie hinzufügst."
+    },
+    "syncAfter": "{{provider}}-Verlauf gleich nach dem Hinzufügen importieren",
+    "added": {
+      "title": "{{provider}} verbunden",
+      "body": "{{label}} gespeichert. Drücke auf ihrer Seite „Sync starten“, um den Verlauf zu importieren.",
+      "importedBody_one": "{{count}} Transaktion in {{label}} importiert.",
+      "importedBody_other": "{{count}} Transaktionen in {{label}} importiert."
+    },
+    "error": {
+      "auth": "{{provider}} hat den Key abgelehnt. Prüfe, ob er gültig und vollständig kopiert ist, von dieser IP-Adresse aus erlaubt ist und genau die oben genannten Leserechte hat.",
+      "rateLimited": "{{provider}} begrenzt gerade die Anfragen. Warte eine Minute und versuche es erneut.",
+      "offline": "Der Offline-Modus ist an, daher hat Kassiber {{provider}} nicht kontaktiert. Schalte den Offline-Modus aus, um zu testen oder zu synchronisieren.",
+      "consent": "Kassiber hat für diese Anfrage keine Freigabe erhalten. Starte die Aktion erneut.",
+      "protocol": "{{provider}} hat so geantwortet, dass Kassiber die Antwort nicht sicher lesen kann. Es wurde nichts importiert.",
+      "refused": "Nichts wurde importiert: Ein Eintrag ließ sich nicht sicher verbuchen. Wenn die Details sagen, dass ein Typ nicht erkannt wird, melde ihn bitte; bis dahin kannst du ihn über den Import „Generic ledger“ erfassen.",
+      "config": "Der gespeicherte Key dieser Verbindung ist unvollständig. Entferne die Verbindung und füge die Börse mit einem Key nur zum Lesen erneut hinzu.",
+      "timeout": "{{provider}} hat nicht rechtzeitig geantwortet. Versuche es später erneut.",
+      "network": "Kassiber konnte {{provider}} nicht erreichen. Prüfe die Netzwerkverbindung und etwaige Proxy-Einstellungen.",
+      "http": "{{provider}} hat mit einem Fehler geantwortet.",
+      "conflict": "In diesem Buch gibt es schon eine Wallet mit diesem Namen. Wähle einen anderen Namen.",
+      "needsRust": "Börsenverbindungen brauchen eine neuere Kassiber-Version. Aktualisiere Kassiber oder synchronisiere über die Kommandozeile.",
+      "unknown": "Die Anfrage ist fehlgeschlagen.",
+      "permissions": "Noch eingeschaltete Rechte: {{list}}",
+      "serverSaid": "Details: {{message}}"
+    },
+    "sync": {
+      "title": "{{provider}}-API",
+      "body": "Kassiber kontaktiert {{provider}} nur, wenn du „Sync starten“ drückst. „Alle aktualisieren“, die Hintergrundaktualisierung und der Assistent synchronisieren Börsenkonten nie.",
+      "button": "Sync starten",
+      "running": "Sync läuft…",
+      "key": "API-Key nur zum Lesen",
+      "keyStored": "Gespeichert im Backend „{{backend}}“",
+      "keyMissing": "Fehlt — füge die Börse erneut hinzu",
+      "lastSync": "Letzter Sync",
+      "never": "Seit dem Start von Kassiber nicht synced",
+      "ok": "{{time}} · {{imported}} neu von {{fetched}} gelesen",
+      "failed": "{{time}} · fehlgeschlagen",
+      "skipped_one": "{{count}} Eintrag wurde übersprungen, weil er kein BTC ist oder nur Fiat bewegt.",
+      "skipped_other": "{{count}} Einträge wurden übersprungen, weil sie kein BTC sind oder nur Fiat bewegen.",
+      "sessionNote": "Sync-Ergebnisse bleiben bis zum Neustart von Kassiber erhalten; das Buch speichert nur die importierten Transaktionen."
+    }
+  },
+  "catalog": {
+    "categories": {
+      "wallets": "Wallets",
+      "nodes": "Nodes",
+      "lightning": "Lightning",
+      "merchant": "Händler",
+      "exchanges": "Börsen",
+      "files": "Dateien"
+    },
+    "paths": {
+      "watchOnlyWallet": "Watch-only-Wallet",
+      "watchOnlyWalletGroup": "Watch-only-Wallet-Gruppe",
+      "walletExport": "Wallet-Export",
+      "nodeBackend": "Node-Backend",
+      "indexBackend": "Index-Backend",
+      "csvImport": "CSV-Import",
+      "lightningNode": "Lightning-Node",
+      "lightningApp": "Lightning-App",
+      "walletCsvImport": "Wallet-CSV-Import",
+      "greenfieldApi": "Greenfield-API",
+      "custodialPlatform": "Verwahrende Plattform",
+      "apiImport": "API-Import",
+      "supplementalCsv": "Ergänzende CSV",
+      "evidenceArchive": "Nachweisarchiv",
+      "taxPlatformMigration": "Umzug von einer Steuerplattform",
+      "spreadsheetImport": "Tabellenimport",
+      "customImport": "Eigener Import",
+      "csvJsonImport": "CSV/JSON-Import",
+      "labelImport": "Label-Import"
+    },
+    "formats": {
+      "descriptorBsmsXpub": "Descriptor/BSMS/xpub-Familie",
+      "addressList": "Adressliste",
+      "liquidDescriptor": "Liquid-Descriptor/-Export",
+      "samouraiDescriptors": "Samourai/Whirlpool-Descriptors",
+      "storesInvoicesPayouts": "Stores, Rechnungen & Auszahlungen",
+      "readOnlyApiKey": "API-Key nur zum Lesen",
+      "reportFile": "Berichtsdatei",
+      "coinTrackingCsv": "CoinTracking-Transaktions-CSV",
+      "blockpitCsv": "Blockpit-Transaktions-CSV",
+      "excelOrCsv": "Excel (.xlsx) oder CSV",
+      "csvTsvExcel": "CSV-, TSV- oder Excel-Export",
+      "genericCsvJson": "generisches CSV/JSON"
+    },
+    "sources": {
+      "descriptor": {
+        "title": "Wallet-Export",
+        "description": "Import aus Descriptor, BSMS, xpub-Familie oder Wallet-Export.",
+        "details": [
+          "Standardmäßig Mainnet",
+          "Nutzt ein konfiguriertes Bitcoin-Backend",
+          "Füge einen gängigen Wallet-Export oder Descriptor ein",
+          "ypub/zpub/upub/vpub-Keys und BSMS-Einträge werden in Descriptors umgewandelt",
+          "Kassiber speichert Empfangs- und Change-Zweige, wenn vorhanden"
+        ]
+      },
+      "address-list": {
+        "title": "Adressliste",
+        "description": "Beobachte eine flache Liste einzelner Adressen – z. B. einen Bitcoin-Core-Keypool aus der Zeit vor HD.",
+        "details": [
+          "Füge Adressen ein oder lade eine .txt/.csv-Datei, eine Adresse pro Zeile",
+          "Keine Ableitung: Jede Adresse wird gescannt, daher gibt es kein Gap-Limit",
+          "Nutze für große Listen Electrum/Fulcrum oder Bitcoin Core RPC – Esplora braucht eine Abfrage pro Adresse"
+        ]
+      },
+      "silent-payment": {
+        "description": "Watch-only-Empfang und -Buchhaltung nach BIP352 aus BIP392-sp()-Material.",
+        "details": [
+          "Akzeptiert Watch-only-Scan-Material und öffentliches Spend-Material",
+          "Braucht ein ausdrücklich gewähltes BIP352-fähiges Backend oder einen lokalen Scanner",
+          "Braucht eine Start-Height bzw. ein Startdatum für den Scan oder einen bestätigten Full-History-Scan",
+          "Kein Ausgeben, kein Signieren, keine PSBTs und kein Absender-Adressbuch"
+        ]
+      },
+      "liquid-descriptor": {
+        "title": "Liquid-Wallet-Export",
+        "description": "Liquid-Watch-only-Wallet-Export oder Elements-Descriptor.",
+        "details": [
+          "Füge einen gängigen Liquid-Wallet-Export oder Descriptor ein",
+          "Braucht ein konfiguriertes Liquid-Backend"
+        ]
+      },
+      "samourai": {
+        "description": "Watch-only-Import von Konto-Descriptors/xpubs aus Samourai und Whirlpool.",
+        "details": [
+          "Erstellt Unterquellen für eingefügte Deposit-, Badbank-, Premix- und Postmix-Konten",
+          "Exportiere öffentliche Konto-Descriptors/xpubs mit Sparrow oder einem anderen Descriptor-Tool",
+          "Speichert nur Watch-only-Sync-Ziele",
+          "Die Postmix-Suche startet mit einem erweiterten Gap-Limit"
+        ]
+      },
+      "wasabi": {
+        "description": "Füge Wasabi-RPC-Ausgaben mit CoinJoin- und Anonymitätsnachweisen ein.",
+        "details": [
+          "Lade die Wallet in Wasabi und kopiere dann das lokale RPC-JSON von Port 37128",
+          "Nutze Basic Auth in curl, wenn JsonRpcUser und JsonRpcPassword gesetzt sind",
+          "Füge gethistory sowie listcoins/listunspentcoins für den Anonymitätsstatus der Coins ein",
+          "CoinJoin-Nachweise werden zu Prüfhinweisen, nicht zu erfundener Herkunft"
+        ]
+      },
+      "bitcoin-core": {
+        "description": "Dein eigener Full Node über JSON-RPC für den Sync von Descriptors, xpubs und Adressen.",
+        "details": [
+          "Erkennt einen lokalen Node, wenn das Standard-Cookie verfügbar ist",
+          "Importiert Watch-only-Descriptors in eine Kassiber-Core-Wallet"
+        ]
+      },
+      "electrum": {
+        "title": "Electrum-Server",
+        "description": "Electrum-Protokoll über TCP/SSL (z. B. Fulcrum, ElectrumX). Nur Sync – keine Transaktionslinks.",
+        "details": [
+          "Wird in den Einstellungen mit ssl://host:50002 oder tcp://host:50001 konfiguriert",
+          "Funktioniert für die Aktualisierung von Bitcoin- und Liquid-Descriptors, wenn das Backend zur Chain passt"
+        ]
+      },
+      "esplora": {
+        "description": "HTTP-REST-API im Stil von Esplora / mempool.space. Liefert Sync und anklickbare Transaktionslinks.",
+        "details": [
+          "Kassiber bringt ein eingebautes Bitcoin-Backend mit Esplora/mempool-API mit",
+          "Füge in den Einstellungen einen selbst gehosteten Esplora-Endpunkt hinzu"
+        ]
+      },
+      "sparrow": {
+        "description": "Descriptor- oder xpub-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "specter": {
+        "description": "Descriptor-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "bluewallet": {
+        "description": "Export des Konto-xpub.",
+        "details": [
+          "Exportiere den Konto-xpub – niemals den Seed oder einen Private Key"
+        ]
+      },
+      "blockstream-green": {
+        "description": "Bitcoin-Singlesig-xpub-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "liana": {
+        "description": "Import eines Timelock-Multisig-Descriptors.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "nunchuk": {
+        "description": "Descriptor- oder BSMS-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "bitbox": {
+        "description": "Export des Konto-xpub.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "trezor": {
+        "description": "Export des Konto-xpub.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "coldcard": {
+        "description": "Descriptor- oder xpub-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "ledger": {
+        "description": "Konto-Export aus Ledger Live.",
+        "details": [
+          "BTC- und Liquid-BTC-Zeilen mit IN/OUT werden zu Wallet-Bewegungen",
+          "Ledger-Gegenwerte werden ignoriert, weil der Export sie als rein informativ kennzeichnet"
+        ]
+      },
+      "foundation-passport": {
+        "description": "Descriptor- oder xpub-Export.",
+        "details": [
+          "„Weiter“ öffnet das Wallet-Export-Formular für das exportierte Material"
+        ]
+      },
+      "core-ln": {
+        "description": "Read-only-Sync von CLN-Bookkeeper und Node-Buchhaltung.",
+        "details": [
+          "Verbindet sich über den lokalen RPC-Socket des Nodes oder einen lightning-cli-Wrapper, den du kontrollierst",
+          "Synchronisiert Bookkeeper-Ereignisse, Forwards, Zahlungen, Invoices, Channels und Zeilen der Node-Wallet",
+          "Zeigt den Routing-Gewinn und den Break-even-Status je Channel"
+        ]
+      },
+      "lnd": {
+        "description": "Read-only-Rentabilitätsdaten aus dem Lightning Network Daemon.",
+        "details": [
+          "Speichert Host, TLS-Zertifikat und ob ein Read-only-Macaroon vorhanden ist",
+          "Liest Channels, Forwards, Zahlungen, Invoices und Gebühren-Snapshots; verwirft Preimages, kodierte bolt11-Strings, Route-Hops und Route-Hints schon an der Grenze"
+        ]
+      },
+      "zeus": {
+        "description": "Oberfläche für Lightning-Nodes.",
+        "details": [
+          "Füge den zugrunde liegenden LND- oder Core-Lightning-Node hinzu"
+        ]
+      },
+      "phoenix": {
+        "description": "CSV-Import der Aktivität einer Lightning-Wallet.",
+        "details": [
+          "Vorzeichenbehaftete msat-Beträge bestimmen die Richtung",
+          "Der Phoenix-Typ bleibt als Tag erhalten"
+        ]
+      },
+      "bullbitcoin-wallet": {
+        "description": "CSV-Import aller Wallet-Transaktionen.",
+        "details": [
+          "Importiert Wallet-Zeilen für Bitcoin, Liquid, Lightning, Payjoin und Swaps",
+          "Nutze stattdessen Descriptor-Wallets, wenn sie deine Quelle der Wahrheit sind",
+          "Die Bull-Order-CSV bleibt unter Börsen für exakte Fiat-Bewertung verfügbar"
+        ]
+      },
+      "btcpay": {
+        "description": "Rechnungen, Zahlungen, Rückerstattungen und Auszahlungen für jeden Store, über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Erstelle mit einem Klick einen Key mit minimalen Rechten",
+          "Prüfe Store für Store, was der Key lesen kann",
+          "Erkenne Wallets, die du schon verfolgst, und Stores, die sich eine teilen",
+          "Buche Lightning-, LNURL- und Plugin-Zahlungen aus BTCPay, wenn Kassiber sie nicht beobachten kann",
+          "Nutze BTCPay CSV, wenn kein API-Zugriff verfügbar ist"
+        ]
+      },
+      "btcpay-csv": {
+        "description": "Manueller Import eines BTCPay-Wallet-Exports, wenn kein API-Sync verfügbar ist.",
+        "details": [
+          "Importiert einen lokalen CSV-Export der BTCPay-Wallet-Transaktionen",
+          "Kommentare werden zu Notizen und Labels zu Kassiber-Tags",
+          "Kann eine dateibasierte Quell-Wallet anlegen oder in eine bestehende Settlement-Wallet importieren",
+          "Nutze BTCPay Server für wiederholbaren Sync samt Herkunft aus Rechnungen und Payment Requests"
+        ]
+      },
+      "river": {
+        "description": "CSV-Import von Bitcoin Activity oder Account Activity.",
+        "details": [
+          "Account Activity erhält die BTC- und die Cash-Seite",
+          "Kauf- und Verkaufszeilen speichern den exakten Ausführungspreis von River"
+        ]
+      },
+      "bullbitcoin": {
+        "description": "Order-CSV-Import für exakte Ausführungspreise bei Kauf und Verkauf.",
+        "details": [
+          "Abgeschlossene Bitcoin-, Lightning- und Liquid-Orders behalten den exakten Fiat-Erlös",
+          "Buchweite Importe können passende Zeilen anreichern oder den gemeinsamen Export mit Abgleich-Markierungen importieren"
+        ]
+      },
+      "relai": {
+        "description": "Aktivitätsimport aus einer Bitcoin-only-App.",
+        "details": [
+          "Ein eigener Parser ist geplant"
+        ]
+      },
+      "pocket-bitcoin": {
+        "description": "Konto-CSV-Import für exakte Ausführungspreise bei Käufen.",
+        "details": [
+          "Konto-Exporte behalten die exakten Ausführungspreise von Pocket Bitcoin",
+          "Buchweite Importe können passende Wallet-Zeilen anreichern oder den vollständigen Export als Abgleichsnachweis aufbewahren"
+        ]
+      },
+      "swan-bitcoin": {
+        "description": "Import von Spar- und Broker-Aktivität einer Bitcoin-only-Plattform.",
+        "details": [
+          "Ein eigener Parser ist geplant"
+        ]
+      },
+      "strike": {
+        "description": "Import aus einer verwahrten Bitcoin-Wallet und Börse.",
+        "details": [
+          "BTC-Käufe und -Verkäufe sowie Lightning- und on-chain-Zeilen werden zu aktiver Plattformaktivität",
+          "Reine Fiat-Einzahlungen und Stornozeilen werden übersprungen",
+          "Zeilen nutzen Strike BTC Price als exakte CSV-Bewertung, wenn vorhanden"
+        ]
+      },
+      "21bitcoin": {
+        "description": "Import der Buchungshistorie einer verwahrenden Plattform mit exakten Handelspreisen.",
+        "details": [
+          "BTC-Handelszeilen werden zu aktiver Bewegung im verwahrten Guthaben",
+          "Kauf- und Verkaufszeilen speichern den exakten Ausführungspreis von 21bitcoin aus der CSV",
+          "Ein- und Auszahlungen ohne txid werden zu geprüften Kandidaten für Verwahrungsübertragungen"
+        ]
+      },
+      "coinfinity": {
+        "description": "Order-CSV-Import für exakte Ausführungspreise bei Kauf und Verkauf.",
+        "details": [
+          "BTC/EUR-Orderzeilen behalten die exakten Ausführungspreise von Coinfinity",
+          "Buchweite Importe können passende Zeilen anreichern oder den gemeinsamen Export mit Abgleich-Markierungen importieren"
+        ]
+      },
+      "bitpanda": {
+        "description": "Bitpanda-Verlauf über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit den Scopes Transaction und Trade (Read); ein Key, der handeln kann, wird abgelehnt",
+          "BTC-Käufe, -Verkäufe, Ein- und Auszahlungen sowie Rewards werden importiert; andere Assets werden übersprungen",
+          "Kassiber kontaktiert Bitpanda nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "kraken": {
+        "description": "Kraken-Trades und Ledger-Einträge über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key, der nur geschlossene Orders & Trades und Ledger-Einträge abfragen kann",
+          "In Fiat notierte BTC-Trades behalten Krakens exakten Ausführungspreis; Ein- und Auszahlungen werden als Wallet-Bewegungen importiert",
+          "Kassiber kontaktiert Kraken nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "coinbase": {
+        "description": "Coinbase-BTC-Konten über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht API-Key und Secret nur mit den Scopes wallet:accounts:read und wallet:transactions:read",
+          "Key-Dateien der Coinbase Developer Platform werden noch nicht unterstützt",
+          "Kassiber kontaktiert Coinbase nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "binance-api": {
+        "title": "Binance-API",
+        "description": "BTC-Käufe, Übertragungen und Einkünfte von Binance über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit Enable Reading; ein Key, der handeln, übertragen oder abheben kann, wird abgelehnt",
+          "BTC-Käufe mit Fiat behalten ihren exakten Ausführungswert; Ein- und Auszahlungen sowie BTC-Einkünfte werden ebenfalls importiert",
+          "Kassiber kontaktiert Binance nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "binance": {
+        "title": "Binance-CSV",
+        "description": "Ergänzende BTC-Zeilen aus Binance-Exporten.",
+        "details": [
+          "Mit Fiat finanzierte BTC-Auto-Invest-Zeilen behalten den exakten Ausführungswert",
+          "BTC-Dividenden- und Mining-Zeilen werden als Einkünfte importiert, ohne einen Fiat-Preis zu raten"
+        ]
+      },
+      "prior-tax-report": {
+        "title": "Früherer Steuerbericht",
+        "description": "Bewahre einen früheren Bericht von CoinTracking, Blockpit oder einer anderen Plattform als Nachweis auf.",
+        "details": [
+          "Kopiert den Originalbericht in Kassibers verwalteten Anhangspeicher",
+          "Erfasst Provider und Steuerjahr, ohne importierten Summen zu vertrauen",
+          "Nutze die Karten zum Umzug der Transaktionshistorie, um prüfbare Kassiber-Berichte neu aufzubauen"
+        ]
+      },
+      "cointracking": {
+        "description": "Übertrage deine Bitcoin-Transaktionshistorie in Kassiber.",
+        "details": [
+          "Nutze die vollständige CSV mit englischen Spaltennamen aus Transactions → Export → CSV",
+          "Füge die CSV und die Descriptor-Wallets in beliebiger Reihenfolge hinzu; der Sync gleicht Überschneidungen ab",
+          "Mit Chain-ID werden exakte Treffer ausgeschlossen; Kollisionen ohne ID bleiben in der Prüfung"
+        ]
+      },
+      "blockpit": {
+        "description": "Übertrage deine Bitcoin-Transaktionshistorie in Kassiber.",
+        "details": [
+          "Nutze die vollständige Transactions-CSV ohne aktive Filter; in Blockpit ausgeschlossene Zeilen fehlen darin",
+          "Füge die CSV und die Descriptor-Wallets in beliebiger Reihenfolge hinzu; der Sync gleicht Überschneidungen ab",
+          "Mit Chain-ID werden exakte Treffer ausgeschlossen; Kollisionen ohne ID bleiben in der Prüfung"
+        ]
+      },
+      "generic-ledger": {
+        "title": "Allgemeines Journal",
+        "description": "Tabellenvorlage zum Ausfüllen für manuelle Transaktionen.",
+        "details": [
+          "Lade die Vorlage herunter, trag deine Transaktionen ein und importier die Datei",
+          "Eine Bitcoin-Buchung pro Zeile; Buy/Sell/Income/Mining/Gift und mehr",
+          "Beträge in BTC (oder SATS); Fiat-Spalten in der Währung deines Buchs"
+        ]
+      },
+      "custom-import": {
+        "title": "Andere Börse oder anderer Broker",
+        "description": "Importiere einen Export von einer Plattform, die Kassiber noch nicht anführt.",
+        "details": [
+          "Kassiber liest die Spaltennamen der Datei selbst – kein Umformen nötig",
+          "Unbekannte Spalten? Ordne sie selbst zu oder lass den Assistenten eine Zuordnung vorschlagen",
+          "Jeder Import wird als Lauf gespeichert, den du rückgängig machen kannst, falls die Zuordnung falsch war"
+        ]
+      },
+      "csv": {
+        "title": "CSV-Import",
+        "description": "Einmaliger Import aus einer lokalen Datei.",
+        "details": [
+          "Nutze Kassibers generische Transaktionsspalten",
+          "Spezifische Parser werden bevorzugt, wenn verfügbar"
+        ]
+      },
+      "bip329": {
+        "title": "BIP329-Labels",
+        "description": "Import und Export von Wallet-Labels als JSONL.",
+        "details": [
+          "Labels werden lokal gespeichert und passenden Transaktionen zugeordnet"
+        ]
+      }
+    }
+  }
+}

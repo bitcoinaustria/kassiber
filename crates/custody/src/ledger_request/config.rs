@@ -97,6 +97,64 @@ fn policy(profile: &Value) -> Result<Value, Refusal> {
         json!({"country":country,"method":if supported{json!(method)}else{Value::Null},"method_label":label,"require_coarse_review":coarse}),
     )
 }
+/// The profile keys a book's own tax calendar arrives in (the journals
+/// loader adds them from the book's settings only when the book has chosen
+/// one, so every other profile keeps its bytes).
+pub const BOOK_TAX_YEAR_START: &str = "tax_year_start";
+pub const BOOK_TIMEZONE: &str = "tax_timezone";
+/// The profile key a `global_then_wallet` book's wallet order arrives in: a
+/// JSON array of its wallet ids by when they were added (the journals
+/// loader adds it for those books only).
+pub const BOOK_WALLET_ORDER: &str = "wallet_allocation_order";
+
+/// The wallet ids the United States' 2025 allocation fills in order, when
+/// the profile carries them; a value that is not a list of ids fails closed.
+pub(super) fn wallet_order(profile: &Value) -> Result<Option<Vec<String>>, Refusal> {
+    let Some(raw) = profile.get(BOOK_WALLET_ORDER).filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    let invalid = || {
+        app(
+            "configuration",
+            "The book's wallet order is not a list of wallet ids",
+            false,
+        )
+    };
+    let parsed: Value = match raw {
+        Value::String(text) => serde_json::from_str(text).map_err(|_| invalid())?,
+        other => other.clone(),
+    };
+    let ids = parsed.as_array().ok_or_else(invalid)?;
+    ids.iter()
+        .map(|id| id.as_str().map(str::to_owned).ok_or_else(invalid))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
+/// The book's tax calendar: its country's, or the start and zone it chose
+/// where the country lets it. A stored choice the country no longer allows
+/// (its region changed under it) fails closed.
+pub fn book_calendar(
+    entry: &kassiber_tax_countries::Country,
+    profile: &Value,
+) -> Result<kassiber_tax_countries::BookCalendar, Refusal> {
+    let text = |key: &str| {
+        profile
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+    };
+    entry
+        .book_calendar(text(BOOK_TAX_YEAR_START), text(BOOK_TIMEZONE))
+        .map_err(|error| {
+            let mut refusal = app("configuration", error.to_string(), true);
+            refusal.hint = Some(error.hint().into());
+            refusal.details = Box::new(json!({"reason": error.code()}));
+            refusal
+        })
+}
+
 /// The engine's country of a registry entry: its shared engine rules when
 /// it has them, else its family's (Python's `build_tax_policy` for generic
 /// and Austrian books).
@@ -104,8 +162,14 @@ fn engine_country(
     entry: &kassiber_tax_countries::Country,
     profile: &Value,
 ) -> Result<Value, Refusal> {
+    let calendar = book_calendar(entry, profile)?;
+    // A country that spans zones computes in the book's.
+    let zoned = kassiber_tax_countries::Country {
+        timezone: calendar.timezone,
+        ..*entry
+    };
     Ok(match (entry.engine, entry.rules) {
-        (Some(rules), _) => rules_country(entry, rules)?,
+        (Some(rules), _) => rules_country(&zoned, rules)?,
         (None, Rules::Austria) => json!({"kind":"at"}),
         // The holding period is the engine's US rule; the stored days are
         // not read.
@@ -118,7 +182,11 @@ fn engine_country(
             | Rules::Ireland
             | Rules::UnitedKingdom
             | Rules::Spain
-            | Rules::Japan,
+            | Rules::Japan
+            | Rules::Australia
+            | Rules::NewZealand
+            | Rules::India
+            | Rules::SouthAfrica,
         ) => {
             return Err(app(
                 "configuration",
@@ -161,7 +229,16 @@ fn engine_country(
                     ),
                 ));
             }
-            json!({"kind":"generic","long_term_days":if n>BigInt::from(i64::MAX){json!(i64::MAX)}else{days}})
+            let mut country = json!({"kind":"generic","long_term_days":if n>BigInt::from(i64::MAX){json!(i64::MAX)}else{days}});
+            // A generic book's own tax year; absent for the UTC calendar
+            // year, so those requests keep their bytes.
+            if calendar.tax_year_start != (1, 1) {
+                country["tax_year_start"] = json!(calendar.start_text());
+            }
+            if calendar.timezone != kassiber_tax_countries::UTC {
+                country["timezone"] = json!(calendar.timezone);
+            }
+            country
         }
     })
 }
@@ -349,6 +426,25 @@ pub(super) fn pool_scope(profile: &Value) -> Result<String, Refusal> {
         error.hint = Some(format!("Choose one of: {}", allowed.join(", ")).into());
         return Err(error);
     }
+    // A method the engine has no form of in this scope fails here, before
+    // the engine, with the profile refusal's code (`policy` left a method
+    // the country does not offer to the method gate).
+    let method = string(&profile["gains_algorithm"]).py_strip().py_upper();
+    if kassiber_tax_countries::COUNTRIES
+        .iter()
+        .any(|entry| entry.allows_method(&method))
+        && !kassiber_tax_countries::method_allows_pool_scope(&method, &scope)
+    {
+        let mut error = Refusal::new(
+            "pool_scope",
+            "AppError",
+            format!(
+                "Accounting method '{method}' has no form for the cost-basis pool scope '{scope}'"
+            ),
+        );
+        error.code = Some("method_scope_unsupported");
+        return Err(error);
+    }
     Ok(scope)
 }
 #[cfg(test)]
@@ -437,5 +533,73 @@ mod tests {
             let profile = json!({"fiat_currency": "EUR"});
             assert_eq!(engine_country(entry, &profile).unwrap()["kind"], kind);
         }
+    }
+
+    #[test]
+    fn a_books_own_calendar_reaches_the_engine_only_when_chosen() {
+        let generic = lookup("generic").unwrap();
+        // No choice, or the calendar year in UTC: the request's bytes.
+        for profile in [
+            json!({"fiat_currency": "EUR"}),
+            json!({"fiat_currency": "EUR", "tax_year_start": "01-01", "tax_timezone": "UTC"}),
+        ] {
+            assert_eq!(
+                engine_country(generic, &profile).unwrap(),
+                json!({"kind": "generic", "long_term_days": 365})
+            );
+        }
+        let profile = json!({"fiat_currency": "AUD", "tax_year_start": "july", "tax_timezone": "Australia/Sydney"});
+        assert_eq!(
+            engine_country(generic, &profile).unwrap(),
+            json!({"kind": "generic", "long_term_days": 365, "tax_year_start": "07-01", "timezone": "Australia/Sydney"})
+        );
+        // A country with a legal year refuses another one, fail closed.
+        let refusal =
+            engine_country(lookup("at").unwrap(), &json!({"tax_year_start": "07-01"})).unwrap_err();
+        assert_eq!(refusal.code, Some("validation"));
+        assert_eq!(refusal.details["reason"], "tax_year_start_locked");
+        // Australia computes in the state zone the book chose.
+        let perth = engine_country(
+            lookup("au").unwrap(),
+            &json!({"tax_timezone": "Australia/Perth"}),
+        )
+        .unwrap();
+        assert_eq!(
+            (&perth["timezone"], &perth["tax_year_start"]),
+            (&json!("Australia/Perth"), &json!("07-01"))
+        );
+    }
+
+    #[test]
+    fn a_transition_books_wallet_order_is_read_or_refused() {
+        assert_eq!(wallet_order(&json!({})).unwrap(), None);
+        let profile = json!({BOOK_WALLET_ORDER: "[\"w-2\",\"w-1\"]"});
+        assert_eq!(
+            wallet_order(&profile).unwrap(),
+            Some(vec!["w-2".to_owned(), "w-1".to_owned()])
+        );
+        for bad in [json!("not json"), json!("{}"), json!("[1]")] {
+            let refusal = wallet_order(&json!({BOOK_WALLET_ORDER: bad})).unwrap_err();
+            assert_eq!(refusal.code, Some("app_error"));
+            assert_eq!(refusal.stage, "configuration");
+        }
+    }
+
+    #[test]
+    fn a_method_without_a_form_in_the_scope_is_refused_before_the_engine() {
+        let profile = |method: &str, scope: &str, country: &str| json!({"tax_country": country, "gains_algorithm": method, "cost_basis_pool_scope": scope});
+        // A generic book has the global pool only (yet).
+        assert!(pool_scope(&profile("MOVING_AVERAGE", "wallet", "generic")).is_err());
+        assert_eq!(
+            pool_scope(&profile("FIFO", "global_then_wallet", "us")).unwrap(),
+            "global_then_wallet"
+        );
+        let refusal = pool_scope(&profile("FIFO", "global_then_wallet", "generic")).unwrap_err();
+        assert_eq!(refusal.code, Some("validation"));
+        // Germany's wallet-only scope with a method that averages globally.
+        let refusal = pool_scope(&profile("JP_TOTAL_AVERAGE", "wallet", "de")).unwrap_err();
+        assert_eq!(refusal.code, Some("method_scope_unsupported"));
+        // An unknown method is the method gate's, as before.
+        assert!(pool_scope(&profile("NOPE", "wallet", "de")).is_ok());
     }
 }

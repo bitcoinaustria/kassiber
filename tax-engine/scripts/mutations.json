@@ -1681,8 +1681,8 @@
   {
     "id": "wallet-scope-ignored",
     "file": "tax-engine/core/src/engine.rs",
-    "find": "    if scope == PoolScope::Wallet {\n        // Lot methods only",
-    "replace": "    if false {\n        // Lot methods only",
+    "find": "    if scope == PoolScope::Wallet {\n        // Lot methods and the plain moving average",
+    "replace": "    if false {\n        // Lot methods and the plain moving average",
     "expect_failing": [
       "the_wallet_scope_disposes_only_of_the_disposing_wallets_lots",
       "engine_matches_rp2s_us_plugin"
@@ -1808,8 +1808,8 @@
   {
     "id": "rules-unknown-zone-refused",
     "file": "tax-engine/core/src/engine.rs",
-    "find": "let zone = calendar::zone(&spec.timezone).ok_or_else(",
-    "replace": "let zone = calendar::zone(&spec.timezone).or(Some(calendar::UTC)).ok_or_else(",
+    "find": "    calendar::zone(name).ok_or_else(|| {",
+    "replace": "    calendar::zone(name).or(Some(calendar::UTC)).ok_or_else(|| {",
     "expect_failing": [
       "rules_fail_closed_on_an_unknown_zone_and_before_its_calendar"
     ],
@@ -2388,5 +2388,37 @@
       "a_price_in_another_currency_is_held_and_taints_the_lot_state"
     ],
     "rule": "A price-currency hold asks for a price in the book's currency."
+  },
+  {
+    "id": "wallet-moving-average-cost",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "let basis = if method == MethodName::MovingAverage {",
+    "replace": "let basis = if false {",
+    "expect_failing": [
+      "the_wallet_moving_average_keeps_each_wallets_own_average",
+      "a_wallet_moving_average_moves_fee_is_a_disposal_at_the_sources_average"
+    ],
+    "rule": "Under the wallet scope the plain moving average takes each wallet's own average cost, carried by moves."
+  },
+  {
+    "id": "transition-allocates-global-pool",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "        if universal && change_us.is_some_and(|change| entry.ts.us >= change) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "the_us_transition_allocates_the_global_pool_to_wallets_on_2025_01_01",
+      "the_us_transition_fails_closed"
+    ],
+    "rule": "A US book on global_then_wallet allocates the global pool to its wallets on 2025-01-01 and identifies per wallet from then on."
+  },
+  {
+    "id": "generic-book-tax-year",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "                Ok(kassiber_tax_countries::years::tax_year(local, year.start))",
+    "replace": "                Ok(local.year + 0 * i32::from(year.start.0))",
+    "expect_failing": [
+      "a_generic_books_own_tax_year_cuts_in_its_zone"
+    ],
+    "rule": "A generic book's own tax year groups its yearly totals by the year that starts on its chosen day."
   }
 ]

@@ -120,6 +120,7 @@ configurable.
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
 | Successful daemon wallet sync explicitly requested by the user (including a consented Assistant sync), or sync under its enabled automatic-sync feature; follow-up starts after sync returns | only that synced wallet's selected backend, including an explicitly chosen default; no fallback to another server | existing Esplora HTTP(S), Core RPC, or Electrum transport, with its proxy policy and no redirects | transaction IDs and spent previous-transaction IDs from that wallet's incomplete graph rows, IP and request timing; at most 50 transactions and 250 uncached prevout fetches per pass; launch, display, status and idle paths do not grant this access |
+| Opening a transaction in the desktop's detail panel whose stored graph lacks spent-output amounts (or inputs and outputs), while **Settings → Privacy → Fill in transaction details from the wallet's backend** is on (the default) and offline mode and `KASSIBER_NO_EGRESS` are off; the owner-approved exception to "display reads send nothing", because the user already syncs that wallet through that backend | only the backend that transaction's own Bitcoin on-chain wallet syncs from (its chosen backend or the book default it uses), and only once that wallet has synced; never the book's default or another backend in its place, never for Liquid, file-import, BTCPay, Lightning, exchange or never-synced wallets | existing Esplora HTTP(S), Core RPC, or Electrum transport through `kassiber-net` with a narrowly scoped grant, its proxy policy and no redirects; 6-second budget, at most 250 uncached prevout fetches | the transaction id and the ids of the transactions it spends, IP and request timing (which tells that server which transaction the user opened); local, stored and cached references answer first, and the sanitized result is cached so reopening sends nothing. One request per transaction opened; the AI's graph tool, MCP and the CLI cannot ask for it. Rows without such a backend keep the explicit **Look up on-chain** |
 | Explicit **Acquire observations** confirmation, CLI `chain-analysis acquire apply --plan …`, or once-only consent to the Assistant's acquisition tool (full agent access only) | only the backend and proxy bound into that plan | bounded, genesis-checked Esplora HTTP(S), Core RPC, or Electrum requests; HTTP redirects refused | selected transaction IDs and queried ancestors/spenders, query timing and IP; the plan itself, local graph queries, PSBT analysis and dataset imports make no network requests |
 | `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
 | `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured HTTP(S) SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
@@ -159,6 +160,25 @@ and any automatic-sync permission before transport and cache writes. Locking or
 switching projects discards pending grants; persisted jobs cannot grant access
 on restart. Only sanitized public references enter the existing local graph cache;
 they establish neither ownership nor accounting facts.
+
+The desktop's automatic graph lookup from a wallet's own backend
+(`ui.transactions.graph` with `lookup: "wallet_backend"`, row above) has no
+grant to keep: the daemon decides per request. It reads offline mode (failing
+closed on an unreadable preference), `KASSIBER_NO_EGRESS` and the owner-only
+preference file `<state root>/config/wallet-backend-lookup.json`
+(`KASSIBER_WALLET_BACKEND_LOOKUP_FILE`; missing means on, unreadable means off)
+before choosing a backend, then resolves only the wallet's own sync backend from
+its stored configuration and refuses every other case without a request. The
+`kassiber-net` gate rechecks offline mode and `KASSIBER_NO_EGRESS` for each
+connection. The desktop sends it only for the transaction open in the panel,
+once per transaction, and never from headless tooling; switching transactions
+starts no new request, though one already sent finishes. The assistant's graph
+tool accepts only a transaction reference, so neither this lookup nor the
+explicit one is reachable from AI, MCP or the operator broker.
+`crates/kassiber/tests/graph_wallet_backend.rs` proves against loopback fakes
+that offline mode, `KASSIBER_NO_EGRESS`, the preference turned off or damaged, a
+never-synced wallet and plain reads contact nothing, and that an allowed lookup
+contacts only the wallet's backend, including when it fails.
 
 Raw transport checkpoints, including cached script and transaction memberships,
 remain in local source state. Sanitized job results and desktop/AI freshness
@@ -479,6 +499,12 @@ until that process stops. `kassiber status` reports the effective root.
   contain passphrases, verifier hashes, wrapped keys, descriptors, xpubs,
   backend tokens, accounting rows, or chat content. Project ids/names and
   last-opened timestamps are still local metadata: choose labels accordingly.
+- `<state-root>/demo/<stamp>-<hex>/` — disposable copies of the bundled
+  [demo book](demo.md), written only by an explicit **Try the demo** or
+  `kassiber projects demo`, outside the project catalog. Each carries its own
+  `config/offline-mode.json` and `config/agent-access.json`, seeded from the
+  user's and used only by the demo. The book has no sync backend, so creating
+  and opening it contacts nothing. **Leave demo** deletes the copy.
 - `<state-root>/.state-root-migration.json` — owner-only migration marker. It is
   prepared inside the legacy root and travels with the atomic rename; its
   location under the native root proves cutover completed. It contains only a

@@ -86,7 +86,7 @@ describe("LockScreen", () => {
 
     expect(
       screen.getByText(
-        "Kassiber needs the passphrase again before it can show them.",
+        "Enter the passphrase again to show them.",
       ),
     ).toBeTruthy();
   });
@@ -205,7 +205,7 @@ describe("LockScreen", () => {
     ).toBeNull();
     expect(
       screen.getByText(
-        "No Touch ID passphrase is saved for these books. Unlock once with the passphrase to save it again.",
+        "No passphrase is saved for Touch ID. Unlock once with the passphrase to save it again.",
       ),
     ).toBeTruthy();
   });
@@ -237,14 +237,14 @@ describe("LockScreen", () => {
     expect(screen.queryByRole("button", { name: "Unlock" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Touch ID/ })).toBeNull();
     expect(screen.getByRole("status").textContent).toBe(
-      "Waiting for Touch ID...",
+      "Waiting for Touch ID…",
     );
     expect(
       screen.getByText("Confirm with Touch ID in the macOS prompt."),
     ).toBeTruthy();
     expect(
       screen.queryByText(
-        "Kassiber needs the passphrase again before it can show them.",
+        "Enter the passphrase again to show them.",
       ),
     ).toBeNull();
     expect(props.onUnlock).not.toHaveBeenCalled();
@@ -262,7 +262,7 @@ describe("LockScreen", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(
       screen.getByText(
-        "Kassiber needs the passphrase again before it can show them.",
+        "Enter the passphrase again to show them.",
       ),
     ).toBeTruthy();
     expect(getAppLogRecords().map((record) => record.msg)).toContain(
@@ -297,7 +297,7 @@ describe("LockScreen", () => {
       expect(props.onTouchIdUnlock).toHaveBeenCalledTimes(1);
       expect(screen.queryByLabelText("Passphrase")).toBeNull();
       expect(screen.getByRole("status").textContent).toBe(
-        "Waiting for Touch ID...",
+        "Waiting for Touch ID…",
       );
 
       await act(async () => {

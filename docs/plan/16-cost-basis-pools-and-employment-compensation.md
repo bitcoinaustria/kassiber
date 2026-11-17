@@ -17,6 +17,14 @@ verification cutoffs below are complete; narrower-pool activation is not.
 Since [plan 20](20-kassiber-tax-engine.md)'s cutover, Kassiber's own tax engine
 reproduces the RP2 behavior this plan describes, so the RP2 limits below now
 apply to the engine until a reviewed change lifts them.
+Update (2026-11-16): the engine's one-pass wallet scope
+(`tax-engine/core/src/wallets.rs`) now also computes the plain moving
+average per wallet (a move carries its source's average cost) and the US
+global-then-wallet transition; a generic book's `wallet` scope is wired and
+guarded but not offered until two frozen fusion-builder vectors are
+regenerated with owner sign-off ([pool scopes](../reference/tax.md#pool-scopes)).
+Austria stays global-only behind the legal gate below; no Austrian wallet
+path was enabled.
 **Executable backlog:** the single matching item in `TODO.md`.
 **Current-truth documents until cutover:** `docs/austrian-handoff.md`,
 `docs/plan/06-austrian-tax-engine.md`, current code, and current tests.

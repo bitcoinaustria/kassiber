@@ -15,6 +15,14 @@ Projection publication participates in the caller's transaction and rolls back
 with it. `rebuild_index` atomically recovers derived state; `build_index` remains
 the independent full-build correctness oracle. Frozen saved cases remain valid.
 
+A read view lives inside one write-free savepoint, so it remembers each node,
+edge, fact and adjacency row it has parsed and answers repeated lookups from
+memory for the rest of that read. Nothing outlives the read: the next query
+starts from the committed index again, and a changed source is seen through the
+normal synchronization above. The selected analysis index is assembled in one
+pass over the bounded node and edge sets (it used to copy each map per insert,
+which made a 2,000-node overview quadratic).
+
 The synthetic, local-only Python benchmark `scripts/benchmark-chain-index.py`
 measured cold projection, warm bounded public queries and one-transaction
 updates against the full rebuild, on unencrypted in-memory fixtures, not as a

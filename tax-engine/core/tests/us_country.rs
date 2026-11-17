@@ -231,9 +231,10 @@ fn the_wallet_scope_fails_closed() {
         .as_str()
         .unwrap()
         .contains("in wallet A"));
-    // A moving average has no per-wallet form.
+    // Austria's moving average has no per-wallet form (the plain one does:
+    // tests/book_settings.rs).
     let response = run(
-        "moving_average",
+        "moving_average_at",
         "wallet",
         vec![buy(1, "2025-01-02", "A", "1E0", "1E0")],
     );

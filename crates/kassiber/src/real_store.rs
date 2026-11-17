@@ -4,6 +4,7 @@
 mod backends;
 mod certificates;
 mod connections;
+mod demo;
 mod exchange;
 mod journals;
 mod lightning;
@@ -129,6 +130,19 @@ fn namespace() -> Result<OwnerNamespace, AppError> {
 
 fn context() -> Result<Context, AppError> {
     Context::from_env().map_err(error)
+}
+
+/// Whether offline mode (failing closed on an unreadable preference) or
+/// `KASSIBER_NO_EGRESS` refuses the graph's automatic wallet-backend lookup.
+fn wallet_backend_offline(context: &Context) -> bool {
+    let no_egress = context
+        .environ
+        .get(std::ffi::OsStr::new("KASSIBER_NO_EGRESS"))
+        .map(|v| v.to_string_lossy().trim().to_ascii_lowercase())
+        .is_some_and(|v| ["1", "true", "yes", "on"].contains(&v.as_str()));
+    no_egress
+        || kassiber_setup::offline::preference_path(context)
+            .map_or(true, |path| kassiber_setup::offline::enabled(&path))
 }
 fn options(selection: &Selection) -> ResolveOptions {
     ResolveOptions {
@@ -436,6 +450,9 @@ impl BookStore for RealStore {
             } else {
                 kassiber_secrets::service::execute(&namespace()?, &resolved, operation, args)
             };
+        }
+        if operation == "demo.create" {
+            return demo::create(&context()?, args);
         }
         if operation.starts_with("offline.") || operation.starts_with("ui.network.offline") {
             return kassiber_setup::offline::execute(&context()?, operation, args);
@@ -2084,25 +2101,43 @@ impl Book for RealBook {
     }
 
     fn transaction_graph(&mut self, args: Option<&Value>) -> Result<Value, AppError> {
-        // Only an explicit `allowPublicLookup` reaches a backend; the merged
-        // backend view and the gate exist for that request alone.
-        let explicit = ["allowPublicLookup", "allow_public_lookup"]
-            .iter()
-            .any(|key| {
-                args.and_then(|args| kassiber_envelope::get(args, key)) == Some(&Value::Bool(true))
-            });
-        if !explicit {
+        use kassiber_journals::transaction_graph::{
+            lookup_mode, LookupMode, Public, WalletBackend,
+        };
+        // Only an explicit `allowPublicLookup`, or the desktop's automatic
+        // `lookup: "wallet_backend"`, reaches a backend; the merged backend
+        // view and the gate exist for those requests alone. Malformed flags
+        // fall through to the local read, which reports them.
+        let mode = lookup_mode(args).unwrap_or(LookupMode::Local);
+        if mode == LookupMode::Local {
             return kassiber_journals::transaction_graph::snapshot(self.conn()?, args);
         }
         let mut backends = self.backends.clone();
         backends.merge(self.conn()?)?;
         let gate = lightning::network_gate();
-        let public = kassiber_journals::transaction_graph::Public {
+        let resolve = |conn: &Connection, name: &str| {
+            kassiber_wallets::sync::resolve_backend(conn, &backends, name)
+        };
+        // The automatic lookup is refused before any backend is chosen while
+        // offline mode or `KASSIBER_NO_EGRESS` is on, or the user turned it off;
+        // the gate still checks both again for every request.
+        let wallet_backend = match context() {
+            _ if mode != LookupMode::WalletBackend => WalletBackend::Disabled,
+            Ok(ctx) if wallet_backend_offline(&ctx) => WalletBackend::Offline,
+            Ok(ctx) if kassiber_setup::wallet_backend_lookup::enabled_for(&ctx) => {
+                WalletBackend::Allowed(&resolve)
+            }
+            Ok(_) => WalletBackend::Disabled,
+            Err(_) => WalletBackend::Offline,
+        };
+        let public = Public {
             network: kassiber_wallets::freshness::graph::public::Network {
                 gate: &gate,
                 version: env!("CARGO_PKG_VERSION"),
+                scoped: mode == LookupMode::WalletBackend,
             },
             runtime: backends.graph_runtime(),
+            wallet_backend,
         };
         kassiber_journals::transaction_graph::snapshot_with(self.conn()?, args, Some(&public))
     }

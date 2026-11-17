@@ -117,9 +117,8 @@ Every rule has an id; the vectors list the ids they exercise.
   wallets (universal application). The book may choose
   `cost_basis_pool_scope = global` for that; **US-POOL-2025** such a book
   refuses to process once it has a disposal or transfer fee on or after
-  1 January 2025 UTC, because the transition (a reasonable allocation of
-  unused basis to wallets as of that day, Rev. Proc. 2024-28 § 5) is not
-  modelled (open question 3).
+  1 January 2025 UTC; a book that spans the change uses
+  `global_then_wallet` ([the 2025 transition](#the-2025-transition)).
 - **US-RP2-PER-WALLET** — RP2's own per-wallet application runs a transfer
   analysis and then a separate pass per wallet; the second pass can dispose
   of a lot the first pass already moved away (vector `us-10`: FIFO sells b1
@@ -129,6 +128,53 @@ Every rule has an id; the vectors list the ids they exercise.
   per-wallet results only on books where its passes agree (no disposal from
   a wallet after it sent units away).
 - **US-ORDER** — At one instant: acquisitions, then moves, then disposals.
+
+### The 2025 transition
+
+`cost_basis_pool_scope = global_then_wallet` (opt-in; FIFO, LIFO, HIFO and
+LOFO) computes one book across the change, in one chronological pass
+(`tax-engine/core/src/wallets.rs`, `transition_fragments`):
+
+- **US-TRANSITION-GLOBAL** — Before 2025-01-01 00:00 UTC every wallet's
+  units are one pool: a disposal takes from it by the method, a move only
+  pays its fee from it (a taxable disposal as under the wallet scope; an
+  unpriced move fee fails), and each wallet's own unit count is kept beside
+  the pool. Disposals before 2025 have the global scope's identification.
+- **US-TRANSITION-ALLOCATION** — "As of January 1, 2025" (immediately after
+  the close of 31 December 2024, Rev. Proc. 2024-28 § 3.10; Kassiber's US
+  day is UTC, open question 1) the pool's remaining lots, every unit of
+  unused basis (§ 3.09), are allocated to the wallets that hold units, by a
+  standing rule: a **global allocation** (§ 5.02(2)(b)). The rule orders the
+  units of unused basis by the book's method (FIFO the earliest acquisition
+  dates first, LIFO the latest, HIFO the highest unit cost, LOFO the lowest;
+  ties by acquisition time, then row) and fills the wallets in turn, in the
+  order they were added to the book (creation time, then id; the request's
+  `wallet_order`), each up to exactly the units it held, as the
+  revenue procedure's own example does ("units of unused basis that have the
+  earliest … acquisition dates … allocate[d] successively to wallet A,
+  wallet B, and wallet C"). Each allocated unit keeps its original basis and
+  acquisition date (§ 3.03, § 3.04). Wallet counts that do not add up to the
+  pool, or a negative count, fail instead of allocating a guess. A standing
+  rule must be fixed by 1 January 2025, so the order is one a rename cannot
+  change: renaming a wallet reprocesses the journals but moves no basis
+  between wallets (adding or deleting a wallet still changes who holds
+  what).
+- **US-TRANSITION-WALLET** — From 2025-01-01 the wallet pool applies
+  (US-POOL-WALLET), starting from the allocation. A book that ends before
+  2025 shows its holdings as the rule will allocate them.
+
+Why a global allocation by the method's order: it needs no per-unit choice
+the book does not record, it is the method the book already uses for its
+standing order, and § 5.02(2)(b) names exactly this shape. The safe harbor
+has conditions Kassiber cannot meet for the user: § 5.02(5)(a) requires the
+rule to be described in the taxpayer's books and records **before
+1 January 2025**, and the allocation must be complete by the dates in
+§ 5.02(4) and (5)(b). Choosing `global_then_wallet` computes the allocation;
+it is not the election. A book whose owner did not adopt this rule in time,
+or allocated otherwise (a specific unit allocation), should use the `wallet`
+scope (which amounts to a specific unit allocation of each wallet's actual
+units) or wait for a recorded allocation. This needs review by a US tax
+professional and owner sign-off before it is relied on (open question 3).
 
 ### Reporting
 
@@ -162,7 +208,9 @@ Every rule has an id; the vectors list the ids they exercise.
 | global scope with a disposal or transfer fee on or after 2025-01-01 | `wallet_scope_required` |
 | a wallet disposes of or moves more than it holds | `insufficient_lots` (engine: lots exhausted in that wallet) |
 | a move's fee without a dollar value under wallet scope | the engine refuses rather than drop its basis |
-| the moving averages | not offered for US books; the engine refuses them with wallet scope |
+| the moving averages | not offered for US books |
+| `global_then_wallet` with a method other than FIFO, LIFO, HIFO or LOFO, or in another country | `method_scope_unsupported` when saved; the engine refuses it too |
+| wallet counts that do not add up to the global pool on 2025-01-01 | the engine refuses the allocation |
 
 ## Fiat
 
@@ -179,9 +227,11 @@ else the market value when the transaction is recorded on chain).
    disposal at the fee's dollar value (the engine computes that gain; the
    final broker regulations treat fee units spent on a sale that way), or
    an addition to the moved units' basis?
-3. Should Kassiber support the 2025 transition in one book: universal
-   identification through 2024, then a Rev. Proc. 2024-28 allocation
-   (specific-unit or global) and per-wallet identification from 2025?
+3. The 2025 transition (`global_then_wallet`): is a global allocation by
+   the book's own method order, wallets in the order they were added, a
+   reasonable allocation
+   under Rev. Proc. 2024-28 § 5.02? Should Kassiber also record the date
+   the rule was adopted, or a specific unit allocation the user authors?
 4. Mining and staking: report as Schedule 1 other income by default, with a
    per-book "trade or business" choice for Schedule C?
 5. Airdrops and hard forks: is every Kassiber `airdrop` receipt income at

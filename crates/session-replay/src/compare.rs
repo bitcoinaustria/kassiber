@@ -93,6 +93,17 @@ fn url_token() -> &'static Regex {
     })
 }
 
+/// Prefixes of the product's own temporary names (`tempfile` and the chat upload
+/// staging). Their tail is random even when it falls in one character class
+/// (`kassiber-restore-GGBIDQ`, about one name in ninety), so it numbers whatever it holds.
+const TEMPORARY_PREFIXES: &[&str] = &[
+    "tmp",
+    ".tmp",
+    "kassiber-backup-",
+    "kassiber-chat-uploads-",
+    "kassiber-restore-",
+];
+
 /// A path inside the session's state roots (`/mnt/...` in a namespaced
 /// recording) and, in it, a temporary directory or file name: a prefix and
 /// six to eight random characters (`kassiber-chat-uploads-XjMTS7Hk`,
@@ -318,14 +329,16 @@ pub fn generated_spans(
         for component in path.as_str().split('/') {
             if let Some(caps) = temporary_name().captures(component) {
                 let suffix = caps.get(1).unwrap();
-                // Random: it mixes letters and digits or cases.
+                // Random: a product temporary name, or a tail that mixes letters and
+                // digits or cases (a word stays).
                 let tail = suffix.as_str();
                 let kinds = [
                     tail.bytes().any(|b| b.is_ascii_digit()),
                     tail.bytes().any(|b| b.is_ascii_uppercase()),
                     tail.bytes().any(|b| b.is_ascii_lowercase()),
                 ];
-                if kinds.iter().filter(|k| **k).count() >= 2 {
+                let ours = TEMPORARY_PREFIXES.contains(&&component[..suffix.start()]);
+                if ours || kinds.iter().filter(|k| **k).count() >= 2 {
                     take_identity(at + suffix.start(), at + suffix.end(), &mut spans);
                 }
             }
@@ -712,6 +725,7 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.transfers.pair_options",
     "ui.backends.certificate.fetch",
     "ui.backends.certificate.trust",
+    "ui.profiles.settings",
 ];
 
 /// Replayed daemon output without the Rust-only kinds in its `daemon.ready`
@@ -1069,6 +1083,27 @@ mod tests {
         // Fixed name segments before the random tail stay literal.
         let kept = rewrite("/mnt/tmp/kassiber-r5-desktop-od6dr16w/data");
         assert!(kept.contains("kassiber-r5-desktop-<"), "{kept}");
+    }
+
+    /// A product temporary name numbers even when its random tail is one
+    /// character class (`GGBIDQ` read as a word failed a backup-restore
+    /// replay); after any other prefix such a tail is a word and stays.
+    #[test]
+    fn product_temporary_names_number_in_any_character_class() {
+        let pinned = HashSet::new();
+        let rewrite = |text: &str| Canon::new(window(), &pinned).rewrite(text, true);
+        let recorded = rewrite(r#"{"staging_path":"/mnt/tmp/kassiber-restore-a1B2c3/stage"}"#);
+        for replayed in ["GGBIDQ", "xqzvbn", "403917"] {
+            let text =
+                format!(r#"{{"staging_path":"/mnt/tmp/kassiber-restore-{replayed}/stage"}}"#);
+            assert_eq!(rewrite(&text), recorded, "{replayed}");
+        }
+        assert_eq!(
+            rewrite("/mnt/tmp/tmpabcdef/x"),
+            rewrite("/mnt/tmp/tmpA1b2C3/x")
+        );
+        let kept = rewrite("/mnt/tmp/kassiber-reports/x /mnt/tmp/writes-ledger/y");
+        assert_eq!(kept, "/mnt/tmp/kassiber-reports/x /mnt/tmp/writes-ledger/y");
     }
 
     #[test]

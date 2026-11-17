@@ -23,6 +23,8 @@ other crate asks it a question:
 | `pool_scopes`, `default_pool_scope` | cost-basis pool scopes (`global`, `wallet`) | global | global |
 | `locale` | the reports' string table and formats | `en` | `de-AT` |
 | `timezone`, `tax_year_start` | the IANA zone whose local dates cut tax years and count holding periods, and the tax year's first day | UTC, 01-01 | Europe/Vienna, 01-01 |
+| `tax_year_editable` | a book may choose its own tax year start (`TAX_YEAR_PRESETS` or any `MM-DD` but `02-29`); every country with a legal tax year is locked | yes | no |
+| `zones` | the zones a book may choose instead of `timezone` ([book settings](tax.md#book-settings)) | every supported zone | none |
 | `cross_asset_carry` | reviewed carrying-value pairs of unlike assets carry basis | no (only the BTC/LBTC rail) | yes |
 | `rail_decision_required` | a BTC/LBTC rail change needs its own policy: the book's `bitcoin_rail_carrying_value` default does not decide it (`transfers pair` refuses without `--policy`; native and reviewed rail pairs without one are held `rail_policy_required`) | no | no |
 | `report_generators` | the reports the country offers | `open_positions`, `rp2_full_report` | `open_positions`, `at.e1kv`, `at.exit_tax` |
@@ -87,6 +89,31 @@ value, hard forks at zero cost, the 70 % rule, and airdrops, routing income
 and unlabelled income refused on receipt and lost and stolen coins on their
 way out, each with Japan's code
 ([specification](tax-country-jp.md#implementation)).
+
+Australia (`au`), New Zealand (`nz`), India (`in`) and South Africa
+(`za`) are preview countries with **generic rules on their legal tax
+years**: each is a rules country whose engine features are all generic
+(fee units as basis, swaps at their own values, gifts quarantined), with
+FIFO, the global pool, `open_positions` and `rp2_full_report`, and no
+country layer, tables or forms yet. Australia has AUD, 1 July in
+Australia/Sydney (a book may choose its state's zone), and the 12-month
+discount period as `MoreThanOneYear`; New Zealand NZD, 1 April in
+Pacific/Auckland, `Never`; India INR, 1 April in Asia/Kolkata, `Never`;
+South Africa ZAR, 1 March in Africa/Johannesburg, `Never`. Their legal
+years and currencies are taken from the tax authorities' own pages
+([Australia](tax-country-au.md), [New Zealand](tax-country-nz.md),
+[India](tax-country-in.md), [South Africa](tax-country-za.md)); none has
+vectors yet, which a reviewer's worked cases would add.
+
+A book's tax calendar is its country's unless the country lets it choose
+([book settings](tax.md#book-settings)): `Country::book_calendar`
+validates a book's choice and `BookCalendar` (`crates/tax-countries/src/book.rs`)
+answers which tax year an instant belongs to and where a year begins and
+ends, for the engine request and every report reader.
+`method_allows_pool_scope` and `Country::allows_method_scope` say which
+method has which pool scope; `describe()` lists them per method
+(`method_pool_scopes`) beside `tax_year_editable`, `tax_year_presets` and
+`zones`.
 
 Callers keep the Python reference's own reading of the stored value (where it
 stripped, where it lower-cased, where it compared literally) and look the
@@ -176,10 +203,10 @@ Germany, Switzerland and the United Kingdom (branch
 
 | Need | Where | Status |
 | --- | --- | --- |
-| A time zone per country (Europe/Berlin, Europe/Zurich, Europe/London, Europe/Madrid, Europe/Dublin, Asia/Tokyo) for dates, holding periods and year boundaries | registry `timezone`; its calendar in `calendar.rs`; the report readers' `kassiber_reports::country::zone`, `calendar::local`, `calendar::year_start` and `export_range::book_zone` | every zone has a calendar from 1996 (checked against zoneinfo), which the engine uses; the report readers cut periods in the book's zone (Vienna its pinned table, Berlin, Zurich, Dublin, London, Madrid and Tokyo the registry rule, checked against tzdata 2026e); a zone outside `SUPPORTED_ZONES` (UTC, Vienna, Berlin, Zurich, Dublin, London, Madrid, Tokyo) still needs that check, and a test refuses it until then; Madrid follows the EU rule and Tokyo its fixed offset (`book_zone`), both checked against tzdata from 1996 |
+| A time zone per country (Europe/Berlin, Europe/Zurich, Europe/London, Europe/Madrid, Europe/Dublin, Asia/Tokyo; Australia/*, Pacific/Auckland, Asia/Kolkata, Africa/Johannesburg) for dates, holding periods and year boundaries, and a book's own zone | registry `timezone` and `zones`; its calendar in `calendar.rs`; `BookCalendar`; the report readers' `kassiber_reports::country::zone`, `tax_years::Cut`, `calendar::local`, `calendar::year_start` and `export_range::book_zone` | every European zone and Tokyo have a calendar from 1996 (checked against zoneinfo), which the engine uses; the added zones from their current rule's start (south-eastern Australia 2008, New Zealand mid-2007, Perth April 2009, the fixed-offset zones 1996), checked against tzdata 2026f (`tests/data/zoneinfo_added.txt`); the report readers cut periods in the book's zone (Vienna its pinned table, the others the registry rule: the EU rule, a fixed offset, or a southern POSIX rule in `book_zone`); a zone outside `SUPPORTED_ZONES` still needs that check, and a test refuses it until then |
 | Holding periods counted in calendar dates in that zone (DE, US; 29 February's anniversary 28 February) | registry `long_term` (`MoreThanOneYear` or `Never`) with `engine`; engine `Country::is_long_term` | in place: the US rule in UTC, any other country's in its zone |
-| Tax years that do not start on 1 January (UK 6 April) | registry `tax_year_start`; `years::tax_year` and `tax_year_label`; engine `tax_year_start` | in place: the engine's yearly totals and summary of a rules country are by its tax year in its zone; `kassiber_reports::tax_years::tax_year` gives a layer an instant's year and label |
-| Per-wallet pools (US from 2025, DE) next to global ones | registry `pool_scopes`; engine pool scope `wallet`, and the rules' `pool_scope` when a country allows one | in place: one country-neutral wallet pass for the lot methods and DE's `moving_average_fifo_period`; a rules country with one allowed scope refuses the other in the engine too (DE-POOL-WALLET, GB-POOL-GLOBAL); the US keeps its own 2025 refusal of the global scope |
+| Tax years that do not start on 1 January (UK 6 April, AU 1 July, NZ and IN 1 April, ZA 1 March, a generic book's own) | registry `tax_year_start` and `tax_year_editable`; `BookCalendar`; `years::tax_year` and `tax_year_label`; engine `tax_year_start` (rules and generic countries) | in place: the engine's yearly totals and summary are by the book's tax year in its zone; `kassiber_reports::tax_years::tax_year` gives a layer an instant's year and label, and `tax_years::Cut` the readers that cut years themselves ([tax years](tax.md#tax-years)) |
+| Per-wallet pools (US from 2025, DE) next to global ones | registry `pool_scopes`; engine pool scope `wallet`, and the rules' `pool_scope` when a country allows one | in place: one country-neutral wallet pass for the lot methods, the plain moving average and DE's `moving_average_fifo_period`, and the US `global_then_wallet` transition; a profile refuses a method without a form in its scope up front (`method_scope_unsupported`); a rules country with one allowed scope refuses the other in the engine too (DE-POOL-WALLET, GB-POOL-GLOBAL); the US keeps its own 2025 refusal of the global scope |
 | Country methods: UK share matching, DE `moving_average_fifo_period`, JP `jp_total_average` (default) and `jp_moving_average` | registry `methods`; engine method gate and the `Matching` hook ([matching methods](tax-engine.md#matching-methods)) | in place: the hook, DE's `moving_average_fifo_period`, the UK's `uk_share_matching` and Japan's two averages; a matching method may replace a fragment's whole cost (`cost_override`, Japan) beside its per-unit cost, and the open lots' basis (`open_basis`, the UK's pool, Japan's closing value) |
 | Fee coins as disposals (DE, UK; ES, IE for transfers) | registry `engine.fee_units`; engine `fee_units` | in place: `disposal` realizes fee and transfer-fee gains at their value; `disposal_before_sale` also books a sale's fee units first, the sale deducting their value as expenses |
 | Crypto-to-crypto values: received coin's value as proceeds and given coin's value as cost (DE, UK); the received value for both (IE, JP); the higher of the two (ES) | registry `engine.swap_values`; engine `swap_values` | in place, with the other leg's value when one has none (DE-SWAP-FALLBACK, GB-SWAP-VALUES) |

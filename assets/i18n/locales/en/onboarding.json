@@ -1,0 +1,544 @@
+{
+  "shell": {
+    "finishError": "Could not finish onboarding.",
+    "passphraseRequired": "Enter a passphrase.",
+    "errorInitSqlcipher": "Could not create the encrypted database.",
+    "errorLoadBooks": "Could not load books.",
+    "errorOpenProject": "Could not open these books.",
+    "errorImportProject": "Could not import these books.",
+    "errorReturnDefaultRoot": "Could not return to the default data folder."
+  },
+  "books": {
+    "intro": "Each book has its own tax and currency settings. Use separate books for private and business activity; use separate Kassiber files for different clients.",
+    "newBookSet": "New book set",
+    "meta": {
+      "since": "since {{date}}"
+    },
+    "workspace": {
+      "overview": "Book set overview",
+      "newBook": "New book",
+      "actions": "Actions for {{name}}",
+      "rename": "Rename book set",
+      "empty": "No books in this set yet.",
+      "newBookIn": "New book in {{name}}"
+    },
+    "row": {
+      "open": "Open",
+      "lastOpened": "Last opened",
+      "settings": "Book settings…",
+      "copy": "New book from these settings",
+      "actions": "More actions for {{name}}"
+    },
+    "filter": {
+      "placeholder": "Filter books",
+      "noMatches": "No books match."
+    },
+    "profileCard": {
+      "settings": "Book settings for {{name}}",
+      "switchTo": "Switch to {{name}} books",
+      "buckets": "Buckets",
+      "wallets": "Wallets",
+      "currentLabel": "Current"
+    },
+    "create": {
+      "title": "New book",
+      "descriptionFromSource": "Create a separate book in {{workspace}} from {{source}}'s tax settings.",
+      "descriptionInWorkspace": "Create a separate book in {{workspace}} and choose its region and accounting method.",
+      "descriptionDefault": "Create a separate book using default settings.",
+      "startFrom": "Start from",
+      "defaultSettings": "Default settings",
+      "copyHint": "Copies only tax policy, currency, holding period and lot selection. Wallets, accounts and transactions stay in the original book.",
+      "nameLabel": "Book name",
+      "namePlaceholder": "Book name",
+      "regionLabel": "Region",
+      "methodLabel": "Accounting method",
+      "austrianMethodNote": "Austrian books use the moving-average method (gleitender Durchschnittspreis) by default. Other methods are available but not standard for Austria.",
+      "submit": "Create book",
+      "errorEmptyName": "Enter a book name.",
+      "errorGeneric": "Could not create book."
+    },
+    "renameProfile": {
+      "title": "Book settings",
+      "description": "Rename the book or change its region, accounting method and cost-basis pool scope. Changing tax settings reprocesses journals so reports recompute.",
+      "nameLabel": "Book name",
+      "regionLabel": "Region",
+      "methodLabel": "Accounting method",
+      "poolScopeLabel": "Cost-basis pool scope",
+      "poolScopeNote": "Changing the scope invalidates journals so reports can be recomputed.",
+      "poolScopeLockedNote": "Only the country policy's reviewed global scope is currently available.",
+      "austrianMethodNote": "Austrian books use the moving-average method (gleitender Durchschnittspreis) by default. Other methods are available but not standard for Austria.",
+      "switchRegion": {
+        "title": "Switch region?",
+        "body": "Change this book from {{from}} to {{to}}, resetting the accounting method to {{method}}.",
+        "warning": "All journals are reprocessed so reports recompute.",
+        "confirm": "Switch region and reprocess",
+        "back": "Back"
+      },
+      "submit": "Save",
+      "errorEmptyName": "Enter a book name.",
+      "errorGeneric": "Could not save book."
+    },
+    "region": {
+      "generic": "Generic",
+      "at": "Austria"
+    },
+    "poolScope": {
+      "global": "Whole book",
+      "wallet": "Per wallet"
+    },
+    "method": {
+      "MOVING_AVERAGE_AT": "Moving average (Austrian)",
+      "MOVING_AVERAGE": "Moving average (average cost)",
+      "MOVING_AVERAGE_FIFO_PERIOD": "Average cost per wallet, holding period by FIFO",
+      "FIFO": "FIFO (first in, first out)",
+      "LIFO": "LIFO (last in, first out)",
+      "HIFO": "HIFO (highest in, first out)",
+      "LOFO": "LOFO (lowest in, first out)",
+      "UK_SHARE_MATCHING": "UK share matching (same day, 30 days, pool)",
+      "JP_TOTAL_AVERAGE": "Total average (Japan, 総平均法)",
+      "JP_MOVING_AVERAGE": "Moving average (Japan, 移動平均法)"
+    },
+    "renameWorkspace": {
+      "title": "Edit book set name",
+      "description": "Rename this book set. Books, wallets, and transactions stay unchanged.",
+      "nameLabel": "Book set name",
+      "submit": "Save name",
+      "errorEmptyName": "Enter a book set name.",
+      "errorGeneric": "Could not rename book set."
+    },
+    "createWorkspace": {
+      "title": "New book set",
+      "description": "A separate set of books in this data folder. Most people only need one.",
+      "nameLabel": "Book set name",
+      "namePlaceholder": "Book set name",
+      "submit": "Create set",
+      "errorEmptyName": "Enter a book set name.",
+      "errorGeneric": "Could not create book set."
+    },
+    "switch": {
+      "errorGeneric": "Could not switch books."
+    },
+    "table": {
+      "label": "Books in {{name}}",
+      "book": "Book",
+      "currency": "Currency",
+      "status": "Status",
+      "actions": "Actions",
+      "taxYearFrom": "Tax year from {{start}}"
+    },
+    "status": {
+      "reprocess": "Reprocess journals",
+      "reprocessOnOpen": "Reprocess after opening",
+      "review_one": "{{count}} needs review",
+      "review_other": "{{count}} need review"
+    },
+    "settings": {
+      "description": "Changes apply to this book only. You see what will change before anything is saved.",
+      "loadError": "Could not load this book's settings.",
+      "reviewChanges": "Review changes",
+      "afterSwitch": "Save the region first; you can change this afterwards.",
+      "on": "On",
+      "off": "Off",
+      "sections": {
+        "book": "Book",
+        "country": "Country and currency",
+        "taxYear": "Tax year",
+        "costBasis": "Cost basis",
+        "holding": "Holding period",
+        "review": "Review options"
+      },
+      "currency": {
+        "locked": "{{country}} books always use {{currency}}.",
+        "note": "The currency gains, losses and cost basis are reported in.",
+        "invalid": "Enter a three-letter currency code, for example EUR or USD."
+      },
+      "taxYear": {
+        "startLabel": "Tax year starts",
+        "custom": "Custom date",
+        "customLabel": "Start date (MM-DD)",
+        "customPlaceholder": "MM-DD",
+        "customHint": "Month and day, for example 10-01 for 1 October.",
+        "customInvalid": "Enter a date as MM-DD, for example 07-01. 29 February can't be used.",
+        "zoneLabel": "Time zone",
+        "zoneNote": "Tax years and days begin at midnight in this time zone.",
+        "example": "Current tax year {{label}}: {{from}} to {{to}}",
+        "span": "{{from}} to {{to}}",
+        "locked": "{{country}} books follow the legal tax year, so it can't be changed.",
+        "presets": {
+          "calendar": "1 January (calendar year)",
+          "uk": "6 April (UK-style)",
+          "april": "1 April (India and New Zealand style)",
+          "july": "1 July (Australia-style)",
+          "march": "1 March (South Africa-style)"
+        }
+      },
+      "pool": {
+        "label": "Cost basis pool",
+        "global": {
+          "label": "Whole book (total)",
+          "help": "One pool per coin across all wallets: a sale uses the book's cost basis, whichever wallet it leaves."
+        },
+        "wallet": {
+          "label": "Per wallet",
+          "help": "Each wallet keeps its own pool: a sale uses only that wallet's cost basis, and moving coins takes their cost basis along."
+        },
+        "global_then_wallet": {
+          "label": "Whole book, then per wallet from 2025",
+          "help": "One pool until the end of 2024; on 1 January 2025 its remaining cost basis is split across the wallets."
+        },
+        "unsupported": "Not available with {{method}}.",
+        "only": "This is the only pool {{country}} books can use.",
+        "perCoin": "Each coin is pooled on its own: BTC and L-BTC never share a pool. Cost basis moves between them only as set under Review options."
+      },
+      "holding": {
+        "note": "Coins held longer than this count as long-term.",
+        "invalid": "Enter a whole number of days, 0 or more.",
+        "oneYear": "{{country}}: coins held for more than one year count as long-term.",
+        "never": "{{country}} books don't use a long-term holding period.",
+        "days_one": "{{count}} day",
+        "days_other": "{{count}} days"
+      },
+      "fields": {
+        "label": "Name",
+        "tax_country": "Region",
+        "fiat_currency": "Currency",
+        "tax_long_term_days": "Long-term holding",
+        "gains_algorithm": "Accounting method",
+        "cost_basis_pool_scope": "Cost basis pool",
+        "require_coarse_review": "Review daily-rate prices",
+        "bitcoin_rail_carrying_value": "Carry cost basis between BTC and L-BTC",
+        "tax_year_start": "Tax year starts",
+        "timezone": "Time zone"
+      },
+      "preview": {
+        "title": "Review changes",
+        "description": "{{name}}: nothing is saved until you apply.",
+        "changesHeading": "What changes",
+        "changeA11y": "{{field}}: {{from}} to {{to}}",
+        "consequencesHeading": "What happens next",
+        "nothingElse": "Nothing else changes.",
+        "reprocess_one": "Journals are reprocessed for {{count}} transaction before reports are up to date again.",
+        "reprocess_other": "Journals are reprocessed for {{count}} transactions before reports are up to date again.",
+        "firstRun": "Journals use the new settings when they are first processed.",
+        "regrouped": "Gains and income are regrouped into tax years starting {{start}}.",
+        "held_one": "{{count}} transaction is priced in {{from}} and waits for review until it has a {{to}} price.",
+        "held_other": "{{count}} transactions are priced in {{from}} and wait for review until they have a {{to}} price.",
+        "filed_one": "{{count}} filed report may no longer match. It stays as it was filed.",
+        "filed_other": "{{count}} filed reports may no longer match. They stay as they were filed.",
+        "calendarReset": "The book's own tax year is reset to {{country}}'s.",
+        "apply": "Apply changes"
+      },
+      "errors": {
+        "methodScopeUnsupported": "This accounting method can't be used with that cost basis pool. Choose another method or pool.",
+        "taxYearStartInvalid": "That start date isn't valid. Use MM-DD; 29 February can't be used.",
+        "taxYearStartLocked": "This region's tax year can't be changed.",
+        "timezoneUnknown": "That time zone isn't supported.",
+        "timezoneLocked": "This region's time zone can't be changed.",
+        "bookSwitched": "The open book changed while this was open. Close and try again."
+      }
+    }
+  },
+  "frame": {
+    "setup": "Setup",
+    "setupConnects": "Setup connects to nothing unless you test a server."
+  },
+  "stepper": {
+    "ariaLabel": "Setup progress",
+    "stepFallback": "Step {{number}}",
+    "summary": {
+      "offline": "Offline",
+      "publicBackends": "Built-in servers",
+      "aiOff": "Off",
+      "aiLocal": "Local · {{name}}",
+      "aiRemote": "Remote · {{name}}",
+      "encrypted": "Encrypted",
+      "plaintext": "Not encrypted"
+    }
+  },
+  "steps": {
+    "essentials": "Your books",
+    "sync": "Sync",
+    "ai": "AI",
+    "security": "Security",
+    "review": "Review"
+  },
+  "start": {
+    "language": "Language",
+    "headline": "Your Bitcoin books, kept on your machine.",
+    "createNew": {
+      "title": "Create new books"
+    },
+    "openExisting": {
+      "titleOpening": "Opening books…",
+      "title": "Open existing books",
+      "desktopOnly": "desktop app only",
+      "tooltipAvailable": "Open existing local Kassiber books",
+      "tooltipUnavailable": "Opening existing books is available in the desktop app"
+    },
+    "regtest": {
+      "titleOpening": "Opening regtest demo…",
+      "title": "Open regtest demo",
+      "body": "Skip setup and open the demo book on the local regtest Docker stack."
+    },
+    "tryDemo": {
+      "title": "Try the demo",
+      "titleOpening": "Preparing the demo…",
+      "tooltip": "Open a sample book with wallets, reports and evidence. Separate from your own books; nothing is downloaded."
+    },
+    "quickStart": "Or create with recommended defaults",
+    "highlights": {
+      "localDatabase": {
+        "title": "One local database"
+      },
+      "encrypted": {
+        "title": "Encrypted by default"
+      },
+      "watchOnly": {
+        "title": "Watch-only"
+      }
+    }
+  },
+  "import": {
+    "title": "Open existing books",
+    "selectedBooks": "Selected local books",
+    "encrypted": "Encrypted",
+    "plaintext": "Not encrypted",
+    "bookCount_one": "{{count}} book",
+    "bookCount_other": "{{count}} books",
+    "passphraseLabel": "Passphrase",
+    "unlock": "Unlock books",
+    "backToSetup": "Back to new setup",
+    "rightBody": "Kassiber now uses the selected data folder. Once a book opens, the rest of the app works from it.",
+    "loading": "Loading local books…",
+    "empty": "No books in this data folder.",
+    "accountsWallets": "{{accounts}} accounts · {{wallets}} wallets",
+    "opening": "Opening",
+    "active": "Active",
+    "errorUnlock": "Could not unlock these books.",
+    "errorOpenBooks": "Could not open books.",
+    "passphraseRequired": "Enter the passphrase."
+  },
+  "connections": {
+    "default": {
+      "title": "Built-in Bitcoin servers",
+      "description": "Explorer API and Electrum / Fulcrum, run by Bitcoin Austria.",
+      "tradeoff": "The operator sees which addresses you look up.",
+      "liquidLabel": "Also add Liquid servers",
+      "liquidDescription": "Only needed for Liquid (L-BTC) wallets."
+    },
+    "custom": {
+      "title": "Your own server",
+      "description": "Your own Esplora, Electrum / Fulcrum, Bitcoin Core or Liquid server, over clearnet or Tor.",
+      "tradeoff": "Only that server sees your addresses."
+    },
+    "skip": {
+      "title": "Offline",
+      "description": "No sync, AI or update checks. Imports and reports still work."
+    },
+    "protocolLabel": "Sync protocol",
+    "displayName": "Display name",
+    "displayNamePlaceholder": "home-node",
+    "host": "Host",
+    "hostPlaceholder": "electrum.example",
+    "port": "Port",
+    "useSsl": "Use SSL",
+    "useSslDescription": "Most servers use TLS on port 50002.",
+    "trustSsl": "Disable TLS certificate verification",
+    "trustSslDescription": "Unsafe. Only for a server you control.",
+    "certificate": "Custom CA bundle",
+    "certificatePlaceholder": "Optional CA certificate path (.pem or .crt)",
+    "certificateIgnored": "Ignored while TLS certificate verification is disabled.",
+    "certificateSystemStore": "Leave empty to use the system certificate store.",
+    "useProxy": "Route this connection via proxy",
+    "useProxyDescription": "Route only this server through Tor, SOCKS or an HTTP proxy.",
+    "onionDetectedTitle": ".onion endpoint detected",
+    "onionDetectedBody": "Uses the local Tor proxy at 127.0.0.1:9050 for this server only.",
+    "proxyHost": "Proxy host",
+    "proxyHostPlaceholder": "127.0.0.1",
+    "proxyPortPlaceholder": "9050",
+    "testConnection": "Test connection",
+    "testing": "Testing",
+    "testHint": "Optional: checks that the server is reachable.",
+    "testLogLabel": "Electrum test connection log",
+    "validationFailed": "Validation failed",
+    "endpointRequired": "Endpoint is required.",
+    "testFailed": "Electrum test failed.",
+    "endpointUrl": "Endpoint URL",
+    "endpointUrlPlaceholder": "https://… or http://abc…onion/api",
+    "credentialsWarning": "Don't paste tokens, passwords or cookies here. Add them after setup."
+  },
+  "ai": {
+    "local": {
+      "title": "Local model",
+      "description": "Ollama, oMLX or another OpenAI-compatible server on this device."
+    },
+    "remote": {
+      "title": "Remote provider",
+      "description": "An OpenAI-compatible API or a subscription app (Codex, Claude, OpenCode, GitHub Copilot). Prompts and book context leave this device."
+    },
+    "disabled": {
+      "title": "No AI",
+      "description": "Hides the Assistant and chat."
+    },
+    "providerPrivacy": "Provider privacy",
+    "providerPrivacyDescription": "TEE providers claim a trusted-execution path. Kassiber still treats them as off-device.",
+    "providerName": "Provider name",
+    "providerNamePlaceholderLocal": "ollama or omlx",
+    "providerNamePlaceholderRemote": "openai or maple",
+    "baseUrl": "Base URL",
+    "baseUrlPlaceholderRemote": "https://…/v1 or claude-cli://default",
+    "baseUrlDescription": "An OpenAI Responses-compatible /v1 address, or a CLI locator such as claude-cli://default.",
+    "remoteAck": "I understand prompts may leave this device.",
+    "remoteAckDescription": "Labels, notes, hostnames and report details can be sensitive.",
+    "offlineNote": "AI is off while offline."
+  },
+  "essentials": {
+    "title": "Set up your books",
+    "booksName": "Books name",
+    "booksNamePlaceholder": "My Books",
+    "booksNameDescription": "Shown in the app header.",
+    "taxHeading": "Tax defaults",
+    "taxJurisdiction": "Tax jurisdiction",
+    "jurisdictionAustria": "Austria",
+    "jurisdictionGeneric": "Other / generic",
+    "fiatCurrency": "Fiat currency",
+    "fiatSample": "Sample: {{sample}}",
+    "accountingMethod": "Accounting method",
+    "lotSelection": "Lot selection",
+    "longTermDays": "Long-term holding days",
+    "longTermDaysPlaceholder": "365"
+  },
+  "security": {
+    "title": "Protect your books",
+    "lead": "Encryption protects your books on this device with a passphrase. Kassiber cannot recover a lost passphrase.",
+    "encrypt": {
+      "title": "Encrypted",
+      "description": "Opens only with your passphrase."
+    },
+    "plaintext": {
+      "title": "Unencrypted",
+      "description": "Anyone with disk access can read it. For testing only."
+    },
+    "passphrase": "Passphrase",
+    "passphrasePlaceholder": "At least 12 characters",
+    "confirmPassphrase": "Confirm passphrase",
+    "confirmPassphrasePlaceholder": "Repeat passphrase",
+    "hint": {
+      "required": "Enter a database passphrase.",
+      "tooShort": "Use at least {{min}} characters.",
+      "confirmRequired": "Confirm the database passphrase.",
+      "mismatch": "Passphrases do not match."
+    },
+    "strength": {
+      "weak": "Easy to guess. Several unrelated words make a stronger passphrase.",
+      "fair": "Could be stronger. Add a few characters or another word."
+    },
+    "passphraseNote": "Used only on this device to unlock the database; never saved by the app.",
+    "recoveryAck": "I have stored this passphrase somewhere safe, such as a password manager.",
+    "recoveryAckDescription": "Kassiber cannot reset it. Without it, these books cannot be opened.",
+    "touchId": "Unlock with Touch ID",
+    "touchIdDescription": "Saves your passphrase in the macOS Keychain, readable only after Touch ID. The CLI is set up separately.",
+    "existingCredentials": "Existing backend credentials",
+    "migrateCredentials": "Move saved backend credentials into the encrypted database.",
+    "migrateCredentialsDescription": "For an existing CLI setup: reads them from backends.env.",
+    "plaintextAck": "I understand plaintext mode is not for real wallet data.",
+    "plaintextAckDescription": "Balances, addresses and labels are readable from disk."
+  },
+  "sync": {
+    "title": "Choose sync connections",
+    "updateChecksHeading": "App updates",
+    "updateChecks": "Check GitHub for updates",
+    "updateChecksDescription": "GitHub sees your IP address, Kassiber version and the time."
+  },
+  "aiStep": {
+    "title": "Choose AI assistance"
+  },
+  "review": {
+    "title": "Review setup",
+    "change": "Change",
+    "changeArea": "Change {{area}}",
+    "creatingBooks": "Creating books…",
+    "createLocalBooks": "Create local books",
+    "area": {
+      "books": "Books",
+      "tax": "Tax",
+      "sync": "Sync",
+      "ai": "AI",
+      "updates": "Updates",
+      "storage": "Storage",
+      "secrets": "Secrets",
+      "others": "Everything else"
+    },
+    "books": {
+      "value": "{{workspace}} / {{profile}}"
+    },
+    "tax": {
+      "value": "{{region}}, {{currency}}, {{method}}",
+      "noteAtCustom": "Differs from the Austrian defaults (EUR, moving average).",
+      "noteGeneric": "{{days}} long-term holding days."
+    },
+    "sync": {
+      "valueManual": "Offline — no sync backends",
+      "valueDefault": "Built-in Bitcoin servers",
+      "valueCustom": "{{name}} ({{detail}})",
+      "customFallbackName": "Custom backend",
+      "noteDefaultLoading": "Backend addresses are loading from Kassiber.",
+      "noteCustomProxy": "Routed through its proxy."
+    },
+    "ai": {
+      "valueDisabled": "Disabled",
+      "value": "{{kind}}: {{name}}",
+      "fallbackName": "assistant",
+      "noteRemote": "Receives the book context you approve."
+    },
+    "updates": {
+      "valueEnabled": "GitHub checks allowed",
+      "valueDisabled": "GitHub checks disabled",
+      "noteEnabled": "GitHub sees your IP address, Kassiber version and the time."
+    },
+    "storage": {
+      "valueEncrypted": "Encrypted database",
+      "valuePlaintext": "Unencrypted database",
+      "noteEncrypted": "Passphrase required. Touch ID {{touchId}}. A lost passphrase cannot be recovered.",
+      "touchIdEnabled": "enabled",
+      "touchIdNotEnabled": "not enabled",
+      "notePlaintext": "Readable by anyone with disk access."
+    },
+    "secrets": {
+      "valueEncrypted": "Encrypted credential storage",
+      "valueNone": "No credentials collected during setup",
+      "noteEncrypted": "Credentials from backends.env move into the encrypted database."
+    },
+    "group": {
+      "local": {
+        "title": "Stays on this machine"
+      },
+      "network": {
+        "title": "Connects to the network"
+      }
+    },
+    "others": {
+      "value": "Live prices, exchange imports, BTCPay, Lightning"
+    }
+  },
+  "network": {
+    "label": "{{reach}} · {{when}}",
+    "reach": {
+      "internet": "Internet",
+      "device": "This device",
+      "yourServer": "Your server"
+    },
+    "when": {
+      "sync": "when you sync",
+      "assistant": "when you use the assistant",
+      "updates": "at launch, then daily"
+    },
+    "none": "No connections",
+    "offOffline": "Off while offline",
+    "offUntilSetUp": "Off until you set it up",
+    "loadingServers": "Loading the server list…",
+    "customPending": "The server you enter",
+    "localPending": "A server on this device",
+    "remotePending": "The provider you choose"
+  }
+}

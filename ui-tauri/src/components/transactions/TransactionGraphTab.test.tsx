@@ -1401,7 +1401,7 @@ describe("TransactionGraphPanel", () => {
     );
 
     expect(html).toContain("Liquid graph not stored locally");
-    expect(html).toContain("generic confidential strands");
+    expect(html).toContain("Liquid backend to draw them");
     expect(html).not.toContain("liquid.network");
     expect(html).not.toContain("Open Liquid Network");
   });

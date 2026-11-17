@@ -98,6 +98,7 @@ pub fn execute(
                 [],
             )
             .map_err(sql_error)?;
+            super::book_settings::forget_deleted(conn)?;
             Ok(dict([
                 ("deleted", Value::Bool(true)),
                 ("workspace", dict([("id", s(id)), ("label", s(label))])),

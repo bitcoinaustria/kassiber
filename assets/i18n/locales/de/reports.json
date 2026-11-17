@@ -1,0 +1,241 @@
+{
+  "page": {
+    "unavailable": "Berichte nicht verfügbar",
+    "noData": "Der Daemon hat keine Berichtsdaten geliefert.",
+    "yearMismatch": "Der Daemon hat {{returned}} geliefert, ausgewählt ist das Steuerjahr {{year}}.",
+    "taxYear": "Steuerjahr",
+    "exporting": "Wird exportiert…"
+  },
+  "date": {
+    "dayMonth": "{{day}}. {{month}}",
+    "dayMonthYear": "{{day}}. {{month}} {{year}}",
+    "range": "{{start}} – {{end}}"
+  },
+  "taxYear": {
+    "calendar": "Kalenderjahr, {{zone}}",
+    "calendarNotApplied": "Kalenderjahr, {{zone}} · Steuerjahr ab {{start}} noch nicht angewendet",
+    "starts": "Beginnt am {{start}}, {{zone}}"
+  },
+  "method": {
+    "fifo": "FIFO · First In, First Out",
+    "lifo": "LIFO · Last In, First Out",
+    "hifo": "HIFO · höchste Anschaffungskosten zuerst",
+    "lofo": "LOFO · niedrigste Anschaffungskosten zuerst",
+    "movingAverage": "Gleitender Durchschnittspreis",
+    "movingAverageAt": "Österreichische Methode · FIFO für Altbestand, gleitender Durchschnittspreis für Neubestand"
+  },
+  "methodShort": {
+    "movingAverage": "Nach gleitendem Durchschnittspreis",
+    "movingAverageAt": "Nach österreichischer Methode",
+    "notSet": "Methode nicht festgelegt",
+    "other": "Nach {{method}}"
+  },
+  "field": {
+    "172": "Laufende Einkünfte aus Kryptowährungen (ausländisch)",
+    "174": "Realisierte Wertsteigerungen aus Kryptowährungen (ausländisch)",
+    "176": "Realisierte Verluste aus Kryptowährungen (ausländisch)",
+    "801": "Einkünfte aus Spekulationsgeschäften (Altbestand)",
+    "801Note": "Mit deinem Einkommensteuertarif besteuert"
+  },
+  "breakdown": {
+    "titleAt": "Kennzahlen",
+    "titleGeneric": "Gewinne und Einkünfte",
+    "yearLink": "Ganz {{year}} in Transaktionen",
+    "empty": "Keine Veräußerungen oder Einkünfte in {{year}}.",
+    "showExact": "Diese {{n}} in Transaktionen zeigen",
+    "showYear": "Das Jahr in Transaktionen öffnen; {{n}} sind zu viele, um sie einzeln aufzulisten",
+    "about": "Hinweis zu {{label}}",
+    "column": {
+      "field": "Kennzahl",
+      "description": "Beschreibung",
+      "transactions": "Transaktionen",
+      "kind": "Art"
+    },
+    "group": {
+      "outsideE1kv": "E 1 · außerhalb der E 1kv",
+      "notReported": "Nicht in der Erklärung"
+    },
+    "row": {
+      "shortTerm": "Kurzfristige Gewinne",
+      "longTerm": "Langfristige Gewinne",
+      "income": "Einkünfte",
+      "taxFree": "Steuerfreier Altbestand",
+      "taxFreeNote": "Vor dem 1. März 2021 angeschafft und länger als ein Jahr gehalten",
+      "swaps": "Steuerneutraler Tausch",
+      "swapsNote": "Die Anschaffungskosten gehen auf das erhaltene Asset über",
+      "unassigned": "Ohne Kennzahl",
+      "unassignedNote": "Zeilen ohne Kennzahl: jene vor dem 1. März 2022, für die noch die alten Regeln galten, und alle, die die Steuerberechnung nicht zuordnen konnte. Prüfe sie vor der Einreichung: Sie können steuerpflichtig sein."
+    }
+  },
+  "readiness": {
+    "sourcesBlocking_one": "{{count}} Quelle konnte nicht aktualisiert werden; Berichte warten, bis sie aktuell ist.",
+    "sourcesBlocking_other": "{{count}} Quellen konnten nicht aktualisiert werden; Berichte warten, bis sie aktuell sind.",
+    "processLedger": {
+      "title": "Journale verarbeiten",
+      "detail": "Die Berichtssummen brauchen vor dem Export eine frische Journalverarbeitung."
+    },
+    "reviewQueue_one": "{{count}} Eintrag in Quarantäne sollte vor der Einreichung geklärt werden.",
+    "reviewQueue_other": "{{count}} Einträge in Quarantäne sollten vor der Einreichung geklärt werden.",
+    "checking": {
+      "title": "Vollständigkeit wird geprüft",
+      "detail": "Kassiber prüft noch, ob die Anschaffungskosten vollständig sind."
+    },
+    "custody": "Offene Verwahrungslücken verhindern endgültige Anschaffungskosten; die Zahlen sind vorläufig.",
+    "missingPrices_one": "{{count}} Transaktion hat keinen Kurs; die Zahlen sind vorläufig.",
+    "missingPrices_other": "{{count}} Transaktionen haben keinen Kurs; die Zahlen sind vorläufig.",
+    "unknown": {
+      "title": "Vollständigkeit unbekannt",
+      "detail": "Kassiber konnte nicht bestätigen, dass die Anschaffungskosten vollständig sind; die Zahlen sind vorläufig."
+    },
+    "noFields": {
+      "title": "Keine Krypto-Kennzahlen vor {{year}}",
+      "detail": "Die österreichischen Krypto-Kennzahlen (KZ 172, 174, 176) gelten ab 1. März {{first}}, daher weist {{year}} nur KZ 801 und keine Schätzung mit 27,5 % aus.",
+      "tail_one": "{{count}} Zeile hat in diesem Jahr keine Kennzahl; lass sie von einer Steuerberaterin oder einem Steuerberater erklären.",
+      "tail_other": "{{count}} Zeilen haben in diesem Jahr keine Kennzahl; lass sie von einer Steuerberaterin oder einem Steuerberater erklären."
+    },
+    "rowsBefore": {
+      "title": "Zeilen vor dem 1. März {{year}}",
+      "detail_one": "{{count}} Zeile aus Jänner oder Februar {{year}} folgte den alten Regeln, außer du hast für die neuen optiert. Sie hat keine Kennzahl, daher gibt es für {{year}} keine E 1kv und keine Schätzung; lass sie von einer Steuerberaterin oder einem Steuerberater erklären.",
+      "detail_other": "{{count}} Zeilen aus Jänner oder Februar {{year}} folgten den alten Regeln, außer du hast für die neuen optiert. Sie haben keine Kennzahl, daher gibt es für {{year}} keine E 1kv und keine Schätzung; lass sie von einer Steuerberaterin oder einem Steuerberater erklären."
+    },
+    "unassigned": {
+      "title": "Zeilen ohne Kennzahl",
+      "detail_one": "{{count}} Zeile steht in keiner Kennzahl der Erklärung; prüfe sie vor der Einreichung.",
+      "detail_other": "{{count}} Zeilen stehen in keiner Kennzahl der Erklärung; prüfe sie vor der Einreichung."
+    },
+    "noRows": {
+      "title": "Keine steuerpflichtigen Zeilen",
+      "detail": "Das Paket für {{year}} enthält derzeit keine Veräußerungen und keine Zeilen mit Kennzahl."
+    },
+    "ready": "Das Hauptbuch ist aktuell und die Prüfwarteschlange ist leer."
+  },
+  "metrics": {
+    "label": "Berichtszahlen",
+    "provisional": "Vorläufig",
+    "provisionalHelp": "Zeilen in Quarantäne, Verwahrungslücken, fehlende Kurse oder veraltete Journale sind noch nicht berücksichtigt.",
+    "disposalsIn": "Veräußerungen {{year}}",
+    "income": "{{amount}} Einkünfte",
+    "taxFree": "{{amount}} steuerfrei (Altbestand)",
+    "realised": "Im Zeitraum realisiert",
+    "includes": "Enthält {{parts}}",
+    "indicativeTaxRate": "Indikative Steuer · {{rate}}",
+    "taxSub": "KZ 172 + 174 − 176",
+    "taxSubWithout801": "KZ 172 + 174 − 176, ohne KZ 801"
+  },
+  "rules": {
+    "title": "Regeln",
+    "changeInBooks": "In den Büchern ändern",
+    "region": "Region",
+    "austria": "Österreich",
+    "generic": "Generisch",
+    "method": "Methode",
+    "tax": "Steuer",
+    "taxE1kv": "E 1kv · KZ 801 zum Einkommensteuertarif",
+    "taxE1kvRate": "E 1kv {{rate}} · KZ 801 zum Einkommensteuertarif",
+    "taxBeforeE1kv": "KZ 801 zum Einkommensteuertarif · keine Krypto-Kennzahlen vor {{year}}",
+    "altbestand": "Altbestand",
+    "altbestandRule": "Vor dem 1. März 2021 angeschafft · nach einem Jahr steuerfrei",
+    "taxYear": "Steuerjahr",
+    "taxYearAt": "Kalenderjahr, Wiener Zeit",
+    "longTermAfter": "Langfristig nach",
+    "days_one": "{{count}} Tag",
+    "days_other": "{{count}} Tagen",
+    "noRate": "Kein Steuersatz angewendet",
+    "note": "Hinweis"
+  },
+  "files": {
+    "title": "Dateien",
+    "noSecrets": "Keine Datei enthält Schlüssel oder Zugangsdaten",
+    "exclusions": "Keine Datei enthält Wallet-Descriptors, xpubs, Backend-Zugangsdaten, rohe Wallet-Konfiguration, AI-Einstellungen, Logs oder fremde Bücher.",
+    "export": "Exportieren",
+    "exportFile": "{{file}} exportieren",
+    "exportFileAs": "{{file}} als {{format}} exportieren",
+    "formats": {
+      "pdf": "Zum Einreichen oder Drucken",
+      "xlsx": "Jede Zeile, als Tabelle",
+      "csv": "Jede Zeile, als reiner Text"
+    },
+    "tax": {
+      "title": "Steuerbericht",
+      "everyYear": "Alle Jahre des Buchs",
+      "noKennzahlen": "Keine Krypto-Kennzahlen vor {{year}} · die Buchhaltungsübergabe listet jede Zeile",
+      "rowsBefore": "Keine E 1kv {{year}}: Zeilen vor dem 1. März · die Buchhaltungsübergabe listet jede Zeile",
+      "e1kv": "E 1kv {{year}} mit allen Zeilen"
+    },
+    "handoff": {
+      "title": "Buchhaltungsübergabe",
+      "detail": "EA / Jahresabschluss {{year}} · XLSX"
+    },
+    "summary": {
+      "title": "Zusammenfassung",
+      "detail": "Portfolio {{year}}, ohne Steuertabellen · PDF",
+      "someWallets": "{{selected}} von {{total}} Wallets",
+      "oneWallet": "1 Wallet",
+      "allWallets": "Alle Wallets",
+      "noCover": "ohne Deckblatt",
+      "cover": "mit Guthaben-Deckblatt",
+      "coverToggle": "Deckblatt mit heutigen Guthaben",
+      "wallets": "Wallets",
+      "selectAll": "Alle auswählen"
+    },
+    "audit": {
+      "title": "Prüfpaket",
+      "detail": "Nachweise aus dem Buch für eine Prüfung",
+      "scope": "Umfang",
+      "scopeLabel": "Umfang des Prüfpakets",
+      "wholeBook": "Gesamtes Buch",
+      "savedCase": "Ein gespeicherter Mittelherkunftsfall",
+      "oneCase": "Ein Mittelherkunftsfall",
+      "case": "Mittelherkunftsfall",
+      "chooseCase": "Gespeicherten Fall wählen",
+      "include": "Einbeziehen",
+      "parts": "{{included}} von {{total}} Teilen",
+      "part": {
+        "copiedAttachments": "Kopierte Dateien",
+        "urlReferences": "URL-Verweise",
+        "journalState": "Journalstand",
+        "reviewState": "Prüfstatus",
+        "editHistory": "Bearbeitungshistorie"
+      }
+    },
+    "saved": "{{file}} gespeichert.",
+    "savedWithNotes": "{{file}} mit Hinweisen gespeichert.",
+    "saveDialogTitle": "Kassiber-Berichtsexport speichern",
+    "written": {
+      "transactions_one": "{{count}} Transaktion",
+      "transactions_other": "{{count}} Transaktionen",
+      "files_one": "{{count}} Datei",
+      "files_other": "{{count}} Dateien",
+      "links_one": "{{count}} Link",
+      "links_other": "{{count}} Links",
+      "pages_one": "{{count}} Seite",
+      "pages_other": "{{count}} Seiten",
+      "sheets_one": "{{count}} Tabellenblatt",
+      "sheets_other": "{{count}} Tabellenblätter",
+      "rows_one": "{{count}} Zeile",
+      "rows_other": "{{count}} Zeilen",
+      "fallback": "Export geschrieben"
+    },
+    "error": {
+      "notAbsolute": "Pfade für Berichtsexporte müssen absolut sein.",
+      "noManagedFolder": "Der verwaltete Ordner für Berichtsexporte wurde nicht gefunden.",
+      "noManagedFolderDetail": "Der verwaltete Ordner für Berichtsexporte wurde nicht gefunden: {{error}}",
+      "notFound": "Die Datei des Berichtsexports wurde nicht gefunden: {{error}}",
+      "otherProject": "Nur Exporte aus dem aktiven Kassiber-Projekt können geöffnet oder gespeichert werden.",
+      "inspect": "Die Datei des Berichtsexports konnte nicht geprüft werden: {{error}}",
+      "unsupported": "Nur verwaltete PDF-, XLSX- und CSV-Dateien, österreichische CSV-Bundle-Ordner und Prüfpaket-Ordner können geöffnet oder gespeichert werden.",
+      "inspectDestination": "Das Ziel des Berichtsexports konnte nicht geprüft werden: {{error}}",
+      "destinationNotEmpty": "Wähle einen neuen oder leeren Ordner für den Berichtsexport.",
+      "createDestination": "Das Ziel des Berichtsexports konnte nicht angelegt werden: {{error}}",
+      "readSource": "Der verwaltete Berichtsexport konnte nicht gelesen werden: {{error}}",
+      "readEntry": "Ein Eintrag des Berichtsexports konnte nicht gelesen werden: {{error}}",
+      "saveEntry": "Ein Eintrag des Berichtsexports konnte nicht gespeichert werden: {{error}}",
+      "noParent": "Das Ziel des Berichtsexports braucht einen übergeordneten Ordner.",
+      "createParent": "Der Zielordner des Berichtsexports konnte nicht angelegt werden: {{error}}",
+      "inspectParent": "Der Zielordner des Berichtsexports konnte nicht geprüft werden: {{error}}",
+      "insideManaged": "Wähle ein Ziel außerhalb von Kassibers verwaltetem Exportordner.",
+      "extension": "Das Ziel des Berichtsexports muss auf .pdf, .xlsx oder .csv enden.",
+      "save": "Der Berichtsexport konnte nicht gespeichert werden: {{error}}"
+    }
+  }
+}

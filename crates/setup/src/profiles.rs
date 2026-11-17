@@ -72,6 +72,28 @@ fn known_method(method: &str) -> bool {
 fn profile_days(country: &Country) -> bool {
     matches!(country.long_term, LongTerm::ProfileDays { .. })
 }
+
+/// The holding period a book is taxed with, for every label and projection
+/// of it: the stored days, or the country's default where a day-count
+/// country's stored value is zero or absent. The journals read
+/// `int(days or default)` (`kassiber_custody` and the reports alike), and
+/// writes store the default for zero, so a stored zero (an older book, a
+/// hand-edited row) must not be shown as a zero-day holding period. Any
+/// other value, and any other country's, is shown as stored.
+pub fn effective_long_term_days(profile: &Value) -> Value {
+    let stored = get(profile, "tax_long_term_days")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let code = optional(profile, "tax_country")
+        .filter(|v| truthy(v))
+        .map(py_str)
+        .unwrap_or_else(|| kassiber_tax_countries::DEFAULT_CODE.into());
+    let code = kassiber_pytext::strip(&code).to_lowercase();
+    match kassiber_tax_countries::lookup(&code).map(|country| country.long_term) {
+        Some(LongTerm::ProfileDays { default }) if !truthy(&stored) => Value::Int(default.into()),
+        _ => stored,
+    }
+}
 fn policy(values: &Value, check_algorithm: bool, create: bool) -> Result<Value> {
     let country = tax_country(values)?;
     let days = get(values, "tax_long_term_days")
@@ -136,6 +158,37 @@ fn policy(values: &Value, check_algorithm: bool, create: bool) -> Result<Value> 
             ),
         )
         .with_hint(format!("Choose one of: {}", country.pool_scopes.join(", "))));
+    }
+    // A method the engine has no form of in the scope is refused here, not
+    // when the journals are processed.
+    let method = kassiber_pytext::strip(&algo).to_uppercase();
+    if country.allows_method(&method)
+        && !kassiber_tax_countries::method_allows_pool_scope(&method, &scope)
+    {
+        let scopes: Vec<&str> = country
+            .pool_scopes
+            .iter()
+            .copied()
+            .filter(|scope| kassiber_tax_countries::method_allows_pool_scope(&method, scope))
+            .collect();
+        return Err(AppError::new(
+            "method_scope_unsupported",
+            format!(
+                "Accounting method '{method}' has no form for the cost-basis pool scope '{scope}'"
+            ),
+        )
+        .with_hint(format!(
+            "With {method}, choose one of: {}",
+            scopes.join(", ")
+        ))
+        .with_details(dict([
+            ("gains_algorithm", s(method.as_str())),
+            ("cost_basis_pool_scope", s(scope.as_str())),
+            (
+                "allowed_cost_basis_pool_scopes",
+                Value::List(scopes.into_iter().map(s).collect()),
+            ),
+        ])));
     }
     let mut result = values.clone();
     replace(&mut result, "tax_country", s(country.code));
@@ -209,6 +262,10 @@ fn stored_pool_scope(p: &Value) -> Result<(String, &'static Country)> {
     }
     Ok((scope, country))
 }
+/// `profiles get`'s projection of a book.
+pub(crate) fn details_of(conn: &Connection, w: &Value, p: &Value) -> Result<Value> {
+    details(conn, w, p)
+}
 fn details(conn: &Connection, w: &Value, p: &Value) -> Result<Value> {
     let (scope, country) = stored_pool_scope(p)?;
     let current = setting(conn, "context_profile")?.is_some_and(|id| id == text(p, "id"))
@@ -240,11 +297,28 @@ fn details(conn: &Connection, w: &Value, p: &Value) -> Result<Value> {
                 Value::List(country.pool_scopes.iter().map(|scope| s(*scope)).collect())
             }
             "is_current" => Value::Bool(current),
+            "tax_long_term_days" => effective_long_term_days(p),
             _ => get(p, k).unwrap_or(&Value::Null).clone(),
         };
         fields.push((k, v));
     }
-    Ok(dict(fields))
+    // A book's own tax calendar, only when it chose one, so every other
+    // book's projection keeps its keys; one its country no longer allows is
+    // reported (`calendar_invalid`), so the book stays readable and its
+    // settings can reset it.
+    let readable = super::book_settings::readable(conn, &text(p, "id"), country)?;
+    let mut details = dict(fields);
+    if let Some(invalid) = readable.invalid {
+        replace(&mut details, "calendar_invalid", invalid);
+    } else if readable.stored.0.is_some() || readable.stored.1.is_some() {
+        replace(
+            &mut details,
+            "tax_year_start",
+            s(readable.book.start_text()),
+        );
+        replace(&mut details, "timezone", s(readable.book.timezone));
+    }
+    Ok(details)
 }
 fn update(conn: &Connection, args: &Value) -> Result<Value> {
     let (w, mut p) = references::scope(conn, args)?;
@@ -289,6 +363,21 @@ fn update(conn: &Connection, args: &Value) -> Result<Value> {
     if changed {
         conn.execute("UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL WHERE id=?",[text(&p,"id")]).map_err(sql_error)?;
     }
+    // A region switch drops a book's own tax calendar the new country does
+    // not allow (its year becomes the country's), as does any change to a
+    // book whose stored calendar its country no longer allows or that
+    // cannot be read.
+    let calendar_reset =
+        super::book_settings::readable(conn, &text(&p, "id"), tax_country(&normalized)?)?
+            .invalid
+            .is_some();
+    if calendar_reset {
+        conn.execute(
+            "DELETE FROM settings WHERE key=?",
+            [super::book_settings::calendar_key(&text(&p, "id"))],
+        )
+        .map_err(sql_error)?;
+    }
     let mut result = details(
         conn,
         &w,
@@ -301,6 +390,9 @@ fn update(conn: &Connection, args: &Value) -> Result<Value> {
             "price_currency_holds",
             price_currency_holds(conn, &text(&p, "id"), &book)?,
         );
+    }
+    if calendar_reset {
+        replace(&mut result, "tax_calendar_reset", Value::Bool(true));
     }
     Ok(result)
 }
@@ -357,6 +449,13 @@ pub fn execute(
 ) -> Result<Value> {
     if command == "ui.profiles.snapshot" {
         return super::profile_snapshot::snapshot(conn, sources);
+    }
+    if command == "profiles.settings" || command == "ui.profiles.settings" {
+        let (_, p) = super::book_settings::select_book(conn, args)?;
+        return super::book_settings::settings(conn, &p);
+    }
+    if command == "profiles.configure" {
+        return super::book_settings::configure(conn, args, sources);
     }
     match command {
         "profiles.create" => create(conn, args, sources),

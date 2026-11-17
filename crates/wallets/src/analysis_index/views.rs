@@ -1,7 +1,7 @@
 use super::{field, fields, list, AnalysisIndex, Text};
 use crate::database_error;
 use kassiber_envelope::{dict, s, set, truthy, AppError};
-use kassiber_pyjson::Value;
+use kassiber_pyjson::{Key, Value};
 use kassiber_store::rusqlite::{
     params_from_iter, types::Value as Sql, Connection, OptionalExtension,
 };
@@ -77,6 +77,8 @@ pub struct SqlView<'a> {
     state: Value,
     public: bool,
     confirmations: RefCell<super::confirmations::ConfirmationOverlay<'a>>,
+    /// Rows this view has read, by map and key (see `GraphRead::get`).
+    reads: RefCell<BTreeMap<(String, String), Value>>,
 }
 
 pub fn with_read<R>(
@@ -149,6 +151,7 @@ impl<'a> SqlView<'a> {
             confirmations: RefCell::new(super::confirmations::ConfirmationOverlay::read(
                 conn, profile,
             )?),
+            reads: RefCell::default(),
         })
     }
     pub fn for_observer(&self, observer: &str) -> Result<SqlView<'_>, AppError> {
@@ -372,6 +375,47 @@ impl<'a> SqlView<'a> {
                 ),
             ),
         ]);
+        // Each mapping is assembled once and stored afterwards. Updating the
+        // snapshot entry per insert cloned the whole mapping every time, which
+        // made a 2,000-node overview quadratic (seconds per Mirror report). The
+        // entries, their order and their values are unchanged: node ids and
+        // edge ids are visited in set order and are unique, and adjacency keys
+        // keep their first-seen position.
+        let mut maps: BTreeMap<&str, Vec<(Key, Value)>> = BTreeMap::new();
+        for id in nodes {
+            for map in ["nodes", "transaction_facts", "output_facts"] {
+                let value = self.get(map, id)?;
+                if value != Value::Null {
+                    maps.entry(map)
+                        .or_default()
+                        .push((Key::from(id.as_str()), value));
+                }
+            }
+        }
+        let mut adjacency: BTreeMap<(&str, String), usize> = BTreeMap::new();
+        for id in edge_ids {
+            let value = self.get("edges", id)?;
+            if value == Value::Null
+                || !nodes.contains(field(&value, "source").as_str().unwrap_or(""))
+                || !nodes.contains(field(&value, "target").as_str().unwrap_or(""))
+            {
+                continue;
+            }
+            for (map, key) in [("outgoing", "source"), ("incoming", "target")] {
+                let key = field(&value, key).as_str().ok_or_else(super::invalid)?;
+                let entries = maps.entry(map).or_default();
+                let position = *adjacency.entry((map, key.to_owned())).or_insert_with(|| {
+                    entries.push((Key::from(key), Value::List(Vec::new())));
+                    entries.len() - 1
+                });
+                if let Value::List(ids) = &mut entries[position].1 {
+                    ids.push(s(id.as_str()));
+                }
+            }
+            maps.entry("edges")
+                .or_default()
+                .push((Key::from(id.as_str()), value));
+        }
         for map in [
             "nodes",
             "transaction_facts",
@@ -381,37 +425,11 @@ impl<'a> SqlView<'a> {
             "subjects",
             "edges",
         ] {
-            set(&mut result, map, dict([] as [(&str, Value); 0]));
-        }
-        for id in nodes {
-            for map in ["nodes", "transaction_facts", "output_facts"] {
-                let value = self.get(map, id)?;
-                if value != Value::Null {
-                    let mut mapping = field(&result, map).clone();
-                    set(&mut mapping, id, value);
-                    set(&mut result, map, mapping);
-                }
-            }
-        }
-        for id in edge_ids {
-            let value = self.get("edges", id)?;
-            if value == Value::Null
-                || !nodes.contains(field(&value, "source").as_str().unwrap_or(""))
-                || !nodes.contains(field(&value, "target").as_str().unwrap_or(""))
-            {
-                continue;
-            }
-            let mut edges = field(&result, "edges").clone();
-            set(&mut edges, id, value.clone());
-            set(&mut result, "edges", edges);
-            for (map, key) in [("outgoing", "source"), ("incoming", "target")] {
-                let key = field(&value, key).as_str().ok_or_else(super::invalid)?;
-                let mut mapping = field(&result, map).clone();
-                let mut ids = list(field(&mapping, key)).to_vec();
-                ids.push(s(id.as_str()));
-                set(&mut mapping, key, Value::List(ids));
-                set(&mut result, map, mapping);
-            }
+            set(
+                &mut result,
+                map,
+                Value::Dict(maps.remove(map).unwrap_or_default()),
+            );
         }
         AnalysisIndex::from_snapshot(result)
     }
@@ -421,11 +439,8 @@ fn parse(text: &str) -> Result<Value, AppError> {
     kassiber_pytext::loads(text).map_err(|_| super::invalid())
 }
 
-impl GraphRead for SqlView<'_> {
-    fn public_visibility(&self) -> bool {
-        self.public
-    }
-    fn get(&self, map: &str, key: &str) -> Result<Value, AppError> {
+impl SqlView<'_> {
+    fn read_map(&self, map: &str, key: &str) -> Result<Value, AppError> {
         if map == "subjects" {
             let ids=self.strings(&format!("SELECT node_id FROM chain_index_aliases WHERE profile_id=? AND observer=? AND alias=? ORDER BY node_id LIMIT {}",NODE_LOOKAHEAD+1),[self.profile,self.visibility(),key])?;
             if ids.len() > NODE_LOOKAHEAD {
@@ -485,6 +500,25 @@ impl GraphRead for SqlView<'_> {
         } else {
             Ok(value)
         }
+    }
+}
+
+impl GraphRead for SqlView<'_> {
+    fn public_visibility(&self) -> bool {
+        self.public
+    }
+    /// A view reads inside one write-free savepoint (`with_read` asserts it),
+    /// so a row read once answers every later lookup of the same key. The
+    /// traversal, the selected index and Mirror's relevance pass each read the
+    /// same nodes; parsing their JSON again dominated the report's time.
+    fn get(&self, map: &str, key: &str) -> Result<Value, AppError> {
+        let cache_key = (map.to_owned(), key.to_owned());
+        if let Some(value) = self.reads.borrow().get(&cache_key) {
+            return Ok(value.clone());
+        }
+        let value = self.read_map(map, key)?;
+        self.reads.borrow_mut().insert(cache_key, value.clone());
+        Ok(value)
     }
     fn seeds(&self, query: &Value) -> Result<Vec<String>, AppError> {
         let sql=format!("SELECT id,json_extract(payload_json,'$.chain'),json_extract(payload_json,'$.network') FROM chain_index_nodes WHERE profile_id=? AND seed=1 AND {} IS NOT NULL ORDER BY id",self.column());

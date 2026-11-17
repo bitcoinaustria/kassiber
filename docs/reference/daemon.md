@@ -31,9 +31,13 @@ Renderer authority is a separate subset under the [desktop invoke contract](#des
 
 
 `ui.reports.export_summary_pdf` writes a managed stakeholder summary PDF. It
-accepts optional `start` / `end` RFC3339 timestamps, optional `wallets` as an
-array of wallet ids or labels, and `include_snapshot` to prepend an as-of-now
-cover snapshot. The export response includes `data_integrity` (now with an
+accepts either an integer tax `year` (2009–2100), which the core resolves to
+the book's own tax year ([tax years](tax.md#tax-years)), or optional
+`start` / `end` RFC3339 timestamps, not both; optional `wallets` as an
+array of wallet ids or labels; and `include_snapshot` to prepend an as-of-now
+cover snapshot. The desktop sends the Reports page's `year`. With a `year`,
+`timeframe` adds `tax_year`, `first_day` and `last_day` (the local days the
+PDF shows); `start` and `end` stay the UTC instants it read. The export response includes `data_integrity` (now with an
 `internal_transfers` count + volume), period-end `wallet_holdings` /
 `holdings_totals`, current `snapshot_wallets` / `snapshot_totals` when
 requested, and `balance_history` so callers can reconcile the generated PDF
@@ -218,7 +222,29 @@ fresh install can sync are deliberately excluded: sending the txid of a
 transaction to a third party is not something a convenience default should do
 silently. A seeded default becomes eligible once the user points a wallet at it,
 selects it as the default, marks it as their own infrastructure, or defines it in
-the environment.
+the environment. That ordered list is the explicit lookup (`allowPublicLookup:
+true`, the user's "Look up on-chain" press).
+
+`lookup: "wallet_backend"` is the desktop's automatic lookup when it opens a
+transaction (it conflicts with `allowPublicLookup: true`; `"none"` or absent is
+a local read). It asks only the backend the transaction's own wallet syncs from,
+and only for a Bitcoin on-chain wallet whose history an on-chain backend sync
+observes and that has synced at least once; it never falls back to the book's
+default or another configured backend, and has a 6-second budget. Before any
+request it refuses, answering the local graph with an info warning, when offline
+mode or `KASSIBER_NO_EGRESS` is on (`wallet_backend_lookup_offline`), when the
+"Fill in transaction details from the wallet's backend" preference is off
+(`wallet_backend_lookup_disabled`), or when the wallet has no such backend,
+including Liquid, file-import, BTCPay, Lightning, exchange and never-synced
+wallets (`wallet_backend_lookup_unavailable`). Stored, local and cached
+references answer first, as for the explicit lookup. The preference is a
+machine-wide owner-only file, `<state root>/config/wallet-backend-lookup.json`
+(`KASSIBER_WALLET_BACKEND_LOOKUP_FILE` overrides the path), holding
+`{"enabled": bool, "schema_version": 1}`; a missing file means on and an
+unreadable one off. The desktop writes it as it writes the update-check
+preference; no daemon kind reads or sets it. The AI's graph tool accepts only
+`transaction`, so neither lookup is reachable from the assistant, MCP or the
+operator broker. See [privacy and security](privacy-and-security.md#external-requests-complete-list).
 
 When the user allows a configured public backend lookup, the daemon caches only the sanitized
 reference graph inside the local DB/SQLCipher boundary, keyed by schema version,
@@ -434,8 +460,30 @@ names for book set and book. It inherits fiat currency, tax country, long-term
 period, and gains algorithm from the active book in that set when available;
 otherwise it uses the first book in the set, then generic EUR/FIFO defaults for
 empty sets. It can also accept `source_profile_id` to copy those settings from a
-specific book in the same set. Wallets, accounts/buckets, and transactions are
+specific book in the same set; a book of the same country also keeps the
+source's own tax calendar. Wallets, accounts/buckets, and transactions are
 not copied. The new book becomes active.
+
+`ui.profiles.settings` (read) accepts `{"profile_id":"..."}` (any book, not
+only the open one; the open book without it) and returns that book's
+settings and the choices its country allows: the projection in
+[book settings](tax.md#book-settings). `ui.profiles.update` accepts
+`profile_id` and any of `tax_country`, `gains_algorithm`,
+`cost_basis_pool_scope`, `fiat_currency` (strings), `tax_long_term_days`
+(an integer), `require_coarse_review` and `bitcoin_rail_carrying_value`
+(booleans), `tax_year_start` and `timezone` (strings; `"default"` for the
+country's), and `dry_run` (a boolean). Every value is validated against the
+country registry before anything is written; a dry run writes nothing and
+returns the preview (`changes`, `journals`, `filed_reports`, `readiness`,
+`price_currency_holds`, `tax_calendar_reset`, `settings`). Without
+`dry_run` the answer is `profiles get`'s projection of the book, with
+`price_currency_holds` when the currency changed and `tax_calendar_reset`
+when a region switch dropped the book's own tax calendar. Refusals carry
+the codes `validation`, `method_scope_unsupported`,
+`tax_year_start_invalid`, `tax_year_start_locked`, `timezone_unknown` and
+`timezone_locked`. Renaming stays `ui.profiles.rename`. The CLI's
+`profiles settings` and `profiles configure [--dry-run]` are the same
+reads and changes.
 
 `ui.workspace.create` accepts `{"label":"..."}` and creates an empty book set.
 `workspace` remains the daemon/API name. The daemon makes the new book set
@@ -556,9 +604,12 @@ contract, defaults to a `Binance` provider wallet in full mode, and returns
 `binance_rows`.
 `source_format="bullbitcoin_wallet_csv"` is different: it imports Bull's
 unified mobile wallet transaction export as active wallet-scoped BTC/LBTC/
-Lightning activity, returns `bullbitcoin_wallet_rows`, skips failed/expired and
-self-direction rows, and redacts exported preimages before raw metadata is
-stored. Wallet config may include `bullbitcoin_wallet_network` (`bitcoin`,
+Lightning activity, returns `bullbitcoin_wallet_rows`, skips failed/expired/
+refunded and undated pending rows, books self-transfer rows as fee-only
+outflows, holds unobserved payjoin, unproven Lightning, and negative-count
+rows excluded for review, and redacts exported preimages before raw metadata is stored. Results
+may add `bullbitcoin_wallet_skipped`, `bullbitcoin_wallet_review`, and
+`warnings` (see [imports](imports.md#bull-bitcoin-wallet-csv)). Wallet config may include `bullbitcoin_wallet_network` (`bitcoin`,
 `liquid`, or `lightning`) to split one unified export into separate source
 wallets; filtered results also include `bullbitcoin_wallet_rows_total` and
 `bullbitcoin_wallet_network`. Coinfinity imports return `coinfinity_rows`. For
@@ -1136,8 +1187,9 @@ Liquid graphs already present on the row are never replaced. A private source
 checkpoint advances the scan even past failed rows so the next sync can cover
 leftovers. Job results contain counts only. Completion emits the existing
 `ui.freshness.background` event, whose desktop query invalidation includes
-`ui.transactions.graph`. Ordinary graph reads remain local, and the explicit
-lookup button remains available.
+`ui.transactions.graph`. Ordinary graph reads remain local; the desktop's
+automatic wallet-backend lookup and the explicit lookup button are the only
+graph reads that reach a backend.
 
 When `background_enabled` is true, the daemon starts an opt-in freshness worker
 while the app is running. The worker opens its own SQLite connection, enqueues

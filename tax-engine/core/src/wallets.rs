@@ -27,10 +27,20 @@
 //!   composition, open positions and sold percentages read them as the
 //!   universal pass's; they come out in RP2's taxable-event order.
 //!
-//! Pool methods have no per-wallet form here and are refused. A wallet that
-//! lacks the units a disposal or move needs fails as RP2's lot engine does
-//! when lots run out; an unpriced move fee fails rather than vanish with its
-//! basis.
+//! The plain moving average has a per-wallet form: each wallet keeps its
+//! own average cost, the method takes the wallet's FIFO portions (whose
+//! acquisitions date the holding period) at that average, and a move
+//! carries its source's average cost with the units it moves (the pass
+//! Germany's `moving_average_fifo_period` uses). The other pool and
+//! matching methods have no per-wallet form here and are refused. A wallet
+//! that lacks the units a disposal or move needs fails as RP2's lot engine
+//! does when lots run out; an unpriced move fee fails rather than vanish
+//! with its basis.
+//!
+//! [`transition_fragments`] runs the same pass with one universal pool
+//! until a change instant (the United States' 2025-01-01), then allocates
+//! the pool's remaining lots to the wallets by a standing rule and goes on
+//! per wallet; see its documentation.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -45,6 +55,10 @@ use crate::num::{add, cmp13, div, gt13, mul, sub, zero};
 
 /// A wallet: RP2's account, an exchange label and a holder.
 type Wallet<'e> = (&'e str, &'e str);
+
+/// The one pool every wallet's units are in before a transition. No wallet
+/// label holds a NUL, so it names no wallet.
+const UNIVERSAL: Wallet<'static> = ("\u{0}universal", "");
 
 /// Part of a lot one wallet holds.
 #[derive(Clone, Debug)]
@@ -69,14 +83,14 @@ impl Order {
             MethodName::Lifo => Order::Lifo,
             MethodName::Hifo => Order::Hifo,
             MethodName::Lofo => Order::Lofo,
-            MethodName::MovingAverage
-            | MethodName::MovingAverageAt
+            MethodName::MovingAverage => Order::Fifo,
+            MethodName::MovingAverageAt
             | MethodName::MovingAverageFifoPeriod
             | MethodName::UkShareMatching
             | MethodName::JpTotalAverage
             | MethodName::JpMovingAverage => {
                 return Err(EngineError::value(format!(
-                    "Accounting method '{}' has no wallet-scoped form: choose FIFO, LIFO, HIFO or LOFO, or the global pool scope",
+                    "Accounting method '{}' has no wallet-scoped form: choose FIFO, LIFO, HIFO, LOFO or MOVING_AVERAGE, or the global pool scope",
                     method.as_str()
                 )))
             }
@@ -281,7 +295,61 @@ pub(crate) fn fragments(
     events: &[usize],
     method: MethodName,
 ) -> EngineResult<(Vec<Fragment>, Vec<WalletHoldingOut>)> {
-    fragments_with(entries, lots, ins, events, Order::of(method)?, Basis::Lot)
+    let basis = if method == MethodName::MovingAverage {
+        Basis::WalletAverage
+    } else {
+        Basis::Lot
+    };
+    fragments_with(entries, lots, ins, events, Order::of(method)?, basis)
+}
+
+/// The fragments of one asset that is identified across every wallet (the
+/// global pool) before `change_us` and per wallet from then on (a lot
+/// method's), and each wallet's remaining units, as [`fragments`].
+///
+/// Before the change one pool holds every wallet's lots: a disposal takes
+/// from it by the method, a move only pays its fee from it, and each
+/// wallet's own unit count is kept beside it. At the change (immediately
+/// before the first entry at or after `change_us`, or at the end of a book
+/// that never reaches it) the pool's remaining lots are allocated by a
+/// standing rule, Rev. Proc. 2024-28 section 5.02(2)(b)'s global
+/// allocation: the lots in the method's order (FIFO the earliest
+/// acquisitions first, LIFO the latest, HIFO the highest unit cost, LOFO
+/// the lowest, ties by acquisition and row), each wallet holding units
+/// filled in turn, wallets in `wallet_order` (the book's wallets by when
+/// they were added, so renaming one does not move basis between them),
+/// then any it does not name by label and holder, until it has exactly
+/// the units it held. A wallet count below zero, or counts that do not add
+/// up to the pool's units, fail instead of allocating a guess.
+pub(crate) fn transition_fragments(
+    entries: &[Entry],
+    lots: &[LotView],
+    ins: &[usize],
+    events: &[usize],
+    method: MethodName,
+    change_us: i64,
+    wallet_order: &[String],
+) -> EngineResult<(Vec<Fragment>, Vec<WalletHoldingOut>)> {
+    let order = match method {
+        MethodName::Fifo | MethodName::Lifo | MethodName::Hifo | MethodName::Lofo => {
+            Order::of(method)?
+        }
+        _ => {
+            return Err(EngineError::value(format!(
+                "Accounting method '{}' has no change from the global to the wallet pool scope: choose FIFO, LIFO, HIFO or LOFO",
+                method.as_str()
+            )))
+        }
+    };
+    pass(
+        entries,
+        lots,
+        ins,
+        events,
+        order,
+        Basis::Lot,
+        Some((change_us, wallet_order)),
+    )
 }
 
 /// [`fragments`] in `order`, with each taken portion costing its `basis`.
@@ -293,6 +361,115 @@ pub(crate) fn fragments_with(
     order: Order,
     basis: Basis,
 ) -> EngineResult<(Vec<Fragment>, Vec<WalletHoldingOut>)> {
+    pass(entries, lots, ins, events, order, basis, None)
+}
+
+/// Allocates the universal pool's portions to the wallets that hold units
+/// (`counts`): portions in the method's order, wallets in `wallet_order`
+/// (labels) and then by label and holder, each filled up to its count.
+fn allocate<'a>(
+    holdings: &mut Holdings<'a>,
+    counts: &mut HashMap<Wallet<'a>, Decimal>,
+    wallet_order: &[String],
+) -> EngineResult<()> {
+    let mut portions = holdings.wallets.remove(&UNIVERSAL).unwrap_or_default();
+    portions.retain(|portion| !portion.amount.is_zero());
+    // Insertion sort with the method's comparison, which can fail.
+    let mut ordered: Vec<Portion> = Vec::with_capacity(portions.len());
+    for portion in portions {
+        let mut at = ordered.len();
+        for (index, other) in ordered.iter().enumerate() {
+            if holdings.before(portion.lot, other.lot)? {
+                at = index;
+                break;
+            }
+        }
+        ordered.insert(at, portion);
+    }
+    let mut wallets: Vec<(Wallet<'a>, Decimal)> = counts.drain().collect();
+    let rank = |wallet: &Wallet<'_>| {
+        wallet_order
+            .iter()
+            .position(|label| label == wallet.0)
+            .unwrap_or(usize::MAX)
+    };
+    wallets.sort_by(|a, b| rank(&a.0).cmp(&rank(&b.0)).then_with(|| a.0.cmp(&b.0)));
+    let mut pool = zero();
+    for portion in &ordered {
+        pool = add(&pool, &portion.amount)?;
+    }
+    let mut held = zero();
+    for (wallet, count) in &wallets {
+        if cmp13(count, &zero())? == Ordering::Less {
+            return Err(EngineError::value(format!(
+                "Cannot allocate the global pool to wallets at the change to per-wallet identification: wallet {} would hold {count} units",
+                wallet.0
+            )));
+        }
+        held = add(&held, count)?;
+    }
+    if cmp13(&held, &pool)? != Ordering::Equal {
+        return Err(EngineError::value(format!(
+            "Cannot allocate the global pool to wallets at the change to per-wallet identification: the wallets hold {held} units and the pool {pool}"
+        )));
+    }
+    let mut next = ordered.into_iter();
+    let mut current: Option<Portion> = None;
+    for (wallet, count) in wallets {
+        let mut needed = count;
+        while gt13(&needed, &zero())? {
+            let mut portion = match current.take() {
+                Some(portion) => portion,
+                None => next.next().ok_or_else(|| {
+                    EngineError::runtime("Internal error: the global pool ran out while allocating")
+                })?,
+            };
+            if cmp13(&portion.amount, &needed)? == Ordering::Greater {
+                portion.amount = sub(&portion.amount, &needed)?;
+                holdings.put(wallet, portion.lot, needed.clone())?;
+                current = Some(portion);
+                needed = zero();
+            } else {
+                needed = sub(&needed, &portion.amount)?;
+                holdings.put(wallet, portion.lot, portion.amount)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Adds `amount` (negative to remove) to a wallet's count before the
+/// change.
+fn count<'a>(
+    counts: &mut HashMap<Wallet<'a>, Decimal>,
+    wallet: Wallet<'a>,
+    amount: &Decimal,
+    remove: bool,
+) -> EngineResult<()> {
+    let held = counts.entry(wallet).or_insert_with(zero);
+    *held = if remove {
+        sub(held, amount)?
+    } else {
+        add(held, amount)?
+    };
+    Ok(())
+}
+
+/// The wallet pass; with `change` (its instant and the allocation's wallet
+/// order), one universal pool before it.
+fn pass(
+    entries: &[Entry],
+    lots: &[LotView],
+    ins: &[usize],
+    events: &[usize],
+    order: Order,
+    basis: Basis,
+    change: Option<(i64, &[String])>,
+) -> EngineResult<(Vec<Fragment>, Vec<WalletHoldingOut>)> {
+    let (change_us, wallet_order) = match change {
+        Some((us, wallet_order)) => (Some(us), wallet_order),
+        None => (None, &[][..]),
+    };
     let unit_cost = lots
         .iter()
         .map(|lot| div(&lot.fiat_in_with_fee, &lot.crypto_in))
@@ -318,14 +495,30 @@ pub(crate) fn fragments_with(
         EntryKind::Intra => 1,
         EntryKind::Out => 2,
     };
-    let mut pass: Vec<usize> = (0..entries.len())
+    let mut order_of_pass: Vec<usize> = (0..entries.len())
         .filter(|&index| entries[index].ts.is_visible())
         .collect();
-    pass.sort_by_key(|&index| (entries[index].ts.us, rank(entries[index].kind), index));
+    order_of_pass.sort_by_key(|&index| (entries[index].ts.us, rank(entries[index].kind), index));
 
     let mut by_event: HashMap<usize, Vec<Fragment>> = HashMap::new();
-    for index in pass {
+    // Before the change: each wallet's own unit count beside the pool.
+    let mut counts: HashMap<Wallet, Decimal> = HashMap::new();
+    let mut universal = change_us.is_some();
+    for index in order_of_pass {
         let entry = &entries[index];
+        if universal && change_us.is_some_and(|change| entry.ts.us >= change) {
+            allocate(&mut holdings, &mut counts, wallet_order)?;
+            universal = false;
+        }
+        // The pool a wallet's units are taken from and put in.
+        fn pool_of(universal: bool, wallet: Wallet<'_>) -> Wallet<'_> {
+            if universal {
+                UNIVERSAL
+            } else {
+                wallet
+            }
+        }
+        let pool = |wallet| pool_of(universal, wallet);
         match &entry.detail {
             Detail::In {
                 exchange,
@@ -334,9 +527,13 @@ pub(crate) fn fragments_with(
                 ..
             } => {
                 let lot = lot_of[&index];
-                holdings.put((exchange, holder), lot, crypto_in.clone())?;
+                let wallet = (exchange.as_str(), holder.as_str());
+                if universal {
+                    count(&mut counts, wallet, crypto_in, false)?;
+                }
+                holdings.put(pool(wallet), lot, crypto_in.clone())?;
                 if basis == Basis::WalletAverage {
-                    let cost = holdings.cost.entry((exchange, holder)).or_insert_with(zero);
+                    let cost = holdings.cost.entry(wallet).or_insert_with(zero);
                     *cost = add(cost, &lots[lot].fiat_in_with_fee)?;
                 }
                 if entry.is_earning() {
@@ -354,6 +551,10 @@ pub(crate) fn fragments_with(
                 exchange, holder, ..
             } => {
                 let wallet = (exchange.as_str(), holder.as_str());
+                if universal {
+                    count(&mut counts, wallet, entry.crypto_balance_change(), true)?;
+                }
+                let wallet = pool(wallet);
                 let unit = holdings.average(wallet)?;
                 let taken = holdings.take(wallet, entry.crypto_balance_change(), entry)?;
                 holdings.move_cost(wallet, None, &unit, &taken)?;
@@ -369,6 +570,15 @@ pub(crate) fn fragments_with(
                 ..
             } => {
                 let from = (from_exchange.as_str(), from_holder.as_str());
+                let to = (to_exchange.as_str(), to_holder.as_str());
+                if universal {
+                    count(&mut counts, from, crypto_fee, true)?;
+                    if from != to {
+                        count(&mut counts, from, crypto_received, true)?;
+                        count(&mut counts, to, crypto_received, false)?;
+                    }
+                }
+                let (from, to) = (pool(from), pool(to));
                 if gt13(crypto_fee, &zero())? {
                     if !entry.is_taxable()? {
                         return Err(EngineError::value(format!(
@@ -381,7 +591,6 @@ pub(crate) fn fragments_with(
                     holdings.move_cost(from, None, &unit, &taken)?;
                     emit(&mut by_event, entries, lots, index, taken, &unit)?;
                 }
-                let to = (to_exchange.as_str(), to_holder.as_str());
                 if from != to && gt13(crypto_received, &zero())? {
                     let unit = holdings.average(from)?;
                     let taken = holdings.take(from, crypto_received, entry)?;
@@ -392,6 +601,11 @@ pub(crate) fn fragments_with(
                 }
             }
         }
+    }
+    if universal {
+        // A book that ends before the change: its holdings as the rule
+        // allocates them.
+        allocate(&mut holdings, &mut counts, wallet_order)?;
     }
     let mut out = Vec::new();
     for index in events {

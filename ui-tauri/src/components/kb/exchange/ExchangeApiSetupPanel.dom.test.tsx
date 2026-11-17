@@ -200,7 +200,7 @@ describe("ExchangeApiSetupPanel", () => {
     );
     await clickTest();
     const alert = screen.getByRole("alert");
-    expect(alert.textContent).toContain("Exchange API connections need a newer Kassiber backend");
+    expect(alert.textContent).toContain("Exchange connections need a newer Kassiber version");
     // The daemon's wording would only confuse here.
     expect(alert.textContent).not.toContain("not wired");
   });

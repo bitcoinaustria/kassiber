@@ -355,10 +355,13 @@ export function explorerButtonTitle(
   target: ExplorerTarget,
   t?: TFunction<"connections">,
 ) {
-  const translate = t ?? ((key: string, opts?: Record<string, unknown>) =>
-    // dynamic key
-    i18n.t(key as never, { ns: "connections", ...opts }) as string);
-  return translate("utxos.openExplorer", { explorer: target.label });
+  if (t) return t("utxos.openExplorer", { explorer: target.label });
+  // Without a hook translator: the shared instance, by namespace. Calling the union of both
+  // function types made the compiler instantiate every bundle's key type at once (TS2589).
+  return i18n.t("utxos.openExplorer" as never, {
+    ns: "connections",
+    explorer: target.label,
+  }) as string;
 }
 
 function localTransactionTitle(

@@ -900,7 +900,9 @@
     "--features",
     "test-harness",
     "--test",
-    "review_apply"
+    "review_apply",
+    "--test",
+    "pair_groups"
    ],
    "env": {
     "RUST_TEST_THREADS": "1"

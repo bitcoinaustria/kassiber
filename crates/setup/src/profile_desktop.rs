@@ -79,9 +79,49 @@ pub fn execute(
                 "Region is required.",
                 "Choose a supported region for the book.",
             ),
+            (
+                "fiat_currency",
+                "Currency is required.",
+                "Choose an ISO 4217 currency for the book.",
+            ),
         ] {
             if optional(args, key).is_some() {
                 replace(&mut updates, key, s(required(args, key, message, hint)?));
+            }
+        }
+        // The book's own tax calendar: a string, "default" for the
+        // country's.
+        for key in ["tax_year_start", "timezone"] {
+            match optional(args, key) {
+                None => {}
+                Some(Value::Str(_)) => replace(&mut updates, key, get(args, key).unwrap().clone()),
+                Some(_) => {
+                    return Err(AppError::new(
+                        "validation",
+                        format!("{key} must be a string"),
+                    ))
+                }
+            }
+        }
+        if let Some(days) = optional(args, "tax_long_term_days") {
+            if !matches!(days, Value::Int(_)) {
+                return Err(AppError::new(
+                    "validation",
+                    "tax_long_term_days must be an integer",
+                ));
+            }
+            replace(&mut updates, "tax_long_term_days", days.clone());
+        }
+        for key in ["require_coarse_review", "bitcoin_rail_carrying_value"] {
+            match optional(args, key) {
+                None => {}
+                Some(Value::Bool(on)) => replace(&mut updates, key, Value::Bool(*on)),
+                Some(_) => {
+                    return Err(AppError::new(
+                        "validation",
+                        format!("{key} must be a boolean"),
+                    ))
+                }
             }
         }
         if !truthy(&updates) {
@@ -89,6 +129,9 @@ pub fn execute(
                 "validation",
                 "No book policy change was provided.",
             ));
+        }
+        if let Some(dry_run) = optional(args, "dry_run") {
+            replace(&mut updates, "dry_run", dry_run.clone());
         }
     }
     let p = selected(
@@ -142,7 +185,9 @@ pub fn execute(
         "update" => {
             replace(&mut updates, "workspace", s(wid));
             replace(&mut updates, "profile", s(id));
-            profiles::execute(conn, "profiles.set", &updates, sources)
+            // Any setting of any book, with a dry run; the policy columns
+            // alone keep `profiles set`'s answer.
+            super::book_settings::configure(conn, &updates, sources)
         }
         _ => Err(AppError::new(
             "not_implemented",
@@ -241,7 +286,12 @@ fn create(conn: &Connection, args: &Value, sources: &dyn Sources) -> Result<Valu
     }
     replace(&mut defaults, "workspace", s(wid.as_str()));
     replace(&mut defaults, "label", s(label));
+    // The book whose settings the new one starts from, if any.
+    let template = get(&defaults, "id").map(py_str);
     let p = profiles::execute(conn, "profiles.create", &defaults, sources)?;
+    if let Some(template) = template {
+        super::book_settings::copy_calendar(conn, &template, &text(&p, "id"))?;
+    }
     let w = one(conn, "SELECT * FROM workspaces WHERE id=?", [&wid])?;
     Ok(dict([
         ("activeProfileId", get(&p, "id").unwrap().clone()),
@@ -267,7 +317,14 @@ fn create(conn: &Connection, args: &Value, sources: &dyn Sources) -> Result<Valu
                     "gains_algorithm",
                     "cost_basis_pool_scope",
                 ]
-                .map(|k| (k, get(&p, k).unwrap().clone())),
+                .map(|k| {
+                    let v = if k == "tax_long_term_days" {
+                        profiles::effective_long_term_days(&p)
+                    } else {
+                        get(&p, k).unwrap().clone()
+                    };
+                    (k, v)
+                }),
             ),
         ),
     ]))

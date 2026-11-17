@@ -37,7 +37,7 @@ describe("ReviewStep grouping", () => {
     const servers = html.indexOf("https://mempool.example/api");
     expect(servers).toBeGreaterThan(network);
     expect(servers).toBeLessThan(local);
-    expect(html.indexOf("SQLCipher encrypted database")).toBeGreaterThan(local);
+    expect(html.indexOf("Encrypted database")).toBeGreaterThan(local);
   });
 
   it("states what each connection reaches, including what stays off", () => {

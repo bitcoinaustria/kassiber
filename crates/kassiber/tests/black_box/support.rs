@@ -84,6 +84,14 @@ impl Sandbox {
         }
         let path = |sub: &str| base.join(sub).to_string_lossy().into_owned();
         let env = vec![
+            // The default state root on macOS and Windows hangs off the home
+            // directory, not XDG: a child that inherits the real one reads and
+            // writes the developer's own `~/.kassiber` catalog. The directory
+            // is created only by a test or child that needs it.
+            ("HOME".into(), path("home")),
+            ("USERPROFILE".into(), path("home")),
+            ("LOCALAPPDATA".into(), path("home/AppData/Local")),
+            ("APPDATA".into(), path("home/AppData/Roaming")),
             ("XDG_DATA_HOME".into(), path("xdg-data")),
             ("XDG_CONFIG_HOME".into(), path("xdg-config")),
             ("XDG_STATE_HOME".into(), path("xdg-state")),
@@ -209,12 +217,10 @@ impl Sandbox {
     }
 
     pub fn command(&self) -> Command {
+        self.assert_confined();
         let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
         for (key, _) in std::env::vars() {
-            if key.starts_with("KASSIBER_")
-                || key.starts_with("SATBOOKS_")
-                || key.starts_with("XDG_")
-            {
+            if inherited_is_replaced(&key) {
                 command.env_remove(key);
             }
         }
@@ -224,6 +230,52 @@ impl Sandbox {
             .envs(self.env.iter().map(|(k, v)| (k, v)))
             .current_dir(repo());
         command
+    }
+
+    /// Panics unless a child's home directory and the default state root it
+    /// would resolve without `--data-root` both lie inside the sandbox, so no
+    /// test can read or write the developer's real `~/.kassiber`.
+    pub fn assert_confined(&self) {
+        let mut environ: std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString> =
+            std::env::vars_os()
+                .filter(|(key, _)| {
+                    !key.to_str().is_some_and(inherited_is_replaced)
+                        && !matches!(key.to_str(), Some("COLUMNS" | "LINES"))
+                })
+                .collect();
+        environ.extend(self.env.iter().map(|(k, v)| (k.into(), v.into())));
+        let home_key = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+        let home = environ
+            .get(std::ffi::OsStr::new(home_key))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                panic!(
+                    "a black-box child would run without {home_key} and fall back to the real \
+                     home directory; keep it set inside the sandbox"
+                )
+            });
+        let context = kassiber_paths::Context {
+            platform: kassiber_paths::Platform::current(),
+            home: home.clone(),
+            environ,
+        };
+        let state = context.native_state_root();
+        for (what, path) in [("home directory", &home), ("default state root", &state)] {
+            assert!(
+                path.starts_with(&self.base),
+                "a black-box child's {what} {} lies outside its sandbox {}; it would touch the \
+                 real home",
+                path.display(),
+                self.base.display()
+            );
+        }
+        if let Some(real) = std::env::var_os(home_key).filter(|real| !real.is_empty()) {
+            assert_ne!(
+                home,
+                PathBuf::from(real),
+                "a black-box child would use the real home directory"
+            );
+        }
     }
 
     /// `kassiber --machine --data-root <root> argv...`.
@@ -331,6 +383,28 @@ impl Sandbox {
     pub fn scrub(&self, text: &str) -> String {
         text.replace(&self.base.to_string_lossy().into_owned(), "<SANDBOX>")
             .replace(&repo().to_string_lossy().into_owned(), "<REPO>")
+    }
+}
+
+/// Inherited variables a child never sees: the sandbox sets its own.
+fn inherited_is_replaced(key: &str) -> bool {
+    key.starts_with("KASSIBER_") || key.starts_with("SATBOOKS_") || key.starts_with("XDG_")
+}
+
+#[test]
+fn every_child_runs_with_a_home_inside_its_sandbox() {
+    let mut sandbox = Sandbox::empty();
+    sandbox.assert_confined();
+    // Dropping the sandboxed home, or pointing it back at the real one,
+    // refuses before any child is spawned.
+    let real = std::env::var("HOME").unwrap_or_else(|_| "/".into());
+    for broken in [None, Some(real)] {
+        match &broken {
+            None => sandbox.unset("HOME").unset("USERPROFILE"),
+            Some(home) => sandbox.set("HOME", home).set("USERPROFILE", home),
+        };
+        let refused = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sandbox.command()));
+        assert!(refused.is_err(), "HOME {broken:?} must be refused");
     }
 }
 

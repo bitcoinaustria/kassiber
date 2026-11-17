@@ -12,7 +12,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const LOCALES_DIR = join(__dirname, "locales");
+// The bundles live in assets/i18n at the repo root, shared across front ends.
+const LOCALES_DIR = join(__dirname, "../../../assets/i18n/locales");
 const LOCALES = readdirSync(LOCALES_DIR);
 
 function bundlePaths(locale: string) {

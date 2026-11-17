@@ -117,15 +117,10 @@ fn income_kind(kind: &str) -> &'static str {
         _ => "income",
     }
 }
-pub(crate) fn entry_key(row: &Value, zone: Option<&str>) -> Result<Option<Key>> {
+pub(crate) fn entry_key(row: &Value, cut: crate::tax_years::Cut<'_>) -> Result<Option<Key>> {
     let at = text(row, "occurred_at");
-    let year = if let Some(zone) = zone {
-        calendar::local(&at, zone)?.0
-    } else {
-        let Some(year) = at.get(..4).and_then(|v| v.parse::<i64>().ok()) else {
-            return Ok(None);
-        };
-        year
+    let Some(year) = cut.year(&at)? else {
+        return Ok(None);
     };
     let asset = if truthy(value(row, "asset")) {
         text(row, "asset")
@@ -170,7 +165,7 @@ pub fn report(conn: &Connection, profile: &Value) -> Result<Value> {
     let id = text(profile, "id");
     let country = text(profile, "tax_country").to_lowercase();
     let vienna = crate::country::vienna(&country);
-    let zone = crate::country::zone(&country);
+    let cut = crate::tax_years::Cut::of(conn, profile)?;
     let austrian = crate::country::austrian(&country);
     let query = "SELECT je.occurred_at,je.asset,je.entry_type,COALESCE(NULLIF(t.kind_override,''),t.kind) AS transaction_kind,COALESCE(je.capital_gains_type,'') AS capital_gains_type,ABS(je.quantity) AS quantity_msat,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.gain_loss,0) AS gain_loss FROM journal_entries je LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND ";
     let predicate = if austrian {
@@ -182,7 +177,7 @@ pub fn report(conn: &Connection, profile: &Value) -> Result<Value> {
     // cross the float boundary, exactly where the reference does.
     let mut groups: Vec<(Key, Totals)> = Vec::new();
     for row in rows(conn, &format!("{query}{predicate}"), [&id])? {
-        if let Some(key) = entry_key(&row, zone)? {
+        if let Some(key) = entry_key(&row, cut)? {
             let index = groups
                 .iter()
                 .position(|(k, _)| *k == key)
@@ -234,7 +229,7 @@ pub fn report(conn: &Connection, profile: &Value) -> Result<Value> {
             text(r, "capital_gains_type"),
         )
     });
-    let fees = fees(conn, &id, zone)?;
+    let fees = fees(conn, &id, cut)?;
     if details.is_empty() && fees.is_empty() {
         return Ok(Value::List(Vec::new()));
     }
@@ -257,7 +252,7 @@ pub fn report(conn: &Connection, profile: &Value) -> Result<Value> {
     result.extend(fees);
     Ok(Value::List(result.into_iter().map(normalize).collect()))
 }
-fn fees(conn: &Connection, id: &str, zone: Option<&str>) -> Result<Vec<Value>> {
+fn fees(conn: &Connection, id: &str, cut: crate::tax_years::Cut<'_>) -> Result<Vec<Value>> {
     let rows = rows(conn,"SELECT p.kind,p.policy,p.swap_fee_msat,p.out_asset,p.in_asset,COALESCE(p.target_occurred_at,t_out.occurred_at) AS occurred_at FROM journal_custody_projection_relations p JOIN transactions t_out ON t_out.id=p.out_transaction_id WHERE p.profile_id=? AND p.swap_fee_msat IS NOT NULL",[id])?;
     if rows.is_empty() {
         return Ok(Vec::new());
@@ -298,13 +293,8 @@ fn fees(conn: &Connection, id: &str, zone: Option<&str>) -> Result<Vec<Value>> {
             continue;
         }
         let at = text(&row, "occurred_at");
-        let year = if let Some(zone) = zone {
-            calendar::local(&at, zone)?.0
-        } else {
-            let Some(year) = at.get(..4).and_then(|v| v.parse::<i64>().ok()) else {
-                continue;
-            };
-            year
+        let Some(year) = cut.year(&at)? else {
+            continue;
         };
         let (year_count, msat) = years
             .entry(year)

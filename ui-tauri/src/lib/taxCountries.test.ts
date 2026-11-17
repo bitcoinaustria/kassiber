@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import deCommon from "@/i18n/locales/de/common.json";
-import enCommon from "@/i18n/locales/en/common.json";
+import deCommon from "@shared/i18n/locales/de/common.json";
+import enCommon from "@shared/i18n/locales/en/common.json";
 
 import {
   TAX_COUNTRIES,

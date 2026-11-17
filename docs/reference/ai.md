@@ -1962,7 +1962,8 @@ append-only edit/evidence audit trail and run only after consent. Commercial
 review writes (`ui_btcpay_provenance_review`, `ui_documents_create`) are also
 consent-gated. The virtual `ui_reports_export` maps a small report/format enum
 onto existing deterministic PDF/XLSX/CSV/audit-package exporters and likewise
-withholds managed paths from model context. Stale journals may also be
+withholds managed paths from model context. Its `year` reaches the capital-gains,
+E 1kv and summary exports; for the summary it selects the book's own tax year. Stale journals may also be
 refreshed automatically before read/report tools as local maintenance. Wallet
 sync before report reads is disabled by default; it runs automatically only
 after `ui_maintenance_configure` enables that active-profile setting, or when
@@ -2133,7 +2134,9 @@ When the report truncated by row, the visual drops the oldest bucket, which may
 have lost some assets. A transaction flow names only the user's own wallets
 (from the graph's wallet field, also for a coin several of them share); other
 inputs and outputs are "Input n" and "Output n", with no address or outpoint,
-and the graph is read without public lookup. Amounts of different assets are
+and the graph is read without public lookup: the AI graph tool accepts only
+`transaction`, so it can ask for neither the explicit lookup nor the desktop's
+automatic wallet-backend lookup. Amounts of different assets are
 never added up as bitcoin. Cash-flow buckets are counted in UTC; the
 Transactions page counts them in the desktop's time zone, so a movement close
 to midnight can fall in a neighbouring bucket.

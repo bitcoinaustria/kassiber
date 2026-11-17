@@ -1,0 +1,488 @@
+{
+  "screen": {
+    "unavailableTitle": "Overview unavailable",
+    "unavailableBody": "Kassiber could not read real overview data.",
+    "noRealData": "No real overview data is available for the current book."
+  },
+  "birdsEye": {
+    "badge": "Book set",
+    "mixedFiatBadge": "Mixed fiat",
+    "refresh": "Refresh book set",
+    "booksLink": "Books",
+    "readonlyNote": "Read-only view across books. Opening a book or transaction switches to that book first.",
+    "couldNotLoad": "Could not load Book Set Overview.",
+    "fallbackTitle": "Book set",
+    "metric": {
+      "btcTotal": "BTC total",
+      "books_one": "{{count}} book",
+      "books_other": "{{count}} books",
+      "fiatRollup": "Fiat rollup",
+      "fiatTotal": "Fiat total",
+      "mixed": "Mixed",
+      "perBookFiatOnly": "Per-book fiat rows only",
+      "noFiatCurrency": "No fiat currency",
+      "readiness": "Readiness",
+      "booksNeedAttention_one": "{{count}} book needs attention",
+      "booksNeedAttention_other": "{{count}} books need attention",
+      "allBooksReady": "All books ready",
+      "quarantine": "Quarantine",
+      "journalsNeedProcessing": "Journals need processing",
+      "noStaleJournals": "No stale journals",
+      "basisIncompleteBooks_one": "Cost basis incomplete in {{count}} book",
+      "basisIncompleteBooks_other": "Cost basis incomplete in {{count}} books"
+    },
+    "booksCard": {
+      "title": "Books",
+      "empty": "This book set does not have any books yet."
+    },
+    "fiatCard": {
+      "title": "Fiat Rows",
+      "empty": "No fiat rows yet.",
+      "basis": "Basis {{value}}",
+      "ytd": "YTD {{value}}"
+    },
+    "bookRow": {
+      "ready": "Ready",
+      "attention": "Attention",
+      "wallets_one": "{{count}} wallet",
+      "wallets_other": "{{count}} wallets",
+      "txs_one": "{{count}} tx",
+      "txs_other": "{{count}} txs",
+      "journalRows_one": "{{count}} journal row",
+      "journalRows_other": "{{count}} journal rows",
+      "quarantines_one": "{{count}} quarantine",
+      "quarantines_other": "{{count}} quarantines"
+    },
+    "refreshPanel": {
+      "title": "Book set refresh",
+      "waiting": "Waiting for refresh progress.",
+      "fallbackBook": "Book",
+      "booksRefreshed": "{{synced}}/{{total}} books refreshed",
+      "summaryDetail": "{{blocked}} reports blocked · {{rateLimited}} rate-limited sources",
+      "placeholder": "Per-book sync, rate, and journal status appears here.",
+      "scanned": "{{value}} scanned"
+    },
+    "recentActivityTitle": "Recent activity by book",
+    "toast": {
+      "activeBookChangedTitle": "Active book changed",
+      "transactionBody": "{{book}} is now active. Opening transaction detail.",
+      "fallbackBook": "Selected book",
+      "couldNotOpenBookTitle": "Could not open book",
+      "couldNotOpenBookBody": "Kassiber could not switch to that book.",
+      "couldNotOpenTransactionTitle": "Could not open transaction",
+      "couldNotOpenTransactionBody": "Kassiber could not switch to that transaction's book."
+    }
+  },
+  "bookRefresh": {
+    "refreshInProgressTitle": "Refreshing book",
+    "rescanInProgressTitle": "Rescanning book",
+    "refreshStartedTitle": "Book refresh started",
+    "rescanStartedTitle": "Book rescan started",
+    "refreshStartedBody": "Kassiber is refreshing configured sources and journals.",
+    "rescanStartedBody": "Kassiber is rescanning configured sources and journals.",
+    "configuredSourcesQueued": "Configured sources queued",
+    "journalsIncluded": "Journals included",
+    "autoPairIncluded": "Safe auto-pairing included",
+    "needsAttentionTitle": "Book refresh needs attention",
+    "pendingTitle": "Book refresh still has pending sources",
+    "backendRequiredTitle": "Add a backend to sync wallets",
+    "quarantineTitle_one": "Review {{count}} quarantined transaction",
+    "quarantineTitle_other": "Review {{count}} quarantined transactions",
+    "transferReviewTitle_one": "Review {{count}} swap/transfer candidate",
+    "transferReviewTitle_other": "Review {{count}} swap/transfer candidates",
+    "finishedTitle": "Book refresh finished",
+    "failedTitle": "Book refresh failed",
+    "failedBody": "Book refresh failed",
+    "actions": {
+      "retry": "Retry",
+      "openSettings": "Open settings",
+      "review": "Review"
+    }
+  },
+  "stats": {
+    "btcPrice": "BTC price",
+    "refreshing": "Refreshing",
+    "refreshBtcPrice": "Refresh BTC price",
+    "refreshingStats": "Refreshing overview statistics",
+    "openStat": "Open {{title}}",
+    "bitcoinBalance": "Bitcoin balance",
+    "title": {
+      "portfolioValue": "Portfolio value"
+    },
+    "comparison": {
+      "vsCostBasis": "vs cost basis",
+      "fromLoadedRows": "from loaded rows"
+    },
+    "status": {
+      "clear": "Clear",
+      "estimate": "Estimate",
+      "needsJournals": "Needs journals",
+      "reviewQuarantines_one": "{{count}} quarantine",
+      "reviewQuarantines_other": "{{count}} quarantines"
+    },
+    "heldIn_zero": "No wallet holds bitcoin yet",
+    "heldIn_one": "in {{count}} wallet",
+    "heldIn_other": "in {{count}} wallets"
+  },
+  "welcome": {
+    "reprocessingJournals": "Reprocessing journals",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing",
+    "addConnection": "Add connection",
+    "addConnectionAria": "Add connection"
+  },
+  "readiness": {
+    "connectSource": {
+      "title": "Connect a source",
+      "detail": "Add a watch-only source or import rows to populate this book."
+    },
+    "sourceAttention": {
+      "title": "Source attention",
+      "detail_one": "{{count}} source needs attention",
+      "detail_other": "{{count}} sources need attention"
+    },
+    "reprocessJournals": {
+      "title": "Reprocess journals",
+      "detail": "Reports need a fresh journal state"
+    },
+    "reviewQueueOpen": {
+      "title": "Review queue open",
+      "detail_one": "{{count}} item before reports",
+      "detail_other": "{{count}} items before reports"
+    },
+    "syncInProgress": {
+      "title": "Sync in progress"
+    },
+    "readyForReports": {
+      "title": "Ready for reports"
+    },
+    "sourceDetail_one": "{{synced}}/{{total}} source current",
+    "sourceDetail_other": "{{synced}}/{{total}} sources current",
+    "noSources": "No sources connected",
+    "custodyUnresolved": {
+      "title": "Custody gaps open",
+      "detail": "Cost basis and reports wait for custody review"
+    },
+    "missingPrices": {
+      "title": "Prices missing",
+      "detail_one": "{{count}} transaction without a price",
+      "detail_other": "{{count}} transactions without a price"
+    },
+    "sourcesBlocking": {
+      "title": "Sources block reports",
+      "detail_one": "{{count}} source could not refresh",
+      "detail_other": "{{count}} sources could not refresh"
+    }
+  },
+  "holdings": {
+    "title": "Holdings by Source",
+    "aria": "Holdings by source",
+    "vsCostBasis": "vs cost basis",
+    "viewConnections": "View wallets",
+    "otherSources": "Other sources",
+    "empty": "No wallet holds bitcoin yet.",
+    "lastSynced": "synced {{time}}",
+    "lastSyncedAt": "Last synced {{date}}",
+    "settingsAria": "Holdings settings",
+    "sortLabel": "Sort by",
+    "sort": {
+      "balance": "Balance",
+      "name": "Name",
+      "activity": "Latest activity"
+    },
+    "emptyLabel": "Empty sources",
+    "emptyMode": {
+      "fold": "Fold into one line",
+      "show": "List them",
+      "hide": "Hide them"
+    },
+    "railsLabel": "Networks",
+    "rail": {
+      "onchain": "On-chain",
+      "liquid": "Liquid",
+      "lightning": "Lightning",
+      "other": "Exchanges and files"
+    },
+    "limitLabel": "Sources shown",
+    "limitAll": "All",
+    "emptySources_one": "{{count}} empty source",
+    "emptySources_other": "{{count}} empty sources",
+    "hideEmpty": "Hide empty sources",
+    "filteredOut_one": "{{count}} source filtered out",
+    "filteredOut_other": "{{count}} sources filtered out",
+    "showAllRails": "Show all",
+    "noneListed": "No source matches this filter.",
+    "openSource": "Open {{name}}",
+    "lastActivity": "Latest activity {{date}}",
+    "syncState": {
+      "syncing": "Syncing",
+      "error": "Sync failed"
+    },
+    "shareBar": "Share of bitcoin by source",
+    "layoutLabel": "Layout",
+    "layout": {
+      "list": "List",
+      "tiles": "Tiles",
+      "table": "Table",
+      "trend": "Trend, last 12 months"
+    },
+    "table": {
+      "source": "Source",
+      "network": "Network",
+      "bitcoin": "Bitcoin",
+      "value": "Value",
+      "share": "Share",
+      "transactions": "Transactions",
+      "lastActivity": "Latest activity"
+    },
+    "transactions_one": "{{count}} transaction",
+    "transactions_other": "{{count}} transactions",
+    "trendChange": "{{change}} over 12 months"
+  },
+  "recentTx": {
+    "title": "Recent Transactions",
+    "showAll": "Show all",
+    "empty": "No transactions found.",
+    "unassigned": "Unassigned"
+  },
+  "txStatus": {
+    "confirmed": "Confirmed",
+    "pending": "Pending",
+    "review": "Review",
+    "failed": "Failed"
+  },
+  "txFlow": {
+    "incoming": "Incoming",
+    "outgoing": "Outgoing",
+    "transfer": "Transfer",
+    "swap": "Swap"
+  },
+  "activityFlow": {
+    "incoming": "Received",
+    "outgoing": "Spent",
+    "movement": "Movement",
+    "fee": "Fee"
+  },
+  "period": {
+    "auto": "Auto",
+    "30days": "30 Days",
+    "1year": "1 Year",
+    "4years": "4 Years",
+    "10years": "10 Years",
+    "all": "All Time",
+    "short": {
+      "auto": "Auto",
+      "30days": "30D",
+      "1year": "1Y",
+      "4years": "4Y",
+      "10years": "10Y",
+      "all": "All"
+    }
+  },
+  "marketRate": {
+    "noRate": "No {{currency}} rate",
+    "perBtc": "{{value}} / BTC",
+    "noSource": "No source",
+    "manual": "Manual",
+    "synced": "Synced {{date}}",
+    "notSynced": "Not synced",
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago",
+    "fetchRates": "Fetch rates"
+  },
+  "treasury": {
+    "basisIncompleteFrom": "Cost basis incomplete from {{date}}",
+    "basisIncomplete": "Cost basis incomplete",
+    "basisGap": {
+      "body": "Your BTC balances are exact. Kassiber can't calculate cost basis or gains until these are resolved:",
+      "bodyFrom": "Your BTC balances are exact. From {{date}} on, Kassiber can't calculate cost basis or gains until these are resolved:",
+      "stale": "Journals are outdated",
+      "quarantines_one": "{{count}} transaction in quarantine",
+      "quarantines_other": "{{count}} transactions in quarantine",
+      "custody": "Custody gaps open",
+      "missingPrices_one": "{{count}} transaction without a price",
+      "missingPrices_other": "{{count}} transactions without a price",
+      "openQuarantine": "Review",
+      "openJournals": "Journals"
+    },
+    "series": {
+      "bitcoinBalance": "Bitcoin Balance",
+      "portfolioValue": "Portfolio Value",
+      "btcPrice": "BTC Price",
+      "avgBasis": "Avg cost / BTC",
+      "activity": "Activity"
+    },
+    "chartLabel": "BTC activity chart",
+    "marker": {
+      "openTransaction": "Open {{flow}} transaction",
+      "openGroup_one": "Open {{count}} transaction",
+      "openGroup_other": "Open {{count}} merged transactions"
+    },
+    "title": "BTC activity",
+    "asOf": "As of {{date}}",
+    "currentSnapshot": "Current snapshot",
+    "priced": "priced {{time}}",
+    "events_one": "{{count}} event",
+    "events_other": "{{count}} events",
+    "net": "net",
+    "rangeChange": "change in range",
+    "rangeChangePercent": "{{percent}}%",
+    "in": "in",
+    "out": "out",
+    "swap": "swap",
+    "unrealized": "{{percent}}% unrealized ({{currency}})",
+    "expandChart": "Expand BTC activity chart",
+    "closeChart": "Close BTC activity chart",
+    "expandedTitle": "Expanded BTC activity chart",
+    "seriesToggle": "{{action}} {{label}}",
+    "btcPriceAxis": "BTC Price ({{currency}})",
+    "dragHint": "Drag the timeline window or handles to adjust the timeframe; double-click to reset",
+    "empty": {
+      "title": "Nothing to chart yet",
+      "body": "Connect a wallet or import transactions, then refresh to see your Bitcoin balance and activity here."
+    }
+  },
+  "tooltip": {
+    "source": "Source",
+    "counterparty": "Counterparty",
+    "fiatValue": "Fiat value",
+    "fiatVolume": "Fiat volume",
+    "btcPrice": "BTC price",
+    "fee": "Fee",
+    "positionAfter": "Position after",
+    "avgBasisAfter": "Avg cost / BTC after",
+    "status": "Status",
+    "confirmations_one": "{{count}} confirmation",
+    "confirmations_other": "{{count}} confirmations",
+    "unknown": "Unknown",
+    "btcBalance": "BTC balance",
+    "avgBasis": "Avg cost / BTC",
+    "unrealized": "Unrealized",
+    "volume": "{{value}} volume",
+    "mergedEvents_one": "{{count}} event",
+    "mergedEvents_other": "{{count}} events",
+    "netAmount": "Net",
+    "groupedEvents": "Events in this dot",
+    "groupedMore_one": "+ {{count}} more event",
+    "groupedMore_other": "+ {{count}} more events"
+  },
+  "controls": {
+    "title": "Activity dots",
+    "dotsVisible": "{{visible}} of {{total}} activity dots visible",
+    "dotsShownOfTotal": "{{visible}} of {{total}} dots shown",
+    "close": "Close the activity dots panel",
+    "timeRange": "Time Range",
+    "scale": "Scale",
+    "lastValueLabel": "Show last value on the axis",
+    "logChip": "log",
+    "autoChip": "fit",
+    "moreSettings": "More settings…",
+    "scaleMenuAria": "Chart scale settings",
+    "logScaleTitle": "Toggle logarithmic scale",
+    "logTimeTitle": "Logarithmic time axis (power law)",
+    "autoFitTitle": "Fit the value axis to the visible data",
+    "activityFlows": "Activity flows",
+    "markerSize": "Minimum dot size",
+    "minBtcSize": "Minimum BTC size for activity dots",
+    "groupDotsLabel": "Group overlapping dots",
+    "powerLawLabel": "Power-law view (log time and price)",
+    "allDots": "All dots",
+    "resetMarkerMinimums": "Reset dot minimums",
+    "incomingPayments": "Incoming payments",
+    "outgoingActivity": "Outgoing activity",
+    "incomingSliderAria": "Minimum incoming payment dot size in BTC",
+    "outgoingSliderAria": "Minimum outgoing activity dot size in BTC",
+    "mergedMarkersHint": "Dots that would overlap merge into one, labelled with the count. Off: only events in the same column share a dot. Zoom in to split them, or hover a merged dot to list them.",
+    "customMinTitle": "Click to enter a custom BTC minimum",
+    "customMinAria": "Custom marker minimum in BTC"
+  },
+  "inspector": {
+    "position": "Position",
+    "noDateSelected": "No date selected",
+    "value": "Value",
+    "btc": "BTC",
+    "costBasis": "Total basis",
+    "unrealized": "Unrealized",
+    "collapseAria": "Collapse panel",
+    "expandAria": "Expand panel"
+  },
+  "balanceChart": {
+    "title": "Balance & performance",
+    "fullscreen": "fullscreen",
+    "srDescription": "Expanded view of balance over time, with hover scrubber and optional by-connection composition mode.",
+    "byConnection": "By connection",
+    "total": "Total",
+    "closeEsc": "Close (Esc)",
+    "close": "Close",
+    "current": "{{range}} · current",
+    "change": "Change",
+    "high": "High",
+    "low": "Low",
+    "spot": "Spot · BTC/EUR",
+    "spotChange": "+ 1.42 % · 24h",
+    "totalBalance": "Total balance",
+    "pointsSynthesized": "{{count}} points · synthesized for demo",
+    "hoverFooter": "hover for detail · esc to close"
+  },
+  "completeness": {
+    "badge": {
+      "incomplete": "Incomplete",
+      "stale": "Outdated",
+      "noMarketRate": "No market rate",
+      "unavailable": "Unavailable"
+    },
+    "uncovered": "{{amount}} without cost basis",
+    "basisIncomplete": "Cost basis incomplete",
+    "basisStale": "Cost basis from outdated journals",
+    "valueUnavailable": "No market rate for a current value",
+    "hint": {
+      "incomplete": "Cost basis is incomplete here: quarantined, unpriced, or unresolved custody rows are not in the journal yet. Resolve them to see exact figures.",
+      "stale": "Journals are outdated. Reprocess them to see current cost basis.",
+      "unavailable": "No market rate is available, so Kassiber shows no current value."
+    }
+  },
+  "exitTaxFmv": {
+    "title": "Fair market value",
+    "asOf": "As of:",
+    "unavailable": "Unavailable",
+    "source": {
+      "cache": "Cache",
+      "transaction": "Transaction",
+      "missing": "Missing"
+    },
+    "incomplete": "Estimate incomplete: no usable FMV quote for {{assets}}."
+  },
+  "exitTaxDepartureTimezone": "Departure timezone: {{timezone}}",
+  "exitTaxReadiness": {
+    "title": "This estimate is incomplete.",
+    "journals": "Journals are not processed yet.",
+    "quarantines_one": "{{count}} quarantined transaction is excluded. Resolve it in the <queue>quarantine queue</queue> before relying on the number.",
+    "quarantines_other": "{{count}} quarantined transactions are excluded. Resolve them in the <queue>quarantine queue</queue> before relying on the number.",
+    "exportDraft": "Incomplete draft — exports remain available for review."
+  },
+  "widgets": {
+    "tax": {
+      "title": "Tax year {{year}}",
+      "openReports": "Reports",
+      "realized": "Realized gains this year",
+      "unrealized": "Unrealized gains",
+      "costBasis": "Cost basis",
+      "taxFree": "Tax-free (old holdings)",
+      "taxable": "Taxable (new holdings)",
+      "basisIncomplete": "Cost basis is incomplete, so gains are not shown until it is resolved.",
+      "taxFreeNeedsJournals": "Run journals before relying on the tax-free split.",
+      "taxFreeQuarantines_one": "Review {{count}} quarantine before relying on the tax-free split.",
+      "taxFreeQuarantines_other": "Review {{count}} quarantines before relying on the tax-free split."
+    },
+    "flows": {
+      "title": "Money in and out, last 12 months",
+      "chartAria": "Bitcoin received and spent per month",
+      "received": "Received",
+      "spent": "Spent",
+      "fees": "Fees",
+      "fiatIncomplete": "Some of these are not valued in {{currency}}, so the totals are in bitcoin."
+    }
+  }
+}

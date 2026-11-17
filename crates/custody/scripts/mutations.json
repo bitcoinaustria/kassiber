@@ -25273,7 +25273,7 @@
   {
     "id": "engine-rules-give-a-rules-country",
     "file": "crates/custody/src/ledger_request/config.rs",
-    "find": "(Some(rules), _) => rules_country(entry, rules)?,",
+    "find": "(Some(rules), _) => rules_country(&zoned, rules)?,",
     "replace": "(Some(_), _) => json!({\"kind\":\"us\"}),",
     "expect_failing": [
       "engine_rules_give_a_rules_country_in_the_registrys_zone"

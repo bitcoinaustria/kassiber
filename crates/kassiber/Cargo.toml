@@ -69,10 +69,11 @@ kassiber-store = { path = "../store" }
 kassiber-secrets = { path = "../secrets", features = ["native-keyring"] }
 serde_json = "1"
 zeroize = "1"
+# Decompresses the bundled demo book (`demo create`); already used by the
+# custody, rates, transfers, wallets and release crates.
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 
 [dev-dependencies]
-# Reads the transfers crate's gzip legacy migration vectors.
-flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 # Loopback OpenCode API fakes for the provider broker's black-box tests.
 kassiber-net = { path = "../net", features = ["test-support"] }
 tempfile = "3"

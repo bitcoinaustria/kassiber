@@ -803,8 +803,8 @@
   {
     "id": "pair-order",
     "file": "crates/transfers/src/pair_spec.rs",
-    "find": "ordered.sort_by_key(|r| (text(r, \"created_at\"), text(r, \"id\")));",
-    "replace": "ordered.sort_by_key(|r| (text(r, \"id\"), text(r, \"created_at\")));",
+    "find": "            text(r, \"created_at\"),\n            text(r, \"out_transaction_id\"),",
+    "replace": "            text(r, \"id\"),\n            text(r, \"out_transaction_id\"),",
     "expect_failing": [
       "pair_sequences_match_python_complete_database_rows_and_refusals"
     ],

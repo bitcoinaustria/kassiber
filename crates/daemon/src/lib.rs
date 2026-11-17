@@ -110,6 +110,7 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.transfers.pair_options",
     "ui.backends.certificate.fetch",
     "ui.backends.certificate.trust",
+    "ui.profiles.settings",
 ];
 
 /// Every kind `daemon.ready` advertises.
@@ -195,6 +196,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(services::kinds().filter(|k| {
         profiles::KINDS.contains(k)
             && [
+                "ui.profiles.settings",
                 "ui.profiles.create",
                 "ui.profiles.rename",
                 "ui.profiles.update",

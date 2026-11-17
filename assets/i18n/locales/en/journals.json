@@ -1,0 +1,800 @@
+{
+  "processing": {
+    "title": "Refreshing journals",
+    "alreadyTitle": "Journal processing already running",
+    "alreadyBody": "Kassiber is already refreshing the journal state.",
+    "startedTitle": "Journal processing started",
+    "startedBody": "Kassiber is rebuilding report-ready journal state.",
+    "successTitle": "Journals processed",
+    "failedTitle": "Journal processing failed",
+    "failedBody": "Could not process journals.",
+    "reportHint": "Reports update when processing finishes",
+    "phase": {
+      "writerWait": "Waiting for the database writer",
+      "autoPair": "Linking exact own-wallet transfers",
+      "preparing": "Preparing journal inputs",
+      "repairing": "Checking overlapping sources",
+      "pricing": "Applying cached prices",
+      "building": "Building journal entries",
+      "storing": "Saving journals",
+      "complete": "Journals saved",
+      "fallback": "Processing journals"
+    },
+    "retry": "Retry"
+  },
+  "ledger": {
+    "tabs": {
+      "state": "State",
+      "reportable": "Ledger entries"
+    },
+    "actions": {
+      "processJournals": "Process journals",
+      "viewLedgerEntries": "View ledger entries",
+      "verifyJournals": "Check reproducibility"
+    },
+    "unavailable": {
+      "title": "Ledger unavailable",
+      "fallback": "Could not load journals."
+    },
+    "metric": {
+      "status": "Status",
+      "transactions": "Transactions",
+      "transactionsSub": "input rows",
+      "journalEntries": "Journal entries",
+      "journalEntriesSub": "processed rows",
+      "quarantine": "Quarantine",
+      "quarantineHeld": "held from reports",
+      "quarantineClear": "clear"
+    },
+    "readiness": {
+      "blocked": "Blocked",
+      "blockedDetail": "review quarantine",
+      "stale": "Stale",
+      "staleDetail": "process before reports",
+      "current": "Current",
+      "currentDetail": "ready for reports",
+      "empty": "Empty",
+      "emptyDetail": "no processed rows"
+    },
+    "entryMix": {
+      "title": "Entry mix",
+      "description": "Current processed journal composition.",
+      "empty": "No processed journal rows yet.",
+      "transferRows": "{{count}} in/out rows",
+      "rows": "{{count}} rows"
+    },
+    "entries": {
+      "title": "Journal entries",
+      "rowsDescription": "Showing latest {{rows}} of {{total}} {{label}}.",
+      "labelProcessedRows": "processed rows",
+      "labelTransferRows": "transfer in/out rows",
+      "labelTypedRows": "{{type}} rows",
+      "outgoingSide": "Outgoing side",
+      "incomingSide": "Incoming side",
+      "openTransactionAria": "Open transaction for {{type}} journal row",
+      "emptyFiltered": "No recent {{label}} exposed by the current journal snapshot.",
+      "empty": "No recent rows exposed by the current journal snapshot.",
+      "column": {
+        "wallet": "Wallet",
+        "quantity": "Quantity",
+        "fiat": "Fiat",
+        "gainLoss": "Gain/Loss"
+      }
+    },
+    "entryType": {
+      "acquisition": "Acquisition",
+      "disposal": "Disposal",
+      "income": "Income",
+      "fee": "Fee",
+      "transferFee": "Transfer fee",
+      "transfer": "Transfer",
+      "transferIn": "Transfer in",
+      "transferOut": "Transfer out",
+      "neutralSwap": "Neutral swap"
+    },
+    "verify": {
+      "title": "Check journal reproducibility",
+      "description": "Kassiber recomputes the journals from this book's current inputs in a private copy in memory and compares them with the stored journals. Nothing is written and nothing leaves this device.",
+      "running": "Recomputing journals…",
+      "status": {
+        "identical": "The stored journals are exactly what the current inputs produce.",
+        "different_one": "{{count}} stored row differs from a recomputation.",
+        "different_other": "{{count}} stored rows differ from a recomputation.",
+        "stale": "The inputs changed since the journals were processed. Process journals first; this is not a sign of wrong numbers.",
+        "noTransactions": "This book has no transactions to check.",
+        "refused": "Recomputing the journals was refused: {{message}}"
+      },
+      "nondeterministic": "Two recomputations also disagreed with each other. This points at a Kassiber bug, not at your data.",
+      "byWallet": "Wallets: {{wallets}}",
+      "byYear": "Years: {{years}}",
+      "truncated": "Showing the first {{count}} differences.",
+      "nextStep": "Processing the journals again replaces the stored rows."
+    }
+  },
+  "reportable": {
+    "unavailable": {
+      "title": "Ledger entries unavailable",
+      "fallback": "Could not load journal entries."
+    },
+    "description": "Journal entries produced by processing transactions into tax lots, pricing, basis, proceeds, and gain/loss.",
+    "badge": {
+      "stale": "stale",
+      "entries": "{{count}} entries"
+    },
+    "tableTitle": "Processed ledger entries",
+    "searchPlaceholder": "Search wallet, entry, asset, pricing…",
+    "empty": "No processed journal entries yet. Process journals after importing transactions.",
+    "actions": {
+      "processJournals": "Process journals"
+    },
+    "atKennzahl": "AT Kennzahl {{kennzahl}}",
+    "eventTitle": "{{type}} · {{description}}",
+    "basis": {
+      "amount": "Basis {{value}}",
+      "proceeds": "Proceeds {{value}}",
+      "value": "Value {{value}}",
+      "noFiatImpact": "No fiat impact"
+    },
+    "pricing": {
+      "label": "Pricing",
+      "manual": "Manual price",
+      "source": "Source price",
+      "cached": "Cached market rate",
+      "providerSample": "Provider market sample",
+      "providerPrice": "Provider market price",
+      "qualified": "{{source}} ({{quality}})"
+    },
+    "nextAction": {
+      "needsJournals": "Process journals before relying on this entry",
+      "austrianMapping": "Ready for Austrian report mapping",
+      "reports": "Ready for reports"
+    },
+    "evidence": {
+      "austrianMapping": "Austrian form mapping {{kennzahl}}",
+      "pricedBy": "Priced by {{source}}",
+      "transferMatching": "Carried by transfer matching",
+      "journalProcessing": "Computed by journal processing"
+    }
+  },
+  "quarantine": {
+    "unavailable": {
+      "title": "Quarantine unavailable",
+      "fallback": "Could not load the quarantine."
+    },
+    "actions": {
+      "fixWithAssistant": "Fix with assistant"
+    },
+    "ownerFallback": "Active book",
+    "detail": {
+      "resolveError": "Could not open this transaction from the quarantine queue."
+    },
+    "cause": {
+      "ownershipSourceMissing": {
+        "title": "Sending wallet history is missing",
+        "why": "This receipt spends coins that belong to {{wallets}}, but that wallet's outgoing transaction is not in the book.",
+        "provide": "Sync {{wallets}} (raise its gap limit if it used many addresses) or import its history. Kassiber then books this as a transfer between your wallets."
+      },
+      "ownershipSourceAmbiguous": {
+        "title": "Several own wallets could have sent this",
+        "why": "The inputs belong to more than one of your wallets, or their network does not match the transaction.",
+        "provide": "Open the matching tools and choose which wallets funded this transfer."
+      },
+      "ownershipDestinationAmbiguous": {
+        "title": "Several receipts match this transfer",
+        "why": "{{wallet}} has more than one incoming transaction that could be the other side of this transfer.",
+        "provide": "Open the matching tools and pick the right receipt."
+      },
+      "ownershipDestinationMissingRef": {
+        "title": "Destination wallet is not in this book",
+        "why": "The chain shows the coins went to an address of one of your wallets, but that wallet is not set up in this book.",
+        "provide": "Connect that wallet to this book or check its configuration."
+      },
+      "ownershipAmountMismatch": {
+        "title": "Recorded amount does not match the chain",
+        "why": "The outputs to your own wallets are larger than this row's amount plus fee.",
+        "provide": "Sync the sending wallet again so its amount comes from the chain."
+      },
+      "ownershipConservation": {
+        "title": "The amounts of this transfer do not add up",
+        "why": "Inputs, outputs and fee of this transfer between your wallets cannot be balanced.",
+        "provide": "Sync the involved wallets again; if the amounts stay inconsistent, check the imported file."
+      },
+      "ownershipFeeEvidence": {
+        "title": "The network fee cannot be proven",
+        "why": "The row includes a fee, but the values of the spent inputs are unknown, so the exact fee cannot be separated.",
+        "provide": "Sync the wallet through a backend that returns input values (Electrum, Esplora or your own node)."
+      },
+      "ownershipAssetEvidence": {
+        "title": "Output amounts are hidden or incomplete",
+        "why": "An output to your wallet has no readable amount or asset (for example confidential Liquid amounts).",
+        "provide": "Sync the receiving wallet with its descriptor so Kassiber can read the amounts."
+      },
+      "ownershipAmbiguousOutput": {
+        "title": "One address belongs to two wallets",
+        "why": "The same script is watched by more than one of your wallets, so it is unclear which one received it.",
+        "provide": "Remove the duplicate descriptor or address from one of the wallets."
+      },
+      "ownershipDuplicateOutbound": {
+        "title": "The same payment was recorded twice",
+        "why": "Several outgoing rows describe the same transaction, usually after importing the same history twice.",
+        "provide": "Delete or exclude the duplicate import and keep the row that came from the chain."
+      },
+      "liquidGraphIncomplete": {
+        "title": "Liquid transfer is incomplete",
+        "why": "Kassiber found only part of this Liquid transfer's receipts in your wallets.",
+        "provide": "Sync all involved Liquid wallets or connect the wallet that received the rest."
+      },
+      "recordedAuthorityConflict": {
+        "title": "One side comes from a file, the other from the chain",
+        "why": "Only one side of this transfer is confirmed by a chain sync; the other side is an imported record, so Kassiber books neither a payment nor a move between your wallets on its own.",
+        "provide": "Link it to the matching receipt in the matching tools. If the side from a file is out of date, syncing that wallet can confirm it from the chain."
+      },
+      "unlinkedAutomaticPair": {
+        "title": "You unlinked this send from {{wallet}}",
+        "why": "You removed its automatic link. The coins arrived in a wallet you own, so Kassiber can't book it as a payment, and tax reports wait until you say what it was.",
+        "provide": "If it was your own move, link it back. If it arrived somewhere else, link it to that receipt."
+      },
+      "chronologyMismatch": {
+        "title": "Transfer arrives before it leaves",
+        "why": "The receiving side is dated earlier than the sending side by more than the allowed clock difference.",
+        "provide": "Check the timestamps of the imported rows (time zone) or link the correct transactions."
+      },
+      "networkMismatch": {
+        "title": "Transfer crosses networks",
+        "why": "The two linked sides are on different networks or units.",
+        "provide": "Unlink them, or record the movement as a swap in the matching tools."
+      },
+      "feeImplausible": {
+        "title": "Too much is missing in this transfer",
+        "why": "More than 1 % (at least 2,500 sats) of this transfer is explained neither by the receipt nor by the fee.",
+        "provide": "If part went to another wallet of yours, connect it; otherwise link the correct receipt or record the difference."
+      },
+      "privacyHop": {
+        "title": "CoinJoin or shared transaction needs evidence",
+        "why": "This row is part of a shared transaction. The chain does not show which part was yours, a payment or a fee.",
+        "provide": "Connect all involved wallets (for example pre-mix and post-mix), or attach the wallet's records and describe the movement."
+      },
+      "samouraiUnverified": {
+        "title": "Samourai/Whirlpool step not confirmed on chain",
+        "why": "This Samourai step comes from an export and was not confirmed by a sync of all involved wallets.",
+        "provide": "Sync the Deposit, Premix and Postmix wallets."
+      },
+      "channelOpen": {
+        "title": "Lightning channel opening is not explained",
+        "why": "The on-chain funding is larger than what the node reports as funded into the channel.",
+        "provide": "Import the Lightning node's history or connect the wallet that received the change."
+      },
+      "channelClose": {
+        "title": "Lightning channel closing is not explained",
+        "why": "The funds returned when the channel closed do not match the channel balance within the fee tolerance.",
+        "provide": "Import the node's history or connect the wallet that received the closing output."
+      },
+      "nativeTransitionAmbiguous": {
+        "title": "Several payments match this swap",
+        "why": "The payment hash of this Lightning swap matches more than one record.",
+        "provide": "Open the matching tools and choose the right payment."
+      },
+      "nativeTransitionAmountMismatch": {
+        "title": "Swap amounts do not balance",
+        "why": "The proven swap route does not keep the amounts on both sides equal.",
+        "provide": "Attach the swap provider's record and review the swap."
+      },
+      "nativeTransitionFeeTiming": {
+        "title": "Swap fee falls on a different day",
+        "why": "The swap is proven, but part of its fee occurred on a later day. Kassiber cannot book separately dated fees yet.",
+        "provide": "No input resolves this automatically yet; it stays visible until Kassiber supports it."
+      },
+      "migrationIncomplete": {
+        "title": "An older review could not be carried over",
+        "why": "A transfer link or payout reviewed in an older version could not be converted to the current format.",
+        "provide": "Open the transaction and review the link again."
+      },
+      "importDuplicate": {
+        "title": "An imported transaction may be stored twice",
+        "why": "Rows from separate imports of this exchange or wallet export look identical and are more than any single export contained. Earlier versions numbered rows without their own ID by file position, so a later, longer export could store the same transaction again. Kassiber holds every copy and picks none for you.",
+        "provide": "Compare the provider's exports. Exclude each row that copies another transaction. If every row is a separate transaction, confirm that instead with the confirm_distinct_import_rows review (kassiber review plan, then review apply); nothing is excluded."
+      },
+      "importDuplicateRefill": {
+        "title": "A newer import may repeat a transaction you excluded",
+        "why": "You excluded an earlier copy of these identical rows. A later export from this exchange or wallet then added a row in the place that copy held. Kassiber cannot tell whether the new row is the transaction you excluded or a separate one, so it holds the rows and picks none for you.",
+        "provide": "Compare the provider's exports. If the new row is the transaction you excluded, exclude it too. Only if every held row is a separate transaction, confirm that with the confirm_distinct_import_rows review (kassiber review plan, then review apply). Confirming counts the transaction you excluded again, through the new row."
+      },
+      "importDuplicatePreBatch": {
+        "title": "Older imports may have stored a transaction twice",
+        "why": "These identical rows were all imported before Kassiber recorded import runs, so it cannot tell whether they came from one export or several. Only rows stored in the same second count as one export, so one import that ran across a second boundary is held as well. Kassiber holds every copy and picks none for you.",
+        "provide": "Compare the provider's exports. Exclude each row that copies another transaction. If every row is a separate transaction, confirm that instead with the confirm_distinct_import_rows review (kassiber review plan, then review apply); nothing is excluded."
+      },
+      "legacyPairFee": {
+        "title": "An older transfer link needs its fee reviewed",
+        "why": "An older version counted this link's network fee as moved principal but left it out of the sending side's full debit. The link stays recorded and changes nothing until a corrected revision is reviewed.",
+        "provide": "Review the link. Preview and apply the corrected revision with kassiber review, update it with transfers update, or unlink it and link the reviewed legs again. Excluding a leg does not answer this."
+      },
+      "resetDecisionHeld": {
+        "title": "A decision kept by the reset is waiting",
+        "why": "\"Reset book data\" kept a decision on this transaction (a transfer link, loan mark, other link or edit), but another transaction it names did not come back with the sync, or came back with different amounts.",
+        "provide": "Sync the wallet that holds the missing transaction. If it is gone for good, only \"Wipe everything\" in Settings releases the hold for now."
+      },
+      "gapHold": {
+        "title": "An intermediate wallet is missing",
+        "why": "Coins left {{wallet}} and a similar amount came back later, but the wallet in between is not connected.",
+        "provide": "Connect the wallet the coins went through (its xpub or descriptor). If you no longer have it, confirm the route in the custody-gap review."
+      },
+      "implicitDelta": {
+        "title": "Wallet balance changed without a recorded transaction",
+        "why": "The observed balance of {{wallet}} differs from its recorded transactions.",
+        "provide": "Sync the wallet again or import its complete history."
+      },
+      "unclaimedResidual": {
+        "title": "Part of this outflow is unexplained",
+        "why": "Part of this outflow went neither to a known wallet of yours nor to a recorded recipient.",
+        "provide": "Connect the wallet that received the rest, or record where it went."
+      },
+      "sourceOverlap": {
+        "title": "Two sources record the same coins",
+        "why": "Two connected sources (for example an address list and a descriptor) both claim these coins.",
+        "provide": "Remove the overlapping source or keep only one of them."
+      },
+      "searchCapacity": {
+        "title": "Too many candidates to check automatically",
+        "why": "Kassiber stopped searching for a missing wallet here because there were too many possibilities.",
+        "provide": "Review this custody gap manually or with the assistant."
+      },
+      "componentProblem": {
+        "title": "A reviewed custody route no longer matches",
+        "why": "A custody route you reviewed earlier no longer matches the current transactions (for example after a new sync).",
+        "provide": "Review the custody component and create a new revision."
+      },
+      "reviewedSuspense": {
+        "title": "Part of a reviewed transfer is unexplained",
+        "why": "A transfer you reviewed moved less than it took, and the difference is held open, so cost basis from here on can't be final.",
+        "provide": "Connect the wallet the difference went to, or record what happened to it."
+      },
+      "quantityOther": {
+        "title": "Custody of these coins is unresolved",
+        "why": "Kassiber cannot tell where part of these coins is held.",
+        "provide": "Open the transaction; connecting the missing wallet or reviewing the route resolves it."
+      },
+      "basisBarrier": {
+        "title": "Waiting on an earlier transaction",
+        "why": "An earlier transaction ({{root}}) is unresolved, so cost basis from that point on can't be final.",
+        "provide": "Nothing to do here. This clears once the earlier transaction is resolved."
+      },
+      "pairDependency": {
+        "title": "Part of a blocked transfer chain",
+        "why": "This row is linked by a transfer to a transaction that is on hold ({{root}}).",
+        "provide": "Resolve the linked transaction; this row follows automatically."
+      },
+      "provenanceIncomplete": {
+        "title": "An earlier lot is unresolved",
+        "why": "An earlier {{asset}} transaction ({{since}}) is not booked, so the lots this disposal would use are uncertain.",
+        "provide": "Resolve the earlier transaction; this row follows automatically."
+      },
+      "groupBlocked": {
+        "title": "Another part of this transfer group is on hold",
+        "why": "Another leg of this transfer group is held back; the group is booked all or nothing.",
+        "provide": "Resolve the other leg; this row follows automatically."
+      },
+      "carryUnresolved": {
+        "title": "Carried cost basis is not available",
+        "why": "This swap carries over the cost basis of the other side, which is not booked yet.",
+        "provide": "Resolve the other side of the swap; this row follows automatically."
+      },
+      "missingPrice": {
+        "title": "Price missing",
+        "why": "There is no {{asset}} price for this date, so the value in your book currency is unknown.",
+        "provide": "Refresh market prices or enter the price from your receipt."
+      },
+      "pricingReview": {
+        "title": "Only an approximate price is available",
+        "why": "The price for this date comes from a coarse source (for example a daily average) and your settings require a review.",
+        "provide": "Confirm the price or enter the exact price from your receipt."
+      },
+      "priceCurrency": {
+        "title": "Price is in another currency",
+        "why": "This price is stored in {{priceCurrency}}, but your book currency is now {{bookCurrency}}. Kassiber does not convert it, so the transaction is held.",
+        "provide": "Enter the price in {{bookCurrency}} from your receipt."
+      },
+      "swapPriceRequired": {
+        "title": "Swap payout needs a value",
+        "why": "The payout of this swap has no amount or value, which the Austrian swap rules need.",
+        "provide": "Enter the value of the payout."
+      },
+      "insufficientLots": {
+        "title": "More spent than ever received",
+        "why": "{{wallet}} sends {{required}}, but Kassiber only knows {{available}} of earlier receipts.",
+        "provide": "Import the missing purchase history (for example an exchange export) or connect the wallet these coins came from."
+      },
+      "missingCostBasis": {
+        "title": "Earlier purchases have no cost basis",
+        "why": "The coins exist, but the purchases they come from have no price, so their cost basis is unknown.",
+        "provide": "Enter the prices of the earlier purchases or import their history with prices."
+      },
+      "unclassifiedIncome": {
+        "title": "This kind of income is not supported",
+        "why": "This receipt is marked as a kind of income Kassiber cannot map to a tax category.",
+        "provide": "Classify it as purchase, income, mining or another supported kind."
+      },
+      "nonSaleDisposal": {
+        "title": "Gift, donation or loss needs a decision",
+        "why": "This outflow is marked as a gift, donation, loss or theft. Kassiber does not guess its tax treatment.",
+        "provide": "Decide the treatment: reclassify it, exclude it or set its tax category."
+      },
+      "valuationUnsupported": {
+        "title": "Airdrop or hard fork valuation is not supported",
+        "why": "Kassiber does not value airdrops or hard forks for Austrian tax.",
+        "provide": "Classify the receipt differently if it is not an airdrop, or keep it excluded."
+      },
+      "conflictingSpend": {
+        "title": "Replaced or double-spent transaction",
+        "why": "Another transaction spends the same coins. Only the one that confirms counts.",
+        "provide": "Wait for the confirmation and sync again; the replaced transaction then drops out."
+      },
+      "pendingConfirmation": {
+        "title": "Not confirmed yet",
+        "why": "This transaction is still in the mempool.",
+        "provide": "Nothing to do: it is booked once it confirms and the wallet syncs."
+      },
+      "unscopedTransfer": {
+        "title": "Transfer without a chain reference",
+        "why": "Two rows in different wallets of yours share a provider ID but have no transaction graph, so Kassiber cannot prove they are one transfer.",
+        "provide": "Link them in the matching tools, or sync the wallets from the chain."
+      },
+      "ownedFanout": {
+        "title": "Payment to several own wallets does not add up",
+        "why": "This transaction sends to several of your wallets, but the recorded receipts do not match the amounts.",
+        "provide": "Sync or connect every receiving wallet, or link the receipts in the matching tools."
+      },
+      "pairAmbiguous": {
+        "title": "The link is ambiguous",
+        "why": "The linked transactions do not form one consistent transfer.",
+        "provide": "Open the matching tools and correct the link."
+      },
+      "category": {
+        "missing_wallet_history": {
+          "title": "Wallet history is missing",
+          "why": "Part of this movement happened in a wallet whose history is not in the book.",
+          "provide": "Connect or sync the missing wallet."
+        },
+        "missing_chain_evidence": {
+          "title": "Chain evidence is incomplete",
+          "why": "The data Kassiber has for this transaction is not complete enough to prove its amounts.",
+          "provide": "Sync the wallet again from the chain."
+        },
+        "missing_price": {
+          "title": "Price missing",
+          "why": "The value of this transaction in your book currency is unknown.",
+          "provide": "Refresh market prices or enter the price."
+        },
+        "missing_acquisition_history": {
+          "title": "Acquisition history is missing",
+          "why": "Kassiber does not know where these coins were acquired or at what cost.",
+          "provide": "Import the purchase history or connect the wallet the coins came from."
+        },
+        "needs_decision": {
+          "title": "Needs your decision",
+          "why": "The evidence allows more than one reading.",
+          "provide": "Open the transaction and decide how it should be booked."
+        },
+        "unsupported": {
+          "title": "Not supported yet",
+          "why": "Kassiber cannot book this kind of transaction yet.",
+          "provide": "It stays visible until support is added."
+        },
+        "downstream": {
+          "title": "Waiting for another transaction",
+          "why": "This row depends on another transaction that is unresolved.",
+          "provide": "Resolve the other transaction; this row follows automatically."
+        }
+      },
+      "fallback": {
+        "wallet": "this wallet",
+        "sendingWallet": "the sending wallet",
+        "amount": "an unknown amount",
+        "date": "earlier date",
+        "root": "see the cause above",
+        "currency": "a currency"
+      },
+      "reviewedSuspensePair": {
+        "title": "A linked transfer doesn't add up",
+        "why": "This transaction is linked to another as a move between your wallets, but less arrived than left. The difference is held open, so cost basis from here on can't be final.",
+        "provide": "Compare the two sides of each linked transfer below. Unlink one only if you know its two transactions are unrelated; different transaction ids alone don't show that. If it was a move between your wallets, open it and record where the difference went."
+      }
+    },
+    "category": {
+      "missing_wallet_history": "Wallet history missing",
+      "missing_chain_evidence": "Chain evidence incomplete",
+      "missing_price": "Price missing",
+      "missing_acquisition_history": "Acquisition history missing",
+      "needs_decision": "Needs your decision",
+      "unsupported": "Not supported yet",
+      "downstream": "Follows another issue"
+    },
+    "cta": {
+      "syncWallet": "Sync {{wallet}}",
+      "connectWallet": "Connect wallet",
+      "importHistory": "Import history",
+      "setPrice": "Enter price",
+      "classify": "Classify",
+      "pairTransfer": "Open matching tools",
+      "reviewCustodyGap": "Review custody gap",
+      "attachEvidence": "Attach evidence",
+      "waitForConfirmation": "Waiting for confirmation",
+      "resolveRoot": "Open cause",
+      "processJournals": "Recalculate journals",
+      "openTransaction": "Open transaction",
+      "askAssistant": "Investigate with assistant",
+      "reviewPair": "Review the link",
+      "restorePairing": "Link it back",
+      "linkDifferently": "Link it to a different receipt…"
+    },
+    "panel": {
+      "blocksReports": "Blocks reports",
+      "deprecatedWallet": "{{wallet}} is marked deprecated, so “Refresh all” skips it; sync it on its own.",
+      "gapReviewLocked": "Custody-gap review is currently part of the developer tools. Connect the missing wallet or ask the assistant to investigate.",
+      "linkedBackTitle": "Linked again",
+      "linkedBackBody": "Journals are being recalculated.",
+      "linkBackFailedTitle": "The link could not be restored"
+    },
+    "freshness": {
+      "staleTitle": "This list may be outdated",
+      "staleBody": "Your transactions changed after the journals were last calculated ({{when}}). Recalculate to update this list.",
+      "neverBody": "Journals have not been processed yet. Recalculate to see which transactions need attention.",
+      "failedTitle": "The last journal update failed",
+      "failedBody": "{{message}} The list shows the state before that attempt."
+    },
+    "paging": {
+      "range": "Rows {{from}}–{{to}} of {{total}}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "summary": {
+      "needsYou_one": "{{count}} transaction needs you",
+      "needsYou_other": "{{count}} transactions need you",
+      "waiting_one": "{{count}} more only waits on it and clears by itself.",
+      "waiting_other": "{{count}} more only wait on these and clear by themselves.",
+      "reportsBlocked": "Tax and portfolio reports stay blocked until this is fixed.",
+      "showWaiting": "Show them"
+    },
+    "causes": {
+      "whatToDo": "What to do",
+      "more_one": "{{count}} more cause is not loaded yet.",
+      "more_other": "{{count}} more causes are not loaded yet.",
+      "count_one": "{{count}} transaction",
+      "count_other": "{{count}} transactions",
+      "showMore_one": "Show {{count}} more cause",
+      "showMore_other": "Show {{count}} more causes",
+      "showFewer": "Show fewer causes",
+      "showFewerTransactions": "Show fewer",
+      "loadMore": "Load more",
+      "loadMoreFailed": "More could not be loaded. {{message}}",
+      "pageMore": "More of what needs you is not loaded yet.",
+      "waitingShort_one": "{{count}} more waits on this",
+      "waitingShort_other": "{{count}} more wait on this",
+      "shownOf": "{{shown}} of {{total}} shown",
+      "showMoreRows": "Show more",
+      "showMoreRowsOf": "Show more of “{{cause}}”",
+      "showFewerRowsOf": "Show fewer of “{{cause}}”",
+      "aboutLabel": "About “{{cause}}”"
+    },
+    "queue": {
+      "waitsOn": "Waits on {{root}}",
+      "waitingEmpty": "No transaction is waiting on another.",
+      "hide": "Hide the list",
+      "title": "Waiting on a cause",
+      "loadError": "This list could not be loaded."
+    },
+    "fact": {
+      "pairTxidsDiffer": "The two sides are different on-chain transactions. A direct move between your wallets has one, but a move through a wallet Kassiber doesn't track has two, so this alone doesn't make the link wrong.",
+      "pairReceiptFirst": "The receipt is dated before the payment it is linked to."
+    },
+    "pair": {
+      "title_one": "The linked transfer",
+      "title_other": "The {{count}} linked transfers",
+      "sent": "Sent",
+      "received": "Received",
+      "unpair": "Unlink",
+      "confirmBody": "Kassiber then books them on their own: the payment from {{outWallet}} as a disposal and the receipt in {{inWallet}} as a purchase at its market value, unless you classify them otherwise. The difference held open goes away, and journals are recalculated so the transactions waiting on it can clear.",
+      "confirmUndo": "You can link them again from Transfers.",
+      "cancel": "Cancel",
+      "confirmTitle": "Unlink these two transactions?",
+      "confirm": "Unlink and recalculate",
+      "andMore_one": "and {{count}} more transfer",
+      "andMore_other": "and {{count}} more transfers",
+      "pick": "Pick the transfer from {{outWallet}} to {{inWallet}}",
+      "unpairPicked_one": "Unlink the picked transfer",
+      "unpairPicked_other": "Unlink {{count}} picked transfers",
+      "clearPicked": "Clear",
+      "pickLimit": "Up to {{count}} transfers at a time.",
+      "tickLapsed_one": "{{count}} transfer you ticked changed or cleared since. Its tick no longer counts; tick it again if it still applies.",
+      "tickLapsed_other": "{{count}} transfers you ticked changed or cleared since. Their ticks no longer count; tick them again if they still apply."
+    },
+    "fix": {
+      "title_one": "Unlink this transfer?",
+      "title_other": "Unlink these {{count}} transfers?",
+      "body_one": "You picked this transfer to unlink. Each side is then booked on its own: the payment as a disposal, the receipt as a purchase at market value, unless you classify them otherwise.",
+      "body_other": "You picked these {{count}} transfers to unlink. Each side is then booked on its own: payments as disposals, receipts as purchases at market value, unless you classify them otherwise.",
+      "checking": "Checking what this changes",
+      "effectQuarantine": "In quarantine: {{before}} → {{after}}",
+      "reportsReady": "Reports: ready after this",
+      "reportsBlocked": "Reports: still blocked afterwards",
+      "apply_one": "Unlink and recalculate",
+      "apply_other": "Unlink {{count}} and recalculate",
+      "applying": "Unlinking…",
+      "stale": "The book changed since this check.",
+      "retry": "Check again",
+      "doneTitle_one": "Unlinked {{count}} transfer",
+      "doneTitle_other": "Unlinked {{count}} transfers",
+      "doneBody": "{{remaining}} left in quarantine.",
+      "recheckFailed": "The linked transfers could not be checked against the current book.",
+      "leftOut_one": "{{count}} transfer you picked is no longer listed as you saw it and was left out.",
+      "leftOut_other": "{{count}} transfers you picked are no longer listed as you saw them and were left out.",
+      "changed_one": "{{count}} transfer you picked changed since you saw it. Nothing was unlinked; close this and look at it again.",
+      "changed_other": "{{count}} transfers you picked changed since you saw them. Nothing was unlinked; close this and look at them again.",
+      "nothing_one": "The transfer you picked is no longer in quarantine. There is nothing to unlink.",
+      "nothing_other": "None of the transfers you picked is still in quarantine. There is nothing to unlink.",
+      "close": "Close",
+      "noScope": "This book's quarantine does not say which book it is, so nothing can be unlinked from here.",
+      "bookChanged": "Another book is open now. Nothing was unlinked; return to the book you picked these transfers in.",
+      "notACase": "This transfer is not one of the transfers to review here. Unlink it from Transfers.",
+      "sheetChanged": "This transfer reads differently now than the sheet showed it. Nothing was unlinked; look at it again.",
+      "reviewLine": "Reviewed as {{kind}}: {{sent}} sent, {{received}} received"
+    },
+    "section": {
+      "title": "Can't be booked yet"
+    },
+    "accept": {
+      "action_one": "Accept this price",
+      "action_other": "Accept these {{count}} prices",
+      "titlePending": "Accept the approximate prices?",
+      "title_one": "Accept {{count}} approximate price?",
+      "title_other": "Accept {{count}} approximate prices?",
+      "body": "Each transaction keeps the daily price it has, and reports still show it as approximate. If a price changes later, that transaction is held for review again.",
+      "undo": "Each acceptance shows in the transaction's history and can be reverted there.",
+      "confirm_one": "Accept {{count}} price",
+      "confirm_other": "Accept {{count}} prices",
+      "doneTitle_one": "{{count}} approximate price accepted",
+      "doneTitle_other": "{{count}} approximate prices accepted",
+      "confirmPending": "Accept prices",
+      "applying": "Accepting…"
+    },
+    "price": {
+      "enter": "Enter prices",
+      "enterExact": "Enter exact prices",
+      "hint": "In {{currency}}. Empty rows stay as they are.",
+      "hintNoCurrency": "In the book's currency. Empty rows stay as they are.",
+      "unitLabel": "What you enter",
+      "unitValue": "Total value",
+      "unitRate": "Price per {{asset}}",
+      "unitRateGeneric": "Price per unit",
+      "inputLabel": "{{unit}} for {{row}}, in {{currency}}",
+      "preview_one": "Check {{count}} price",
+      "preview_other": "Check {{count}} prices",
+      "invalid_one": "{{count}} price is not a number above zero. Fix or clear it.",
+      "invalid_other": "{{count}} prices are not numbers above zero. Fix or clear them.",
+      "tooMany": "Up to {{count}} prices at a time.",
+      "title_one": "Save {{count}} price?",
+      "title_other": "Save {{count}} prices?",
+      "body": "Each transaction takes the price you entered as exact, and its approximate or missing price is replaced.",
+      "undo": "Each price shows in the transaction's history and can be reverted there.",
+      "confirm_one": "Save {{count}} price",
+      "confirm_other": "Save {{count}} prices",
+      "applying": "Saving…",
+      "doneTitle_one": "{{count}} price saved",
+      "doneTitle_other": "{{count}} prices saved",
+      "inputLabelNoCurrency": "{{unit}} for {{row}}, in the book currency",
+      "listLabel": "Prices to save",
+      "lineValue": "{{value}} {{currency}} total",
+      "lineRate": "{{value}} {{currency}} per {{asset}}"
+    }
+  },
+  "review": {
+    "column": {
+      "event": "Event",
+      "evidence": "Evidence",
+      "amountBasis": "Amount / basis",
+      "impact": "Impact"
+    },
+    "tableTitle": {
+      "review": "Review records",
+      "blocked": "Blocked records"
+    },
+    "tableDescription": {
+      "detail": "{{rows}} shown · {{detail}}",
+      "resolved": "{{rows}} shown · {{resolved}} resolved"
+    },
+    "searchPlaceholder": "Search account, issue, source…",
+    "empty": "No matching records.",
+    "unknownDate": "Unknown",
+    "badgeOpen": "{{count}} open",
+    "metricFallback": {
+      "open": "Open",
+      "needsReview": "Needs review",
+      "blocked": "Blocked",
+      "highPriority": "High priority"
+    },
+    "status": {
+      "all": "All",
+      "ready": "Ready",
+      "needsReview": "Needs review",
+      "blocked": "Blocked",
+      "resolved": "Resolved"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "filters": {
+      "active": "Filters active",
+      "clearAll": "Clear all",
+      "clearMetricAria": "Clear {{label}} filter"
+    },
+    "metricAria": {
+      "showAll": "Show all {{label}}",
+      "filter": "Filter {{label}}"
+    },
+    "evidenceHint": {
+      "price": "Needs fiat price evidence",
+      "pair": "Needs matching movement decision",
+      "document": "Needs document attachment",
+      "asset": "Needs source/asset mapping",
+      "fee": "Needs tax classification",
+      "fallback": "Needs review evidence"
+    },
+    "nextAction": {
+      "noAction": "No action needed",
+      "blocked": "Blocks trusted reports",
+      "needsReview": "Review before reports",
+      "ready": "Ready for reports"
+    },
+    "pagination": {
+      "noRows": "0 rows",
+      "range": "{{from}}-{{to}} of {{total}}",
+      "page": "Page {{current}} of {{count}}",
+      "previous": "Previous page",
+      "next": "Next page"
+    }
+  },
+  "explanation": {
+    "open": "Explain",
+    "title": "Capital-gains calculation",
+    "description": "Exact contributions retained from the tax engine, with source evidence from this journal version.",
+    "loading": "Loading calculation…",
+    "unavailable": "Engine detail is unavailable for this journal. Rebuild journals to retain the calculation.",
+    "mismatch": "Stored calculation detail does not reconcile. Rebuild journals before relying on this result.",
+    "version": "Input version {{version}}",
+    "quarantines": "{{count}} quarantined transactions are excluded from this journal; this explains only the displayed result.",
+    "inheritedBasis": "Inherited acquisition basis",
+    "inheritedContext": "The reviewed carry links this acquisition to the full outgoing calculation below, including its fees. These earlier contributions are not an allocation to the later sale.",
+    "inheritedUnavailable": "The inherited source calculation is unavailable in this journal. No historical allocation has been inferred.",
+    "inheritedTruncated": "The bounded inherited-source trace stops here; further historical calculation detail is not shown.",
+    "poolNote": "This calculation uses a per-unit cost basis override. For pooled methods, the selected acquisition is a matching anchor, not an allocation of the pool to that transaction.",
+    "fragment": "Contribution {{index}}",
+    "unitBasis": "Engine unit basis",
+    "disposal": "Taxable event",
+    "acquisition": "Acquisition evidence",
+    "acquisitionBasis": "Engine acquisition basis",
+    "custody": "Relevant custody decisions",
+    "noCustody": "No stored custody decisions were found in this source period and wallet context.",
+    "custodyContext": "Incoming moves between your wallets before this result, back to the earliest source. This does not assign physical coins to tax lots.",
+    "custodyTruncated": "More custody decisions exist. Open custody lineage for the complete history.",
+    "missingSource": "Source transaction unavailable",
+    "timestamp": "Timestamp",
+    "spotPrice": "Engine spot price",
+    "fee": "Whole-source fee",
+    "link": "Link to this calculation",
+    "sourceLink": "Link to this source evidence",
+    "priceCurrency": "Price currency",
+    "sourceRate": "Source rate",
+    "sourceValue": "Source value",
+    "priceKind": "Price origin",
+    "priceQuality": "Price quality",
+    "priceSource": "Price source",
+    "priceTimestamp": "Price timestamp",
+    "priceProvider": "Price provider",
+    "pricePair": "Price pair",
+    "priceFetched": "Retrieved at",
+    "priceGranularity": "Price interval",
+    "priceMethod": "Price method"
+  }
+}

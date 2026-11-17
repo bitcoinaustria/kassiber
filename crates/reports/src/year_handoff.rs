@@ -153,11 +153,37 @@ struct Period {
     year: i64,
     /// The book calendar's zone; `None` is UTC.
     zone: Option<&'static str>,
+    /// The book's own tax year, when it is not the calendar year in the
+    /// country's zone (`tax_years::book_cut`).
+    book: Option<kassiber_tax_countries::BookCalendar>,
     start: String,
     end: String,
 }
 impl Period {
+    #[cfg(test)]
     fn new(profile: &Value, year: i64) -> Result<Self> {
+        Self::with_book(profile, year, None)
+    }
+    /// The handoff period of the book `profile`: its own tax year when it
+    /// has one.
+    fn of(conn: &Connection, profile: &Value, year: i64) -> Result<Self> {
+        Self::with_book(profile, year, crate::tax_years::book_cut(conn, profile)?)
+    }
+    fn with_book(
+        profile: &Value,
+        year: i64,
+        book: Option<kassiber_tax_countries::BookCalendar>,
+    ) -> Result<Self> {
+        if let Some(book) = book {
+            let (start, end) = crate::tax_years::book_window(&book, year)?;
+            return Ok(Self {
+                year,
+                zone: Some(book.timezone),
+                book: Some(book),
+                start,
+                end,
+            });
+        }
         // `str(tax_country or "").strip().lower()` (29027328b).
         let zone = crate::country::zone(
             &kassiber_pytext::strip(&text(profile, "tax_country")).to_lowercase(),
@@ -171,6 +197,7 @@ impl Period {
         Ok(Self {
             year,
             zone,
+            book: None,
             start: boundary(year)?,
             end: boundary(year + 1)?,
         })
@@ -178,7 +205,11 @@ impl Period {
     fn calendar(&self) -> &'static str {
         self.zone.unwrap_or("UTC")
     }
+    /// The tax year and local date of a stored instant.
     fn date(&self, raw: &str) -> Result<(i64, String)> {
+        if let Some(book) = &self.book {
+            return crate::tax_years::book_year(book, raw);
+        }
         if let Some(zone) = self.zone {
             return calendar::local(raw, zone);
         }
@@ -383,7 +414,11 @@ pub(super) fn build(
             "--year is required for Austrian E 1kv export",
         ));
     }
-    let period = Period::new(&profile, austrian::normalize_tax_year(value(args, "year"))?)?;
+    let period = Period::of(
+        conn,
+        &profile,
+        austrian::normalize_tax_year(value(args, "year"))?,
+    )?;
     quarantine(conn, &profile, &period)?;
     let id = text(&profile, "id");
     let observed = rows(conn,"SELECT t.*,w.label AS wallet,COALESCE(t.external_id,'') AS external_id FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id",[&id])?;
@@ -1107,7 +1142,13 @@ pub(super) fn build(
     if !fallback.is_empty() {
         warnings.push(s(format!("Year-end market value uses the last transaction price for {}, not a market rate at year end. Sync or set a rate before valuing holdings.",joined(&fallback))));
     }
-    Ok(dict([
+    let tax_year = period.book.map(|book| {
+        dict([
+            ("start", s(book.start_text())),
+            ("label", s(book.label(period.year as i32))),
+        ])
+    });
+    let mut handoff = dict([
         ("workspace", workspace),
         ("profile", profile),
         ("year", Value::Int(period.year.into())),
@@ -1137,7 +1178,11 @@ pub(super) fn build(
             Value::Bool(differences == 0 && roll_differences.is_empty()),
         ),
         ("warnings", Value::List(warnings)),
-    ]))
+    ]);
+    if let Some(tax_year) = tax_year {
+        replace(&mut handoff, "tax_year", tax_year);
+    }
+    Ok(handoff)
 }
 pub(super) fn classify(fact: &Facts, swap: bool) -> String {
     let mut labels = Vec::new();

@@ -14,9 +14,12 @@
 
 use serde_json::{json, Value};
 
+pub mod book;
 pub mod calendar;
 pub mod tables;
 pub mod years;
+
+pub use book::{BookCalendar, CalendarError};
 
 /// The country a profile without one uses.
 pub const DEFAULT_CODE: &str = "generic";
@@ -72,6 +75,15 @@ pub struct Country {
     /// The first day (month, day) of the tax year in [`Country::timezone`];
     /// `(1, 1)` is the calendar year.
     pub tax_year_start: (u8, u8),
+    /// A book may choose its own tax year's first day ([`TAX_YEAR_PRESETS`]
+    /// or any other day but 29 February). Only a country without a legal
+    /// tax year Kassiber files for (the generic one) allows it; every
+    /// other country's year is locked to its law's.
+    pub tax_year_editable: bool,
+    /// Zones a book may choose instead of [`Country::timezone`] for its
+    /// tax-year boundaries and report periods (a country that spans several
+    /// zones, or the generic country); empty when the zone is locked.
+    pub zones: &'static [&'static str],
     /// Reviewed carrying-value pairs between unlike assets carry basis.
     /// Otherwise only the Bitcoin rail pair (BTC and LBTC) may.
     pub cross_asset_carry: bool,
@@ -319,6 +331,18 @@ pub enum Rules {
     /// Japan: 雑所得, the total or moving average, the NTA calculation sheet
     /// (`docs/reference/tax-country-jp.md`).
     Japan,
+    /// Australia: CGT by income year from 1 July, the 12-month discount
+    /// period (`docs/reference/tax-country-au.md`).
+    Australia,
+    /// New Zealand: income tax on disposals, tax years from 1 April
+    /// (`docs/reference/tax-country-nz.md`).
+    NewZealand,
+    /// India: virtual digital assets at a flat rate, tax years from 1 April
+    /// (`docs/reference/tax-country-in.md`).
+    India,
+    /// South Africa: CGT or income by years of assessment from 1 March
+    /// (`docs/reference/tax-country-za.md`).
+    SouthAfrica,
 }
 
 /// The book's fiat currency.
@@ -437,11 +461,91 @@ pub const LONDON: &str = "Europe/London";
 pub const MADRID: &str = "Europe/Madrid";
 /// Japan's calendar.
 pub const TOKYO: &str = "Asia/Tokyo";
+/// Australia's default calendar (New South Wales); an Australian book may
+/// choose another of [`AUSTRALIAN_ZONES`].
+pub const SYDNEY: &str = "Australia/Sydney";
+/// The Australian zones a book may choose.
+pub const AUSTRALIAN_ZONES: &[&str] = &[
+    "Australia/Adelaide",
+    "Australia/Brisbane",
+    "Australia/Darwin",
+    "Australia/Hobart",
+    "Australia/Melbourne",
+    "Australia/Perth",
+    SYDNEY,
+];
+/// New Zealand's calendar.
+pub const AUCKLAND: &str = "Pacific/Auckland";
+/// India's calendar.
+pub const KOLKATA: &str = "Asia/Kolkata";
+/// South Africa's calendar.
+pub const JOHANNESBURG: &str = "Africa/Johannesburg";
 /// The zones whose calendars the report readers implement (Vienna its
 /// pinned table, the others `calendar`'s rule, checked against tzdata in
 /// `kassiber-reports`). A country in another zone needs that check first (a
 /// test keeps the registry to these).
-pub const SUPPORTED_ZONES: &[&str] = &[UTC, VIENNA, BERLIN, ZURICH, DUBLIN, LONDON, MADRID, TOKYO];
+pub const SUPPORTED_ZONES: &[&str] = &[
+    UTC,
+    VIENNA,
+    BERLIN,
+    ZURICH,
+    DUBLIN,
+    LONDON,
+    MADRID,
+    TOKYO,
+    KOLKATA,
+    JOHANNESBURG,
+    "Australia/Adelaide",
+    "Australia/Brisbane",
+    "Australia/Darwin",
+    "Australia/Hobart",
+    "Australia/Melbourne",
+    "Australia/Perth",
+    SYDNEY,
+    AUCKLAND,
+];
+
+/// A tax year's first day a book may choose by name, where its country lets
+/// it ([`Country::tax_year_editable`]); any other day but 29 February is a
+/// custom start.
+#[derive(Debug, PartialEq, Eq)]
+pub struct TaxYearPreset {
+    /// The stable name the desktop and the CLI use.
+    pub id: &'static str,
+    /// The first day (month, day).
+    pub start: (u8, u8),
+    /// Its English description.
+    pub name_en: &'static str,
+}
+
+/// The named tax-year starts, the calendar year first.
+pub const TAX_YEAR_PRESETS: &[TaxYearPreset] = &[
+    TaxYearPreset {
+        id: "calendar",
+        start: (1, 1),
+        name_en: "1 January (calendar year)",
+    },
+    TaxYearPreset {
+        id: "uk",
+        start: (4, 6),
+        name_en: "6 April (UK-style)",
+    },
+    TaxYearPreset {
+        id: "april",
+        start: (4, 1),
+        name_en: "1 April (India and New Zealand style)",
+    },
+    TaxYearPreset {
+        id: "july",
+        start: (7, 1),
+        name_en: "1 July (Australia-style)",
+    },
+    TaxYearPreset {
+        id: "march",
+        start: (3, 1),
+        name_en: "1 March (South Africa-style)",
+    },
+];
 
 /// A legal source a country's rules follow.
 #[derive(Debug, PartialEq, Eq)]
@@ -469,11 +573,20 @@ const GENERIC: Country = Country {
     long_term: LongTerm::ProfileDays { default: 365 },
     methods: &["FIFO", "HIFO", "LIFO", "LOFO", "MOVING_AVERAGE"],
     default_method: "FIFO",
+    // The global pool only, until the reviewed regeneration of the two
+    // frozen fusion-builder vectors that pin a generic book's `wallet` as
+    // refused (`tests/fixtures/custody_fusion_builder.json`,
+    // `profile-cost_basis_pool_scope-0`, `ordering-pool-before-row`) is
+    // signed off. The engine and every check already compute and guard a
+    // generic per-wallet pool (`docs/reference/tax.md#book-settings`);
+    // adding `wallet` here is the switch.
     pool_scopes: &["global"],
     default_pool_scope: "global",
     locale: Locale::En,
     timezone: UTC,
     tax_year_start: (1, 1),
+    tax_year_editable: true,
+    zones: SUPPORTED_ZONES,
     cross_asset_carry: false,
     rail_decision_required: false,
     report_generators: &["open_positions", "rp2_full_report"],
@@ -509,6 +622,8 @@ const AUSTRIA: Country = Country {
     locale: Locale::DeAt,
     timezone: VIENNA,
     tax_year_start: (1, 1),
+    tax_year_editable: false,
+    zones: &[],
     cross_asset_carry: true,
     rail_decision_required: false,
     report_generators: &["open_positions", "at.e1kv", "at.exit_tax"],
@@ -537,13 +652,17 @@ const UNITED_STATES: Country = Country {
     methods: &["FIFO", "HIFO", "LIFO", "LOFO"],
     default_method: "FIFO",
     // Per wallet from 2025 (Treas. Reg. § 1.1012-1(j)); global (universal)
-    // for books that end before 2025.
-    pool_scopes: &["global", "wallet"],
+    // for books that end before 2025; global_then_wallet for a book that
+    // spans the change, allocating the global pool to the wallets on
+    // 2025-01-01 by Rev. Proc. 2024-28's global allocation.
+    pool_scopes: &["global", "global_then_wallet", "wallet"],
     default_pool_scope: "wallet",
     locale: Locale::En,
     // A documented choice: Kassiber has no per-book zone yet.
     timezone: UTC,
     tax_year_start: (1, 1),
+    tax_year_editable: false,
+    zones: &[],
     cross_asset_carry: false,
     rail_decision_required: false,
     report_generators: &["open_positions", "us.form_8949"],
@@ -615,6 +734,8 @@ const GERMANY: Country = Country {
     locale: Locale::DeDe,
     timezone: BERLIN,
     tax_year_start: (1, 1),
+    tax_year_editable: false,
+    zones: &[],
     cross_asset_carry: false,
     // Whether L-BTC is the same Wirtschaftsgut as BTC is not settled.
     rail_decision_required: true,
@@ -713,6 +834,8 @@ const SWITZERLAND: Country = Country {
     locale: Locale::DeCh,
     timezone: ZURICH,
     tax_year_start: (1, 1),
+    tax_year_editable: false,
+    zones: &[],
     cross_asset_carry: false,
     // A peg has no income-tax effect for a private investor (CH-RAIL).
     rail_decision_required: false,
@@ -802,6 +925,8 @@ const IRELAND: Country = Country {
     locale: Locale::En,
     timezone: DUBLIN,
     tax_year_start: (1, 1),
+    tax_year_editable: false,
+    zones: &[],
     cross_asset_carry: false,
     // Whether a peg is one asset under s.580 is open (IE-Q9).
     rail_decision_required: false,
@@ -927,6 +1052,8 @@ const UNITED_KINGDOM: Country = Country {
     locale: Locale::En,
     timezone: LONDON,
     tax_year_start: (4, 6),
+    tax_year_editable: false,
+    zones: &[],
     cross_asset_carry: false,
     // A peg returns another token: the book decides each rail pair
     // (tax-country-gb.md, Bitcoin rails), or it is held.
@@ -1062,6 +1189,8 @@ const SPAIN: Country = Country {
     locale: Locale::Es,
     timezone: MADRID,
     tax_year_start: (1, 1),
+    tax_year_editable: false,
+    zones: &[],
     cross_asset_carry: false,
     // A peg carries basis as in generic books until reviewed (ES-Q6).
     rail_decision_required: false,
@@ -1167,6 +1296,8 @@ const JAPAN: Country = Country {
     locale: Locale::Ja,
     timezone: TOKYO,
     tax_year_start: (1, 1),
+    tax_year_editable: false,
+    zones: &[],
     cross_asset_carry: false,
     // A peg is no disposal, as in generic books, until reviewed (JP-Q7).
     rail_decision_required: false,
@@ -1264,6 +1395,209 @@ const JAPAN: Country = Country {
     }),
 };
 
+/// Australia (preview): `docs/reference/tax-country-au.md`.
+const AUSTRALIA_COUNTRY: Country = Country {
+    code: "au",
+    iso: Some("AU"),
+    name_en: "Australia",
+    name_de: "Australien",
+    name_local: None,
+    preview: true,
+    rules: Rules::Australia,
+    fiat: Fiat::Fixed("AUD"),
+    // The CGT discount needs the asset owned for at least 12 months,
+    // counting neither the day of acquisition nor the day of the CGT event:
+    // a disposal after the anniversary (ATO, CGT discount).
+    long_term: LongTerm::MoreThanOneYear,
+    methods: &["FIFO"],
+    default_method: "FIFO",
+    pool_scopes: &["global"],
+    default_pool_scope: "global",
+    locale: Locale::En,
+    timezone: SYDNEY,
+    // The income year runs from 1 July to 30 June.
+    tax_year_start: (7, 1),
+    tax_year_editable: false,
+    zones: AUSTRALIAN_ZONES,
+    cross_asset_carry: false,
+    rail_decision_required: false,
+    report_generators: &["open_positions", "rp2_full_report"],
+    income_categories: EARN_KINDS,
+    sources: &[
+        Source {
+            title: "ATO: Preparing your tax return (the income year from 1 July to 30 June)",
+            url: "https://www.ato.gov.au/individuals-and-families/your-tax-return/before-you-prepare-your-tax-return/preparing-your-tax-return",
+            retrieved: "2026-11-16",
+        },
+        Source {
+            title: "ATO: CGT discount (owned for at least 12 months, excluding the days of acquisition and of the CGT event)",
+            url: "https://www.ato.gov.au/individuals-and-families/investments-and-assets/capital-gains-tax/cgt-discount",
+            retrieved: "2026-11-16",
+        },
+        Source {
+            title: "ATO: How to work out and report CGT on crypto",
+            url: "https://www.ato.gov.au/individuals-and-families/investments-and-assets/crypto-asset-investments/how-to-work-out-and-report-cgt-on-crypto",
+            retrieved: "2026-11-16",
+        },
+    ],
+    tax_tables: &[],
+    engine: Some(GENERIC_ENGINE_RULES),
+};
+
+/// The generic rules a preview country starts from: every engine feature
+/// at its generic value, so only its zone, holding period, tax year and
+/// pool scope differ from a generic book.
+const GENERIC_ENGINE_RULES: EngineRules = EngineRules {
+    fee_units: FeeUnits::Basis,
+    swap_values: SwapValues::Own,
+    gifts: Gifts {
+        given_at_value: false,
+        donated_at_value: false,
+        received_refused: false,
+        losses_not_deductible: false,
+    },
+    refused_receipts: &[],
+    zero_cost_kinds: &[],
+    below_market: BelowMarket::Price,
+};
+
+/// New Zealand (preview): `docs/reference/tax-country-nz.md`.
+const NEW_ZEALAND: Country = Country {
+    code: "nz",
+    iso: Some("NZ"),
+    name_en: "New Zealand",
+    name_de: "Neuseeland",
+    name_local: None,
+    preview: true,
+    rules: Rules::NewZealand,
+    fiat: Fiat::Fixed("NZD"),
+    // Disposals are income or not by the purpose of acquisition; no
+    // holding period decides it.
+    long_term: LongTerm::Never,
+    methods: &["FIFO"],
+    default_method: "FIFO",
+    pool_scopes: &["global"],
+    default_pool_scope: "global",
+    locale: Locale::En,
+    timezone: AUCKLAND,
+    // The tax year runs from 1 April to 31 March; Inland Revenue names it
+    // by its end, Kassiber by its start (`2024-25`).
+    tax_year_start: (4, 1),
+    tax_year_editable: false,
+    zones: &[],
+    cross_asset_carry: false,
+    rail_decision_required: false,
+    report_generators: &["open_positions", "rp2_full_report"],
+    income_categories: EARN_KINDS,
+    sources: &[
+        Source {
+            title: "Inland Revenue: What happens at the end of the tax year (1 April to 31 March)",
+            url: "https://www.ird.govt.nz/income-tax/income-tax-for-individuals/what-happens-at-the-end-of-the-tax-year",
+            retrieved: "2026-11-16",
+        },
+        Source {
+            title: "Inland Revenue: Calculating cryptoasset income (FIFO or weighted average cost)",
+            url: "https://www.ird.govt.nz/cryptoassets/taxing/income-expenses/calculating-cryptoasset-income",
+            retrieved: "2026-11-16",
+        },
+    ],
+    tax_tables: &[],
+    engine: Some(GENERIC_ENGINE_RULES),
+};
+
+/// India (preview): `docs/reference/tax-country-in.md`.
+const INDIA: Country = Country {
+    code: "in",
+    iso: Some("IN"),
+    name_en: "India",
+    name_de: "Indien",
+    name_local: None,
+    preview: true,
+    rules: Rules::India,
+    fiat: Fiat::Fixed("INR"),
+    // Income from transferring a virtual digital asset is taxed at one
+    // flat rate whatever the holding period (s. 115BBH).
+    long_term: LongTerm::Never,
+    methods: &["FIFO"],
+    default_method: "FIFO",
+    pool_scopes: &["global"],
+    default_pool_scope: "global",
+    locale: Locale::En,
+    timezone: KOLKATA,
+    // The financial year from 1 April (the 1961 Act's previous year, the
+    // 2025 Act's tax year).
+    tax_year_start: (4, 1),
+    tax_year_editable: false,
+    zones: &[],
+    cross_asset_carry: false,
+    rail_decision_required: false,
+    report_generators: &["open_positions", "rp2_full_report"],
+    income_categories: EARN_KINDS,
+    sources: &[
+        Source {
+            title: "Income Tax Department: Section 115BBH, tax on income from virtual digital assets",
+            url: "https://www.incometaxindia.gov.in/w/section-115bbh",
+            retrieved: "2026-11-16",
+        },
+        Source {
+            title: "Income Tax Department: Section 3 of the Income-tax Act, 2025 (tax year from 1 April)",
+            url: "https://www.incometaxindia.gov.in/w/section-3-1",
+            retrieved: "2026-11-16",
+        },
+        Source {
+            title: "Income Tax Department: FAQs on the transition to the Income-tax Act, 2025",
+            url: "https://www.incometaxindia.gov.in/documents/d/guest/income-tax-document-faqs-on-interplay-and-transition",
+            retrieved: "2026-11-16",
+        },
+    ],
+    tax_tables: &[],
+    engine: Some(GENERIC_ENGINE_RULES),
+};
+
+/// South Africa (preview): `docs/reference/tax-country-za.md`.
+const SOUTH_AFRICA: Country = Country {
+    code: "za",
+    iso: Some("ZA"),
+    name_en: "South Africa",
+    name_de: "Südafrika",
+    name_local: None,
+    preview: true,
+    rules: Rules::SouthAfrica,
+    fiat: Fiat::Fixed("ZAR"),
+    // Capital or revenue is a question of intention, not of a holding
+    // period.
+    long_term: LongTerm::Never,
+    methods: &["FIFO"],
+    default_method: "FIFO",
+    pool_scopes: &["global"],
+    default_pool_scope: "global",
+    locale: Locale::En,
+    timezone: JOHANNESBURG,
+    // An individual's year of assessment runs from 1 March to the last day
+    // of February.
+    tax_year_start: (3, 1),
+    tax_year_editable: false,
+    zones: &[],
+    cross_asset_carry: false,
+    rail_decision_required: false,
+    report_generators: &["open_positions", "rp2_full_report"],
+    income_categories: EARN_KINDS,
+    sources: &[
+        Source {
+            title: "SARS: Comprehensive Guide to the ITR12 Income Tax Return for Individuals (year of assessment from 1 March)",
+            url: "https://www.sars.gov.za/wp-content/uploads/Ops/Guides/IT-AE-36-G05-Comprehensive-Guide-to-the-ITR12-Income-Tax-Return-for-Individuals-External-Guide.pdf",
+            retrieved: "2026-11-16",
+        },
+        Source {
+            title: "SARS: ABC of Capital Gains Tax for Individuals",
+            url: "https://www.sars.gov.za/wp-content/uploads/Ops/Guides/Legal-Pub-Guide-CGT02-ABC-Guide-on-CGT-for-Individuals.pdf",
+            retrieved: "2026-11-16",
+        },
+    ],
+    tax_tables: &[],
+    engine: Some(GENERIC_ENGINE_RULES),
+};
+
 /// Every country, in the order pickers list them.
 pub const COUNTRIES: &[Country] = &[
     GENERIC,
@@ -1275,6 +1609,10 @@ pub const COUNTRIES: &[Country] = &[
     UNITED_KINGDOM,
     SPAIN,
     JAPAN,
+    AUSTRALIA_COUNTRY,
+    NEW_ZEALAND,
+    INDIA,
+    SOUTH_AFRICA,
 ];
 
 /// The country stored as `code` (already normalized by the caller).
@@ -1372,6 +1710,15 @@ impl Country {
         self.pool_scopes.contains(&scope)
     }
 
+    /// Whether the profile may use `method` (stored, upper case) with pool
+    /// `scope`: both the country's, and a combination the engine computes
+    /// ([`method_allows_pool_scope`]).
+    pub fn allows_method_scope(&self, method: &str, scope: &str) -> bool {
+        self.allows_method(method)
+            && self.allows_pool_scope(scope)
+            && method_allows_pool_scope(method, scope)
+    }
+
     /// The machine description `commands describe`, the daemon and the
     /// desktop read.
     pub fn describe(&self) -> Value {
@@ -1395,6 +1742,10 @@ impl Country {
                 Rules::UnitedKingdom => "united_kingdom",
                 Rules::Spain => "spain",
                 Rules::Japan => "japan",
+                Rules::Australia => "australia",
+                Rules::NewZealand => "new_zealand",
+                Rules::India => "india",
+                Rules::SouthAfrica => "south_africa",
             },
             "fiat_currency": match self.fiat {
                 Fiat::Profile => Value::Null,
@@ -1412,6 +1763,21 @@ impl Country {
             "locale": self.locale.code(),
             "timezone": self.timezone,
             "tax_year_start": format!("{:02}-{:02}", self.tax_year_start.0, self.tax_year_start.1),
+            "tax_year_editable": self.tax_year_editable,
+            "tax_year_presets": if self.tax_year_editable {
+                TAX_YEAR_PRESETS.iter().map(|preset| json!({
+                    "id": preset.id,
+                    "start": format!("{:02}-{:02}", preset.start.0, preset.start.1),
+                    "name": preset.name_en,
+                })).collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            },
+            "zones": self.book_zones(),
+            "method_pool_scopes": self.methods.iter().map(|method| (
+                (*method).to_owned(),
+                json!(self.pool_scopes.iter().filter(|scope| method_allows_pool_scope(method, scope)).collect::<Vec<_>>()),
+            )).collect::<serde_json::Map<_, _>>(),
             "cross_asset_carry": self.cross_asset_carry,
             "report_generators": self.report_generators,
             "income_categories": self.income_categories,
@@ -1430,6 +1796,27 @@ impl Country {
             description["rail_decision_required"] = json!(true);
         }
         description
+    }
+}
+
+/// Whether the engine has `method` (stored, upper case) in pool `scope`.
+/// The lot methods have every scope; the plain moving average the global
+/// and the wallet pool; Austria's moving average, the UK's share matching
+/// and Japan's averages only the global pool; Germany's
+/// `MOVING_AVERAGE_FIFO_PERIOD` only the wallet pool. Only the lot methods
+/// change from the global to the wallet pool within a book
+/// (`global_then_wallet`).
+pub fn method_allows_pool_scope(method: &str, scope: &str) -> bool {
+    match method {
+        "FIFO" | "LIFO" | "HIFO" | "LOFO" => {
+            matches!(scope, "global" | "wallet" | "global_then_wallet")
+        }
+        "MOVING_AVERAGE" => matches!(scope, "global" | "wallet"),
+        "MOVING_AVERAGE_FIFO_PERIOD" => scope == "wallet",
+        "MOVING_AVERAGE_AT" | "UK_SHARE_MATCHING" | "JP_TOTAL_AVERAGE" | "JP_MOVING_AVERAGE" => {
+            scope == "global"
+        }
+        _ => false,
     }
 }
 
@@ -1556,7 +1943,7 @@ mod tests {
         assert!(!us.allows_method("MOVING_AVERAGE"));
         assert_eq!(
             (us.default_pool_scope, us.pool_scopes),
-            ("wallet", &["global", "wallet"][..])
+            ("wallet", &["global", "global_then_wallet", "wallet"][..])
         );
         assert_eq!(us.preview_notice(Language::En), Some(PREVIEW_NOTICE_EN));
         assert!(!cross_asset_carry("us"));
@@ -1680,6 +2067,87 @@ mod tests {
         );
         assert_eq!(BelowMarket::MarketValue.code(), "market_value");
         assert_eq!(BelowMarket::Price.code(), "price");
+    }
+
+    #[test]
+    fn methods_and_pool_scopes_combine_only_where_the_engine_computes_them() {
+        let generic = lookup("generic").unwrap();
+        for method in generic.methods {
+            assert!(generic.allows_method_scope(method, "global"), "{method}");
+            // The engine has every generic method per wallet; the country
+            // does not offer the scope yet (see GENERIC.pool_scopes).
+            assert!(method_allows_pool_scope(method, "wallet"), "{method}");
+            assert!(!generic.allows_method_scope(method, "wallet"));
+            assert!(!generic.allows_method_scope(method, "global_then_wallet"));
+        }
+        let at = lookup("at").unwrap();
+        assert!(!at.allows_method_scope("MOVING_AVERAGE_AT", "wallet"));
+        let de = lookup("de").unwrap();
+        assert!(de.allows_method_scope("MOVING_AVERAGE_FIFO_PERIOD", "wallet"));
+        let us = lookup("us").unwrap();
+        assert!(us.allows_method_scope("HIFO", "global_then_wallet"));
+        // Every default combination is allowed.
+        for country in COUNTRIES {
+            assert!(
+                country.allows_method_scope(country.default_method, country.default_pool_scope),
+                "{}",
+                country.code
+            );
+            let described = country.describe();
+            for method in country.methods {
+                assert!(
+                    !described["method_pool_scopes"][method]
+                        .as_array()
+                        .unwrap()
+                        .is_empty(),
+                    "{} {method}",
+                    country.code
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_new_preview_countries_have_their_legal_years_and_currencies() {
+        for (code, fiat, zone, start, long_term) in [
+            ("au", "AUD", SYDNEY, (7, 1), LongTerm::MoreThanOneYear),
+            ("nz", "NZD", AUCKLAND, (4, 1), LongTerm::Never),
+            ("in", "INR", KOLKATA, (4, 1), LongTerm::Never),
+            ("za", "ZAR", JOHANNESBURG, (3, 1), LongTerm::Never),
+        ] {
+            let country = lookup(code).unwrap();
+            assert!(country.preview, "{code}");
+            assert_eq!(country.fiat, Fiat::Fixed(fiat));
+            assert_eq!((country.timezone, country.tax_year_start), (zone, start));
+            assert_eq!(country.long_term, long_term);
+            assert_eq!(
+                (country.methods, country.pool_scopes),
+                (&["FIFO"][..], &["global"][..])
+            );
+            assert!(!country.tax_year_editable && !country.cross_asset_carry);
+            assert_eq!(
+                country.report_generators,
+                ["open_positions", "rp2_full_report"]
+            );
+            // The engine computes them as rules countries in their zone and
+            // year, every other rule generic.
+            let engine = country.engine_country().unwrap().unwrap();
+            assert_eq!(engine["timezone"], zone);
+            assert_eq!(
+                engine["tax_year_start"],
+                format!("{:02}-{:02}", start.0, start.1)
+            );
+            assert_eq!(engine["pool_scope"], "global");
+            assert_eq!(
+                engine.as_object().unwrap().len(),
+                5,
+                "{code}: only kind, zone, holding, scope and year: {engine}"
+            );
+            for source in country.sources {
+                assert_eq!(source.retrieved, "2026-11-16");
+            }
+        }
+        assert_eq!(lookup("au").unwrap().book_zones().len(), 7);
     }
 
     #[test]
@@ -1867,7 +2335,10 @@ mod tests {
         for country in [generic, at] {
             assert_eq!(country.pool_scopes, ["global"]);
         }
-        assert_eq!(sorted_codes(), "at, ch, de, es, gb, generic, ie, jp, us");
+        assert_eq!(
+            sorted_codes(),
+            "at, au, ch, de, es, gb, generic, ie, in, jp, nz, us, za"
+        );
         for country in [generic, at] {
             assert!(!country.rail_decision_required && country.engine.is_none());
         }
