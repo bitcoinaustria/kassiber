@@ -66,6 +66,9 @@ pub struct State {
     pub open_channel: Option<String>,
     /// The copy button showing "Copied" (key, until app clock).
     pub copied: Option<(String, f64)>,
+    /// The connection of each Refresh in flight, in send order (replies come in order). Kept
+    /// across connections, so a reply for one never lands on another's page.
+    pub asked: std::collections::VecDeque<String>,
 }
 
 /// The connection with its live snapshot merged in (`resolvedConnection.node`).
@@ -94,6 +97,7 @@ impl State {
             live: k.live,
             fetching: k.fetching,
             error: k.error,
+            asked: k.asked,
             ..State::default()
         };
     }
@@ -108,6 +112,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     if app.wallets.node.conn_id.as_deref() != Some(id.as_str()) {
         app.wallets.node = State {
             conn_id: Some(id),
+            asked: std::mem::take(&mut app.wallets.node.asked),
             ..State::default()
         };
         changed = true;
@@ -140,6 +145,7 @@ pub fn sync(app: &mut App, id: &str) {
         .is_some()
     {
         app.wallets.node.fetching = true;
+        app.wallets.node.asked.push_back(id.to_owned());
     }
 }
 
@@ -147,18 +153,21 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     if tag != "wallets.node.snapshot" {
         return;
     }
-    app.wallets.node.fetching = false;
-    let label = app
-        .wallets
-        .node
-        .conn_id
-        .clone()
+    let asked = app.wallets.node.asked.pop_front();
+    // Only the page of the node that was asked takes the result; the notice names that node.
+    let ours = asked.is_some() && asked == app.wallets.node.conn_id;
+    if ours {
+        app.wallets.node.fetching = false;
+    }
+    let label = asked
         .and_then(|id| super::conn::find(app, &id))
         .map(|c| c.label)
         .unwrap_or_default();
     match &r.error {
         Some(e) => {
-            app.wallets.node.error = Some(e.clone());
+            if ours {
+                app.wallets.node.error = Some(e.clone());
+            }
             // `recordConnectionSyncFailed`: a condition in the centre and an error toast.
             let title = tc(
                 "chrome:notifications.condition.connectionSyncFailed.title",
@@ -176,9 +185,11 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             );
         }
         None => {
-            app.wallets.node.error = None;
-            if r.data.is_object() {
-                app.wallets.node.live = Some(r.data.clone());
+            if ours {
+                app.wallets.node.error = None;
+                if r.data.is_object() {
+                    app.wallets.node.live = Some(r.data.clone());
+                }
             }
             // `recordConnectionSynced`.
             let title = crate::i18n::t("chrome:notifications.result.connectionSynced.title");
@@ -209,6 +220,7 @@ pub fn prime(app: &mut App, c: &Conn) {
     if app.wallets.node.conn_id.as_deref() != Some(c.id.as_str()) {
         app.wallets.node = State {
             conn_id: Some(c.id.clone()),
+            asked: std::mem::take(&mut app.wallets.node.asked),
             ..State::default()
         };
     }
@@ -291,3 +303,43 @@ pub const SCENES: &[crate::app::Scene] = &[
         open_populated(a, Tab::Overview);
     }),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(n: u64) -> Reply {
+        Reply {
+            kind: "ui.connections.node.snapshot".into(),
+            data: json!({ "alias": format!("node {n}") }),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Refresh on node A, then node B's page before A answers: A's snapshot stays off B's page,
+    /// and B's own Refresh still lands on B.
+    #[test]
+    fn a_snapshot_lands_only_on_the_node_that_asked() {
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.node.conn_id = Some("a".into());
+        app.wallets.node.asked.push_back("a".into());
+        app.wallets.node.fetching = true;
+        // `poll` on B's page.
+        app.wallets.node = State {
+            conn_id: Some("b".into()),
+            asked: std::mem::take(&mut app.wallets.node.asked),
+            ..State::default()
+        };
+        app.wallets.node.asked.push_back("b".into());
+        app.wallets.node.fetching = true;
+        on_reply(&mut app, "wallets.node.snapshot", &snapshot(1));
+        assert!(app.wallets.node.live.is_none(), "A's snapshot is not B's");
+        assert!(app.wallets.node.fetching, "B's Refresh still runs");
+        on_reply(&mut app, "wallets.node.snapshot", &snapshot(2));
+        assert_eq!(app.wallets.node.live.as_ref().unwrap()["alias"], "node 2");
+        assert!(!app.wallets.node.fetching);
+        assert!(app.wallets.node.asked.is_empty());
+    }
+}

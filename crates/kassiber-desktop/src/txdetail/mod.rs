@@ -170,7 +170,9 @@ pub struct Open {
     pub attach_error: Option<String>,
     pub commercial_kind: Option<String>,
     pub commercial_error: Option<String>,
-    pub acq_kind: Option<String>,
+    /// The classification picked in the acquisition card: `None` until the user picks,
+    /// `Some(None)` for an explicit reset to the imported classification.
+    pub acq_kind: Option<Option<String>>,
     pub acq_preview: Option<Value>,
     pub acq_scope: Option<Value>,
     pub acq_error: Option<String>,
@@ -303,8 +305,6 @@ pub struct DetailUi {
     /// `sidePanelWidth`: default 600, 480–1680.
     pub width: f32,
     pub maximized: bool,
-    /// Last saved draft per transaction (the host's `drafts` map).
-    pub drafts: HashMap<String, Draft>,
     /// The transactions of the saves in flight, in the order they were sent (metadata writes run
     /// one at a time and reply in order), so a reply finds its panel after a tab switch.
     /// With each, the draft that was submitted: only that becomes the saved baseline, so edits
@@ -347,7 +347,6 @@ impl Default for DetailUi {
             maximized: false,
             saving_ids: Default::default(),
             targets: HashMap::new(),
-            drafts: HashMap::new(),
             loans: None,
             nav: vec![],
             drag_from: None,
@@ -576,12 +575,10 @@ pub fn retry(app: &mut App) {
 /// active panel's), side reads, the graph.
 fn load_record(app: &mut App, panel: u64, record: Value, keep_draft: bool) {
     let id = draft::s(&record, "id").to_owned();
-    let base = app
-        .detail
-        .drafts
-        .get(&id)
-        .cloned()
-        .unwrap_or_else(|| draft::baseline(&record));
+    // The record is the saved state: the daemon answers in order, so a read sent after a save
+    // includes it, and metadata changed elsewhere (an exclusion from the table, the assistant)
+    // must not give way to an older save's draft.
+    let base = draft::baseline(&record);
     let active = app.detail.open.as_ref().is_some_and(|o| o.serial == panel);
     let any_tx = Target {
         panel,

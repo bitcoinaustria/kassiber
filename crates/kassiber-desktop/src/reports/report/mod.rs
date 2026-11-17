@@ -162,6 +162,10 @@ pub struct Ui {
     pub ln_selected: Option<String>,
     /// `ui.reports.lightning_profitability` for (connection id): None until "Run report".
     pub ln: Option<(String, Load<Value>)>,
+    /// The connection of each profitability read and the reference of each explanation read in
+    /// flight, in send order (replies come in order): a reply lands only on what asked for it.
+    /// Kept through a book switch, since the replies still come.
+    pub asked: Asked,
     /// Bumped each time the page is left (`leave`): an export started on an earlier visit
     /// finishes without a strip, as the web's `setExportStatus` on an unmounted view does.
     pub visit: u64,
@@ -252,6 +256,7 @@ fn step(app: &mut App) -> bool {
             pending_save: ui.pending_save,
             visit: ui.visit,
             export_visit: ui.export_visit,
+            asked: ui.asked,
             ..Ui::default()
         };
         changed = true;
@@ -269,6 +274,7 @@ fn step(app: &mut App) -> bool {
                 ui.explain = Some((r.clone(), Load::Loading));
                 ui.explain_open.clear();
                 let reference: Value = serde_json::from_str(&r).unwrap_or(Value::Null);
+                app.reports.report.asked.explain.push_back(r);
                 app.send(
                     "ui.reports.explain_capital_gain",
                     json!({"reference": reference}),
@@ -431,7 +437,14 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         "reports.report.export" => on_export(app, r),
         "reports.report.ln" => {
-            if let Some((_, load)) = app.reports.report.ln.as_mut() {
+            let asked = app.reports.report.asked.ln.pop_front();
+            if let Some((_, load)) = app
+                .reports
+                .report
+                .ln
+                .as_mut()
+                .filter(|(c, _)| Some(c) == asked.as_ref())
+            {
                 *load = match &r.error {
                     Some(e) => Load::Failed(e.clone()),
                     None => Load::Ready(r.data.clone()),
@@ -439,7 +452,14 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "reports.report.explain" => {
-            if let Some((_, load)) = app.reports.report.explain.as_mut() {
+            let asked = app.reports.report.asked.explain.pop_front();
+            if let Some((_, load)) = app
+                .reports
+                .report
+                .explain
+                .as_mut()
+                .filter(|(k, _)| Some(k) == asked.as_ref())
+            {
                 *load = match &r.error {
                     Some(e) => Load::Failed(e.clone()),
                     None => Load::Ready(r.data.clone()),
@@ -448,6 +468,13 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         _ => {}
     }
+}
+
+/// What the profitability and explanation reads in flight were asked for, in send order.
+#[derive(Default)]
+pub struct Asked {
+    pub ln: VecDeque<String>,
+    pub explain: VecDeque<String>,
 }
 
 /// The audit package's case scope takes the first saved case when none is chosen.
@@ -945,6 +972,7 @@ pub fn open_export(app: &mut App, path: &str) {
 /// "Run report" (Lightning): contacts the node, so only from that press.
 pub fn run_ln(app: &mut App, connection: &str) {
     app.reports.report.ln = Some((connection.to_owned(), Load::Loading));
+    app.reports.report.asked.ln.push_back(connection.to_owned());
     app.send(
         "ui.reports.lightning_profitability",
         json!({"connection": connection}),
@@ -1114,6 +1142,36 @@ pub const SCENES: &[super::Scene] = &[
 #[cfg(test)]
 mod transient_tests {
     use super::*;
+
+    /// Profitability run for A, then for B before A answers: A's numbers never show as B's,
+    /// and B stays loading until its own reply.
+    #[test]
+    fn a_profitability_reply_lands_only_on_its_connection() {
+        let mut app = crate::app::tests::quiet_app();
+        app.reports
+            .report
+            .asked
+            .ln
+            .extend(["a".to_owned(), "b".to_owned()]);
+        app.reports.report.ln = Some(("b".into(), Load::Loading));
+        let reply = |n: u64| Reply {
+            kind: "ui.reports.lightning_profitability".into(),
+            data: json!({ "revenue_msat": n }),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "reports.report.ln", &reply(1));
+        assert!(matches!(app.reports.report.ln, Some((_, Load::Loading))));
+        on_reply(&mut app, "reports.report.ln", &reply(2));
+        match &app.reports.report.ln {
+            Some((c, Load::Ready(v))) => {
+                assert_eq!((c.as_str(), &v["revenue_msat"]), ("b", &json!(2)))
+            }
+            _ => panic!("B's own reply lands"),
+        }
+        assert!(app.reports.report.asked.ln.is_empty());
+    }
 
     #[test]
     fn leaving_reports_drops_the_export_strip_and_keeps_reads() {

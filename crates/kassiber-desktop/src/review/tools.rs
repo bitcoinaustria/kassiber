@@ -35,9 +35,14 @@ pub struct State {
     /// Comparisons by their args (`staleTime: Infinity`).
     cache: HashMap<String, Value>,
     errors: HashMap<String, String>,
-    /// The last result shown, kept while another year's loads (`keepPreviousData`).
+    /// The last result shown, kept while another year's (or a refreshed book's) loads
+    /// (`keepPreviousData`).
     shown: Option<Value>,
-    queue: VecDeque<String>,
+    /// The comparisons in flight: their args and the book refresh cycle they read.
+    queue: VecDeque<(String, u64)>,
+    /// The book refresh cycle (`app.book_generation`) the cache belongs to: a refresh (an
+    /// exclusion, a journal run, a sync) changes what the comparison reads, so it reads again.
+    generation: u64,
     pub years: Vec<i64>,
     pub exporting: bool,
     /// An exported workbook waiting for the save dialog.
@@ -225,15 +230,23 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         return changed;
     };
     let k = key_of(&a);
+    let generation = app.book_generation;
+    if app.review.tools.generation != generation {
+        let s = st(app);
+        s.generation = generation;
+        s.cache.clear();
+        s.errors.clear();
+        changed = true;
+    }
     let s = &app.review.tools;
     if !s.cache.contains_key(&k)
         && !s.errors.contains_key(&k)
-        && !s.queue.contains(&k)
+        && !s.queue.contains(&(k.clone(), generation))
         && app
             .send("ui.reports.cross_check", a, "review.tools.compare")
             .is_some()
     {
-        st(app).queue.push_back(k);
+        st(app).queue.push_back((k, generation));
         changed = true;
     }
     changed
@@ -242,9 +255,13 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
         "review.tools.compare" => {
-            let Some(k) = st(app).queue.pop_front() else {
+            let Some((k, generation)) = st(app).queue.pop_front() else {
                 return;
             };
+            if generation != app.book_generation {
+                // Read before a book refresh: the next poll compares again.
+                return;
+            }
             let s = st(app);
             match &r.error {
                 Some(e) => {
@@ -390,7 +407,9 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     let k = a.as_ref().map(key_of);
     let result = k.as_ref().and_then(|k| s.cache.get(k)).or(s.shown.as_ref());
     let error = k.as_ref().and_then(|k| s.errors.get(k));
-    let fetching = k.as_ref().is_some_and(|k| s.queue.contains(k));
+    let fetching = k
+        .as_ref()
+        .is_some_and(|k| s.queue.iter().any(|(q, _)| q == k));
     let tool_label = s.tool.map(tool_name).unwrap_or("");
     // The file bar.
     let mut file_btn = row()
@@ -1837,7 +1856,47 @@ pub fn scene_load(app: &mut App, name: &str, bytes: &[u8]) {
             .send("ui.reports.cross_check", a, "review.tools.compare")
             .is_some()
         {
-            st(app).queue.push_back(k);
+            let generation = app.book_generation;
+            st(app).generation = generation;
+            st(app).queue.push_back((k, generation));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reply(matched: u64) -> Reply {
+        Reply {
+            kind: "ui.reports.cross_check".into(),
+            data: json!({ "matched": matched }),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// A comparison read before a book refresh (an exclusion in Transactions, a journal run)
+    /// is not kept: the page compares again against the refreshed book.
+    #[test]
+    fn a_comparison_from_before_a_book_refresh_is_read_again() {
+        let mut app = crate::app::tests::quiet_app();
+        let before = app.book_generation;
+        let s = st(&mut app);
+        s.file = Some(("export.csv".into(), "AA==".into()));
+        s.tool = Some("cointracking");
+        let k = key_of(&args(s).unwrap());
+        s.queue.push_back((k.clone(), before));
+        app.book_generation += 1;
+        on_reply(&mut app, "review.tools.compare", &reply(1));
+        assert!(
+            !app.review.tools.cache.contains_key(&k),
+            "the old book's result"
+        );
+        let generation = app.book_generation;
+        st(&mut app).queue.push_back((k.clone(), generation));
+        on_reply(&mut app, "review.tools.compare", &reply(2));
+        assert_eq!(app.review.tools.cache[&k]["matched"], 2);
     }
 }

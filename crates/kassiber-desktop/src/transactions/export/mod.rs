@@ -119,6 +119,9 @@ pub struct Written {
 pub struct ExportUi {
     pub open: bool,
     pub busy: bool,
+    /// The running export's format and previewed file name, fixed when it was sent: the
+    /// dialog's choice may change before it finishes.
+    pub sent: Option<(Format, String)>,
     pub format: Format,
     pub preset: usize,
     pub from: TextEdit,
@@ -347,6 +350,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         "txs.export.write" => {
             app.txs.export.busy = false;
+            let sent = app.txs.export.sent.take();
             match &r.error {
                 Some(msg) => {
                     if blocked(&r.error_detail) {
@@ -370,14 +374,12 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                         .or_else(|| r.data["path"].as_str())
                         .unwrap_or("")
                         .to_owned();
-                    let file_name = e
-                        .preview
-                        .as_ref()
-                        .and_then(|p| p["file_name"].as_str())
-                        .unwrap_or("")
-                        .to_owned();
+                    let (format, file_name) = sent.unwrap_or_else(|| {
+                        let name = e.preview.as_ref().and_then(|p| p["file_name"].as_str());
+                        (e.format, name.unwrap_or("").to_owned())
+                    });
                     let w = Written {
-                        format: e.format,
+                        format,
                         path,
                         payload: r.data.clone(),
                         file_name,
@@ -543,6 +545,13 @@ fn submit(app: &mut App) {
         Format::Xlsx => ("ui.transactions.export_xlsx", m),
         Format::Csv => ("ui.transactions.export_csv", m),
     };
+    let file_name = e
+        .preview
+        .as_ref()
+        .and_then(|p| p["file_name"].as_str())
+        .unwrap_or("")
+        .to_owned();
+    app.txs.export.sent = Some((e.format, file_name));
     app.txs.export.busy = true;
     if app.txs.export.preview_error.as_ref().is_some_and(blocked) {
         app.txs.export.preview_error = None;

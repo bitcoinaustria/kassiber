@@ -859,7 +859,7 @@ static SCENES: &[crate::app::Scene] = &[
     ("detail-acq-preview", |a| {
         txdetail::scene_open(a, "tax", |_| true);
         if let Some(o) = a.detail.open.as_mut() {
-            o.acq_kind = Some("income".into());
+            o.acq_kind = Some(Some("income".into()));
         }
         txdetail::actions::acq_preview(a);
         txdetail::pump_until(a, |a| a.detail.open.as_ref().is_some_and(|o| !o.busy.acq));
@@ -867,7 +867,7 @@ static SCENES: &[crate::app::Scene] = &[
     ("detail-acq-apply", |a| {
         txdetail::scene_open(a, "tax", |_| true);
         if let Some(o) = a.detail.open.as_mut() {
-            o.acq_kind = Some("income".into());
+            o.acq_kind = Some(Some("income".into()));
         }
         txdetail::actions::acq_preview(a);
         txdetail::pump_until(a, |a| a.detail.open.as_ref().is_some_and(|o| !o.busy.acq));

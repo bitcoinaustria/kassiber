@@ -95,8 +95,7 @@ pub fn on_saved(app: &mut App, r: &Reply) {
             match &r.error {
                 Some(e) => o.save_error = Some(save_error_text(e)),
                 None => {
-                    o.base = submitted.clone();
-                    app.detail.drafts.insert(id.clone(), submitted);
+                    o.base = submitted;
                 }
             }
         }
@@ -115,9 +114,8 @@ pub fn on_saved(app: &mut App, r: &Reply) {
     }
     // Only what was submitted is saved; edits made meanwhile stay dirty.
     let saved = submitted;
-    o.base = saved.clone();
+    o.base = saved;
     let (close_after, next) = (o.close_after_save, o.next_after_save);
-    app.detail.drafts.insert(id.clone(), saved);
     app.refresh_reads();
     // The Review page re-reads its lists; "Save & next" picks the next row from what they return.
     if let Some(h) = super::review_host(app).cloned() {
@@ -621,14 +619,18 @@ pub fn acq_preview(app: &mut App) {
 /// The second step of the acquisition preview, for the panel that asked (gone: nothing).
 fn acq_plan(app: &mut App, to: Target, cases: &Value) {
     let Some(o) = panel_mut(app, &to) else { return };
-    let kind = o.acq_kind.clone();
     o.acq_scope = Some(cases.clone());
-    let args = json!({
+    let args = acq_plan_args(o.acq_kind.clone().flatten(), &to.tx, cases);
+    send_to(app, to, "ui.review.plan", args, "txd.acq_plan");
+}
+
+/// The plan request for classifying `tx` as `kind` (`None`: back to the imported kind).
+fn acq_plan_args(kind: Option<String>, tx: &str, cases: &Value) -> Value {
+    json!({
         "expected_scope": { "workspace_id": cases["workspace_id"], "profile_id": cases["profile_id"] },
         "expected_input_version": cases["input_version"],
-        "operations": [{ "type": "kind_override", "transaction_id": to.tx, "kind": kind, "reason": "Reviewed acquisition classification" }],
-    });
-    send_to(app, to, "ui.review.plan", args, "txd.acq_plan");
+        "operations": [{ "type": "kind_override", "transaction_id": tx, "kind": kind, "reason": "Reviewed acquisition classification" }],
+    })
 }
 
 pub fn acq_apply(app: &mut App) {
@@ -998,9 +1000,6 @@ pub fn on_reply(app: &mut App, tag: &str, to: Option<Target>, r: &Reply) {
                     Some(t("transactions:notification.editReverted.body")),
                 );
                 // The reverted value is the new baseline.
-                if !to.tx.is_empty() {
-                    app.detail.drafts.remove(&to.tx);
-                }
                 if panel_mut(app, &to).is_some() {
                     reload_to(app, to);
                 }
@@ -1189,8 +1188,35 @@ mod tests {
         assert!(a.dirty().count > 0, "the later edit stays dirty");
         let b = app.detail.open.as_ref().unwrap();
         assert!(b.dirty().count > 0, "B keeps its unsaved edits");
-        assert!(app.detail.drafts.contains_key("a") && !app.detail.drafts.contains_key("b"));
         assert!(app.detail.saving_ids.is_empty());
+    }
+
+    /// A transaction saved here and later excluded elsewhere (the Transactions table, the
+    /// assistant): the next read is the baseline, so a later save cannot include it again.
+    #[test]
+    fn a_fresh_read_outranks_an_earlier_save() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut a = shown("a");
+        a.draft.note = "saved here".into();
+        app.detail
+            .saving_ids
+            .push_back(("a".into(), a.draft.clone()));
+        app.detail.open = Some(a);
+        on_saved(&mut app, &ok(json!({})));
+        assert_eq!(app.detail.open.as_ref().unwrap().base.note, "saved here");
+        // Excluded through the table; the panel re-reads.
+        super::super::reload(&mut app);
+        super::super::on_reply(
+            &mut app,
+            "txd.reload",
+            &ok(json!({ "transaction": { "id": "a", "note": "saved here", "excluded": true } })),
+        );
+        let o = app.detail.open.as_ref().unwrap();
+        assert!(
+            o.base.excluded && o.draft.excluded,
+            "the read's exclusion stands"
+        );
+        assert_eq!(o.dirty().count, 0);
     }
 
     fn ok(data: Value) -> Reply {
@@ -1425,7 +1451,7 @@ mod tests {
         let mut app = crate::app::tests::quiet_app();
         let mut a = shown("a");
         a.busy.acq = true;
-        a.acq_kind = Some("gift_in".into());
+        a.acq_kind = Some(Some("gift_in".into()));
         let to = a.target(Value::Null);
         two_tabs(&mut app, a, shown("b"));
         app.detail
@@ -1446,6 +1472,20 @@ mod tests {
         assert!(!a.busy.acq);
         assert_eq!(a.acq_error.as_deref(), Some("refused"));
         assert!(app.detail.open.as_ref().unwrap().acq_error.is_none());
+    }
+
+    /// Resetting an override to the imported classification asks for `kind: null`.
+    #[test]
+    fn an_explicit_reset_previews_a_null_kind() {
+        let mut a = shown("a");
+        a.record = Some(json!({ "id": "a", "kindOverride": "income" }));
+        a.acq_kind = Some(None);
+        let cases = json!({ "workspace_id": "w", "profile_id": "p", "input_version": "v1" });
+        let args = acq_plan_args(a.acq_kind.clone().flatten(), "a", &cases);
+        let op = &args["operations"][0];
+        assert_eq!(op["type"], "kind_override");
+        assert!(op["kind"].is_null(), "{op}");
+        assert_eq!(args["expected_input_version"], "v1");
     }
 
     /// An explanation read for A's row that lands after switching to B stays off B's dialog,

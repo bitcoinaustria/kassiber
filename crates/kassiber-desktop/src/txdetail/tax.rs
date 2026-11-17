@@ -618,8 +618,10 @@ fn effect_table(app: &App, tk: &Tk, o: &Open, r: &Value) -> El {
 fn acquisition(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) -> El {
     let hide = app.prefs.hide_sensitive();
     let locked = o.dirty().count > 0;
+    // A preview or apply in flight pins the choice it was asked for.
+    let pinned = locked || o.busy.acq;
     let initial = opt_s(r, "kindOverride");
-    let selected = o.acq_kind.clone().or(initial.clone());
+    let selected = o.acq_kind.clone().unwrap_or_else(|| initial.clone());
     let current = selected.clone().unwrap_or_else(|| UNCLASSIFIED.into());
     let label = if current == UNCLASSIFIED {
         t("transactions:tax.kindUnclassified")
@@ -651,15 +653,15 @@ fn acquisition(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) -> 
         "txd-acq-kind",
         &t("transactions:tax.kind"),
         &label,
-        !locked,
+        !pinned,
     );
-    if !locked {
+    if !pinned {
         trigger = trigger.select_trigger(o.select == Some(Select::AcqKind), |a: &mut App| {
             toggle_select(a, Select::AcqKind)
         });
     }
     c = c.child(trigger);
-    if o.select == Some(Select::AcqKind) {
+    if o.select == Some(Select::AcqKind) && !pinned {
         let mut opts = vec![(
             UNCLASSIFIED.to_owned(),
             t("transactions:tax.kindUnclassified"),
@@ -670,8 +672,8 @@ fn acquisition(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) -> 
                 .map(|k| (k.to_string(), draft::kind_label(k))),
         );
         select_menu(tk, layer, "txd-acq-kind", opts, &current, |a, v| {
-            if let Some(o) = a.detail.open.as_mut() {
-                o.acq_kind = (v != UNCLASSIFIED).then(|| v.to_owned());
+            if let Some(o) = a.detail.open.as_mut().filter(|o| !o.busy.acq) {
+                o.acq_kind = Some((v != UNCLASSIFIED).then(|| v.to_owned()));
                 o.acq_preview = None;
                 o.acq_error = None;
             }
