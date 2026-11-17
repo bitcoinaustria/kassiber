@@ -6,7 +6,7 @@ use rune::{Color, Cx, El, TextEdit, col, row, text};
 use rune_kit::TextInput;
 use serde_json::Value;
 
-use super::common::{self as c, Tone, eur, sens, tnum};
+use super::common::{self as c, Tone, sens, tnum};
 use super::journals::{entry_type_label, humanize};
 use crate::app::{App, Load};
 use crate::i18n::{t, tr};
@@ -137,7 +137,10 @@ pub fn metric_ids(kind: &str) -> Vec<&'static str> {
 }
 
 /// `reportableEntryToRow`.
-pub fn to_row(e: &Value, summary: &Value) -> Row {
+/// `cur` is the book's currency: the event's `costBasisEur`, `proceedsEur`, `fiatValueEur` and
+/// `gainLossEur` are stored journal amounts in it (the `Eur` names are historical).
+pub fn to_row(e: &Value, summary: &Value, cur: &str) -> Row {
+    let money = |v: f64| crate::format::fiat(v, cur);
     let needs = summary["needsJournals"].as_bool().unwrap_or(false);
     let kennzahl = e["atKennzahl"].as_i64();
     let at_label = match (kennzahl, e["atCategory"].as_str()) {
@@ -163,8 +166,13 @@ pub fn to_row(e: &Value, summary: &Value) -> Row {
     let (basis_v, proceeds) = (opt_f(&e["costBasisEur"]), opt_f(&e["proceedsEur"]));
     let basis = if basis_v.is_some() || proceeds.is_some() {
         [
-            basis_v.map(|v| tr("journals:reportable.basis.amount", &[("value", &eur(v))])),
-            proceeds.map(|v| tr("journals:reportable.basis.proceeds", &[("value", &eur(v))])),
+            basis_v.map(|v| tr("journals:reportable.basis.amount", &[("value", &money(v))])),
+            proceeds.map(|v| {
+                tr(
+                    "journals:reportable.basis.proceeds",
+                    &[("value", &money(v))],
+                )
+            }),
         ]
         .into_iter()
         .flatten()
@@ -173,7 +181,7 @@ pub fn to_row(e: &Value, summary: &Value) -> Row {
     } else if opt_f(&e["fiatValueEur"]).is_some_and(|v| v != 0.0) {
         tr(
             "journals:reportable.basis.value",
-            &[("value", &eur(e["fiatValueEur"].as_f64().unwrap_or(0.0)))],
+            &[("value", &money(e["fiatValueEur"].as_f64().unwrap_or(0.0)))],
         )
     } else {
         t("journals:reportable.basis.noFiatImpact")
@@ -235,7 +243,7 @@ pub fn to_row(e: &Value, summary: &Value) -> Row {
             .join(" · "),
         amount: msat_amount(e["quantityMsat"].as_f64().unwrap_or(0.0), s(&e["asset"])),
         basis,
-        impact: eur(opt_f(&e["gainLossEur"]).unwrap_or(0.0)),
+        impact: money(opt_f(&e["gainLossEur"]).unwrap_or(0.0)),
         ready: !needs,
         evidence,
         next_action,
@@ -394,9 +402,10 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         .as_str()
         .map(str::to_owned)
         .unwrap_or_else(|| t("journals:quarantine.ownerFallback"));
+    let cur = crate::format::book_currency(app);
     let rows: Vec<Row> = data["events"]
         .as_array()
-        .map(|a| a.iter().map(|e| to_row(e, summary)).collect())
+        .map(|a| a.iter().map(|e| to_row(e, summary, &cur)).collect())
         .unwrap_or_default();
     let ui = &app.reports.ledger.journals.table;
     let shown = filtered(&rows, ui, &owner);
@@ -846,6 +855,28 @@ fn impact_ink(tk: &Tk, impact: &str) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Basis, proceeds, value and impact are the book's currency, not euros.
+    #[test]
+    fn ledger_rows_render_in_the_book_currency() {
+        let summary = serde_json::json!({"needsJournals": false});
+        let sell = serde_json::json!({
+            "entryType": "sell", "occurredAt": "2025-03-01T10:00:00Z", "asset": "BTC",
+            "quantityMsat": -1_000_000_000.0, "costBasisEur": 700.0, "proceedsEur": 950.5,
+            "gainLossEur": 250.5,
+        });
+        let r = to_row(&sell, &summary, "USD");
+        assert!(
+            r.basis.contains("$700.00") && r.basis.contains("$950.50"),
+            "{}",
+            r.basis
+        );
+        assert_eq!(r.impact, "$250.50");
+        let income = serde_json::json!({"entryType": "income", "fiatValueEur": 42.0});
+        let r = to_row(&income, &summary, "GBP");
+        assert!(r.basis.contains("£42.00"), "{}", r.basis);
+        assert!(!r.basis.contains('€') && !r.impact.contains('€'));
+    }
 
     #[test]
     fn markers_are_stripped() {

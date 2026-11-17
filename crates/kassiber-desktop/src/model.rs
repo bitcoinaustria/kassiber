@@ -306,6 +306,24 @@ impl Snapshot {
             .to_uppercase()
     }
 
+    /// The book's accounting currency (the profile's `fiat_currency`): the unit of every stored
+    /// journal amount the daemon still names `*Eur` (`fiatValueEur`, `gainLossEur`, row `eur`, …).
+    /// The market rate is quoted in the same profile currency, so it is only a fallback here.
+    pub fn book_currency(&self) -> String {
+        [&self.fiat.fiat_currency, &self.market_rate_currency()]
+            .into_iter()
+            .flatten()
+            .map(|c| c.trim().to_uppercase())
+            .find(|c| !c.is_empty())
+            .unwrap_or_else(|| "EUR".into())
+    }
+
+    fn market_rate_currency(&self) -> Option<String> {
+        self.market_rate
+            .as_ref()
+            .and_then(|m| m.fiat_currency.clone())
+    }
+
     /// `activeMarketFiatRate`: the rate for every fiat↔BTC conversion.
     pub fn rate(&self) -> f64 {
         match self.market_rate.as_ref().and_then(|m| m.rate) {

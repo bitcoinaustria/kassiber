@@ -1004,15 +1004,6 @@ fn wallet_editor(app: &App, tk: &Tk) -> El {
 
 // ---- Preview --------------------------------------------------------------------------------
 
-fn book_currency(app: &App) -> String {
-    app.txs
-        .rows
-        .iter()
-        .map(|r| r.fiat_currency.clone())
-        .find(|c| !c.is_empty())
-        .unwrap_or_else(|| "EUR".into())
-}
-
 fn preview_pane(app: &App, tk: &Tk) -> El {
     let e = &app.txs.export;
     let pane = col()
@@ -1322,7 +1313,8 @@ fn summary_table(app: &App, tk: &Tk, format: Format, sheet: &Value) -> El {
         return table;
     }
     let value = summary::has_value(format);
-    let cur = book_currency(app);
+    // A line's own currency wins; values without one are the book's.
+    let cur = crate::format::book_currency(app);
     let (wd, wa, wv, wt) = (tk.r(8.0), tk.r(8.75), tk.r(6.0), tk.r(6.0));
     let mut h = tb::head(tk)
         .child(head_cell(Some(wd), false, t("common:field.date")))

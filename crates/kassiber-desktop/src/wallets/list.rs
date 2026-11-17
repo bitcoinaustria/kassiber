@@ -111,19 +111,11 @@ fn win_w(app: &App) -> f32 {
     }
 }
 
-/// `formatEur` (components/kb/wallets/format.ts): `€ ` and de-AT grouping, always.
-pub fn format_eur(v: f64) -> String {
-    let neg = v < 0.0;
-    let s = format!("{:.2}", v.abs());
-    let (int, frac) = s.split_once('.').unwrap_or((&s, "00"));
-    let mut g = String::new();
-    for (i, ch) in int.chars().enumerate() {
-        if i > 0 && (int.len() - i) % 3 == 0 {
-            g.push('\u{a0}');
-        }
-        g.push(ch);
-    }
-    format!("€ {}{g},{frac}", if neg { "-" } else { "" })
+/// A BTC balance in the book's currency at its market rate, as the wallet detail hero values it
+/// (`wallets::detail::fiat`), so the list and the detail never disagree on unit or rate.
+fn fiat_value(app: &App, btc: f64) -> String {
+    let (cur, rate) = crate::wallets::detail::fiat(app);
+    crate::format::fiat(btc * rate, &cur)
 }
 
 /// `formatBtc` (wallets/format.ts): eight decimals.
@@ -307,13 +299,6 @@ fn rate_missing(app: &App) -> bool {
         && s.pointer("/fiat/completeness/marketRateMissing")
             .and_then(Value::as_bool)
             .unwrap_or(false)
-}
-
-fn price_eur(app: &App) -> f64 {
-    snapshot(app)
-        .and_then(|s| s.get("priceEur"))
-        .and_then(Value::as_f64)
-        .unwrap_or(0.0)
 }
 
 /// `walletOverviewTotalBtc`: the summary's total, else the sum of balances.
@@ -545,7 +530,7 @@ fn metrics(app: &App, cx: &Cx<App>, tk: &Tk, conns: &[Conn], total: f64) -> El {
     let balance_text = if fiat_unavailable {
         "—".to_owned()
     } else if fiat_mode {
-        format_eur(total * price_eur(app))
+        fiat_value(app, total)
     } else {
         format!("₿ {}", format_btc8(total))
     };
@@ -1424,7 +1409,7 @@ fn wallet_row(
     let fiat_label = if rate_missing(app) {
         "—".to_owned()
     } else {
-        format_eur(c.balance * price_eur(app))
+        fiat_value(app, c.balance)
     };
     let btc_label = format!("₿ {}", format_btc8(c.balance));
     let mut meta: Vec<String> = Vec::new();
@@ -1811,9 +1796,19 @@ mod tests {
         assert_eq!(collate("abc", "ABC"), std::cmp::Ordering::Equal);
     }
 
+    /// Balances are valued in the book's currency at its market rate, not in euros.
     #[test]
-    fn eur_uses_de_at_grouping() {
-        assert_eq!(format_eur(1234567.891), "€ 1\u{a0}234\u{a0}567,89");
+    fn balances_value_in_the_book_currency() {
+        let mut app = crate::app::tests::quiet_app();
+        app.overview = crate::app::Load::Ready(
+            crate::model::Snapshot::parse(&serde_json::json!({
+                "priceEur": 80_000.0,
+                "marketRate": {"fiatCurrency": "USD", "rate": 100_000.0},
+                "fiat": {"fiatCurrency": "USD"},
+            }))
+            .unwrap(),
+        );
+        assert_eq!(fiat_value(&app, 0.5), "$50,000.00");
     }
 
     #[test]

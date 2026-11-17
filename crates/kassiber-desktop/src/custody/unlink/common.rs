@@ -981,7 +981,7 @@ pub fn leg_amount(
     let fiat_mode = app.prefs.currency == Currency::Fiat;
     let (content, name) = match (fiat_mode, leg.fiat) {
         (true, Some(Some(v))) => {
-            let s = kit::money(v);
+            let s = kit::money(app, v);
             (
                 sensitive(s.clone(), style.features("'tnum' 1"), tk.fg, hidden),
                 s,

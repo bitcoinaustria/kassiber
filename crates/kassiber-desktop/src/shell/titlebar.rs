@@ -453,10 +453,7 @@ fn refresh_status(app: &App, tk: &Tk) -> El {
 }
 
 fn currency_toggle(app: &App, tk: &Tk) -> El {
-    let fiat_symbol = app
-        .snapshot()
-        .map(|s| crate::format::symbol(&s.fiat_currency()))
-        .unwrap_or_else(|| "€".into());
+    let fiat_symbol = crate::format::symbol(&crate::format::book_currency(app));
     let btc = app.prefs.currency == Currency::Btc;
     let (bitcoin, euro) = (
         t("chrome:currencyToggle.bitcoin"),

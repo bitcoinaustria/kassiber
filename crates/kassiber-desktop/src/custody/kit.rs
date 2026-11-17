@@ -1077,7 +1077,8 @@ pub fn currency_toggle(
         .child(content)
 }
 
-/// `formatDisplayMoney` in fiat (the web formats it with its de-AT EUR formatter).
-pub fn money(value: f64) -> String {
-    crate::format::fiat(value, "EUR")
+/// `formatDisplayMoney` in fiat: transfer and leg values are transaction values, in the book's
+/// currency (the web pinned its de-AT EUR formatter).
+pub fn money(app: &App, value: f64) -> String {
+    crate::format::fiat(value, &crate::format::book_currency(app))
 }

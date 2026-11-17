@@ -215,25 +215,9 @@ pub fn btc(v: f64) -> String {
     format!("₿ {v:.8}")
 }
 
-/// `fmtEur`: always `de-AT` with two decimals (`€ 1.234,56`), `Unpriced` when unknown.
-pub fn eur(v: Option<f64>) -> String {
-    let Some(v) = v.filter(|v| v.is_finite()) else {
-        return "Unpriced".into();
-    };
-    let cents = (v.abs() * 100.0).round() as u128;
-    let whole = (cents / 100).to_string();
-    let mut grouped = String::new();
-    for (i, ch) in whole.chars().enumerate() {
-        if i > 0 && (whole.len() - i).is_multiple_of(3) {
-            grouped.push('.');
-        }
-        grouped.push(ch);
-    }
-    format!(
-        "€ {}{grouped},{:02}",
-        if v < 0.0 && cents > 0 { "-" } else { "" },
-        cents % 100
-    )
+/// `fmtEur`, in the book's currency `cur` (the web pinned it to `€`).
+pub fn fiat(v: f64, cur: &str) -> String {
+    crate::format::fiat(v, cur)
 }
 
 /// `fmtPubkey`: first 8 … last 6 when longer than 18.

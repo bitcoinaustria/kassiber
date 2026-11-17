@@ -717,10 +717,8 @@ fn hero_stat(
 /// `NodeOperatorHero`.
 fn hero(app: &App, tk: &Tk, c: &Conn, n: &Node, busy: bool, w: f32) -> El {
     let hide = hidden(app);
-    let price = crate::wallets::conn::snapshot(app)
-        .and_then(|s| s.get("priceEur"))
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
+    // Valued in the book's currency at its market rate, like the wallet detail hero.
+    let (cur, price) = crate::wallets::detail::fiat(app);
     let active = n.active_count();
     let cap = n.total_capacity_sat.max(0.0);
     let local_pct = if cap > 0.0 {
@@ -815,7 +813,7 @@ fn hero(app: &App, tk: &Tk, c: &Conn, n: &Node, busy: bool, w: f32) -> El {
             &I::ZAP,
             &t("connections:node.hero.canSend"),
             m::sat(n.total_local_balance_sat),
-            m::eur(Some(n.total_local_balance_sat / 1e8 * price)),
+            m::fiat(n.total_local_balance_sat / 1e8 * price, &cur),
             m::ink_emerald(tk),
             hide,
         ),
@@ -833,7 +831,7 @@ fn hero(app: &App, tk: &Tk, c: &Conn, n: &Node, busy: bool, w: f32) -> El {
             &I::COINS,
             &t("connections:node.hero.onchainReserve"),
             m::sat(n.onchain_balance_sat),
-            m::eur(Some(n.onchain_balance_sat / 1e8 * price)),
+            m::fiat(n.onchain_balance_sat / 1e8 * price, &cur),
             tk.fg,
             hide,
         ),
@@ -842,7 +840,7 @@ fn hero(app: &App, tk: &Tk, c: &Conn, n: &Node, busy: bool, w: f32) -> El {
             &I::TRENDING_UP,
             &t("connections:node.hero.netRouting"),
             m::sat_signed(net_sat),
-            m::eur(Some(net_sat / 1e8 * price)),
+            m::fiat(net_sat / 1e8 * price, &cur),
             net_tone,
             hide,
         ),
@@ -1074,10 +1072,8 @@ fn metric_card(tk: &Tk, glyph: &'static Icon, label: &str, value: El, detail: St
 /// `NodeMetrics`.
 fn metrics(app: &App, tk: &Tk, n: &Node, w: f32) -> El {
     let hide = hidden(app);
-    let price = crate::wallets::conn::snapshot(app)
-        .and_then(|s| s.get("priceEur"))
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
+    // Valued in the book's currency at its market rate, like the wallet detail hero.
+    let (cur, price) = crate::wallets::detail::fiat(app);
     let value_font = tk
         .txl(600.0)
         .tracking(-0.025 * tk.r(1.25))
@@ -1095,7 +1091,7 @@ fn metrics(app: &App, tk: &Tk, n: &Node, w: f32) -> El {
                 "connections:node.metrics.localBalanceDetail",
                 &[
                     ("sat", &m::count(n.total_local_balance_sat)),
-                    ("eur", &m::eur(Some(local_btc * price))),
+                    ("eur", &m::fiat(local_btc * price, &cur)),
                 ],
             ),
         ),
@@ -1283,10 +1279,8 @@ fn accounting_card(tk: &Tk, sm: bool, c: &Conn, n: &Node) -> El {
 /// `RoutingSummary`.
 fn routing_card(app: &App, tk: &Tk, sm: bool, w: f32, r: &Routing) -> El {
     let hide = hidden(app);
-    let price = crate::wallets::conn::snapshot(app)
-        .and_then(|s| s.get("priceEur"))
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
+    // Valued in the book's currency at its market rate, like the wallet detail hero.
+    let (cur, price) = crate::wallets::detail::fiat(app);
     let stat = |label: &str, value: String, detail: Option<String>, tone: Color| {
         let mut c = col()
             .min_w(0.0)
@@ -1348,7 +1342,7 @@ fn routing_card(app: &App, tk: &Tk, sm: bool, w: f32, r: &Routing) -> El {
         stat(
             &t("connections:node.routing.netProfit"),
             m::sat_signed(r.net_profit_sat),
-            Some(m::eur(Some(r.net_profit_sat / 1e8 * price))),
+            Some(m::fiat(r.net_profit_sat / 1e8 * price, &cur)),
             profit_tone,
         ),
     ];

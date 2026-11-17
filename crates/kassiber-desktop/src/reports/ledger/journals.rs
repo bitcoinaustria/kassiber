@@ -5,7 +5,7 @@
 use rune::{Color, Cx, El, col, el, row, text};
 use serde_json::Value;
 
-use super::common::{self as c, Tone, eur, sens, tnum};
+use super::common::{self as c, Tone, sens, tnum};
 use super::reportable::{self, TableUi};
 use crate::app::{App, Load, Reply};
 use crate::i18n::{t, tc, tr};
@@ -689,6 +689,8 @@ fn body(app: &App, cx: &mut Cx<App>, tk: &Tk, snap: &Snapshot) -> El {
 
 fn entry_mix(app: &App, tk: &Tk, snap: &Snapshot, card_w: f32, beside: bool) -> El {
     let hidden = app.prefs.hide_sensitive();
+    // The type totals are journal `gain_loss` sums, in the book's currency.
+    let cur = crate::format::book_currency(app);
     let groups = group_entry_types(&snap.entry_types);
     let max = groups.iter().map(|e| e.count).fold(1.0, f64::max);
     // One column beside the table; two or three across the page when stacked.
@@ -800,7 +802,12 @@ fn entry_mix(app: &App, tk: &Tk, snap: &Snapshot, card_w: f32, beside: bool) -> 
                                     .color(tk.muted_fg),
                             ),
                     )
-                    .child(crate::ui::table::num(tk, eur(e.gain_loss), tk.fg, hidden)),
+                    .child(crate::ui::table::num(
+                        tk,
+                        crate::format::fiat(e.gain_loss, &cur),
+                        tk.fg,
+                        hidden,
+                    )),
             )
             .child(bar);
         list = list.child(b);
@@ -832,6 +839,19 @@ pub(super) fn fill_table(table_w: f32, overflow: bool) -> El {
 
 /// The latest rows on the table kit: date, type, the wallet (the flexible column, cut with a
 /// tooltip), then the figures right-aligned.
+/// One recent-entries row: date, type, wallet, quantity, value and gain/loss. The daemon's
+/// `fiatValueEur`/`gainLossEur` hold the stored journal amounts, in the book's currency `cur`.
+fn entry_cells(e: &Recent, cur: &str) -> [String; 6] {
+    [
+        e.date.clone(),
+        entry_type_label(display_type(&e.kind)),
+        e.wallet.clone(),
+        format!("{:.8} {}", e.quantity, e.asset),
+        crate::format::fiat(e.fiat, cur),
+        crate::format::fiat(e.gain_loss, cur),
+    ]
+}
+
 fn entries(app: &App, cx: &mut Cx<App>, tk: &Tk, snap: &Snapshot, fallback_w: f32) -> El {
     use crate::ui::table as tb;
     let ui = &app.reports.ledger.journals;
@@ -895,19 +915,8 @@ fn entries(app: &App, cx: &mut Cx<App>, tk: &Tk, snap: &Snapshot, fallback_w: f3
         Some((day, time)) => (day.to_owned(), time.to_owned()),
         None => (d.to_owned(), String::new()),
     };
-    let cells_text: Vec<[String; 6]> = filtered
-        .iter()
-        .map(|e| {
-            [
-                e.date.clone(),
-                entry_type_label(display_type(&e.kind)),
-                e.wallet.clone(),
-                format!("{:.8} {}", e.quantity, e.asset),
-                eur(e.fiat),
-                eur(e.gain_loss),
-            ]
-        })
-        .collect();
+    let cur = crate::format::book_currency(app);
+    let cells_text: Vec<[String; 6]> = filtered.iter().map(|e| entry_cells(e, &cur)).collect();
     // Every column but the wallet takes its widest cell; the wallet takes the rest.
     let mut content: [f32; 6] = std::array::from_fn(|k| {
         if k == 2 {
@@ -1055,4 +1064,33 @@ fn entries(app: &App, cx: &mut Cx<App>, tk: &Tk, snap: &Snapshot, fallback_w: f3
         .clip_rounded(tk.r(0.75))
         .child(head)
         .child(table)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// A USD book's journal amounts render in dollars: the daemon's `*Eur` names are historical.
+    #[test]
+    fn recent_entries_render_in_the_book_currency() {
+        let snap = Snapshot::parse(&json!({
+            "status": {"journalEntryCount": 1},
+            "entryTypes": [{"type": "sell", "count": 1, "gainLossEur": 210.25}],
+            "recent": [{
+                "date": "2025-03-01 10:00", "type": "sell", "wallet": "Cold",
+                "asset": "BTC", "quantity": -0.01, "fiatValueEur": 950.5, "gainLossEur": 210.25,
+            }],
+        }));
+        let cells = entry_cells(&snap.recent[0], "USD");
+        assert_eq!(cells[4], "$950.50");
+        assert_eq!(cells[5], "$210.25");
+        assert!(cells.iter().all(|c| !c.contains('€')), "{cells:?}");
+        assert_eq!(
+            crate::format::fiat(group_entry_types(&snap.entry_types)[0].gain_loss, "USD"),
+            "$210.25"
+        );
+        let eur = entry_cells(&snap.recent[0], "EUR");
+        assert_eq!(eur[4], "€\u{a0}950,50");
+    }
 }

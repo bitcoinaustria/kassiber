@@ -107,6 +107,15 @@ fn currency_with(value: f64, cur: &str, frac: usize, min_group: usize) -> String
     }
 }
 
+/// The open book's accounting currency ([`crate::model::Snapshot::book_currency`]), the currency
+/// of journal and transaction amounts whose daemon fields keep historical `*Eur` names. A reply
+/// that carries its own `fiatCurrency` should win over this. `EUR` before the book has loaded.
+pub fn book_currency(app: &crate::app::App) -> String {
+    app.snapshot()
+        .map(crate::model::Snapshot::book_currency)
+        .unwrap_or_else(|| "EUR".into())
+}
+
 /// `formatFiatAmount`: currency style with the currency's two fraction digits.
 pub fn fiat(value: f64, cur: &str) -> String {
     if !value.is_finite() {
@@ -445,6 +454,29 @@ pub fn compact_id(id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The book's own currency wins; before a book is open the formatter falls back to EUR.
+    #[test]
+    fn book_currency_follows_the_open_book() {
+        use crate::app::Load;
+        use crate::model::Snapshot;
+        let mut app = crate::app::tests::quiet_app();
+        assert_eq!(book_currency(&app), "EUR");
+        let snap = |v: serde_json::Value| Snapshot::parse(&v).expect("snapshot");
+        app.overview = Load::Ready(snap(serde_json::json!({
+            "fiat": {"fiatCurrency": "usd"},
+            "marketRate": {"fiatCurrency": "USD", "rate": 95_000.0},
+        })));
+        assert_eq!(book_currency(&app), "USD");
+        assert_eq!(fiat(-1234.5, &book_currency(&app)), "-$1,234.50");
+        // No fiat block yet: the market rate is quoted in the profile currency too.
+        app.overview = Load::Ready(snap(serde_json::json!({
+            "marketRate": {"fiatCurrency": "GBP"},
+        })));
+        assert_eq!(book_currency(&app), "GBP");
+        app.overview = Load::Ready(snap(serde_json::json!({"fiat": {"fiatCurrency": " "}})));
+        assert_eq!(book_currency(&app), "EUR");
+    }
 
     #[test]
     fn matches_intl_de_at() {

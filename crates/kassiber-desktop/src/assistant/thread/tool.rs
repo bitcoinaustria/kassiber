@@ -1008,6 +1008,7 @@ fn overview_summary(d: &Value) -> String {
         ),
     ];
     if let (Some(p), false) = (d["priceEur"].as_f64(), eur_missing) {
+        // `priceEur` really is the BTC-EUR rate (the label reads `BTC/EUR`), whatever the book.
         parts.push(tr(
             "assistant:tool.overviewSnapshot.priceEur",
             &[("value", &crate::format::fiat(p, "EUR"))],
@@ -1021,7 +1022,13 @@ fn overview_summary(d: &Value) -> String {
         } else {
             "assistant:tool.overviewSnapshot.realizedYtdIncomplete"
         };
-        parts.push(tr(key, &[("value", &crate::format::fiat(r, "EUR"))]));
+        // Realized gain/loss is a sum of journal amounts, in the book's own currency.
+        let book = fiat["fiatCurrency"]
+            .as_str()
+            .map(|c| c.trim().to_uppercase())
+            .filter(|c| !c.is_empty())
+            .unwrap_or_else(|| "EUR".into());
+        parts.push(tr(key, &[("value", &crate::format::fiat(r, &book))]));
     }
     if !basis_complete {
         parts.push(t(if state == "stale" {
@@ -1061,6 +1068,16 @@ mod tests {
             None
         );
         assert_eq!(summarize(Some(&json!("text"))), None);
+    }
+
+    /// A USD book's realized YTD reads in dollars; the BTC/EUR price stays the EUR quote.
+    #[test]
+    fn overview_summary_uses_the_book_currency_for_realized() {
+        crate::i18n::set_lang(crate::i18n::Lang::En);
+        let d = json!({"priceEur": 80_000.0, "fiat": {"fiatCurrency": "USD", "eurRealizedYTD": 1234.5}});
+        let s = overview_summary(&d);
+        assert!(s.contains("realized YTD $1,234.50"), "{s}");
+        assert!(s.contains("BTC/EUR €\u{a0}80.000,00"), "{s}");
     }
 
     #[test]

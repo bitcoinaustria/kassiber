@@ -1822,7 +1822,7 @@ fn stats(app: &App, cx: &Cx<App>, tk: &Tk, loading: bool) -> El {
     let value = if btc {
         model::msat_btc(amount)
     } else {
-        kit::money(fiat)
+        kit::money(app, fiat)
     };
     let meta = if !btc && unpriced > 0 {
         let u = unpriced.to_string();
@@ -3438,7 +3438,7 @@ fn linked_row(
     let time = time_part(m.occurred_at.as_deref());
     let has_fee = m.fee_msat.is_some_and(|f| f != 0);
     let fiat = |v: Option<f64>| {
-        v.map(kit::money)
+        v.map(|v| kit::money(app, v))
             .unwrap_or_else(|| t("review:transfersPage.linked.unpriced"))
     };
     let fee = if btc {

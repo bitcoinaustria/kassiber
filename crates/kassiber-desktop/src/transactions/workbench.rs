@@ -283,10 +283,9 @@ fn stat(v: &Value, k: &str) -> (f64, f64, f64) {
     )
 }
 
+/// The stats' `eur` sums are transaction values in the book's currency.
 fn cur(app: &App) -> String {
-    app.snapshot()
-        .map(|s| s.fiat_currency())
-        .unwrap_or_else(|| "EUR".into())
+    format::book_currency(app)
 }
 
 // ---- Tiles ----------------------------------------------------------------------------------
@@ -689,7 +688,7 @@ fn chart(app: &App, cx: &mut Cx<App>, tk: &Tk, d: &super::Dash, layer: &mut Vec<
             return format!("{}", v.round() as i64);
         }
         if fiat {
-            format::fiat_compact(v, "EUR")
+            format::fiat_compact(v, &c)
         } else {
             // formatBtc(v, {precision 4, sign: v !== 0}) with every space removed.
             format::btc(v, 4, v != 0.0).replace(' ', "")
@@ -1111,7 +1110,7 @@ fn tooltip(app: &App, tk: &Tk, b: &Bar, c: &str) -> El {
         };
         let money = |btc: f64, eur: f64| {
             if fiat {
-                format::fiat(eur, "EUR")
+                format::fiat(eur, c)
             } else {
                 format::btc(btc, 8, false)
             }

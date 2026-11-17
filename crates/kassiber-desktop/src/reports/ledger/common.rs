@@ -447,11 +447,6 @@ pub fn sens(s: impl Into<String>, style: TextStyle, color: Color, hidden: bool) 
     crate::ui::sensitive(s, style, color, hidden)
 }
 
-/// `Intl.NumberFormat("de-AT", {style: "currency", currency: "EUR"})`.
-pub fn eur(v: f64) -> String {
-    crate::format::fiat(v, "EUR")
-}
-
 /// `underline underline-offset-2`: Rune text has no decoration, so a 1 px rule 2 px under it.
 pub fn underlined(tk: &Tk, t: El, color: Color) -> El {
     let _ = tk;
