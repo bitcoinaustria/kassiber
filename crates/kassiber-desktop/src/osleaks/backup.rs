@@ -432,8 +432,20 @@ mod tests {
         }
     }
 
-    fn paths(v: &[PathBuf]) -> Vec<&str> {
-        v.iter().map(|p| p.to_str().unwrap()).collect()
+    /// The paths with `/` separators (on Windows `join` adds `\`).
+    fn paths(v: &[PathBuf]) -> Vec<String> {
+        v.iter()
+            .map(|p| p.to_str().unwrap().replace('\\', "/"))
+            .collect()
+    }
+
+    /// An absolute path on this host (`/d/k.sqlite3` has no drive on Windows).
+    fn abs(p: &str) -> String {
+        if cfg!(windows) {
+            format!("C:{p}")
+        } else {
+            p.to_owned()
+        }
     }
 
     #[test]
@@ -505,7 +517,7 @@ mod tests {
             ),
             None
         );
-        let b = Book::from_status(&serde_json::json!({"database_encrypted": false, "database": "/d/k.sqlite3", "exports_root": ""})).unwrap();
+        let b = Book::from_status(&serde_json::json!({"database_encrypted": false, "database": abs("/d/k.sqlite3"), "exports_root": ""})).unwrap();
         assert_eq!(b.exports, None);
     }
 

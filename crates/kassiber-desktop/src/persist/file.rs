@@ -228,20 +228,23 @@ mod tests {
             default_dir(Os::Linux, &home, none).unwrap(),
             home.join(".config/at.bitcoinaustria.kassiber")
         );
-        let xdg = |k: &str| (k == "XDG_CONFIG_HOME").then(|| OsString::from("/xdg"));
+        // Absolute on every host (`/xdg` is not absolute on Windows).
+        let xdg_dir = home.join("xdg");
+        let xdg = |k: &str| (k == "XDG_CONFIG_HOME").then(|| xdg_dir.clone().into_os_string());
         assert_eq!(
             default_dir(Os::Linux, &home, xdg).unwrap(),
-            PathBuf::from("/xdg/at.bitcoinaustria.kassiber")
+            xdg_dir.join("at.bitcoinaustria.kassiber")
         );
         let rel = |k: &str| (k == "XDG_CONFIG_HOME").then(|| OsString::from("relative"));
         assert_eq!(
             default_dir(Os::Linux, &home, rel).unwrap(),
             home.join(".config/at.bitcoinaustria.kassiber")
         );
-        let appdata = |k: &str| (k == "APPDATA").then(|| OsString::from("/appdata"));
+        let appdata_dir = home.join("appdata");
+        let appdata = |k: &str| (k == "APPDATA").then(|| appdata_dir.clone().into_os_string());
         assert_eq!(
             default_dir(Os::Windows, &home, appdata).unwrap(),
-            PathBuf::from("/appdata/at.bitcoinaustria.kassiber")
+            appdata_dir.join("at.bitcoinaustria.kassiber")
         );
         assert_eq!(
             default_dir(Os::Windows, &home, none).unwrap(),

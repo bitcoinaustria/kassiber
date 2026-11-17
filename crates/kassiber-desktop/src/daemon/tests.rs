@@ -182,17 +182,20 @@ fn state_root_precedence() {
         state_root_for_platform("macos", Some(home), None, None),
         Some(native.clone())
     );
+    // Absolute on every host (`/xdg` is not absolute on Windows).
+    let xdg = home.join("xdg");
     assert_eq!(
-        state_root_for_platform("linux", Some(home), Some(Path::new("/xdg")), None),
-        Some(PathBuf::from("/xdg/kassiber"))
+        state_root_for_platform("linux", Some(home), Some(&xdg), None),
+        Some(xdg.join("kassiber"))
     );
     assert_eq!(
         state_root_for_platform("linux", Some(home), Some(Path::new("relative")), None),
         Some(home.join(".local/share/kassiber"))
     );
+    let lad = home.join("lad");
     assert_eq!(
-        state_root_for_platform("windows", Some(home), None, Some(Path::new("/lad"))),
-        Some(PathBuf::from("/lad/at.bitcoinaustria.kassiber"))
+        state_root_for_platform("windows", Some(home), None, Some(&lad)),
+        Some(lad.join("at.bitcoinaustria.kassiber"))
     );
     // A legacy root holding only bin/run stays ignored; real state wins.
     std::fs::create_dir_all(home.join(".kassiber/bin")).unwrap();
