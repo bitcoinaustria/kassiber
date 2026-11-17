@@ -129,7 +129,7 @@ and gain summaries, and the filed-report impact checks that recompute
 them, so a later change inside a filed tax year flags it and one outside
 does not). A book on its country's calendar year keeps each reader's
 established cut, so its outputs are unchanged. The summary PDF given a
-`year` (`ui.reports.export_summary_pdf`, as the desktop sends the Reports
+`year` (`ui.reports.export_summary_pdf`, as both desktops send the Reports
 page's year) covers that tax year with `BookCalendar::bounds` itself, for
 every book: its first local midnight through the second before the next
 year's, shown by its local first and last days and registered under that

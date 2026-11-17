@@ -195,8 +195,8 @@ For a local Apple Silicon build without Rosetta, use the arm64-only helper:
 BUNDLES=app ./scripts/build-macos-arm64-app.sh
 ```
 
-It builds the production `kassiber` binary as the sidecar and runs Tauri with
-`--target aarch64-apple-darwin`; the details are under
+It builds the production `kassiber` binary and packages the Rune desktop app
+around it as the sidecar; the details are under
 [Local Apple Silicon build details](#local-apple-silicon-build-details).
 The result is an ad-hoc-signed desktop app and DMG, copied to `dist/macos-arm64/`.
 Intel Macs are not a build target; see above.
@@ -295,11 +295,14 @@ strips it with Xcode's `strip`, ad-hoc signs it under the identifier
 `kassiber-cli-aarch64-apple-darwin`, and refuses it unless it is an arm64
 Mach-O that links only macOS system libraries and reports
 `Kassiber <version> (dev, commit <12 hex>)`. It then runs the packaged-binary
-smoke CI runs. It places the binary at the sidecar location,
-`binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, so the supervisor,
-the bundled CLI launcher and the Touch ID helper's identity check find it
-unchanged, and re-signs it under that identifier if Tauri's bundle signing changed it. Tauri seals the bundle with an
-ad-hoc signature (`signingIdentity` `-`) before it makes the DMG. It probes the
+smoke CI runs. It then packages the Rune app (built without agent tooling)
+with `crates/kassiber-desktop/packaging/macos/build-app.sh --identity dev`,
+which places the binary at the sidecar location,
+`Resources/binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, so the
+supervisor, the bundled CLI launcher and the Touch ID helper's identity check
+find it unchanged, signs both Mach-Os and then the bundle ad hoc under their
+release identifiers, and checks that both terminal entry points reach the
+sidecar. The DMG is a plain `hdiutil` image of the sealed app. It probes the
 freshly built bundles and only reads installed apps' build records, never
 executes them. The app is named **Kassiber Dev** (`at.bitcoinaustria.kassiber.dev`)
 and shows the build label `dev`. Finished apps and DMGs are copied to

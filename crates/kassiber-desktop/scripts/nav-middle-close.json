@@ -1,0 +1,58 @@
+{
+ "events": [
+  {
+   "t": 0.1,
+   "type": "tap",
+   "key": "asst-tab-label"
+  },
+  {
+   "t": 0.2,
+   "type": "tap",
+   "key": "asst-tab-label"
+  },
+  {
+   "t": 0.3,
+   "type": "tap",
+   "button": "middle",
+   "key": "asst-stab-logs-label"
+  },
+  {
+   "t": 0.6,
+   "type": "mark",
+   "name": "logs-closed"
+  },
+  {
+   "t": 0.7,
+   "type": "tap",
+   "button": "middle",
+   "key": "asst-dtab-0"
+  },
+  {
+   "t": 1.0,
+   "type": "mark",
+   "name": "detail-closed"
+  },
+  {
+   "t": 1.1,
+   "type": "tap",
+   "button": "middle",
+   "key": "asst-stab-changes-close"
+  },
+  {
+   "t": 1.4,
+   "type": "mark",
+   "name": "changes-closed"
+  },
+  {
+   "t": 1.5,
+   "type": "tap",
+   "button": "middle",
+   "key": "asst-tab"
+  },
+  {
+   "t": 1.9,
+   "type": "mark",
+   "name": "end"
+  }
+ ]
+}

@@ -12,7 +12,8 @@ serves the command line, the desktop daemon, the MCP server, and the operator
 broker. Keep business decisions in its crates so the CLI, desktop, and
 in-product AI cannot produce different accounting. Read
 [backend guidance](crates/AGENTS.md) for Rust crate work and
-[desktop guidance](ui-tauri/AGENTS.md) for React, Tauri, or bridge work. Changes to
+[desktop guidance](crates/kassiber-desktop/AGENTS.md) for the desktop app
+([Tauri guidance](ui-tauri/AGENTS.md) for the outgoing React shell). Changes to
 a shared contract need verification across its callers, including AI projections.
 
 - Keep observed transactions, ownership evidence, reviewed custody, tax inputs,

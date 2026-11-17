@@ -31,8 +31,8 @@ const IMPORT_PROJECT_BRIDGE_PATH = "/__kassiber__/import-project";
 const RESET_REGTEST_BRIDGE_PATH = "/__kassiber__/reset-regtest";
 const LEDGER_PREVIEW_EXTENSIONS = new Set([".csv", ".tsv", ".xlsx", ".xlsm"]);
 const UI_ROOT = __dirname;
-// Translation bundles and integration logos shared across front ends
-// (`assets/` at the repo root), imported through the `@shared` alias.
+// Translation bundles and integration logos shared with the Rune desktop app
+// (crates/kassiber-desktop), imported through the `@shared` alias.
 const SHARED_ASSETS_ROOT = path.resolve(UI_ROOT, "../assets");
 const NODE_MODULES_REALPATH = (() => {
   const nodeModulesPath = path.resolve(UI_ROOT, "node_modules");

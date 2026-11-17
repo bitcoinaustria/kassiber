@@ -1,0 +1,1331 @@
+{
+ "scenes": [
+  {
+   "name": "reports-reports",
+   "rune": {
+    "scene": "reports-reports",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-reports-light",
+   "rune": {
+    "scene": "reports-reports-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-reports-de",
+   "rune": {
+    "scene": "reports-reports-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-reports-hidden",
+   "rune": {
+    "scene": "reports-reports-hidden",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {
+     "privacyMode": "hideAmounts"
+    },
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-reports-2022",
+   "rune": {
+    "scene": "reports-reports-2022",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports?year=2022",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-reports-year",
+   "rune": {
+    "scene": "reports-reports-year",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     },
+     {
+      "click": {
+       "label": "Tax year"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-reports-summary",
+   "rune": {
+    "scene": "reports-reports-summary",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     },
+     {
+      "click": {
+       "textIncludes": "balance cover page",
+       "sel": "button[aria-expanded]"
+      }
+     },
+     {
+      "wait": 300
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-reports-audit",
+   "rune": {
+    "scene": "reports-reports-audit",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     },
+     {
+      "click": {
+       "textIncludes": "Whole book",
+       "sel": "button[aria-expanded]"
+      }
+     },
+     {
+      "wait": 300
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-reports-audit-scope",
+   "rune": {
+    "scene": "reports-reports-audit-scope",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     },
+     {
+      "click": {
+       "textIncludes": "Whole book",
+       "sel": "button[aria-expanded]"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "label": "Audit package scope"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-reports-narrow",
+   "rune": {
+    "scene": "reports-reports-narrow",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     }
+    ]
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "reports-reports-exported",
+   "rune": {
+    "scene": "reports-reports-exported",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     },
+     {
+      "click": {
+       "label": "Export Bookkeeping handoff as XLSX"
+      }
+     },
+     {
+      "waitText": "saved"
+     },
+     {
+      "wait": 400
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-journals",
+   "rune": {
+    "scene": "reports-journals",
+    "args": []
+   },
+   "tauri": {
+    "path": "/journals",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Entry mix"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-journals-filtered",
+   "rune": {
+    "scene": "reports-journals-filtered",
+    "args": []
+   },
+   "tauri": {
+    "path": "/journals",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Entry mix"
+     },
+     {
+      "click": {
+       "textIncludes": "552 rows",
+       "sel": "button[aria-pressed]"
+      }
+     },
+     {
+      "wait": 300
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-journals-reportable",
+   "rune": {
+    "scene": "reports-journals-reportable",
+    "args": []
+   },
+   "tauri": {
+    "path": "/journals",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Entry mix"
+     },
+     {
+      "click": {
+       "text": "Ledger entries",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Processed ledger entries"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-journals-light",
+   "rune": {
+    "scene": "reports-journals-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/journals",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "waitText": "Entry mix"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-journals-de",
+   "rune": {
+    "scene": "reports-journals-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/journals",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "waitCss": "button[aria-pressed]"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-exit-tax",
+   "rune": {
+    "scene": "reports-exit-tax",
+    "args": []
+   },
+   "tauri": {
+    "path": "/exit-tax",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Steuerberater handoff"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-exit-tax-filled",
+   "rune": {
+    "scene": "reports-exit-tax-filled",
+    "args": []
+   },
+   "tauri": {
+    "path": "/exit-tax",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Steuerberater handoff"
+     },
+     {
+      "click": {
+       "css": "button:has(svg.lucide-calendar-days)"
+      }
+     },
+     {
+      "wait": 200
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "text": "10",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Cache"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-exit-tax-picker",
+   "rune": {
+    "scene": "reports-exit-tax-picker",
+    "args": []
+   },
+   "tauri": {
+    "path": "/exit-tax",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Steuerberater handoff"
+     },
+     {
+      "click": {
+       "css": "button:has(svg.lucide-calendar-days)"
+      }
+     },
+     {
+      "wait": 300
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-exit-tax-third",
+   "rune": {
+    "scene": "reports-exit-tax-third",
+    "args": []
+   },
+   "tauri": {
+    "path": "/exit-tax",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Steuerberater handoff"
+     },
+     {
+      "click": {
+       "css": "button[role=combobox]"
+      }
+     },
+     {
+      "wait": 200
+     },
+     {
+      "click": {
+       "text": "Third country (non-EU/EEA)",
+       "sel": "[role=option]"
+      }
+     },
+     {
+      "waitText": "Due immediately"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-exit-tax-de",
+   "rune": {
+    "scene": "reports-exit-tax-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/exit-tax",
+    "state": {
+     "developerToolsEnabled": true,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "waitText": "Steuerberater handoff"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-exit-tax-light",
+   "rune": {
+    "scene": "reports-exit-tax-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/exit-tax",
+    "state": {
+     "developerToolsEnabled": true,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "waitText": "Steuerberater handoff"
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-activity",
+   "rune": {
+    "scene": "reports-activity",
+    "args": []
+   },
+   "tauri": {
+    "path": "/activity",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-activity-de",
+   "rune": {
+    "scene": "reports-activity-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/activity",
+    "state": {
+     "developerToolsEnabled": true,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-activity-date",
+   "rune": {
+    "scene": "reports-activity-date",
+    "args": []
+   },
+   "tauri": {
+    "path": "/activity",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "css": "#activity-date"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-logs",
+   "rune": {
+    "scene": "reports-logs",
+    "args": []
+   },
+   "tauri": {
+    "path": "/logs",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-logs-filtered",
+   "rune": {
+    "scene": "reports-logs-filtered",
+    "args": []
+   },
+   "tauri": {
+    "path": "/logs",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "label": "Filter logs"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "sel": "[role=menuitemcheckbox]",
+       "textIncludes": "DEBUG"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "label": "Filter logs"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "sel": "[role=menuitemcheckbox]",
+       "textIncludes": "kassiber.daemon.request"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-logs-light",
+   "rune": {
+    "scene": "reports-logs-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/logs",
+    "state": {
+     "developerToolsEnabled": true,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-logs-settings-menu",
+   "rune": {
+    "scene": "reports-logs-settings-menu",
+    "args": []
+   },
+   "tauri": {
+    "path": "/logs",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "label": "Log settings"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-logs-export-menu",
+   "rune": {
+    "scene": "reports-logs-export-menu",
+    "args": []
+   },
+   "tauri": {
+    "path": "/logs",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Export",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-logs-support",
+   "rune": {
+    "scene": "reports-logs-support",
+    "args": []
+   },
+   "tauri": {
+    "path": "/logs",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Export",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "textIncludes": "Support bundle",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-egress",
+   "rune": {
+    "scene": "reports-egress",
+    "args": []
+   },
+   "tauri": {
+    "path": "/egress",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-egress-de",
+   "rune": {
+    "scene": "reports-egress-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/egress",
+    "state": {
+     "developerToolsEnabled": true,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-egress-light",
+   "rune": {
+    "scene": "reports-egress-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/egress",
+    "state": {
+     "developerToolsEnabled": true,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "reports-books",
+   "rune": {
+    "scene": "reports-books",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-light",
+   "rune": {
+    "scene": "reports-books-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-de",
+   "rune": {
+    "scene": "reports-books-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-menu",
+   "rune": {
+    "scene": "reports-books-menu",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Actions for Regtest Demo"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-create",
+   "rune": {
+    "scene": "reports-books-create",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Actions for Regtest Demo"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "text": "New book",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-create-de",
+   "rune": {
+    "scene": "reports-books-create-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Aktionen f\u00fcr Regtest Demo"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "css": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-create-region",
+   "rune": {
+    "scene": "reports-books-create-region",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Actions for Regtest Demo"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "text": "New book",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "css": "#create-profile-region"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-create-copy",
+   "rune": {
+    "scene": "reports-books-create-copy",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Actions for Regtest Demo"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "text": "New book",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "css": "#books-source"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "text": "Full Accounting",
+       "sel": "[role=option]"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-settings",
+   "rune": {
+    "scene": "reports-books-settings",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-settings-switch",
+   "rune": {
+    "scene": "reports-books-settings-switch",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "css": "#rename-profile-region"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "text": "United Kingdom",
+       "sel": "[role=option]"
+      }
+     },
+     {
+      "wait": 300
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-rename-set",
+   "rune": {
+    "scene": "reports-books-rename-set",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Actions for Regtest Demo"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "text": "Rename book set",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-new-set",
+   "rune": {
+    "scene": "reports-books-new-set",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "text": "New book set",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-books-new-set-error",
+   "rune": {
+    "scene": "reports-books-new-set-error",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "text": "New book set",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "text": "Create set",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 300
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-birds-eye",
+   "rune": {
+    "scene": "reports-birds-eye",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books/{fx:workspace}/birds-eye",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='book-route-']"
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-birds-eye-light",
+   "rune": {
+    "scene": "reports-birds-eye-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books/{fx:workspace}/birds-eye",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "waitCss": "[data-testid^='book-route-']"
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-birds-eye-de",
+   "rune": {
+    "scene": "reports-birds-eye-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books/{fx:workspace}/birds-eye",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "waitCss": "[data-testid^='book-route-']"
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "reports-birds-eye-hidden",
+   "rune": {
+    "scene": "reports-birds-eye-hidden",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books/{fx:workspace}/birds-eye",
+    "state": {
+     "privacyMode": "hideAmounts"
+    },
+    "steps": [
+     {
+      "waitCss": "[data-testid^='book-route-']"
+     }
+    ],
+    "ready": "quiet"
+   }
+  }
+ ]
+}

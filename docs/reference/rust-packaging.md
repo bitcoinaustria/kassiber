@@ -212,8 +212,7 @@ minimal toolchain cannot load `libLLVM.dylib` and only warns. The build
 therefore links unstripped and runs Xcode's `strip -x`, then re-signs. (Adding
 the `llvm-tools` rustup component would also fix `rust-objcopy`.)
 
-Native run, on an Apple Silicon Mac with Xcode command line tools, rustup and
-pnpm 10.33.0:
+Native run, on an Apple Silicon Mac with Xcode command line tools and rustup:
 
 ```bash
 ./scripts/build-macos-arm64-app.sh --no-backup          # local "Kassiber Dev" app

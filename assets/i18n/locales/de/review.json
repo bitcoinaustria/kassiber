@@ -572,6 +572,7 @@
       "inWalletKind": "Zu Wallet-Typ",
       "maxFee": "Gebühr bis (% des Betrags)",
       "maxFeePlaceholder": "z. B. 0,01",
+      "maxFeeInvalid": "Gib die Gebührengrenze als Zahl ein, z. B. 0,01.",
       "minConfidence": "Wie sicher der Treffer ist",
       "minStrong": "Wahrscheinlich oder exakt",
       "minExact": "Nur exakt",

@@ -1,0 +1,5 @@
+{"scenes": [
+ {"name": "gapfix-not-found", "rune": {"scene": "route", "args": ["--route", "/no-such-page"]}, "tauri": {"path": "/no-such-page", "state": {}, "steps": []}},
+ {"name": "gapfix-not-found-de", "rune": {"scene": "route", "args": ["--route", "/no-such-page", "--lang", "de"]}, "tauri": {"path": "/no-such-page", "state": {"lang": "de"}, "steps": []}},
+ {"name": "gapfix-hide-amounts", "rune": {"scene": "hide-amounts", "args": []}, "tauri": {"path": "/overview", "state": {"privacyMode": "hideAmounts"}, "steps": []}}
+]}

@@ -1,0 +1,780 @@
+{
+ "scenes": [
+  {
+   "name": "assistant-empty",
+   "rune": {
+    "scene": "assistant-page",
+    "args": []
+   },
+   "tauri": {
+    "path": "/assistant",
+    "state": {},
+    "steps": [],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "assistant-more-menu",
+   "rune": {
+    "scene": "assistant-more-menu",
+    "args": []
+   },
+   "tauri": {
+    "path": "/assistant",
+    "state": {},
+    "steps": [
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "label": "More actions"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "assistant-history",
+   "rune": {
+    "scene": "assistant-history",
+    "args": []
+   },
+   "tauri": {
+    "path": "/assistant",
+    "state": {},
+    "steps": [
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "label": "More actions"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "text": "History",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "assistant-picker",
+   "rune": {
+    "scene": "assistant-picker",
+    "args": []
+   },
+   "tauri": {
+    "path": "/assistant",
+    "state": {},
+    "steps": [
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "css": "[data-chat-provider-model-picker]"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "assistant-picker-model",
+   "rune": {
+    "scene": "assistant-picker-model",
+    "args": []
+   },
+   "tauri": {
+    "path": "/assistant",
+    "state": {
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     }
+    },
+    "steps": [
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "css": "[data-chat-provider-model-picker]"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "assistant-model",
+   "rune": {
+    "scene": "assistant-model",
+    "args": []
+   },
+   "tauri": {
+    "path": "/assistant",
+    "state": {
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     }
+    },
+    "steps": [],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "assistant-light",
+   "rune": {
+    "scene": "assistant-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/assistant",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "assistant-de",
+   "rune": {
+    "scene": "assistant-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/assistant",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "assistant-panel-overview",
+   "rune": {
+    "scene": "assistant-panel",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-panel-transactions",
+   "rune": {
+    "scene": "assistant-panel-transactions",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transactions",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true
+    },
+    "steps": [],
+    "ready": "transactions"
+   }
+  },
+  {
+   "name": "assistant-panel-model",
+   "rune": {
+    "scene": "assistant-panel-model",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     }
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-panel-launcher",
+   "rune": {
+    "scene": "assistant-panel-launcher",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": false
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-ask-about",
+   "rune": {
+    "scene": "assistant-ask-about",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transactions",
+    "state": {},
+    "ready": "transactions",
+    "steps": [
+     {
+      "click": {
+       "labelPrefix": "Open actions for"
+      }
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "text": "Ask about this",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "assistant-panel-de",
+   "rune": {
+    "scene": "assistant-panel-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "lang": "de"
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-panel-light",
+   "rune": {
+    "scene": "assistant-panel-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "theme": "light"
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-panel-logs",
+   "rune": {
+    "scene": "assistant-panel-logs",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "label": "Open in side panel"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "sel": "[role=menuitem]",
+       "textIncludes": "Logs"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "assistant-panel-logs-de",
+   "rune": {
+    "scene": "assistant-panel-logs-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "developerToolsEnabled": true,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "label": "Im Seitenbereich öffnen"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "sel": "[role=menuitem]",
+       "textIncludes": "Protokoll"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "assistant-panel-logs-light",
+   "rune": {
+    "scene": "assistant-panel-logs-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "developerToolsEnabled": true,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "label": "Open in side panel"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "sel": "[role=menuitem]",
+       "textIncludes": "Logs"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "assistant-panel-changes",
+   "rune": {
+    "scene": "assistant-panel-changes",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "label": "Open in side panel"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "sel": "[role=menuitem]",
+       "textIncludes": "Changes"
+      }
+     },
+     {
+      "wait": 1200
+     }
+    ]
+   }
+  },
+  {
+   "name": "assistant-panel-changes-de",
+   "rune": {
+    "scene": "assistant-panel-changes-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "developerToolsEnabled": true,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "label": "Im Seitenbereich öffnen"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "sel": "[role=menuitem]",
+       "textIncludes": "Änderungen"
+      }
+     },
+     {
+      "wait": 1200
+     }
+    ]
+   }
+  },
+  {
+   "name": "assistant-panel-changes-light",
+   "rune": {
+    "scene": "assistant-panel-changes-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "developerToolsEnabled": true,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "label": "Open in side panel"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "sel": "[role=menuitem]",
+       "textIncludes": "Changes"
+      }
+     },
+     {
+      "wait": 1200
+     }
+    ]
+   }
+  },
+  {
+   "name": "assistant-panel-launcher-dev",
+   "rune": {
+    "scene": "assistant-panel-launcher-dev",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": false,
+     "developerToolsEnabled": true
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-typed-send",
+   "rune": {
+    "scene": "assistant-typed-send",
+    "args": []
+   },
+   "tauri": {
+    "path": "/assistant",
+    "state": {
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     }
+    },
+    "steps": [
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "css": "textarea"
+      }
+     },
+     {
+      "key": "H",
+      "mods": [
+       "shift"
+      ]
+     },
+     {
+      "key": "i"
+     },
+     {
+      "wait": 300
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "assistant-bar-composer",
+   "rune": {
+    "scene": "assistant-bar-composer",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": false,
+     "assistantClosedBar": "composer",
+     "assistantDockPosition": "right",
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     }
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-bar-composer-center",
+   "rune": {
+    "scene": "assistant-bar-composer-center",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": false,
+     "assistantClosedBar": "composer",
+     "assistantDockPosition": "center",
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     }
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-bar-composer-left-light",
+   "rune": {
+    "scene": "assistant-bar-composer-left-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": false,
+     "assistantClosedBar": "composer",
+     "assistantDockPosition": "left",
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     },
+     "theme": "light"
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-bar-launcher",
+   "rune": {
+    "scene": "assistant-bar-launcher",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": false,
+     "assistantClosedBar": "launcher",
+     "assistantDockPosition": "right",
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     }
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-bar-launcher-center",
+   "rune": {
+    "scene": "assistant-bar-launcher-center",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": false,
+     "assistantClosedBar": "launcher",
+     "assistantDockPosition": "center",
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     }
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-bar-launcher-left-de",
+   "rune": {
+    "scene": "assistant-bar-launcher-left-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": false,
+     "assistantClosedBar": "launcher",
+     "assistantDockPosition": "left",
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     },
+     "lang": "de"
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-panel-max",
+   "rune": {
+    "scene": "assistant-panel-max",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "rightPanelMaximized": true
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-panel-max-model",
+   "rune": {
+    "scene": "assistant-panel-max-model",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "rightPanelMaximized": true,
+     "assistantModelSelection": {
+      "provider": "ollama",
+      "model": "qwen3.6:35b"
+     }
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-panel-max-light",
+   "rune": {
+    "scene": "assistant-panel-max-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "rightPanelMaximized": true,
+     "theme": "light"
+    },
+    "steps": []
+   }
+  },
+  {
+   "name": "assistant-panel-max-de",
+   "rune": {
+    "scene": "assistant-panel-max-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "rightPanelOpen": true,
+     "assistantPanelOpen": true,
+     "rightPanelMaximized": true,
+     "lang": "de"
+    },
+    "steps": []
+   }
+  }
+ ]
+}

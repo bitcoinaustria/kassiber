@@ -1,0 +1,8 @@
+{"events": [
+ {"t": 0.1, "type": "tap", "key": "range-1Y-0"},
+ {"t": 0.4, "type": "tap", "key": "legend-Price"},
+ {"t": 0.7, "type": "tap", "key": "year-chip-0"},
+ {"t": 1.0, "type": "tap", "key": "year-menu-0-item2"},
+ {"t": 1.4, "type": "move", "x": 800, "y": 330},
+ {"t": 1.6, "type": "mark", "name": "end"}
+]}

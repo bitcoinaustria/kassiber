@@ -1,0 +1,1059 @@
+{
+ "scenes": [
+  {
+   "name": "custody-default",
+   "rune": {
+    "scene": "custody",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-light",
+   "rune": {
+    "scene": "custody-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-de",
+   "rune": {
+    "scene": "custody-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-needs",
+   "rune": {
+    "scene": "custody-needs",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Needs you",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-menu",
+   "rune": {
+    "scene": "custody-menu",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "label": "More transfer tools"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-menu-dev",
+   "rune": {
+    "scene": "custody-menu-dev",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "label": "More transfer tools"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-filter",
+   "rune": {
+    "scene": "custody-filter",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "label": "Filters"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-variant-unlinked",
+   "rune": {
+    "scene": "custody-unlinked",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Unlinked by you",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-variant-setaside",
+   "rune": {
+    "scene": "custody-setaside",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Set aside",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-variant-unlinked-menu",
+   "rune": {
+    "scene": "custody-unlinked-menu",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Unlinked by you",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "labelPrefix": "More for"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-row-menu",
+   "rune": {
+    "scene": "custody-row-menu",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "labelPrefix": "Actions for Regtest Liquid Treasury 2024 Rotation"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-gaps-default",
+   "rune": {
+    "scene": "custody-gaps",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=gaps",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-gaps-light",
+   "rune": {
+    "scene": "custody-gaps-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=gaps",
+    "state": {
+     "developerToolsEnabled": true,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-gaps-de",
+   "rune": {
+    "scene": "custody-gaps-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=gaps",
+    "state": {
+     "developerToolsEnabled": true,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-gaps-review",
+   "rune": {
+    "scene": "custody-gaps-review",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=gaps",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Review",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-gaps-plan",
+   "rune": {
+    "scene": "custody-gaps-plan",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=gaps",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Review",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     },
+     {
+      "click": {
+       "text": "Preview and confirm",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-gaps-coverage",
+   "rune": {
+    "scene": "custody-gaps-coverage",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=coverage",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-link-new",
+   "rune": {
+    "scene": "custody-link-new",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Link manually\u2026",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-link-new-dialog",
+   "width": 1100,
+   "height": 800,
+   "rune": {
+    "scene": "custody-link-new",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Link manually\u2026",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-unlink-details",
+   "rune": {
+    "scene": "custody-unlink-details",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "labelPrefix": "Show the transfer"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-unlink-pair",
+   "rune": {
+    "scene": "custody-unlink-pair",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "labelPrefix": "Show the transfer Regtest Liquid Treasury 2024 Rotation"
+      }
+     },
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Unlink\u2026",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-unlink-de",
+   "rune": {
+    "scene": "custody-unlink-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "labelPrefix": "\u00dcbertragung Regtest Liquid Treasury 2024 Rotation"
+      }
+     },
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Trennen\u2026",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-comps-default",
+   "rune": {
+    "scene": "custody-comps",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=components",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 1000
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-comps-light",
+   "rune": {
+    "scene": "custody-comps-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=components",
+    "state": {
+     "developerToolsEnabled": true,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 1000
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-comps-de",
+   "rune": {
+    "scene": "custody-comps-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=components",
+    "state": {
+     "developerToolsEnabled": true,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1000
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-comps-expanded",
+   "rune": {
+    "scene": "custody-comps-expanded",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=components",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 1000
+     },
+     {
+      "click": {
+       "text": "2 legs",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-comps-new",
+   "rune": {
+    "scene": "custody-comps-new",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=components",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 1000
+     },
+     {
+      "click": {
+       "text": "New component",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-comps-revise",
+   "rune": {
+    "scene": "custody-comps-revise",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=components",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 1000
+     },
+     {
+      "click": {
+       "text": "Create revision",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-comps-revise-de",
+   "rune": {
+    "scene": "custody-comps-revise-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=components",
+    "state": {
+     "developerToolsEnabled": true,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1000
+     },
+     {
+      "click": {
+       "text": "Revision erstellen",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-comps-preview",
+   "rune": {
+    "scene": "custody-comps-preview",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=components",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 1000
+     },
+     {
+      "click": {
+       "text": "Create revision",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Preview draft",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 2500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-sugg-default",
+   "rune": {
+    "scene": "custody",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-sugg-light",
+   "rune": {
+    "scene": "custody-sugg-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-sugg-de",
+   "rune": {
+    "scene": "custody-sugg-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-sugg-expanded",
+   "rune": {
+    "scene": "custody-sugg-expanded",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "text": "Show 3 more transfers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-sugg-about",
+   "rune": {
+    "scene": "custody-sugg-about",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "label": "About suggested links"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-sugg-bulk",
+   "rune": {
+    "scene": "custody-sugg-bulk",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "text": "Link 1 exact match",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 2000
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-rules",
+   "rune": {
+    "scene": "custody-rules",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "label": "More transfer tools"
+      }
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "text": "Linking rules and saved views"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-rules-new",
+   "rune": {
+    "scene": "custody-rules-new",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "label": "More transfer tools"
+      }
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "text": "Linking rules and saved views"
+      }
+     },
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "text": "New rule",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-sugg-view",
+   "rune": {
+    "scene": "custody-sugg-view",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "label": "More transfer tools"
+      }
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "text": "Linking rules and saved views"
+      }
+     },
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "text": "Likely transfers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "custody-rules-de",
+   "rune": {
+    "scene": "custody-rules-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "label": "Weitere \u00dcbertragungs-Werkzeuge"
+      }
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "textIncludes": "Verkn\u00fcpfungsregeln",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   }
+  }
+ ]
+}

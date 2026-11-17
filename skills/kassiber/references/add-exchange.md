@@ -271,8 +271,8 @@ site; the list below is what that search returns today.
    `crates/cli/src/describe.rs`, and the path to its capability class in
    `crates/runtime/src/capabilities.rs` next to `wallets.import-strike`.
 
-5. **`assets/logos/integrations/<slug>.svg`** (repository root, shared across
-   front ends) — the connection logo.
+5. **`assets/logos/integrations/<slug>.svg`** (repository root, shared by both
+   desktop apps) — the connection logo.
    Prefer a **vector** (`.svg`): it stays crisp at every size and the existing
    assets are almost all tiny SVGs (~0.3–3 KB). Source the official brand mark
    from the provider's press/brand kit or site, optimize it (e.g. SVGO; strip
@@ -305,6 +305,9 @@ site; the list below is what that search returns today.
      format label or import-mode helper) must you add them to **both** `en` and
      `de`, or the i18n key-parity test fails — see
      [docs/reference/i18n.md](../../../docs/reference/i18n.md).
+   - The Rune desktop's copy of the catalog (`crates/kassiber-desktop/src/overview/catalog.rs`)
+     is generated from this file: rerun `tools/connection-catalog/dump.mjs` and `gen.py`
+     there (usage at the top of `gen.py`).
 
 7. **Tests** — pin the behavior in `crates/wallets/src/file_import/tests.rs`:
    a small fixture CSV covering the main row types (and at least one

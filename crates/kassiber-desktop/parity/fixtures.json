@@ -1,0 +1,171 @@
+{
+ "_doc": [
+  "Demo-book fixtures for headless scenes, parity scenes and scripts: the one file to change when the demo book is replaced.",
+  "Rust reads it at build time (src/fixtures.rs: fixtures::id(\"name\"), fixtures::field, fixtures::now, fixtures::use_book).",
+  "parity/capture-rune.sh and parity/capture-tauri.mjs expand `{fx:name}` (the id) and `{fx:name.field}` in scene args and paths.",
+  "Each fixture's `select` re-resolves it on a new book from stable properties (wallet label, direction, exact amount):",
+  "  python3 -I tools/demo-fixtures.py check <kassiber.sqlite3>     verify every id and field",
+  "  python3 -I tools/demo-fixtures.py resolve <kassiber.sqlite3>   rewrite ids and fields from the selects",
+  "`books` are named variants of the demo book a scene needs (pending link reviews, a seeded source-of-funds case):",
+  "the scene copies the current book to a temporary root, runs these local CLI steps there and switches the daemon to it.",
+  "Steps run with --data-root <copy> --machine; `save` keeps data.id of the reply for later `{fx:saved.<name>}`."
+ ],
+ "book": "2026 regtest demo book (pristine-2026): 1,131 transactions, 2019-01-15 to 2026-11-04",
+ "now": "2026-11-15T12:00:00Z",
+ "fixtures": {
+  "partial": {
+   "about": "Latest Spending Wallet deposit: a partial graph whose spent input amount is missing (a lookup could add it); first row of Recent Transactions",
+   "id": "5d35bb53-0b9e-48f2-80e2-79b1c6b6b60d",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Spending Wallet' AND t.direction = 'inbound' AND t.amount = 534123000"
+  },
+  "full": {
+   "about": "Treasury 2020 Rotation send with a full local graph (1 input, 2 outputs); a taxable disposal; the exportable source-of-funds target",
+   "id": "a10f5881-9b8d-4d57-b001-045752835ac1",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Treasury 2020 Rotation' AND t.direction = 'outbound' AND t.amount = 7351178000"
+  },
+  "graphless": {
+   "about": "Silent Payments deposit imported without inputs (graphless, with a txid)",
+   "id": "4c884ec7-b10c-4dda-b3c8-d69372d7801b",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Silent Payments Wallet' AND t.direction = 'inbound' AND t.amount = 1234567000"
+  },
+  "liquid": {
+   "about": "Liquid Operations L-BTC deposit with confidential amounts",
+   "id": "23964f86-bff9-4bd1-a58a-8c0c3ea503ba",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Liquid Operations' AND t.direction = 'inbound' AND t.amount = 3410000000"
+  },
+  "linked": {
+   "about": "Treasury to Spending Wallet self-transfer (one transaction) on the Linked tab: its receipt, the id the Overview's merged transfer row carries (the web's ?tx= deep link only opens rows the Overview lists)",
+   "id": "f279296b-305c-499d-b496-0357314cfc23",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Spending Wallet' AND t.direction = 'inbound' AND t.amount = 19983215000"
+  },
+  "loan": {
+   "about": "Loan principal received (regtest-loan-2), a loan leg on the Linked tab",
+   "id": "0f3d8c3f-8f40-4da4-b2d9-0af5f01878fd",
+   "select": "SELECT l.transaction_id AS id FROM loan_legs l WHERE l.loan_id = 'regtest-loan-2' AND l.role = 'loan_principal_received' AND l.deleted_at IS NULL"
+  },
+  "multi": {
+   "about": "Cold Storage 2024 Rotation consolidation: 78 inputs, 1 output",
+   "id": "ef463a35-4145-4a15-8ab1-2fae7bb56c5b",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Cold Storage 2024 Rotation' AND t.direction = 'inbound' AND t.amount = 3089812775000"
+  },
+  "fanout": {
+   "about": "First Treasury deposit: 49 outputs (the lists fold past eight rows)",
+   "id": "b3be4d2e-d883-4191-a579-8c9cd266ce29",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Treasury' AND t.direction = 'inbound' AND t.amount = 119874203000"
+  },
+  "swap": {
+   "about": "Liquid to Bitcoin peg-out: the paired swap's Bitcoin receipt in Treasury 2020 Rotation",
+   "id": "eb1cdac9-6ac2-496b-90f0-8d9b75cf6847",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Treasury 2020 Rotation' AND t.direction = 'inbound' AND t.amount = 4080000000"
+  },
+  "same_tx_transfer": {
+   "about": "Liquid Treasury to Liquid Treasury 2024 Rotation: one transaction seen by two wallets",
+   "id": "def92b5f-8b67-4939-a571-7876510ea34f",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Liquid Treasury 2024 Rotation' AND t.direction = 'inbound' AND t.amount = 5750000000 ORDER BY t.occurred_at DESC LIMIT 1"
+  },
+  "cold_send": {
+   "about": "Cold Storage 2024 Rotation send (a transfer-table row)",
+   "id": "4b91c2c8-941c-4d32-a45e-9da715f99cda",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Cold Storage 2024 Rotation' AND t.direction = 'outbound' AND t.amount = 1175107000"
+  },
+  "merchant_send": {
+   "about": "Merchant Wallet sweep (a transfer-table row)",
+   "id": "f245ee47-78b3-4ad1-8cb5-869065fd4e6a",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Merchant Wallet' AND t.direction = 'outbound' AND t.amount = 1318943047000"
+  },
+  "linked_in": {
+   "about": "Cold Storage 2024 Rotation receipt the synthetic manual link ends in",
+   "id": "a16afd16-f19b-4386-8e62-1189111e7e90",
+   "txid": "83fa8d57c27bb71972b6b24d27ef1c82c621b51f5d43a48c59b0c721f0df6aa1",
+   "select": "SELECT t.id, t.external_id AS txid FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Cold Storage 2024 Rotation' AND t.direction = 'inbound' AND t.amount = 9909123000"
+  },
+  "linked_out": {
+   "about": "Merchant 2022 Rotation send the synthetic manual link starts from",
+   "id": "9889dbb2-f428-4feb-a607-7bb07b27a242",
+   "txid": "26be6117b4c9d88e18edc144a66e1d2e0d0c0409a48bd0716b2140a78f9fdf72",
+   "select": "SELECT t.id, t.external_id AS txid FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Merchant 2022 Rotation' AND t.direction = 'outbound' AND t.amount = 9910158000"
+  },
+  "strike_sell": {
+   "about": "Strike sell (Exchange Reconciliation book; exchange row, no chain transaction)",
+   "id": "d8237ad6-99fd-4368-bd0e-05ee38506cba",
+   "occurred_at": "2026-11-04T05:10:00Z",
+   "select": "SELECT t.id, t.occurred_at FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Strike' AND t.kind = 'sell'"
+  },
+  "strike_buy": {
+   "about": "Strike buy (Exchange Reconciliation book)",
+   "id": "4e911030-9869-4db9-a958-597908b1f108",
+   "occurred_at": "2026-11-04T04:49:00Z",
+   "select": "SELECT t.id, t.occurred_at FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Strike' AND t.kind = 'buy'"
+  },
+  "sof_blocked": {
+   "about": "Merchant 2022 Rotation payment whose source-of-funds trace stops at a missing-history blocker",
+   "id": "8b7f799e-6d5e-4a02-a53b-729062107bd3",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Merchant 2022 Rotation' AND t.direction = 'outbound' AND t.amount = 4523802000"
+  },
+  "sof_hop": {
+   "about": "The funding hop assembly proves for `full` (covered by the seeded fiat-purchase source)",
+   "id": "8494b467-abd2-417e-a1a8-e48cb1dd94df",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Treasury 2020 Rotation' AND t.direction = 'inbound' AND t.amount = 79837172000"
+  },
+  "pair_out": {
+   "about": "Treasury send the residual-suspense manual pair starts from",
+   "id": "469efcc6-3453-4eb9-960e-7f4e61e8d3bc",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Treasury' AND t.direction = 'outbound' AND t.amount = 254032770000"
+  },
+  "pair_in": {
+   "about": "Cold Storage receipt the residual-suspense manual pair ends in (smaller than the send: the rest goes to suspense)",
+   "id": "8d3b31a4-8dfe-49cb-ad94-49791bd7f013",
+   "select": "SELECT t.id FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE w.label = 'Regtest Cold Storage' AND t.direction = 'inbound' AND t.amount = 137448587000"
+  },
+  "wallet_spending": {
+   "about": "Regtest Spending Wallet (the wallet with the most transactions)",
+   "id": "a363dacd-664c-4e29-a03d-7cafd98b5f00",
+   "select": "SELECT id FROM wallets WHERE label = 'Regtest Spending Wallet'"
+  },
+  "wallet_liquid": {
+   "about": "Regtest Liquid Treasury 2024 Rotation (descriptor wallet)",
+   "id": "2739feae-01bf-408c-8ff2-a1a409e6f9bf",
+   "select": "SELECT id FROM wallets WHERE label = 'Regtest Liquid Treasury 2024 Rotation'"
+  },
+  "wallet_liquid_deprecated": {
+   "about": "Regtest Liquid Treasury (the rotated-out Liquid wallet)",
+   "id": "6bea3115-9686-4e14-88e2-530833dde45c",
+   "select": "SELECT id FROM wallets WHERE label = 'Regtest Liquid Treasury'"
+  },
+  "wallet_silent": {
+   "about": "Regtest Silent Payments Wallet",
+   "id": "f83e6416-77b1-4db6-be89-de5d7b8ee638",
+   "select": "SELECT id FROM wallets WHERE label = 'Regtest Silent Payments Wallet'"
+  },
+  "workspace": {
+   "about": "The demo workspace (Bird's eye route)",
+   "id": "eba07ae6-35aa-424f-a225-8bfb0248a7b5",
+   "select": "SELECT id FROM workspaces WHERE label = 'Regtest Demo'"
+  }
+ },
+ "books": {
+  "coarse-review": {
+   "about": "Coarse-price review required on the active profile: one large quarantine cause (pricing review) with many rows, for the Review page's links-* scenes",
+   "steps": [
+    {"args": ["profiles", "set", "--require-coarse-review"]},
+    {"args": ["journals", "process"]}
+   ]
+  },
+  "residual-pair": {
+   "about": "A manual pair whose receipt is smaller than the send (residual suspense): a pair cause on the Review page with Unpair in the panel",
+   "steps": [
+    {"args": ["transfers", "pair", "--tx-out", "{fx:pair_out}", "--tx-in", "{fx:pair_in}", "--kind", "manual", "--policy", "carrying-value"]},
+    {"args": ["journals", "process"]}
+   ]
+  },
+  "sof-seeded": {
+   "about": "One exportable source-of-funds case on `full`: assembly proves its funding hop, a reviewed fiat-purchase source covers the hop; plus a recipient",
+   "steps": [
+    {"args": ["source-funds", "assemble", "--target-transaction", "{fx:full}"]},
+    {"args": ["source-funds", "sources", "create", "--type", "fiat_purchase", "--label", "Kraken purchase March 2025", "--asset", "BTC", "--amount", "0.76232011", "--description", "Bank transfer to Kraken, receipt on file"], "save": "source"},
+    {"args": ["source-funds", "links", "create", "--from-source", "{fx:saved.source}", "--to-transaction", "{fx:sof_hop}", "--type", "manual_source", "--state", "reviewed", "--confidence", "strong", "--method", "manual", "--allocation-amount", "0.76232011", "--allocation-policy", "explicit", "--explanation", "Kraken withdrawal"]},
+    {"args": ["source-funds", "recipients", "create", "--label", "Erste Bank compliance", "--kind", "bank", "--default-reveal-mode", "minimal"]}
+   ]
+  }
+ }
+}

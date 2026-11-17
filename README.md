@@ -8,8 +8,11 @@
 Local-first Bitcoin accounting for individuals, businesses, and associations.
 Kassiber imports or syncs wallet transactions, supports review of transfers and
 missing evidence, and produces portfolio, tax, and source-of-funds reports.
-It has a desktop app and a CLI backed by the same Rust core: one `kassiber`
-binary serves the command line, the desktop daemon and the MCP server.
+It has a native desktop app and a CLI, peers backed by the same Rust core: one
+`kassiber` binary serves the command line, the desktop daemon and the MCP
+server. The desktop app is written in Rust with the
+[Rune](https://github.com/anomalyco/rune) UI framework
+([`crates/kassiber-desktop`](crates/kassiber-desktop/README.md)).
 
 **Pre-alpha:** expect breaking changes and incorrect accounting or tax output.
 Do not use Kassiber as the sole basis for filings or financial decisions.

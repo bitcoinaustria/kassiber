@@ -1,0 +1,711 @@
+{
+ "scenes": [
+  {
+   "name": "overview-holdings-list",
+   "rune": {
+    "scene": "overview-holdings-list",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {},
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-tiles",
+   "rune": {
+    "scene": "overview-holdings-tiles",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "tiles",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     }
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1280
+  },
+  {
+   "name": "overview-holdings-table",
+   "rune": {
+    "scene": "overview-holdings-table",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "table",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     }
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1420
+  },
+  {
+   "name": "overview-holdings-trend",
+   "rune": {
+    "scene": "overview-holdings-trend",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "trend",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     }
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1150
+  },
+  {
+   "name": "overview-holdings-light",
+   "rune": {
+    "scene": "overview-holdings-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "theme": "light"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-de",
+   "rune": {
+    "scene": "overview-holdings-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "lang": "de"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-tiles-light",
+   "rune": {
+    "scene": "overview-holdings-tiles-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "tiles",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     },
+     "theme": "light"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1280
+  },
+  {
+   "name": "overview-holdings-table-de",
+   "rune": {
+    "scene": "overview-holdings-table-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "table",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     },
+     "lang": "de"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1420
+  },
+  {
+   "name": "overview-holdings-trend-light",
+   "rune": {
+    "scene": "overview-holdings-trend-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "trend",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     },
+     "theme": "light"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1150
+  },
+  {
+   "name": "overview-holdings-fiat",
+   "rune": {
+    "scene": "overview-holdings-fiat",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "currency": "eur"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-tiles-fiat",
+   "rune": {
+    "scene": "overview-holdings-tiles-fiat",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "tiles",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     },
+     "currency": "eur"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1280
+  },
+  {
+   "name": "overview-holdings-table-fiat",
+   "rune": {
+    "scene": "overview-holdings-table-fiat",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "table",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     },
+     "currency": "eur"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1420
+  },
+  {
+   "name": "overview-holdings-sort-name",
+   "rune": {
+    "scene": "overview-holdings-sort-name",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "list",
+      "sort": "name",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     }
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-sort-activity",
+   "rune": {
+    "scene": "overview-holdings-sort-activity",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "list",
+      "sort": "activity",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     }
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-filtered",
+   "rune": {
+    "scene": "overview-holdings-filtered",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "list",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "liquid"
+      ],
+      "limit": 8
+     }
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-limit-all",
+   "rune": {
+    "scene": "overview-holdings-limit-all",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "list",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 0
+     }
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-hide-amounts",
+   "rune": {
+    "scene": "overview-holdings-hide-amounts",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "privacyMode": "hideAmounts"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-hide-all",
+   "rune": {
+    "scene": "overview-holdings-hide-all",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "privacyMode": "hideAll"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-tiles-hide-all",
+   "rune": {
+    "scene": "overview-holdings-tiles-hide-all",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "tiles",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     },
+     "privacyMode": "hideAll"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1280
+  },
+  {
+   "name": "overview-holdings-table-hide-all",
+   "rune": {
+    "scene": "overview-holdings-table-hide-all",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "table",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     },
+     "privacyMode": "hideAll"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1420
+  },
+  {
+   "name": "overview-holdings-trend-hide-all",
+   "rune": {
+    "scene": "overview-holdings-trend-hide-all",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "trend",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     },
+     "privacyMode": "hideAll"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1150
+  },
+  {
+   "name": "overview-holdings-menu",
+   "rune": {
+    "scene": "overview-holdings-menu",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Holdings settings"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ]
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-menu-rails",
+   "rune": {
+    "scene": "overview-holdings-menu-rails",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Holdings settings"
+      }
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "textIncludes": "Networks",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ]
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-menu-empty",
+   "rune": {
+    "scene": "overview-holdings-menu-empty",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Holdings settings"
+      }
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "textIncludes": "Empty sources",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ]
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-menu-limit",
+   "rune": {
+    "scene": "overview-holdings-menu-limit",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Holdings settings"
+      }
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "textIncludes": "Sources shown",
+       "sel": "[role=menuitem]"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ]
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-menu-de",
+   "rune": {
+    "scene": "overview-holdings-menu-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "click": {
+       "label": "Einstellungen f\u00fcr Best\u00e4nde"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ]
+   },
+   "width": 1440,
+   "height": 1140
+  },
+  {
+   "name": "overview-holdings-narrow",
+   "rune": {
+    "scene": "overview-holdings-narrow",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {},
+    "steps": []
+   },
+   "width": 1000,
+   "height": 1700
+  },
+  {
+   "name": "overview-holdings-trend-narrow",
+   "rune": {
+    "scene": "overview-holdings-trend-narrow",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "holdingsView": {
+      "layout": "trend",
+      "sort": "balance",
+      "empty": "fold",
+      "rails": [
+       "onchain",
+       "liquid",
+       "lightning",
+       "other"
+      ],
+      "limit": 8
+     }
+    },
+    "steps": []
+   },
+   "width": 1000,
+   "height": 1700
+  },
+  {
+   "name": "overview-widgets-light-de",
+   "rune": {
+    "scene": "overview-widgets-light-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/overview",
+    "state": {
+     "theme": "light",
+     "lang": "de",
+     "currency": "eur"
+    },
+    "steps": []
+   },
+   "width": 1440,
+   "height": 1140
+  }
+ ]
+}

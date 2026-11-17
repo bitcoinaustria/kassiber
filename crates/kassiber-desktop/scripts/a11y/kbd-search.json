@@ -1,0 +1,56 @@
+{
+"events": [
+{
+"t": 0.2,
+"type": "key",
+"name": "k",
+"cmd": true
+},
+{
+"t": 0.5,
+"type": "type",
+"text": "trans"
+},
+{
+"t": 0.9,
+"type": "key",
+"name": "Down"
+},
+{
+"t": 1.1,
+"type": "mark",
+"name": "typed"
+},
+{
+"t": 1.3,
+"type": "key",
+"name": "Up"
+},
+{
+"t": 1.5,
+"type": "key",
+"name": "Enter"
+},
+{
+"t": 1.9,
+"type": "mark",
+"name": "ran"
+},
+{
+"t": 2.1,
+"type": "key",
+"name": "k",
+"cmd": true
+},
+{
+"t": 2.4,
+"type": "key",
+"name": "Escape"
+},
+{
+"t": 2.7,
+"type": "mark",
+"name": "end"
+}
+]
+}

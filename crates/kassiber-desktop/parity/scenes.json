@@ -1,0 +1,1092 @@
+{
+  "width": 1440,
+  "height": 900,
+  "scenes": [
+    {
+      "name": "overview-dark",
+      "rune": {
+        "scene": "dark",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": []
+      }
+    },
+    {
+      "name": "overview-light",
+      "rune": {
+        "scene": "light",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {
+          "theme": "light"
+        },
+        "steps": []
+      }
+    },
+    {
+      "name": "overview-narrow",
+      "rune": {
+        "scene": "dark",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": []
+      },
+      "width": 1000,
+      "height": 800
+    },
+    {
+      "name": "hide-amounts",
+      "rune": {
+        "scene": "hide-amounts",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {
+          "privacyMode": "hideAmounts"
+        },
+        "steps": []
+      }
+    },
+    {
+      "name": "fiat",
+      "rune": {
+        "scene": "fiat",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {
+          "currency": "eur"
+        },
+        "steps": []
+      }
+    },
+    {
+      "name": "collapsed",
+      "rune": {
+        "scene": "collapsed",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {
+          "navCollapsed": true
+        },
+        "steps": []
+      }
+    },
+    {
+      "name": "search",
+      "rune": {
+        "scene": "search",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "key": "k",
+            "mods": [
+              "ctrl"
+            ]
+          },
+          {
+            "waitCss": "input[placeholder^='Search']"
+          }
+        ]
+      }
+    },
+    {
+      "name": "books",
+      "rune": {
+        "scene": "books",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "labelPrefix": "Switch books"
+            }
+          },
+          {
+            "wait": 1200
+          }
+        ]
+      }
+    },
+    {
+      "name": "user-menu",
+      "rune": {
+        "scene": "user-menu",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "labelPrefix": "Regtest Demo \u00b7 Full Accounting"
+            }
+          },
+          {
+            "wait": 600
+          }
+        ]
+      }
+    },
+    {
+      "name": "refresh-menu",
+      "rune": {
+        "scene": "refresh-menu",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Refresh options"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "notifications",
+      "rune": {
+        "scene": "notifications",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "labelPrefix": "Notifications"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "privacy-menu",
+      "rune": {
+        "scene": "privacy-menu",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "labelPrefix": "Privacy:"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "theme-menu",
+      "rune": {
+        "scene": "theme-menu",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Theme"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "network",
+      "rune": {
+        "scene": "network",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "css": "header [aria-label^='Connections'], header [aria-label^='Nothing connected'], header [aria-label^='Offline']"
+            }
+          },
+          {
+            "wait": 1500
+          }
+        ]
+      }
+    },
+    {
+      "name": "alpha",
+      "rune": {
+        "scene": "alpha",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Alpha software warning"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings",
+      "rune": {
+        "scene": "settings",
+        "args": []
+      },
+      "tauri": {
+        "path": "/settings",
+        "state": {},
+        "steps": [
+          {
+            "wait": 1200
+          }
+        ]
+      }
+    },
+    {
+      "name": "add-connection",
+      "rune": {
+        "scene": "add-connection",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "text": "Add connection",
+              "sel": "button"
+            }
+          },
+          {
+            "wait": 1000
+          }
+        ]
+      }
+    },
+    {
+      "name": "chart-30d",
+      "rune": {
+        "scene": "chart-30d",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "text": "30D",
+              "sel": "button"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "chart-1y",
+      "rune": {
+        "scene": "chart-1y",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "text": "1Y",
+              "sel": "button"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "chart-all-log",
+      "rune": {
+        "scene": "chart-all-log",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "text": "log",
+              "sel": "button",
+              "nth": 0
+            }
+          },
+          {
+            "wait": 600
+          },
+          {
+            "click": {
+              "text": "log",
+              "sel": "button",
+              "nth": 1
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "chart-fit",
+      "rune": {
+        "scene": "chart-fit",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "text": "fit",
+              "sel": "button"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "chart-hover",
+      "rune": {
+        "scene": "chart-hover",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "hover": {
+              "css": "svg.recharts-surface",
+              "fx": 0.45,
+              "fy": 0.55
+            }
+          },
+          {
+            "wait": 400
+          }
+        ]
+      }
+    },
+    {
+      "name": "chart-gear",
+      "rune": {
+        "scene": "chart-gear",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Chart scale settings"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "chart-controls",
+      "rune": {
+        "scene": "chart-controls",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Chart scale settings"
+            }
+          },
+          {
+            "wait": 300
+          },
+          {
+            "click": {
+              "textIncludes": "More settings",
+              "sel": "[role=menuitem]"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ]
+      }
+    },
+    {
+      "name": "chart-expanded",
+      "rune": {
+        "scene": "chart-expanded",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Expand BTC activity chart"
+            }
+          },
+          {
+            "wait": 1500
+          }
+        ]
+      }
+    },
+    {
+      "name": "chart-year",
+      "rune": {
+        "scene": "chart-year",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "textIncludes": "Year",
+              "sel": "button",
+              "nth": 0
+            }
+          },
+          {
+            "wait": 600
+          }
+        ]
+      }
+    },
+    {
+      "name": "transactions",
+      "rune": {
+        "scene": "transactions",
+        "args": []
+      },
+      "tauri": {
+        "path": "/transactions",
+        "state": {},
+        "steps": [],
+        "ready": "transactions"
+      }
+    },
+    {
+      "name": "transactions-all",
+      "rune": {
+        "scene": "transactions-all",
+        "args": []
+      },
+      "tauri": {
+        "path": "/transactions?period=all",
+        "state": {},
+        "steps": [],
+        "ready": "transactions"
+      }
+    },
+    {
+      "name": "transactions-filters",
+      "rune": {
+        "scene": "transactions-filters",
+        "args": []
+      },
+      "tauri": {
+        "path": "/transactions",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Open transaction filters"
+            }
+          },
+          {
+            "wait": 400
+          },
+          {
+            "hover": {
+              "text": "Flow",
+              "sel": "[role=menuitem]"
+            }
+          },
+          {
+            "wait": 600
+          }
+        ],
+        "ready": "transactions"
+      }
+    },
+    {
+      "name": "transactions-rowmenu",
+      "rune": {
+        "scene": "transactions-rowmenu",
+        "args": []
+      },
+      "tauri": {
+        "path": "/transactions",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "labelPrefix": "Open actions for",
+              "nth": 1
+            }
+          },
+          {
+            "wait": 500
+          }
+        ],
+        "ready": "transactions"
+      }
+    },
+    {
+      "name": "transactions-chips",
+      "rune": {
+        "scene": "transactions-chips",
+        "args": []
+      },
+      "tauri": {
+        "path": "/transactions?period=all&status=pending&flow=incoming&fees=with-fees&sort=amount&order=desc",
+        "state": {},
+        "steps": [],
+        "ready": "transactions"
+      }
+    },
+    {
+      "name": "transactions-expanded",
+      "rune": {
+        "scene": "transactions-expanded",
+        "args": []
+      },
+      "tauri": {
+        "path": "/transactions",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Expand transaction table"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "transactions"
+      }
+    },
+    {
+      "name": "transactions-export",
+      "rune": {
+        "scene": "transactions-export",
+        "args": []
+      },
+      "tauri": {
+        "path": "/transactions",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "text": "Export",
+              "sel": "button"
+            }
+          },
+          {
+            "wait": 2500
+          }
+        ],
+        "ready": "transactions"
+      }
+    },
+    {
+      "name": "transactions-year",
+      "rune": {
+        "scene": "transactions-year",
+        "args": []
+      },
+      "tauri": {
+        "path": "/transactions",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Show one calendar year"
+            }
+          },
+          {
+            "wait": 600
+          }
+        ],
+        "ready": "transactions"
+      }
+    },
+    {
+      "name": "transactions-light",
+      "rune": {
+        "scene": "transactions-light",
+        "args": []
+      },
+      "tauri": {
+        "path": "/transactions",
+        "state": {
+          "theme": "light"
+        },
+        "steps": [],
+        "ready": "transactions"
+      }
+    },
+    {
+      "name": "transactions-de",
+      "rune": {
+        "scene": "transactions-de",
+        "args": []
+      },
+      "tauri": {
+        "path": "/transactions",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [],
+        "ready": "transactions"
+      }
+    },
+    {
+      "name": "detail-details",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:partial}",
+          "--tab",
+          "details"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:partial}&tab=details",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "detail-classify",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:partial}",
+          "--tab",
+          "classify"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:partial}&tab=classify",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "detail-pricing",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:partial}",
+          "--tab",
+          "pricing"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:partial}&tab=pricing",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "detail-tax",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:partial}",
+          "--tab",
+          "tax"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:partial}&tab=tax",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "detail-tax-send",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:full}",
+          "--tab",
+          "tax"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:full}&tab=tax",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "detail-linked",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:linked}",
+          "--tab",
+          "linked"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:linked}&tab=linked",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "detail-loan",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:loan}",
+          "--tab",
+          "linked"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:loan}&tab=linked",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "detail-history",
+      "rune": {
+        "scene": "detail-history",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:partial}&tab=details",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "text": "Edit history"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "detail-links",
+      "rune": {
+        "scene": "detail-links",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:partial}&tab=details",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "text": "Attach links",
+              "sel": "button"
+            }
+          },
+          {
+            "wait": 800
+          }
+        ],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "detail-reuse",
+      "rune": {
+        "scene": "detail-reuse",
+        "args": []
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:partial}&tab=details",
+        "state": {},
+        "steps": [
+          {
+            "click": {
+              "label": "Reuse evidence"
+            }
+          },
+          {
+            "wait": 1500
+          }
+        ],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "detail-de",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--lang",
+          "de",
+          "--tx",
+          "{fx:partial}",
+          "--tab",
+          "details"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:partial}&tab=details",
+        "state": {
+          "lang": "de"
+        },
+        "steps": [],
+        "ready": "detail"
+      },
+      "width": 1440,
+      "height": 1800
+    },
+    {
+      "name": "graph-partial",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:partial}",
+          "--tab",
+          "details"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:partial}&tab=details",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      }
+    },
+    {
+      "name": "graph-full",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:full}",
+          "--tab",
+          "details"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:full}&tab=details",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      }
+    },
+    {
+      "name": "graph-multi",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:multi}",
+          "--tab",
+          "details"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:multi}&tab=details",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      }
+    },
+    {
+      "name": "graph-fanout",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:fanout}",
+          "--tab",
+          "details"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:fanout}&tab=details",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      }
+    },
+    {
+      "name": "graph-swap",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:swap}",
+          "--tab",
+          "details"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:swap}&tab=details",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      }
+    },
+    {
+      "name": "graph-liquid",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:liquid}",
+          "--tab",
+          "details"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:liquid}&tab=details",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      }
+    },
+    {
+      "name": "graph-graphless",
+      "rune": {
+        "scene": "open-tx",
+        "args": [
+          "--tx",
+          "{fx:graphless}",
+          "--tab",
+          "details"
+        ]
+      },
+      "tauri": {
+        "path": "/overview?tx={fx:graphless}&tab=details",
+        "state": {},
+        "steps": [],
+        "ready": "detail"
+      }
+    },
+    {
+      "name": "overview-de",
+      "rune": {
+        "scene": "dark",
+        "args": [
+          "--lang",
+          "de"
+        ]
+      },
+      "tauri": {
+        "path": "/overview",
+        "state": {
+          "lang": "de"
+        },
+        "steps": []
+      }
+    }
+  ],
+  "notes": {
+    "detail-explorer": "omitted: the web hides the explorer button on this regtest book (no public explorer), so the Rune-only dialog has no Tauri equivalent",
+    "detail-*": "captured at 1440x1800 so the tabs and the right rail below the graph are on screen in both apps"
+  }
+}

@@ -1,0 +1,6 @@
+{"events": [
+  {"t": 0.2, "type": "tap", "key": "sh-side-panel"},
+  {"t": 0.5, "type": "tap", "key": "sh-privacy"},
+  {"t": 0.7, "type": "tap", "key": "sh-privacy-HideAll"},
+  {"t": 1.0, "type": "mark", "name": "end"}
+]}

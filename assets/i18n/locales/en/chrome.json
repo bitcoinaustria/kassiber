@@ -74,7 +74,22 @@
       "current": "Kassiber v{{version}} is up to date.",
       "openGitHub": "Open GitHub",
       "notNow": "Not now",
-      "ok": "OK"
+      "ok": "OK",
+      "error": {
+        "disabled": "GitHub update checks are disabled. Enable them in Settings > Privacy.",
+        "unreachable": "Could not reach GitHub to check for updates.",
+        "failed": "Could not check for updates: {{reason}}.",
+        "invalidResponse": "The Kassiber CLI returned an invalid update response.",
+        "unexpectedKind": "The Kassiber CLI returned an unexpected response kind.",
+        "emptyResponse": "The Kassiber CLI returned an empty update response.",
+        "untrustedUrl": "The update check returned an untrusted release URL.",
+        "startFailed": "Could not start the Kassiber CLI to check for updates.",
+        "readFailed": "Could not read the Kassiber CLI update output.",
+        "timedOut": "The update check timed out.",
+        "tooLarge": "The Kassiber CLI returned an unexpectedly large update response.",
+        "runFailed": "Could not run the Kassiber CLI update check.",
+        "headless": "Update checks don't run in headless mode."
+      }
     },
     "freshness": {
       "label": "Book status",
@@ -652,6 +667,93 @@
     "failedHint": "The failed source stays listed until you close this message.",
     "closeFailure": "Close",
     "continueInBackground": "Continue in background"
+  },
+  "syncProgress": {
+    "phase": {
+      "discovery": "Discovering wallet history",
+      "backendFetch": "Fetching source history",
+      "decodeEnrich": "Decoding and enriching transactions",
+      "import": "Importing transactions",
+      "rateCoverage": "Checking market-rate coverage",
+      "autoPair": "Pairing swaps and transfers",
+      "journalRefresh": "Refreshing journals",
+      "rateLimited": "Waiting out rate limit",
+      "done": "Refresh complete",
+      "error": "Refresh needs attention"
+    },
+    "title": {
+      "checkingMarketRates": "Checking market rates",
+      "fetchingBtcRate": "Fetching BTC market rate.",
+      "fetchingPair": "Fetching {{pair}}."
+    },
+    "refreshingSources": "Refreshing configured sources",
+    "refreshRunning": "refresh is running",
+    "inProgress": "In progress",
+    "unit": {
+      "addresses": "addresses probed",
+      "scanTargets": "scan targets checked",
+      "transactions": "transactions scanned",
+      "rows": "rows scanned"
+    },
+    "gap": {
+      "unused": "Unused gap {{unused}} / {{gap}}",
+      "stopsAfter": "Stops after {{gap}} consecutive unused addresses"
+    },
+    "summary": {
+      "queued_one": "{{count}} source queued.",
+      "queued_other": "{{count}} sources queued.",
+      "completed": "{{count}} completed",
+      "coolingDown": "{{count}} cooling down",
+      "needsAttention": "{{count}} needs attention",
+      "pairingSkipped": "automatic pairing skipped",
+      "pairsApplied_one": "{{count}} pair applied",
+      "pairsApplied_other": "{{count}} pairs applied",
+      "candidates_one": "{{count}} swap/transfer candidate to review",
+      "candidates_other": "{{count}} swap/transfer candidates to review",
+      "quarantined_one": "{{count}} quarantined transaction",
+      "quarantined_other": "{{count}} quarantined transactions",
+      "refreshed": "{{count}} refreshed",
+      "skipped": "{{count}} skipped",
+      "failed": "{{count}} failed",
+      "noChanges": "No source changes returned.",
+      "source": "Source"
+    },
+    "result": {
+      "failed": "{{wallet}} refresh failed.",
+      "failedDetail": "{{wallet}} refresh failed: {{detail}}",
+      "skipped": "{{wallet}} refresh skipped.",
+      "skippedDetail": "{{wallet}} refresh skipped: {{detail}}",
+      "coolingDown": "{{wallet}} refresh cooling down.",
+      "coolingDownDetail": "{{wallet}} refresh cooling down: {{detail}}",
+      "partial": "{{wallet}} partially refreshed.",
+      "partialDetail": "{{wallet}} partially refreshed: {{detail}}",
+      "refreshed": "{{wallet}} refreshed.",
+      "refreshedDetail": "{{wallet}} refreshed: {{detail}}.",
+      "queued": "{{wallet}} refresh queued.",
+      "other": "{{wallet}} refresh {{status}}."
+    },
+    "observed": {
+      "fullRescan": "full rescan",
+      "compatibility": "compatibility observer ({{reason}})",
+      "capabilityFallback": "capability fallback",
+      "imported": "{{count}} imported",
+      "updated": "{{count}} updated",
+      "unchanged": "{{count}} unchanged",
+      "sourceRows": "{{count}} source rows",
+      "scriptsChecked": "{{count}} scripts checked",
+      "targets": "{{count}} targets",
+      "overlapsMatched": "{{count}} migration overlaps matched",
+      "overlapsReview": "{{count}} migration overlaps need review",
+      "reactivated_one": "{{count}} migration row reactivated",
+      "reactivated_other": "{{count}} migration rows reactivated",
+      "retired_one": "{{count}} obsolete projection retired",
+      "retired_other": "{{count}} obsolete projections retired",
+      "utxosUnchanged": "UTXOs unchanged",
+      "utxosRefreshed": "UTXOs refreshed",
+      "journalsUnchanged": "journals unchanged",
+      "journalsStale": "journals marked stale",
+      "elapsed": "{{count}} ms"
+    }
   },
   "syncDot": {
     "synced": "Current",

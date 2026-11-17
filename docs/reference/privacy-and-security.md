@@ -822,6 +822,88 @@ replacement tears down leases even with a lingering user manager. Broker
 startup fails closed when neither mechanism can prove logout lifetime; manual
 mode remains available on such unusual no-PAM systems.
 
+## Operating-system surfaces
+
+The desktop app hands some data to the operating system. These rules keep book
+data from spreading through those channels. None of them make a network
+request; all are local system calls, and tooling runs (tests, headless scenes,
+scripted runs) record what they would do instead of doing it.
+
+The app itself has no network code; every request goes through its daemon.
+`crates/net/tests/chokepoint.rs` scans `crates/kassiber-desktop` like any other
+crate: each program it starts (the bundled `kassiber`, and fixed local tools
+such as `open`, `osascript` or `codesign`) is a reviewed entry, its one socket
+is the macOS single-instance handoff (a `0600` Unix socket in the user's
+private `$TMPDIR`), and Rune, pinned to one full commit, is the only git
+source the scan admits. Rune's own interaction timing posts to a loopback
+OpenTelemetry collector only when `RUNE_PERF=1` or
+`OTEL_EXPORTER_OTLP_ENDPOINT` names a loopback address.
+
+- **Clipboard.** Every copy (addresses, transaction ids, `txid:vout`, payment
+  hashes, amounts, labels, CSV, revealed wallet material, diagnostics) goes
+  through one helper. On macOS Kassiber writes the pasteboard itself with
+  `NSPasteboardContentsCurrentHostOnly`, so Universal Clipboard / Handoff does
+  not send it to other devices, and adds `org.nspasteboard.ConcealedType` and
+  `org.nspasteboard.TransientType`, so clipboard managers that follow
+  nspasteboard.org skip it. On Windows the copy carries
+  `ExcludeClipboardContentFromMonitorProcessing`, which keeps it out of
+  clipboard history and cloud clipboard. On Linux it carries
+  `x-kde-passwordManagerHint=secret`, which Klipper and history tools that read
+  the hint honor; other history tools may still record it. With **Clear
+  clipboard after copy** (on by default) a copy is cleared after 30 seconds,
+  but only if the clipboard still holds it (compared by change count, so a
+  later copy by the user is never cleared). A copy still held is also cleared
+  when the session locks and when Kassiber quits. On Windows and Linux the
+  exclusion marks only exist on the self-clearing path, so with clearing off a
+  copy is held for 24 hours and then cleared if unchanged. Limitation: text
+  selected with the pointer and copied with ⌘C/Ctrl+C (assistant messages,
+  input fields) uses the UI toolkit's plain copy and carries none of these
+  marks.
+- **OS notifications.** The title is always "Kassiber" and the body one of a
+  fixed set of generic sentences ("Background work has finished."). No amount,
+  count, wallet or account name, label, txid, address, server, path or error
+  text reaches the system's notification store, the lock screen or mirrored
+  devices, whatever **Hide amounts** is set to. A test scans every body and
+  fails if any other module talks to the notification service.
+- **OS backups.** An encrypted book is ciphertext on disk, and Time Machine may
+  back it up. With **Keep unencrypted books out of Time Machine** (Settings →
+  Data, on by default) Kassiber sets the per-item exclusion attribute
+  `com.apple.metadata:com_apple_backup_excludeItem` (what `tmutil
+  addexclusion` writes; no administrator rights, no change to Time Machine
+  settings). For an unencrypted book it marks the database and its `-wal`,
+  `-shm` and `-journal` files, and the managed `attachments/` and `exports/`
+  folders when they are inside the state root. For any book it also marks the
+  plaintext `kassiber.pre-encryption.sqlite3.bak` rollback copy. Marks are
+  set when the open book's status arrives or changes, and checked again every
+  minute while an unencrypted book is open, because SQLite recreates its
+  `-wal`/`-shm` files. Only existing items are marked. The data root itself,
+  anything outside the state root, and export destinations the user picks are
+  never marked. Each mark carries a Kassiber marker attribute
+  (`at.bitcoinaustria.kassiber.backup-excluded`), so turning the setting off,
+  or encrypting the book, removes Kassiber's marks and never one the user set.
+  An excluded unencrypted book is not in any Time Machine backup; keep a copy
+  with an encrypted `.kassiber` backup. Windows and Linux backup tools have no
+  per-file attribute Kassiber can set; the Data page asks the user to exclude
+  the folder there or encrypt the book.
+- **Synced folders.** Time Machine attributes do nothing for file-sync
+  services. When an unencrypted book's database sits in iCloud Drive
+  (including iCloud's Desktop & Documents), `~/Library/CloudStorage`
+  providers, Dropbox, OneDrive, Google Drive or a Syncthing folder, the Data
+  page warns that the database leaves the device in plain text. Detection
+  reads only path names and local marker files (`.stfolder`, `.dropbox`).
+- **Screen sharing and recording.** With **Hide amounts while the screen is
+  shared** (Settings → Privacy, on by default) a Normal privacy mode is raised
+  to Hide amounts while the screen is shared or recorded and lowered again
+  when that ends, unless the user changed the mode meanwhile. The saved
+  preference never records the raised mode. macOS has no public capture
+  signal that works without the Screen Recording permission; Kassiber asks the
+  WindowServer's `CGSIsScreenWatcherPresent` (private, resolved at run time,
+  no permission prompt) once a second while the setting is on. It is true for
+  ScreenCaptureKit recordings and shares and for Screen Sharing sessions,
+  including captures of another display. If a macOS release removes it, the
+  setting reports that sharing cannot be detected. Windows and Linux report no
+  capture to apps; there the setting is unavailable.
+
 ## Safe-to-record CLI output
 
 Normal `backends ...` and `wallets ...` success output now follows a narrow

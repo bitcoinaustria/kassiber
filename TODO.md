@@ -2033,6 +2033,42 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Desktop and handoffs
 
+- [x] Adopt the Rune desktop as the desktop app: moved to
+  `crates/kassiber-desktop` (own workspace and lockfile, excluded from the root
+  workspace), translations and integration logos shared with `ui-tauri/` from
+  `assets/`, Rune built without its default features (no MPL audio decoders),
+  `fmt`/clippy/tests in the gate and a macOS/Linux/Windows CI job.
+- [ ] Make the desktop scene check (`packaging/ci/rune-checks.sh --scenes-only`,
+  `src/checks.rs`) finish and pass, then run it in CI's "Desktop app" job. On an
+  empty `kassiber init` book each Transactions scene waits out
+  `transactions::prime`'s 30 s deadline (its reads never settle), so a full run
+  takes hours; the scenes after `crash` had never been checked before the
+  harness reset the recovery state between renders.
+- [ ] Ship the Rune app in releases: point the prerelease workflow, the
+  Homebrew cask and the Linux channels at `crates/kassiber-desktop/packaging/`
+  instead of the Tauri bundle, and run its Linux and Windows packaging natively.
+- [ ] Desktop reply routing left after the #773 sweep: the custody book-switch
+  reset (`custody/mod.rs`) still drops the link/unlink preview, rules and
+  components queues (only an outside book change, nothing user-started, hits
+  it); `wallets/add` pending flags (`preview_pending`, `core_detect_pending`,
+  `core_test_pending`, template/export) apply any answer, even after
+  `reset_form`.
+- [ ] Desktop English left outside i18n (found in the #773 review sweep): the
+  terminal-command install errors (`native/terminal.rs`), credential-store and
+  managed-settings errors (`secrets/`), assistant status lines ("Stopped by
+  user.", "Could not reach the model provider.", the chat export dialog title),
+  the mempool backend labels (`settings/model.rs`), "No imported rows"
+  (`settings/market.rs`) and the overview's no-data message (`app.rs`). Route
+  each surface through `i18n.rs` with en + de together.
+- [ ] Desktop file picks read the whole file: the Reconcile comparison CSV
+  (`review/tools.rs`) and the generic-ledger import preview
+  (`wallets/add/setup.rs`) load a picked file into memory on the UI thread with
+  no size cap. The assistant's attachments are bounded (`read_bounded`); these
+  need a cap the daemon's import limits agree with, or a path handoff.
+- [ ] Decide when `ui-tauri/` retires. Until then it is the parity reference
+  (`crates/kassiber-desktop/parity/`) and its kind lists are checked against
+  the desktop's (`src/kinds/tests.rs`, which skips when `ui-tauri/` is absent).
+
 - [ ] Let an agent request a brokered session that the user approves with
   Touch ID on signed macOS builds: allow `operator unlock --auth touch-id`
   without a terminal when explicitly requested, since the biometric prompt is

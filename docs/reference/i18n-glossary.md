@@ -150,6 +150,9 @@ FIFO, KESt, ESt, Kz./KZ, **Formular E 1**, **Beilage E 1kv**, § 27 / § 27a /
 | Tax base / assessment basis | Bemessungsgrundlage | Avoid „Steuerbasis". |
 | Exit taxation | Wegzugsbesteuerung | § 27 Abs 6 EStG. Already in code. |
 | Deemed disposal | fiktive Veräußerung | a.k.a. Veräußerungsfiktion. |
+| Exit-tax destination class | Zielstaat | „EU-/EWR-Mitgliedstaat" / „Drittstaat (nicht EU/EWR)". |
+| Tax adviser (Steuerberater handoff) | Steuerberatung | Prose: „deine Steuerberaterin oder dein Steuerberater". |
+| Carrying value (no disposal) | Buchwertfortführung | Basis carries over; „zum Buchwert" in short labels. |
 | Tax year | Veranlagungsjahr | „Steuerjahr" as the shorter UI label. Month „Jänner". |
 | Tax residency | steuerliche Ansässigkeit | Giving it up = Wegzug. |
 | Cost basis / acquisition cost / basis | Anschaffungskosten | One AT term for all three. Fees increase it (Anschaffungsnebenkosten). |

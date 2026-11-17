@@ -1,0 +1,460 @@
+{
+ "scenes": [
+  {
+   "name": "settings-appearance",
+   "rune": {
+    "scene": "settings-appearance",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/appearance",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-market",
+   "rune": {
+    "scene": "settings-market",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/market",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-bitcoin",
+   "rune": {
+    "scene": "settings-bitcoin",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/bitcoin",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-lightning",
+   "rune": {
+    "scene": "settings-lightning",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/lightning",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-liquid",
+   "rune": {
+    "scene": "settings-liquid",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/liquid",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-privacy",
+   "rune": {
+    "scene": "settings-privacy",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/privacy",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-security",
+   "rune": {
+    "scene": "settings-security",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/security",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-ai",
+   "rune": {
+    "scene": "settings-ai",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/ai",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-data",
+   "rune": {
+    "scene": "settings-data",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/data",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-terminal",
+   "rune": {
+    "scene": "settings-terminal",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/terminal",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-developer",
+   "rune": {
+    "scene": "settings-developer",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/developer",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-developer-dev",
+   "rune": {
+    "scene": "settings-developer-dev",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/developer",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-appearance-light",
+   "rune": {
+    "scene": "settings-appearance-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/appearance",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-privacy-light",
+   "rune": {
+    "scene": "settings-privacy-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/privacy",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-appearance-de",
+   "rune": {
+    "scene": "settings-appearance-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/appearance",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-bitcoin-de",
+   "rune": {
+    "scene": "settings-bitcoin-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/bitcoin",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-backend-edit",
+   "rune": {
+    "scene": "settings-backend-edit",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/bitcoin",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     },
+     {
+      "click": {
+       "label": "Edit Bitcoin Mempool Regtest"
+      }
+     },
+     {
+      "wait": 1200
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-backend-add",
+   "rune": {
+    "scene": "settings-backend-add",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/liquid",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     },
+     {
+      "click": {
+       "text": "Add Liquid backend",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1200
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-theme-select",
+   "rune": {
+    "scene": "settings-theme-select",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/appearance",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     },
+     {
+      "click": {
+       "css": "#settings-theme"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-reset-book",
+   "rune": {
+    "scene": "settings-reset-book",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/data",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     },
+     {
+      "click": {
+       "text": "Reset book",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-search-jump",
+   "rune": {
+    "scene": "settings-search-jump",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/privacy",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-ai-form",
+   "rune": {
+    "scene": "settings-ai-form",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/ai",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     },
+     {
+      "click": {
+       "text": "Add provider",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "css": "[data-provider-route=local]"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "css": "[data-provider-preset=ollama]"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ]
+   }
+  },
+  {
+   "name": "settings-ai-expanded",
+   "rune": {
+    "scene": "settings-ai-expanded",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/ai",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     },
+     {
+      "click": {
+       "label": "Ollama details"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "textIncludes": "more providers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ]
+   }
+  }
+ ]
+}

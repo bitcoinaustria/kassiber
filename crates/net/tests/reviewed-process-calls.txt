@@ -126,3 +126,33 @@ crates/kassiber/tests/provider_broker.rs|signal|let status = Command::new("/bin/
 # The Claude and Codex adapters through the same binary, with a fake CLI
 # directory as the whole PATH (plan 23, step 2).
 crates/kassiber/tests/provider_broker_claude_codex.rs|broker|let mut child = Command::new(env!("CARGO_BIN_EXE_kassiber"))
+# Rune desktop app (crates/kassiber-desktop). The bundled `kassiber` binary: the supervised
+# daemon, its pre-launch state-root migration, the demo-book creator, installed-app CLI
+# forwarding, and the consent-gated update check (any egress is the CLI's own, through
+# kassiber-net's routes); headless scene books run it with KASSIBER_NO_EGRESS=1.
+crates/kassiber-desktop/src/daemon.rs|migrate_default_state_root|let mut c = Command::new(&cmd.program);
+crates/kassiber-desktop/src/daemon.rs|spawn|let mut c = Command::new(&cmd.program);
+crates/kassiber-desktop/src/demo/mod.rs|run_create|let mut c = Command::new(&cmd.program);
+crates/kassiber-desktop/src/native/cli.rs|run_cli|match Command::new(&cmd.program)
+crates/kassiber-desktop/src/native/update.rs|run_cli_check|let mut cmd = Command::new(program);
+crates/kassiber-desktop/src/fixtures.rs|build_book|let out = Command::new(&bin)
+# Fixed local OS programs: explicit file/browser opens and reveals (open, explorer, xdg-open,
+# dbus-send FileManager1), notifications for an unbundled build (osascript, gdbus,
+# notify-send), local speech (say), codesign inspection of the native-auth helper, the
+# system UTC offset (date), fontconfig fallback (fc-match), the build's git commit,
+# headless-only process probes/kills (kill), and a Time Machine exclusion test (tmutil).
+crates/kassiber-desktop/src/toastopen/mod.rs|run_chain|let out = std::process::Command::new(c.program)
+crates/kassiber-desktop/src/txdetail/mod.rs|open_external|std::process::Command::new(cmd).arg(target).spawn().is_ok()
+crates/kassiber-desktop/src/native/notify.rs|deliver|std::process::Command::new("/usr/bin/osascript")
+crates/kassiber-desktop/src/native/notify.rs|deliver|let gdbus = Command::new("gdbus")
+crates/kassiber-desktop/src/native/notify.rs|deliver|Command::new("notify-send")
+crates/kassiber-desktop/src/assistant/mod.rs|voice_for|let out = std::process::Command::new("/usr/bin/say")
+crates/kassiber-desktop/src/assistant/mod.rs|toggle_speech|let mut cmd = std::process::Command::new("/usr/bin/say");
+crates/kassiber-desktop/src/secrets/operator.rs|codesign_identity|let verified = Command::new("/usr/bin/codesign")
+crates/kassiber-desktop/src/secrets/operator.rs|codesign_identity|let details = Command::new("/usr/bin/codesign")
+crates/kassiber-desktop/src/reports/diag/time.rs|local_offset|let out = std::process::Command::new("date").arg("+%z").output().ok();
+crates/kassiber-desktop/src/main.rs|chromium_fallback|let out = std::process::Command::new("fc-match")
+crates/kassiber-desktop/build.rs|git|let out = Command::new("git").args(args).output().ok()?;
+crates/kassiber-desktop/src/fixtures.rs|process_alive|std::process::Command::new("kill")
+crates/kassiber-desktop/src/app.rs|on_window_close|let _ = std::process::Command::new("kill")
+crates/kassiber-desktop/src/osleaks/backup.rs|marks_are_set_on_existing_items_and_only_kassibers_are_released|let tm = std::process::Command::new("/usr/bin/tmutil")

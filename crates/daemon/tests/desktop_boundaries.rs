@@ -1,5 +1,11 @@
 //! The desktop boundaries agree with the daemon and with each other.
 //!
+//! The desktop app's request allowlists (`crates/kassiber-desktop/src/kinds.rs`:
+//! `ALLOWED_DAEMON_KINDS`, `STREAMING_DAEMON_KINDS`, `AI_RUNTIME_KINDS`) are the
+//! canonical desktop boundary: they may name only kinds the daemon supports.
+//! Until the Tauri shell is removed it must keep the same lists, apart from the
+//! documented [`DESKTOP_ONLY_KINDS`].
+//!
 //! The Tauri command allowlist (`ui-tauri/src-tauri/src/lib.rs`) and the dev
 //! Vite bridge (`ui-tauri/vite.config.ts`) may forward only kinds the daemon
 //! supports, must forward the same kinds, and must forward every `ui.*` kind
@@ -33,6 +39,85 @@ fn quoted_list(text: &str, start: &str, end: &str) -> BTreeSet<String> {
         .step_by(2)
         .map(str::to_owned)
         .collect()
+}
+
+/// The quoted kinds of one `pub const NAME: &[&str] = &[ … ];` in the desktop
+/// app's `kinds.rs`, line comments dropped.
+fn desktop_list(name: &str) -> BTreeSet<String> {
+    let text = read("crates/kassiber-desktop/src/kinds.rs");
+    let start = text
+        .find(&format!("pub const {name}: &[&str] = &["))
+        .unwrap_or_else(|| panic!("{name} not found in the desktop kinds.rs"));
+    let body = &text[start..];
+    let end = body.find("\n];").expect("list end");
+    body[..end]
+        .lines()
+        .skip(1)
+        .map(|line| line.split("//").next().unwrap_or(""))
+        .flat_map(|line| {
+            line.split('"')
+                .skip(1)
+                .step_by(2)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn desktop_allowlist() -> BTreeSet<String> {
+    desktop_list("ALLOWED_DAEMON_KINDS")
+}
+
+/// Kinds the desktop app allows that the Tauri shell does not, with the reason.
+const DESKTOP_ONLY_KINDS: &[(&str, &str)] = &[(
+    "ui.profiles.settings",
+    "Book settings reads any book's settings and choices (docs/reference/daemon.md); the Tauri dialog predates it",
+)];
+
+fn tauri_list(name: &str) -> BTreeSet<String> {
+    let text = read("ui-tauri/src-tauri/src/lib.rs");
+    let at = text
+        .find(&format!("const {name}: &[&str] = &["))
+        .unwrap_or_else(|| panic!("{name} not found in lib.rs"));
+    quoted_list(&text[at..], "&[", "];")
+}
+
+#[test]
+fn tauri_shell_keeps_the_desktop_lists() {
+    for name in [
+        "ALLOWED_DAEMON_KINDS",
+        "STREAMING_DAEMON_KINDS",
+        "AI_RUNTIME_KINDS",
+    ] {
+        let ours: BTreeSet<String> = desktop_list(name)
+            .into_iter()
+            .filter(|k| !DESKTOP_ONLY_KINDS.iter().any(|(only, _)| only == k))
+            .collect();
+        assert_eq!(
+            tauri_list(name),
+            ours,
+            "{name} drifted between the desktop app and Tauri"
+        );
+    }
+    for (kind, why) in DESKTOP_ONLY_KINDS {
+        assert!(
+            desktop_allowlist().contains(*kind),
+            "{kind} is listed as desktop-only but not allowed"
+        );
+        assert!(!why.trim().is_empty(), "{kind} needs a reason");
+    }
+}
+
+#[test]
+fn desktop_stream_and_ai_lists_are_allowed_kinds() {
+    let allowed = desktop_allowlist();
+    for name in ["STREAMING_DAEMON_KINDS", "AI_RUNTIME_KINDS"] {
+        let extra: Vec<String> = desktop_list(name).difference(&allowed).cloned().collect();
+        assert!(
+            extra.is_empty(),
+            "{name} names kinds outside ALLOWED_DAEMON_KINDS: {extra:?}"
+        );
+    }
 }
 
 fn tauri_allowlist() -> BTreeSet<String> {
@@ -80,6 +165,7 @@ const DESKTOP_KINDS: &[&str] = &[
     "ui.connections.btcpay.create",
     "ui.connections.btcpay.discover",
     "ui.connections.btcpay.test",
+    "ui.connections.bullbitcoin_wallet.create",
     "ui.metadata.bip329.import",
     "ui.rates.kraken_csv.import",
     "ui.rates.latest",
@@ -141,7 +227,7 @@ fn tauri_and_vite_bridge_allowlists_match() {
 #[test]
 fn desktop_allowlists_are_subset_of_daemon_supported_kinds() {
     let supported = supported();
-    for list in [tauri_allowlist(), vite_allowlist()] {
+    for list in [desktop_allowlist(), tauri_allowlist(), vite_allowlist()] {
         let extra: Vec<&String> = list.difference(&supported).collect();
         assert!(
             extra.is_empty(),
@@ -153,8 +239,13 @@ fn desktop_allowlists_are_subset_of_daemon_supported_kinds() {
 #[test]
 fn desktop_kinds_are_supported_and_allowed() {
     let (supported, tauri, vite) = (supported(), tauri_allowlist(), vite_allowlist());
+    let desktop = desktop_allowlist();
     for kind in DESKTOP_KINDS {
         assert!(supported.contains(*kind), "{kind} is not a daemon kind");
+        assert!(
+            desktop.contains(*kind),
+            "{kind} is missing from the desktop allowlist"
+        );
         assert!(
             tauri.contains(*kind),
             "{kind} is missing from the Tauri allowlist"
@@ -169,7 +260,12 @@ fn desktop_kinds_are_supported_and_allowed() {
 #[test]
 fn removed_device_sync_kinds_stay_out_of_every_boundary() {
     // Device sync was removed (plan 19); wallet sync is `ui.wallets.sync`.
-    for list in [supported(), tauri_allowlist(), vite_allowlist()] {
+    for list in [
+        supported(),
+        desktop_allowlist(),
+        tauri_allowlist(),
+        vite_allowlist(),
+    ] {
         assert!(list.iter().all(|k| !k.starts_with("ui.sync.")));
     }
 }
@@ -178,6 +274,7 @@ fn removed_device_sync_kinds_stay_out_of_every_boundary() {
 fn document_import_stage_kind_is_privileged() {
     let kind = "internal.document_import.stage";
     assert!(supported().contains(kind));
+    assert!(!desktop_allowlist().contains(kind));
     assert!(!tauri_allowlist().contains(kind));
     assert!(!vite_allowlist().contains(kind));
 }
@@ -190,6 +287,7 @@ fn exchange_connection_kinds_are_desktop_kinds() {
     for kind in kinds.iter().filter(|k| k.contains("exchange")) {
         assert!(supported.contains(kind), "{kind}");
         assert!(tauri.contains(kind) && vite.contains(kind), "{kind}");
+        assert!(desktop_allowlist().contains(kind), "{kind}");
     }
     let exchanges: Vec<String> = catalog_entries()
         .iter()
@@ -213,6 +311,7 @@ fn refresh_kinds_are_stream_capable_in_desktop_boundaries() {
         .find("STREAM_CAPABLE_BRIDGE_KINDS")
         .expect("Vite stream-capable list");
     let vite = quoted_list(&vite[at..], "new Set([", "]);");
+    let desktop = desktop_list("STREAMING_DAEMON_KINDS");
     for kind in [
         "ui.wallets.sync",
         "ui.freshness.run",
@@ -220,7 +319,7 @@ fn refresh_kinds_are_stream_capable_in_desktop_boundaries() {
         "ui.wallets.document_import.import",
     ] {
         assert!(
-            tauri.contains(kind),
+            desktop.contains(kind) && tauri.contains(kind),
             "{kind} emits progress records and must stream"
         );
         assert!(

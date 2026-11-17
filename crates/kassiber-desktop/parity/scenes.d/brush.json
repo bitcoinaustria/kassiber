@@ -1,0 +1,28 @@
+{
+ "scenes": [
+  {
+   "name": "chart-brush-hover",
+   "rune": {"scene": "chart-brush-hover", "args": []},
+   "tauri": {
+    "path": "/overview",
+    "state": {},
+    "steps": [
+     {"hover": {"css": ".recharts-brush", "fx": 0.5, "fy": 0.5}},
+     {"wait": 400}
+    ]
+   }
+  },
+  {
+   "name": "chart-hover-low",
+   "rune": {"scene": "chart-hover-low", "args": []},
+   "tauri": {
+    "path": "/overview",
+    "state": {},
+    "steps": [
+     {"hover": {"css": "svg.recharts-surface", "fx": 0.4, "fy": 0.8}},
+     {"wait": 400}
+    ]
+   }
+  }
+ ]
+}

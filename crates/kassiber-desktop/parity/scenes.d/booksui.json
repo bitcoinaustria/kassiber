@@ -1,0 +1,346 @@
+{
+ "scenes": [
+  {
+   "name": "booksui-settings-de",
+   "rune": {
+    "scene": "reports-books-settings-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Bucheinstellungen für Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-settings-light",
+   "rune": {
+    "scene": "reports-books-settings-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-settings-region",
+   "rune": {
+    "scene": "reports-books-settings-region",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "css": "#rename-profile-region"
+      }
+     },
+     {
+      "wait": 300
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-settings-year",
+   "rune": {
+    "scene": "reports-books-settings-year",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-settings-custom",
+   "rune": {
+    "scene": "reports-books-settings-custom",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-settings-basis",
+   "rune": {
+    "scene": "reports-books-settings-basis",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-settings-review",
+   "rune": {
+    "scene": "reports-books-settings-review",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-settings-preview",
+   "rune": {
+    "scene": "reports-books-settings-preview",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-settings-preview-de",
+   "rune": {
+    "scene": "reports-books-settings-preview-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Bucheinstellungen für Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-settings-us",
+   "rune": {
+    "scene": "reports-books-settings-us",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     },
+     {
+      "click": {
+       "css": "#rename-profile-region"
+      }
+     },
+     {
+      "wait": 300
+     },
+     {
+      "click": {
+       "text": "United States",
+       "sel": "[role=option]"
+      }
+     },
+     {
+      "wait": 300
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-settings-error",
+   "rune": {
+    "scene": "reports-books-settings-error",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     },
+     {
+      "click": {
+       "label": "Book settings for Full Accounting"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-row-menu",
+   "rune": {
+    "scene": "reports-books-row-menu",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     }
+    ],
+    "ready": "quiet"
+   }
+  },
+  {
+   "name": "booksui-narrow",
+   "rune": {
+    "scene": "reports-books-narrow",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='birds-eye-']"
+     }
+    ],
+    "ready": "quiet"
+   },
+   "width": 720,
+   "height": 900
+  }
+ ]
+}

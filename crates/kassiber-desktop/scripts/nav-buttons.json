@@ -1,0 +1,20 @@
+{"events": [
+  {"t": 0.3, "type": "tap", "button": "back", "x": 760, "y": 800},
+  {"t": 0.6, "type": "mark", "name": "back-over-table"},
+  {"t": 0.7, "type": "tap", "button": "forward", "x": 120, "y": 600},
+  {"t": 0.95, "type": "mark", "name": "forward-over-sidebar"},
+  {"t": 1.0, "type": "tap", "key": "sh-side-panel"},
+  {"t": 1.6, "type": "tap", "key": "asst-input-panel"},
+  {"t": 1.9, "type": "tap", "button": "back", "key": "asst-input-panel"},
+  {"t": 2.3, "type": "mark", "name": "back-in-text-field"},
+  {"t": 2.4, "type": "tap", "button": "forward", "x": 400, "y": 600},
+  {"t": 2.7, "type": "mark", "name": "forward-over-page"},
+  {"t": 2.8, "type": "key", "name": "k", "cmd": true},
+  {"t": 3.2, "type": "tap", "button": "back", "x": 760, "y": 800},
+  {"t": 3.35, "type": "mark", "name": "back-under-modal"},
+  {"t": 3.4, "type": "key", "name": "Escape"},
+  {"t": 3.8, "type": "tap", "key": "sh-bell"},
+  {"t": 4.1, "type": "mark", "name": "popover-open"},
+  {"t": 4.2, "type": "tap", "button": "back", "x": 760, "y": 800},
+  {"t": 4.6, "type": "mark", "name": "end"}
+]}

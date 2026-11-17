@@ -144,3 +144,24 @@ kassiber-mcp
 # bridge uses kassiber-ipc's AF_UNIX socket and named pipe only; provider
 # CLIs start through one reviewed launch (executables.rs, provider_command).
 kassiber-provider-broker
+
+# The Rune desktop app (crates/kassiber-desktop, its own Cargo workspace), git-pinned
+# to one full Rune commit (the manifest check admits that source and its
+# [patch.crates-io] forks of winit, parley_engine, wgpu-hal and accesskit_* only in
+# that manifest). Rune without defaults: AccessKit adapters, Linux D-Bus services
+# (zbus over the session bus's Unix socket; tokio `net` arrives with them, as with
+# zbus-secret-service-keyring-store above), the Metal renderer, native file dialogs
+# and SVG. `tooling` (development builds only; packaging builds without it) adds
+# headless snapshots and scripts, no transport. Left out: `hot` (dioxus devtools,
+# a devtools socket client), `embedded-fonts`, `ogg-audio`. Rune's interaction timing
+# (an OTLP POST to a loopback collector) is in every build, off unless RUNE_PERF=1
+# or OTEL_EXPORTER_OTLP_ENDPOINT names loopback; no feature turns it on.
+rune accessibility dbus metal-backend native-file-dialog svg tooling
+rune-kit
+rune-notify
+# The transaction graph's GPU renderer on Rune's device, its vertex uploads, the
+# BBQR raw-DEFLATE decoder and the macOS camera queue: all already in Rune's tree.
+wgpu std wgsl
+bytemuck derive
+miniz_oxide
+dispatch2

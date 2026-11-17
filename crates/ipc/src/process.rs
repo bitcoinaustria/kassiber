@@ -400,9 +400,9 @@ mod tests {
     fn descriptor_open_in_child(inherit: bool) -> bool {
         let file = tempfile::tempfile().unwrap();
         let fd = file.as_raw_fd();
-        let mut command = shell(&format!(
-            "(: <&{fd}) 2>/dev/null && echo open || echo closed"
-        ));
+        // `/dev/fd/N`, not `<&N`: dash (Ubuntu's `/bin/sh`) cannot parse
+        // descriptor numbers above 9, which parallel tests easily reach.
+        let mut command = shell(&format!("[ -e /dev/fd/{fd} ] && echo open || echo closed"));
         command.stdout(Stdio::Pipe).stdin(Stdio::Null);
         if inherit {
             command.inherit(fd);

@@ -1,0 +1,11 @@
+{"events": [
+ {"t": 0.8, "type": "tap", "key": "onb-open"},
+ {"t": 1.2, "type": "file-dialog", "path": "/tmp/kbe2e/enc/book"},
+ {"t": 3.0, "type": "mark", "name": "passphrase"},
+ {"t": 3.1, "type": "tap", "key": "import-passphrase"},
+ {"t": 3.2, "type": "type", "text": "disposable test passphrase", "every": 0.01},
+ {"t": 3.8, "type": "key", "name": "Enter"},
+ {"t": 6.0, "type": "mark", "name": "books"},
+ {"t": 6.2, "type": "tap", "x": 720, "y": 637},
+ {"t": 10.0, "type": "mark", "name": "end"}
+]}

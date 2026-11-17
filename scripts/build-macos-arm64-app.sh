@@ -10,8 +10,7 @@ SIDECAR_NAME="kassiber-cli-${TARGET_TRIPLE}"
 # a released Kassiber.
 APP_PRODUCT_NAME="Kassiber Dev"
 APP_IDENTIFIER="at.bitcoinaustria.kassiber.dev"
-BINARIES_DIR="$ROOT/ui-tauri/src-tauri/binaries"
-BUNDLE_DIR="$ROOT/ui-tauri/src-tauri/target/$TARGET_TRIPLE/release/bundle"
+PACKAGER="$ROOT/crates/kassiber-desktop/packaging/macos/build-app.sh"
 OUTPUT_DIR="$ROOT/dist/macos-arm64"
 BUNDLES="${BUNDLES:-app,dmg}"
 BACKUP=1
@@ -21,9 +20,9 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/build-macos-arm64-app.sh [--install] [--no-backup]
 
-Build the local ad-hoc-signed macOS arm64 app: "Kassiber Dev"
-(at.bitcoinaustria.kassiber.dev). It installs beside a released Kassiber and
-opens the same books.
+Build the local ad-hoc-signed macOS arm64 desktop app, the Rune app with the
+`kassiber` CLI bundled: "Kassiber Dev" (at.bitcoinaustria.kassiber.dev). It
+installs beside a released Kassiber and opens the same books.
 
   --install          Replace an installed Kassiber Dev (in /Applications or
                      ~/Applications), or copy the app to ~/Applications, and
@@ -35,7 +34,8 @@ opens the same books.
                      since the last snapshot) before this build can open it;
                      see scripts/macos-kassiber-data.sh.
 
-Finished apps and DMGs are copied to dist/macos-arm64/.
+Finished apps and DMGs are copied to dist/macos-arm64/. BUNDLES=app skips the
+DMG.
 EOF
 }
 
@@ -78,8 +78,7 @@ require_command otool
 require_command codesign
 require_command strip
 require_command ditto
-require_command osascript
-require_command pnpm
+require_command hdiutil
 require_command rustup
 require_command cargo
 
@@ -155,81 +154,45 @@ smoke_root="$(cd "$smoke_root" && pwd -P)"
 run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$RUST_BIN" --scratch "$smoke_root/smoke" \
   --expect-commit "$APP_COMMIT"
 
-run pnpm --dir ui-tauri install --frozen-lockfile
+# The Rune app, built without agent tooling, around the CLI built and smoked
+# above: crates/kassiber-desktop/packaging/macos/build-app.sh assembles the
+# bundle (sidecar at Resources/binaries/kassiber-cli/$SIDECAR_NAME, terminal
+# launcher at Resources/bin/kassiber), signs it ad hoc inside out under the
+# release identifiers, and checks both entry points reach the sidecar.
+case ",$BUNDLES," in *,app,*|*,dmg,*) ;; *) echo "BUNDLES names neither app nor dmg: $BUNDLES" >&2; exit 2 ;; esac
+run "$PACKAGER" --kassiber-bin "$RUST_BIN" --identity dev --version "$APP_VERSION" \
+  --commit "$APP_COMMIT_FULL" --channel dev --output "$OUTPUT_DIR"
 
-# The one-dir location and file name the supervisor, the CLI launcher and the
-# Touch ID helper's identity check look in. Sweep the flat layout and an old
-# Node provider_broker/ too, so nothing from an older build rides along.
-mkdir -p "$BINARIES_DIR"
-find "$BINARIES_DIR" -maxdepth 1 -type f -name 'kassiber-cli-*' -delete
-rm -rf "${BINARIES_DIR:?}/kassiber-cli" "${BINARIES_DIR:?}/provider_broker"
-mkdir -p "$BINARIES_DIR/kassiber-cli"
-run cp "$RUST_BIN" "$BINARIES_DIR/kassiber-cli/$SIDECAR_NAME"
-run chmod 755 "$BINARIES_DIR/kassiber-cli/$SIDECAR_NAME"
-
-TAURI_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-tauri-config.XXXXXX")"
-trap 'rm -rf "$smoke_root" "$TAURI_CONFIG_DIR"' EXIT
-TAURI_BUILD_CONFIG="$TAURI_CONFIG_DIR/build.json"
-# Tauri seals the bundle only when a signing identity is set; "-" asks for an
-# ad-hoc signature, so the app is sealed before the DMG is made from it.
-printf '{ "version": "%s", "productName": "%s", "identifier": "%s", "bundle": { "macOS": { "signingIdentity": "-" } } }\n' \
-  "$APP_VERSION" "$APP_PRODUCT_NAME" "$APP_IDENTIFIER" > "$TAURI_BUILD_CONFIG"
-
-# CI=true makes Tauri skip create-dmg's flaky Finder styling step (it scripts
-# Finder through AppleScript and fails without a logged-in GUI session).
-run env CI=true KASSIBER_BUILD_VERSION="$APP_DISPLAY_VERSION" KASSIBER_BUILD_COMMIT="$APP_COMMIT" \
-  pnpm --dir ui-tauri tauri build --target "$TARGET_TRIPLE" --bundles "$BUNDLES" --ci --config "$TAURI_BUILD_CONFIG"
-
-APP_BUNDLE="$BUNDLE_DIR/macos/$APP_PRODUCT_NAME.app"
-if [ -d "$APP_BUNDLE" ]; then
-  bundled_sidecar="$APP_BUNDLE/Contents/Resources/binaries/kassiber-cli/$SIDECAR_NAME"
-  case "$(file "$bundled_sidecar")" in
-    *"Mach-O 64-bit executable arm64"*) ;;
-    *)
-      echo "The app bundle does not contain the kassiber binary at $bundled_sidecar." >&2
-      exit 1
-      ;;
-  esac
-  if [ "$("$bundled_sidecar" --version)" != "$version_text" ]; then
-    echo "The bundled sidecar is not the kassiber binary built above." >&2
-    exit 1
-  fi
-  if [ -e "$APP_BUNDLE/Contents/Resources/binaries/kassiber-cli/_internal" ]; then
-    echo "The app bundle still carries an old Python sidecar payload; refusing it." >&2
-    exit 1
-  fi
-  # The sidecar keeps its file name as its signing identifier, which the Touch
-  # ID helper's identity check expects. Tauri's ad-hoc bundle signing may
-  # re-sign nested code under a derived identifier; if so, restore it and
-  # re-seal the bundle. A Developer ID signature (and with it the Touch ID
-  # helper and Keychain continuity) comes only from the release signing
-  # workflow, which signs every Mach-O under its file name.
-  sidecar_identifier="$(codesign -d --verbose=2 "$bundled_sidecar" 2>&1 | sed -n 's/^Identifier=//p')"
-  if [ "$sidecar_identifier" != "$SIDECAR_NAME" ]; then
-    echo "Re-signing the bundled sidecar as $SIDECAR_NAME (Tauri signed it as '$sidecar_identifier')."
-    run codesign --force --sign - --identifier "$SIDECAR_NAME" "$bundled_sidecar"
-    run codesign --force --sign - --preserve-metadata=entitlements,requirements,flags,runtime "$APP_BUNDLE"
-  fi
-  run codesign --verify --deep --strict "$APP_BUNDLE"
-  sidecar_identifier="$(codesign -d --verbose=2 "$bundled_sidecar" 2>&1 | sed -n 's/^Identifier=//p')"
-  if [ "$sidecar_identifier" != "$SIDECAR_NAME" ]; then
-    echo "The bundled sidecar is signed as '$sidecar_identifier', not $SIDECAR_NAME." >&2
-    exit 1
-  fi
-  bundled_version="$("$APP_BUNDLE/Contents/Resources/bin/kassiber" --version)"
-  if [ "$bundled_version" != "$version_text" ]; then
-    echo "The bundled CLI launcher reports '$bundled_version', expected '$version_text'." >&2
-    exit 1
-  fi
-  run "$APP_BUNDLE/Contents/Resources/bin/kassiber" --help >/dev/null
-  rm -rf "${OUTPUT_DIR:?}/$APP_PRODUCT_NAME.app"
-  run ditto "$APP_BUNDLE" "$OUTPUT_DIR/$APP_PRODUCT_NAME.app"
+APP_BUNDLE="$OUTPUT_DIR/$APP_PRODUCT_NAME.app"
+bundled_sidecar="$APP_BUNDLE/Contents/Resources/binaries/kassiber-cli/$SIDECAR_NAME"
+if [ "$("$bundled_sidecar" --version)" != "$version_text" ]; then
+  echo "The bundled sidecar is not the kassiber binary built above." >&2
+  exit 1
 fi
-for dmg in "$BUNDLE_DIR/dmg/$APP_PRODUCT_NAME"_*.dmg; do
-  if [ -f "$dmg" ]; then
-    run ditto "$dmg" "$OUTPUT_DIR/$(basename "$dmg")"
-  fi
-done
+bundled_version="$("$APP_BUNDLE/Contents/Resources/bin/kassiber" --version)"
+if [ "$bundled_version" != "$version_text" ]; then
+  echo "The bundled CLI launcher reports '$bundled_version', expected '$version_text'." >&2
+  exit 1
+fi
+run "$APP_BUNDLE/Contents/Resources/bin/kassiber" --help >/dev/null
+
+case ",$BUNDLES," in
+  *,dmg,*)
+    # A plain compressed image of the sealed app; no Finder styling (it
+    # scripts Finder and fails without a logged-in GUI session).
+    dmg="$OUTPUT_DIR/${APP_PRODUCT_NAME}_${APP_VERSION}_aarch64.dmg"
+    dmg_stage="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-dmg.XXXXXX")"
+    trap 'rm -rf "$smoke_root" "$dmg_stage"' EXIT
+    run ditto "$APP_BUNDLE" "$dmg_stage/$APP_PRODUCT_NAME.app"
+    ln -s /Applications "$dmg_stage/Applications"
+    rm -f "$dmg"
+    run hdiutil create -quiet -volname "$APP_PRODUCT_NAME" -srcfolder "$dmg_stage" -ov -format UDZO "$dmg"
+    ;;
+esac
+case ",$BUNDLES," in
+  *,app,*) ;;
+  *) rm -rf "${APP_BUNDLE:?}" ;;
+esac
 
 # Warn when an installed Kassiber comes from another commit: whichever app is
 # newer may upgrade the books, and an older build then refuses them. Read its

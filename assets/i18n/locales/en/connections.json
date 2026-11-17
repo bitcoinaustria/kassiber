@@ -50,7 +50,53 @@
     "clearAll": "Clear all"
   },
   "table": {
-    "balanceOverlap": "Shared outpoint · wallet shares overlap"
+    "balanceOverlap": "Shared outpoint · wallet shares overlap",
+    "columns": {
+      "connection": "Connection",
+      "transactions": "Transactions",
+      "lastActivity": "Last activity",
+      "composition": "Composition",
+      "taxFree": "Tax-free",
+      "balance": "Balance"
+    },
+    "category": {
+      "onChain": "On-chain",
+      "liquid": "Liquid",
+      "lightning": "Lightning",
+      "nwc": "NWC",
+      "ecash": "Ecash",
+      "btcpay": "BTCPay",
+      "exchange": "Exchange",
+      "custodial": "Custodial platform",
+      "csv": "CSV",
+      "bip329": "BIP329",
+      "custom": "Custom",
+      "infrastructure": "Infrastructure"
+    },
+    "never": "never",
+    "emptyNoWallets": "No wallets yet — add a wallet to start syncing or importing history.",
+    "emptyFiltered": "No wallets or sources match your filters.",
+    "meta": {
+      "defaultBackend": "default backend",
+      "firstPartyInfra": "first-party infra",
+      "addresses_one": "{{count}} address",
+      "addresses_other": "{{count}} addresses",
+      "channels_one": "{{count}} channel",
+      "channels_other": "{{count}} channels",
+      "gapLimit": "gap limit {{gap}}",
+      "deprecated": "deprecated"
+    },
+    "share": {
+      "firstParty": "First-party infrastructure",
+      "hidden": "Wallet share hidden",
+      "below": "<{{percent}}% of total balance",
+      "ofTotal": "{{percent}}% of total balance"
+    },
+    "backendEndpoint": "Backend endpoint",
+    "backendDefault": "Default",
+    "backendConfigured": "Configured",
+    "wallets_one": "{{count}} wallet",
+    "wallets_other": "{{count}} wallets"
   },
   "detail": {
     "notFound": "No connection found for {{id}}.",

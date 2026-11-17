@@ -1,0 +1,8 @@
+Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fee Amount,Fee Asset,Fiat Value,Counterparty,Note,Tx-ID
+Buy,2024-03-01T10:00:00Z,0.01500000,BTC,,,,,850.00,Test Exchange,synthetic regtest row,
+Buy,2024-04-12T09:30:00Z,0.02000000,BTC,,,,,1200.00,Test Exchange,synthetic regtest row,
+Spend,2024-06-02T18:45:00Z,,,0.00500000,BTC,0.00001000,BTC,310.00,Coffee Shop,synthetic regtest row,
+Income,2024-07-15T12:00:00Z,0.00250000,BTC,,,,,140.00,Client,synthetic regtest row,
+Sell,2024-09-20T08:10:00Z,,,0.00800000,BTC,,,500.00,Test Exchange,synthetic regtest row,
+Buy,2024-11-05T14:20:00Z,0.01000000,BTC,,,,,900.00,Test Exchange,synthetic regtest row,
+Bogus,not-a-date,abc,BTC,,,,,,,synthetic bad row,

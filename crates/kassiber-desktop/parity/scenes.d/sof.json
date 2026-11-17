@@ -1,0 +1,557 @@
+{
+ "scenes": [
+  {
+   "name": "provenance-sof-target",
+   "rune": {
+    "scene": "provenance-sof-target",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "What needs explaining?"
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-target-light",
+   "rune": {
+    "scene": "provenance-sof-target-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds",
+    "state": {
+     "developerToolsEnabled": true,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "waitText": "What needs explaining?"
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-target-de",
+   "rune": {
+    "scene": "provenance-sof-target-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds",
+    "state": {
+     "developerToolsEnabled": true,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "waitText": "Was soll erklärt werden?"
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-filters",
+   "rune": {
+    "scene": "provenance-sof-filters",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "What needs explaining?"
+     },
+     {
+      "click": {
+       "text": "Filters",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 300
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-options",
+   "rune": {
+    "scene": "provenance-sof-options",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "What needs explaining?"
+     },
+     {
+      "click": {
+       "text": "Planned sale or transaction reference",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 300
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-coverage",
+   "rune": {
+    "scene": "provenance-sof-coverage",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "What needs explaining?"
+     },
+     {
+      "click": {
+       "textIncludes": "Historical inbound coverage",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-selected",
+   "rune": {
+    "scene": "provenance-sof-selected",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds?tx={fx:sof_blocked}",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Report amount"
+     },
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-trace",
+   "rune": {
+    "scene": "provenance-sof-trace",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds?tx={fx:sof_blocked}",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Report amount"
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "textIncludes": "Trace these funds",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Where did these funds come from?"
+     },
+     {
+      "wait": 500
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-trace-light",
+   "rune": {
+    "scene": "provenance-sof-trace-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds?tx={fx:sof_blocked}",
+    "state": {
+     "developerToolsEnabled": true,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "waitText": "Report amount"
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "textIncludes": "Trace these funds",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Where did these funds come from?"
+     },
+     {
+      "wait": 500
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-trace-de",
+   "rune": {
+    "scene": "provenance-sof-trace-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds?tx={fx:sof_blocked}",
+    "state": {
+     "developerToolsEnabled": true,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "waitText": "Berichtsbetrag"
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "textIncludes": "Herkunft nachvollziehen",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1200
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-trace-advanced",
+   "rune": {
+    "scene": "provenance-sof-trace-advanced",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds?tx={fx:sof_blocked}",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Report amount"
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "textIncludes": "Trace these funds",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Where did these funds come from?"
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "textIncludes": "Advanced review editor",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1200
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-trace-node",
+   "rune": {
+    "scene": "provenance-sof-trace-node",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds?tx={fx:sof_blocked}",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Report amount"
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "textIncludes": "Trace these funds",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Where did these funds come from?"
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "labelPrefix": "Earlier movement"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-disclose",
+   "book": "sof-seeded",
+   "rune": {
+    "scene": "provenance-sof-disclose",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds?tx={fx:full}",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Report amount"
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "textIncludes": "Trace these funds",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Where did these funds come from?"
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "textIncludes": "Review the report",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "What you share"
+     },
+     {
+      "wait": 800
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-disclose-details",
+   "book": "sof-seeded",
+   "rune": {
+    "scene": "provenance-sof-disclose-details",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds?tx={fx:full}",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Report amount"
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "textIncludes": "Trace these funds",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Where did these funds come from?"
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "textIncludes": "Review the report",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "What you share"
+     },
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Transaction and disclosure details",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-disclose-options",
+   "book": "sof-seeded",
+   "rune": {
+    "scene": "provenance-sof-disclose-options",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds?tx={fx:full}",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Report amount"
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "textIncludes": "Trace these funds",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Where did these funds come from?"
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "textIncludes": "Review the report",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "What you share"
+     },
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Adjust report",
+       "sel": "summary"
+      }
+     },
+     {
+      "wait": 400
+     }
+    ]
+   }
+  },
+  {
+   "name": "provenance-sof-export",
+   "book": "sof-seeded",
+   "rune": {
+    "scene": "provenance-sof-export",
+    "args": []
+   },
+   "tauri": {
+    "path": "/source-of-funds?tx={fx:full}",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Report amount"
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "textIncludes": "Trace these funds",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Where did these funds come from?"
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "textIncludes": "Review the report",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "What you share"
+     },
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "textIncludes": "Confirm preview",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Your source-of-funds report"
+     },
+     {
+      "wait": 400
+     }
+    ]
+   }
+  }
+ ]
+}

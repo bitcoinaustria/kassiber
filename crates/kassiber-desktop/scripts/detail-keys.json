@@ -1,0 +1,15 @@
+{"events": [
+ {"t": 0.3, "type": "key", "name": "2"},
+ {"t": 0.6, "type": "key", "name": "3"},
+ {"t": 0.9, "type": "key", "name": "4"},
+ {"t": 1.2, "type": "key", "name": "5"},
+ {"t": 1.5, "type": "key", "name": "1"},
+ {"t": 1.8, "type": "key", "name": "e"},
+ {"t": 2.1, "type": "key", "name": "2"},
+ {"t": 2.4, "type": "tap", "key": "txd-label"},
+ {"t": 2.7, "type": "tap", "key": "txd-label-opt-Income"},
+ {"t": 3.0, "type": "tap", "key": "txd-discard"},
+ {"t": 3.3, "type": "key", "name": "e"},
+ {"t": 3.6, "type": "tap", "key": "txd-save"},
+ {"t": 5.0, "type": "mark", "name": "end"}
+]}

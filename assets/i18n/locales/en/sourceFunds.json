@@ -383,6 +383,8 @@
     "linkRejected": "Link rejected",
     "linkReviewedBody": "{{type}} reviewed.",
     "linkRejectedBody": "{{type}} rejected.",
+    "evidenceAttachFailed": "Link accepted, evidence not attached",
+    "evidenceAttachFailedBody": "The link is accepted, but the selected evidence could not be attached: {{error}}",
     "manualLinkAdded": "Manual link added",
     "manualLinkBody": "The reviewed flow has been updated.",
     "gapMarked": "Gap marked reviewed",

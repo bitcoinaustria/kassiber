@@ -1,10 +1,31 @@
 # Desktop Reference
 
-Kassiber's desktop shell uses Tauri 2 + React + TypeScript with the Rust
-`kassiber` binary running as a long-lived sidecar daemon over JSONL. See
-[../plan/01-stack-decision.md](../plan/01-stack-decision.md) for the stack
-decision and [../plan/04-desktop-ui.md](../plan/04-desktop-ui.md) for the
-implementation plan.
+Kassiber's desktop app is a native Rust UI built with
+[Rune](https://github.com/anomalyco/rune), in
+[`crates/kassiber-desktop`](../../crates/kassiber-desktop/README.md). It runs
+the Rust `kassiber` binary as a long-lived sidecar daemon over JSONL, like the
+CLI's other front ends, so the desktop and the CLI share one accounting core.
+The crate is its own Cargo workspace (the root workspace excludes it) and
+shares its translation bundles and integration logos with the Tauri app
+through `assets/` at the repository root.
+
+```bash
+cargo build --release -p kassiber                       # the daemon, from the root
+crates/kassiber-desktop/scripts/run.sh --data-root <a disposable book>/data
+crates/kassiber-desktop/packaging/ci/rune-checks.sh --skip-scenes   # fmt, clippy, tests
+crates/kassiber-desktop/packaging/macos/build-app.sh --kassiber-bin target/release/kassiber --unsigned --output <dir>
+```
+
+The crate's [README](../../crates/kassiber-desktop/README.md) covers headless
+snapshots, scenes, fixtures, the parity harness and packaging.
+
+The earlier Tauri 2 + React + TypeScript shell (`ui-tauri/`) is still in the
+tree and is the reference the Rune app is held to; most of this document
+describes behaviour both share, in the terms of the React code where that is
+where it was first written. See
+[../plan/01-stack-decision.md](../plan/01-stack-decision.md) for the original
+stack decision and [../plan/04-desktop-ui.md](../plan/04-desktop-ui.md) for
+the implementation plan.
 
 The desktop shell is a pre-alpha preview. It already uses real daemon-backed
 paths for the main setup, review, report, export, assistant, and diagnostics
@@ -381,7 +402,17 @@ local graph queries. The "Look up on-chain" action appears only where a lookup
 could still add something: a row with no local graph, or a Bitcoin graph whose
 spent outputs lack their amounts, mostly rows without a synced wallet or left
 incomplete by the pass's limits or a backend failure; a local Liquid graph is
-never replaced. Opening the panel never starts a network request.
+never replaced. Opening the panel starts no network request, with one
+owner-approved exception: while **Settings → Privacy → Fill in transaction
+details from the wallet's backend** is on (the default) and offline mode is off,
+opening a Bitcoin transaction whose spent amounts are missing asks the backend
+its own wallet syncs from, and nothing else, for them (`lookup:
+"wallet_backend"`; see [privacy and security](privacy-and-security.md#external-requests-complete-list)).
+Such rows show no lookup notice or button, only a subtle loading line, and one
+quiet line when the amounts could not be loaded ("Offline — input amounts not
+loaded", "Input amounts unavailable: backend unreachable"). The Rune desktop
+sends it; the Tauri renderer does not yet and keeps the explicit lookup for
+every row.
 Manual lookups use the wallet's own backend first and never a server
 Kassiber merely ships as a default, so the panel follows whatever observes the
 wallet and stays silent instead of reaching for third-party infrastructure; with
@@ -902,6 +933,35 @@ first notification is posted, which can only happen after the switch is on;
 debug builds post as Terminal. Linux notification servers generally do not
 activate the app on click. Delivery adds no network request, poll, or
 probe; it only reacts to work that was already authorized.
+
+### Clipboard, screen sharing and OS backups (Rune desktop)
+
+The Rune desktop's handling lives in `crates/kassiber-desktop/src/osleaks/`. The
+privacy rules are in
+[privacy and security](privacy-and-security.md#operating-system-surfaces).
+
+- **Copies** go through `osleaks::clipboard::copy` (`settings::effects::copy`
+  delegates to it). Never call `Tx::copy` directly. macOS writes the
+  pasteboard on a `kassiber-clipboard` worker thread: current host only, plus
+  the concealed and transient nspasteboard.org types. Windows and Linux use
+  Rune's `copy_secret`. **Settings → Privacy → Clear clipboard after copy**
+  (`clearClipboard`) sets the 30-second clear. Locking the session and
+  quitting clear a copy that is still held.
+- **Hide amounts while the screen is shared** (`hideAmountsWhileScreenShared`
+  in `kb.ui`, default on) sits in Settings → Privacy → Screen & clipboard.
+  While the app holds amounts hidden, a status line there says so, and a toast
+  appears when hiding starts. Detection is macOS only (see the privacy
+  reference); on other systems the switch is disabled and says why.
+- **Keep unencrypted books out of Time Machine**
+  (`excludeUnencryptedFromBackups`, default on) sits in Settings → Data →
+  Backup & restore, with one line describing the open book's state. A
+  synced-folder warning appears there while an unencrypted book is in a
+  cloud-synced folder. On Windows and Linux the row is replaced by a note for
+  unencrypted books.
+- Tooling runs (`persist::file::tooling_run()`: tests, `--scene`, `--snap`,
+  `--script`, `--tree`, the click-through) never write the clipboard or set
+  file attributes. They record the plan instead (`osleaks::clipboard::recorded`,
+  `osleaks::backup::recorded`). Scenes: `osleaks-privacy*`, `osleaks-data*`.
 
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
 launcher without administrator privileges. It writes a small managed launcher

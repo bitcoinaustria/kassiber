@@ -1,0 +1,75 @@
+[package]
+name = "kassiber-desktop"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Kassiber's native desktop app, built with Rune"
+
+# Its own workspace and lockfile: the root Cargo workspace excludes this crate (Rune and its
+# graphics stack never enter the backend's dependency tree).
+[workspace]
+
+# Rune's agent tooling (headless `--snap`, `--tree`, `--script`, `--scene`, ...) is on for development
+# and the parity harness, and off in shipped builds: packaging builds with `--no-default-features`
+# (packaging/macos/build-app.sh), which also drops the scene table, so a release binary refuses
+# every headless argument. Debug builds always carry Rune's tooling regardless.
+[features]
+default = ["tooling"]
+tooling = ["rune/tooling"]
+
+[dependencies]
+# Rune without its defaults, then only what the app uses: AccessKit adapters (`accessibility`), the
+# Linux D-Bus services (`dbus`: the desktop's light/dark preference; `native-file-dialog` needs it
+# too), the Metal renderer Mac apps draw with by default (`metal-backend`), SVG logos (`svg`) and
+# native Open/Save dialogs. Left out: `embedded-fonts` (on native Rune only falls back to its Inter
+# when an app registers no fonts, and this one registers its own, src/main.rs `FONTS`) and
+# `ogg-audio` (no audio; it would link the MPL-2.0 symphonia/opuscule decoders).
+rune = { git = "https://github.com/anomalyco/rune", rev = "f6cf57db95c662c99c40d682a6076f20f18b2f20", default-features = false, features = ["accessibility", "dbus", "metal-backend", "native-file-dialog", "svg"] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "f6cf57db95c662c99c40d682a6076f20f18b2f20" }
+# OS notifications through the platform's API (UNUserNotificationCenter, Windows toasts):
+# Rune's own crate at the same revision (src/native/notify.rs).
+rune-notify = { git = "https://github.com/anomalyco/rune", rev = "f6cf57db95c662c99c40d682a6076f20f18b2f20" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The transaction graph's 3D glass renderer (src/txdetail/graph/gpu): the same wgpu Rune draws with
+# (its compositor hands us its device), and bytemuck for vertex/uniform uploads.
+wgpu = { version = "~30.0.2", default-features = false, features = ["std", "wgsl"] }
+bytemuck = { version = "1.25", features = ["derive"] }
+# The OS credential store (src/secrets): the Tauri shell's crates and versions, so items it wrote
+# keep working. `zeroize` clears passphrase buffers.
+keyring-core = "1.0.0"
+zeroize = "1.8"
+# BBQR wallet-material scans (src/wallets/add/bbqr.rs): the `Z` encoding is raw DEFLATE, which the
+# web inflates with pako. Already in the tree (through Rune's image decoders); no new crate.
+miniz_oxide = "0.8.9"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1.0.0", features = ["keychain"] }
+block2 = "0.6.2"
+core-foundation = "0.10.1"
+# The scanner camera's serial capture queue (src/wallets/add/camera.rs). Already in the tree.
+dispatch2 = "0.3.1"
+objc2 = "0.6.4"
+objc2-foundation = "0.3.2"
+security-framework = { version = "3.7", features = ["OSX_10_15"] }
+security-framework-sys = "2.17.0"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store = "1.0.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus-secret-service-keyring-store = { version = "1.0.0", features = ["rt-tokio-crypto-rust"] }
+
+[patch.crates-io]
+winit = { git = "https://github.com/anomalyco/rune", rev = "f6cf57db95c662c99c40d682a6076f20f18b2f20" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "f6cf57db95c662c99c40d682a6076f20f18b2f20" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "f6cf57db95c662c99c40d682a6076f20f18b2f20" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "f6cf57db95c662c99c40d682a6076f20f18b2f20" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "f6cf57db95c662c99c40d682a6076f20f18b2f20" }
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.release]
+debug = "line-tables-only"

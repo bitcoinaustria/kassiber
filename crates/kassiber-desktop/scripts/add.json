@@ -1,0 +1,1 @@
+{"events": [{"t": 0.1, "type": "tap", "key": "add-connection"}, {"t": 0.4, "type": "type", "text": "bit"}, {"t": 0.8, "type": "tap", "key": "add-filter-exchanges"}]}

@@ -1,0 +1,187 @@
+{
+ "scenes": [
+  {
+   "name": "links-fix-assistant",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "links-fix-assistant",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "text": "Fix with assistant",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "links-fix-assistant-de",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "links-fix-assistant-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "text": "Mit Assistent beheben",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "links-ask-cause",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "links-ask-cause",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "text": "Ask about this",
+       "sel": "button",
+       "nth": 0
+      }
+     },
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "links-review-row",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "links-review-row",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "0a5b301b",
+       "sel": "button",
+       "nth": 0
+      }
+     },
+     {
+      "wait": 2500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "links-pair-unpair",
+   "book": "residual-pair",
+   "rune": {
+    "scene": "links-pair-unpair",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Regtest Treasury",
+       "sel": "button",
+       "nth": 0
+      }
+     },
+     {
+      "wait": 2500
+     },
+     {
+      "click": {
+       "textIncludes": "Linked",
+       "sel": "[role=tab]"
+      }
+     },
+     {
+      "wait": 600
+     },
+     {
+      "click": {
+       "text": "Unpair",
+       "sel": "[role=dialog] button, aside button, [data-slot=sheet-content] button",
+       "nth": 0
+      }
+     },
+     {
+      "wait": 2500
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "links-auto-lock",
+   "rune": {
+    "scene": "links-auto-lock",
+    "args": []
+   },
+   "tauri": {
+    "path": "/settings/security",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1500
+     },
+     {
+      "click": {
+       "css": "#settings-auto-lock"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ]
+   }
+  }
+ ]
+}

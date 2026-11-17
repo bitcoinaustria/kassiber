@@ -1,0 +1,107 @@
+{
+"events": [
+{
+"t": 0.6,
+"type": "tap",
+"key": "onb-create"
+},
+{
+"t": 1.4,
+"type": "tap",
+"key": "onb-continue"
+},
+{
+"t": 2.2,
+"type": "tap",
+"key": "onb-sync-skip"
+},
+{
+"t": 2.8,
+"type": "tap",
+"key": "onb-continue"
+},
+{
+"t": 3.6,
+"type": "tap",
+"key": "onb-continue"
+},
+{
+"t": 4.4,
+"type": "tap",
+"key": "database-passphrase"
+},
+{
+"t": 4.6,
+"type": "type",
+"text": "disposable test passphrase",
+"every": 0.01
+},
+{
+"t": 5.4,
+"type": "tap",
+"key": "database-passphrase-confirm"
+},
+{
+"t": 5.6,
+"type": "type",
+"text": "disposable test passphrase",
+"every": 0.01
+},
+{
+"t": 6.4,
+"type": "tap",
+"key": "recovery-ack"
+},
+{
+"t": 7.0,
+"type": "tap",
+"key": "onb-continue"
+},
+{
+"t": 7.8,
+"type": "mark",
+"name": "review"
+},
+{
+"t": 8.6,
+"type": "tap",
+"key": "onb-continue"
+},
+{
+"t": 12.0,
+"type": "mark",
+"name": "overview"
+},
+{
+"t": 12.5,
+"type": "tap",
+"key": "sh-lock"
+},
+{
+"t": 13.5,
+"type": "mark",
+"name": "locked"
+},
+{
+"t": 13.6,
+"type": "tap",
+"key": "sh-lock-passphrase"
+},
+{
+"t": 13.8,
+"type": "type",
+"text": "disposable test passphrase",
+"every": 0.01
+},
+{
+"t": 14.4,
+"type": "key",
+"name": "Enter"
+},
+{
+"t": 18.0,
+"type": "mark",
+"name": "end"
+}
+]
+}

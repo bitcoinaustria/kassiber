@@ -409,6 +409,7 @@
     "expandAria": "Panel ausklappen"
   },
   "balanceChart": {
+    "noHistory": "Noch kein Saldoverlauf – synchronisiere oder importiere eine Wallet, um dieses Diagramm aufzubauen.",
     "title": "Guthaben & Performance",
     "fullscreen": "Vollbild",
     "srDescription": "Vergrößerte Ansicht des Guthabens über die Zeit, mit Hover-Scrubber und optionalem Modus nach Verbindung.",
@@ -461,6 +462,74 @@
     "quarantines_one": "{{count}} Transaktion in Quarantäne ist ausgeschlossen. Kläre sie in der <queue>Quarantäneliste</queue>, bevor du dich auf den Betrag verlässt.",
     "quarantines_other": "{{count}} Transaktionen in Quarantäne sind ausgeschlossen. Kläre sie in der <queue>Quarantäneliste</queue>, bevor du dich auf den Betrag verlässt.",
     "exportDraft": "Unvollständiger Entwurf — Exporte bleiben zur Prüfung verfügbar."
+  },
+  "exitTax": {
+    "description": "Schätze die österreichische Wegzugsbesteuerung auf deine Bitcoin, falls du deine steuerliche Ansässigkeit aufgibst — eine fiktive Veräußerung zum Marktwert. Gib den Entwurf deiner Steuerberaterin oder deinem Steuerberater.",
+    "departureDate": "Wegzugsdatum",
+    "pickDate": "Datum wählen",
+    "calendar": {
+      "previousMonth": "Vorheriger Monat",
+      "nextMonth": "Nächster Monat"
+    },
+    "destination": {
+      "label": "Zielstaat",
+      "euEea": "EU-/EWR-Mitgliedstaat",
+      "thirdCountry": "Drittstaat (nicht EU/EWR)"
+    },
+    "loadFailed": "Die Schätzung der Wegzugsbesteuerung konnte nicht geladen werden",
+    "unknownError": "Unbekannter Fehler.",
+    "headline": {
+      "title": "Geschätzte Wegzugsbesteuerung",
+      "rate": "{{rate}} auf {{gain}} steuerpflichtigen Gewinn",
+      "rateNeu": "{{rate}} auf {{gain}} steuerpflichtigen Gewinn aus Neubestand",
+      "on": "auf {{gain}} steuerpflichtigen Gewinn",
+      "onNeu": "auf {{gain}} steuerpflichtigen Gewinn aus Neubestand",
+      "neuGain": "Gewinn Neubestand",
+      "taxableGain": "Steuerpflichtiger Gewinn",
+      "altExcluded": "Altbestand (ausgenommen)",
+      "excludedHoldings": "Ausgenommene Bestände",
+      "method": "Methode",
+      "jurisdiction": "Steuerjurisdiktion"
+    },
+    "timing": {
+      "deferredTitle": "Ermittelt, aber bis zur Veräußerung aufgeschoben",
+      "deferredBody": "Bei einem Wegzug in einen EU-/EWR-Staat wird die Steuer ermittelt, auf Antrag aber erst erhoben, wenn du die Wirtschaftsgüter tatsächlich veräußerst (Nichtfestsetzung, § 27 Abs 6 Z 1 lit a).",
+      "dueTitle": "Sofort mit dem Wegzug fällig",
+      "dueBody": "Bei einem Wegzug in einen Drittstaat (nicht EU/EWR) wird die Steuer auf die fiktive Veräußerung mit dem Wegzug fällig."
+    },
+    "columns": {
+      "asset": "Asset",
+      "regime": "Regime",
+      "quantity": "Menge",
+      "costBasis": "Anschaffungskosten",
+      "marketValue": "Marktwert",
+      "gain": "Gewinn",
+      "kennzahl": "Kennzahl",
+      "wallet": "Wallet"
+    },
+    "lots": {
+      "title": "Fiktive Veräußerung zum Marktwert",
+      "neuTaxable": "Neubestand · steuerpflichtig",
+      "taxable": "Steuerpflichtig",
+      "altTaxFree": "Altbestand · steuerfrei",
+      "taxFree": "Steuerfrei",
+      "excluded": "ausgenommen"
+    },
+    "holdings": {
+      "title": "Wallet-Bestände (Kontext)"
+    },
+    "handoff": {
+      "title": "Übergabe an die Steuerberatung",
+      "body": "Exportiere die Schätzung, damit deine Steuerberatung sie prüfen und bestätigen kann.",
+      "exportPdf": "PDF exportieren",
+      "exportXlsx": "XLSX exportieren",
+      "saved": "{{format}}-Übergabe gespeichert — {{file}}"
+    },
+    "exportFailed": "Export fehlgeschlagen.",
+    "assumptions": {
+      "title": "Annahmen & Prüfung"
+    },
+    "historicalNote": "Historischer Hinweis. Die Wegzugsbesteuerung hat eine dunkle Vorgeschichte: Die „Reichsfluchtsteuer“ entstand 1931 in der Weimarer Republik als Abgabe gegen Kapitalflucht, ab 1933 machte das NS-Regime sie zu einem Instrument, um Jüdinnen und Juden und andere Verfolgte bei ihrer Flucht ihres Vermögens zu berauben."
   },
   "widgets": {
     "tax": {

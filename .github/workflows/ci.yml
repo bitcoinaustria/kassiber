@@ -338,6 +338,64 @@ jobs:
         if: steps.observer_paths.outputs.run != 'true'
         run: echo "The dependency-backed chain-observer lane is not required for this change."
 
+  desktop:
+    name: Desktop app (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    env:
+      # As in the Rust crates job: no debug info keeps the test build within
+      # the runner's disk. Panic messages keep their file and line.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      KASSIBER_NO_EGRESS: "1"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      # Rune's Linux build links fontconfig (parley's system font source) and
+      # compiles wayland-backend's C shim; winit, wgpu, AccessKit, D-Bus and the
+      # file dialog portal are pure Rust or load their libraries at run time.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if sudo apt-get -o Acquire::Retries=3 update \
+              && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
+                pkg-config libfontconfig1-dev libwayland-dev libxkbcommon-dev; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then exit 1; fi
+            sleep $((attempt * 30))
+          done
+
+      # The redaction test compares the app's floor with the backend's scanner
+      # corpus, which is locked test data.
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
+
+      # The desktop crate is its own Cargo workspace with its own target
+      # directory, cached apart from the root workspace's.
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: rust-desktop-${{ runner.os }}
+          save-cache: "true"
+          workspaces: crates/kassiber-desktop -> target
+
+      # The scene check (`--scenes-only`) is not run here yet: on the empty
+      # book CI would create, each Transactions scene waits out its 30 s load
+      # deadline, so a full run takes hours (TODO.md, "Desktop and handoffs").
+      - name: Format, lint (with and without agent tooling) and unit tests
+        shell: bash
+        run: crates/kassiber-desktop/packaging/ci/rune-checks.sh --skip-scenes
+
   required:
     name: required
     if: always()
@@ -347,6 +405,7 @@ jobs:
       - session-replay
       - tooling
       - chain-observers
+      - desktop
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -358,7 +417,8 @@ jobs:
           echo "- Recorded sessions: ${{ needs.session-replay.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tooling scripts: ${{ needs.tooling.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Desktop app: ${{ needs.desktop.result }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce required checks
-        if: ${{ needs.frontend.result != 'success' || needs.tax-engine.result != 'success' || needs.session-replay.result != 'success' || needs.tooling.result != 'success' || needs.chain-observers.result != 'success' }}
+        if: ${{ needs.frontend.result != 'success' || needs.tax-engine.result != 'success' || needs.session-replay.result != 'success' || needs.tooling.result != 'success' || needs.chain-observers.result != 'success' || needs.desktop.result != 'success' }}
         run: exit 1

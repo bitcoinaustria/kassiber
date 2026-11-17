@@ -1,0 +1,1 @@
+{"events": [{"t": 0.3, "type": "mark", "name": "before"}, {"t": 0.4, "type": "drag", "key": "graph-3d-0", "dx": 260, "dy": 110, "dur": 0.8}, {"t": 1.4, "type": "key", "name": "Right"}, {"t": 1.5, "type": "key", "name": "Home"}, {"t": 1.8, "type": "mark", "name": "after"}]}

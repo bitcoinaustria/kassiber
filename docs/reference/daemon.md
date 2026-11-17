@@ -35,7 +35,7 @@ accepts either an integer tax `year` (2009–2100), which the core resolves to
 the book's own tax year ([tax years](tax.md#tax-years)), or optional
 `start` / `end` RFC3339 timestamps, not both; optional `wallets` as an
 array of wallet ids or labels; and `include_snapshot` to prepend an as-of-now
-cover snapshot. The desktop sends the Reports page's `year`. With a `year`,
+cover snapshot. Both desktops send the Reports page's `year`. With a `year`,
 `timeframe` adds `tax_year`, `first_day` and `last_day` (the local days the
 PDF shows); `start` and `end` stay the UTC instants it read. The export response includes `data_integrity` (now with an
 `internal_transfers` count + volume), period-end `wallet_holdings` /
@@ -859,14 +859,17 @@ For a new desktop-invoked kind, keep these declarations in lockstep:
 | Layer | Declaration | Source |
 | --- | --- | --- |
 | Daemon handler support | `supported_kinds()` | [crates/daemon/src/lib.rs](../../crates/daemon/src/lib.rs) |
-| Tauri renderer invocation | `ALLOWED_DAEMON_KINDS` | [lib.rs](../../ui-tauri/src-tauri/src/lib.rs) |
-| Browser bridge invocation | `ALLOWED_BRIDGE_KINDS` | [vite.config.ts](../../ui-tauri/vite.config.ts) |
-| Streaming support, when needed | `STREAMING_DAEMON_KINDS` / `STREAM_CAPABLE_BRIDGE_KINDS` | The same Rust / Vite files |
+| Desktop app invocation (canonical) | `ALLOWED_DAEMON_KINDS`, `STREAMING_DAEMON_KINDS`, `AI_RUNTIME_KINDS` | [kinds.rs](../../crates/kassiber-desktop/src/kinds.rs) |
+| Tauri renderer invocation (outgoing shell) | the same three lists | [lib.rs](../../ui-tauri/src-tauri/src/lib.rs) |
+| Browser bridge invocation | `ALLOWED_BRIDGE_KINDS` / `STREAM_CAPABLE_BRIDGE_KINDS` | [vite.config.ts](../../ui-tauri/vite.config.ts) |
 
-The Tauri and bridge lists must be equal and a subset of daemon support.
-Missing entries fail as `kind_not_allowed` in Tauri or HTTP 403 in the bridge.
+The desktop app's lists are the source: they must be a subset of daemon
+support, and until the Tauri shell is removed its lists and the bridge's must
+equal them, apart from the documented desktop-only kinds. Missing entries fail
+as `kind_not_allowed` in the app and Tauri or HTTP 403 in the bridge.
 [desktop_boundaries.rs](../../crates/daemon/tests/desktop_boundaries.rs)
-checks those relationships and actual React transport call sites.
+checks those relationships and actual React transport call sites; the app's
+own `kinds` tests check every kind its code sends.
 
 These are privilege boundaries. AI runtime kinds have their own
 `AI_RUNTIME_KINDS` gate. AI-only reads and unsolicited worker events are

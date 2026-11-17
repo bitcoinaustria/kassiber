@@ -1,0 +1,978 @@
+{
+ "scenes": [
+  {
+   "name": "tables-txs-all-1000",
+   "rune": {
+    "scene": "transactions-all",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transactions?period=all",
+    "state": {},
+    "steps": [],
+    "ready": "transactions"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-txs-all-900",
+   "rune": {
+    "scene": "transactions-all",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transactions?period=all",
+    "state": {},
+    "steps": [],
+    "ready": "transactions"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-txs-expanded-1000",
+   "rune": {
+    "scene": "transactions-expanded",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transactions",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Expand transaction table"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "transactions"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-txs-expanded-900",
+   "rune": {
+    "scene": "transactions-expanded",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transactions",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "label": "Expand transaction table"
+      }
+     },
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "transactions"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-wallets-1000",
+   "rune": {
+    "scene": "wallets-list",
+    "args": []
+   },
+   "tauri": {
+    "path": "/connections",
+    "state": {},
+    "steps": [],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-wallets-900",
+   "rune": {
+    "scene": "wallets-list",
+    "args": []
+   },
+   "tauri": {
+    "path": "/connections",
+    "state": {},
+    "steps": [],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-wallet-txs-1000",
+   "rune": {
+    "scene": "wallets-detail-spending",
+    "args": []
+   },
+   "tauri": {
+    "path": "/connections/{fx:wallet_spending}",
+    "state": {},
+    "steps": [],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-wallet-txs-900",
+   "rune": {
+    "scene": "wallets-detail-spending",
+    "args": []
+   },
+   "tauri": {
+    "path": "/connections/{fx:wallet_spending}",
+    "state": {},
+    "steps": [],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-wallet-coins-1000",
+   "rune": {
+    "scene": "wallets-detail-spending-coins",
+    "args": []
+   },
+   "tauri": {
+    "path": "/connections/{fx:wallet_spending}",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "textIncludes": "Coins",
+       "sel": "[role=tab]"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-wallet-coins-900",
+   "rune": {
+    "scene": "wallets-detail-spending-coins",
+    "args": []
+   },
+   "tauri": {
+    "path": "/connections/{fx:wallet_spending}",
+    "state": {},
+    "steps": [
+     {
+      "click": {
+       "textIncludes": "Coins",
+       "sel": "[role=tab]"
+      }
+     },
+     {
+      "wait": 500
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-node-1000",
+   "rune": {
+    "scene": "wallets-node",
+    "args": []
+   },
+   "tauri": {
+    "path": "/connections",
+    "state": {},
+    "ready": "none",
+    "steps": [
+     {
+      "waitText": "Regtest Lightning Node"
+     },
+     {
+      "click": {
+       "text": "Regtest Lightning Node"
+      }
+     },
+     {
+      "waitText": "node snapshot"
+     },
+     {
+      "wait": 800
+     }
+    ]
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-node-900",
+   "rune": {
+    "scene": "wallets-node",
+    "args": []
+   },
+   "tauri": {
+    "path": "/connections",
+    "state": {},
+    "ready": "none",
+    "steps": [
+     {
+      "waitText": "Regtest Lightning Node"
+     },
+     {
+      "click": {
+       "text": "Regtest Lightning Node"
+      }
+     },
+     {
+      "waitText": "node snapshot"
+     },
+     {
+      "wait": 800
+     }
+    ]
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-reports-1000",
+   "rune": {
+    "scene": "reports-reports",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     }
+    ]
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-reports-900",
+   "rune": {
+    "scene": "reports-reports",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reports",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Gains and income"
+     }
+    ]
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-journals-1000",
+   "rune": {
+    "scene": "reports-journals",
+    "args": []
+   },
+   "tauri": {
+    "path": "/journals",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Entry mix"
+     }
+    ]
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-journals-900",
+   "rune": {
+    "scene": "reports-journals",
+    "args": []
+   },
+   "tauri": {
+    "path": "/journals",
+    "state": {},
+    "steps": [
+     {
+      "waitText": "Entry mix"
+     }
+    ]
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-exit-tax-1000",
+   "rune": {
+    "scene": "reports-exit-tax-filled",
+    "args": []
+   },
+   "tauri": {
+    "path": "/exit-tax",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Steuerberater handoff"
+     },
+     {
+      "click": {
+       "css": "button:has(svg.lucide-calendar-days)"
+      }
+     },
+     {
+      "wait": 200
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "text": "10",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Cache"
+     }
+    ]
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-exit-tax-900",
+   "rune": {
+    "scene": "reports-exit-tax-filled",
+    "args": []
+   },
+   "tauri": {
+    "path": "/exit-tax",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "waitText": "Steuerberater handoff"
+     },
+     {
+      "click": {
+       "css": "button:has(svg.lucide-calendar-days)"
+      }
+     },
+     {
+      "wait": 200
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "label": "Previous month"
+      }
+     },
+     {
+      "click": {
+       "text": "10",
+       "sel": "button"
+      }
+     },
+     {
+      "waitText": "Cache"
+     }
+    ]
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-birds-eye-1000",
+   "rune": {
+    "scene": "reports-birds-eye",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books/{fx:workspace}/birds-eye",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='book-route-']"
+     }
+    ],
+    "ready": "quiet"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-birds-eye-900",
+   "rune": {
+    "scene": "reports-birds-eye",
+    "args": []
+   },
+   "tauri": {
+    "path": "/books/{fx:workspace}/birds-eye",
+    "state": {},
+    "steps": [
+     {
+      "waitCss": "[data-testid^='book-route-']"
+     }
+    ],
+    "ready": "quiet"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-egress-1000",
+   "rune": {
+    "scene": "reports-egress",
+    "args": []
+   },
+   "tauri": {
+    "path": "/egress",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ]
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-egress-900",
+   "rune": {
+    "scene": "reports-egress",
+    "args": []
+   },
+   "tauri": {
+    "path": "/egress",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 800
+     }
+    ]
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-reconcile-1000",
+   "rune": {
+    "scene": "review-reconcile",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reconcile",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-reconcile-900",
+   "rune": {
+    "scene": "review-reconcile",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reconcile",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-reconcile-tools-1000",
+   "rune": {
+    "scene": "review-reconcile-tools",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reconcile?mode=tools",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-reconcile-tools-900",
+   "rune": {
+    "scene": "review-reconcile-tools",
+    "args": []
+   },
+   "tauri": {
+    "path": "/reconcile?mode=tools",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-review-waiting-1000",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "review-waiting",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Show them",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-review-waiting-900",
+   "book": "coarse-review",
+   "rune": {
+    "scene": "review-waiting",
+    "args": []
+   },
+   "tauri": {
+    "path": "/review",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Show them",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-custody-1000",
+   "rune": {
+    "scene": "custody",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-custody-900",
+   "rune": {
+    "scene": "custody",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-custody-unlinked-1000",
+   "rune": {
+    "scene": "custody-unlinked",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Unlinked by you",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-custody-unlinked-900",
+   "rune": {
+    "scene": "custody-unlinked",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Unlinked by you",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-custody-setaside-1000",
+   "rune": {
+    "scene": "custody-setaside",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Set aside",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-custody-setaside-900",
+   "rune": {
+    "scene": "custody-setaside",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Set aside",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 600
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-custody-comps-1000",
+   "rune": {
+    "scene": "custody-comps",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=components",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 1000
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-custody-comps-900",
+   "rune": {
+    "scene": "custody-comps",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers?section=advanced&tab=components",
+    "state": {
+     "developerToolsEnabled": true
+    },
+    "steps": [
+     {
+      "wait": 1000
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  },
+  {
+   "name": "tables-custody-link-1000",
+   "rune": {
+    "scene": "custody-link-new",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Link manually\u2026",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 1000,
+   "height": 800
+  },
+  {
+   "name": "tables-custody-link-900",
+   "rune": {
+    "scene": "custody-link-new",
+    "args": []
+   },
+   "tauri": {
+    "path": "/transfers",
+    "state": {},
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "text": "Link manually\u2026",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 1500
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 800
+  }
+ ]
+}

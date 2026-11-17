@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Kassiber
+Comment=Local-first Bitcoin accounting
+Exec=kassiber-ui %u
+Icon=kassiber-ui
+Terminal=false
+Categories=Office;Finance;
+MimeType=x-scheme-handler/kassiber;
+StartupWMClass=kassiber-ui

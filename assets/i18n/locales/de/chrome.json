@@ -74,7 +74,22 @@
       "current": "Kassiber v{{version}} ist aktuell.",
       "openGitHub": "GitHub öffnen",
       "notNow": "Nicht jetzt",
-      "ok": "OK"
+      "ok": "OK",
+      "error": {
+        "disabled": "Update-Prüfungen über GitHub sind deaktiviert. Aktiviere sie unter Einstellungen > Privatsphäre.",
+        "unreachable": "GitHub war nicht erreichbar, um nach Updates zu suchen.",
+        "failed": "Die Suche nach Updates ist fehlgeschlagen: {{reason}}.",
+        "invalidResponse": "Die Kassiber-CLI hat eine ungültige Update-Antwort geliefert.",
+        "unexpectedKind": "Die Kassiber-CLI hat eine Antwort unerwarteten Typs geliefert.",
+        "emptyResponse": "Die Kassiber-CLI hat eine leere Update-Antwort geliefert.",
+        "untrustedUrl": "Die Update-Prüfung hat eine nicht vertrauenswürdige Release-URL geliefert.",
+        "startFailed": "Die Kassiber-CLI konnte für die Update-Prüfung nicht gestartet werden.",
+        "readFailed": "Die Update-Ausgabe der Kassiber-CLI konnte nicht gelesen werden.",
+        "timedOut": "Die Update-Prüfung hat zu lange gedauert.",
+        "tooLarge": "Die Kassiber-CLI hat eine unerwartet große Update-Antwort geliefert.",
+        "runFailed": "Die Update-Prüfung der Kassiber-CLI konnte nicht ausgeführt werden.",
+        "headless": "Update-Prüfungen laufen im Headless-Modus nicht."
+      }
     },
     "freshness": {
       "label": "Status der Bücher",
@@ -652,6 +667,93 @@
     "failedHint": "Die fehlgeschlagene Quelle bleibt aufgeführt, bis du diese Meldung schließt.",
     "closeFailure": "Schließen",
     "continueInBackground": "Im Hintergrund fortsetzen"
+  },
+  "syncProgress": {
+    "phase": {
+      "discovery": "Wallet-Historie wird ermittelt",
+      "backendFetch": "Quellen-Historie wird abgerufen",
+      "decodeEnrich": "Transaktionen werden dekodiert und angereichert",
+      "import": "Transaktionen werden importiert",
+      "rateCoverage": "Abdeckung der Marktkurse wird geprüft",
+      "autoPair": "Swaps und Übertragungen werden verknüpft",
+      "journalRefresh": "Journale werden aktualisiert",
+      "rateLimited": "Rate Limit wird abgewartet",
+      "done": "Aktualisierung abgeschlossen",
+      "error": "Aktualisierung braucht Aufmerksamkeit"
+    },
+    "title": {
+      "checkingMarketRates": "Marktkurse werden geprüft",
+      "fetchingBtcRate": "BTC-Marktkurs wird abgerufen.",
+      "fetchingPair": "{{pair}} wird abgerufen."
+    },
+    "refreshingSources": "Konfigurierte Quellen werden aktualisiert",
+    "refreshRunning": "Aktualisierung läuft",
+    "inProgress": "Läuft",
+    "unit": {
+      "addresses": "Adressen geprüft",
+      "scanTargets": "Scan-Ziele geprüft",
+      "transactions": "Transaktionen durchsucht",
+      "rows": "Zeilen durchsucht"
+    },
+    "gap": {
+      "unused": "Ungenutzte Lücke {{unused}} / {{gap}}",
+      "stopsAfter": "Stoppt nach {{gap}} ungenutzten Adressen in Folge"
+    },
+    "summary": {
+      "queued_one": "{{count}} Quelle in der Warteschlange.",
+      "queued_other": "{{count}} Quellen in der Warteschlange.",
+      "completed": "{{count}} abgeschlossen",
+      "coolingDown": "{{count}} pausiert wegen Rate Limit",
+      "needsAttention": "{{count}} braucht Aufmerksamkeit",
+      "pairingSkipped": "automatisches Verknüpfen übersprungen",
+      "pairsApplied_one": "{{count}} Verknüpfung angewendet",
+      "pairsApplied_other": "{{count}} Verknüpfungen angewendet",
+      "candidates_one": "{{count}} Swap-/Übertragungskandidat zu prüfen",
+      "candidates_other": "{{count}} Swap-/Übertragungskandidaten zu prüfen",
+      "quarantined_one": "{{count}} Transaktion in Quarantäne",
+      "quarantined_other": "{{count}} Transaktionen in Quarantäne",
+      "refreshed": "{{count}} aktualisiert",
+      "skipped": "{{count}} übersprungen",
+      "failed": "{{count}} fehlgeschlagen",
+      "noChanges": "Keine Änderungen aus den Quellen.",
+      "source": "Quelle"
+    },
+    "result": {
+      "failed": "Aktualisierung von {{wallet}} fehlgeschlagen.",
+      "failedDetail": "Aktualisierung von {{wallet}} fehlgeschlagen: {{detail}}",
+      "skipped": "Aktualisierung von {{wallet}} übersprungen.",
+      "skippedDetail": "Aktualisierung von {{wallet}} übersprungen: {{detail}}",
+      "coolingDown": "Aktualisierung von {{wallet}} pausiert wegen Rate Limit.",
+      "coolingDownDetail": "Aktualisierung von {{wallet}} pausiert wegen Rate Limit: {{detail}}",
+      "partial": "{{wallet}} teilweise aktualisiert.",
+      "partialDetail": "{{wallet}} teilweise aktualisiert: {{detail}}",
+      "refreshed": "{{wallet}} aktualisiert.",
+      "refreshedDetail": "{{wallet}} aktualisiert: {{detail}}.",
+      "queued": "Aktualisierung von {{wallet}} in der Warteschlange.",
+      "other": "Aktualisierung von {{wallet}}: {{status}}."
+    },
+    "observed": {
+      "fullRescan": "vollständiger Rescan",
+      "compatibility": "Kompatibilitäts-Observer ({{reason}})",
+      "capabilityFallback": "Fallback mangels Fähigkeit",
+      "imported": "{{count}} importiert",
+      "updated": "{{count}} aktualisiert",
+      "unchanged": "{{count}} unverändert",
+      "sourceRows": "{{count}} Quellzeilen",
+      "scriptsChecked": "{{count}} Skripte geprüft",
+      "targets": "{{count}} Ziele",
+      "overlapsMatched": "{{count}} Migrationsüberschneidungen zugeordnet",
+      "overlapsReview": "{{count}} Migrationsüberschneidungen zu prüfen",
+      "reactivated_one": "{{count}} Migrationszeile reaktiviert",
+      "reactivated_other": "{{count}} Migrationszeilen reaktiviert",
+      "retired_one": "{{count}} veraltete Projektion entfernt",
+      "retired_other": "{{count}} veraltete Projektionen entfernt",
+      "utxosUnchanged": "UTXOs unverändert",
+      "utxosRefreshed": "UTXOs aktualisiert",
+      "journalsUnchanged": "Journale unverändert",
+      "journalsStale": "Journale als veraltet markiert",
+      "elapsed": "{{count}} ms"
+    }
   },
   "syncDot": {
     "synced": "Aktuell",

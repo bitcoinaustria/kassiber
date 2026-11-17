@@ -1,0 +1,1128 @@
+{
+ "scenes": [
+  {
+   "name": "onboarding-start",
+   "rune": {
+    "scene": "onboarding-start",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-essentials",
+   "rune": {
+    "scene": "onboarding-essentials",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-sync",
+   "rune": {
+    "scene": "onboarding-sync",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-sync-default",
+   "rune": {
+    "scene": "onboarding-sync-default",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Built-in Bitcoin servers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-sync-custom",
+   "rune": {
+    "scene": "onboarding-sync-custom",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Your own server",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-sync-offline",
+   "rune": {
+    "scene": "onboarding-sync-offline",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Offline",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-ai",
+   "rune": {
+    "scene": "onboarding-ai",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Built-in Bitcoin servers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-ai-offline",
+   "rune": {
+    "scene": "onboarding-ai-offline",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Offline",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-security",
+   "rune": {
+    "scene": "onboarding-security",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Built-in Bitcoin servers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-security-plaintext",
+   "rune": {
+    "scene": "onboarding-security-plaintext",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Built-in Bitcoin servers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Unencrypted",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-review-plain",
+   "rune": {
+    "scene": "onboarding-review-plain",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Built-in Bitcoin servers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Unencrypted",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "text": "I understand plaintext mode is not for real wallet data.",
+       "sel": "label"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-quick",
+   "rune": {
+    "scene": "onboarding-quick",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Or create with recommended defaults",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-start-light",
+   "rune": {
+    "scene": "onboarding-start-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-start-de",
+   "rune": {
+    "scene": "onboarding-start-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-essentials-light",
+   "rune": {
+    "scene": "onboarding-essentials-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-essentials-de",
+   "rune": {
+    "scene": "onboarding-essentials-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Neue Bücher erstellen",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-sync-light",
+   "rune": {
+    "scene": "onboarding-sync-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Built-in Bitcoin servers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-sync-de",
+   "rune": {
+    "scene": "onboarding-sync-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Neue Bücher erstellen",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Weiter",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Eingebaute Bitcoin-Server",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-security-light",
+   "rune": {
+    "scene": "onboarding-security-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Built-in Bitcoin servers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-security-de",
+   "rune": {
+    "scene": "onboarding-security-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Neue Bücher erstellen",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Weiter",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Eingebaute Bitcoin-Server",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Weiter",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Weiter",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-review-plain-light",
+   "rune": {
+    "scene": "onboarding-review-plain-light",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null,
+     "theme": "light"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Create new books",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Built-in Bitcoin servers",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Unencrypted",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "text": "I understand plaintext mode is not for real wallet data.",
+       "sel": "label"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Continue",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-review-plain-de",
+   "rune": {
+    "scene": "onboarding-review-plain-de",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null,
+     "lang": "de"
+    },
+    "steps": [
+     {
+      "wait": 1200
+     },
+     {
+      "click": {
+       "textIncludes": "Neue Bücher erstellen",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Weiter",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Eingebaute Bitcoin-Server",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Weiter",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Weiter",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Unverschlüsselt",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "text": "Mir ist klar, dass der Klartextmodus nicht für echte Wallet-Daten gedacht ist.",
+       "sel": "label"
+      }
+     },
+     {
+      "wait": 350
+     },
+     {
+      "click": {
+       "textIncludes": "Weiter",
+       "sel": "button"
+      }
+     },
+     {
+      "wait": 350
+     }
+    ],
+    "ready": "none"
+   }
+  },
+  {
+   "name": "onboarding-start-narrow",
+   "rune": {
+    "scene": "onboarding-start-narrow",
+    "args": []
+   },
+   "tauri": {
+    "path": "/",
+    "state": {
+     "identity": null
+    },
+    "steps": [
+     {
+      "wait": 1200
+     }
+    ],
+    "ready": "none"
+   },
+   "width": 900,
+   "height": 700
+  }
+ ]
+}

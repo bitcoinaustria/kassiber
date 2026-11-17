@@ -1,0 +1,8 @@
+{"events": [
+ {"t": 0.3, "type": "tap", "key": "txd-attach-files"},
+ {"t": 0.8, "type": "file-dialog", "path": "/srv/build-fast/build-cache/kassiber-build/t3-9888a5d2/p2-detail/attach-test.txt"},
+ {"t": 2.0, "type": "tap", "key": "txd-attach-links"},
+ {"t": 2.4, "type": "type", "text": "https://example.org/receipt-pilot"},
+ {"t": 6.0, "type": "tap", "key": "txd-links-submit"},
+ {"t": 8.0, "type": "mark", "name": "end"}
+]}
