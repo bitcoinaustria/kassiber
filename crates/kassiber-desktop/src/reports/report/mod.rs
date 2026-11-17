@@ -717,6 +717,8 @@ fn ask_save(w: Written, tx: &mut Tx) {
                 options.filter(t("transactions:dashboard.export.formats.xlsx"), &["xlsx"])
             }
             Some("csv") => options.filter("CSV", &["csv"]),
+            // The full report's CSV export: its tables in one ZIP.
+            Some("zip") => options.filter("ZIP", &["zip"]),
             _ => options,
         };
     }
@@ -771,7 +773,7 @@ pub(crate) fn managed(app: &App, path: &Path) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-/// `is_supported_report_export_target`: a `.pdf`/`.xlsx`/`.csv` file, or a folder named as an
+/// `is_supported_report_export_target`: a `.pdf`/`.xlsx`/`.csv`/`.zip` file, or a folder named as an
 /// Austrian CSV bundle or an audit package.
 fn supported_target(path: &Path, is_file: bool, is_dir: bool) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -780,7 +782,7 @@ fn supported_target(path: &Path, is_file: bool, is_dir: bool) -> bool {
             .extension()
             .and_then(|e| e.to_str())
             .map(str::to_ascii_lowercase);
-        return matches!(ext.as_deref(), Some("pdf" | "xlsx" | "csv"));
+        return matches!(ext.as_deref(), Some("pdf" | "xlsx" | "csv" | "zip"));
     }
     is_dir
         && ((name.starts_with("kassiber-austrian-e1kv-") && name.contains("-csv-"))
@@ -811,7 +813,7 @@ fn copy_dir(src: &Path, dest: &Path) -> Result<(), String> {
 }
 
 /// `save_exported_file_as`: copies the managed export to a destination outside the managed
-/// folder (a file keeps a `.pdf`/`.xlsx`/`.csv` name; a bundle folder copies whole).
+/// folder (a file keeps a `.pdf`/`.xlsx`/`.csv`/`.zip` name; a bundle folder copies whole).
 pub(crate) fn save_copy(app: &App, source: &Path, dest: &Path) -> Result<String, String> {
     let source = managed(app, source)?;
     let parent = dest
@@ -827,7 +829,7 @@ pub(crate) fn save_copy(app: &App, source: &Path, dest: &Path) -> Result<String,
             .extension()
             .and_then(|e| e.to_str())
             .map(str::to_ascii_lowercase);
-        if !matches!(ext.as_deref(), Some("pdf" | "xlsx" | "csv")) {
+        if !matches!(ext.as_deref(), Some("pdf" | "xlsx" | "csv" | "zip")) {
             return Err(t("reports:files.error.extension"));
         }
         std::fs::copy(&source, dest).map_err(|e| err("save", e))?;
@@ -1314,5 +1316,20 @@ mod transient_tests {
             args,
             json!({"year": 2025, "include_snapshot": false, "wallets": ["b"]})
         );
+    }
+}
+
+#[cfg(test)]
+mod export_target_tests {
+    /// A full report's CSV export is one ZIP of its tables: it can be opened and saved.
+    #[test]
+    fn a_report_zip_is_a_supported_target() {
+        let p = std::path::Path::new("/x/kassiber-report-2026.zip");
+        assert!(super::supported_target(p, true, false));
+        assert!(!super::supported_target(
+            std::path::Path::new("/x/a.sh"),
+            true,
+            false
+        ));
     }
 }

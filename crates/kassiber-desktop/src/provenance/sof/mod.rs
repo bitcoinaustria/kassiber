@@ -406,6 +406,11 @@ pub struct Sof {
     pub reviews: std::collections::VecDeque<(String, String, String)>,
     /// For each evidence attach in flight: the reviewed link's type (for the toast).
     pub attaching: std::collections::VecDeque<String>,
+    /// For each case save of an export in flight: (bundle, recipe) as asked. The mounted case
+    /// may be another one when the answer comes.
+    pub saves: std::collections::VecDeque<(bool, String)>,
+    /// For each export render in flight: (bundle, recipe, the saved case) as asked.
+    pub exports: std::collections::VecDeque<(bool, String, Value)>,
 }
 
 // ---- Scope and requests -----------------------------------------------------------------------
@@ -1735,15 +1740,28 @@ pub fn export(app: &mut App, bundle: bool) {
     args["expected_review_fingerprint"] = json!(fingerprint(app));
     if let Some(c) = app.provenance.sof.case.as_mut() {
         c.export_failure = None;
-        c.exporting = Some((bundle, recipe, None));
+        c.exporting = Some((bundle, recipe.clone(), None));
     }
-    if !send(
+    if send(
         app,
         "ui.source_funds.cases.save",
         args,
         "provenance.sof.save",
     ) {
-        app.provenance.sof.case.as_mut().expect("case").exporting = None;
+        app.provenance.sof.saves.push_back((bundle, recipe));
+    } else if let Some(c) = app.provenance.sof.case.as_mut() {
+        c.exporting = None;
+    }
+}
+
+/// Ends the mounted case's running export if it is the one for `recipe`.
+fn end_export(app: &mut App, recipe: &str) -> bool {
+    match app.provenance.sof.case.as_mut() {
+        Some(c) if c.exporting.as_ref().is_some_and(|e| e.1 == recipe) => {
+            c.exporting = None;
+            true
+        }
+        _ => false,
     }
 }
 
@@ -1753,18 +1771,14 @@ fn still_current(app: &App, recipe: &str) -> bool {
 }
 
 fn on_saved(app: &mut App, r: &Reply) {
-    let Some((bundle, recipe, _)) = app
-        .provenance
-        .sof
-        .case
-        .as_ref()
-        .and_then(|c| c.exporting.clone())
-    else {
+    // The export this save was for, whatever case is mounted now.
+    let Some((bundle, recipe)) = app.provenance.sof.saves.pop_front() else {
         return;
     };
     if r.error.is_some() {
-        if let Some(c) = app.provenance.sof.case.as_mut() {
-            c.exporting = None;
+        if end_export(app, &recipe)
+            && let Some(c) = app.provenance.sof.case.as_mut()
+        {
             c.export_failure = Some(recipe);
         }
         invalidate(app);
@@ -1773,36 +1787,32 @@ fn on_saved(app: &mut App, r: &Reply) {
     let case = r.data["case"].clone();
     let id = case["id"].as_str().map(str::to_owned);
     if !still_current(app, &recipe) || id.is_none() {
-        if let Some(c) = app.provenance.sof.case.as_mut() {
-            c.exporting = None;
-        }
+        end_export(app, &recipe);
         return;
-    }
-    if let Some(c) = app.provenance.sof.case.as_mut() {
-        c.exporting = Some((bundle, recipe, Some(case)));
     }
     let kind = if bundle {
         "ui.source_funds.export_bundle"
     } else {
         "ui.source_funds.export_pdf"
     };
-    if !send(app, kind, json!({"case": id}), "provenance.sof.export") {
-        app.provenance.sof.case.as_mut().expect("case").exporting = None;
+    if let Some(c) = app.provenance.sof.case.as_mut() {
+        c.exporting = Some((bundle, recipe.clone(), Some(case.clone())));
+    }
+    if send(app, kind, json!({"case": id}), "provenance.sof.export") {
+        app.provenance.sof.exports.push_back((bundle, recipe, case));
+    } else {
+        end_export(app, &recipe);
     }
 }
 
 fn on_exported(app: &mut App, r: &Reply) {
-    let Some((bundle, recipe, case)) = app
-        .provenance
-        .sof
-        .case
-        .as_mut()
-        .and_then(|c| c.exporting.take())
-    else {
+    // The case this render was for, as saved; not whichever case is mounted now.
+    let Some((bundle, recipe, case)) = app.provenance.sof.exports.pop_front() else {
         return;
     };
+    let mounted = end_export(app, &recipe);
     if let Some(e) = &r.error {
-        if let Some(c) = app.provenance.sof.case.as_mut() {
+        if mounted && let Some(c) = app.provenance.sof.case.as_mut() {
             c.export_failure = Some(recipe);
         }
         app.toast(
@@ -1821,7 +1831,7 @@ fn on_exported(app: &mut App, r: &Reply) {
     if let Some(c) = app.provenance.sof.case.as_mut() {
         let mut done = Completed {
             recipe: recipe.clone(),
-            case: case.unwrap_or(Value::Null),
+            case,
             pdf: None,
             bundle: None,
         };
@@ -2052,6 +2062,35 @@ mod source_link_tests {
         on_source_created(&mut app, &reply);
         assert!(app.provenance.sof.source_links.is_empty());
         assert!(app.provenance.sof.busy.contains("create_link"));
+    }
+
+    /// Case A's export saving, then case B opened and its export started: A's save answer must
+    /// not render A's case under B's export (nor end B's).
+    #[test]
+    fn an_earlier_cases_save_answer_does_not_export_under_another_case() {
+        let mut app = crate::app::tests::quiet_app();
+        app.provenance
+            .sof
+            .saves
+            .push_back((false, "recipe-a".into()));
+        let mut b = Case::new(&Draft::default(), "tx-b");
+        b.exporting = Some((false, "recipe-b".into(), None));
+        app.provenance.sof.case = Some(b);
+        let saved_a = Reply {
+            kind: "ui.source_funds.cases.save".into(),
+            data: json!({"case": {"id": "case-a"}}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_saved(&mut app, &saved_a);
+        assert!(app.provenance.sof.saves.is_empty());
+        assert!(
+            app.provenance.sof.exports.is_empty(),
+            "A's case is not rendered"
+        );
+        let running = app.provenance.sof.case.as_ref().unwrap().exporting.clone();
+        assert_eq!(running.map(|e| e.1), Some("recipe-b".to_owned()));
     }
 
     /// Accepting a link, then leaving the page (or picking other evidence) before the answer:

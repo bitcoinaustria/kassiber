@@ -223,7 +223,7 @@
       "notFound": "Report export file could not be found: {{error}}",
       "otherProject": "Only exports from the active Kassiber project can be opened or saved.",
       "inspect": "Report export file could not be inspected: {{error}}",
-      "unsupported": "Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be opened or saved.",
+      "unsupported": "Only managed PDF, XLSX, CSV and ZIP files, Austrian CSV bundle folders, and audit package folders can be opened or saved.",
       "inspectDestination": "Could not inspect report export destination: {{error}}",
       "destinationNotEmpty": "Choose a new or empty folder for the report export.",
       "createDestination": "Could not create report export destination: {{error}}",
@@ -234,7 +234,7 @@
       "createParent": "Could not create report export destination folder: {{error}}",
       "inspectParent": "Could not inspect report export destination folder: {{error}}",
       "insideManaged": "Choose a destination outside Kassiber's managed exports folder.",
-      "extension": "Report export destination must use .pdf, .xlsx, or .csv.",
+      "extension": "Report export destination must use .pdf, .xlsx, .csv, or .zip.",
       "save": "Could not save report export: {{error}}"
     }
   }

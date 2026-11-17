@@ -240,6 +240,9 @@ pub struct Ui {
     pub terminal: desktop::Terminal,
     pub backend: backend::BackendForm,
     pub aiform: aiform::AiForm,
+    /// The tested values (`aiform::TestRun::target`) of each provider test in flight, oldest
+    /// first; kept outside the form, which starts over each time it opens.
+    pub aiform_tests: std::collections::VecDeque<String>,
     pub dialog: dialogs::Dialogs,
     /// The open sub-page's frame (its form's open flag says whether one is open).
     pub sub: Option<subpage::Sub>,
