@@ -323,7 +323,17 @@ mod tests {
         assert_eq!(missing.kind(), io::ErrorKind::NotFound);
         let path = dir.path().join("stale.sock");
         drop(bind_listener(&path, 0o600, 1).unwrap());
-        let refused = connect(&path, Some(Duration::from_secs(1))).unwrap_err();
+        // A child another test forks at this moment holds a copy of the listener until it
+        // execs, so a connect can briefly still succeed: retry until the copy is gone.
+        let refused = (0..100)
+            .find_map(|_| match connect(&path, Some(Duration::from_secs(1))) {
+                Ok(_) => {
+                    std::thread::sleep(Duration::from_millis(10));
+                    None
+                }
+                Err(e) => Some(e),
+            })
+            .expect("the stale socket refuses once no child holds the listener");
         assert_eq!(refused.kind(), io::ErrorKind::ConnectionRefused);
     }
 

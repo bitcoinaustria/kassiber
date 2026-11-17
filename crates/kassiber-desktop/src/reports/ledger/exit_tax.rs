@@ -111,7 +111,10 @@ impl ExitUi {
         };
     }
 
+    /// A refresh: what is shown stays up while it is re-read, and previews already out answer
+    /// for the book before the refresh, so their answers are dropped and asked again.
     pub fn invalidate(&mut self) {
+        self.queue.iter_mut().for_each(|k| *k = None);
         self.cache.retain(|_, v| matches!(v, Load::Ready(_)));
         self.stale = self.cache.keys().cloned().collect();
     }
@@ -1908,6 +1911,45 @@ mod tests {
         match app.reports.ledger.exit.cache.get(&today) {
             Some(Load::Ready(v)) => assert_eq!(v["book"], "b"),
             _ => panic!("the new book's estimate lands"),
+        }
+    }
+
+    /// A book refresh while the first estimate is out: that answer predates the refresh, so it
+    /// is not cached, and the estimate is asked again and lands.
+    #[test]
+    fn a_refresh_drops_the_estimate_asked_before_it() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route("/exit-tax".into());
+        let reply = |data: Value| Reply {
+            kind: "ui.reports.exit_tax_preview".into(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        crate::reports::ledger::poll(&mut app, &mut Tx::default());
+        let today = app.reports.ledger.exit.today_key();
+        assert_eq!(app.reports.ledger.exit.queue.len(), 1);
+        app.book_generation += 1;
+        crate::reports::ledger::poll(&mut app, &mut Tx::default());
+        assert_eq!(app.reports.ledger.exit.queue.len(), 2, "asked again");
+        on_reply(
+            &mut app,
+            "reports.ledger.exit.preview",
+            &reply(json!({ "n": "before" })),
+        );
+        assert!(matches!(
+            app.reports.ledger.exit.cache.get(&today),
+            Some(Load::Loading)
+        ));
+        on_reply(
+            &mut app,
+            "reports.ledger.exit.preview",
+            &reply(json!({ "n": "after" })),
+        );
+        match app.reports.ledger.exit.cache.get(&today) {
+            Some(Load::Ready(v)) => assert_eq!(v["n"], "after"),
+            _ => panic!("the refreshed estimate lands"),
         }
     }
 

@@ -118,7 +118,10 @@ pub fn on_saved(app: &mut App, r: &Reply) {
     // Only what was submitted is saved; edits made meanwhile stay dirty.
     let saved = submitted;
     o.base = saved;
-    let (close_after, next) = (o.close_after_save, o.next_after_save);
+    // Edits made after the click were not sent: the panel stays (no close, no next row) so they
+    // are not lost.
+    let kept = o.dirty().count > 0;
+    let (close_after, next) = (o.close_after_save && !kept, o.next_after_save && !kept);
     app.refresh_reads();
     // The Review page re-reads its lists; "Save & next" picks the next row from what they return.
     if let Some(h) = super::review_host(app).cloned() {
@@ -1326,6 +1329,33 @@ mod tests {
         on_saved(&mut app, &ok(json!({})));
         assert!(!app.detail.tabs[0].parked.as_ref().unwrap().saving);
         assert!(!app.detail.open.as_ref().unwrap().saving);
+    }
+
+    /// Save & close, then more typing before the answer: the panel stays open with the later
+    /// edit still unsaved. Without later edits it closes.
+    #[test]
+    fn a_save_keeps_the_panel_while_later_edits_are_unsaved() {
+        for later in [true, false] {
+            let mut app = crate::app::tests::quiet_app();
+            let mut o = shown("a");
+            o.draft.note = "first".into();
+            app.detail.open = Some(o);
+            save(&mut app, true, false);
+            assert!(app.detail.open.as_ref().unwrap().saving);
+            if later {
+                app.detail.open.as_mut().unwrap().draft.note = "first and more".into();
+            }
+            on_saved(&mut app, &ok(json!({})));
+            match (later, app.detail.open.as_ref()) {
+                (true, Some(o)) => {
+                    assert_eq!(o.draft.note, "first and more");
+                    assert_eq!(o.base.note, "first");
+                    assert!(o.dirty().note);
+                }
+                (false, None) => {}
+                _ => panic!("later edits: {later}"),
+            }
+        }
     }
 
     fn shown(id: &str) -> Box<super::super::Open> {

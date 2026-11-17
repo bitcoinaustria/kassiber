@@ -2060,6 +2060,11 @@ See [tax countries](docs/reference/tax-countries.md) and
   the mempool backend labels (`settings/model.rs`), "No imported rows"
   (`settings/market.rs`) and the overview's no-data message (`app.rs`). Route
   each surface through `i18n.rs` with en + de together.
+- [ ] Desktop file picks read the whole file: the Reconcile comparison CSV
+  (`review/tools.rs`) and the generic-ledger import preview
+  (`wallets/add/setup.rs`) load a picked file into memory on the UI thread with
+  no size cap. The assistant's attachments are bounded (`read_bounded`); these
+  need a cap the daemon's import limits agree with, or a path handoff.
 - [ ] Decide when `ui-tauri/` retires. Until then it is the parity reference
   (`crates/kassiber-desktop/parity/`) and its kind lists are checked against
   the desktop's (`src/kinds/tests.rs`, which skips when `ui-tauri/` is absent).
