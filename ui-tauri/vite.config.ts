@@ -258,6 +258,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.connections.btcpay.discover",
   "ui.connections.btcpay.key_guide",
   "ui.connections.btcpay.test",
+  // Bull Bitcoin Wallet CSV import: the user-picked file becomes a wallet.
+  "ui.connections.bullbitcoin_wallet.create",
   // Exchange connections: docs/reference/exchange-desktop.md.
   "ui.connections.exchange.status",
   "ui.connections.exchange.test",
