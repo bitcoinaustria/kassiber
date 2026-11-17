@@ -110,11 +110,14 @@ pub fn open(app: &mut App, start: LinkStart) {
     } else {
         Some(LegSide::Send)
     };
+    let mut preview = std::mem::take(&mut app.custody.link.preview);
+    preview.reset();
     app.custody.link = State {
         send_id: start.send_id.clone(),
         receipt_id: start.receipt_id.clone(),
         picking,
         start: Some(start.clone()),
+        preview,
         ..State::default()
     };
     if !both && let Some(id) = &start.transaction_id {
@@ -126,7 +129,12 @@ pub fn open(app: &mut App, start: LinkStart) {
 }
 
 pub fn close(app: &mut App) {
-    app.custody.link = State::default();
+    let mut preview = std::mem::take(&mut app.custody.link.preview);
+    preview.reset();
+    app.custody.link = State {
+        preview,
+        ..State::default()
+    };
 }
 
 pub fn is_open(app: &App) -> bool {

@@ -177,12 +177,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                 // Empty: the view says "Unknown error." in the reader's language.
                 None => Load::Failed(String::new()),
             };
-            // A failed re-read of a shown answer keeps the answer, as React Query does.
-            if !(matches!(load, Load::Failed(_))
-                && matches!(ui.cache.get(&key), Some(Load::Ready(_))))
-            {
-                ui.cache.insert(key, load);
-            }
+            // A failed re-read replaces the shown estimate: a liability the book no longer
+            // produces must not stay up as current.
+            ui.cache.insert(key, load);
         }
         "reports.ledger.exit.export" => {
             let ui = &mut app.reports.ledger.exit;

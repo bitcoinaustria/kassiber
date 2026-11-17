@@ -185,6 +185,17 @@ pub struct Preview {
     retries: u64,
 }
 
+impl Preview {
+    /// A fresh preview for a dialog that closed or moved on. The requests still out stay
+    /// listed (their replies settle the shared run table) and the token keeps counting, so a
+    /// late reply is never taken for the new preview's.
+    pub fn reset(&mut self) {
+        let old = std::mem::take(self);
+        self.queue = old.queue;
+        self.token = old.token;
+    }
+}
+
 const PREVIEW_CANCELLED: &str = "review_plan_cancelled";
 const FINISHED_LIMIT: usize = 20;
 
@@ -1487,5 +1498,38 @@ pub fn md_btn(
         b.busy(true).child(kit::spinner(tk, tk.r(1.0), fg))
     } else {
         b
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+
+    /// Link closed while its plan runs: the late reply still ends the shared run, so reopening
+    /// the same operation sends a new plan instead of joining an abandoned one forever.
+    #[test]
+    fn a_plan_reply_after_close_ends_its_run() {
+        let mut app = crate::app::tests::quiet_app();
+        let key = "[\"w\",\"p\",7,\"ops\"]".to_owned();
+        RUNNING.with(|r| r.borrow_mut().insert(key.clone(), 0.0));
+        let p = preview_mut(&mut app, Owner::Link);
+        p.token = 3;
+        p.cache_key = Some(key.clone());
+        p.status = PStatus::Checking(0.0);
+        p.queue.push_back((Stage::Plan, 3, key.clone()));
+        crate::custody::link::close(&mut app);
+        let p = preview_mut(&mut app, Owner::Link);
+        assert_eq!(p.token, 3, "the token keeps counting");
+        assert!(matches!(p.status, PStatus::Idle));
+        let reply = Reply {
+            kind: "ui.review.plan".into(),
+            data: Value::Null,
+            error: Some("cancelled".into()),
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_preview_reply(&mut app, Owner::Link, "plan", &reply, "failed");
+        assert!(RUNNING.with(|r| !r.borrow().contains_key(&key)));
+        assert!(preview_mut(&mut app, Owner::Link).queue.is_empty());
     }
 }

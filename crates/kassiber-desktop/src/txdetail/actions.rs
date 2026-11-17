@@ -1222,6 +1222,33 @@ mod tests {
         assert_eq!(o.dirty().count, 0);
     }
 
+    /// A save normalizes its value (`70000,5` comes back `70000.5`) while the user already edits
+    /// the note: the read takes the price, the note edit stays.
+    #[test]
+    fn a_normalizing_read_keeps_unrelated_edits() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut a = shown("a");
+        a.draft.manual_price = "70000,5".into();
+        app.detail
+            .saving_ids
+            .push_back(("a".into(), a.draft.clone()));
+        app.detail.open = Some(a);
+        on_saved(&mut app, &ok(json!({})));
+        app.detail.open.as_mut().unwrap().draft.note = "typing".into();
+        app.detail.note = rune::TextEdit::new("typing");
+        super::super::reload(&mut app);
+        super::super::on_reply(
+            &mut app,
+            "txd.reload",
+            &ok(json!({ "transaction": { "id": "a", "rate": 70000.5 } })),
+        );
+        let o = app.detail.open.as_ref().unwrap();
+        assert_eq!(o.draft.note, "typing", "the note edit stays");
+        assert_eq!(o.draft.manual_price, "70000.5", "the price takes the read");
+        assert_eq!(o.base.manual_price, "70000.5");
+        assert_eq!(app.detail.note.text, "typing");
+    }
+
     fn ok(data: Value) -> Reply {
         Reply {
             kind: "ui.transactions.resolve".into(),

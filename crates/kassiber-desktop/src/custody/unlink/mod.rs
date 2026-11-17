@@ -93,12 +93,15 @@ pub fn open(app: &mut App, mv: LinkedMove, intent: Intent) {
         .as_ref()
         .is_some_and(|m| m.key == mv.key);
     let legs = std::mem::take(&mut app.custody.unlink.legs);
-    let preview = std::mem::take(&mut app.custody.unlink.preview);
+    let mut preview = std::mem::take(&mut app.custody.unlink.preview);
+    if !same {
+        preview.reset();
+    }
     app.custody.unlink = State {
         mv: Some(mv.clone()),
         intent,
         legs,
-        preview: if same { preview } else { Preview::default() },
+        preview,
         ..State::default()
     };
     common::ensure_leg(app, Owner::Unlink, &mv.out_transaction_id);
@@ -107,8 +110,11 @@ pub fn open(app: &mut App, mv: LinkedMove, intent: Intent) {
 
 pub fn close(app: &mut App) {
     let legs = std::mem::take(&mut app.custody.unlink.legs);
+    let mut preview = std::mem::take(&mut app.custody.unlink.preview);
+    preview.reset();
     app.custody.unlink = State {
         legs,
+        preview,
         ..State::default()
     };
 }

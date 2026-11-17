@@ -526,6 +526,37 @@ pub fn diff(a: &Draft, b: &Draft) -> Dirty {
     }
 }
 
+/// A fresh read merged into a draft: each field still at the old baseline takes the fresh value
+/// (a save's normalized form, a change made elsewhere); a field the user edited keeps the edit.
+pub fn rebase(old: &Draft, fresh: &Draft, draft: &Draft) -> Draft {
+    let mut out = draft.clone();
+    macro_rules! take {
+        ($($f:ident),*) => {$(
+            if draft.$f == old.$f {
+                out.$f = fresh.$f.clone();
+            }
+        )*};
+    }
+    take!(
+        label,
+        tags,
+        note,
+        at_regime,
+        at_category,
+        pricing_source_kind,
+        pricing_quality,
+        manual_currency,
+        manual_price,
+        manual_value,
+        manual_source,
+        review_status,
+        taxable,
+        excluded,
+        kind
+    );
+    out
+}
+
 /// `parseManualDecimal`.
 pub fn parse_decimal(s: &str) -> Option<f64> {
     let t = s.trim().replacen(',', ".", 1);

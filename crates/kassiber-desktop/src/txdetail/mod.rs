@@ -589,8 +589,9 @@ fn load_record(app: &mut App, panel: u64, record: Value, keep_draft: bool) {
     };
     let same_row = o.id() == Some(id.as_str());
     let prev_base = o.base.clone();
-    // A refetched row with identical metadata keeps in-progress edits (§3.2).
-    let reset = !(keep_draft && same_row) || draft::diff(&prev_base, &base).count > 0;
+    // A refetched row keeps in-progress edits (§3.2); fields the user left alone take the read.
+    let reset = !(keep_draft && same_row);
+    let moved = !reset && draft::diff(&prev_base, &base).count > 0;
     if let Some(from) = o.follow_from.take().filter(|f| *f != id) {
         o.trail.push(from);
     }
@@ -605,6 +606,13 @@ fn load_record(app: &mut App, panel: u64, record: Value, keep_draft: bool) {
             let d = o.draft.clone();
             sync_edits(app, &d);
         }
+    } else if moved {
+        o.draft = draft::rebase(&prev_base, &base, &o.draft);
+        o.base = base;
+        if active {
+            let d = o.draft.clone();
+            rebind_changed(app, &d);
+        }
     }
     if !same_row || !keep_draft {
         let to = Target {
@@ -614,6 +622,23 @@ fn load_record(app: &mut App, panel: u64, record: Value, keep_draft: bool) {
         };
         side_reads(app, &to);
         graph::ensure(app, &id);
+    }
+}
+
+/// Rebinds only the text fields whose draft value differs from what they show, so a field being
+/// typed in keeps its cursor.
+fn rebind_changed(app: &mut App, d: &Draft) {
+    let ui = &mut app.detail;
+    for (edit, value) in [
+        (&mut ui.note, &d.note),
+        (&mut ui.cur, &d.manual_currency),
+        (&mut ui.price, &d.manual_price),
+        (&mut ui.value, &d.manual_value),
+        (&mut ui.source, &d.manual_source),
+    ] {
+        if edit.text != *value {
+            *edit = TextEdit::new(value.clone());
+        }
     }
 }
 

@@ -372,12 +372,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                 (None, true) => Load::Ready(r.data.clone()),
                 (None, false) => Load::Failed(t("reports:page.noData")),
             };
-            // A failed refetch keeps the shown read, as React Query does.
-            if !(matches!(next, Load::Failed(_))
-                && matches!(ui.reports.get(&key), Some(Load::Ready(_))))
-            {
-                ui.reports.insert(key, next);
-            }
+            // A failed refetch replaces the shown read: figures the book no longer produces must
+            // not stay up as current (the next book refresh reads the year again).
+            ui.reports.insert(key, next);
         }
         "reports.report.wallets" if r.error.is_none() => {
             let choices: Vec<WalletChoice> = r.data["wallets"]
@@ -1142,6 +1139,29 @@ pub const SCENES: &[super::Scene] = &[
 #[cfg(test)]
 mod transient_tests {
     use super::*;
+
+    /// A refresh that fails after a good read shows the failure, not the old figures as current.
+    #[test]
+    fn a_failed_refresh_replaces_the_shown_report() {
+        let mut app = crate::app::tests::quiet_app();
+        app.reports
+            .report
+            .reports
+            .insert(2025, Load::Ready(json!({ "year": 2025 })));
+        app.reports.report.queue.push_back(2025);
+        let failed = Reply {
+            kind: "ui.reports.capital_gains".into(),
+            data: Value::Null,
+            error: Some("journals are stale".into()),
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "reports.report.cg", &failed);
+        assert!(matches!(
+            app.reports.report.reports.get(&2025),
+            Some(Load::Failed(_))
+        ));
+    }
 
     /// Profitability run for A, then for B before A answers: A's numbers never show as B's,
     /// and B stays loading until its own reply.
