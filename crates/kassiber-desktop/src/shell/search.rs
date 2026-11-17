@@ -748,8 +748,8 @@ pub fn run(app: &mut App, action: Action) {
     app.shell.popup = None;
     match action {
         Action::Nav(href) => go(app, &href),
-        Action::Refresh => app.refresh_book(false),
-        Action::FullRescan => app.refresh_book(true),
+        Action::Refresh => app.refresh_book_from_title_bar(false),
+        Action::FullRescan => app.refresh_book_from_title_bar(true),
         Action::AddWallet => go(app, "/connections"),
         Action::ProcessJournals => app.process_journals(),
         Action::Lock => super::overlays::lock(app),

@@ -1154,8 +1154,8 @@ finds none behind) opens the list with that filter and period.
 
 ### Connection detail: Coverage card
 
-The card sits at the top of the facts, in its own component
-(`SourceCoverageCard`).
+The card sits under the balance panel, above an exchange's sync card, in its own
+module (`crates/kassiber-desktop/src/wallets/sources.rs`).
 
 ```
  ┌ Coverage ─────────────────────────────────────────────────────────────┐
@@ -1183,8 +1183,9 @@ the gap from its date on; clearing it asks again.
 
 ### Add connection: key or file
 
-Where a provider offers both an API and a CSV (`connectionCatalog.tsx`
-entries with an exchange API and `refreshHint`), the modal asks first:
+Where a provider offers both an API and a CSV (the catalog pairs them:
+`file_source_id` in `crates/kassiber-desktop/src/wallets/add/meta.rs`; Binance today),
+the modal asks first:
 
 ```
  Kraken
@@ -1203,8 +1204,8 @@ transaction ID scheme.
 
 ### Refresh all and reports
 
-The title bar refresh (its button, Cmd/Ctrl+R, and the command palette's
-Refresh book set) is an explicit user action: after the book refresh it also
+The title bar refresh (its button and menu, Cmd/Ctrl+R and Cmd/Ctrl+Shift+R, and the
+command palette's Refresh and Full rescan) is an explicit user action: after the book refresh it also
 syncs every exchange wallet with a key, one `ui.connections.exchange.sync`
 each. The sequence belongs to the book the click was made in: each request
 carries that book's `expected_scope`, which the daemon refuses for another

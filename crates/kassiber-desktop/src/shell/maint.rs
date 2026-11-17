@@ -98,6 +98,8 @@ pub struct Run {
     pub jobs: HashMap<String, Value>,
     /// The last journal run's `auto_pair` choice, for its Retry.
     pub journals_auto_pair: bool,
+    /// A title-bar refresh: every exchange API source with a key syncs after it.
+    pub exchanges: bool,
 }
 
 /// `STARTING_SYNC_PROGRESS_VALUE`.

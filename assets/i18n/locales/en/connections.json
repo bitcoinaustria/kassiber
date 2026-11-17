@@ -1531,7 +1531,7 @@
     },
     "sync": {
       "title": "{{provider}} API",
-      "body": "Kassiber contacts {{provider}} only when you press Sync now. Refresh all, background refresh and the assistant never sync exchange accounts.",
+      "body": "Kassiber contacts {{provider}} only when you press Sync now or the title-bar refresh. Background refresh and the assistant never sync exchange accounts.",
       "button": "Sync now",
       "running": "Syncing…",
       "key": "Read-only API key",

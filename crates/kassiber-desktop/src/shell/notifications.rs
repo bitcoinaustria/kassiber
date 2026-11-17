@@ -21,6 +21,8 @@ enum Act {
     RetryJournals,
     /// Settings → Security at the Touch ID row (the saved-unlock conditions).
     Security,
+    /// Connections filtered to the sources needing action for the condition's period.
+    Coverage,
 }
 
 struct Condition {
@@ -445,6 +447,21 @@ fn conditions(app: &App) -> Vec<Condition> {
             )),
         });
     }
+    // `sources.behind`: sources that do not reach the previous year's end (a local read).
+    if let Some((period, n)) = app.wallets.behind.as_ref().filter(|(_, n)| *n > 0) {
+        let (title, body) = crate::wallets::behind::behind_text(*n as usize, period);
+        out.push(Condition {
+            blocking: false,
+            error: false,
+            title,
+            body,
+            details: Vec::new(),
+            action: Some((
+                t("chrome:notifications.condition.sourcesBehind.action"),
+                Act::Coverage,
+            )),
+        });
+    }
     // App-level conditions about saved unlock methods (unlockNotifications.ts).
     for (_, title, body, details, action) in crate::secrets::conditions(app) {
         out.push(Condition {
@@ -474,6 +491,13 @@ fn act(s: &mut App, a: Act) {
             s.process_journals_with(auto_pair)
         }
         Act::Security => crate::secrets::open_security(s),
+        Act::Coverage => {
+            let period = s.wallets.behind.as_ref().map(|(p, _)| p.clone());
+            s.navigate(&crate::wallets::coverage::search_route(
+                true,
+                period.as_deref(),
+            ))
+        }
     }
 }
 
@@ -682,7 +706,8 @@ fn panel(app: &App, tk: &Tk, conds: Vec<Condition>) -> El {
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         });
-    let running = app.busy.syncing || app.busy.processing;
+    let exchange = crate::wallets::add::exchange::refresh::refresh_running(app);
+    let running = app.busy.syncing || app.busy.processing || exchange.is_some();
     if conds.is_empty() && !running && app.shell.recent_here().next().is_none() {
         // `px-3 py-4 text-center text-xs text-muted-foreground`, in place of the list.
         body = col()
@@ -795,7 +820,12 @@ fn job_row(app: &App, tk: &Tk) -> El {
             }
             && !m.failed
     });
+    // After a title-bar refresh, each exchange source with a key syncs as its own connection job.
+    let exchange = (!refresh && !app.busy.processing)
+        .then(|| crate::wallets::add::exchange::refresh::refresh_running(app))
+        .flatten();
     let title = t(match (refresh, app.shell.run.force_full) {
+        _ if exchange.is_some() => "chrome:notifications.job.connectionSync",
         (true, true) => "chrome:notifications.job.bookRescan",
         (true, false) => "chrome:notifications.job.bookRefresh",
         (false, _) => "chrome:notifications.job.journalProcessing",
@@ -803,6 +833,7 @@ fn job_row(app: &App, tk: &Tk) -> El {
     // `projectFreeText`: a phase can name a source, and a name can carry an amount.
     let phase = maint
         .map(|m| m.label.trim().to_owned())
+        .or_else(|| exchange.map(str::to_owned))
         .or_else(|| app.busy.progress.clone())
         .filter(|p| !p.is_empty() && *p != title)
         .and_then(|p| match app.prefs.privacy {

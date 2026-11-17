@@ -8,12 +8,14 @@
 //! - `list`: routes/Connections.tsx (+ components/kb/wallets/Wallets*).
 //! - `imports`: routes/Imports.tsx (+ shadcnblocks/settings-integrations4).
 //! - `detail`: routes/ConnectionDetail.tsx (wallet detail and its panels).
-//! - `coverage`, `sources`: lib/sourceCoverage.ts and the Coverage card (SourceCoverageCard.tsx).
+//! - `coverage`, `sources`: lib/sourceCoverage.ts and the Coverage card (SourceCoverageCard.tsx);
+//!   `behind`: the `sources.behind` Needs attention read.
 //! - `node`: routes/NodeConnectionDetail.tsx (+ ConnectionDetail's NodeConnectionContainer).
 //! - `add`: components/kb/AddConnectionDialog.tsx (both steps, every setup form);
 //!   `add::btcpay` and `add::exchange` the BTCPay / exchange setup panels and ExchangeSyncCard.
 
 pub mod add;
+pub mod behind;
 pub mod common;
 pub mod conn;
 pub mod coverage;
@@ -38,6 +40,9 @@ pub struct Ui {
     pub add: add::State,
     /// The Coverage card on a wallet's page.
     pub sources: sources::State,
+    /// The shell's `sources.behind` read: the period end (the previous calendar year's) and how
+    /// many sources do not reach it, once a read answered.
+    pub behind: Option<(String, u64)>,
     /// Successful file imports this session (the Coverage card judges the one after its Import).
     pub imports_done: u64,
 }
@@ -134,6 +139,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     detail::on_reply(app, tag, r);
     node::on_reply(app, tag, r);
     sources::on_reply(app, tag, r);
+    behind::on_reply(app, tag, r);
     add::on_reply(app, tag, r);
 }
 

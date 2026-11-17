@@ -2130,6 +2130,26 @@ See [tax countries](docs/reference/tax-countries.md) and
   AI, and diagnostics surfaces; preserve the adapter discard policy in
   [Lightning opsec](docs/reference/lightning-opsec.md).
 
+[Source coverage](docs/reference/desktop.md#sources-live-sync-and-file-snapshots)
+(live sync vs file snapshots) is in: the coverage model, import-run file
+metadata, persisted exchange sync outcomes, attaching a key to a CSV wallet,
+the Connections column and filter, the Coverage card, the key-or-file choice,
+the shell notification, the Reports warning, and the title-bar exchange sync.
+Remaining:
+
+- [ ] Carry source coverage in `ui.report.blockers` (as a warning that keeps
+  `ready`) once it takes a period; recorded sessions and goldens pin today's
+  payload. The assistant reads `ui_sources_coverage` meanwhile.
+- [ ] Fill `api_history_limit` per exchange module where its API stops
+  returning history, so hybrid sources say "CSV covers history before …".
+- [ ] Say "this file matches an earlier import" by hash: identical re-imports
+  record no run, so the desktop only reports "nothing new" today.
+- [ ] Publish the Rust-only coverage tools to the MCP registry and AI vectors
+  on the test-data branch; the tests compare them in-tree for now.
+- [ ] Give the generic exchanges (Kraken, Coinbase, Bitpanda) a dedicated CSV
+  parser in the exchange-kind wallet, then add `fileSourceId` to their API
+  cards; a generic-ledger CSV would land in a second wallet and double-count.
+
 ## Desktop and handoffs
 
 - [x] Adopt the Rune desktop as the desktop app: moved to

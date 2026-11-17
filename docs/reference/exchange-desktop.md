@@ -37,7 +37,14 @@ page).
    `<kind>-2`, ...), and the provider wallet `wallets sync-<kind>` creates on
    its first run (label, kind, `{"backend": name}`). A wallet that already
    has the label is refused (`conflict`), because the CLI sync would import
-   into it. The key lives in the book's `backends` row, inside SQLCipher when
+   into it. When that wallet is the same exchange's CSV wallet without a key,
+   the refusal names it (`attachable_wallet_id`, `attachable_wallet`) and the
+   dialog offers to add the key to it instead (`wallet` argument): the wallet
+   gains `backend` in its config and becomes a hybrid source whose API keeps
+   recent activity current while its CSV runs cover older history
+   ([sources](desktop.md#sources-live-sync-and-file-snapshots)). Rows
+   deduplicate within that one wallet by external ID and fingerprint, so CSV
+   and API rows only match where both carry the same transaction ID scheme. The key lives in the book's `backends` row, inside SQLCipher when
    the book is encrypted, and no kind returns it.
 6. **Sync now** (`ui.connections.exchange.sync`), either right after creation
    when the user ticks **Import history right after adding the connection**
@@ -47,8 +54,8 @@ page).
 ## Wallet page
 
 An exchange wallet's page shows an exchange card instead of the chain refresh:
-whether its key is stored, the last sync of this session (time, new and read
-rows, skipped Bitpanda operations) or its error, and **Sync now**. The header
+whether its key is stored, its last sync (time, new and read rows, skipped
+Bitpanda operations) or its error, and **Sync now**. The header
 Refresh runs the same sync; Full rescan is hidden. Errors are explained by
 code, then the daemon's own message and hint:
 
@@ -62,10 +69,20 @@ code, then the daemon's own message and hint:
 | `config_error` | the saved key is incomplete |
 | `backend_timeout`, `network_error`, `app_error` | unreachable, slow, or an HTTP error |
 
-The last sync result lives in the open book's memory only
-(`ui.connections.exchange.status`), so it resets when Kassiber restarts or the
-book closes. The CLI's sync stores no sync record, and the desktop's book
-must hold the CLI's rows, so the book has nothing to read it from.
+Every sync, CLI or desktop, stores its outcome on the wallet it ran for, also
+when no `--wallet` named it (`config_json.exchange_sync`: `status`, `at`, the
+counts, and for a failure only its error class: `auth`, `rate_limited`,
+`offline`, `network`, `protocol`, `validation`, `config`, or `other`). Provider
+text (messages, hints, response bodies) is never stored: the status read
+reports a stored failure as the class's error code and Kassiber's own
+explanation. Older records that held text are rewritten to their class when
+the book opens, with `secure_delete` on, and the WAL is checkpointed and
+truncated; until that truncate completes (a reader can hold old pages) the
+cleanup stays pending and later opens retry it
+([compatibility](database-compatibility.md)). A
+success also stores `last_synced_at`. `ui.connections.exchange.status` reads it, so it survives a
+restart, and source coverage and completeness use it. API syncs record no
+import run ([imports](imports.md#import-runs-and-rolling-one-back)).
 
 ## Daemon kinds
 
@@ -77,7 +94,7 @@ rest operator), and refuse unknown arguments before any work.
 | --- | --- | --- | --- |
 | `ui.connections.exchange.status` | `wallet?` | none | `connections`: per exchange wallet of the active profile, `wallet_id`, `wallet`, `exchange`, `provider`, `backend`, `backend_configured`, `has_api_key`, `has_api_secret` (null for Bitpanda) and `last_sync` (`status`, `at`, `imported`, `fetched`, `skipped`, or the error envelope's `error`) |
 | `ui.connections.exchange.test` | `backend`, or `exchange`, `api_key`, `api_secret`, `url?` | the check above, once | `exchange`, `ok`, `read_only` (true when the exchange confirmed it, null when it does not say) |
-| `ui.connections.exchange.create` | `exchange`, `api_key`, `api_secret` (not for Bitpanda), `label?`, `url?` | none | `exchange`, `wallet` (`id`, `label`, `kind`), `backend` (the redacted backend row) |
+| `ui.connections.exchange.create` | `exchange`, `api_key`, `api_secret` (not for Bitpanda), `label?`, `url?`, `wallet?` (attach to that exchange's CSV wallet) | none | `exchange`, `attached`, `wallet` (`id`, `label`, `kind`), `backend` (the redacted backend row) |
 | `ui.connections.exchange.sync` | `wallet` | the CLI sync's reads | the CLI's `wallets.sync-<kind>` data |
 
 `url` defaults to the exchange's public API and exists for tests and
@@ -95,13 +112,21 @@ proxies; the desktop never sends it.
   so offline mode or `KASSIBER_NO_EGRESS` stops either before its first
   request, and the sync's publication savepoint is rechecked too.
 - An echoed key or secret is withheld from every error, as for the CLI, so
-  neither reaches the reply, the RAM logs, the session's last-sync record or
+  neither reaches the reply, the RAM logs, the stored last-sync record (which
+  keeps only an error class) or
   the book. Request arguments named `api_key` and `api_secret` are sensitive
   to the shared redaction.
-- `ui.wallets.sync`, Refresh all and background freshness still treat
+- `ui.wallets.sync`, `ui.freshness.run` and background freshness still treat
   exchange wallets as sourceless, and no assistant or MCP tool calls these
   kinds: exchange syncs stay out of the assistant's surface, as before. Only
-  the user's click on Sync now contacts the exchange.
+  the user's click on Sync now, or on the title-bar refresh (Cmd/Ctrl+R),
+  contacts the exchange; the title-bar refresh runs `ui.connections.exchange.sync`
+  once per exchange wallet with a key after the book refresh. Each of those
+  requests carries the originating book's `expected_scope`, and the sequence
+  stops when the book or daemon session changes. Each of those syncs shows
+  like Sync now in the notification list: a running connection sync, then a
+  result, or a failed-sync condition on that connection. Startup, timers and
+  menu-driven book refreshes do not.
 
 ## Verification
 

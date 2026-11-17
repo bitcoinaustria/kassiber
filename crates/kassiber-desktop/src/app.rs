@@ -615,6 +615,8 @@ impl App {
         self.send("ui.freshness.status", Value::Null, "app.freshness");
         self.send("ui.network.offline", Value::Null, "app.offline");
         self.send("ui.backends.settings.list", Value::Null, "app.backends");
+        // Sources behind for the previous year (`sources.behind`; a local read).
+        crate::wallets::behind::read_behind(self);
     }
 
     /// Re-reads everything the screen shows (after a mutation, a sync, a journal run or a
@@ -661,6 +663,7 @@ impl App {
         self.send("ui.review.badges", Value::Null, "app.badges");
         self.send("ui.freshness.status", Value::Null, "app.freshness");
         self.send("ui.profiles.snapshot", Value::Null, "app.profiles");
+        crate::wallets::behind::read_behind(self);
         // Transactions re-reads its list and dashboard on its next poll (held with these); rows
         // the refresh brings in are highlighted.
         self.txs.list_key.clear();
@@ -1481,6 +1484,9 @@ impl App {
                 // Toast, Recent entry, condition and the card's failed state (useWalletSyncAction).
                 crate::shell::maint::on_refresh_reply(self, r);
                 self.refresh_reads();
+                if std::mem::take(&mut self.shell.run.exchanges) {
+                    crate::wallets::add::exchange::refresh::sync_after_refresh(self);
+                }
             }
             "app.journals_process" => {
                 self.busy.processing = false;
@@ -1638,6 +1644,17 @@ impl App {
     /// `syncAll()`: the header refresh, ⌘R, and the chart's empty-state Refresh. Network egress,
     /// so only ever called from a user action.
     pub fn refresh_book(&mut self, force_full: bool) {
+        self.refresh_book_with(force_full, false);
+    }
+
+    /// The title-bar refresh (its button, menu and shortcut): the book, then every exchange API
+    /// source with a key, one request each (`includeExchangeApis`). Other refreshes never contact
+    /// an exchange.
+    pub fn refresh_book_from_title_bar(&mut self, force_full: bool) {
+        self.refresh_book_with(force_full, true);
+    }
+
+    fn refresh_book_with(&mut self, force_full: bool, exchanges: bool) {
         if self.busy.syncing || self.busy.processing {
             return;
         }
@@ -1649,6 +1666,7 @@ impl App {
         {
             self.busy.syncing = true;
             crate::shell::maint::start_refresh(self, force_full);
+            self.shell.run.exchanges = exchanges;
         }
     }
 
@@ -2055,6 +2073,43 @@ pub(crate) mod tests {
             ..Default::default()
         });
         app.route = Route("/overview".into());
+    }
+
+    /// Exchange APIs are contacted after a title-bar refresh only (docs/reference/privacy-and-security.md):
+    /// the chart's, the menu's and a notification's Retry refresh never ask for an exchange.
+    #[test]
+    fn only_the_title_bar_refresh_reaches_exchanges() {
+        let asked = |title_bar: bool| {
+            let mut app = quiet_app();
+            in_app(&mut app);
+            if title_bar {
+                app.refresh_book_from_title_bar(false);
+            } else {
+                app.refresh_book(false);
+            }
+            for _ in 0..6 {
+                app.pump();
+            }
+            app.timings
+                .iter()
+                .map(|(kind, _)| kind.clone())
+                .collect::<Vec<_>>()
+        };
+        let plain = asked(false);
+        assert!(plain.iter().any(|k| k == "ui.freshness.run"), "{plain:?}");
+        assert!(
+            !plain
+                .iter()
+                .any(|k| k.starts_with("ui.connections.exchange")),
+            "{plain:?}"
+        );
+        let title_bar = asked(true);
+        assert!(
+            title_bar
+                .iter()
+                .any(|k| k == "ui.connections.exchange.status"),
+            "{title_bar:?}"
+        );
     }
 
     #[test]
