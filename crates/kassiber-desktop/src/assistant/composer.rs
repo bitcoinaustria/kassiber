@@ -820,11 +820,13 @@ pub fn attach_paths(app: &mut App, paths: &[std::path::PathBuf]) {
             Some("assistant-attachmentUnsupported"),
         );
     }
-    if app.assistant.uploads.len() == 1
-        || (!app.assistant.uploads.is_empty()
-            && app.assistant.uploads[0].offset == 0
-            && !app.assistant.upload_busy)
-    {
+    start_queue(app);
+}
+
+/// Starts the upload queue unless a chunk is in flight: re-sending the pending chunk (same id
+/// and offset) would fail the daemon's offset check and abort a valid upload.
+fn start_queue(app: &mut App) {
+    if !app.assistant.uploads.is_empty() && !app.assistant.upload_busy {
         send_chunk(app);
     }
 }
@@ -985,6 +987,18 @@ mod tests {
             book,
         });
         send_chunk(app);
+    }
+
+    /// A chunk of the only queued upload in flight (a second file was refused): starting the
+    /// queue again sends nothing, so the daemon never sees a duplicate offset.
+    #[test]
+    fn a_chunk_in_flight_is_not_sent_twice() {
+        let mut app = crate::app::tests::quiet_app();
+        queue(&mut app, "a", "a.csv");
+        assert!(app.assistant.upload_busy);
+        let sent = app.pending.len();
+        start_queue(&mut app);
+        assert_eq!(app.pending.len(), sent, "no duplicate chunk");
     }
 
     fn staged(token: &str) -> crate::app::Reply {
