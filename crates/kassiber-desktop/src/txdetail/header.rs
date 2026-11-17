@@ -229,10 +229,18 @@ pub fn header(app: &App, tk: &Tk, o: &Open, r: &Value, sheet: bool) -> El {
         _ => 1.0,
     };
     let rate = f(r, "rate").filter(|x| *x != 0.0);
+    // "Then" is in the transaction's own fiat currency; "now" in the market rate's. The change
+    // compares the two rates, so it shows only when they are the same currency.
+    let then_currency = super::tax::row_currency(Some(app), r);
+    let now_currency = app
+        .snapshot()
+        .map(|s| s.fiat_currency())
+        .unwrap_or_else(|| then_currency.clone());
     let now = now_rate(app)
         .filter(|_| amount_btc != 0.0)
         .map(|nr| nr * amount_btc * impact);
     let change = match (now_rate(app), rate) {
+        _ if now_currency != then_currency => None,
         (Some(nr), Some(rt)) => Some((nr - rt) / rt * 100.0),
         _ => None,
     };
@@ -391,7 +399,7 @@ pub fn header(app: &App, tk: &Tk, o: &Open, r: &Value, sheet: bool) -> El {
         e
     };
     let big = tk.ty_amount();
-    let then_text = then.map(|v| format::fiat(v, "EUR"));
+    let then_text = then.map(|v| format::fiat(v, &then_currency));
     let btc_text = draft::btc_amount(amount_btc);
     let headline = row()
         .key("txd-amount")
@@ -453,7 +461,7 @@ pub fn header(app: &App, tk: &Tk, o: &Open, r: &Value, sheet: bool) -> El {
             row()
                 .child(super::widgets::sens(
                     tk,
-                    format::fiat(nv.abs(), "EUR"),
+                    format::fiat(nv.abs(), &now_currency),
                     sec,
                     tk.muted_fg,
                     hide,

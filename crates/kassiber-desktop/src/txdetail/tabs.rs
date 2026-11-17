@@ -77,7 +77,10 @@ pub fn details(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) -> 
     } else if let Some(rt) = f(r, "rate").filter(|x| *x != 0.0) {
         tr(
             "transactions:details.perBtc",
-            &[("value", &format::fiat(rt, "EUR"))],
+            &[(
+                "value",
+                &format::fiat(rt, &super::tax::row_currency(Some(app), r)),
+            )],
         )
     } else {
         t("transactions:details.priceMissing")
@@ -1074,7 +1077,10 @@ pub fn pricing(app: &App, tk: &Tk, o: &Open, r: &Value) -> El {
         .map(|v| {
             tr(
                 "transactions:pricing.perBtc",
-                &[("value", &format::fiat(v, "EUR"))],
+                &[(
+                    "value",
+                    &format::fiat(v, &super::tax::row_currency(Some(app), r)),
+                )],
             )
         })
         .unwrap_or_else(|| t("transactions:pricing.importedPriceNone"));
@@ -1082,7 +1088,15 @@ pub fn pricing(app: &App, tk: &Tk, o: &Open, r: &Value) -> El {
         .map(|v| {
             tr(
                 "transactions:pricing.perBtc",
-                &[("value", &format::fiat(v, "EUR"))],
+                &[(
+                    "value",
+                    &format::fiat(
+                        v,
+                        &app.snapshot()
+                            .map(|s| s.fiat_currency())
+                            .unwrap_or_else(|| "EUR".into()),
+                    ),
+                )],
             )
         })
         .unwrap_or_else(|| t("transactions:pricing.spotNowUnknown"));

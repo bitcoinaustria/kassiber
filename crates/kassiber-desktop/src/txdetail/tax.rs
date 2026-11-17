@@ -74,7 +74,7 @@ struct Effect {
 /// The currency of a transaction's fiat figures: its own `fiatCurrency` (the row's `eur` and the
 /// journal amounts are in the book's accounting currency despite their historical names), else
 /// the open book's, else EUR.
-fn row_currency(app: Option<&App>, r: &Value) -> String {
+pub(super) fn row_currency(app: Option<&App>, r: &Value) -> String {
     opt_s(r, "fiatCurrency")
         .filter(|c| !c.trim().is_empty())
         .or_else(|| {

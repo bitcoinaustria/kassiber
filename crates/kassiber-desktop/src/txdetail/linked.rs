@@ -418,7 +418,7 @@ pub fn linked(app: &App, tk: &Tk, o: &Open, r: &Value) -> El {
             f(e, "quantity").unwrap_or(0.0),
             s(e, "asset"),
             f(e, "fiatValueEur")
-                .map(|x| format::fiat(x, "EUR"))
+                .map(|x| format::fiat(x, &super::tax::row_currency(Some(app), r)))
                 .unwrap_or_else(|| "—".into())
         );
         j = j.child(ledger_row(
