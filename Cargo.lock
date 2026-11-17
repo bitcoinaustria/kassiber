@@ -2501,6 +2501,7 @@ dependencies = [
  "kassiber-pytext",
  "kassiber-rates",
  "kassiber-release",
+ "kassiber-replay",
  "kassiber-reports",
  "kassiber-runtime",
  "kassiber-secrets",
