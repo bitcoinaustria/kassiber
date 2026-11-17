@@ -19,8 +19,8 @@
     "text": "\nx\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: date, type, direction, amount_sats, amount_btc, fee_sats, status, txid, network, address, swap_id, preimage, total_swap_fees_sats, send_network, receive_network, send_txid, receive_txid",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: date, type, direction, amount_sats, amount_btc, fee_sats, status, txid, network, address, swap_id, preimage, total_swap_fees_sats, send_network, receive_network, send_txid, receive_txid"
     }
   },
   {
@@ -31,8 +31,8 @@
     ],
     "error": {
       "code": "internal_error",
-      "message": "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte",
-      "hint": null
+      "hint": null,
+      "message": "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte"
     }
   },
   {
@@ -89,8 +89,8 @@
     "text": "\ufeffdate,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: date",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: date"
     }
   },
   {
@@ -99,8 +99,8 @@
     "text": "date;type;direction;amount_sats;amount_btc;fee_sats;status;txid;network;address;swap_id;preimage;total_swap_fees_sats;send_network;receive_network;send_txid;receive_txid\r\n2025-01-02T01:02:03Z;onchain;incoming;150000;0.0015;200;confirmed;abababababababababababababababababababababababababababababababab;bitcoin;bc1q;;;;;;;\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: date, type, direction, amount_sats, amount_btc, fee_sats, status, txid, network, address, swap_id, preimage, total_swap_fees_sats, send_network, receive_network, send_txid, receive_txid",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: date, type, direction, amount_sats, amount_btc, fee_sats, status, txid, network, address, swap_id, preimage, total_swap_fees_sats, send_network, receive_network, send_txid, receive_txid"
     }
   },
   {
@@ -109,8 +109,8 @@
     "text": "type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\nonchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: date",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: date"
     }
   },
   {
@@ -119,8 +119,8 @@
     "text": "date,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: type",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: type"
     }
   },
   {
@@ -129,8 +129,8 @@
     "text": "date,type,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: direction",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: direction"
     }
   },
   {
@@ -139,8 +139,8 @@
     "text": "date,type,direction,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: amount_sats",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: amount_sats"
     }
   },
   {
@@ -149,8 +149,8 @@
     "text": "date,type,direction,amount_sats,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: amount_btc",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: amount_btc"
     }
   },
   {
@@ -159,8 +159,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: fee_sats",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: fee_sats"
     }
   },
   {
@@ -169,8 +169,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: status",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: status"
     }
   },
   {
@@ -179,8 +179,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: txid",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: txid"
     }
   },
   {
@@ -189,8 +189,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: network",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: network"
     }
   },
   {
@@ -199,8 +199,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: address",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: address"
     }
   },
   {
@@ -209,8 +209,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: swap_id",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: swap_id"
     }
   },
   {
@@ -219,8 +219,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: preimage",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: preimage"
     }
   },
   {
@@ -229,8 +229,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: total_swap_fees_sats",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: total_swap_fees_sats"
     }
   },
   {
@@ -239,8 +239,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: send_network",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: send_network"
     }
   },
   {
@@ -249,8 +249,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: receive_network",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: receive_network"
     }
   },
   {
@@ -259,8 +259,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: send_txid",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: send_txid"
     }
   },
   {
@@ -269,8 +269,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: receive_txid",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: receive_txid"
     }
   },
   {
@@ -279,8 +279,8 @@
     "text": "date\r\n2025-01-02T01:02:03Z\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV is missing required columns: type, direction, amount_sats, amount_btc, fee_sats, status, txid, network, address, swap_id, preimage, total_swap_fees_sats, send_network, receive_network, send_txid, receive_txid",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV is missing required columns: type, direction, amount_sats, amount_btc, fee_sats, status, txid, network, address, swap_id, preimage, total_swap_fees_sats, send_network, receive_network, send_txid, receive_txid"
     }
   },
   {
@@ -1035,15 +1035,97 @@
     "name": "bull-wallet:direction-self",
     "format": "bullbitcoin_wallet_csv",
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,self,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
-    "records": [],
-    "networks": []
+    "records": [
+      {
+        "fields": {
+          "external_id": "abababababababababababababababababababababababababababababababab",
+          "external_id_kind": "txid",
+          "occurred_at": "2025-01-02T01:02:03Z",
+          "confirmed_at": "2025-01-02T01:02:03Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 0,
+          "fee": 200000,
+          "amount_includes_fee": 0,
+          "fiat_currency": "",
+          "fiat_rate": null,
+          "fiat_value": null,
+          "fiat_rate_exact": null,
+          "fiat_value_exact": null,
+          "fiat_price_source": null,
+          "pricing_source_kind": null,
+          "pricing_provider": null,
+          "pricing_pair": null,
+          "pricing_timestamp": null,
+          "pricing_fetched_at": null,
+          "pricing_granularity": null,
+          "pricing_method": null,
+          "pricing_external_ref": null,
+          "pricing_quality": "missing",
+          "kind": "fee",
+          "privacy_boundary": null,
+          "description": "Bull Bitcoin wallet self-transfer fee",
+          "counterparty": null,
+          "payment_hash": null,
+          "payment_hash_source": null,
+          "swap_refund_funding_txid": null,
+          "swap_refund_funding_vout": null,
+          "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"self\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"onchain\"}"
+        },
+        "fingerprint": "93e979b2f6ffffc64523e03ddf3d730d261c2e4edcd35c1217548995962bf02d"
+      }
+    ],
+    "networks": [
+      "bitcoin"
+    ]
   },
   {
     "name": "bull-wallet:direction-SELF",
     "format": "bullbitcoin_wallet_csv",
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,SELF,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
-    "records": [],
-    "networks": []
+    "records": [
+      {
+        "fields": {
+          "external_id": "abababababababababababababababababababababababababababababababab",
+          "external_id_kind": "txid",
+          "occurred_at": "2025-01-02T01:02:03Z",
+          "confirmed_at": "2025-01-02T01:02:03Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 0,
+          "fee": 200000,
+          "amount_includes_fee": 0,
+          "fiat_currency": "",
+          "fiat_rate": null,
+          "fiat_value": null,
+          "fiat_rate_exact": null,
+          "fiat_value_exact": null,
+          "fiat_price_source": null,
+          "pricing_source_kind": null,
+          "pricing_provider": null,
+          "pricing_pair": null,
+          "pricing_timestamp": null,
+          "pricing_fetched_at": null,
+          "pricing_granularity": null,
+          "pricing_method": null,
+          "pricing_external_ref": null,
+          "pricing_quality": "missing",
+          "kind": "fee",
+          "privacy_boundary": null,
+          "description": "Bull Bitcoin wallet self-transfer fee",
+          "counterparty": null,
+          "payment_hash": null,
+          "payment_hash_source": null,
+          "swap_refund_funding_txid": null,
+          "swap_refund_funding_vout": null,
+          "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"SELF\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"onchain\"}"
+        },
+        "fingerprint": "93e979b2f6ffffc64523e03ddf3d730d261c2e4edcd35c1217548995962bf02d"
+      }
+    ],
+    "networks": [
+      "bitcoin"
+    ]
   },
   {
     "name": "bull-wallet:direction-sideways",
@@ -1051,8 +1133,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,sideways,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Unsupported Bull Bitcoin wallet direction 'sideways'",
-      "hint": null
+      "hint": null,
+      "message": "Unsupported Bull Bitcoin wallet direction 'sideways'"
     }
   },
   {
@@ -1061,8 +1143,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Unsupported Bull Bitcoin wallet direction 'None'",
-      "hint": null
+      "hint": null,
+      "message": "Unsupported Bull Bitcoin wallet direction 'None'"
     }
   },
   {
@@ -1213,49 +1295,11 @@
     "name": "bull-wallet:number-amount_sats--150",
     "format": "bullbitcoin_wallet_csv",
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,-150,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
-    "records": [
-      {
-        "fields": {
-          "external_id": "abababababababababababababababababababababababababababababababab",
-          "external_id_kind": "txid",
-          "occurred_at": "2025-01-02T01:02:03Z",
-          "confirmed_at": "2025-01-02T01:02:03Z",
-          "direction": "inbound",
-          "asset": "BTC",
-          "amount": 150000,
-          "fee": 200000,
-          "amount_includes_fee": 0,
-          "fiat_currency": "",
-          "fiat_rate": null,
-          "fiat_value": null,
-          "fiat_rate_exact": null,
-          "fiat_value_exact": null,
-          "fiat_price_source": null,
-          "pricing_source_kind": null,
-          "pricing_provider": null,
-          "pricing_pair": null,
-          "pricing_timestamp": null,
-          "pricing_fetched_at": null,
-          "pricing_granularity": null,
-          "pricing_method": null,
-          "pricing_external_ref": null,
-          "pricing_quality": "missing",
-          "kind": "onchain",
-          "privacy_boundary": null,
-          "description": "Bull Bitcoin wallet onchain",
-          "counterparty": null,
-          "payment_hash": null,
-          "payment_hash_source": null,
-          "swap_refund_funding_txid": null,
-          "swap_refund_funding_vout": null,
-          "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"-150\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"onchain\"}"
-        },
-        "fingerprint": "c69f1dfc3796f5730c639e8fe080878be537b6e76aaa2e522cf916b48cfa0bf7"
-      }
-    ],
-    "networks": [
-      "bitcoin"
-    ]
+    "error": {
+      "code": "app_error",
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has negative amount_sats: -150"
+    }
   },
   {
     "name": "bull-wallet:number-amount_sats-1.0",
@@ -1311,8 +1355,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,1.5,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV has non-integer amount_sats: 1.5",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has non-integer amount_sats: 1.5"
     }
   },
   {
@@ -1369,57 +1413,19 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,1e-3,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV has non-integer amount_sats: 0.001",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has non-integer amount_sats: 0.001"
     }
   },
   {
     "name": "bull-wallet:number-amount_sats-($1,234)",
     "format": "bullbitcoin_wallet_csv",
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,\"($1,234)\",0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
-    "records": [
-      {
-        "fields": {
-          "external_id": "abababababababababababababababababababababababababababababababab",
-          "external_id_kind": "txid",
-          "occurred_at": "2025-01-02T01:02:03Z",
-          "confirmed_at": "2025-01-02T01:02:03Z",
-          "direction": "inbound",
-          "asset": "BTC",
-          "amount": 1234000,
-          "fee": 200000,
-          "amount_includes_fee": 0,
-          "fiat_currency": "",
-          "fiat_rate": null,
-          "fiat_value": null,
-          "fiat_rate_exact": null,
-          "fiat_value_exact": null,
-          "fiat_price_source": null,
-          "pricing_source_kind": null,
-          "pricing_provider": null,
-          "pricing_pair": null,
-          "pricing_timestamp": null,
-          "pricing_fetched_at": null,
-          "pricing_granularity": null,
-          "pricing_method": null,
-          "pricing_external_ref": null,
-          "pricing_quality": "missing",
-          "kind": "onchain",
-          "privacy_boundary": null,
-          "description": "Bull Bitcoin wallet onchain",
-          "counterparty": null,
-          "payment_hash": null,
-          "payment_hash_source": null,
-          "swap_refund_funding_txid": null,
-          "swap_refund_funding_vout": null,
-          "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"($1,234)\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"onchain\"}"
-        },
-        "fingerprint": "e9148493fd82a972a70d83a4455c4aa63b0745e712b12973f2778349f4c7a8e7"
-      }
-    ],
-    "networks": [
-      "bitcoin"
-    ]
+    "error": {
+      "code": "app_error",
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has negative amount_sats: -1234"
+    }
   },
   {
     "name": "bull-wallet:number-amount_sats-1,234",
@@ -1523,8 +1529,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV has a row with empty amount_sats",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has a row with empty amount_sats"
     }
   },
   {
@@ -1533,8 +1539,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,NaN,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV has non-integer amount_sats: NaN",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has non-integer amount_sats: NaN"
     }
   },
   {
@@ -1543,8 +1549,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,-NaN,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV has non-integer amount_sats: -NaN",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has non-integer amount_sats: -NaN"
     }
   },
   {
@@ -1553,8 +1559,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,sNaN,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "internal_error",
-      "message": "[<class 'decimal.InvalidOperation'>]",
-      "hint": null
+      "hint": null,
+      "message": "[<class 'decimal.InvalidOperation'>]"
     }
   },
   {
@@ -1563,8 +1569,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,Infinity,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "internal_error",
-      "message": "cannot convert Infinity to integer",
-      "hint": null
+      "hint": null,
+      "message": "cannot convert Infinity to integer"
     }
   },
   {
@@ -1573,8 +1579,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,-Infinity,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "internal_error",
-      "message": "cannot convert Infinity to integer",
-      "hint": null
+      "hint": null,
+      "message": "cannot convert Infinity to integer"
     }
   },
   {
@@ -1583,8 +1589,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,bad,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Invalid decimal value: bad",
-      "hint": null
+      "hint": null,
+      "message": "Invalid decimal value: bad"
     }
   },
   {
@@ -1593,8 +1599,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,999999999999999999999999999999,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "internal_error",
-      "message": "Python int too large to convert to SQLite INTEGER",
-      "hint": null
+      "hint": null,
+      "message": "Python int too large to convert to SQLite INTEGER"
     }
   },
   {
@@ -1745,49 +1751,11 @@
     "name": "bull-wallet:number-fee_sats--150",
     "format": "bullbitcoin_wallet_csv",
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,-150,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
-    "records": [
-      {
-        "fields": {
-          "external_id": "abababababababababababababababababababababababababababababababab",
-          "external_id_kind": "txid",
-          "occurred_at": "2025-01-02T01:02:03Z",
-          "confirmed_at": "2025-01-02T01:02:03Z",
-          "direction": "inbound",
-          "asset": "BTC",
-          "amount": 150000000,
-          "fee": 150000,
-          "amount_includes_fee": 0,
-          "fiat_currency": "",
-          "fiat_rate": null,
-          "fiat_value": null,
-          "fiat_rate_exact": null,
-          "fiat_value_exact": null,
-          "fiat_price_source": null,
-          "pricing_source_kind": null,
-          "pricing_provider": null,
-          "pricing_pair": null,
-          "pricing_timestamp": null,
-          "pricing_fetched_at": null,
-          "pricing_granularity": null,
-          "pricing_method": null,
-          "pricing_external_ref": null,
-          "pricing_quality": "missing",
-          "kind": "onchain",
-          "privacy_boundary": null,
-          "description": "Bull Bitcoin wallet onchain",
-          "counterparty": null,
-          "payment_hash": null,
-          "payment_hash_source": null,
-          "swap_refund_funding_txid": null,
-          "swap_refund_funding_vout": null,
-          "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"-150\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"onchain\"}"
-        },
-        "fingerprint": "419d5d0363255074adff14e97a01e0bede4d3306d9d30bb4f36947fd92e315f3"
-      }
-    ],
-    "networks": [
-      "bitcoin"
-    ]
+    "error": {
+      "code": "app_error",
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has negative fee_sats: -150"
+    }
   },
   {
     "name": "bull-wallet:number-fee_sats-1.0",
@@ -1843,8 +1811,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,1.5,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV has non-integer fee_sats: 1.5",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has non-integer fee_sats: 1.5"
     }
   },
   {
@@ -1901,57 +1869,19 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,1e-3,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV has non-integer fee_sats: 0.001",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has non-integer fee_sats: 0.001"
     }
   },
   {
     "name": "bull-wallet:number-fee_sats-($1,234)",
     "format": "bullbitcoin_wallet_csv",
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,\"($1,234)\",confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
-    "records": [
-      {
-        "fields": {
-          "external_id": "abababababababababababababababababababababababababababababababab",
-          "external_id_kind": "txid",
-          "occurred_at": "2025-01-02T01:02:03Z",
-          "confirmed_at": "2025-01-02T01:02:03Z",
-          "direction": "inbound",
-          "asset": "BTC",
-          "amount": 150000000,
-          "fee": 1234000,
-          "amount_includes_fee": 0,
-          "fiat_currency": "",
-          "fiat_rate": null,
-          "fiat_value": null,
-          "fiat_rate_exact": null,
-          "fiat_value_exact": null,
-          "fiat_price_source": null,
-          "pricing_source_kind": null,
-          "pricing_provider": null,
-          "pricing_pair": null,
-          "pricing_timestamp": null,
-          "pricing_fetched_at": null,
-          "pricing_granularity": null,
-          "pricing_method": null,
-          "pricing_external_ref": null,
-          "pricing_quality": "missing",
-          "kind": "onchain",
-          "privacy_boundary": null,
-          "description": "Bull Bitcoin wallet onchain",
-          "counterparty": null,
-          "payment_hash": null,
-          "payment_hash_source": null,
-          "swap_refund_funding_txid": null,
-          "swap_refund_funding_vout": null,
-          "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"($1,234)\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"onchain\"}"
-        },
-        "fingerprint": "a860528b41ffc4dd1a88b1c957cd79773497c9853bfd4a01f83a189a3aacce0a"
-      }
-    ],
-    "networks": [
-      "bitcoin"
-    ]
+    "error": {
+      "code": "app_error",
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has negative fee_sats: -1234"
+    }
   },
   {
     "name": "bull-wallet:number-fee_sats-1,234",
@@ -2103,8 +2033,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,NaN,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV has non-integer fee_sats: NaN",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has non-integer fee_sats: NaN"
     }
   },
   {
@@ -2113,8 +2043,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,-NaN,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Bull Bitcoin wallet CSV has non-integer fee_sats: -NaN",
-      "hint": null
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has non-integer fee_sats: -NaN"
     }
   },
   {
@@ -2123,8 +2053,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,sNaN,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "internal_error",
-      "message": "[<class 'decimal.InvalidOperation'>]",
-      "hint": null
+      "hint": null,
+      "message": "[<class 'decimal.InvalidOperation'>]"
     }
   },
   {
@@ -2133,8 +2063,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,Infinity,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "internal_error",
-      "message": "cannot convert Infinity to integer",
-      "hint": null
+      "hint": null,
+      "message": "cannot convert Infinity to integer"
     }
   },
   {
@@ -2143,8 +2073,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,-Infinity,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "internal_error",
-      "message": "cannot convert Infinity to integer",
-      "hint": null
+      "hint": null,
+      "message": "cannot convert Infinity to integer"
     }
   },
   {
@@ -2153,8 +2083,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,bad,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Invalid decimal value: bad",
-      "hint": null
+      "hint": null,
+      "message": "Invalid decimal value: bad"
     }
   },
   {
@@ -2163,8 +2093,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,999999999999999999999999999999,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "internal_error",
-      "message": "Python int too large to convert to SQLite INTEGER",
-      "hint": null
+      "hint": null,
+      "message": "Python int too large to convert to SQLite INTEGER"
     }
   },
   {
@@ -2442,8 +2372,8 @@
           "privacy_boundary": null,
           "description": "Bull Bitcoin wallet lightning_send",
           "counterparty": null,
-          "payment_hash": "abababababababababababababababababababababababababababababababab",
-          "payment_hash_source": "importer",
+          "payment_hash": null,
+          "payment_hash_source": null,
           "swap_refund_funding_txid": null,
           "swap_refund_funding_vout": null,
           "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"\", \"normalized_network\": \"lightning\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"lightning_send\"}"
@@ -2490,8 +2420,8 @@
           "privacy_boundary": null,
           "description": "Bull Bitcoin wallet lightning_send",
           "counterparty": null,
-          "payment_hash": "abababababababababababababababababababababababababababababababab",
-          "payment_hash_source": "importer",
+          "payment_hash": null,
+          "payment_hash_source": null,
           "swap_refund_funding_txid": null,
           "swap_refund_funding_vout": null,
           "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"lightning_send\"}"
@@ -2538,8 +2468,8 @@
           "privacy_boundary": null,
           "description": "Bull Bitcoin wallet lightning_receive",
           "counterparty": null,
-          "payment_hash": "abababababababababababababababababababababababababababababababab",
-          "payment_hash_source": "importer",
+          "payment_hash": null,
+          "payment_hash_source": null,
           "swap_refund_funding_txid": null,
           "swap_refund_funding_vout": null,
           "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"\", \"normalized_network\": \"lightning\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"lightning_receive\"}"
@@ -2586,8 +2516,8 @@
           "privacy_boundary": null,
           "description": "Bull Bitcoin wallet lightning_receive",
           "counterparty": null,
-          "payment_hash": "abababababababababababababababababababababababababababababababab",
-          "payment_hash_source": "importer",
+          "payment_hash": null,
+          "payment_hash_source": null,
           "swap_refund_funding_txid": null,
           "swap_refund_funding_vout": null,
           "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"lightning_receive\"}"
@@ -2797,8 +2727,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,chain_swap,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Unsupported Bull Bitcoin wallet network 'None'",
-      "hint": null
+      "hint": null,
+      "message": "Unsupported Bull Bitcoin wallet network 'None'"
     }
   },
   {
@@ -2855,8 +2785,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,mystery,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Unsupported Bull Bitcoin wallet network 'None'",
-      "hint": null
+      "hint": null,
+      "message": "Unsupported Bull Bitcoin wallet network 'None'"
     }
   },
   {
@@ -2913,8 +2843,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Unsupported Bull Bitcoin wallet network 'None'",
-      "hint": null
+      "hint": null,
+      "message": "Unsupported Bull Bitcoin wallet network 'None'"
     }
   },
   {
@@ -3499,8 +3429,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,doge,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Unsupported Bull Bitcoin wallet network 'doge'",
-      "hint": null
+      "hint": null,
+      "message": "Unsupported Bull Bitcoin wallet network 'doge'"
     }
   },
   {
@@ -3509,8 +3439,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,chain,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Unsupported Bull Bitcoin wallet network 'chain'",
-      "hint": null
+      "hint": null,
+      "message": "Unsupported Bull Bitcoin wallet network 'chain'"
     }
   },
   {
@@ -3615,8 +3545,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,chain_swap,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Unsupported Bull Bitcoin wallet network 'None'",
-      "hint": null
+      "hint": null,
+      "message": "Unsupported Bull Bitcoin wallet network 'None'"
     }
   },
   {
@@ -3817,8 +3747,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n,,in,5,0.0015,200,confirmed,,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Unsupported Bull Bitcoin wallet direction 'in'",
-      "hint": null
+      "hint": null,
+      "message": "Unsupported Bull Bitcoin wallet direction 'in'"
     }
   },
   {
@@ -3827,8 +3757,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n , ,incoming,150000,0.0015,200,confirmed,,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "validation",
-      "message": "Invalid occurred_at/date value ' '",
-      "hint": "Use RFC3339 UTC like 2025-01-01T00:00:00Z"
+      "hint": "Use RFC3339 UTC like 2025-01-01T00:00:00Z",
+      "message": "Invalid occurred_at/date value ' '"
     }
   },
   {
@@ -3962,8 +3892,8 @@
           "privacy_boundary": null,
           "description": "Bull Bitcoin wallet lightning_send",
           "counterparty": null,
-          "payment_hash": "abababababababababababababababababababababababababababababababab",
-          "payment_hash_source": "importer",
+          "payment_hash": null,
+          "payment_hash_source": null,
           "swap_refund_funding_txid": null,
           "swap_refund_funding_vout": null,
           "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"[redacted]\", \"preimage_redacted\": true, \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"lightning_send\"}"
@@ -4010,8 +3940,8 @@
           "privacy_boundary": null,
           "description": "Bull Bitcoin wallet lightning_send",
           "counterparty": null,
-          "payment_hash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
-          "payment_hash_source": "importer",
+          "payment_hash": null,
+          "payment_hash_source": null,
           "swap_refund_funding_txid": null,
           "swap_refund_funding_vout": null,
           "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"[redacted]\", \"preimage_redacted\": true, \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"CDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCD\", \"type\": \"lightning_send\"}"
@@ -4058,8 +3988,8 @@
           "privacy_boundary": null,
           "description": "Bull Bitcoin wallet lightning_send",
           "counterparty": null,
-          "payment_hash": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
-          "payment_hash_source": "importer",
+          "payment_hash": null,
+          "payment_hash_source": null,
           "swap_refund_funding_txid": null,
           "swap_refund_funding_vout": null,
           "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"[redacted]\", \"preimage_redacted\": true, \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \" efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef \", \"type\": \"lightning_send\"}"
@@ -4250,8 +4180,8 @@
           "privacy_boundary": null,
           "description": "Bull Bitcoin wallet lightning_receive",
           "counterparty": null,
-          "payment_hash": "abababababababababababababababababababababababababababababababab",
-          "payment_hash_source": "importer",
+          "payment_hash": null,
+          "payment_hash_source": null,
           "swap_refund_funding_txid": null,
           "swap_refund_funding_vout": null,
           "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"[redacted]\", \"preimage_redacted\": true, \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"lightning_receive\"}"
@@ -4298,8 +4228,8 @@
           "privacy_boundary": null,
           "description": "Bull Bitcoin wallet lightning_receive",
           "counterparty": null,
-          "payment_hash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
-          "payment_hash_source": "importer",
+          "payment_hash": null,
+          "payment_hash_source": null,
           "swap_refund_funding_txid": null,
           "swap_refund_funding_vout": null,
           "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"[redacted]\", \"preimage_redacted\": true, \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"CDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCD\", \"type\": \"lightning_receive\"}"
@@ -4346,8 +4276,8 @@
           "privacy_boundary": null,
           "description": "Bull Bitcoin wallet lightning_receive",
           "counterparty": null,
-          "payment_hash": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
-          "payment_hash_source": "importer",
+          "payment_hash": null,
+          "payment_hash_source": null,
           "swap_refund_funding_txid": null,
           "swap_refund_funding_vout": null,
           "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"[redacted]\", \"preimage_redacted\": true, \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \" efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef \", \"type\": \"lightning_receive\"}"
@@ -4891,166 +4821,11 @@
     "name": "bull-wallet:mixed",
     "format": "bullbitcoin_wallet_csv",
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n2025-01-02T01:02:03Z,liquid,outgoing,-5000,0.0015,1.0,completed,l1,,bc1q,,,,,,,\r\n2025-01-02T01:02:03Z,lightning_receive,incoming,150000,0.0015,,confirmed,,,bc1q,sw,1111111111111111111111111111111111111111111111111111111111111111,,,,,\r\n2025-01-02T01:02:03Z,onchain,incoming,150000,0.0015,200,failed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n2025-01-02T01:02:03Z,onchain,self,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n2025-01-02T01:02:03Z,payjoin_send,sent,150000,0.0015,200,confirmed,pj,,bc1q,,,,,,,\r\n",
-    "records": [
-      {
-        "fields": {
-          "external_id": "abababababababababababababababababababababababababababababababab",
-          "external_id_kind": "txid",
-          "occurred_at": "2025-01-02T01:02:03Z",
-          "confirmed_at": "2025-01-02T01:02:03Z",
-          "direction": "inbound",
-          "asset": "BTC",
-          "amount": 150000000,
-          "fee": 200000,
-          "amount_includes_fee": 0,
-          "fiat_currency": "",
-          "fiat_rate": null,
-          "fiat_value": null,
-          "fiat_rate_exact": null,
-          "fiat_value_exact": null,
-          "fiat_price_source": null,
-          "pricing_source_kind": null,
-          "pricing_provider": null,
-          "pricing_pair": null,
-          "pricing_timestamp": null,
-          "pricing_fetched_at": null,
-          "pricing_granularity": null,
-          "pricing_method": null,
-          "pricing_external_ref": null,
-          "pricing_quality": "missing",
-          "kind": "onchain",
-          "privacy_boundary": null,
-          "description": "Bull Bitcoin wallet onchain",
-          "counterparty": null,
-          "payment_hash": null,
-          "payment_hash_source": null,
-          "swap_refund_funding_txid": null,
-          "swap_refund_funding_vout": null,
-          "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"200\", \"network\": \"bitcoin\", \"normalized_network\": \"bitcoin\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"abababababababababababababababababababababababababababababababab\", \"type\": \"onchain\"}"
-        },
-        "fingerprint": "7324acf3c819a7eaf87438924960b03d19036bc8a77aa8ba78007454d715a052"
-      },
-      {
-        "fields": {
-          "external_id": "l1",
-          "external_id_kind": null,
-          "occurred_at": "2025-01-02T01:02:03Z",
-          "confirmed_at": "2025-01-02T01:02:03Z",
-          "direction": "outbound",
-          "asset": "LBTC",
-          "amount": 5000000,
-          "fee": 1000,
-          "amount_includes_fee": 0,
-          "fiat_currency": "",
-          "fiat_rate": null,
-          "fiat_value": null,
-          "fiat_rate_exact": null,
-          "fiat_value_exact": null,
-          "fiat_price_source": null,
-          "pricing_source_kind": null,
-          "pricing_provider": null,
-          "pricing_pair": null,
-          "pricing_timestamp": null,
-          "pricing_fetched_at": null,
-          "pricing_granularity": null,
-          "pricing_method": null,
-          "pricing_external_ref": null,
-          "pricing_quality": "missing",
-          "kind": "liquid",
-          "privacy_boundary": null,
-          "description": "Bull Bitcoin wallet liquid",
-          "counterparty": null,
-          "payment_hash": null,
-          "payment_hash_source": null,
-          "swap_refund_funding_txid": null,
-          "swap_refund_funding_vout": null,
-          "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"-5000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"outgoing\", \"fee_sats\": \"1.0\", \"network\": \"\", \"normalized_network\": \"liquid\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"completed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"l1\", \"type\": \"liquid\"}"
-        },
-        "fingerprint": "0b9ba6ad5a63e83c204cb2cfd1bbac6c903258334997312baa9c50c96b067104"
-      },
-      {
-        "fields": {
-          "external_id": "sw",
-          "external_id_kind": null,
-          "occurred_at": "2025-01-02T01:02:03Z",
-          "confirmed_at": "2025-01-02T01:02:03Z",
-          "direction": "inbound",
-          "asset": "BTC",
-          "amount": 150000000,
-          "fee": 0,
-          "amount_includes_fee": 0,
-          "fiat_currency": "",
-          "fiat_rate": null,
-          "fiat_value": null,
-          "fiat_rate_exact": null,
-          "fiat_value_exact": null,
-          "fiat_price_source": null,
-          "pricing_source_kind": null,
-          "pricing_provider": null,
-          "pricing_pair": null,
-          "pricing_timestamp": null,
-          "pricing_fetched_at": null,
-          "pricing_granularity": null,
-          "pricing_method": null,
-          "pricing_external_ref": null,
-          "pricing_quality": "missing",
-          "kind": "lightning_receive",
-          "privacy_boundary": null,
-          "description": "Bull Bitcoin wallet lightning_receive",
-          "counterparty": null,
-          "payment_hash": "02d449a31fbb267c8f352e9968a79e3e5fc95c1bbeaa502fd6454ebde5a4bedc",
-          "payment_hash_source": "importer",
-          "swap_refund_funding_txid": null,
-          "swap_refund_funding_vout": null,
-          "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"incoming\", \"fee_sats\": \"\", \"network\": \"\", \"normalized_network\": \"lightning\", \"preimage\": \"[redacted]\", \"preimage_redacted\": true, \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"sw\", \"total_swap_fees_sats\": \"\", \"txid\": \"\", \"type\": \"lightning_receive\"}"
-        },
-        "fingerprint": "1fcb3b736e2835d82f3ecc9c2853dd9dc0561956a757f895ed8c6f9dbb2188b2"
-      },
-      {
-        "fields": {
-          "external_id": "pj",
-          "external_id_kind": null,
-          "occurred_at": "2025-01-02T01:02:03Z",
-          "confirmed_at": "2025-01-02T01:02:03Z",
-          "direction": "outbound",
-          "asset": "BTC",
-          "amount": 150000000,
-          "fee": 200000,
-          "amount_includes_fee": 0,
-          "fiat_currency": "",
-          "fiat_rate": null,
-          "fiat_value": null,
-          "fiat_rate_exact": null,
-          "fiat_value_exact": null,
-          "fiat_price_source": null,
-          "pricing_source_kind": null,
-          "pricing_provider": null,
-          "pricing_pair": null,
-          "pricing_timestamp": null,
-          "pricing_fetched_at": null,
-          "pricing_granularity": null,
-          "pricing_method": null,
-          "pricing_external_ref": null,
-          "pricing_quality": "missing",
-          "kind": "payjoin_send",
-          "privacy_boundary": "payjoin",
-          "description": "Bull Bitcoin wallet payjoin_send",
-          "counterparty": null,
-          "payment_hash": null,
-          "payment_hash_source": null,
-          "swap_refund_funding_txid": null,
-          "swap_refund_funding_vout": null,
-          "raw_json": "{\"address\": \"bc1q\", \"amount_btc\": \"0.0015\", \"amount_sats\": \"150000\", \"date\": \"2025-01-02T01:02:03Z\", \"direction\": \"sent\", \"fee_sats\": \"200\", \"network\": \"\", \"normalized_network\": \"bitcoin\", \"preimage\": \"\", \"receive_network\": \"\", \"receive_txid\": \"\", \"send_network\": \"\", \"send_txid\": \"\", \"source\": \"bullbitcoin_wallet_csv\", \"status\": \"confirmed\", \"swap_id\": \"\", \"total_swap_fees_sats\": \"\", \"txid\": \"pj\", \"type\": \"payjoin_send\"}"
-        },
-        "fingerprint": "8bcdc016710d6d16def4c900cd5f0580d3c7c9bf0e00a1698b10a119c13f8491"
-      }
-    ],
-    "networks": [
-      "bitcoin",
-      "liquid",
-      "lightning",
-      "bitcoin"
-    ]
+    "error": {
+      "code": "app_error",
+      "hint": null,
+      "message": "Bull Bitcoin wallet CSV has negative amount_sats: -5000"
+    }
   },
   {
     "name": "bull-wallet:date-'2025-01-02'",
@@ -5106,8 +4881,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\ninvalid,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "validation",
-      "message": "Invalid occurred_at/date value 'invalid'",
-      "hint": "Use RFC3339 UTC like 2025-01-01T00:00:00Z"
+      "hint": "Use RFC3339 UTC like 2025-01-01T00:00:00Z",
+      "message": "Invalid occurred_at/date value 'invalid'"
     }
   },
   {
@@ -5116,8 +4891,8 @@
     "text": "date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid\r\n,onchain,incoming,150000,0.0015,200,confirmed,abababababababababababababababababababababababababababababababab,bitcoin,bc1q,,,,,,,\r\n",
     "error": {
       "code": "app_error",
-      "message": "Missing occurred_at/date value",
-      "hint": null
+      "hint": null,
+      "message": "Missing occurred_at/date value"
     }
   }
 ]
