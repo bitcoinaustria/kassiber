@@ -156,7 +156,11 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         "settings.kraken" => {
             app.settings.market.pending = None;
             match &r.error {
-                None => app.settings.market.import_result = Some(r.data.clone()),
+                None => {
+                    app.settings.market.import_result = Some(r.data.clone());
+                    // New rates: readiness and prices read again.
+                    app.refresh_reads();
+                }
                 Some(e) => app.settings.market.import_error = Some(e.clone()),
             }
         }
@@ -184,6 +188,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     ],
                 );
                 app.settings.market.rebuild_result = Some(d);
+                // Prices were cleared and refetched, journal inputs invalidated: every book
+                // read (transactions, reports, readiness) reads again.
+                app.refresh_reads();
                 app.shell.note(
                     &t("settings:marketData.resultRebuilt"),
                     Some(summary),
@@ -191,7 +198,11 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     app.clock,
                 );
             }
-            Some(e) => app.settings.market.rebuild_error = Some(e.clone()),
+            Some(e) => {
+                app.settings.market.rebuild_error = Some(e.clone());
+                // A rebuild can fail after it cleared prices: show what the book holds now.
+                app.refresh_reads();
+            }
         },
         _ => {}
     }

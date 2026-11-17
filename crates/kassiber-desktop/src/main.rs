@@ -259,6 +259,7 @@ fn poll_app(app: &mut App, clock: f64, tx: &mut Tx) -> bool {
     changed |= review::poll(app, tx);
     changed |= reports::poll(app, tx);
     changed |= assistant::poll(app, tx);
+    changed |= txdetail::follow_generation(app);
     changed |= txdetail::graph::poll(app, tx);
     changed |= custody::poll(app, tx);
     changed |= provenance::poll(app, tx);

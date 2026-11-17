@@ -65,7 +65,10 @@ pub fn save(app: &mut App, close_after: bool, next: bool) {
     o.close_after_save = close_after;
     o.next_after_save = next;
     let submitted = o.draft.clone();
-    app.detail.saving_ids.push_back((tx_id, submitted));
+    // Keyed by the panel (its serial), not the transaction: the same transaction can be open
+    // in another tab by the time the answer comes.
+    let serial = o.serial;
+    app.detail.saving_ids.push_back((serial, tx_id, submitted));
     app.send("ui.transactions.metadata.update", args, "txd.save");
 }
 
@@ -78,10 +81,10 @@ fn save_error_text(e: &str) -> String {
 }
 
 pub fn on_saved(app: &mut App, r: &Reply) {
-    let Some((id, submitted)) = app.detail.saving_ids.pop_front() else {
+    let Some((serial, id, submitted)) = app.detail.saving_ids.pop_front() else {
         return;
     };
-    if app.detail.open.as_ref().and_then(|o| o.id()) != Some(id.as_str()) {
+    if app.detail.open.as_ref().map(|o| o.serial) != Some(serial) {
         // The user moved to another tab (or closed this one) while it saved: finish the save on
         // the parked panel it came from, without navigating.
         let parked = app
@@ -89,7 +92,7 @@ pub fn on_saved(app: &mut App, r: &Reply) {
             .tabs
             .iter_mut()
             .filter_map(|slot| slot.parked.as_deref_mut())
-            .find(|o| o.id() == Some(id.as_str()));
+            .find(|o| o.serial == serial);
         if let Some(o) = parked {
             o.saving = false;
             match &r.error {
@@ -1170,8 +1173,11 @@ mod tests {
         ];
         app.detail.active_tab = 1;
         app.detail.open = Some(panel("b", false));
-        let submitted = app.detail.tabs[0].parked.as_ref().unwrap().draft.clone();
-        app.detail.saving_ids.push_back(("a".into(), submitted));
+        let parked = app.detail.tabs[0].parked.as_ref().unwrap();
+        let (serial, submitted) = (parked.serial, parked.draft.clone());
+        app.detail
+            .saving_ids
+            .push_back((serial, "a".into(), submitted));
         // An edit made after the save was sent stays unsaved.
         app.detail.tabs[0].parked.as_mut().unwrap().draft.note = "edited again".into();
         let reply = Reply {
@@ -1203,7 +1209,7 @@ mod tests {
         a.draft.note = "saved here".into();
         app.detail
             .saving_ids
-            .push_back(("a".into(), a.draft.clone()));
+            .push_back((a.serial, "a".into(), a.draft.clone()));
         app.detail.open = Some(a);
         on_saved(&mut app, &ok(json!({})));
         assert_eq!(app.detail.open.as_ref().unwrap().base.note, "saved here");
@@ -1231,7 +1237,7 @@ mod tests {
         a.draft.manual_price = "70000,5".into();
         app.detail
             .saving_ids
-            .push_back(("a".into(), a.draft.clone()));
+            .push_back((a.serial, "a".into(), a.draft.clone()));
         app.detail.open = Some(a);
         on_saved(&mut app, &ok(json!({})));
         app.detail.open.as_mut().unwrap().draft.note = "typing".into();
@@ -1264,11 +1270,55 @@ mod tests {
     #[test]
     fn a_save_reply_drains_after_the_last_tab_closes() {
         let mut app = crate::app::tests::quiet_app();
-        let draft = super::super::Open::new("a", super::super::Tab::Details, vec![]).draft;
-        app.detail.saving_ids.push_back(("a".into(), draft));
+        let o = super::super::Open::new("a", super::super::Tab::Details, vec![]);
+        app.detail.saving_ids.push_back((o.serial, "a".into(), o.draft));
         app.detail.open = None;
         super::super::on_reply(&mut app, "txd.save", &ok(json!({})));
         assert!(app.detail.saving_ids.is_empty());
+    }
+
+    /// A book refresh (an exclusion in the table) re-reads the shown panel once, not a panel
+    /// still on its first read.
+    #[test]
+    fn a_book_refresh_rereads_the_shown_panel() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut a = shown("a");
+        a.loading = false;
+        a.generation = app.book_generation.max(1);
+        app.book_generation = a.generation;
+        app.detail.open = Some(a);
+        assert!(!super::super::follow_generation(&mut app));
+        app.book_generation += 1;
+        assert!(super::super::follow_generation(&mut app));
+        assert!(!super::super::follow_generation(&mut app), "once per refresh");
+    }
+
+    /// Saving pinned tab A, then opening the same transaction in another tab: the answer is
+    /// A's, so A stops saving and the new tab is untouched.
+    #[test]
+    fn a_save_answer_finds_its_tab_not_its_transaction() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut a = shown("a");
+        a.saving = true;
+        let serial = a.serial;
+        app.detail.saving_ids.push_back((serial, "a".into(), a.draft.clone()));
+        app.detail.tabs = vec![
+            super::super::TabSlot {
+                parked: Some(a),
+                pinned: true,
+                label: "A".into(),
+            },
+            super::super::TabSlot {
+                parked: None,
+                pinned: false,
+                label: "A".into(),
+            },
+        ];
+        app.detail.active_tab = 1;
+        app.detail.open = Some(shown("a"));
+        on_saved(&mut app, &ok(json!({})));
+        assert!(!app.detail.tabs[0].parked.as_ref().unwrap().saving);
+        assert!(!app.detail.open.as_ref().unwrap().saving);
     }
 
     fn shown(id: &str) -> Box<super::super::Open> {

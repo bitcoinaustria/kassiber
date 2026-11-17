@@ -386,6 +386,10 @@ pub struct Sof {
     pub scope: Option<Result<(String, String), String>>,
     pub health_sent: bool,
     pub mounted: Option<String>,
+    /// For each write in flight, by kind ("assemble", "create_link", "create_source",
+    /// "source_link"), oldest first: the case (`mounted`) it was sent from. Its reply updates
+    /// that case's form or summary only while it is still the one on screen.
+    pub sent_from: HashMap<&'static str, std::collections::VecDeque<Option<String>>>,
     pub case: Option<Case>,
     pub drafts: HashMap<String, Draft>,
     pub auto_assembled: HashSet<String>,
@@ -1136,12 +1140,19 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     )),
                     Some("sof"),
                 ),
-                None => reviewed_toast(app, true, &ty),
+                None => {
+                    app.refresh_reads();
+                    reviewed_toast(app, true, &ty)
+                }
             }
         }
         "create_link" => {
             sof.busy.remove("create_link");
             invalidate(app);
+            let mine = from_this_case(app, "create_link");
+            if r.error.is_none() {
+                app.refresh_reads();
+            }
             match &r.error {
                 Some(e) => app.toast(
                     ToastTone::Error,
@@ -1150,7 +1161,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     Some("sof"),
                 ),
                 None => {
-                    if let Some(c) = app.provenance.sof.case.as_mut() {
+                    if mine && let Some(c) = app.provenance.sof.case.as_mut() {
                         c.manual.allocation = TextEdit::new("");
                         c.manual.from_allocation = TextEdit::new("");
                         c.manual.explanation = TextEdit::new("");
@@ -1169,6 +1180,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         "source_link" => {
             sof.busy.remove("create_link");
             invalidate(app);
+            let mine = from_this_case(app, "source_link");
+            // The source was created either way (a failed link leaves it standing).
+            app.refresh_reads();
             match &r.error {
                 Some(e) => app.toast(
                     ToastTone::Error,
@@ -1183,7 +1197,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                         .case
                         .as_ref()
                         .is_some_and(|c| c.source.source_type == "missing_history");
-                    if let Some(c) = app.provenance.sof.case.as_mut() {
+                    if mine && let Some(c) = app.provenance.sof.case.as_mut() {
                         c.source.label = TextEdit::new("");
                         c.source.amount = TextEdit::new("");
                         c.source.description = TextEdit::new("");
@@ -1250,10 +1264,22 @@ pub fn run_assembly(app: &mut App, notify: bool) {
         },
     ) {
         app.provenance.sof.busy.insert("assemble");
+        sent_from(app, "assemble");
     }
 }
 
 fn on_assembled(app: &mut App, r: &Reply, notify: bool) {
+    let mine = from_this_case(app, "assemble");
+    // The reviewed flow graph changed: every book read follows. The quiet assembly a case runs
+    // when it opens refreshes only when it reviewed something, so opening a case is no refresh.
+    if r.error.is_none() && (notify || r.data["auto_reviewed"].as_u64().unwrap_or(0) > 0) {
+        app.refresh_reads();
+    }
+    // Another case (or none) is on screen now: its summary and form are not this one's.
+    if !mine {
+        invalidate(app);
+        return;
+    }
     if r.error.is_some() {
         app.toast(
             ToastTone::Warning,
@@ -1381,6 +1407,7 @@ fn on_reviewed(app: &mut App, r: &Reply, accepted: bool) {
         return;
     }
     invalidate(app);
+    app.refresh_reads();
     if accepted && !attach.is_empty() && attach != NO_ATTACHMENT && !link_id.is_empty() {
         if send(
             app,
@@ -1460,6 +1487,7 @@ pub fn create_manual_link(app: &mut App) {
         "provenance.sof.create_link",
     ) {
         app.provenance.sof.busy.insert("create_link");
+        sent_from(app, "create_link");
     }
 }
 
@@ -1498,6 +1526,7 @@ pub fn create_source_link(app: &mut App) {
     ) {
         app.provenance.sof.source_links.push_back(link);
         app.provenance.sof.busy.insert("create_source");
+        sent_from(app, "create_source");
     }
 }
 
@@ -1505,6 +1534,13 @@ pub fn create_source_link(app: &mut App) {
 fn on_source_created(app: &mut App, r: &Reply) {
     app.provenance.sof.busy.remove("create_source");
     let link = app.provenance.sof.source_links.pop_front();
+    let origin = app
+        .provenance
+        .sof
+        .sent_from
+        .get_mut("create_source")
+        .and_then(|q| q.pop_front())
+        .flatten();
     if let Some(e) = &r.error {
         app.toast(
             ToastTone::Error,
@@ -1525,6 +1561,16 @@ fn on_source_created(app: &mut App, r: &Reply) {
         "provenance.sof.source_link",
     ) {
         app.provenance.sof.busy.insert("create_link");
+        // The link step belongs to the case the source was created from.
+        app.provenance
+            .sof
+            .sent_from
+            .entry("source_link")
+            .or_default()
+            .push_back(origin);
+    } else {
+        // The source exists even though its link was not sent.
+        app.refresh_reads();
     }
 }
 
@@ -1792,6 +1838,23 @@ fn end_export(app: &mut App, recipe: &str) -> bool {
         }
         _ => false,
     }
+}
+
+/// Records that write `kind` was just sent from the case on screen.
+fn sent_from(app: &mut App, kind: &'static str) {
+    let m = app.provenance.sof.mounted.clone();
+    app.provenance.sof.sent_from.entry(kind).or_default().push_back(m);
+}
+
+/// Whether the oldest write `kind` in flight was sent from the case on screen (and drains it).
+fn from_this_case(app: &mut App, kind: &'static str) -> bool {
+    let asked = app
+        .provenance
+        .sof
+        .sent_from
+        .get_mut(kind)
+        .and_then(|q| q.pop_front());
+    asked.is_some_and(|m| m.is_some() && m == app.provenance.sof.mounted)
 }
 
 /// Whether the export started for `recipe` still belongs to the case on screen.
@@ -2146,10 +2209,14 @@ mod source_link_tests {
             error_detail: Value::Null,
             elapsed: Default::default(),
         };
-        let before = app.pending.len();
         on_reviewed(&mut app, &ok, true);
         assert!(app.provenance.sof.reviews.is_empty());
-        assert_eq!(app.pending.len(), before + 1, "the attach is sent");
+        let attaches = app
+            .pending
+            .values()
+            .filter(|(tag, _, _)| *tag == "provenance.sof.attach")
+            .count();
+        assert_eq!(attaches, 1, "the attach is sent once");
         assert!(
             app.pending
                 .values()

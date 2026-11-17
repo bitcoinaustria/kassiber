@@ -316,19 +316,49 @@ pub fn open_edit(app: &mut App) {
     };
     let d = &mut app.wallets.detail;
     d.menu = false;
-    d.edit = Some(form);
+    d.dialogs += 1;
+    d.edit = Some(EditForm {
+        serial: d.dialogs,
+        ..form
+    });
 }
 
 pub fn open_delete(app: &mut App) {
     let d = &mut app.wallets.detail;
     d.menu = false;
-    d.delete = Some(super::DeleteForm::default());
+    d.dialogs += 1;
+    d.delete = Some(super::DeleteForm {
+        serial: d.dialogs,
+        ..Default::default()
+    });
 }
 
 pub fn open_reveal(app: &mut App) {
     let d = &mut app.wallets.detail;
     d.menu = false;
-    d.reveal = Some(super::RevealForm::default());
+    d.dialogs += 1;
+    d.reveal = Some(super::RevealForm {
+        serial: d.dialogs,
+        ..Default::default()
+    });
+}
+
+/// Records a wallet write just sent from dialog opening `serial`.
+fn asked(app: &mut App, tag: &'static str, c: &Conn, next_label: String, serial: u64) {
+    app.wallets.detail.asked.push_back(super::Asked {
+        tag,
+        wallet: c.id.clone(),
+        label: c.label.clone(),
+        next_label,
+        serial,
+    });
+}
+
+/// The oldest write in flight with reply tag `tag`.
+fn take_asked(app: &mut App, tag: &str) -> Option<super::Asked> {
+    let q = &mut app.wallets.detail.asked;
+    let i = q.iter().position(|a| a.tag == tag)?;
+    q.remove(i)
 }
 
 fn edit_error(app: &mut App, msg: String) {
@@ -495,6 +525,13 @@ pub fn submit_edit(app: &mut App) {
         auth(app, &e.passphrase.text, "plaintext_change_ack", CHANGE_ACK),
     );
     args.insert("expected_scope".into(), app.expected_scope());
+    let (next, serial) = app
+        .wallets
+        .detail
+        .edit
+        .as_ref()
+        .map(|e| (e.label.text.trim().to_owned(), e.serial))
+        .unwrap_or_default();
     if app
         .send(
             "ui.wallets.update",
@@ -502,10 +539,12 @@ pub fn submit_edit(app: &mut App) {
             "wallets.detail.update",
         )
         .is_some()
-        && let Some(e) = app.wallets.detail.edit.as_mut()
     {
-        e.error = None;
-        e.pending = true;
+        asked(app, "wallets.detail.update", &c, next, serial);
+        if let Some(e) = app.wallets.detail.edit.as_mut() {
+            e.error = None;
+            e.pending = true;
+        }
     }
 }
 
@@ -552,11 +591,14 @@ pub fn submit_delete(app: &mut App) {
         "auth_response": auth(app, &d.passphrase.text, "plaintext_delete_ack", DELETE_ACK),
         "expected_scope": app.expected_scope(),
     });
-    if app
+    let serial = app.wallets.detail.delete.as_ref().map_or(0, |d| d.serial);
+    let sent = app
         .send("ui.wallets.delete", args, "wallets.detail.delete")
-        .is_some()
-        && let Some(d) = app.wallets.detail.delete.as_mut()
-    {
+        .is_some();
+    if sent {
+        asked(app, "wallets.detail.delete", &c, String::new(), serial);
+    }
+    if sent && let Some(d) = app.wallets.detail.delete.as_mut() {
         d.error = None;
         d.pending = true;
     }
@@ -594,11 +636,14 @@ pub fn submit_reveal(app: &mut App) {
         "auth_response": auth(app, &r.passphrase.text, "plaintext_reveal_ack", REVEAL_ACK),
         "expected_scope": app.expected_scope(),
     });
-    if app
+    let serial = app.wallets.detail.reveal.as_ref().map_or(0, |r| r.serial);
+    let sent = app
         .send("wallets.reveal_descriptor", args, "wallets.detail.reveal")
-        .is_some()
-        && let Some(r) = app.wallets.detail.reveal.as_mut()
-    {
+        .is_some();
+    if sent {
+        asked(app, "wallets.detail.reveal", &c, String::new(), serial);
+    }
+    if sent && let Some(r) = app.wallets.detail.reveal.as_mut() {
         r.error = None;
         r.pending = true;
     }
@@ -798,10 +843,24 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "wallets.detail.update" => {
-            let Some(c) = conn(app) else { return };
+            let Some(asked) = take_asked(app, "wallets.detail.update") else {
+                return;
+            };
+            // The dialog this edit was sent from, if it is still the one open.
+            let mine = |app: &App| {
+                app.wallets.detail.wallet == asked.wallet
+                    && app
+                        .wallets
+                        .detail
+                        .edit
+                        .as_ref()
+                        .is_some_and(|e| e.serial == asked.serial)
+            };
             match &r.error {
                 Some(e) => {
-                    if let Some(f) = app.wallets.detail.edit.as_mut() {
+                    if mine(app)
+                        && let Some(f) = app.wallets.detail.edit.as_mut()
+                    {
                         f.pending = false;
                         f.error = Some(if e.is_empty() {
                             t("connections:detail.edit.couldNotChange")
@@ -811,20 +870,14 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     }
                 }
                 None => {
-                    let next = app
-                        .wallets
-                        .detail
-                        .edit
-                        .as_ref()
-                        .map(|e| e.label.text.trim().to_owned())
-                        .unwrap_or_default();
-                    let body = if !next.is_empty() && next != c.label {
+                    let (from, next) = (&asked.label, &asked.next_label);
+                    let body = if !next.is_empty() && next != from {
                         tr(
                             "connections:detail.edit.renamed",
-                            &[("from", &c.label), ("to", &next)],
+                            &[("from", from), ("to", next)],
                         )
                     } else {
-                        tr("connections:detail.edit.updated", &[("label", &c.label)])
+                        tr("connections:detail.edit.updated", &[("label", from)])
                     };
                     app.toast(
                         ToastTone::Success,
@@ -832,42 +885,81 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                         Some(body),
                         Some("connection-edit"),
                     );
-                    app.wallets.detail.edit = None;
-                    super::reload(app);
+                    if mine(app) {
+                        app.wallets.detail.edit = None;
+                    }
+                    // The wallet changed whichever page is open now.
+                    if app.wallets.detail.wallet == asked.wallet {
+                        super::reload(app);
+                    } else {
+                        app.refresh_reads();
+                    }
                 }
             }
         }
-        "wallets.detail.delete" => match &r.error {
-            Some(e) => {
-                if let Some(d) = app.wallets.detail.delete.as_mut() {
-                    d.pending = false;
-                    d.error = Some(if e.is_empty() {
-                        t("connections:detail.delete.couldNotRemove")
-                    } else {
-                        e.clone()
-                    });
+        "wallets.detail.delete" => {
+            let Some(asked) = take_asked(app, "wallets.detail.delete") else {
+                return;
+            };
+            let on_page = app.wallets.detail.wallet == asked.wallet;
+            match &r.error {
+                Some(e) => {
+                    if on_page
+                        && let Some(d) = app.wallets.detail.delete.as_mut()
+                        && d.serial == asked.serial
+                    {
+                        d.pending = false;
+                        d.error = Some(if e.is_empty() {
+                            t("connections:detail.delete.couldNotRemove")
+                        } else {
+                            e.clone()
+                        });
+                    }
+                }
+                None => {
+                    app.toast(
+                        ToastTone::Success,
+                        &t("connections:detail.delete.removedTitle"),
+                        Some(tr(
+                            "connections:detail.delete.removedBody",
+                            &[("label", &asked.label)],
+                        )),
+                        Some("connection-delete"),
+                    );
+                    // Back to Connections only from the deleted wallet's own page.
+                    if on_page {
+                        let d = &mut app.wallets.detail;
+                        let (dialogs, queue) = (d.dialogs, std::mem::take(&mut d.asked));
+                        *d = super::State {
+                            dialogs,
+                            asked: queue,
+                            ..super::State::default()
+                        };
+                        // `navigate({ to: "/connections", replace: true })`.
+                        app.route = crate::app::Route("/connections".into());
+                    }
+                    app.refresh_reads();
                 }
             }
-            None => {
-                let label = conn(app).map(|c| c.label).unwrap_or_default();
-                app.toast(
-                    ToastTone::Success,
-                    &t("connections:detail.delete.removedTitle"),
-                    Some(tr(
-                        "connections:detail.delete.removedBody",
-                        &[("label", &label)],
-                    )),
-                    Some("connection-delete"),
-                );
-                app.wallets.detail = super::State::default();
-                // `navigate({ to: "/connections", replace: true })`.
-                app.route = crate::app::Route("/connections".into());
-                app.refresh_reads();
-            }
-        },
+        }
         "wallets.detail.reveal" => {
-            let label = conn(app).map(|c| c.label).unwrap_or_default();
-            let Some(rv) = app.wallets.detail.reveal.as_mut() else {
+            let Some(asked) = take_asked(app, "wallets.detail.reveal") else {
+                return;
+            };
+            let label = asked.label.clone();
+            // Only into the dialog opening it was asked from, for the wallet it was asked for:
+            // a dismissed dialog's material is never copied (least of all under another
+            // wallet's name).
+            if app.wallets.detail.wallet != asked.wallet {
+                return;
+            }
+            let Some(rv) = app
+                .wallets
+                .detail
+                .reveal
+                .as_mut()
+                .filter(|rv| rv.serial == asked.serial)
+            else {
                 return;
             };
             rv.pending = false;
@@ -1119,5 +1211,41 @@ mod material_tests {
         assert_eq!(k, "bare-xpub");
         assert_eq!((label, hint), (d.label, d.hint));
         assert_eq!(super::detect_material("nonsense").0, "unknown");
+    }
+}
+
+#[cfg(test)]
+mod reveal_tests {
+    use super::*;
+
+    /// Reveal asked for wallet A, the dialog dismissed and wallet B's Reveal opened before the
+    /// answer: A's descriptor is not copied, and B's dialog stays waiting for its own answer.
+    #[test]
+    fn a_dismissed_reveal_copies_nothing() {
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.detail.asked.push_back(crate::wallets::detail::Asked {
+            tag: "wallets.detail.reveal",
+            wallet: "a".into(),
+            label: "A".into(),
+            next_label: String::new(),
+            serial: 1,
+        });
+        app.wallets.detail.wallet = "b".into();
+        app.wallets.detail.reveal = Some(crate::wallets::detail::RevealForm {
+            serial: 2,
+            pending: true,
+            ..Default::default()
+        });
+        let r = Reply {
+            kind: "wallets.reveal_descriptor".into(),
+            data: json!({"wallet_material": "wpkh(xpubA/0/*)"}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "wallets.detail.reveal", &r);
+        assert!(PENDING_COPY.with(|p| p.borrow().is_none()));
+        let rv = app.wallets.detail.reveal.as_ref().unwrap();
+        assert!(!rv.copied && rv.pending);
     }
 }

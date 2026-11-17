@@ -31,6 +31,14 @@ use model::{AResult, Query, Sel, Workspace};
 /// or the open book changes, as the web keys `ChainAnalysisWorkbench` by both.
 #[derive(Default)]
 pub struct State {
+    /// Counts mounts of the workbench; a PSBT answer belongs to the mount that asked.
+    pub mounts: u64,
+    /// Each PSBT analysis or comparison in flight, oldest first: (mount, input key, is a
+    /// comparison). Kept across mounts, so an earlier mount's answer is recognized.
+    pub psbt_asked: std::collections::VecDeque<(u64, String, bool)>,
+    /// Each "Investigate with assistant" in flight, oldest first: the mount it was asked from
+    /// and the page and book at the click, which its prompt is sent under.
+    pub handoffs: std::collections::VecDeque<(u64, Option<crate::assistant::chat::Parked>)>,
     /// The route + book scope this state was mounted for.
     pub mounted_for: Option<String>,
     pub query: Query,
@@ -118,6 +126,9 @@ fn mount(app: &mut App) {
     let mut s = State {
         inflight: std::mem::take(&mut old.inflight),
         version: old.version,
+        mounts: old.mounts + 1,
+        psbt_asked: std::mem::take(&mut old.psbt_asked),
+        handoffs: std::mem::take(&mut old.handoffs),
         mounted_for: Some(mount_key(app)),
         tab: search.tab.unwrap_or("findings"),
         workspace: search.workspace.unwrap_or_default(),
@@ -408,7 +419,11 @@ pub fn ask(app: &mut App) {
         )
         .is_some()
     {
-        st(app).asking = true;
+        let captured = crate::assistant::capture(app);
+        let s = st(app);
+        s.asking = true;
+        let mount = s.mounts;
+        s.handoffs.push_back((mount, captured));
     }
 }
 
@@ -466,12 +481,19 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "ai_context" => {
+            let Some((mount, captured)) = st(app).handoffs.pop_front() else {
+                return;
+            };
+            // Asked from an earlier mount (the workbench was left): not sent.
+            if mount != st(app).mounts {
+                return;
+            }
             st(app).asking = false;
             match &r.error {
                 Some(e) => report(app, e.clone()),
                 None if r.data.is_object() => {
                     let prompt = handoff_prompt(&r.data);
-                    crate::assistant::hand_off(app, &prompt);
+                    crate::assistant::hand_off_captured(app, &prompt, captured);
                 }
                 None => {}
             }

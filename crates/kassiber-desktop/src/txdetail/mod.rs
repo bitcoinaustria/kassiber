@@ -133,6 +133,9 @@ pub struct Reuse {
 }
 
 pub struct Open {
+    /// `App::book_generation` this panel's record was read for (0 before its first read): a
+    /// book refresh since (an exclusion in the table, reprocessed journals) re-reads it.
+    pub generation: u64,
     /// This panel's identity for the requests it sends: unique per `Open`, so a reply finds the
     /// panel (active or parked) that asked, and a replaced panel (coin trail, retry) hears none.
     pub serial: u64,
@@ -200,6 +203,7 @@ impl Open {
     fn new(query: &str, tab: Tab, trail: Vec<String>) -> Open {
         let empty = draft::baseline(&Value::Null);
         Open {
+            generation: 0,
             serial: NEXT_SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             query: query.to_owned(),
             tab,
@@ -313,7 +317,7 @@ pub struct DetailUi {
     /// one at a time and reply in order), so a reply finds its panel after a tab switch.
     /// With each, the draft that was submitted: only that becomes the saved baseline, so edits
     /// made while it saves stay dirty.
-    pub saving_ids: std::collections::VecDeque<(String, Draft)>,
+    pub saving_ids: std::collections::VecDeque<(u64, String, Draft)>,
     /// The panel each request in flight was sent for, per reply tag (replies with one tag arrive
     /// in the order they were sent, a stale-context re-read keeping its place), so a reply after a
     /// tab switch lands on its own panel, active or parked, or is dropped with it. Saves keep
@@ -595,6 +599,7 @@ fn load_record(app: &mut App, panel: u64, record: Value, keep_draft: bool) {
     // includes it, and metadata changed elsewhere (an exclusion from the table, the assistant)
     // must not give way to an older save's draft.
     let base = draft::baseline(&record);
+    let generation = app.book_generation;
     let active = app.detail.open.as_ref().is_some_and(|o| o.serial == panel);
     let any_tx = Target {
         panel,
@@ -612,6 +617,9 @@ fn load_record(app: &mut App, panel: u64, record: Value, keep_draft: bool) {
         o.trail.push(from);
     }
     o.record = Some(record);
+    if o.generation == 0 {
+        o.generation = generation;
+    }
     o.loading = false;
     o.error = None;
     if reset {
@@ -882,6 +890,22 @@ fn on_resolved(app: &mut App, to: &Target, keep: bool, r: &Reply) {
 pub fn reload(app: &mut App) {
     let to = active_target(app, Value::Null);
     reload_to(app, to);
+}
+
+/// The shown panel follows book refreshes: when the book changed since its record was read, it
+/// reads the record (and its journal events) again, keeping unsaved edits. A parked panel
+/// catches up when it comes to the front. Only this panel's reads; no book refresh.
+pub fn follow_generation(app: &mut App) -> bool {
+    let generation = app.book_generation;
+    let Some(o) = app.detail.open.as_mut() else {
+        return false;
+    };
+    if o.generation == 0 || o.generation == generation || o.loading || o.record.is_none() {
+        return false;
+    }
+    o.generation = generation;
+    reload(app);
+    true
 }
 
 /// `reload` for the panel `to` names, shown or parked.

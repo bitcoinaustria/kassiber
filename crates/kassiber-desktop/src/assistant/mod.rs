@@ -977,16 +977,31 @@ fn urlencode(s: &str) -> String {
 /// opens the panel, and sends at once when a model is chosen (queued while an answer streams);
 /// without a model it waits in the composer, without the pin, until it is sent or replaced.
 pub fn hand_off(app: &mut App, prompt: &str) {
-    let Some(book) = chat::book_now(app) else {
+    let captured = capture(app);
+    hand_off_captured(app, prompt, captured);
+}
+
+/// The page and book at the user's action, for a handoff whose prompt arrives later (a daemon
+/// projection): the prompt goes out under what was on screen when the user asked, never under
+/// a page opened meanwhile. None while no book is open.
+pub fn capture(app: &App) -> Option<chat::Parked> {
+    Some(chat::Parked {
+        context: screen::current_page(app),
+        book: chat::book_now(app)?,
+    })
+}
+
+/// `hand_off` with the page and book captured at the user's action.
+pub fn hand_off_captured(app: &mut App, prompt: &str, captured: Option<chat::Parked>) {
+    let Some(parked) = captured else {
         chat::refuse_book_loading(app, None);
         return;
     };
-    let context = screen::current_page(app);
     open_panel(app);
     if prompt.trim().is_empty() {
         return;
     }
-    chat::send_prompt(app, prompt, Some(chat::Parked { context, book }));
+    chat::send_prompt(app, prompt, Some(parked));
 }
 
 /// The quarantine fix's prompt (`review.seedPrompt`), naming the causes that need the user.

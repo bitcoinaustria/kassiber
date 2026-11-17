@@ -270,10 +270,7 @@ pub fn payload(f: &Form) -> Value {
             predicate.insert(k.into(), json!(v));
         }
     }
-    let fee = f.max_fee.text.trim();
-    if !fee.is_empty()
-        && let Some(n) = parse_float(fee)
-    {
+    if let Ok(Some(n)) = max_fee(f) {
         predicate.insert("max_fee_pct".into(), json!(n));
     }
     predicate.insert("min_confidence".into(), json!(f.min_confidence));
@@ -285,6 +282,21 @@ pub fn payload(f: &Form) -> Value {
         "policy": f.policy,
         "enabled": true,
     })
+}
+
+/// The fee cap as typed: None when blank, the whole field as a non-negative number (a decimal
+/// comma counts, as German input writes it), Err when anything else is in it. A prefix is never
+/// taken: `0,01` is 0.01, not 0, and `1.5x` is refused rather than saved as 1.5.
+pub fn max_fee(f: &Form) -> Result<Option<f64>, ()> {
+    let v = f.max_fee.text.trim();
+    if v.is_empty() {
+        return Ok(None);
+    }
+    let v = v.trim_end_matches('%').trim().replace(',', ".");
+    match v.parse::<f64>() {
+        Ok(n) if n.is_finite() && n >= 0.0 && parse_float(&v) == Some(n) => Ok(Some(n)),
+        _ => Err(()),
+    }
 }
 
 /// `Number.parseFloat`: the longest leading decimal number, None when there is none.
@@ -312,6 +324,10 @@ fn parse_float(s: &str) -> Option<f64> {
 
 pub fn create(app: &mut App) {
     if app.custody.rules.creating {
+        return;
+    }
+    if max_fee(&app.custody.rules.form).is_err() {
+        st(app).error = Some(t("review:swap.createRule.maxFeeInvalid"));
         return;
     }
     let p = payload(&app.custody.rules.form);
@@ -424,7 +440,7 @@ mod tests {
     #[test]
     fn payload_keeps_only_what_is_set() {
         let mut f = Form {
-            max_fee: TextEdit::new(" 1.5x "),
+            max_fee: TextEdit::new(" 1.5 "),
             out_kind: "phoenix".into(),
             ..Form::default()
         };
@@ -437,5 +453,22 @@ mod tests {
         assert_eq!(p["kind"], "submarine-swap");
         f.max_fee = TextEdit::new("abc");
         assert!(payload(&f)["predicate"].get("max_fee_pct").is_none());
+    }
+
+    /// German input: a decimal comma is the number, never its integer prefix; junk is refused.
+    #[test]
+    fn the_fee_cap_reads_the_whole_field() {
+        let fee = |s: &str| {
+            max_fee(&Form {
+                max_fee: TextEdit::new(s),
+                ..Form::default()
+            })
+        };
+        assert_eq!(fee("0,01"), Ok(Some(0.01)));
+        assert_eq!(fee(" 0.5 % "), Ok(Some(0.5)));
+        assert_eq!(fee(""), Ok(None));
+        assert_eq!(fee("1.5x"), Err(()));
+        assert_eq!(fee("abc"), Err(()));
+        assert_eq!(fee("-1"), Err(()));
     }
 }

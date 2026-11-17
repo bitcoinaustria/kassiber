@@ -130,6 +130,9 @@ pub enum Select {
 
 #[derive(Default)]
 pub struct EditForm {
+    /// Which opening of the dialog this is (`State::dialogs`); a reply belongs to it only
+    /// when its request was sent from this opening.
+    pub serial: u64,
     pub label: TextEdit,
     pub passphrase: TextEdit,
     pub ack: TextEdit,
@@ -148,8 +151,21 @@ pub struct EditForm {
     pub pending: bool,
 }
 
+/// A wallet write in flight: its reply tag, the wallet and its label as asked, the label the
+/// edit asked for, and the dialog opening it came from.
+pub struct Asked {
+    pub tag: &'static str,
+    pub wallet: String,
+    pub label: String,
+    pub next_label: String,
+    pub serial: u64,
+}
+
 #[derive(Default)]
 pub struct DeleteForm {
+    /// Which opening of the dialog this is (`State::dialogs`); a reply belongs to it only
+    /// when its request was sent from this opening.
+    pub serial: u64,
     pub passphrase: TextEdit,
     pub ack: TextEdit,
     pub confirm: TextEdit,
@@ -159,6 +175,9 @@ pub struct DeleteForm {
 
 #[derive(Default)]
 pub struct RevealForm {
+    /// Which opening of the dialog this is (`State::dialogs`); a reply belongs to it only
+    /// when its request was sent from this opening.
+    pub serial: u64,
     pub passphrase: TextEdit,
     pub ack: TextEdit,
     pub error: Option<String>,
@@ -200,6 +219,11 @@ pub static CERT_HOST: crate::settings::certtrust::Host = crate::settings::certtr
 
 #[derive(Default)]
 pub struct State {
+    /// Counts dialog openings (edit, delete, reveal), for `EditForm::serial` and the like.
+    pub dialogs: u64,
+    /// Each edit, delete or reveal in flight, oldest first: kept across a wallet change and
+    /// leaving the page, so its answer reaches the wallet and dialog it was sent from.
+    pub asked: std::collections::VecDeque<Asked>,
     /// The wallet the reads below belong to; another id resets the page (the web keys the
     /// view by connection).
     pub wallet: String,
@@ -388,6 +412,8 @@ impl State {
             sync_wallet: k.sync_wallet,
             core_testing: k.core_testing,
             core_test_wallet: k.core_test_wallet,
+            dialogs: k.dialogs,
+            asked: k.asked,
             tx_visible: txs::PAGE,
             utxo_visible: coins::PAGE,
             ..State::default()
@@ -441,6 +467,8 @@ fn load(app: &mut App, c: &Conn) {
         sync_wallet: old.sync_wallet,
         core_testing: old.core_testing,
         core_test_wallet: old.core_test_wallet,
+        dialogs: old.dialogs,
+        asked: old.asked,
         ..State::default()
     };
     app.send("status", Value::Null, "wallets.detail.status");

@@ -166,7 +166,13 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             let s = &mut app.custody.unlink;
             s.unpairing = false;
             let differently = s.differently;
-            let Some(mv) = s.mv.clone() else { return };
+            let Some(mv) = s.mv.clone() else {
+                // The panel closed meanwhile; an applied unpair still changed the book.
+                if r.error.is_none() {
+                    super::request_refresh(app);
+                }
+                return;
+            };
             match &r.error {
                 Some(e) => {
                     s.error = Some(if e.is_empty() {
@@ -193,6 +199,10 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             if let Some(applied) = common::on_preview_reply(app, Owner::Unlink, stage, r, &failed) {
                 let differently = app.custody.unlink.differently;
                 let Some(mv) = app.custody.unlink.mv.clone() else {
+                    // The panel closed meanwhile; an applied unlink still changed the book.
+                    if matches!(applied, Applied::Ok(_)) {
+                        super::request_refresh(app);
+                    }
                     return;
                 };
                 match applied {
