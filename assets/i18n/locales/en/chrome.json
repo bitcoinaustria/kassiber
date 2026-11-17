@@ -348,6 +348,18 @@
         "title": "Local evidence changed",
         "body": "A watch condition was met. Its change waits under Watches in Chain Analysis.",
         "action": "Open watches"
+      },
+      "balanceDiffers": {
+        "title_one": "A reported balance differs from the book",
+        "title_other": "{{count}} wallets report a balance that differs from the book",
+        "titleNamed": "{{name}}: the reported balance differs from the book",
+        "body": "The source may be incomplete. The book is not changed."
+      },
+      "balanceWaits": {
+        "title_one": "A balance check waits for the next sync",
+        "title_other": "{{count}} balance checks wait for the next sync",
+        "titleNamed": "{{name}}: a balance check waits for the next sync",
+        "body": "The book has transactions dated after the last sync, so the reported balance can't be compared yet. Sync the source again."
       }
     },
     "result": {

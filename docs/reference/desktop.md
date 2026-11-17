@@ -446,7 +446,14 @@ date span, last sync and backend) and its monthly booked balance from
 `ui.reports.balance_history` (month-end market value when the app shows fiat;
 months the wallet held nothing in show as zero, and the line stays in bitcoin
 for a range with an unpriced month). When the on-chain inventory and the books
-disagree, a card compares the two. A notice appears only when the wallet has
+disagree, a card compares the two. Below it, the Balance checks card lists the
+latest balance each source reported (exchange API, chain, Lightning node, your
+own entry) against the booked balance at that time, with an Add balance
+action and the history ([balance checkpoints](balance-checkpoints.md)); the
+wallets list marks a wallet whose latest reported balance differs, and such
+a wallet is a Needs attention condition until a later read shows it matching. When the last exchange sync of
+the session stored no balance, the card says why (for Kraken: add Query
+funds, read-only). A notice appears only when the wallet has
 transactions in the review queue or without a price, counted by the
 wallet-scoped `ui.transactions.dashboard` read the Transactions page uses, and
 links into that page filtered to the wallet. Tabs carry the rest. Transactions is
@@ -846,7 +853,9 @@ The title bar's bell opens the notification list
   or node sync that failed (per connection), BTCPay stores whose invoices did
   not load, a price rebuild that failed, a source-of-funds case whose wallet
   needs a full rescan, an all-books refresh that failed or left books
-  needing attention, unread evidence-watch changes, Touch ID unlock turned
+  needing attention, unread evidence-watch changes, a wallet whose reported
+  balance differs from the book (or waits for the next sync to compare,
+  [balance checkpoints](balance-checkpoints.md)), Touch ID unlock turned
   off, a saved unlock method that could not be removed, and a backup restore
   that failed or could not reset unlock methods (both outlast the lock the
   restore triggers) are conditions too. Each row says what is wrong and

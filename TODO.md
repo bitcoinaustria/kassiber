@@ -2021,6 +2021,27 @@ See [tax countries](docs/reference/tax-countries.md) and
   `header_row` option; copying the statement file onto the accepted source;
   masking own non-IBAN account numbers inside bank free text; and network
   partitions of books holding statements.
+- [x] Balance checkpoints ([balance checkpoints](docs/reference/balance-checkpoints.md)):
+  the `balance_checkpoints` table, exact comparison with the wallet's journal
+  quantity postings (matches / differs / unknown), exchange API balances read
+  in the same consented sync (Kraken, Coinbase, Binance, Bitpanda), chain and
+  Core Lightning node checkpoints derived from stored sync state, manual
+  entries, CSV import/export, `wallets checkpoints` and
+  `ui.wallets.checkpoints.*`, the desktop Balance checks card, the wallets
+  list mark, a notification per new mismatch, a readiness warning, and the
+  assistant tools `ui_wallets_checkpoints_list|add|remove`
+  ([AI](docs/reference/ai.md#balance-checkpoints)).
+- [ ] Balance checkpoints from imported files: the last row's running balance
+  as a `file` checkpoint at that row's time. Importers with such a column:
+  the Kraken ledger CSV (`balance`), Strike and Bull wallet statements, and a
+  generic ledger with a mapped balance column. Done when each importer stores
+  the checkpoint in its import savepoint, scoped by asset, with a fixture.
+- [ ] Desktop: mark differing checkpoints on the wallet's balance history
+  chart, offer the CSV import/export on the Balance checks card, and attach a
+  newly uploaded statement to a manual checkpoint.
+- [ ] Bitstamp, Bitvavo, Bitcoin.de and Bitfinex syncs: return
+  `ReportedBalance` per [reported balances](docs/reference/rust-exchange-sync.md#reported-balances)
+  so their syncs store `api` checkpoints too.
 
 - [ ] Extend [exact exchange withdrawals](docs/reference/custody-resolution.md#exchange-withdrawals-that-name-their-txid)
   past Strike and River. Coinbase and Binance API rows name the txid, but the

@@ -450,6 +450,7 @@ fn send_reads(app: &mut App, id: &str) {
         json!({"wallet": id}),
         "wallets.detail.imports",
     );
+    super::checks::read_card(app, id);
 }
 
 /// Starts every read the page makes on mount for `c` (all local).
@@ -539,6 +540,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     if exchange_kind(app, &c).is_some() {
         changed |= crate::wallets::add::exchange::sync_poll(app, tx, &c);
     }
+    changed |= super::checks::poll(app, &c);
     changed
 }
 
@@ -605,6 +607,9 @@ pub fn on_key(app: &mut App, ev: &KeyEvent, _tx: &mut Tx) -> bool {
     if current(app).is_none() {
         return false;
     }
+    if super::checks::on_key(app, ev) {
+        return true;
+    }
     if matches!(ev.key, Key::Escape) && app.wallets.detail.cert.open {
         // The trust dialog is the innermost overlay (it stays while a request runs).
         crate::settings::certtrust::close(app, &CERT_HOST);
@@ -664,6 +669,17 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, c: &Conn)
             sync_running(app) && !crate::wallets::add::exchange::sync_pending(app),
         ));
     }
+    let exchange = exchange_kind(app, c);
+    let gap = exchange
+        .as_ref()
+        .and_then(|_| crate::wallets::add::exchange::balance_gap(app, c));
+    page = page.child(super::checks::card(
+        app,
+        tk,
+        c,
+        exchange.as_deref(),
+        gap.as_deref(),
+    ));
     for n in notices::all(app, tk, c) {
         page = page.child(n);
     }
@@ -674,6 +690,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, c: &Conn)
         Tab::Details => page.children(info::panel(app, tk, c, width)),
     };
     dialogs::mount(app, tk, layer, c);
+    super::checks::mount(app, tk, layer);
     page
 }
 
@@ -951,6 +968,27 @@ pub const SCENES: &[crate::app::Scene] = &[
     ("wallets-detail-utxo-sorted", |a| {
         with_tab(a, SPENDING, Tab::Coins);
         a.wallets.detail.utxo_sort = Sort::SizeDesc;
+    }),
+    // SYNTHETIC balance checks (`checks::scene_sample`): a differing manual balance, a matching
+    // chain one; the history with Remove; the Add balance dialog; the Needs attention row.
+    ("wallets-detail-checks", |a| {
+        open_by_label(a, SPENDING);
+        super::checks::scene_sample(a, false);
+    }),
+    ("wallets-detail-checks-history-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        open_by_label(a, SPENDING);
+        super::checks::scene_sample(a, true);
+    }),
+    ("wallets-detail-checks-add", |a| {
+        open_by_label(a, SPENDING);
+        super::checks::scene_sample(a, false);
+        a.wallets.checks.card.add = Some(Default::default());
+    }),
+    ("wallets-detail-checks-attention", |a| {
+        open_by_label(a, SPENDING);
+        super::checks::scene_sample(a, false);
+        a.shell.popup = Some(crate::shell::Popup::Notifications);
     }),
     ("wallets-detail-notfound", |a| {
         super::scene_route(a, "/connections/does-not-exist")

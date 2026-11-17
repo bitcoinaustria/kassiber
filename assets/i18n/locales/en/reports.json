@@ -87,6 +87,14 @@
       "title": "Completeness unknown",
       "detail": "Kassiber could not confirm that the cost basis is complete; figures are provisional."
     },
+    "balanceDiffers": {
+      "title": "Reported balance differs",
+      "detail": "{{wallets}}: the balance the source reported differs from the book, so the source may be incomplete. Check its balance checks before filing."
+    },
+    "balanceWaits": {
+      "title": "Balance check waits for a sync",
+      "detail": "{{wallets}}: the book has transactions dated after the last sync, so the reported balance can't be compared yet. Sync these sources before filing."
+    },
     "noFields": {
       "title": "No crypto fields before {{year}}",
       "detail": "Austria's crypto Kennzahlen (KZ 172, 174, 176) start on 1 March {{first}}, so {{year}} states only KZ 801 and no 27.5 % estimate.",

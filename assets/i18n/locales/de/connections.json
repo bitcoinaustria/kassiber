@@ -1955,5 +1955,71 @@
         ]
       }
     }
+  },
+  "balanceChecks": {
+    "title": "Saldenabgleich",
+    "description": "Guthaben, das eine Quelle gemeldet hat, verglichen mit dem Saldo im Buch zum selben Zeitpunkt. Eine Abweichung heißt, dass Import oder Synchronisierung unvollständig sein können; nichts wird automatisch korrigiert.",
+    "history": "Verlauf anzeigen",
+    "latestOnly": "Nur aktuelle",
+    "addButton": "Guthaben erfassen",
+    "loading": "Saldenabgleich wird geladen …",
+    "unavailable": "Der Saldenabgleich ist für dieses Buch nicht verfügbar.",
+    "empty": "Noch kein Guthaben zum Vergleichen. Synchronisiere die Quelle oder erfasse ein Guthaben aus einem Kontoauszug.",
+    "journalsStale": "Die Journale müssen verarbeitet werden, bevor diese Guthaben verglichen werden können.",
+    "asOf": "Stand {{date}}",
+    "reported": "Gemeldet",
+    "book": "Buch",
+    "difference": "Abweichung",
+    "remove": "Entfernen",
+    "differsHint": "Die Quelle ist möglicherweise unvollständig: Importiere oder synchronisiere die fehlende Historie und verarbeite dann die Journale.",
+    "status": {
+      "matches": "Stimmt überein",
+      "differs": "Weicht ab",
+      "unknown": "Nicht vergleichbar"
+    },
+    "origin": {
+      "api": "Börsen-API",
+      "file": "Importierte Datei",
+      "chain": "Blockchain (letzte Synchronisierung)",
+      "node": "Lightning-Node (letzte Synchronisierung)",
+      "manual": "Von dir erfasst"
+    },
+    "reason": {
+      "journals_stale": "Die Journale müssen verarbeitet werden, bevor dieses Guthaben verglichen werden kann.",
+      "no_history": "Das Buch hat für diese Wallet noch keine Historie.",
+      "before_coverage": "Dieses Guthaben liegt vor der ersten importierten Transaktion der Wallet.",
+      "undated_postings": "Einige Journalbuchungen dieser Wallet haben kein Datum.",
+      "after_last_sync": "Das Buch hat Transaktionen nach dem Coin-Stand der letzten Synchronisierung; synchronisiere erneut, um zu vergleichen."
+    },
+    "scope": {
+      "kraken_spot": "Krakens Wert ist das Spot-Guthaben; Staking- und Earn-Guthaben sind nicht enthalten.",
+      "coinbase_btc_accounts": "Coinbases Wert umfasst alle BTC-Konten, inklusive Tresore und laufender Überweisungen.",
+      "binance_spot_free_plus_locked": "Binances Wert ist die Spot-Wallet; Spot-Trades werden über die API nicht importiert.",
+      "bitpanda_wallet_balance_after": "Bitpandas Wert ist das Guthaben jeder BTC-Wallet nach ihrer letzten Transaktion.",
+      "kraken_ledger_balance": "Der Wert ist das Guthaben nach der letzten BTC-Zeile des Exports.",
+      "file_running_balance": "Der Wert ist das Guthaben nach der letzten Zeile der Datei.",
+      "chain_utxo_set": "Der Wert sind die unverbrauchten Coins der letzten Synchronisierung.",
+      "cln_bookkeeper_accounts": "Der Wert sind On-Chain-Wallet und Kanäle von Core Lightning bei der letzten Synchronisierung."
+    },
+    "add": {
+      "title": "Guthaben erfassen",
+      "body": "Erfasse, was diese Quelle an einem Tag hielt, etwa laut Kontoauszug. Es wird nur mit dem Buch verglichen; Journale und Steuerergebnisse ändern sich nicht.",
+      "amount": "Guthaben in BTC",
+      "date": "Datum",
+      "dateHint": "Gilt als Ende dieses Tages (UTC).",
+      "note": "Notiz (optional)",
+      "cancel": "Abbrechen",
+      "save": "Guthaben speichern"
+    },
+    "indicator": "Guthaben weicht vom Buch ab",
+    "gap": {
+      "permission_denied_kraken": "Die letzte Synchronisierung hat kein Guthaben gespeichert: Dieser Key darf keine Guthaben lesen. Ergänze bei Kraken die Berechtigung „Query funds“ (nur lesend).",
+      "permission_denied": "Die letzte Synchronisierung hat kein Guthaben gespeichert: Dieser Key darf das Guthaben nicht lesen.",
+      "read_failed": "Die letzte Synchronisierung hat kein Guthaben gespeichert: Das Guthaben der Börse war nicht lesbar. Die Historie wurde importiert.",
+      "incomplete": "Die letzte Synchronisierung hat kein Guthaben gespeichert: Die Börse hat das Guthaben eines BTC-Kontos ausgelassen.",
+      "conflicting": "Die letzte Synchronisierung hat kein Guthaben gespeichert: Die Börse hat ein Konto mit zwei verschiedenen Guthaben gelistet.",
+      "ambiguous": "Die letzte Synchronisierung hat kein Guthaben gespeichert: Zwei Transaktionen zur selben Zeit lassen das Endguthaben offen."
+    },
+    "incompleteUntilSync": "Das Buch hat auch Transaktionen nach dem Coin-Stand dieser Synchronisierung; der Vergleich ist bis zur nächsten Synchronisierung unvollständig."
   }
 }

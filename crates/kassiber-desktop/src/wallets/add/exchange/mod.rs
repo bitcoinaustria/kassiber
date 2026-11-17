@@ -328,6 +328,18 @@ pub fn sync_pending(app: &App) -> bool {
         .is_some_and(|w| s.syncs.iter().any(|(x, _, _)| x == w))
 }
 
+/// Why the last sync of wallet `c` this session stored no balance checkpoint
+/// (`last_sync.reported_balance_unavailable.reason`, docs/reference/balance-checkpoints.md).
+pub fn balance_gap(app: &App, c: &Conn) -> Option<String> {
+    let s = &st(app).sync;
+    if s.wallet.as_deref() != Some(c.id.as_str()) {
+        return None;
+    }
+    s.row.as_ref()?["last_sync"]["reported_balance_unavailable"]["reason"]
+        .as_str()
+        .map(str::to_owned)
+}
+
 fn run_sync(a: &mut App) {
     let s = &st(a).sync;
     let Some(wallet) = s.wallet.clone() else {

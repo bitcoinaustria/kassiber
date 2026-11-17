@@ -1955,5 +1955,71 @@
         ]
       }
     }
+  },
+  "balanceChecks": {
+    "title": "Balance checks",
+    "description": "Balances a source reported, compared with the book's balance at the same time. A difference means the import or sync may be incomplete; nothing is corrected automatically.",
+    "history": "View history",
+    "latestOnly": "Latest only",
+    "addButton": "Add balance",
+    "loading": "Loading balance checks…",
+    "unavailable": "Balance checks are not available for this book.",
+    "empty": "No balance to compare yet. Sync the source or add a balance from a statement.",
+    "journalsStale": "Journals need processing before these balances can be compared.",
+    "asOf": "as of {{date}}",
+    "reported": "Reported",
+    "book": "Book",
+    "difference": "Difference",
+    "remove": "Remove",
+    "differsHint": "The source may be incomplete: import or sync the missing history, then process journals.",
+    "status": {
+      "matches": "Matches",
+      "differs": "Differs",
+      "unknown": "Not comparable"
+    },
+    "origin": {
+      "api": "Exchange API",
+      "file": "Imported file",
+      "chain": "Blockchain (last sync)",
+      "node": "Lightning node (last sync)",
+      "manual": "Entered by you"
+    },
+    "reason": {
+      "journals_stale": "Journals need processing before this balance can be compared.",
+      "no_history": "The book has no history for this wallet yet.",
+      "before_coverage": "This balance is dated before the wallet's first imported transaction.",
+      "undated_postings": "Some journal postings of this wallet have no date.",
+      "after_last_sync": "The book has transactions dated after the last sync’s coin snapshot; sync again to compare."
+    },
+    "scope": {
+      "kraken_spot": "Kraken's figure is the spot balance; staked and Earn balances are left out.",
+      "coinbase_btc_accounts": "Coinbase's figure covers every BTC account, including vaults and pending transfers.",
+      "binance_spot_free_plus_locked": "Binance's figure is the spot wallet; spot trades are not imported from the API.",
+      "bitpanda_wallet_balance_after": "Bitpanda's figure is each BTC wallet's balance after its latest transaction.",
+      "kraken_ledger_balance": "The figure is the balance after the export's last BTC row.",
+      "file_running_balance": "The figure is the balance after the file's last row.",
+      "chain_utxo_set": "The figure is the unspent coins the last sync saw.",
+      "cln_bookkeeper_accounts": "The figure is Core Lightning's on-chain wallet and channels at the last sync."
+    },
+    "add": {
+      "title": "Add a balance",
+      "body": "Record what this source held on a date, for example from a statement. It is only compared with the book; journals and tax results do not change.",
+      "amount": "Balance in BTC",
+      "date": "Date",
+      "dateHint": "Read as the end of that day (UTC).",
+      "note": "Note (optional)",
+      "cancel": "Cancel",
+      "save": "Save balance"
+    },
+    "indicator": "Balance differs from the book",
+    "gap": {
+      "permission_denied_kraken": "The last sync stored no balance: this key can’t read balances. Add Query funds (read-only) to the key in Kraken.",
+      "permission_denied": "The last sync stored no balance: this key can’t read the account balance.",
+      "read_failed": "The last sync stored no balance: the exchange’s balance could not be read. The history was imported.",
+      "incomplete": "The last sync stored no balance: the exchange left out the balance of one of its BTC accounts.",
+      "conflicting": "The last sync stored no balance: the exchange listed one account with two different balances.",
+      "ambiguous": "The last sync stored no balance: two transactions at the same time left an unclear final balance."
+    },
+    "incompleteUntilSync": "The book also holds transactions dated after this sync’s coin snapshot; the comparison is incomplete until the next sync."
   }
 }

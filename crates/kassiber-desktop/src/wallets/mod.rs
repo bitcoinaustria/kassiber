@@ -8,11 +8,13 @@
 //! - `list`: routes/Connections.tsx (+ components/kb/wallets/Wallets*).
 //! - `imports`: routes/Imports.tsx (+ shadcnblocks/settings-integrations4).
 //! - `detail`: routes/ConnectionDetail.tsx (wallet detail and its panels).
+//! - `checks`: the Balance checks card and the book-wide balance check read.
 //! - `node`: routes/NodeConnectionDetail.tsx (+ ConnectionDetail's NodeConnectionContainer).
 //! - `add`: components/kb/AddConnectionDialog.tsx (both steps, every setup form);
 //!   `add::btcpay` and `add::exchange` the BTCPay / exchange setup panels and ExchangeSyncCard.
 
 pub mod add;
+pub mod checks;
 pub mod common;
 pub mod conn;
 pub mod detail;
@@ -33,6 +35,8 @@ pub struct Ui {
     pub detail: detail::State,
     pub node: node::State,
     pub add: add::State,
+    /// Balance checks: the open book's, and the card on a connection's page.
+    pub checks: checks::State,
 }
 
 /// Whether this area renders `path` (the route without its query).
@@ -104,6 +108,14 @@ pub fn on_leave(app: &mut App, from: &str) {
         l.popup = None;
     } else if from.starts_with("/connections/") {
         app.wallets.detail.leave();
+        // The card's `useState`s (history, the Add balance dialog, a Remove error).
+        let card = &mut app.wallets.checks.card;
+        if std::mem::take(&mut card.history) {
+            // Its read listed the history: the next visit reads the latest again.
+            card.wallet.clear();
+        }
+        card.add = None;
+        card.remove_error = None;
         app.wallets.node.leave();
         // `useExchangeSync`'s `lastError`; its status read stays cached.
         app.wallets.add.exchange.sync.last_error = None;
@@ -119,6 +131,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     imports::on_reply(app, tag, r);
     detail::on_reply(app, tag, r);
     node::on_reply(app, tag, r);
+    checks::on_reply(app, tag, r);
     add::on_reply(app, tag, r);
 }
 

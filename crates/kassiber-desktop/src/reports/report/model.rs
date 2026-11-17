@@ -776,6 +776,7 @@ impl CoreReadiness {
 }
 
 /// `buildReportReadiness`.
+#[allow(clippy::too_many_arguments)]
 pub fn readiness(
     r: &Report,
     row_count: f64,
@@ -784,6 +785,7 @@ pub fn readiness(
     pending: bool,
     blocking: usize,
     core: &CoreReadiness,
+    balance: &[crate::wallets::checks::WalletDiff],
 ) -> Readiness {
     let ready =
         |title: String, detail: String, tone: Tone, glyph: Glyph, href: Option<&'static str>| {
@@ -920,6 +922,17 @@ pub fn readiness(
                 None,
             );
         }
+    }
+    // A source whose reported balance differs from the book may be incomplete
+    // (docs/reference/balance-checkpoints.md): a warning, never a correction.
+    if let Some((title, detail)) = crate::wallets::checks::readiness_text(balance) {
+        return ready(
+            title,
+            detail,
+            Tone::Warning,
+            Glyph::Alert,
+            Some("/connections"),
+        );
     }
     let austrian = r.region() == Region::At;
     let unassigned = r.unassigned_rows();
@@ -1115,24 +1128,54 @@ mod tests {
         let c = complete();
         crate::i18n::set_lang(crate::i18n::Lang::De);
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&c), false, 0, &CoreReadiness::Ready).title,
+            readiness(
+                &r,
+                2.0,
+                2025,
+                Some(&c),
+                false,
+                0,
+                &CoreReadiness::Ready,
+                &[]
+            )
+            .title,
             "Bereit für Berichte"
         );
         crate::i18n::set_lang(crate::i18n::Lang::En);
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&c), false, 0, &CoreReadiness::Ready).title,
+            readiness(
+                &r,
+                2.0,
+                2025,
+                Some(&c),
+                false,
+                0,
+                &CoreReadiness::Ready,
+                &[]
+            )
+            .title,
             "Ready for reports"
         );
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&c), false, 1, &CoreReadiness::Ready).title,
+            readiness(
+                &r,
+                2.0,
+                2025,
+                Some(&c),
+                false,
+                1,
+                &CoreReadiness::Ready,
+                &[]
+            )
+            .title,
             "Sources block reports"
         );
         assert_eq!(
-            readiness(&r, 2.0, 2025, None, true, 0, &CoreReadiness::Ready).title,
+            readiness(&r, 2.0, 2025, None, true, 0, &CoreReadiness::Ready, &[]).title,
             "Checking completeness"
         );
         assert_eq!(
-            readiness(&r, 2.0, 2025, None, false, 0, &CoreReadiness::Ready).title,
+            readiness(&r, 2.0, 2025, None, false, 0, &CoreReadiness::Ready, &[]).title,
             "Completeness unknown"
         );
         let missing = Completeness {
@@ -1148,7 +1191,8 @@ mod tests {
                 Some(&missing),
                 false,
                 0,
-                &CoreReadiness::Ready
+                &CoreReadiness::Ready,
+                &[]
             )
             .detail,
             "1 transaction has no price; figures are provisional."
@@ -1156,12 +1200,69 @@ mod tests {
         let mut q = generic();
         q.quarantines = 3.0;
         assert_eq!(
-            readiness(&q, 2.0, 2025, Some(&c), false, 0, &CoreReadiness::Ready).detail,
+            readiness(
+                &q,
+                2.0,
+                2025,
+                Some(&c),
+                false,
+                0,
+                &CoreReadiness::Ready,
+                &[]
+            )
+            .detail,
             "3 quarantined items should be resolved before filing."
         );
         assert!(provisional(&q, Some(&c), false));
         assert!(!provisional(&r, Some(&c), false));
         assert!(!provisional(&r, None, true));
+        // A differing reported balance warns after completeness, before the rows' notices.
+        let diff = |pending| crate::wallets::checks::WalletDiff {
+            wallet_id: "w1".into(),
+            wallet: "Kraken".into(),
+            pending,
+        };
+        let differs = readiness(
+            &r,
+            2.0,
+            2025,
+            Some(&c),
+            false,
+            0,
+            &CoreReadiness::Ready,
+            &[diff(false)],
+        );
+        assert_eq!(differs.title, "Reported balance differs");
+        assert_eq!(differs.tone, Tone::Warning);
+        assert_eq!(differs.href, Some("/connections"));
+        assert_eq!(
+            readiness(
+                &r,
+                2.0,
+                2025,
+                Some(&c),
+                false,
+                0,
+                &CoreReadiness::Ready,
+                &[diff(true)]
+            )
+            .title,
+            "Balance check waits for a sync"
+        );
+        assert_eq!(
+            readiness(
+                &q,
+                2.0,
+                2025,
+                Some(&c),
+                false,
+                0,
+                &CoreReadiness::Ready,
+                &[diff(false)]
+            )
+            .detail,
+            "3 quarantined items should be resolved before filing."
+        );
     }
 
     /// The core's `ready: false` wins over clean local checks, and its blocker shows; only an
@@ -1179,7 +1280,7 @@ mod tests {
                 {"id": "missing_prices", "severity": "review", "title": "Missing transaction prices", "detail": "1"}
             ]
         }));
-        let got = readiness(&r, 2.0, 2025, Some(&c), false, 0, &core);
+        let got = readiness(&r, 2.0, 2025, Some(&c), false, 0, &core, &[]);
         assert_ne!(got.title, "Ready for reports");
         assert_eq!(got.tone, Tone::Alert);
         assert_eq!(
@@ -1197,7 +1298,7 @@ mod tests {
         ));
         for core in [CoreReadiness::Checking, CoreReadiness::Unavailable] {
             assert_ne!(
-                readiness(&r, 2.0, 2025, Some(&c), false, 0, &core).title,
+                readiness(&r, 2.0, 2025, Some(&c), false, 0, &core, &[]).title,
                 "Ready for reports"
             );
         }
@@ -1337,6 +1438,7 @@ mod tests {
             false,
             0,
             &CoreReadiness::Ready,
+            &[],
         )
         .detail;
         crate::i18n::set_lang(crate::i18n::Lang::En);

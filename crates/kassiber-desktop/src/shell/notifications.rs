@@ -1,5 +1,6 @@
 //! The notification center (NotificationCenter.tsx): live conditions rebuilt from local reads
-//! (`ui.review.badges`, `ui.freshness.status`), running jobs, and a RAM-only recent list.
+//! (`ui.review.badges`, `ui.freshness.status`, `ui.wallets.checkpoints.list`), running jobs, and a
+//! RAM-only recent list.
 
 use rune::{Color, El, col, el, row, text};
 use rune_kit::Placement;
@@ -21,6 +22,8 @@ enum Act {
     RetryJournals,
     /// Settings → Security at the Touch ID row (the saved-unlock conditions).
     Security,
+    /// The connection whose reported balance differs (the list when several do).
+    BalanceChecks,
 }
 
 struct Condition {
@@ -445,6 +448,24 @@ fn conditions(app: &App) -> Vec<Condition> {
             )),
         });
     }
+    // `balance.differs`: wallets whose latest reported balance differs from the book, or waits
+    // for the next sync to compare (a local read; it never corrects anything).
+    let diffs = crate::wallets::checks::book_diffs(app);
+    if !diffs.is_empty() {
+        let (title, body, details) =
+            crate::wallets::checks::condition_text(&diffs, app.prefs.privacy);
+        out.push(Condition {
+            blocking: false,
+            error: false,
+            title,
+            body,
+            details,
+            action: Some((
+                t("chrome:notifications.action.openConnection"),
+                Act::BalanceChecks,
+            )),
+        });
+    }
     // App-level conditions about saved unlock methods (unlockNotifications.ts).
     for (_, title, body, details, action) in crate::secrets::conditions(app) {
         out.push(Condition {
@@ -474,6 +495,11 @@ fn act(s: &mut App, a: Act) {
             s.process_journals_with(auto_pair)
         }
         Act::Security => crate::secrets::open_security(s),
+        Act::BalanceChecks => {
+            let to =
+                crate::wallets::checks::condition_route(&crate::wallets::checks::book_diffs(s));
+            s.navigate(&to)
+        }
     }
 }
 

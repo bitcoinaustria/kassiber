@@ -615,6 +615,8 @@ impl App {
         self.send("ui.freshness.status", Value::Null, "app.freshness");
         self.send("ui.network.offline", Value::Null, "app.offline");
         self.send("ui.backends.settings.list", Value::Null, "app.backends");
+        // Which wallets report a balance the book does not hold (stored data only).
+        crate::wallets::checks::read_book(self);
     }
 
     /// Re-reads everything the screen shows (after a mutation, a sync, a journal run or a
@@ -661,6 +663,7 @@ impl App {
         self.send("ui.review.badges", Value::Null, "app.badges");
         self.send("ui.freshness.status", Value::Null, "app.freshness");
         self.send("ui.profiles.snapshot", Value::Null, "app.profiles");
+        crate::wallets::checks::read_book(self);
         // Transactions re-reads its list and dashboard on its next poll (held with these); rows
         // the refresh brings in are highlighted.
         self.txs.list_key.clear();

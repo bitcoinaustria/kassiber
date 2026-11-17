@@ -348,6 +348,18 @@
         "title": "Lokale Belege geändert",
         "body": "Eine Beobachtungsbedingung ist eingetreten. Die Änderung wartet unter Beobachtungen in der Kettenanalyse.",
         "action": "Beobachtungen öffnen"
+      },
+      "balanceDiffers": {
+        "title_one": "Ein gemeldetes Guthaben weicht vom Buch ab",
+        "title_other": "{{count}} Wallets melden ein Guthaben, das vom Buch abweicht",
+        "titleNamed": "{{name}}: Das gemeldete Guthaben weicht vom Buch ab",
+        "body": "Die Quelle ist möglicherweise unvollständig. Das Buch wird nicht geändert."
+      },
+      "balanceWaits": {
+        "title_one": "Eine Guthabenprüfung wartet auf die nächste Synchronisierung",
+        "title_other": "{{count}} Guthabenprüfungen warten auf die nächste Synchronisierung",
+        "titleNamed": "{{name}}: Eine Guthabenprüfung wartet auf die nächste Synchronisierung",
+        "body": "Das Buch enthält Transaktionen nach der letzten Synchronisierung, daher lässt sich das gemeldete Guthaben noch nicht vergleichen. Synchronisiere die Quelle erneut."
       }
     },
     "result": {

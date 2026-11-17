@@ -87,6 +87,14 @@
       "title": "Vollständigkeit unbekannt",
       "detail": "Kassiber konnte nicht bestätigen, dass die Anschaffungskosten vollständig sind; die Zahlen sind vorläufig."
     },
+    "balanceDiffers": {
+      "title": "Gemeldetes Guthaben weicht ab",
+      "detail": "{{wallets}}: Das von der Quelle gemeldete Guthaben weicht vom Buch ab, die Quelle ist also möglicherweise unvollständig. Prüfe vor der Einreichung ihren Saldenabgleich."
+    },
+    "balanceWaits": {
+      "title": "Guthabenprüfung wartet auf eine Synchronisierung",
+      "detail": "{{wallets}}: Das Buch enthält Transaktionen nach der letzten Synchronisierung, daher lässt sich das gemeldete Guthaben noch nicht vergleichen. Synchronisiere diese Quellen vor der Einreichung."
+    },
     "noFields": {
       "title": "Keine Krypto-Kennzahlen vor {{year}}",
       "detail": "Die österreichischen Krypto-Kennzahlen (KZ 172, 174, 176) gelten ab 1. März {{first}}, daher weist {{year}} nur KZ 801 und keine Schätzung mit 27,5 % aus.",

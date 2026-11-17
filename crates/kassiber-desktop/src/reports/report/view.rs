@@ -113,6 +113,7 @@ pub fn page(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         pending,
         blocking_source_count(app),
         &core_readiness(app),
+        &crate::wallets::checks::book_diffs(app),
     );
     let provisional = model::provisional(&report, comp.as_ref(), pending);
     let mut page = lc::shell(tk)
