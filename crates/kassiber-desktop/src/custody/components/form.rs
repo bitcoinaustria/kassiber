@@ -472,7 +472,14 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             });
         }
         "custody.comps.form_apply" => {
-            let Some(f) = form_mut(app) else { return };
+            let Some(f) = form_mut(app) else {
+                // The form was closed meanwhile: an applied component still changed the book.
+                if r.error.is_none() {
+                    app.refresh_reads();
+                    crate::custody::invalidate(app);
+                }
+                return;
+            };
             f.in_flight = None;
             f.reviewed = None;
             let reviewed_scope = f.apply_scope.take();

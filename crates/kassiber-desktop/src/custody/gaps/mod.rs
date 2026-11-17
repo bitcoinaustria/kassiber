@@ -336,26 +336,29 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "custody.gaps.apply" => {
-            let Some(d) = st(app).detail.as_mut() else {
-                return;
-            };
-            d.applying = false;
-            if !ok {
-                d.error = Some(msg(r, "custodyGaps:actions.failed"));
-                return;
-            }
-            if let Some(p) = d.pending.take() {
-                match p.action.as_str() {
-                    "reopen" | "revise" => d.correction = TextEdit::new(""),
-                    "classify_residual" => d.residual = TextEdit::new(""),
-                    _ => {}
+            // The panel may have been collapsed meanwhile; the review is applied either way.
+            if let Some(d) = st(app).detail.as_mut() {
+                d.applying = false;
+                if !ok {
+                    d.error = Some(msg(r, "custodyGaps:actions.failed"));
+                } else {
+                    if let Some(p) = d.pending.take() {
+                        match p.action.as_str() {
+                            "reopen" | "revise" => d.correction = TextEdit::new(""),
+                            "classify_residual" => d.residual = TextEdit::new(""),
+                            _ => {}
+                        }
+                    }
+                    d.confirmed = false;
                 }
             }
-            d.confirmed = false;
-            // `ui.custody.review.apply` refreshes the gaps, their review context and history,
-            // the lineage, components, journals and report blockers.
-            app.refresh_reads();
-            crate::custody::invalidate(app);
+            if ok {
+                // `ui.custody.review.apply` changed the gaps, their review context and history,
+                // the lineage, components, journals and report blockers: every one re-reads,
+                // whether or not the review panel is still open.
+                app.refresh_reads();
+                crate::custody::invalidate(app);
+            }
         }
         _ => {}
     }

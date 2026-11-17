@@ -31,6 +31,9 @@ pub struct Job {
     pub done: Option<(String, String, ToastTone)>,
     /// Keep the dialog open when done (an import into an existing wallet shows its summary).
     pub stay_open: bool,
+    /// The form as submitted: later steps (detection, coverage, the create after them) use
+    /// it, not the form's current values, which stay editable while the steps run.
+    pub form: super::Form,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -271,7 +274,7 @@ pub fn wallet_for_bull_network(app: &App, network: &str) -> String {
 
 /// `selectedBullWalletRoutes`.
 pub fn bull_routes(app: &App) -> Vec<(&'static str, String)> {
-    let f = &st(app).form;
+    let f = form(app);
     f.bull_networks
         .iter()
         .map(|n| {
@@ -353,7 +356,7 @@ pub fn validate(app: &mut App) -> Vec<(&'static str, String)> {
     let m = meta(src.id);
     let k = m.kind();
     let mut e: Vec<(&'static str, String)> = Vec::new();
-    let f = &st(app).form;
+    let f = form(app);
     let btcpay_existing =
         m.source_format == Some("btcpay_csv") && f.btcpay_csv_mode == "existing_wallet";
     let needs_label =
@@ -373,7 +376,7 @@ pub fn validate(app: &mut App) -> Vec<(&'static str, String)> {
         e.push(("label", t("connections:add.validation.labelRequired")));
     }
     let coverage_errors = |e: &mut Vec<(&'static str, String)>| {
-        if selected_is_core(app) && st(app).form.sync_after {
+        if selected_is_core(app) && form(app).sync_after {
             match &st(app).coverage {
                 Coverage::Checking => {
                     e.push(("birthday", t("connections:add.core.coverageChecking")))
@@ -632,13 +635,13 @@ pub fn validate(app: &mut App) -> Vec<(&'static str, String)> {
             }
         }
         SetupKind::Btcpay => {
-            let label = st(app).form.label.text.trim().to_owned();
+            let label = form(app).label.text.trim().to_owned();
             if let Err(msg) = super::btcpay::submit(app, &label) {
                 e.push(("backend", msg));
             }
         }
         SetupKind::ExchangeApi => {
-            let label = st(app).form.label.text.trim().to_owned();
+            let label = form(app).label.text.trim().to_owned();
             if let Err(msg) = super::exchange::submit(app, &label) {
                 e.push(("backend", msg));
             }
@@ -662,13 +665,23 @@ fn send_job(app: &mut App, stage: Stage, kind: &str, args: Value) {
 }
 
 fn start(app: &mut App, label: &str) {
+    let form = st(app).form.clone();
     stm(app).job = Some(Job {
         stage: Stage::Create,
         label: label.to_owned(),
         syncs: VecDeque::new(),
         done: None,
         stay_open: false,
+        form,
     });
+}
+
+/// The form a step reads: the submitted copy while a submit runs, else the live form.
+fn form(app: &App) -> &super::Form {
+    match &st(app).job {
+        Some(j) => &j.form,
+        None => &st(app).form,
+    }
 }
 
 /// `onSetupSubmit`.
@@ -707,7 +720,7 @@ pub fn submit(app: &mut App) {
     if !errors.is_empty() {
         return;
     }
-    let f = &st(app).form;
+    let f = form(app);
     let label = txt(&f.label);
     match k {
         SetupKind::BackendSettings if src.id == "bitcoin-core" => {
@@ -718,10 +731,10 @@ pub fn submit(app: &mut App) {
         SetupKind::BackendSettings => open_backend_settings(app),
         SetupKind::Descriptor | SetupKind::AddressList => {
             start(app, &label);
-            if st(app).form.sync_after && selected_is_core(app) {
-                let mut args = json!({"backend": st(app).form.backend});
-                if !txt(&st(app).form.birthday).is_empty() {
-                    args["birthday"] = json!(iso_date(&st(app).form.birthday.text));
+            if form(app).sync_after && selected_is_core(app) {
+                let mut args = json!({"backend": form(app).backend});
+                if !txt(&form(app).birthday).is_empty() {
+                    args["birthday"] = json!(iso_date(&form(app).birthday.text));
                 }
                 send_job(app, Stage::Coverage, "ui.backends.bitcoinrpc.test", args);
             } else {
@@ -730,7 +743,7 @@ pub fn submit(app: &mut App) {
         }
         SetupKind::SilentPayment => {
             start(app, &label);
-            let f = &st(app).form;
+            let f = form(app);
             let full = f.sp_full_history;
             let h = txt(&f.sp_start_height).parse::<u64>().ok();
             let args = json!({
@@ -763,7 +776,7 @@ pub fn submit(app: &mut App) {
         }
         SetupKind::Samourai => {
             start(app, &label);
-            let f = &st(app).form;
+            let f = form(app);
             let s = &f.samourai;
             let built = samourai::build_source_set(
                 samourai::Fields {
@@ -791,7 +804,7 @@ pub fn submit(app: &mut App) {
         SetupKind::FileWallet => submit_file_wallet(app, &label),
         SetupKind::FileEnrichment => {
             start(app, &label);
-            let f = &st(app).form;
+            let f = form(app);
             let fmt = m.source_format.unwrap_or("");
             let book = is_exchange_evidence(m.source_format);
             let mut args = json!({"source_file": txt(&f.source_file), "source_format": fmt});
@@ -807,7 +820,7 @@ pub fn submit(app: &mut App) {
         }
         SetupKind::PriorReport => {
             start(app, &label);
-            let f = &st(app).form;
+            let f = form(app);
             let args = json!({
                 "provider": txt(&f.report_provider),
                 "file_path": txt(&f.source_file),
@@ -823,7 +836,7 @@ pub fn submit(app: &mut App) {
         }
         SetupKind::BullbitcoinWallet => {
             start(app, &label);
-            let f = &st(app).form;
+            let f = form(app);
             let args = if f.bull_mode == "existing_wallets" {
                 let routes: Vec<Value> = bull_routes(app)
                     .into_iter()
@@ -864,7 +877,7 @@ pub fn submit(app: &mut App) {
         }
         SetupKind::Bip329 => {
             start(app, &label);
-            let file = txt(&st(app).form.bip329_file);
+            let file = txt(&form(app).bip329_file);
             if st(app).bip329_preview.is_none() {
                 send_job(
                     app,
@@ -1013,7 +1026,7 @@ pub fn iso_date(s: &str) -> String {
 fn after_coverage(app: &mut App) {
     let src = selected(app);
     let m = meta(src.id);
-    let f = &st(app).form;
+    let f = form(app);
     if m.kind() == SetupKind::Descriptor {
         let bare = wallet_material::detect(&f.wallet_material.text).kind
             == wallet_material::Kind::BareXpub;
@@ -1070,7 +1083,7 @@ fn after_coverage(app: &mut App) {
 
 fn create_descriptor(app: &mut App, script_types: Option<Vec<String>>) {
     let m = meta(selected(app).id);
-    let f = &st(app).form;
+    let f = form(app);
     let label = st(app)
         .job
         .as_ref()
@@ -1104,7 +1117,7 @@ fn create_descriptor(app: &mut App, script_types: Option<Vec<String>>) {
 fn submit_file_wallet(app: &mut App, label: &str) {
     let src = selected(app);
     let m = meta(src.id);
-    let f = &st(app).form;
+    let f = form(app);
     let fmt = if src.id == "csv" {
         f.source_format
     } else {
@@ -1115,7 +1128,7 @@ fn submit_file_wallet(app: &mut App, label: &str) {
         return;
     }
     start(app, label);
-    let f = &st(app).form;
+    let f = form(app);
     if history_uses_existing(app) {
         // Review's history import into the wallet it named: rows only, no new wallet.
         let Some(target) = history_target(app) else {
@@ -1183,7 +1196,7 @@ fn f_sync(b: bool) -> bool {
 
 /// `coreRpcConfig` / `coreRpcProbeArgs`.
 fn core_config(app: &App) -> Value {
-    let f = &st(app).form;
+    let f = form(app);
     let mut c = json!({"display_name": txt(&f.label)});
     if f.core_auth == "cookiefile" {
         c["cookiefile"] = json!(txt(&f.core_cookiefile));
@@ -1225,7 +1238,7 @@ fn backend_name_from_label(label: &str) -> String {
 }
 
 fn core_backend_args(app: &App) -> Value {
-    let f = &st(app).form;
+    let f = form(app);
     let mut a = json!({
         "name": backend_name_from_label(&f.label.text),
         "kind": "bitcoinrpc",
@@ -1356,7 +1369,7 @@ fn on_job(app: &mut App, r: &Reply) {
                 );
             }
             if d.get("pruned").and_then(Value::as_bool) == Some(true)
-                && txt(&st(app).form.birthday).is_empty()
+                && txt(&form(app).birthday).is_empty()
             {
                 return fail(app, t("connections:add.core.birthdayRequiredForPruned"));
             }
@@ -1380,9 +1393,9 @@ fn on_job(app: &mut App, r: &Reply) {
         },
         Stage::Create => {
             let rpc = meta(selected(app).id).source_format == Some("wasabi_bundle")
-                && st(app).form.wasabi_mode == "rpc";
+                && form(app).wasabi_mode == "rpc";
             if rpc {
-                let w = &st(app).form.wasabi;
+                let w = &form(app).wasabi;
                 let b = wasabi::build_bundle(&w[0].text, &w[1].text, &w[2].text, &w[3].text);
                 let label = st(app)
                     .job
@@ -1406,7 +1419,7 @@ fn on_job(app: &mut App, r: &Reply) {
                 let scope = if book {
                     t("connections:add.enrichment.bookScope")
                 } else {
-                    st(app).form.target_wallet.clone()
+                    form(app).target_wallet.clone()
                 };
                 let n = |k: &str| {
                     crate::format::count(d.get(k).and_then(Value::as_u64).unwrap_or(0) as usize)
@@ -1444,7 +1457,7 @@ fn on_job(app: &mut App, r: &Reply) {
                 .as_ref()
                 .map(|j| j.label.clone())
                 .unwrap_or_default();
-            let sync = st(app).form.sync_after;
+            let sync = form(app).sync_after;
             let value = crate::format::count(children.len());
             let body = if sync {
                 tr(
@@ -1497,7 +1510,7 @@ fn on_job(app: &mut App, r: &Reply) {
             finish(app);
         }
         Stage::BullCreate => {
-            let existing = st(app).form.bull_mode == "existing_wallets";
+            let existing = form(app).bull_mode == "existing_wallets";
             let labels: Vec<String> = if existing {
                 let mut v: Vec<String> = Vec::new();
                 for (_, w) in bull_routes(app) {
@@ -1524,7 +1537,7 @@ fn on_job(app: &mut App, r: &Reply) {
                             .unwrap_or_default()
                     })
             };
-            let sync = st(app).form.sync_after;
+            let sync = form(app).sync_after;
             let n = labels.len();
             let title = if existing {
                 t("connections:add.bullWallet.mappingSavedTitle")
@@ -1549,7 +1562,7 @@ fn on_job(app: &mut App, r: &Reply) {
         }
         Stage::BtcpayCreate => {
             let created = super::btcpay::created(app, d);
-            let sync = st(app).form.sync_after;
+            let sync = form(app).sync_after;
             if let Some(j) = stm(app).job.as_mut() {
                 if sync {
                     j.syncs.extend(created.sync);
@@ -1573,7 +1586,7 @@ fn on_job(app: &mut App, r: &Reply) {
                 });
             let provider =
                 super::exchange::provider_name(meta(selected(app).id).exchange.unwrap_or(""));
-            if st(app).form.sync_after && wallet.is_object() {
+            if form(app).sync_after && wallet.is_object() {
                 if let Some(j) = stm(app).job.as_mut() {
                     j.label = label;
                 }
@@ -1754,8 +1767,8 @@ pub fn check_coverage(app: &mut App) {
         return;
     };
     let mut args = json!({"backend": name_of(&b)});
-    if !txt(&st(app).form.birthday).is_empty() {
-        args["birthday"] = json!(iso_date(&st(app).form.birthday.text));
+    if !txt(&form(app).birthday).is_empty() {
+        args["birthday"] = json!(iso_date(&form(app).birthday.text));
     }
     stm(app).coverage = Coverage::Checking;
 
@@ -1958,7 +1971,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             if !matches!(st(app).coverage, Coverage::Checking) {
                 return; // inputs changed meanwhile
             }
-            let birthday = !txt(&st(app).form.birthday).is_empty();
+            let birthday = !txt(&form(app).birthday).is_empty();
             stm(app).coverage = match &r.error {
                 Some(e) => {
                     let code = r
@@ -2107,6 +2120,19 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
 mod tests {
     use super::*;
 
+    /// Editing the form while a multi-step submit runs (script detection, coverage) does not
+    /// change what the later steps create: they read the form as submitted.
+    #[test]
+    fn later_steps_read_the_form_as_submitted() {
+        let mut app = crate::app::tests::quiet_app();
+        stm(&mut app).form.wallet_material = rune::TextEdit::new("xpubA");
+        start(&mut app, "Cold");
+        stm(&mut app).form.wallet_material = rune::TextEdit::new("xpubB");
+        assert_eq!(form(&app).wallet_material.text, "xpubA");
+        stm(&mut app).job = None;
+        assert_eq!(form(&app).wallet_material.text, "xpubB");
+    }
+
     /// The assistant opens the dialog while a submit runs: the job and its dialog stay, so the
     /// running request's answer still finds it.
     #[test]
@@ -2119,6 +2145,7 @@ mod tests {
             syncs: VecDeque::new(),
             done: None,
             stay_open: false,
+            form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
         });
         super::super::open(&mut app, Some("descriptor"));
         let job = st(&app).job.as_ref().expect("the job runs on");
