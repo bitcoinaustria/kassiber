@@ -20,6 +20,7 @@ pub mod logstore;
 mod ordjson;
 pub mod redact;
 pub mod regex;
+pub mod replay;
 pub mod surfaces;
 pub mod tail;
 mod time;
@@ -48,6 +49,8 @@ pub struct Ui {
     pub popup: Option<Popup>,
     pub act: activity::State,
     pub logs: logs::State,
+    /// Logs → Export → Replay bundle.
+    pub replay: replay::State,
     pub egress: egress::State,
     /// The panel's Logs tab (its ring is `logs.store`, shared with the page).
     pub tail: tail::State,
@@ -125,6 +128,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         Some("act") => activity::on_reply(app, tag, r),
         Some("chg") => changes::on_reply(app, tag, r),
         Some("logs") => logs::on_reply(app, tag, r),
+        Some("replay") => replay::on_reply(app, tag, r),
         Some("egress") => egress::on_reply(app, tag, r),
         _ => {}
     }

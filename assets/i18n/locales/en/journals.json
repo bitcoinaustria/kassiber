@@ -108,7 +108,7 @@
       "byWallet": "Wallets: {{wallets}}",
       "byYear": "Years: {{years}}",
       "truncated": "Showing the first {{count}} differences.",
-      "nextStep": "Processing the journals again replaces the stored rows."
+      "nextStep": "Processing the journals again replaces the stored rows. To report the difference, export a replay bundle from Logs → Export."
     }
   },
   "reportable": {

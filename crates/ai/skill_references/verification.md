@@ -66,3 +66,8 @@ with the stored ones. It writes nothing and contacts nothing.
 - `stale` / `not_processed`: inputs changed since processing; process the
   journals first. This is not a sign of wrong numbers.
 - `refused`: processing itself would refuse; follow its error.
+
+For a reproducible bug report the user can export an encrypted replay bundle
+(`kassiber diagnostics replay-bundle export`, or Logs → Export → Replay
+bundle in the desktop). Only the user can export it; never ask for its
+passphrase in chat.

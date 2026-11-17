@@ -2132,6 +2132,20 @@ on the CLI, daemon, desktop and assistant.
   dismissal) should report as `stale` rather than a difference when the
   check runs long after processing.
 
+## Replay bundles
+
+Shipped: [encrypted, generated replay bundles](docs/reference/replay-bundle.md#replay-bundle)
+on the CLI, daemon and desktop.
+
+- [ ] Add a daemon kind and a desktop picker for `replay-bundle verify` if
+  maintainers want it in the app; the CLI verify needs no book today.
+- [ ] Measure export on a large book (two journal runs plus the stored
+  outputs in memory). Done when the peak memory and time are recorded in the
+  reference.
+- [ ] Teach the projection schema the value when a real book's export is
+  refused with `replay_bundle_unfaithful` or `replay_bundle_unsafe_stored`.
+  Done when the frozen test books and the demo organization export.
+
 ## Daemon, contracts, and performance
 
 - [ ] Support OpenCode 2 OAuth-backed private turns once credentials can be

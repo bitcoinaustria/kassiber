@@ -108,7 +108,7 @@
       "byWallet": "Wallets: {{wallets}}",
       "byYear": "Jahre: {{years}}",
       "truncated": "Die ersten {{count}} Abweichungen werden angezeigt.",
-      "nextStep": "Eine erneute Verarbeitung ersetzt die gespeicherten Zeilen."
+      "nextStep": "Eine erneute Verarbeitung ersetzt die gespeicherten Zeilen. Um die Abweichung zu melden, exportiere ein Replay-Bundle unter Logs → Exportieren."
     }
   },
   "reportable": {
