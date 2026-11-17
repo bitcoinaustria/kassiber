@@ -1781,7 +1781,6 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         .grow(1.0)
         .min_h(0.0)
         .px(tk.card_pad())
-        .pt(if ui.expanded { tk.r(1.0) } else { 0.0 })
         .pb(tk.r(1.0))
         // `tabIndex={0}`: the region is a Tab stop on the web.
         .focusable(true)
@@ -1804,6 +1803,11 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         overflow,
         true,
     );
+    // Expanded, the card's `pt-4` sits above the scroll region: the sticky header then stops
+    // below the card's top edge instead of covering its border while the rows scroll.
+    if ui.expanded {
+        card = card.child(rune::el().w_full().h(tk.r(1.0)).a11y_hidden());
+    }
     card = card.child(scroll);
     // Footer.
     let n = ui.filtered.len();
