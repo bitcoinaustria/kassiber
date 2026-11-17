@@ -2478,7 +2478,7 @@ dependencies = [
 
 [[package]]
 name = "kassiber"
-version = "0.22.78"
+version = "1.0.0"
 dependencies = [
  "flate2",
  "kassiber-ai",
