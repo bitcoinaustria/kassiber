@@ -1362,6 +1362,9 @@ fn on_job(app: &mut App, r: &Reply) {
         return;
     };
     if let Some(e) = &r.error {
+        if stage == Stage::ExchangeCreate {
+            super::exchange::on_create_error(app, &r.error_detail);
+        }
         fail(app, e.clone());
         return;
     }
@@ -1458,6 +1461,7 @@ fn on_job(app: &mut App, r: &Reply) {
         }
         Stage::WasabiImport | Stage::ImportFile => {
             stm(app).last_import = Some(d.clone());
+            app.wallets.imports_done += 1;
             if meta(selected(app).id).kind() == SetupKind::FileEnrichment {
                 let book = is_exchange_evidence(meta(selected(app).id).source_format);
                 let scope = if book {
@@ -1616,6 +1620,7 @@ fn on_job(app: &mut App, r: &Reply) {
             next_sync(app);
         }
         Stage::ExchangeCreate => {
+            super::exchange::clear_attach(app);
             let wallet = d.get("wallet").cloned().unwrap_or(Value::Null);
             let label = wallet
                 .get("label")

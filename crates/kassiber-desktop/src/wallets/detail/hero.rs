@@ -359,8 +359,20 @@ pub fn hero(app: &App, tk: &Tk, c: &Conn, width: f32) -> El {
         }
         None => t("connections:detail.metric.noActivity"),
     };
-    let source = match c.sync_mode.as_deref() {
-        Some("live") => t("connections:detail.source.live"),
+    // The overview's syncMode is backend_descriptor, file_import, btcpay, …; coverage names the
+    // mode itself.
+    let mode = c
+        .coverage
+        .as_ref()
+        .and_then(|v| v["source_mode"].as_str())
+        .map(str::to_owned)
+        .or_else(|| match c.sync_mode.as_deref() {
+            Some("file_import") => Some("file".into()),
+            Some(m) if m.starts_with("backend_") || m == "btcpay" => Some("live".into()),
+            _ => None,
+        });
+    let source = match mode.as_deref() {
+        Some("live" | "hybrid") => t("connections:detail.source.live"),
         Some("file") => t("connections:detail.source.file"),
         _ => t("connections:detail.source.wallet"),
     };

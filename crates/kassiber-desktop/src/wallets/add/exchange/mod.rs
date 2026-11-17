@@ -64,6 +64,11 @@ pub struct State {
     pub sync: SyncState,
     /// Scene harness: `wallets-detail-exchange-card` mounts `card_scene_view` full-page.
     pub card_scene: bool,
+    /// A save refused because the same exchange's CSV wallet holds this label: (id, label) of
+    /// that wallet, offered to take the key instead (one hybrid source, no double count).
+    pub attach_offer: Option<(String, String)>,
+    /// The wallet the next save adds the key to (the offer's button).
+    pub attach_wallet: Option<String>,
 }
 
 /// `useExchangeSync` for the wallet on screen.
@@ -142,7 +147,72 @@ pub fn submit(app: &mut App, label: &str) -> Result<Value, String> {
     }
     let mut args = model::credential_args(&c);
     args.insert("label".into(), json!(label));
+    if let Some(wallet) = stm(app).attach_wallet.take() {
+        args.insert("wallet".into(), json!(wallet));
+    }
     Ok(Value::Object(args))
+}
+
+/// The offer ends with a save, a new choice or another source.
+pub fn clear_attach(app: &mut App) {
+    stm(app).attach_offer = None;
+    stm(app).attach_wallet = None;
+}
+
+/// A refused save: the CSV wallet the daemon names (`details.attachable_wallet_id`) can take
+/// the key instead.
+pub fn on_create_error(app: &mut App, detail: &Value) {
+    let d = &detail["details"];
+    stm(app).attach_offer = d["attachable_wallet_id"].as_str().map(|id| {
+        (
+            id.to_owned(),
+            d["attachable_wallet"].as_str().unwrap_or(id).to_owned(),
+        )
+    });
+}
+
+/// The offer under the panel: add the key to the existing CSV wallet.
+pub fn attach_offer(app: &App, tk: &Tk, provider: &str) -> Option<El> {
+    let (id, label) = st(app).attach_offer.clone()?;
+    let (fill, border, ink) = crate::wallets::detail::ui::amber(tk);
+    let button_label = tr("connections:coverage.attach.button", &[("wallet", &label)]);
+    Some(
+        col()
+            .key("connection-exchange-attach")
+            .w_full()
+            .padding(tk.r(0.75))
+            .gap(tk.r(0.5))
+            .radius(tk.r(0.375))
+            .fill(fill)
+            .border(1.0, border)
+            .border_layout()
+            .role("status")
+            .child(
+                text(tr(
+                    "connections:coverage.attach.body",
+                    &[("provider", provider), ("wallet", &label)],
+                ))
+                .font(tk.tsm(400.0))
+                .color(ink)
+                .wrap()
+                .w_full(),
+            )
+            .child(
+                crate::txdetail::widgets::button(
+                    tk,
+                    "connection-exchange-attach-submit",
+                    crate::txdetail::widgets::Variant::Outline,
+                    crate::txdetail::widgets::Size::Sm,
+                    None,
+                    &button_label,
+                    true,
+                )
+                .on_press(move |a: &mut App| {
+                    stm(a).attach_wallet = Some(id.clone());
+                    crate::wallets::add::submit_setup(a);
+                }),
+            ),
+    )
 }
 
 fn run_test(a: &mut App) {
