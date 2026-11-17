@@ -47,21 +47,35 @@ pub struct State {
     pub switching: bool,
     /// After a switch: (route, toast title, toast body).
     pub then: Option<(String, String, String)>,
+    /// `App::book_generation` the shown read belongs to; a book refresh reads it again.
+    pub generation: u64,
+    /// The generation of each snapshot read in flight, oldest first (kept across a set
+    /// change, so an earlier answer is recognized and dropped).
+    pub asked: std::collections::VecDeque<u64>,
 }
 
 /// Mount and set change: read the set's overview (local).
 pub fn step(app: &mut App, id: &str) -> bool {
-    if app.reports.books.be.ws == id {
+    let generation = app.book_generation;
+    let s = &mut app.reports.books.be;
+    if s.ws == id && s.generation == generation {
         return false;
     }
-    let s = &mut app.reports.books.be;
-    let keep_refresh = s.refreshing && s.ws == id;
-    *s = State {
-        ws: id.to_owned(),
-        loading: true,
-        refreshing: keep_refresh,
-        ..State::default()
-    };
+    if s.ws == id {
+        // A book refresh since the read (an exclusion, a classification, a sync): read the
+        // set again, showing the old figures as loading until it lands.
+        s.loading = true;
+    } else {
+        let asked = std::mem::take(&mut s.asked);
+        *s = State {
+            ws: id.to_owned(),
+            loading: true,
+            asked,
+            ..State::default()
+        };
+    }
+    s.generation = generation;
+    s.asked.push_back(generation);
     app.send(
         "ui.workspace.overview.snapshot",
         json!({"workspace_id": id}),
@@ -218,8 +232,9 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         "reports.books.be.snapshot" => {
             let ws = r.data["workspace"]["id"].as_str().unwrap_or_default();
             let s = &mut app.reports.books.be;
-            if !ws.is_empty() && ws != s.ws {
-                return; // a superseded set's answer
+            let asked = s.asked.pop_front();
+            if (!ws.is_empty() && ws != s.ws) || asked != Some(s.generation) {
+                return; // a superseded set's, or an earlier generation's, answer
             }
             s.loading = false;
             match &r.error {
@@ -1670,4 +1685,38 @@ pub fn scene_refresh_panel(app: &mut App) {
         json!({"books": 2, "synced_books": 2, "reports_blocked": 0, "rate_limited": 0, "errors": 0}),
     );
     let _ = el;
+}
+
+#[cfg(test)]
+mod refresh_tests {
+    use super::*;
+
+    fn snapshot(ws: &str, books: u64) -> Reply {
+        Reply {
+            kind: "ui.workspace.overview.snapshot".into(),
+            data: json!({"workspace": {"id": ws}, "books": books}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// A book refresh (an exclusion elsewhere) reads the same set again; the answer from
+    /// before the refresh does not land as current.
+    #[test]
+    fn a_book_refresh_reads_the_set_again() {
+        let mut app = crate::app::tests::quiet_app();
+        assert!(step(&mut app, "ws-1"));
+        assert!(!step(&mut app, "ws-1"), "nothing changed: no new read");
+        app.book_generation += 1;
+        assert!(step(&mut app, "ws-1"), "refreshed: read again");
+        on_reply(&mut app, "reports.books.be.snapshot", &snapshot("ws-1", 1));
+        assert!(
+            app.reports.books.be.data.is_none(),
+            "the earlier read is dropped"
+        );
+        on_reply(&mut app, "reports.books.be.snapshot", &snapshot("ws-1", 2));
+        assert!(app.reports.books.be.data.is_some());
+        assert!(!app.reports.books.be.loading);
+    }
 }

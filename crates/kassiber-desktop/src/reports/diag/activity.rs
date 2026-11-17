@@ -69,6 +69,9 @@ pub struct State {
     /// The field diff under the pointer (its revert button shows).
     pub hover_field: Option<String>,
     was_processing: bool,
+    /// `App::book_generation` of the history read; a book refresh (an edit, an exclusion)
+    /// reads it again.
+    generation: u64,
     /// The Filters menu's open submenu ("source", "family", "wallet").
     pub sub: Option<&'static str>,
     /// The edit whose "⋯" menu is open.
@@ -133,6 +136,7 @@ impl Default for State {
             reverting: false,
             hover_field: None,
             was_processing: false,
+            generation: 0,
             sub: None,
             row_menu: None,
         }
@@ -191,7 +195,13 @@ pub fn poll(app: &mut App, _tx: &mut Tx) -> bool {
 fn step(app: &mut App) -> bool {
     let mut changed = false;
     let processing = app.busy.processing;
+    let generation = app.book_generation;
     let s = &mut app.reports.diag.act;
+    if s.generation != generation {
+        s.generation = generation;
+        s.args_key.clear();
+        s.stale_sent = false;
+    }
     if s.was_processing && !processing {
         // The web invalidates every daemon query once journals are processed.
         s.args_key.clear();

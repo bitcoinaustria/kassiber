@@ -203,6 +203,8 @@ pub struct State {
     /// The wallet the reads below belong to; another id resets the page (the web keys the
     /// view by connection).
     pub wallet: String,
+    /// `App::book_generation` of the reads; a book refresh (an exclusion, a sync) reads again.
+    pub generation: u64,
     pub tab: Tab,
     pub txs: Read<Vec<Value>>,
     pub dash: Read<Value>,
@@ -373,6 +375,7 @@ impl State {
         let k = std::mem::take(self);
         *self = State {
             wallet: k.wallet,
+            generation: k.generation,
             txs: k.txs,
             dash: k.dash,
             utxos: k.utxos,
@@ -431,6 +434,7 @@ fn load(app: &mut App, c: &Conn) {
     let old = std::mem::take(&mut app.wallets.detail);
     app.wallets.detail = State {
         wallet: id.clone(),
+        generation: app.book_generation,
         tx_visible: txs::PAGE,
         utxo_visible: coins::PAGE,
         syncing: old.syncing,
@@ -470,6 +474,11 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     let mut changed = false;
     if app.wallets.detail.wallet != c.id {
         load(app, &c);
+        changed = true;
+    } else if app.wallets.detail.generation != app.book_generation {
+        // The book was refreshed since these reads: read again, keeping the page's state.
+        app.wallets.detail.generation = app.book_generation;
+        reload(app);
         changed = true;
     }
     if let Some((_, until)) = app.wallets.detail.copied

@@ -175,6 +175,8 @@ pub struct Ui {
     pub export_visit: u64,
     /// `/reports?result=…`: (reference JSON, explanation read).
     pub explain: Option<(String, Load<Value>)>,
+    /// `App::book_generation` the shown explanation was read in.
+    pub explain_generation: u64,
     /// Open `<details>` nodes of the explanation.
     pub explain_open: Vec<String>,
     /// A select's trigger to focus again once the page shows it (key, with its ring): picking a
@@ -274,19 +276,21 @@ fn step(app: &mut App) -> bool {
         ui.year = model::year_from_route(&route);
         match model::result_param(&route) {
             Some(r) if ui.explain.as_ref().map(|(k, _)| k) != Some(&r) => {
-                ui.explain = Some((r.clone(), Load::Loading));
                 ui.explain_open.clear();
-                let reference: Value = serde_json::from_str(&r).unwrap_or(Value::Null);
-                app.reports.report.asked.explain.push_back(r);
-                app.send(
-                    "ui.reports.explain_capital_gain",
-                    json!({"reference": reference}),
-                    "reports.report.explain",
-                );
+                ask_explain(app, r);
             }
             Some(_) => {}
             None => ui.explain = None,
         }
+        changed = true;
+    }
+    // A book refresh since the explanation was read: read it again (the core re-checks its
+    // reference against the current inputs) instead of showing the old figures.
+    if let Some((r, _)) = &app.reports.report.explain
+        && app.reports.report.explain_generation != app.book_generation
+    {
+        let r = r.clone();
+        ask_explain(app, r);
         changed = true;
     }
     if app.reports.report.explain.is_some() {
@@ -453,13 +457,13 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         "reports.report.explain" => {
             let asked = app.reports.report.asked.explain.pop_front();
-            if let Some((_, load)) = app
-                .reports
-                .report
-                .explain
-                .as_mut()
-                .filter(|(k, _)| Some(k) == asked.as_ref())
-            {
+            let generation = app.reports.report.explain_generation;
+            // Only the answer for the reference shown, read in the current generation.
+            if let Some((_, load)) = app.reports.report.explain.as_mut().filter(|(k, _)| {
+                asked
+                    .as_ref()
+                    .is_some_and(|(a, g)| a == k && *g == generation)
+            }) {
                 *load = match &r.error {
                     Some(e) => Load::Failed(e.clone()),
                     None => Load::Ready(r.data.clone()),
@@ -470,11 +474,27 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     }
 }
 
-/// What the profitability and explanation reads in flight were asked for, in send order.
+/// What the profitability and explanation reads in flight were asked for, in send order (an
+/// explanation with the book generation it was read in).
 #[derive(Default)]
 pub struct Asked {
     pub ln: VecDeque<String>,
-    pub explain: VecDeque<String>,
+    pub explain: VecDeque<(String, u64)>,
+}
+
+/// Reads the explanation of reference `r` for the current book generation.
+fn ask_explain(app: &mut App, r: String) {
+    let generation = app.book_generation;
+    let ui = &mut app.reports.report;
+    ui.explain = Some((r.clone(), Load::Loading));
+    ui.explain_generation = generation;
+    let reference: Value = serde_json::from_str(&r).unwrap_or(Value::Null);
+    ui.asked.explain.push_back((r, generation));
+    app.send(
+        "ui.reports.explain_capital_gain",
+        json!({"reference": reference}),
+        "reports.report.explain",
+    );
 }
 
 /// The audit package's case scope takes the first saved case when none is chosen.
@@ -1331,5 +1351,41 @@ mod export_target_tests {
             true,
             false
         ));
+    }
+}
+
+#[cfg(test)]
+mod explain_refresh_tests {
+    use super::*;
+
+    fn explained(proceeds: &str) -> Reply {
+        Reply {
+            kind: "ui.reports.explain_capital_gain".into(),
+            data: json!({"proceeds": proceeds}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// An explanation read before a book refresh is read again, and the earlier answer does
+    /// not land as the current one.
+    #[test]
+    fn an_explanation_is_read_again_after_a_book_refresh() {
+        let mut app = crate::app::tests::quiet_app();
+        ask_explain(&mut app, "{\"r\":1}".into());
+        app.book_generation += 1;
+        let r = app.reports.report.explain.as_ref().unwrap().0.clone();
+        ask_explain(&mut app, r);
+        on_reply(&mut app, "reports.report.explain", &explained("old"));
+        assert!(matches!(
+            app.reports.report.explain.as_ref().unwrap().1,
+            Load::Loading
+        ));
+        on_reply(&mut app, "reports.report.explain", &explained("new"));
+        match &app.reports.report.explain.as_ref().unwrap().1 {
+            Load::Ready(v) => assert_eq!(v["proceeds"], "new"),
+            _ => panic!("the fresh answer lands"),
+        }
     }
 }
