@@ -425,21 +425,6 @@ pub fn begin_setup(app: &mut App) {
     request_defaults(app);
 }
 
-/// "Or create with recommended defaults": the built-in servers chosen, straight to Security.
-pub fn begin_quick_start(app: &mut App) {
-    let ui = &mut app.onboarding;
-    ui.finish_error = None;
-    ui.import_error = None;
-    ui.form = Form {
-        backend_mode: Some(BackendMode::Default),
-        ..Form::default()
-    };
-    ui.step = SECURITY_STEP;
-    ui.flow = Flow::Setup;
-    ui.form.passphrase.focused = true;
-    request_defaults(app);
-}
-
 /// `ui.backends.public_defaults` (`refetchOnMount: "always"` while setup is up): local.
 fn request_defaults(app: &mut App) {
     app.onboarding.defaults_asked = true;

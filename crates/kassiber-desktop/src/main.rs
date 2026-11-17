@@ -618,6 +618,11 @@ static SCENES: &[crate::app::Scene] = &[
     ("network", |a| a.shell.toggle(shell::Popup::Network)),
     ("alpha", |a| a.shell.toggle(shell::Popup::Alpha)),
     ("locked", |a| a.locked = true),
+    // With developer tools on, the lock screen also offers the demo book.
+    ("locked-dev", |a| {
+        a.locked = true;
+        a.prefs.developer_tools = true;
+    }),
     // An unlock attempt while the daemon has not answered yet: the wordmark decrypts again.
     ("locked-attempt", |a| {
         a.locked = true;

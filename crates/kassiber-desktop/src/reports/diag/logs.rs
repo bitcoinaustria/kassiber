@@ -1260,13 +1260,13 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
             Some(idx.len()),
             header_controls(app, tk, layer),
         ))
-        .child(
+        .children(has_filters(s).then(|| {
             row()
                 .w_full()
                 .px(tk.card_pad())
                 .pb(tk.r(0.75))
-                .child(chips(app, tk)),
-        );
+                .child(chips(app, tk))
+        }));
     if !s.redacted {
         let time = s
             .raw_until

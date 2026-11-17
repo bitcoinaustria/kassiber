@@ -339,6 +339,36 @@ pub fn lock_screen(app: &App, tk: &Tk) -> El {
         .on_press(open_other_books)
         .child(ic(&I::ARROW_LEFT, tk.r(0.875), ink2(tk)))
         .child(text(footer_label).font(tk.tsm(500.0)).color(ink2(tk)));
+    // With developer tools on, the demo book opens from here too (a separate local copy; Leave
+    // demo comes back to this lock screen's books).
+    let demo = app.prefs.developer_tools.then(|| {
+        let busy = app.demo.busy() || l.submitting;
+        let label = t(if app.demo.busy() {
+            "onboarding:start.tryDemo.titleOpening"
+        } else {
+            "onboarding:start.tryDemo.title"
+        });
+        let mut d = row()
+            .key("sh-lock-demo")
+            .gap(tk.r(0.375))
+            .px(tk.r(0.25))
+            .py(tk.r(0.125))
+            .center_y()
+            .radius(tk.r(0.375))
+            .role("button")
+            .label(label.clone())
+            .help(t("onboarding:start.tryDemo.tooltip"))
+            .focusable(!busy)
+            .disabled(busy)
+            .child(ic(&I::FLASK_CONICAL, tk.r(0.875), ink2(tk)))
+            .child(text(label).font(tk.tsm(500.0)).color(ink2(tk)));
+        if busy {
+            d = d.opacity(0.5);
+        } else {
+            d = d.on_press(crate::demo::start);
+        }
+        d
+    });
     // `m-auto`: centred in the panel, scrolling to the wordmark in a short window.
     let panel_h = (app.shell.window_h - 40.0 - tk.r(0.375) - 2.0).max(tk.r(30.0));
     col()
@@ -355,11 +385,13 @@ pub fn lock_screen(app: &App, tk: &Tk) -> El {
                 .w_full()
                 .justify_center()
                 .pb(tk.r(1.5))
+                .gap(tk.r(1.5))
                 .child(if l.submitting {
                     footer.opacity(0.5)
                 } else {
                     footer
-                }),
+                })
+                .children(demo),
         )
 }
 
