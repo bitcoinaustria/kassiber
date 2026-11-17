@@ -118,6 +118,11 @@ pub struct GraphUi {
     pub auto_enabled: bool,
     /// The launch's override the preference was last read for (None: not read since a reset).
     pub auto_source: Option<Option<String>>,
+    /// `App::book_generation` the local reads belong to; a book refresh (an unlink, reprocessed
+    /// journals) re-reads them. Lookups that asked a server are not repeated.
+    generation: u64,
+    /// The book generation each graph read was sent in, by cache key.
+    asked: HashMap<String, u64>,
 }
 
 impl Default for GraphUi {
@@ -141,6 +146,8 @@ impl Default for GraphUi {
             // Read by `auto::sync` on the next poll; nothing is asked before that.
             auto_enabled: true,
             auto_source: None,
+            generation: 0,
+            asked: HashMap::new(),
         }
     }
 }
@@ -204,6 +211,7 @@ fn request(app: &mut App, reference: &str, public: bool) {
         .entry(key.clone())
         .or_insert_with(|| Box::leak(format!("graph:{key}").into_boxed_str()));
     app.graph.cache.insert(key.clone(), Entry::Loading);
+    app.graph.asked.insert(key.clone(), app.book_generation);
     if app
         .send(
             "ui.transactions.graph",
@@ -222,6 +230,11 @@ fn request(app: &mut App, reference: &str, public: bool) {
 /// panel calls this whenever it shows a transaction. Never enables the explicit public lookup by
 /// itself; the wallet-backend lookup follows once the local read shows something is missing.
 pub fn ensure(app: &mut App, transaction_id: &str) {
+    if app.graph.generation != app.book_generation {
+        // The book changed: its local projection (the swap route, own wallets) is read again.
+        app.graph.generation = app.book_generation;
+        app.graph.cache.retain(|k, _| !k.ends_with("|local"));
+    }
     let public = app.graph.public_for(transaction_id);
     request(app, transaction_id, public);
     maybe_auto(app, transaction_id);
@@ -321,6 +334,12 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         return;
     }
     let public = mode == "public";
+    let generation = app.graph.asked.remove(key);
+    if !public && generation != Some(app.book_generation) {
+        // Read before the latest book refresh: dropped; the next show reads it again.
+        app.graph.cache.remove(key);
+        return;
+    }
     let entry = match (&r.error, Payload::parse(&r.data)) {
         (Some(e), _) => Entry::Failed(e.clone()),
         (None, Ok(p)) => Entry::Ready(Rc::new(p)),
@@ -336,6 +355,20 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             if let Some(r) = model::preload_reference(route, leg, &current) {
                 let local_row = route.leg(leg).id.as_deref() == Some(r.as_str());
                 legs.push((r, public && local_row));
+            }
+        }
+    }
+    // The route is the book's (its custody projection), even in an answer that asked a server:
+    // a fresh local read's route replaces the one in the lookups already shown.
+    if let (false, Entry::Ready(local)) = (public, &entry) {
+        for mode in ["public", "wallet"] {
+            let k = format!("{reference}|{mode}");
+            if let Some(Entry::Ready(p)) = app.graph.cache.get(&k)
+                && p.swap_route != local.swap_route
+            {
+                let mut q = (**p).clone();
+                q.swap_route = local.swap_route.clone();
+                app.graph.cache.insert(k, Entry::Ready(Rc::new(q)));
             }
         }
     }
@@ -923,3 +956,40 @@ pub fn focus_view(
 
 /// The graph focus body's scroll viewport (sizes the drawing and clips the GPU view).
 pub(crate) const FOCUS_SCROLL: &str = "graph-focus-scroll";
+
+#[cfg(test)]
+mod refresh_tests {
+    use super::*;
+
+    /// A book refresh re-reads a transaction's local graph (its swap route comes from the
+    /// custody projection) but keeps a lookup that asked a server; a pre-refresh local answer
+    /// does not land.
+    #[test]
+    fn a_book_refresh_rereads_the_local_graph_only() {
+        let mut app = crate::app::tests::quiet_app();
+        app.graph.generation = app.book_generation;
+        app.graph.cache.insert(
+            GraphUi::key("t1", false),
+            Entry::Ready(Rc::new(Payload::default())),
+        );
+        app.graph.cache.insert(
+            GraphUi::key("t1", true),
+            Entry::Ready(Rc::new(Payload::default())),
+        );
+        app.book_generation += 1;
+        ensure(&mut app, "t1");
+        assert!(matches!(app.graph.entry("t1", false), Some(Entry::Loading)));
+        assert!(matches!(app.graph.entry("t1", true), Some(Entry::Ready(_))));
+        // An answer sent before another refresh is dropped.
+        app.book_generation += 1;
+        let reply = Reply {
+            kind: "ui.transactions.graph".into(),
+            data: json!({}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "graph:t1|local", &reply);
+        assert!(app.graph.entry("t1", false).is_none());
+    }
+}

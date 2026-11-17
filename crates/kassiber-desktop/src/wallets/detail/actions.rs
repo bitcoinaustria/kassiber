@@ -47,48 +47,21 @@ pub fn wallet_script_types(app: &App, c: &Conn) -> Vec<String> {
         .collect()
 }
 
-/// `detectWalletMaterial` (lib/walletMaterialFormat.ts): (kind, label, hint).
+/// `detectWalletMaterial`: (kind, label, hint), the label and hint translated (the setup
+/// form's detector).
 pub fn detect_material(value: &str) -> (&'static str, String, Option<String>) {
-    let v = value.trim();
-    if v.is_empty() {
-        return ("empty", "Empty".into(), None);
-    }
-    if v.starts_with('{') || v.starts_with('[') {
-        return ("descriptor-json", "Descriptor JSON export".into(), None);
-    }
-    let lower = v.to_lowercase();
-    if lower.starts_with("bsms 1.0") {
-        return ("bsms", "BSMS descriptor record".into(), None);
-    }
-    const PREFIXES: [&str; 13] = [
-        "pkh(", "wpkh(", "sh(", "wsh(", "tr(", "combo(", "addr(", "raw(", "ct(", "elwpkh(",
-        "elwsh(", "elsh(", "eltr(",
-    ];
-    if PREFIXES.iter().any(|p| lower.starts_with(p)) {
-        return ("descriptor", "Output descriptor".into(), None);
-    }
-    let head: String = v.chars().take(4).collect();
-    let slip = match head.as_str() {
-        "ypub" => Some("P2SH-wrapped SegWit (BIP49)"),
-        "zpub" => Some("Native SegWit (BIP84)"),
-        "upub" => Some("Testnet P2SH-wrapped SegWit"),
-        "vpub" => Some("Testnet Native SegWit"),
-        _ => None,
+    use crate::wallets::add::libs::wallet_material::{Kind, detect};
+    let d = detect(value);
+    let kind = match d.kind {
+        Kind::Empty => "empty",
+        Kind::DescriptorJson => "descriptor-json",
+        Kind::Bsms => "bsms",
+        Kind::Descriptor => "descriptor",
+        Kind::Slip132 => "slip132",
+        Kind::BareXpub => "bare-xpub",
+        Kind::Unknown => "unknown",
     };
-    if let Some(l) = slip {
-        return ("slip132", format!("{head} · {l}"), None);
-    }
-    if head == "xpub" || head == "tpub" {
-        return (
-            "bare-xpub",
-            format!("Bare {head}"),
-            Some(
-                "Kassiber auto-detects which address types this key uses; pick one to pin it."
-                    .into(),
-            ),
-        );
-    }
-    ("unknown", "Unrecognized format".into(), Some("Paste a descriptor, BSMS descriptor record, Bitcoin Core descriptor JSON, or a ypub/zpub/upub/vpub key.".into()))
+    (kind, d.label, d.hint)
 }
 
 /// `editConfigKindForConnection`.
@@ -1126,5 +1099,19 @@ mod tests {
         on_reply(&mut app, "wallets.detail.rollback_plan", &plan("b"));
         let rb = app.wallets.detail.rollback.as_ref().unwrap();
         assert!(rb.plan.is_some() && !rb.plan_pending);
+    }
+}
+
+#[cfg(test)]
+mod material_tests {
+    /// The edit dialog's detection uses the translated setup detector: kinds unchanged, the
+    /// label and hint from the i18n bundles.
+    #[test]
+    fn detection_is_the_setup_forms() {
+        let (k, label, hint) = super::detect_material("xpub6C...");
+        let d = crate::wallets::add::libs::wallet_material::detect("xpub6C...");
+        assert_eq!(k, "bare-xpub");
+        assert_eq!((label, hint), (d.label, d.hint));
+        assert_eq!(super::detect_material("nonsense").0, "unknown");
     }
 }

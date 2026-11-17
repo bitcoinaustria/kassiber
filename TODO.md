@@ -2053,6 +2053,13 @@ See [tax countries](docs/reference/tax-countries.md) and
   it); `wallets/add` pending flags (`preview_pending`, `core_detect_pending`,
   `core_test_pending`, template/export) apply any answer, even after
   `reset_form`.
+- [ ] Desktop English left outside i18n (found in the #773 review sweep): the
+  terminal-command install errors (`native/terminal.rs`), credential-store and
+  managed-settings errors (`secrets/`), assistant status lines ("Stopped by
+  user.", "Could not reach the model provider.", the chat export dialog title),
+  the mempool backend labels (`settings/model.rs`), "No imported rows"
+  (`settings/market.rs`) and the overview's no-data message (`app.rs`). Route
+  each surface through `i18n.rs` with en + de together.
 - [ ] Decide when `ui-tauri/` retires. Until then it is the parity reference
   (`crates/kassiber-desktop/parity/`) and its kind lists are checked against
   the desktop's (`src/kinds/tests.rs`, which skips when `ui-tauri/` is absent).

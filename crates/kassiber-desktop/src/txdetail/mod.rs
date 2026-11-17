@@ -637,8 +637,10 @@ fn load_record(app: &mut App, panel: u64, record: Value, keep_draft: bool) {
             key: Value::Null,
         };
         side_reads(app, &to);
-        graph::ensure(app, &id);
     }
+    // Every load (a reload after a book refresh too): the graph re-reads its local projection
+    // when the book changed since; otherwise the cached graph is reused.
+    graph::ensure(app, &id);
 }
 
 /// Rebinds only the text fields whose draft value differs from what they show, so a field being
