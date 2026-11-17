@@ -57,6 +57,8 @@ pub struct Ui {
     seen: String,
     /// The book the reads were made in; a switch starts over.
     scope: String,
+    /// `App::book_generation` the open page's reads belong to.
+    generation: u64,
 }
 
 /// Whether this area renders `path` (the route without its query).
@@ -144,8 +146,18 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     } else if app.custody.seen != app.route.0 {
         let first_visit = app.custody.seen.is_empty();
         app.custody.seen = app.route.0.clone();
+        app.custody.generation = app.book_generation;
         page::mount(app, first_visit);
         changed = true;
+    }
+    // Any book refresh re-reads the open page: an assistant's unlink, a sync or a rate rebuild
+    // changes pairs, lineage and badges as much as a decision made here.
+    if app.custody.generation != app.book_generation {
+        app.custody.generation = app.book_generation;
+        if !app.custody.seen.is_empty() {
+            invalidate(app);
+            changed = true;
+        }
     }
     // A refresh asked for after a decision starts once the core is free (SETTLE_MS = 800).
     if let Some(at) = app.custody.refresh_at {
@@ -315,3 +327,31 @@ pub fn show_transaction(app: &mut App, id: &str, tab: Option<&str>) {
 
 /// Named states for `--scene` (headless snapshots and the parity harness).
 pub const SCENES: &[crate::app::Scene] = scenes::SCENES;
+
+#[cfg(test)]
+mod refresh_tests {
+    use super::*;
+
+    /// A book refresh started elsewhere (an assistant's unlink) re-reads the open page's pairs,
+    /// as a decision made on the page does.
+    #[test]
+    fn a_book_refresh_rereads_the_open_page() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route("/transfers".into());
+        let mut tx = Tx::default();
+        poll(&mut app, &mut tx);
+        let reads = |a: &App| -> usize {
+            a.pending
+                .values()
+                .filter(|(tag, _, _)| *tag == "custody.page.pairs")
+                .count()
+        };
+        let mounted = reads(&app);
+        assert!(mounted >= 1, "mounting reads the pairs");
+        poll(&mut app, &mut tx);
+        assert_eq!(reads(&app), mounted, "an idle poll reads nothing");
+        app.book_generation += 1;
+        poll(&mut app, &mut tx);
+        assert_eq!(reads(&app), mounted + 1, "the refresh re-reads them");
+    }
+}

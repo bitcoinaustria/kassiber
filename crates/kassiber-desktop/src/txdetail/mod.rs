@@ -325,6 +325,11 @@ pub struct DetailUi {
     pub targets: HashMap<&'static str, std::collections::VecDeque<Target>>,
     /// `ui.loans.list` marks.
     pub loans: Option<Vec<Value>>,
+    /// `App::book_generation` the marks were read in, and of each read in flight: a book
+    /// refresh (a loan marked from the table) re-reads them, and an answer asked before it is
+    /// dropped.
+    pub loans_generation: u64,
+    pub loans_asked: std::collections::VecDeque<u64>,
     /// The host's row order for "Save & next" (`set_nav_list`).
     pub nav: Vec<String>,
     pub drag_from: Option<(f32, f32)>,
@@ -356,6 +361,8 @@ impl Default for DetailUi {
             saving_ids: Default::default(),
             targets: HashMap::new(),
             loans: None,
+            loans_generation: 0,
+            loans_asked: Default::default(),
             nav: vec![],
             drag_from: None,
             note: TextEdit::new(""),
@@ -526,8 +533,22 @@ fn open_inner(app: &mut App, id: &str, tab: Tab, trail: Vec<String>, follow_from
         "txd.resolve",
         Value::Null,
     );
-    if app.detail.loans.is_none() {
-        app.send("ui.loans.list", Value::Null, "txd.loans");
+    want_loans(app);
+}
+
+/// Reads the loan marks unless current ones are here or on their way.
+fn want_loans(app: &mut App) {
+    let generation = app.book_generation;
+    let d = &app.detail;
+    let current = d.loans.is_some() && d.loans_generation == generation;
+    if current || d.loans_asked.back() == Some(&generation) {
+        return;
+    }
+    if app
+        .send("ui.loans.list", Value::Null, "txd.loans")
+        .is_some()
+    {
+        app.detail.loans_asked.push_back(generation);
     }
 }
 
@@ -778,8 +799,10 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         return;
     }
     if tag == "txd.loans" {
-        if r.error.is_none() {
+        let asked = app.detail.loans_asked.pop_front();
+        if r.error.is_none() && asked == Some(app.book_generation) {
             app.detail.loans = r.data["marks"].as_array().cloned();
+            app.detail.loans_generation = app.book_generation;
         }
         return;
     }
@@ -897,6 +920,10 @@ pub fn reload(app: &mut App) {
 /// catches up when it comes to the front. Only this panel's reads; no book refresh.
 pub fn follow_generation(app: &mut App) -> bool {
     let generation = app.book_generation;
+    if app.detail.open.is_none() {
+        return false;
+    }
+    want_loans(app);
     let Some(o) = app.detail.open.as_mut() else {
         return false;
     };
@@ -1123,5 +1150,49 @@ mod split_tests {
         assert_eq!(app.detail.split_out.text, "0.2");
         close(&mut app);
         assert_eq!(app.detail.split_out.text, "0.5");
+    }
+}
+
+#[cfg(test)]
+mod loan_tests {
+    use super::*;
+
+    fn marks(ids: &[&str]) -> Reply {
+        Reply {
+            kind: "ui.loans.list".into(),
+            data: json!({"marks": ids.iter().map(|i| json!({"transaction_id": i})).collect::<Vec<_>>()}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// A book refresh (a loan marked from the table) re-reads the detail panel's loan marks,
+    /// and an answer asked for before it is dropped.
+    #[test]
+    fn a_book_refresh_rereads_the_loan_marks() {
+        let mut app = crate::app::tests::quiet_app();
+        let reads = |a: &App| -> usize {
+            a.pending
+                .values()
+                .filter(|(tag, _, _)| *tag == "txd.loans")
+                .count()
+        };
+        want_loans(&mut app);
+        want_loans(&mut app);
+        assert_eq!(reads(&app), 1, "one read in flight");
+        app.book_generation += 1;
+        want_loans(&mut app);
+        assert_eq!(reads(&app), 2, "the refresh asks again");
+        on_reply(&mut app, "txd.loans", &marks(&[]));
+        assert!(
+            app.detail.loans.is_none(),
+            "the pre-refresh answer is dropped"
+        );
+        on_reply(&mut app, "txd.loans", &marks(&["a"]));
+        assert_eq!(app.detail.loans.as_ref().map(Vec::len), Some(1));
+        let before = reads(&app);
+        want_loans(&mut app);
+        assert_eq!(reads(&app), before, "current marks are kept");
     }
 }
