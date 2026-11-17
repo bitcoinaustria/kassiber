@@ -61,10 +61,53 @@ enum Status {
     Scanned,
     Frames(u32, u32),
     Complete(u32, u32),
-    /// A message from the scan rules (untranslated in the web too).
+    /// A message from the scan rules (`bbqr::process`), translated by [`message`].
     Note(&'static str),
     Failed,
     Unavailable,
+}
+
+/// The scan rules' and the camera's English messages (`bbqr`, `camera`; the web shows them
+/// untranslated) in the active language. Anything else (an OS-provided camera error, already
+/// in the system language) passes through.
+fn message(raw: &str) -> String {
+    let k = |key: &str| t(&format!("connections:scanner.messages.{key}"));
+    match raw {
+        "Empty QR frame ignored." => k("emptyFrame"),
+        "Waiting for a BBQR frame." => k("waitingBbqr"),
+        "BBQR frame seen; switch to Auto or BBQR to collect it." => k("bbqrInSingle"),
+        "Could not decode BBQR HEX payload." => k("hex"),
+        "Could not decode BBQR Base32 payload." => k("base32"),
+        "Could not decode BBQR Base32 padding bits." => k("base32Padding"),
+        "Could not decode malformed BBQR frames." => k("malformed"),
+        "The scanned BBQR payload was empty." => k("empty"),
+        "invalid stored block lengths" => k("inflate"),
+        "The encoded data was not valid for encoding utf-8" => k("notUtf8"),
+        "Could not start the camera." => t("connections:scanner.couldNotStart"),
+        super::camera::NOT_FOUND => k("cameraNotFound"),
+        super::camera::DENIED => k("cameraDenied"),
+        _ => {
+            if let Some(e) = raw
+                .strip_prefix("BBQR encoding ")
+                .and_then(|r| r.strip_suffix(" is not supported."))
+            {
+                tr(
+                    "connections:scanner.messages.unsupportedEncoding",
+                    &[("encoding", e)],
+                )
+            } else if let Some(ty) = raw
+                .strip_prefix("BBQR type ")
+                .and_then(|r| r.strip_suffix(" is not a wallet export or descriptor."))
+            {
+                tr(
+                    "connections:scanner.messages.notWalletMaterial",
+                    &[("type", ty)],
+                )
+            } else {
+                raw.to_owned()
+            }
+        }
+    }
 }
 
 impl Status {
@@ -85,7 +128,7 @@ impl Status {
                 "connections:scanner.status.bbqrComplete",
                 &[("received", &n(r)), ("total", &n(total))],
             ),
-            Status::Note(m) => (*m).to_owned(),
+            Status::Note(m) => message(m),
             Status::Failed => t("connections:scanner.status.scanFailed"),
             Status::Unavailable => t("connections:scanner.status.cameraUnavailable"),
         }
@@ -215,11 +258,7 @@ fn apply(app: &mut App, e: Event) {
         }
         Event::Failed(message) => {
             s.starting = false;
-            s.error = Some(if message == "Could not start the camera." {
-                t("connections:scanner.couldNotStart")
-            } else {
-                message
-            });
+            s.error = Some(self::message(&message));
             s.status = Status::Unavailable;
         }
         Event::Decoded(raw) => on_scan(app, &raw),
@@ -265,8 +304,8 @@ fn on_scan(app: &mut App, raw: &str) {
             s.collector = state;
         }
         ScanResult::Ignored(message) => s.status = Status::Note(message),
-        ScanResult::Error(message) => {
-            s.error = Some(message);
+        ScanResult::Error(m) => {
+            s.error = Some(message(&m));
             s.status = Status::Failed;
         }
     }

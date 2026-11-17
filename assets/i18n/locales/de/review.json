@@ -998,7 +998,8 @@
     "sourcesSubHeading": "Wähle den Quelltyp. Nur Watch-only- oder Read-only-Abläufe gehören hierher.",
     "actionConfigure": "Konfigurieren",
     "actionSetup": "Einrichten",
-    "actionPlanned": "Geplant"
+    "actionPlanned": "Geplant",
+    "actionSelected": "Ausgewählt"
   },
   "inbox": {
     "updating": "Bücher werden aktualisiert…",

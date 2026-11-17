@@ -123,7 +123,7 @@ impl Form {
         } else if let Some(ex) = m.exchange {
             exchange::provider_name(ex).to_owned()
         } else {
-            src.title.to_owned()
+            src.title()
         };
         let te = |s: &str| TextEdit::new(s);
         Form {
@@ -576,7 +576,7 @@ pub fn dialog(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) {
 
     // Header: `px-5 pt-5 pb-4 pr-12`, title `text-lg leading-none font-semibold`, `gap-2`.
     let title = if setup_step {
-        tr("connections:add.setupTitle", &[("title", src.title)])
+        tr("connections:add.setupTitle", &[("title", &src.title())])
     } else {
         t("connections:add.title")
     };
@@ -945,7 +945,7 @@ fn scene_scanner(a: &mut App) {
         a,
         tr(
             "connections:scanner.scanTitle",
-            &[("title", selected(a).title)],
+            &[("title", &selected(a).title())],
         ),
     );
 }

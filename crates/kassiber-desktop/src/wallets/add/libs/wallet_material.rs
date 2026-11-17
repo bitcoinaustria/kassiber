@@ -3,6 +3,8 @@
 
 use serde_json::Value;
 
+use crate::i18n::{t, tr};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     DescriptorJson,
@@ -29,14 +31,9 @@ const DESCRIPTOR_PREFIXES: [&str; 13] = [
     "elsh(", "eltr(",
 ];
 
-fn slip132_label(head: &str) -> Option<&'static str> {
-    Some(match head {
-        "ypub" => "P2SH-wrapped SegWit (BIP49)",
-        "zpub" => "Native SegWit (BIP84)",
-        "upub" => "Testnet P2SH-wrapped SegWit",
-        "vpub" => "Testnet Native SegWit",
-        _ => return None,
-    })
+fn slip132_label(head: &str) -> Option<String> {
+    matches!(head, "ypub" | "zpub" | "upub" | "vpub")
+        .then(|| t(&format!("connections:add.descriptor.material.{head}")))
 }
 
 /// `scriptTypesFromDetectionPayload`: Ok(types) after a real probe (native SegWit when the
@@ -77,24 +74,25 @@ pub fn script_types_from_detection_payload(
 
 /// `detectWalletMaterial`.
 pub fn detect(value: &str) -> Detection {
+    // Labels and hints are shown inline in the setup form, so they are translated here.
     let d = |kind, label: &str, hint: Option<&str>| Detection {
         kind,
-        label: label.to_owned(),
-        hint: hint.map(str::to_owned),
+        label: t(&format!("connections:add.descriptor.material.{label}")),
+        hint: hint.map(|h| t(&format!("connections:add.descriptor.material.{h}"))),
     };
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        return d(Kind::Empty, "Empty", None);
+        return d(Kind::Empty, "empty", None);
     }
     if trimmed.starts_with('{') || trimmed.starts_with('[') {
-        return d(Kind::DescriptorJson, "Descriptor JSON export", None);
+        return d(Kind::DescriptorJson, "descriptorJson", None);
     }
     let lower = trimmed.to_lowercase();
     if lower.starts_with("bsms 1.0") {
-        return d(Kind::Bsms, "BSMS descriptor record", None);
+        return d(Kind::Bsms, "bsms", None);
     }
     if DESCRIPTOR_PREFIXES.iter().any(|p| lower.starts_with(p)) {
-        return d(Kind::Descriptor, "Output descriptor", None);
+        return d(Kind::Descriptor, "outputDescriptor", None);
     }
     // `slice(0, 4)` counts UTF-16 units; for the ASCII heads that matter, chars are the same.
     let head: String = trimmed.chars().take(4).collect();
@@ -108,20 +106,14 @@ pub fn detect(value: &str) -> Detection {
     if head == "xpub" || head == "tpub" {
         return Detection {
             kind: Kind::BareXpub,
-            label: format!("Bare {head}"),
-            hint: Some(
-                "Kassiber auto-detects which address types this key uses; pick one to pin it."
-                    .to_owned(),
+            label: tr(
+                "connections:add.descriptor.material.bareXpub",
+                &[("head", &head)],
             ),
+            hint: Some(t("connections:add.descriptor.material.bareXpubHint")),
         };
     }
-    d(
-        Kind::Unknown,
-        "Unrecognized format",
-        Some(
-            "Paste a descriptor, BSMS descriptor record, Bitcoin Core descriptor JSON, or a ypub/zpub/upub/vpub key.",
-        ),
-    )
+    d(Kind::Unknown, "unrecognized", Some("unrecognizedHint"))
 }
 
 #[cfg(test)]

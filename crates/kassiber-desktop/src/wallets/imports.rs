@@ -51,12 +51,12 @@ fn categories(app: &App) -> Vec<&'static str> {
     v
 }
 
-fn category_label(id: &str) -> &'static str {
+fn category_label(id: &str) -> String {
     CATEGORIES
         .iter()
         .find(|c| c.id == id)
-        .map(|c| c.label)
-        .unwrap_or("")
+        .map(|c| c.label())
+        .unwrap_or_default()
 }
 
 /// The active category: the chosen tab, else the first.
@@ -106,7 +106,11 @@ fn artwork(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El {
             side,
         ),
     };
-    let mut b = row().size(side, side).center().role("img").label(src.title);
+    let mut b = row()
+        .size(side, side)
+        .center()
+        .role("img")
+        .label(src.title());
     if let Frame::Fill(c) = src.frame {
         b = b.fill(rune::color::hex(c).expect("hex"));
     }
@@ -122,9 +126,9 @@ fn card(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El {
     } else {
         t("review:imports.actionSetup")
     };
-    // `IntegrationCard` hardcodes "Selected".
+    // `IntegrationCard` hardcodes "Selected"; the desktop translates it.
     let label = if selected {
-        "Selected".to_owned()
+        t("review:imports.actionSelected")
     } else {
         action
     };
@@ -177,13 +181,13 @@ fn card(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El {
                 .min_w(0.0)
                 .gap(tk.r(0.25))
                 .child(
-                    text(src.title)
+                    text(src.title())
                         .font(tk.tbase(500.0))
                         .color(tk.fg)
                         .truncate(),
                 )
                 .child(
-                    text(src.description)
+                    text(src.description())
                         .font(tk.tsm(400.0))
                         .color(tk.muted_fg)
                         .wrap(),
@@ -242,6 +246,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
         .focus_group();
     for c in categories(app) {
         let on = c == act;
+        let name = category_label(c);
         let mut b = row()
             .key(format!("imports-tab-{c}"))
             .h_full()
@@ -260,14 +265,14 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
             .border_layout()
             .role("tab")
             .checked(on)
-            .label(category_label(c))
+            .label(name.clone())
             .focusable(true)
             .on_press(move |a: &mut App| a.wallets.imports.category = Some(c))
-            .child(text(category_label(c)).font(tk.tsm(500.0)).color(if on {
-                tk.fg
-            } else {
-                tk.muted_fg
-            }));
+            .child(
+                text(name)
+                    .font(tk.tsm(500.0))
+                    .color(if on { tk.fg } else { tk.muted_fg }),
+            );
         if on {
             b = b
                 .fill(if tk.dark {

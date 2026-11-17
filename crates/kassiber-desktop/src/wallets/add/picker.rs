@@ -34,7 +34,7 @@ fn visible(app: &App) -> Vec<&'static Source> {
             if query.is_empty() {
                 s.category == category
             } else {
-                format!("{} {} {}", s.title, s.description, s.id)
+                format!("{} {} {}", s.title(), s.description(), s.id)
                     .to_lowercase()
                     .contains(&query)
             }
@@ -159,7 +159,7 @@ fn category_button(app: &App, tk: &Tk, c: &'static Category) -> El {
         })
         .hover(tk.accent.alpha(0.6))
         .role("button")
-        .label(c.label)
+        .label(c.label())
         .focusable(true)
         .on_press(move |a: &mut App| {
             // `selectCategory`: the first source of the category becomes the selection (a
@@ -173,13 +173,17 @@ fn category_button(app: &App, tk: &Tk, c: &'static Category) -> El {
             a.ov.add_selected = Some(first.id);
         })
         .child(ic(c.icon, tk.r(1.0), ink))
-        .child(text(c.label).font(tk.tsm(400.0)).color(ink))
+        .child(text(c.label()).font(tk.tsm(400.0)).color(ink))
 }
 
 fn source_row(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El {
     let is_selected = selected(app).id == src.id;
     let id = src.id;
-    let detail = src.format_label.or(src.path_label).unwrap_or("");
+    let title = src.title();
+    let detail = src
+        .format_label()
+        .or_else(|| src.path_label())
+        .unwrap_or_default();
     let mut r = row()
         .key(format!("add-source-{id}"))
         .w_full()
@@ -196,8 +200,8 @@ fn source_row(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El {
         .hover(tk.accent.alpha(0.6))
         .role("button")
         .checked(is_selected)
-        .label(format!("{} {detail}", src.title))
-        .help(src.description)
+        .label(format!("{title} {detail}"))
+        .help(src.description())
         .focusable(true)
         .on_press(move |a: &mut App| {
             super::mark_history_chosen(a);
@@ -216,7 +220,7 @@ fn source_row(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El {
             tk.r(0.375),
         ))
         .child(
-            text(src.title)
+            text(title)
                 .font(tk.tsm(500.0))
                 .color(tk.fg)
                 .truncate()
@@ -251,9 +255,9 @@ fn planned_badge(tk: &Tk) -> El {
 
 /// `renderSourceSummary` for `src`.
 pub fn summary_of(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El {
-    let sub = match (src.path_label, src.format_label) {
+    let sub = match (src.path_label(), src.format_label()) {
         (Some(p), Some(f)) => format!("{p} · {f}"),
-        (Some(p), None) => p.to_owned(),
+        (Some(p), None) => p,
         (None, Some(f)) => format!(" · {f}"),
         (None, None) => String::new(),
     };
@@ -278,7 +282,12 @@ pub fn summary_of(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El 
                 col()
                     .min_w(0.0)
                     .grow(1.0)
-                    .child(text(src.title).font(tk.tsm(500.0)).color(tk.fg).truncate())
+                    .child(
+                        text(src.title())
+                            .font(tk.tsm(500.0))
+                            .color(tk.fg)
+                            .truncate(),
+                    )
                     .child(text(sub).font(tk.txs(400.0)).color(tk.muted_fg).wrap()),
             ),
     );
@@ -308,7 +317,7 @@ pub fn summary_of(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El 
     }
     head = head.child(badges);
     let mut details = col().w_full().gap(tk.r(0.5));
-    for d in src.details {
+    for d in src.details() {
         details = details.child(
             row()
                 .w_full()
@@ -321,7 +330,7 @@ pub fn summary_of(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El 
                         .fill(tk.muted_fg.alpha(0.6)),
                 )
                 .child(
-                    text(*d)
+                    text(d)
                         .font(tk.tsm(400.0))
                         .color(tk.muted_fg)
                         .wrap()
@@ -335,7 +344,7 @@ pub fn summary_of(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El 
         .gap(tk.r(1.0))
         .child(head)
         .child(
-            text(src.description)
+            text(src.description())
                 .font(tk.tsm(400.0))
                 .color(tk.fg)
                 .wrap(),

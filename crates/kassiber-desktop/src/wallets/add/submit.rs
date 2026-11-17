@@ -684,7 +684,10 @@ pub fn submit(app: &mut App) {
         return;
     }
     if k == SetupKind::Planned {
-        stm(app).setup_error = Some(tr("connections:add.planned.body", &[("title", src.title)]));
+        stm(app).setup_error = Some(tr(
+            "connections:add.planned.body",
+            &[("title", &src.title())],
+        ));
         return;
     }
     // The browser's own constraint validation runs first: an empty `required` field stops the
@@ -809,7 +812,7 @@ pub fn submit(app: &mut App) {
                 "provider": txt(&f.report_provider),
                 "file_path": txt(&f.source_file),
                 "tax_year": opt(&txt(&f.tax_year)),
-                "label": if label == src.title { None } else { Some(label.clone()) },
+                "label": if label == src.title() { None } else { Some(label.clone()) },
             });
             send_job(
                 app,
@@ -1674,10 +1677,7 @@ fn on_job(app: &mut App, r: &Reply) {
                     .iter()
                     .any(|x| x.get("status").and_then(Value::as_str) != Some("synced"))
             {
-                return fail(
-                    app,
-                    "The connection was saved, but its history was not fully synced.".into(),
-                );
+                return fail(app, t("connections:add.setupFailed.notFullySynced"));
             }
             next_sync(app);
         }

@@ -1,38 +1,42 @@
 //! The connection catalog: the categories and sources the Add connection dialog offers. First
 //! generated from the Tauri app's `connectionCatalog.tsx`; this file is now the source.
+//!
+//! Copy is stored as `connections:catalog.*` translation keys (`Label::Key`), so every renderer
+//! shows the active language; brand, product and format names stay literal (`Label::Name`).
+//! A new source needs its keys in the English and the German `connections.json`.
 
-use super::add_connection::{Art, Category, Frame, Size, Source};
+use super::add_connection::{Art, Category, Frame, Label, Size, Source};
 use crate::icons as I;
 
 pub static CATEGORIES: &[Category] = &[
     Category {
         id: "wallets",
-        label: "Wallets",
+        label: "connections:catalog.categories.wallets",
         icon: &I::WALLET,
     },
     Category {
         id: "nodes",
-        label: "Nodes",
+        label: "connections:catalog.categories.nodes",
         icon: &I::SERVER,
     },
     Category {
         id: "lightning",
-        label: "Lightning",
+        label: "connections:catalog.categories.lightning",
         icon: &I::ZAP,
     },
     Category {
         id: "merchant",
-        label: "Merchant",
+        label: "connections:catalog.categories.merchant",
         icon: &I::SERVER,
     },
     Category {
         id: "exchanges",
-        label: "Exchanges",
+        label: "connections:catalog.categories.exchanges",
         icon: &I::DATABASE,
     },
     Category {
         id: "files",
-        label: "Files",
+        label: "connections:catalog.categories.files",
         icon: &I::FILE_INPUT,
     },
 ];
@@ -40,20 +44,14 @@ pub static CATEGORIES: &[Category] = &[
 pub static SOURCES: &[Source] = &[
     Source {
         id: "descriptor",
-        title: "Wallet export",
-        description: "Descriptor, BSMS, xpub-family, or wallet export import.",
+        title: Label::Key("connections:catalog.sources.descriptor.title"),
+        description: "connections:catalog.sources.descriptor.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Watch-only wallet"),
-        format_label: Some("descriptor/BSMS/xpub-family"),
-        details: &[
-            "Mainnet by default",
-            "Uses a configured Bitcoin backend",
-            "Paste one common wallet export or descriptor",
-            "ypub/zpub/upub/vpub keys and BSMS records are converted to descriptors",
-            "Kassiber stores receive/change branches when present",
-        ],
+        path_label: Some("connections:catalog.paths.watchOnlyWallet"),
+        format_label: Some(Label::Key("connections:catalog.formats.descriptorBsmsXpub")),
+        details: "connections:catalog.sources.descriptor.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -68,18 +66,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "address-list",
-        title: "Address list",
-        description: "Watch a flat list of individual addresses — e.g. a pre-HD Bitcoin Core keypool.",
+        title: Label::Key("connections:catalog.sources.address-list.title"),
+        description: "connections:catalog.sources.address-list.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Watch-only wallet"),
-        format_label: Some("address list"),
-        details: &[
-            "Paste addresses or load a .txt/.csv file, one address per line",
-            "No derivation: every address is scanned, so there is no gap limit",
-            "Use Electrum/Fulcrum or Bitcoin Core RPC for large lists — Esplora is one lookup per address",
-        ],
+        path_label: Some("connections:catalog.paths.watchOnlyWallet"),
+        format_label: Some(Label::Key("connections:catalog.formats.addressList")),
+        details: "connections:catalog.sources.address-list.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -94,19 +88,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "silent-payment",
-        title: "Silent Payments",
-        description: "Watch-only BIP352 receiving/accounting from BIP392 sp() material.",
+        title: Label::Name("Silent Payments"),
+        description: "connections:catalog.sources.silent-payment.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Watch-only wallet"),
-        format_label: Some("BIP352 / BIP392 sp()"),
-        details: &[
-            "Accepts watch-only scan material and public spend material",
-            "Requires a BIP352-capable backend or local scanner selected explicitly",
-            "Needs a scan start height/date, or an acknowledged full-history scan",
-            "No spending, signing, PSBTs, or sender contact book",
-        ],
+        path_label: Some("connections:catalog.paths.watchOnlyWallet"),
+        format_label: Some(Label::Name("BIP352 / BIP392 sp()")),
+        details: "connections:catalog.sources.silent-payment.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -121,17 +110,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "liquid-descriptor",
-        title: "Liquid wallet export",
-        description: "Liquid watch-only wallet export or Elements descriptor.",
+        title: Label::Key("connections:catalog.sources.liquid-descriptor.title"),
+        description: "connections:catalog.sources.liquid-descriptor.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Watch-only wallet"),
-        format_label: Some("Liquid descriptor/export"),
-        details: &[
-            "Paste one common Liquid wallet export or descriptor",
-            "Requires a configured Liquid backend",
-        ],
+        path_label: Some("connections:catalog.paths.watchOnlyWallet"),
+        format_label: Some(Label::Key("connections:catalog.formats.liquidDescriptor")),
+        details: "connections:catalog.sources.liquid-descriptor.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -146,19 +132,16 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "samourai",
-        title: "Samourai Wallet",
-        description: "Watch-only Samourai and Whirlpool account descriptor/xpub import.",
+        title: Label::Name("Samourai Wallet"),
+        description: "connections:catalog.sources.samourai.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Watch-only wallet group"),
-        format_label: Some("Samourai/Whirlpool descriptors"),
-        details: &[
-            "Creates child sources for pasted Deposit, Badbank, Premix, and Postmix accounts",
-            "Use Sparrow or another descriptor tool to export public account descriptors/xpubs",
-            "Stores only watch-only sync targets",
-            "Postmix discovery starts with a widened gap limit",
-        ],
+        path_label: Some("connections:catalog.paths.watchOnlyWalletGroup"),
+        format_label: Some(Label::Key(
+            "connections:catalog.formats.samouraiDescriptors",
+        )),
+        details: "connections:catalog.sources.samourai.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -173,19 +156,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "wasabi",
-        title: "Wasabi Wallet",
-        description: "Paste Wasabi RPC outputs with CoinJoin and anonymity evidence.",
+        title: Label::Name("Wasabi Wallet"),
+        description: "connections:catalog.sources.wasabi.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
-        format_label: Some("wasabi_bundle"),
-        details: &[
-            "Load the wallet in Wasabi, then copy local RPC JSON from port 37128",
-            "Use Basic Auth in curl when JsonRpcUser and JsonRpcPassword are set",
-            "Paste gethistory plus listcoins/listunspentcoins for Coins anonymity state",
-            "CoinJoin evidence becomes review warnings, not fabricated provenance",
-        ],
+        path_label: Some("connections:catalog.paths.walletExport"),
+        format_label: Some(Label::Name("wasabi_bundle")),
+        details: "connections:catalog.sources.wasabi.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -200,17 +178,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "bitcoin-core",
-        title: "Bitcoin Core",
-        description: "Your own full node over JSON-RPC for descriptor, xpub, and address sync.",
+        title: Label::Name("Bitcoin Core"),
+        description: "connections:catalog.sources.bitcoin-core.description",
         category: "nodes",
         planned: false,
         dev_only: false,
-        path_label: Some("Node backend"),
-        format_label: Some("bitcoinrpc"),
-        details: &[
-            "Detects a local node when the default cookie is available",
-            "Imports watch-only descriptors into a Kassiber Core wallet",
-        ],
+        path_label: Some("connections:catalog.paths.nodeBackend"),
+        format_label: Some(Label::Name("bitcoinrpc")),
+        details: "connections:catalog.sources.bitcoin-core.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -225,17 +200,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "electrum",
-        title: "Electrum server",
-        description: "Electrum protocol over TCP/SSL (e.g. Fulcrum, ElectrumX). Sync-only — no transaction links.",
+        title: Label::Key("connections:catalog.sources.electrum.title"),
+        description: "connections:catalog.sources.electrum.description",
         category: "nodes",
         planned: false,
         dev_only: false,
-        path_label: Some("Index backend"),
-        format_label: Some("electrum"),
-        details: &[
-            "Configured in Settings with ssl://host:50002 or tcp://host:50001",
-            "Works for Bitcoin and Liquid descriptor refresh when the backend matches the chain",
-        ],
+        path_label: Some("connections:catalog.paths.indexBackend"),
+        format_label: Some(Label::Name("electrum")),
+        details: "connections:catalog.sources.electrum.details",
         art: Art::Badge {
             fill: "#2563eb",
             ink: "#ffffff",
@@ -247,17 +219,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "esplora",
-        title: "Esplora / mempool",
-        description: "Esplora / mempool.space-type HTTP REST API. Syncs and provides clickable transaction links.",
+        title: Label::Name("Esplora / mempool"),
+        description: "connections:catalog.sources.esplora.description",
         category: "nodes",
         planned: false,
         dev_only: false,
-        path_label: Some("Index backend"),
-        format_label: Some("esplora"),
-        details: &[
-            "Kassiber ships with a built-in Esplora/mempool-API Bitcoin backend",
-            "Use Settings to add a self-hosted Esplora endpoint",
-        ],
+        path_label: Some("connections:catalog.paths.indexBackend"),
+        format_label: Some(Label::Name("esplora")),
+        details: "connections:catalog.sources.esplora.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -272,14 +241,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "sparrow",
-        title: "Sparrow",
-        description: "Descriptor or xpub export.",
+        title: Label::Name("Sparrow"),
+        description: "connections:catalog.sources.sparrow.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
-        format_label: Some("descriptor/xpub"),
-        details: &["Continue opens the Wallet export form for the exported material"],
+        path_label: Some("connections:catalog.paths.walletExport"),
+        format_label: Some(Label::Name("descriptor/xpub")),
+        details: "connections:catalog.sources.sparrow.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -294,14 +263,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "specter",
-        title: "Specter Desktop",
-        description: "Descriptor export.",
+        title: Label::Name("Specter Desktop"),
+        description: "connections:catalog.sources.specter.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
-        format_label: Some("descriptor"),
-        details: &["Continue opens the Wallet export form for the exported material"],
+        path_label: Some("connections:catalog.paths.walletExport"),
+        format_label: Some(Label::Name("descriptor")),
+        details: "connections:catalog.sources.specter.details",
         art: Art::Badge {
             fill: "#7c3aed",
             ink: "#ffffff",
@@ -313,14 +282,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "bluewallet",
-        title: "BlueWallet",
-        description: "Account xpub export.",
+        title: Label::Name("BlueWallet"),
+        description: "connections:catalog.sources.bluewallet.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
+        path_label: Some("connections:catalog.paths.walletExport"),
         format_label: None,
-        details: &["Export the account xpub — never the seed or a private key"],
+        details: "connections:catalog.sources.bluewallet.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -335,14 +304,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "blockstream-green",
-        title: "Blockstream Green",
-        description: "Bitcoin singlesig xpub export.",
+        title: Label::Name("Blockstream Green"),
+        description: "connections:catalog.sources.blockstream-green.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
-        format_label: Some("descriptor/xpub"),
-        details: &["Continue opens the Wallet export form for the exported material"],
+        path_label: Some("connections:catalog.paths.walletExport"),
+        format_label: Some(Label::Name("descriptor/xpub")),
+        details: "connections:catalog.sources.blockstream-green.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -357,14 +326,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "liana",
-        title: "Liana",
-        description: "Timelock multisig descriptor import.",
+        title: Label::Name("Liana"),
+        description: "connections:catalog.sources.liana.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
-        format_label: Some("descriptor"),
-        details: &["Continue opens the Wallet export form for the exported material"],
+        path_label: Some("connections:catalog.paths.walletExport"),
+        format_label: Some(Label::Name("descriptor")),
+        details: "connections:catalog.sources.liana.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -379,14 +348,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "nunchuk",
-        title: "Nunchuk",
-        description: "Descriptor or BSMS export.",
+        title: Label::Name("Nunchuk"),
+        description: "connections:catalog.sources.nunchuk.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
+        path_label: Some("connections:catalog.paths.walletExport"),
         format_label: None,
-        details: &["Continue opens the Wallet export form for the exported material"],
+        details: "connections:catalog.sources.nunchuk.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -401,14 +370,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "bitbox",
-        title: "BitBox",
-        description: "Account xpub export.",
+        title: Label::Name("BitBox"),
+        description: "connections:catalog.sources.bitbox.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
+        path_label: Some("connections:catalog.paths.walletExport"),
         format_label: None,
-        details: &["Continue opens the Wallet export form for the exported material"],
+        details: "connections:catalog.sources.bitbox.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -423,14 +392,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "trezor",
-        title: "Trezor",
-        description: "Account xpub export.",
+        title: Label::Name("Trezor"),
+        description: "connections:catalog.sources.trezor.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
+        path_label: Some("connections:catalog.paths.walletExport"),
         format_label: None,
-        details: &["Continue opens the Wallet export form for the exported material"],
+        details: "connections:catalog.sources.trezor.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -445,14 +414,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "coldcard",
-        title: "Coldcard",
-        description: "Descriptor or xpub export.",
+        title: Label::Name("Coldcard"),
+        description: "connections:catalog.sources.coldcard.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
-        format_label: Some("descriptor/xpub"),
-        details: &["Continue opens the Wallet export form for the exported material"],
+        path_label: Some("connections:catalog.paths.walletExport"),
+        format_label: Some(Label::Name("descriptor/xpub")),
+        details: "connections:catalog.sources.coldcard.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -467,17 +436,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "ledger",
-        title: "Ledger",
-        description: "Ledger Live account export.",
+        title: Label::Name("Ledger"),
+        description: "connections:catalog.sources.ledger.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("CSV import"),
-        format_label: Some("ledgerlive_csv"),
-        details: &[
-            "BTC and Liquid BTC IN/OUT rows become wallet movement",
-            "Ledger countervalues are ignored because the export marks them informational",
-        ],
+        path_label: Some("connections:catalog.paths.csvImport"),
+        format_label: Some(Label::Name("ledgerlive_csv")),
+        details: "connections:catalog.sources.ledger.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -492,14 +458,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "foundation-passport",
-        title: "Foundation Passport",
-        description: "Descriptor or xpub export.",
+        title: Label::Name("Foundation Passport"),
+        description: "connections:catalog.sources.foundation-passport.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet export"),
+        path_label: Some("connections:catalog.paths.walletExport"),
         format_label: None,
-        details: &["Continue opens the Wallet export form for the exported material"],
+        details: "connections:catalog.sources.foundation-passport.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -514,18 +480,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "core-ln",
-        title: "Core Lightning",
-        description: "Read-only CLN bookkeeper and node accounting sync.",
+        title: Label::Name("Core Lightning"),
+        description: "connections:catalog.sources.core-ln.description",
         category: "lightning",
         planned: false,
         dev_only: true,
-        path_label: Some("Lightning node"),
-        format_label: Some("coreln"),
-        details: &[
-            "Connects through the node's local RPC socket or a lightning-cli wrapper you control",
-            "Syncs bookkeeper events, forwards, payments, invoices, channels, and node wallet rows",
-            "Reports routing profit and per-channel break-even status",
-        ],
+        path_label: Some("connections:catalog.paths.lightningNode"),
+        format_label: Some(Label::Name("coreln")),
+        details: "connections:catalog.sources.core-ln.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -540,17 +502,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "lnd",
-        title: "LND",
-        description: "Lightning Network Daemon read-only profitability data.",
+        title: Label::Name("LND"),
+        description: "connections:catalog.sources.lnd.description",
         category: "lightning",
         planned: false,
         dev_only: true,
-        path_label: Some("Lightning node"),
-        format_label: Some("LND REST"),
-        details: &[
-            "Stores host, TLS certificate, and read-only macaroon presence",
-            "Reads channels, forwards, payments, invoices, and fee snapshots; drops preimages, encoded bolt11 strings, route hops, and route hints at the boundary",
-        ],
+        path_label: Some("connections:catalog.paths.lightningNode"),
+        format_label: Some(Label::Name("LND REST")),
+        details: "connections:catalog.sources.lnd.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -565,14 +524,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "zeus",
-        title: "ZEUS",
-        description: "Lightning node interface.",
+        title: Label::Name("ZEUS"),
+        description: "connections:catalog.sources.zeus.description",
         category: "lightning",
         planned: true,
         dev_only: false,
-        path_label: Some("Lightning app"),
+        path_label: Some("connections:catalog.paths.lightningApp"),
         format_label: None,
-        details: &["Add the underlying LND or Core Lightning node"],
+        details: "connections:catalog.sources.zeus.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -587,17 +546,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "phoenix",
-        title: "Phoenix",
-        description: "Lightning wallet CSV activity import.",
+        title: Label::Name("Phoenix"),
+        description: "connections:catalog.sources.phoenix.description",
         category: "lightning",
         planned: false,
         dev_only: false,
-        path_label: Some("CSV import"),
-        format_label: Some("phoenix_csv"),
-        details: &[
-            "Signed msat amounts drive direction",
-            "Phoenix type is preserved as a tag",
-        ],
+        path_label: Some("connections:catalog.paths.csvImport"),
+        format_label: Some(Label::Name("phoenix_csv")),
+        details: "connections:catalog.sources.phoenix.details",
         art: Art::Badge {
             fill: "#6d28d9",
             ink: "#ffffff",
@@ -609,18 +565,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "bullbitcoin-wallet",
-        title: "Bull Bitcoin Wallet",
-        description: "Unified wallet transaction CSV import.",
+        title: Label::Name("Bull Bitcoin Wallet"),
+        description: "connections:catalog.sources.bullbitcoin-wallet.description",
         category: "wallets",
         planned: false,
         dev_only: false,
-        path_label: Some("Wallet CSV import"),
-        format_label: Some("bullbitcoin_wallet_csv"),
-        details: &[
-            "Imports Bitcoin, Liquid, Lightning, payjoin, and swap wallet rows",
-            "Use descriptor wallets instead when they are your source of truth",
-            "Bull order CSV remains available under Exchanges for exact fiat pricing",
-        ],
+        path_label: Some("connections:catalog.paths.walletCsvImport"),
+        format_label: Some(Label::Name("bullbitcoin_wallet_csv")),
+        details: "connections:catalog.sources.bullbitcoin-wallet.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -635,20 +587,16 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "btcpay",
-        title: "BTCPay Server",
-        description: "Invoices, payments, refunds, and payouts for every store, through a read-only API key.",
+        title: Label::Name("BTCPay Server"),
+        description: "connections:catalog.sources.btcpay.description",
         category: "merchant",
         planned: false,
         dev_only: false,
-        path_label: Some("Greenfield API"),
-        format_label: Some("stores, invoices & payouts"),
-        details: &[
-            "Create a least-privilege key with one click",
-            "Check what the key can read, store by store",
-            "Recognise wallets you already track and stores that share one",
-            "Book Lightning, LNURL, and plugin payments from BTCPay when Kassiber cannot watch them",
-            "Use BTCPay CSV when API access is not available",
-        ],
+        path_label: Some("connections:catalog.paths.greenfieldApi"),
+        format_label: Some(Label::Key(
+            "connections:catalog.formats.storesInvoicesPayouts",
+        )),
+        details: "connections:catalog.sources.btcpay.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -663,19 +611,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "btcpay-csv",
-        title: "BTCPay CSV",
-        description: "Manual BTCPay wallet export import when API sync is not available.",
+        title: Label::Name("BTCPay CSV"),
+        description: "connections:catalog.sources.btcpay-csv.description",
         category: "merchant",
         planned: false,
         dev_only: false,
-        path_label: Some("CSV import"),
-        format_label: Some("btcpay_csv"),
-        details: &[
-            "Imports a local BTCPay wallet transaction CSV export",
-            "Comments become notes and labels become Kassiber tags",
-            "Can create a file-backed source wallet or import into an existing settlement wallet",
-            "Use BTCPay Server for repeatable sync plus invoice and payment-request provenance",
-        ],
+        path_label: Some("connections:catalog.paths.csvImport"),
+        format_label: Some(Label::Name("btcpay_csv")),
+        details: "connections:catalog.sources.btcpay-csv.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -690,17 +633,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "river",
-        title: "River",
-        description: "Bitcoin Activity or Account Activity CSV import.",
+        title: Label::Name("River"),
+        description: "connections:catalog.sources.river.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("CSV import"),
-        format_label: Some("river_csv"),
-        details: &[
-            "Account Activity preserves BTC and cash legs",
-            "Buy/sell rows store exact River execution pricing",
-        ],
+        path_label: Some("connections:catalog.paths.csvImport"),
+        format_label: Some(Label::Name("river_csv")),
+        details: "connections:catalog.sources.river.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -717,17 +657,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "bullbitcoin",
-        title: "Bull Bitcoin",
-        description: "Order CSV import for exact buy/sell execution pricing.",
+        title: Label::Name("Bull Bitcoin"),
+        description: "connections:catalog.sources.bullbitcoin.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("CSV import"),
-        format_label: Some("bullbitcoin_csv"),
-        details: &[
-            "Completed Bitcoin, Lightning, and Liquid orders preserve exact fiat proceeds",
-            "Book-wide imports can enrich relevant rows or import the shared export with reconciliation flags",
-        ],
+        path_label: Some("connections:catalog.paths.csvImport"),
+        format_label: Some(Label::Name("bullbitcoin_csv")),
+        details: "connections:catalog.sources.bullbitcoin.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -742,14 +679,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "relai",
-        title: "Relai",
-        description: "Bitcoin-only app activity import.",
+        title: Label::Name("Relai"),
+        description: "connections:catalog.sources.relai.description",
         category: "exchanges",
         planned: true,
         dev_only: false,
-        path_label: Some("CSV import"),
+        path_label: Some("connections:catalog.paths.csvImport"),
         format_label: None,
-        details: &["Dedicated parser is planned"],
+        details: "connections:catalog.sources.relai.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -766,17 +703,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "pocket-bitcoin",
-        title: "Pocket Bitcoin",
-        description: "Account CSV import for exact buy execution pricing.",
+        title: Label::Name("Pocket Bitcoin"),
+        description: "connections:catalog.sources.pocket-bitcoin.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("CSV import"),
-        format_label: Some("pocketbitcoin_csv"),
-        details: &[
-            "Account exports preserve exact Pocket Bitcoin execution pricing",
-            "Book-wide imports can enrich relevant wallet rows or keep the full export as reconciliation evidence",
-        ],
+        path_label: Some("connections:catalog.paths.csvImport"),
+        format_label: Some(Label::Name("pocketbitcoin_csv")),
+        details: "connections:catalog.sources.pocket-bitcoin.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -791,14 +725,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "swan-bitcoin",
-        title: "Swan Bitcoin",
-        description: "Bitcoin-only savings and broker activity import.",
+        title: Label::Name("Swan Bitcoin"),
+        description: "connections:catalog.sources.swan-bitcoin.description",
         category: "exchanges",
         planned: true,
         dev_only: false,
-        path_label: Some("CSV import"),
+        path_label: Some("connections:catalog.paths.csvImport"),
         format_label: None,
-        details: &["Dedicated parser is planned"],
+        details: "connections:catalog.sources.swan-bitcoin.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -813,18 +747,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "strike",
-        title: "Strike",
-        description: "Custodial Bitcoin wallet and exchange import.",
+        title: Label::Name("Strike"),
+        description: "connections:catalog.sources.strike.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("Custodial platform"),
-        format_label: Some("strike_csv"),
-        details: &[
-            "BTC buys, sells, Lightning, and on-chain rows become active platform activity",
-            "Fiat-only funding and reversal rows are skipped",
-            "Rows use Strike BTC Price as exact CSV pricing when present",
-        ],
+        path_label: Some("connections:catalog.paths.custodialPlatform"),
+        format_label: Some(Label::Name("strike_csv")),
+        details: "connections:catalog.sources.strike.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -839,18 +769,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "21bitcoin",
-        title: "21bitcoin",
-        description: "Custodial platform ledger import with exact trade pricing.",
+        title: Label::Name("21bitcoin"),
+        description: "connections:catalog.sources.21bitcoin.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("CSV import"),
-        format_label: Some("21bitcoin_csv"),
-        details: &[
-            "BTC trade rows become active custodial balance activity",
-            "Buy/sell rows store exact 21bitcoin execution pricing from the CSV",
-            "Deposits and withdrawals without txids become reviewed custody-transfer candidates",
-        ],
+        path_label: Some("connections:catalog.paths.csvImport"),
+        format_label: Some(Label::Name("21bitcoin_csv")),
+        details: "connections:catalog.sources.21bitcoin.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -865,17 +791,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "coinfinity",
-        title: "Coinfinity",
-        description: "Order CSV import for exact buy/sell execution pricing.",
+        title: Label::Name("Coinfinity"),
+        description: "connections:catalog.sources.coinfinity.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("CSV import"),
-        format_label: Some("coinfinity_csv"),
-        details: &[
-            "BTC/EUR order rows preserve exact Coinfinity execution pricing",
-            "Book-wide imports can enrich relevant rows or import the shared export with reconciliation flags",
-        ],
+        path_label: Some("connections:catalog.paths.csvImport"),
+        format_label: Some(Label::Name("coinfinity_csv")),
+        details: "connections:catalog.sources.coinfinity.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -890,18 +813,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "bitpanda",
-        title: "Bitpanda",
-        description: "Bitpanda history through a read-only API key.",
+        title: Label::Name("Bitpanda"),
+        description: "connections:catalog.sources.bitpanda.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("API import"),
-        format_label: Some("read-only API key"),
-        details: &[
-            "Needs a key with only the Transaction and Trade (Read) scopes; a key that can trade is refused",
-            "BTC buys, sells, deposits, withdrawals and rewards import; other assets are skipped",
-            "Kassiber contacts Bitpanda only when you test the key or press Sync now",
-        ],
+        path_label: Some("connections:catalog.paths.apiImport"),
+        format_label: Some(Label::Key("connections:catalog.formats.readOnlyApiKey")),
+        details: "connections:catalog.sources.bitpanda.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -916,18 +835,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "kraken",
-        title: "Kraken",
-        description: "Kraken trades and ledger through a read-only API key.",
+        title: Label::Name("Kraken"),
+        description: "connections:catalog.sources.kraken.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("API import"),
-        format_label: Some("read-only API key"),
-        details: &[
-            "Needs a key that can only query closed orders & trades and ledger entries",
-            "Fiat-quoted BTC trades keep Kraken's exact execution price; deposits and withdrawals import as wallet movement",
-            "Kassiber contacts Kraken only when you test the key or press Sync now",
-        ],
+        path_label: Some("connections:catalog.paths.apiImport"),
+        format_label: Some(Label::Key("connections:catalog.formats.readOnlyApiKey")),
+        details: "connections:catalog.sources.kraken.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -944,18 +859,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "coinbase",
-        title: "Coinbase",
-        description: "Coinbase BTC accounts through a read-only API key.",
+        title: Label::Name("Coinbase"),
+        description: "connections:catalog.sources.coinbase.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("API import"),
-        format_label: Some("read-only API key"),
-        details: &[
-            "Needs an API key and secret with only the wallet:accounts:read and wallet:transactions:read scopes",
-            "Coinbase Developer Platform key files are not supported yet",
-            "Kassiber contacts Coinbase only when you test the key or press Sync now",
-        ],
+        path_label: Some("connections:catalog.paths.apiImport"),
+        format_label: Some(Label::Key("connections:catalog.formats.readOnlyApiKey")),
+        details: "connections:catalog.sources.coinbase.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -970,18 +881,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "binance-api",
-        title: "Binance API",
-        description: "Binance BTC buys, transfers and income through a read-only API key.",
+        title: Label::Key("connections:catalog.sources.binance-api.title"),
+        description: "connections:catalog.sources.binance-api.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("API import"),
-        format_label: Some("read-only API key"),
-        details: &[
-            "Needs a key with only Enable Reading; a key that can trade, transfer or withdraw is refused",
-            "Fiat BTC buys keep their exact execution value; deposits, withdrawals and BTC income import too",
-            "Kassiber contacts Binance only when you test the key or press Sync now",
-        ],
+        path_label: Some("connections:catalog.paths.apiImport"),
+        format_label: Some(Label::Key("connections:catalog.formats.readOnlyApiKey")),
+        details: "connections:catalog.sources.binance-api.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -996,17 +903,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "binance",
-        title: "Binance CSV",
-        description: "BTC supplemental rows from Binance exports.",
+        title: Label::Key("connections:catalog.sources.binance.title"),
+        description: "connections:catalog.sources.binance.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("Supplemental CSV"),
-        format_label: Some("binance_supplemental_csv"),
-        details: &[
-            "BTC autoinvest rows funded by fiat preserve exact execution value",
-            "BTC dividend/mining rows import as income without guessing fiat price",
-        ],
+        path_label: Some("connections:catalog.paths.supplementalCsv"),
+        format_label: Some(Label::Name("binance_supplemental_csv")),
+        details: "connections:catalog.sources.binance.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -1021,18 +925,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "prior-tax-report",
-        title: "Prior tax report",
-        description: "Preserve a CoinTracking, Blockpit, or other prior report as evidence.",
+        title: Label::Key("connections:catalog.sources.prior-tax-report.title"),
+        description: "connections:catalog.sources.prior-tax-report.description",
         category: "files",
         planned: false,
         dev_only: false,
-        path_label: Some("Evidence archive"),
-        format_label: Some("Report file"),
-        details: &[
-            "Copies the original report into Kassiber's managed attachment store",
-            "Records the provider and tax year without trusting imported totals",
-            "Use the transaction-history migration cards to rebuild auditable Kassiber reports",
-        ],
+        path_label: Some("connections:catalog.paths.evidenceArchive"),
+        format_label: Some(Label::Key("connections:catalog.formats.reportFile")),
+        details: "connections:catalog.sources.prior-tax-report.details",
         art: Art::Badge {
             fill: "#7f1d1d",
             ink: "#ffffff",
@@ -1044,18 +944,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "cointracking",
-        title: "CoinTracking",
-        description: "Move your Bitcoin transaction history into Kassiber.",
+        title: Label::Name("CoinTracking"),
+        description: "connections:catalog.sources.cointracking.description",
         category: "files",
         planned: false,
         dev_only: false,
-        path_label: Some("Tax-platform migration"),
-        format_label: Some("CoinTracking transaction CSV"),
-        details: &[
-            "Use the complete English-header CSV from Transactions → Export → CSV",
-            "Add the CSV and descriptor wallets in either order; sync reconciles overlaps",
-            "With a chain ID, exact matches are excluded; ID-less collisions stay in review",
-        ],
+        path_label: Some("connections:catalog.paths.taxPlatformMigration"),
+        format_label: Some(Label::Key("connections:catalog.formats.coinTrackingCsv")),
+        details: "connections:catalog.sources.cointracking.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -1072,18 +968,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "blockpit",
-        title: "Blockpit",
-        description: "Move your Bitcoin transaction history into Kassiber.",
+        title: Label::Name("Blockpit"),
+        description: "connections:catalog.sources.blockpit.description",
         category: "files",
         planned: false,
         dev_only: false,
-        path_label: Some("Tax-platform migration"),
-        format_label: Some("Blockpit transaction CSV"),
-        details: &[
-            "Use the complete Transactions CSV with filters cleared; excluded Blockpit rows are absent",
-            "Add the CSV and descriptor wallets in either order; sync reconciles overlaps",
-            "With a chain ID, exact matches are excluded; ID-less collisions stay in review",
-        ],
+        path_label: Some("connections:catalog.paths.taxPlatformMigration"),
+        format_label: Some(Label::Key("connections:catalog.formats.blockpitCsv")),
+        details: "connections:catalog.sources.blockpit.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -1100,18 +992,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "generic-ledger",
-        title: "Generic ledger",
-        description: "Fill-in spreadsheet import for manual transactions.",
+        title: Label::Key("connections:catalog.sources.generic-ledger.title"),
+        description: "connections:catalog.sources.generic-ledger.description",
         category: "files",
         planned: false,
         dev_only: false,
-        path_label: Some("Spreadsheet import"),
-        format_label: Some("Excel (.xlsx) or CSV"),
-        details: &[
-            "Download the template, fill in your transactions, import the file",
-            "One Bitcoin leg per row; Buy/Sell/Income/Mining/Gift and more",
-            "Amounts in BTC (or SATS); fiat columns in your book's currency",
-        ],
+        path_label: Some("connections:catalog.paths.spreadsheetImport"),
+        format_label: Some(Label::Key("connections:catalog.formats.excelOrCsv")),
+        details: "connections:catalog.sources.generic-ledger.details",
         art: Art::Badge {
             fill: "#f2a900",
             ink: "#1a1a1a",
@@ -1123,18 +1011,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "custom-import",
-        title: "Other exchange or broker",
-        description: "Import an export from a platform Kassiber doesn't list yet.",
+        title: Label::Key("connections:catalog.sources.custom-import.title"),
+        description: "connections:catalog.sources.custom-import.description",
         category: "files",
         planned: false,
         dev_only: false,
-        path_label: Some("Custom import"),
-        format_label: Some("CSV, TSV or Excel export"),
-        details: &[
-            "Kassiber reads the file's own column names — no reshaping needed",
-            "Unrecognized columns? Map them yourself, or let the assistant propose a mapping",
-            "Every import is recorded as a run you can roll back if the mapping was wrong",
-        ],
+        path_label: Some("connections:catalog.paths.customImport"),
+        format_label: Some(Label::Key("connections:catalog.formats.csvTsvExcel")),
+        details: "connections:catalog.sources.custom-import.details",
         art: Art::Badge {
             fill: "#f2a900",
             ink: "#1a1a1a",
@@ -1146,17 +1030,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "csv",
-        title: "CSV import",
-        description: "One-shot import from a local file.",
+        title: Label::Key("connections:catalog.sources.csv.title"),
+        description: "connections:catalog.sources.csv.description",
         category: "files",
         planned: false,
         dev_only: false,
-        path_label: Some("CSV/JSON import"),
-        format_label: Some("generic csv/json"),
-        details: &[
-            "Use Kassiber's generic transaction columns",
-            "Specific parsers are preferred when available",
-        ],
+        path_label: Some("connections:catalog.paths.csvJsonImport"),
+        format_label: Some(Label::Key("connections:catalog.formats.genericCsvJson")),
+        details: "connections:catalog.sources.csv.details",
         art: Art::Badge {
             fill: "#64748b",
             ink: "#ffffff",
@@ -1168,14 +1049,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "bip329",
-        title: "BIP329 labels",
-        description: "JSONL wallet label import and export.",
+        title: Label::Key("connections:catalog.sources.bip329.title"),
+        description: "connections:catalog.sources.bip329.description",
         category: "files",
         planned: false,
         dev_only: false,
-        path_label: Some("Label import"),
-        format_label: Some("bip329 JSONL"),
-        details: &["Labels are stored locally and bridged to matching transactions"],
+        path_label: Some("connections:catalog.paths.labelImport"),
+        format_label: Some(Label::Name("bip329 JSONL")),
+        details: "connections:catalog.sources.bip329.details",
         art: Art::Badge {
             fill: "#475569",
             ink: "#ffffff",

@@ -469,7 +469,7 @@ fn source_file_setup(app: &App, tk: &Tk, sync_label: Option<String>) -> Vec<El> 
     let (label, helper) = source_file_field(src.id);
     let title = tr(
         "connections:add.field.selectExportFileTitle",
-        &[("title", src.title)],
+        &[("title", &src.title())],
     );
     let on_change: fn(&mut App) = |a| {
         stm(a).last_import = None;
@@ -889,6 +889,15 @@ fn script_label(v: &str) -> String {
     t(&format!("connections:add.descriptor.scriptType.{k}"))
 }
 
+/// A backend row's endpoint, with the rows' placeholders (`backend_rows`) translated.
+fn endpoint_text(endpoint: &str) -> String {
+    match endpoint {
+        "Configured endpoint" => t("connections:add.backendSettings.endpoint.configured"),
+        "Missing endpoint" => t("connections:add.backendSettings.endpoint.missing"),
+        e => e.to_owned(),
+    }
+}
+
 /// `renderWalletMaterialFeedback`.
 fn material_feedback(app: &App, tk: &Tk) -> Option<El> {
     let f = &st(app).form;
@@ -1049,7 +1058,7 @@ fn descriptor_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
     let wm_name = t("connections:add.descriptor.walletExport");
     let title = tr(
         "connections:scanner.scanTitle",
-        &[("title", selected(app).title)],
+        &[("title", &selected(app).title())],
     );
     let scan_row = row()
         .w_full()
@@ -2465,13 +2474,13 @@ fn enrichment_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
             } else {
                 "connections:add.enrichment.importModeHelperRelevant"
             },
-            &[("title", src.title)],
+            &[("title", &src.title())],
         );
         out.push(setup_field(tk, &name, sel, None, Some(helper)));
         let fname = t("connections:add.enrichment.csvPath");
         let title = tr(
             "connections:add.field.selectExportFileTitle",
-            &[("title", src.title)],
+            &[("title", &src.title())],
         );
         let control = row()
             .w_full()
@@ -2502,7 +2511,7 @@ fn enrichment_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
             err(app, "sourceFile"),
             Some(tr(
                 "connections:add.enrichment.csvPathHelper",
-                &[("title", src.title)],
+                &[("title", &src.title())],
             )),
         ));
         return out;
@@ -2539,7 +2548,7 @@ fn enrichment_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
     let fname = t("connections:add.exportFile.label");
     let title = tr(
         "connections:add.field.chooseExportTitle",
-        &[("title", src.title)],
+        &[("title", &src.title())],
     );
     let control = row()
         .w_full()
@@ -3330,7 +3339,7 @@ fn backend_settings_fields(app: &App, tk: &Tk) -> Vec<El> {
                                             .truncate(),
                                     )
                                     .child(
-                                        text(b.endpoint.clone())
+                                        text(endpoint_text(&b.endpoint))
                                             .font(tk.txs(400.0).mono())
                                             .color(tk.muted_fg)
                                             .truncate(),
@@ -3650,7 +3659,7 @@ pub fn body(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         .max_w(tk.r(if wide { 48.0 } else { 36.0 }))
         .gap(tk.r(1.0))
         .role("form")
-        .label(tr("connections:add.setupTitle", &[("title", src.title)]));
+        .label(tr("connections:add.setupTitle", &[("title", &src.title())]));
     for f in fields(app, cx, tk, layer) {
         form = form.child(f);
     }
