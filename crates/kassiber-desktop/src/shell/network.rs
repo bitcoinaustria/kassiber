@@ -75,11 +75,22 @@ fn probe_request(b: &Value) -> (String, Value) {
     let name = b["name"].as_str().unwrap_or_default();
     let url = b["url"].as_str().unwrap_or_default();
     let proxy = b["tor_proxy"].as_str().filter(|p| !p.is_empty());
+    // The saved TLS trust, as the settings form's test sends it: a pinned certificate, or
+    // explicit trust of a self-signed one. Without it a working TLS backend probes as failed.
+    let certificate = b["certificate"]
+        .as_str()
+        .map(str::trim)
+        .filter(|c| !c.is_empty());
+    let insecure = b["insecure"].as_bool() == Some(true);
     match b["kind"].as_str().unwrap_or_default() {
-        "electrum" => (
-            "ui.backends.electrum.test".into(),
-            json!({"url": url, "proxy": proxy, "timeout": 5}),
-        ),
+        "electrum" => {
+            let mut args = json!({"url": url, "proxy": proxy, "timeout": 5,
+                "trust_self_signed": insecure});
+            if let (false, Some(c)) = (insecure, certificate) {
+                args["certificate"] = json!(c);
+            }
+            ("ui.backends.electrum.test".into(), args)
+        }
         "bitcoinrpc" => (
             "ui.backends.bitcoinrpc.test".into(),
             json!({"backend": name, "proxy": proxy, "timeout": 5}),
@@ -92,10 +103,13 @@ fn probe_request(b: &Value) -> (String, Value) {
             "ui.backends.btcpay.test".into(),
             json!({"backend": name, "timeout": 5}),
         ),
-        _ => (
-            "ui.backends.http.test".into(),
-            json!({"url": url, "proxy": proxy, "timeout": 5}),
-        ),
+        _ => {
+            let mut args = json!({"url": url, "proxy": proxy, "timeout": 5, "insecure": insecure});
+            if let (false, Some(c)) = (insecure, certificate) {
+                args["certificate"] = json!(c);
+            }
+            ("ui.backends.http.test".into(), args)
+        }
     }
 }
 
@@ -545,4 +559,22 @@ fn panel(app: &App, tk: &Tk) -> El {
         );
     }
     out
+}
+
+#[cfg(test)]
+mod probe_tls_tests {
+    use super::*;
+
+    /// A backend's saved TLS trust goes with its health probe, as with the settings test.
+    #[test]
+    fn probes_carry_the_saved_tls_trust() {
+        let (_, http) = probe_request(&json!({"kind": "esplora", "url": "https://e",
+            "certificate": "PEM"}));
+        assert_eq!(http["certificate"], "PEM");
+        assert_eq!(http["insecure"], false);
+        let (_, el) = probe_request(&json!({"kind": "electrum", "url": "ssl://e",
+            "insecure": true, "certificate": "PEM"}));
+        assert_eq!(el["trust_self_signed"], true);
+        assert!(el.get("certificate").is_none());
+    }
 }

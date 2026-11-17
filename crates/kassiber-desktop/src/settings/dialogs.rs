@@ -598,7 +598,10 @@ pub fn pass_page(app: &App, tk: &Tk) -> Parts {
                 return;
             }
             let args = json!({"auth_response": {"passphrase_secret": d.pass_current.text}, "new_passphrase_secret": d.pass_new.text});
-            send(a, "ui.secrets.change_passphrase", args, "settings.change_pass");
+            let submitted = zeroize::Zeroizing::new(d.pass_new.text.clone());
+            if send(a, "ui.secrets.change_passphrase", args, "settings.change_pass") {
+                a.secrets.changing_to.push_back(submitted);
+            }
         });
     Parts {
         title: t("settings:changePassphrase.title"),
@@ -824,7 +827,10 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         },
         "settings.change_pass" => match &r.error {
-            Some(e) => app.settings.dialog.pass_error = Some(e.clone()),
+            Some(e) => {
+                app.secrets.changing_to.pop_front();
+                app.settings.dialog.pass_error = Some(e.clone())
+            }
             None => {
                 // An enrolled Touch ID follows the new passphrase.
                 crate::secrets::passphrase_changed(app, r);

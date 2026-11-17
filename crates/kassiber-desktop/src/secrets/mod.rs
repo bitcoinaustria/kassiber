@@ -119,6 +119,9 @@ pub fn touch_id_supported() -> bool {
 
 /// `app.secrets`.
 pub struct Ui {
+    /// The new passphrase of each `ui.secrets.change_passphrase` in flight, oldest first: the
+    /// Touch ID update stores the one that encrypted the database, not the editable field.
+    pub changing_to: std::collections::VecDeque<Zeroizing<String>>,
     /// The last Touch ID status (None: not asked, not encrypted, or not a Mac).
     pub status: Option<TouchIdPassphraseStatus>,
     pub status_pending: bool,
@@ -144,6 +147,7 @@ pub struct Ui {
 impl Default for Ui {
     fn default() -> Self {
         Ui {
+            changing_to: Default::default(),
             status: None,
             status_pending: false,
             enroll_pending: false,
@@ -521,10 +525,13 @@ fn enroll_failed(app: &mut App, error: String) {
 /// After `ui.secrets.change_passphrase` succeeded: an enrolled Touch ID follows the new
 /// passphrase (`shouldRefreshTouchIdPassphrase`).
 pub fn passphrase_changed(app: &mut App, r: &Reply) {
+    // The passphrase this change submitted (taken in any case, so the queue stays in step).
+    let Some(passphrase) = app.secrets.changing_to.pop_front() else {
+        return;
+    };
     if !(touch_id_supported() && app.secrets.status.as_ref().is_some_and(|s| s.configured)) {
         return;
     }
-    let passphrase = Zeroizing::new(app.settings.dialog.pass_new.text.clone());
     let stale_generation = r.data["desktop_biometric_stale_generation"]
         .as_str()
         .map(str::to_owned);
