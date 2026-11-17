@@ -227,6 +227,8 @@ pub struct State {
     pub syncing: bool,
     /// The pre-rescan Bitcoin Core coverage probe in flight.
     pub core_testing: bool,
+    /// The wallet that probe is for: its reply continues a rescan only for that wallet.
+    pub core_test_wallet: Option<String>,
     pub sync_error: Option<String>,
     /// An untrusted or changed backend certificate behind the last sync error: offers the
     /// explicit trust dialog for the wallet's backend.
@@ -379,6 +381,7 @@ impl State {
             encrypted: k.encrypted,
             syncing: k.syncing,
             core_testing: k.core_testing,
+            core_test_wallet: k.core_test_wallet,
             tx_visible: txs::PAGE,
             utxo_visible: coins::PAGE,
             ..State::default()

@@ -275,6 +275,7 @@ pub fn sync(app: &mut App, force_full: bool) {
             .is_some()
         {
             app.wallets.detail.core_testing = true;
+            app.wallets.detail.core_test_wallet = Some(app.wallets.detail.wallet.clone());
         }
         return;
     }
@@ -751,6 +752,12 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             super::reload(app);
         }
         "wallets.detail.core_test" => {
+            // The rescan was asked for one wallet: after navigating to another, the probe's
+            // result starts nothing (an exact action, never carried to another wallet).
+            let sent_for = app.wallets.detail.core_test_wallet.take();
+            if sent_for.as_deref() != Some(app.wallets.detail.wallet.as_str()) {
+                return;
+            }
             app.wallets.detail.core_testing = false;
             let Some(c) = conn(app) else { return };
             let birthday = super::wallet_detail(app, &c)
@@ -1005,5 +1012,29 @@ thread_local! {
 pub fn take_pending_copy(app: &App, tx: &mut rune::Tx) {
     if let Some(m) = PENDING_COPY.with(|p| p.borrow_mut().take()) {
         crate::osleaks::clipboard::copy(app, tx, m);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A Full rescan's Bitcoin Core probe that answers after navigating to another wallet starts
+    /// nothing there, even when it reports full coverage.
+    #[test]
+    fn a_rescan_probe_for_another_wallet_starts_nothing() {
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.detail.wallet = "b".into();
+        app.wallets.detail.core_test_wallet = Some("a".into());
+        let reply = Reply {
+            kind: "ui.backends.bitcoinrpc.test".into(),
+            data: serde_json::json!({"reachable": true, "pruned": false}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "wallets.detail.core_test", &reply);
+        assert!(!app.wallets.detail.syncing && app.wallets.detail.sync_error.is_none());
+        assert!(app.wallets.detail.core_test_wallet.is_none());
     }
 }
