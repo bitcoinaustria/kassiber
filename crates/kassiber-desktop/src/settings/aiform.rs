@@ -294,6 +294,8 @@ pub struct AiForm {
     pub saving: Option<String>,
     pub save_key: Option<String>,
     pub save_proxy_models: bool,
+    /// Which opening of the form this is (`Settings::aiform_opens`).
+    pub opening: u64,
 }
 
 fn te(s: &str) -> TextEdit {
@@ -301,7 +303,9 @@ fn te(s: &str) -> TextEdit {
 }
 
 pub fn open_add(app: &mut App) {
+    app.settings.aiform_opens += 1;
     app.settings.aiform = AiForm {
+        opening: app.settings.aiform_opens,
         open: true,
         kind: "local".into(),
         step: "provider",
@@ -333,7 +337,9 @@ pub fn open_edit(app: &mut App, name: &str) {
         _ => "auto",
     };
     let omit = p["omit_store_field"].as_bool() == Some(true);
+    app.settings.aiform_opens += 1;
     app.settings.aiform = AiForm {
+        opening: app.settings.aiform_opens,
         open: true,
         name: te(p["display_name"].as_str().unwrap_or(&s("name"))),
         base_url: te(&s("base_url")),
@@ -596,6 +602,10 @@ fn handle_test(app: &mut App) {
 
 /// `handleSubmit`.
 fn submit(app: &mut App) {
+    // One provider save at a time: its later steps answer by tag.
+    if app.settings.aiform_save.is_some() {
+        return;
+    }
     let f = &mut app.settings.aiform;
     f.error = None;
     if guard_key(f) {
@@ -714,20 +724,53 @@ fn submit(app: &mut App) {
     if let Some(d) = detected {
         args["detected_api_format"] = json!(d);
     }
-    f.saving = Some(name);
+    f.saving = Some(name.clone());
     f.save_key = (!key.is_empty()).then_some(key);
+    // The whole sequence (create/update, the key, the proxy's models) runs from this snapshot:
+    // the form can be left and another opened before it finishes.
+    let run = SaveRun {
+        form: f.opening,
+        name,
+        key: f.save_key.take(),
+        proxy_models: std::mem::take(&mut f.save_proxy_models),
+        base_url: f.base_url.text.trim().to_owned(),
+    };
     let kind_ = if editing(f) {
         "ai.providers.update"
     } else {
         "ai.providers.create"
     };
-    send(app, kind_, args, "settings.aiform_save");
+    if send(app, kind_, args, "settings.aiform_save") {
+        app.settings.aiform_save = Some(run);
+    } else {
+        app.settings.aiform.saving = None;
+    }
+}
+
+/// A provider save in flight, as submitted (one at a time).
+pub struct SaveRun {
+    /// The form opening it was saved from.
+    pub form: u64,
+    pub name: String,
+    pub key: Option<String>,
+    pub proxy_models: bool,
+    pub base_url: String,
+}
+
+/// Whether the form on screen is the one the running save came from.
+fn save_is_this_forms(app: &App) -> bool {
+    app.settings
+        .aiform_save
+        .as_ref()
+        .is_some_and(|r| r.form == app.settings.aiform.opening && app.settings.aiform.open)
 }
 
 fn finish_save(app: &mut App) {
-    let f = &mut app.settings.aiform;
-    let name = f.saving.clone().unwrap_or_default();
-    if let Some(k) = f.save_key.take() {
+    let Some(run) = app.settings.aiform_save.as_mut() else {
+        return;
+    };
+    let name = run.name.clone();
+    if let Some(k) = run.key.take() {
         send(
             app,
             "ai.providers.set_api_key",
@@ -736,8 +779,8 @@ fn finish_save(app: &mut App) {
         );
         return;
     }
-    if std::mem::take(&mut app.settings.aiform.save_proxy_models) {
-        let url = app.settings.aiform.base_url.text.trim().to_owned();
+    if std::mem::take(&mut run.proxy_models) {
+        let url = run.base_url.clone();
         send(
             app,
             "ai.list_models",
@@ -746,8 +789,11 @@ fn finish_save(app: &mut App) {
         );
         return;
     }
-    app.settings.aiform.saving = None;
-    app.settings.aiform.open = false;
+    if save_is_this_forms(app) {
+        app.settings.aiform.saving = None;
+        app.settings.aiform.open = false;
+    }
+    app.settings.aiform_save = None;
     send(
         app,
         "ai.providers.list",
@@ -796,8 +842,19 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         "settings.aiform_save" | "settings.aiform_key" => match &r.error {
             Some(e) => {
-                f.error = Some(e.clone());
-                f.saving = None;
+                if save_is_this_forms(app) {
+                    let f = &mut app.settings.aiform;
+                    f.error = Some(e.clone());
+                    f.saving = None;
+                }
+                app.settings.aiform_save = None;
+                // A created provider whose key failed is listed as it is now.
+                send(
+                    app,
+                    "ai.providers.list",
+                    Value::Null,
+                    "settings.ai_providers",
+                );
             }
             None => finish_save(app),
         },
@@ -2267,5 +2324,44 @@ mod test_reply_tests {
         on_reply(&mut app, "settings.aiform_test", &passed());
         assert_eq!(app.settings.aiform.test.state, "ok");
         assert!(app.settings.aiform_tests.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod save_run_tests {
+    use super::*;
+
+    /// A provider saved with a key, the form left and Add opened again before the create
+    /// answered: the key still goes to the saved provider, and the new form stays open.
+    #[test]
+    fn a_save_finishes_from_what_was_submitted() {
+        let mut app = crate::app::tests::quiet_app();
+        open_add(&mut app);
+        let first = app.settings.aiform.opening;
+        app.settings.aiform_save = Some(SaveRun {
+            form: first,
+            name: "first".into(),
+            key: Some("sk-test".into()),
+            proxy_models: false,
+            base_url: "http://127.0.0.1:1".into(),
+        });
+        open_add(&mut app);
+        let ok = Reply {
+            kind: "ai.providers.create".into(),
+            data: Value::Null,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "settings.aiform_save", &ok);
+        assert!(
+            app.pending
+                .values()
+                .any(|(tag, _, _)| *tag == "settings.aiform_key"),
+            "the submitted key is written"
+        );
+        on_reply(&mut app, "settings.aiform_key", &ok);
+        assert!(app.settings.aiform.open, "the new form stays open");
+        assert!(app.settings.aiform_save.is_none());
     }
 }

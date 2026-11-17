@@ -1843,7 +1843,12 @@ fn end_export(app: &mut App, recipe: &str) -> bool {
 /// Records that write `kind` was just sent from the case on screen.
 fn sent_from(app: &mut App, kind: &'static str) {
     let m = app.provenance.sof.mounted.clone();
-    app.provenance.sof.sent_from.entry(kind).or_default().push_back(m);
+    app.provenance
+        .sof
+        .sent_from
+        .entry(kind)
+        .or_default()
+        .push_back(m);
 }
 
 /// Whether the oldest write `kind` in flight was sent from the case on screen (and drains it).

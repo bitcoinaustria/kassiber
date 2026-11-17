@@ -682,7 +682,9 @@
       "error": "Refresh needs attention"
     },
     "title": {
-      "checkingMarketRates": "Checking market rates"
+      "checkingMarketRates": "Checking market rates",
+      "fetchingBtcRate": "Fetching BTC market rate.",
+      "fetchingPair": "Fetching {{pair}}."
     },
     "refreshingSources": "Refreshing configured sources",
     "refreshRunning": "refresh is running",

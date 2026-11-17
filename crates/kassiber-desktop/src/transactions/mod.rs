@@ -85,6 +85,9 @@ pub struct TxUi {
     /// transaction id → loan role.
     pub loans: HashMap<String, String>,
     pub loans_requested: bool,
+    /// `App::book_generation` of the loan read: a book refresh (a loan marked in the detail
+    /// panel) reads the loan roles again.
+    pub loans_generation: u64,
     pub popup: Option<Popup>,
     pub expanded: bool,
     pub chart_count: bool,
@@ -128,6 +131,7 @@ impl Default for TxUi {
             candidates: Candidates::default(),
             loans: HashMap::new(),
             loans_requested: false,
+            loans_generation: 0,
             popup: None,
             expanded: false,
             chart_count: false,
@@ -548,8 +552,9 @@ fn step(app: &mut App) -> bool {
         apply_route(app);
         changed = true;
     }
-    if !app.txs.loans_requested {
+    if !app.txs.loans_requested || app.txs.loans_generation != app.book_generation {
         app.txs.loans_requested = true;
+        app.txs.loans_generation = app.book_generation;
         app.send("ui.loans.list", Value::Null, "txs.loans");
     }
     // A book refresh that changed the transaction count reloads, highlighting the new rows.

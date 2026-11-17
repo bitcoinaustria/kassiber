@@ -1223,13 +1223,16 @@ mod reveal_tests {
     #[test]
     fn a_dismissed_reveal_copies_nothing() {
         let mut app = crate::app::tests::quiet_app();
-        app.wallets.detail.asked.push_back(crate::wallets::detail::Asked {
-            tag: "wallets.detail.reveal",
-            wallet: "a".into(),
-            label: "A".into(),
-            next_label: String::new(),
-            serial: 1,
-        });
+        app.wallets
+            .detail
+            .asked
+            .push_back(crate::wallets::detail::Asked {
+                tag: "wallets.detail.reveal",
+                wallet: "a".into(),
+                label: "A".into(),
+                next_label: String::new(),
+                serial: 1,
+            });
         app.wallets.detail.wallet = "b".into();
         app.wallets.detail.reveal = Some(crate::wallets::detail::RevealForm {
             serial: 2,

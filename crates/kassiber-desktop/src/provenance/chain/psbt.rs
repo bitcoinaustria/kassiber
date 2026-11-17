@@ -1049,9 +1049,15 @@ mod answer_tests {
     #[test]
     fn an_earlier_comparison_does_not_fill_the_current_one() {
         let mut app = crate::app::tests::quiet_app();
-        app.provenance.chain.psbt_asked.push_back((0, "pair-1".into(), true));
+        app.provenance
+            .chain
+            .psbt_asked
+            .push_back((0, "pair-1".into(), true));
         app.provenance.chain.mounts = 1;
-        app.provenance.chain.psbt_asked.push_back((1, "pair-2".into(), true));
+        app.provenance
+            .chain
+            .psbt_asked
+            .push_back((1, "pair-2".into(), true));
         app.provenance.chain.psbt.outcome = Some(("pair-2".into(), Value::Null, true));
         let r = Reply {
             kind: "ui.chain_analysis.psbt.compare".into(),
@@ -1061,8 +1067,26 @@ mod answer_tests {
             elapsed: Default::default(),
         };
         on_reply(&mut app, "psbt.compare", &r);
-        assert!(app.provenance.chain.psbt.outcome.as_ref().unwrap().1.is_null());
+        assert!(
+            app.provenance
+                .chain
+                .psbt
+                .outcome
+                .as_ref()
+                .unwrap()
+                .1
+                .is_null()
+        );
         on_reply(&mut app, "psbt.compare", &r);
-        assert!(!app.provenance.chain.psbt.outcome.as_ref().unwrap().1.is_null());
+        assert!(
+            !app.provenance
+                .chain
+                .psbt
+                .outcome
+                .as_ref()
+                .unwrap()
+                .1
+                .is_null()
+        );
     }
 }

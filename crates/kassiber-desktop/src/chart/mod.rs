@@ -855,9 +855,8 @@ pub(crate) fn card(
                 .radius(tk.r(0.375))
                 .border(1.0, tk.border)
                 .border_dash(4.0, 3.0)
-                // Hard-coded English in BtcActivityChart.tsx (not in the bundles).
                 .child(
-                    text("No balance history yet — sync or import a wallet to build this chart.")
+                    text(crate::i18n::t("overview:balanceChart.noHistory"))
                         .font(tk.tsm(400.0))
                         .color(tk.muted_fg),
                 ),

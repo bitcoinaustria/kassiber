@@ -1271,7 +1271,9 @@ mod tests {
     fn a_save_reply_drains_after_the_last_tab_closes() {
         let mut app = crate::app::tests::quiet_app();
         let o = super::super::Open::new("a", super::super::Tab::Details, vec![]);
-        app.detail.saving_ids.push_back((o.serial, "a".into(), o.draft));
+        app.detail
+            .saving_ids
+            .push_back((o.serial, "a".into(), o.draft));
         app.detail.open = None;
         super::super::on_reply(&mut app, "txd.save", &ok(json!({})));
         assert!(app.detail.saving_ids.is_empty());
@@ -1290,7 +1292,10 @@ mod tests {
         assert!(!super::super::follow_generation(&mut app));
         app.book_generation += 1;
         assert!(super::super::follow_generation(&mut app));
-        assert!(!super::super::follow_generation(&mut app), "once per refresh");
+        assert!(
+            !super::super::follow_generation(&mut app),
+            "once per refresh"
+        );
     }
 
     /// Saving pinned tab A, then opening the same transaction in another tab: the answer is
@@ -1301,7 +1306,9 @@ mod tests {
         let mut a = shown("a");
         a.saving = true;
         let serial = a.serial;
-        app.detail.saving_ids.push_back((serial, "a".into(), a.draft.clone()));
+        app.detail
+            .saving_ids
+            .push_back((serial, "a".into(), a.draft.clone()));
         app.detail.tabs = vec![
             super::super::TabSlot {
                 parked: Some(a),

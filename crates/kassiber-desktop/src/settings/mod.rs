@@ -246,6 +246,10 @@ pub struct Ui {
     /// The tested values (`aiform::TestRun::target`) of each provider test in flight, oldest
     /// first; kept outside the form, which starts over each time it opens.
     pub aiform_tests: std::collections::VecDeque<String>,
+    /// Counts openings of the provider form.
+    pub aiform_opens: u64,
+    /// The provider save in flight, outside the form (which starts over when it reopens).
+    pub aiform_save: Option<aiform::SaveRun>,
     pub dialog: dialogs::Dialogs,
     /// The open sub-page's frame (its form's open flag says whether one is open).
     pub sub: Option<subpage::Sub>,
