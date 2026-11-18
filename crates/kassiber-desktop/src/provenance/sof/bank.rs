@@ -11,7 +11,7 @@ use super::Query;
 use super::kit;
 use super::model;
 use super::target::optional_section;
-use crate::app::{App, Reply};
+use crate::app::{App, Reply, ToastTone};
 use crate::i18n::{t, tc, tr};
 use crate::icons as I;
 use crate::theme::Tk;
@@ -219,6 +219,7 @@ fn import(a: &mut App, file: &str) {
         "provenance.sof.bank.import",
     ) {
         a.provenance.sof.busy.insert("bank.import");
+        super::sent_from(a, "bank.import");
     }
 }
 
@@ -226,6 +227,7 @@ fn decide(a: &mut App, kind: &'static str, s: &Value) {
     clear_notes(a);
     if super::send(a, kind, decision_args(s), "provenance.sof.bank.decide") {
         a.provenance.sof.busy.insert("bank.decide");
+        super::sent_from(a, "bank.decide");
     }
 }
 
@@ -236,21 +238,40 @@ pub fn on_reply(a: &mut App, sub: &str, r: &Reply) {
         "suggest" => super::landed(&mut a.provenance.sof.bank.suggest, r, generation),
         "lines" => super::landed(&mut a.provenance.sof.bank.lines, r, generation),
         "import" | "decide" => {
-            a.provenance.sof.busy.remove(if sub == "import" {
+            let kind = if sub == "import" {
                 "bank.import"
             } else {
                 "bank.decide"
-            });
+            };
+            a.provenance.sof.busy.remove(kind);
             let note = match &r.error {
                 Some(e) => (None, Some(e.clone())),
                 None if sub == "import" => (Some(import_message(&r.data)), None),
                 None => (None, None),
             };
-            if let Some(p) = panel(a) {
+            // The answer belongs to the case it was sent from: another case on screen keeps its
+            // own notes, and the answer shows as a toast instead.
+            if super::from_this_case(a, kind)
+                && let Some(p) = panel(a)
+            {
                 if note.0.is_some() {
                     p.message = note.0;
                 }
                 p.error = note.1;
+            } else if let Some(e) = note.1 {
+                a.toast(
+                    ToastTone::Error,
+                    &t("sourceFunds:header.title"),
+                    Some(e),
+                    Some("sof"),
+                );
+            } else if let Some(m) = note.0 {
+                a.toast(
+                    ToastTone::Success,
+                    &t("sourceFunds:bank.title"),
+                    Some(m),
+                    Some("sof"),
+                );
             }
             // Accepted lines become evidence on a reviewed source: every case read refreshes.
             if r.error.is_none() {
@@ -546,6 +567,72 @@ mod tests {
             decision_args(&suggestion()),
             json!({"line_ids": ["L1"], "transaction_ids": ["T1"]})
         );
+    }
+
+    fn reply(kind: &str, data: Value, error: Option<&str>) -> Reply {
+        Reply {
+            kind: kind.into(),
+            data,
+            error: error.map(str::to_owned),
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    fn open_case(app: &mut App, target: &str) {
+        app.provenance.sof.mounted = Some(format!("book|{target}"));
+        app.provenance.sof.case = Some(super::super::Case::new(
+            &super::super::Draft::default(),
+            target,
+        ));
+    }
+
+    /// An import or decision answered after another case opened: its note stays out of the case
+    /// on screen (it shows as a toast), and the next answer for that case lands in it.
+    #[test]
+    fn a_reply_lands_in_the_case_it_was_sent_from() {
+        let mut app = crate::app::tests::quiet_app();
+        open_case(&mut app, "tx-a");
+        import(&mut app, "/x/statement.xml");
+        decide(&mut app, ACCEPT, &suggestion());
+        open_case(&mut app, "tx-b");
+        let shown = |app: &App| {
+            app.toasts
+                .last()
+                .map(|t| (t.tone, t.body.clone().unwrap_or_default()))
+        };
+        on_reply(
+            &mut app,
+            "import",
+            &reply(IMPORT, json!({"lines_new": 3, "lines_existing": 0}), None),
+        );
+        let (tone, body) = shown(&app).expect("the import's answer shows");
+        assert_eq!(tone, ToastTone::Success);
+        assert!(body.contains('3'), "{body}");
+        on_reply(
+            &mut app,
+            "decide",
+            &reply(ACCEPT, json!({}), Some("refused")),
+        );
+        assert_eq!(
+            shown(&app),
+            Some((ToastTone::Error, "refused".to_owned())),
+            "the decision's error shows"
+        );
+        let b = &app.provenance.sof.case.as_ref().expect("case").bank;
+        assert_eq!((&b.message, &b.error), (&None, &None));
+        assert!(app.provenance.sof.sent_from.values().all(|q| q.is_empty()));
+        assert!(!busy(&app));
+
+        import(&mut app, "/x/giro.csv");
+        on_reply(
+            &mut app,
+            "import",
+            &reply(IMPORT, json!({"already_imported": true}), None),
+        );
+        let b = &app.provenance.sof.case.as_ref().expect("case").bank;
+        assert_eq!(b.message, Some(t("sourceFunds:bank.alreadyImported")));
+        assert_eq!(b.error, None);
     }
 
     #[test]
