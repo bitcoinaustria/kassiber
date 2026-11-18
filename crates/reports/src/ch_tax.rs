@@ -631,7 +631,8 @@ pub fn load(conn: &Connection, profile_id: &str, zone: &str, wallet: Option<&str
         "SELECT je.transaction_id,je.occurred_at,je.entry_type,je.asset,je.quantity,\
          je.proceeds,je.proceeds_exact,je.cost_basis,je.cost_basis_exact,je.gain_loss,je.gain_loss_exact,\
          je.calculation_json,je.calculation_compact,COALESCE(w.label,'') AS wallet,\
-         COALESCE(NULLIF(t.kind_override,''),t.kind,'') AS kind,t.fiat_value,t.fiat_value_exact,t.amount AS transaction_amount \
+         COALESCE(NULLIF(t.kind_override,''),t.kind,'') AS kind,t.fiat_value,t.fiat_value_exact,t.amount AS transaction_amount,\
+         COALESCE(t.taxability_override,1)!=0 AS taxable \
          FROM journal_entries je LEFT JOIN wallets w ON w.id=je.wallet_id \
          LEFT JOIN transactions t ON t.id=je.transaction_id \
          WHERE je.profile_id=?1 AND (?2 IS NULL OR je.wallet_id=?2) \
@@ -656,6 +657,10 @@ pub fn load(conn: &Connection, profile_id: &str, zone: &str, wallet: Option<&str
                 asset: asset.clone(),
                 quantity: signed.clone(),
             });
+        }
+        // A reviewed non-taxable disposal still moves the holding.
+        if crate::layer_reads::non_taxable(entry) {
+            continue;
         }
         match entry_type.as_str() {
             "income" => book.income.push(Income {

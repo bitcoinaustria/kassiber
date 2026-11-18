@@ -1,5 +1,6 @@
 //! Journal reads the country layers share: a stored instant, an exact
-//! amount, and the book's quarantines with their transaction kinds.
+//! amount, reviewed taxability, and the book's quarantines with their
+//! transaction kinds.
 
 use super::*;
 
@@ -30,6 +31,15 @@ pub fn exact(row: &Value, key: &str) -> Result<Decimal> {
     } else {
         decimal(value(row, key))
     }
+}
+
+/// Whether a disposal or income entry belongs to a transaction the user
+/// reviewed as not taxable (`taxability_override = 0`, read into the
+/// `taxable` column). Such entries stay in the journal, so holdings and
+/// pools keep them, but no country form may count them; the review figures
+/// and the Austrian report exclude them the same way.
+pub fn non_taxable(row: &Value) -> bool {
+    matches!(text(row, "entry_type").as_str(), "disposal" | "income") && int(row, "taxable") == 0
 }
 
 /// One quarantined transaction.
