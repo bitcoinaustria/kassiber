@@ -2128,6 +2128,31 @@ See [tax countries](docs/reference/tax-countries.md) and
   `header_row` option; copying the statement file onto the accepted source;
   masking own non-IBAN account numbers inside bank free text; and network
   partitions of books holding statements.
+- [ ] Other crypto assets per [plan 24](docs/plan/24-crypto-assets.md).
+  Done: the foundation (`asset_scope`, the skip tally, exact units, swap
+  pairing), Bitpanda, Kraken, Binance (without spot trades, which Binance
+  serves only per market; the sync result says so), Coinbase, CoinTracking
+  and Blockpit exports, the desktop toggle (exchange card and import result),
+  the per-asset overview backend, and the importer triage: Binance
+  supplemental, Ledger Live and Coinfinity CSVs follow the scope, generic
+  CSV/JSON and BTCPay rows are screened against it, and the bitcoin scope
+  refuses a Coinbase convert's BTC leg. The summary PDF's BTC fee and
+  transfer volume count Bitcoin rows only, a correction that also reaches
+  BTC-only Liquid books: an issued asset (USDt) there now has null sats and
+  leaves the BTC volume instead of adding its raw units. The desktop app lists
+  other assets in its Holdings by Asset card. Open: the desktop's per-asset
+  transactions and wallets views, Binance spot trades (the user
+  would have to name markets), Ledger Live sends of another asset with a fee,
+  or with only a fee (refused: the export does not say which asset pays a
+  token's fee), the
+  bitcoin scope telling a Coinbase convert against fiat from one against
+  crypto (both refused today; the crypto scope reads both legs),
+  and an assistant tool that sets a wallet's asset scope under the usual
+  consent (AI tools must not see wallet configuration, so it needs its own
+  narrow tool). Bitvavo, Bitstamp, Bitfinex and Bitcoin.de are connected (API
+  and CSV; see their pages for which assets each reads). Then further sources
+  from the Rotki survey: Bison, Trade Republic and Crypto.com App (CSV; need
+  real samples), Revolut, Nexo, KuCoin, Bybit and OKX.
 - [ ] Coinbase API keys: Coinbase expired the legacy HMAC keys the sync
   signs with in February 2025 and accepts only CDP keys, which sign a
   short-lived JWT per request (ES256 or Ed25519), so `wallets sync-coinbase`
@@ -2246,6 +2271,13 @@ See [tax countries](docs/reference/tax-countries.md) and
 - [ ] Decide when `ui-tauri/` retires. Until then it is the parity reference
   (`crates/kassiber-desktop/parity/`) and its kind lists are checked against
   the desktop's (`src/kinds/tests.rs`, which skips when `ui-tauri/` is absent).
+- [ ] Two parts of the other-crypto-assets stack have no screen in the desktop app
+  yet and stay out of it until one exists: the source-of-funds view's guess that
+  a Bitvavo, Bitfinex or Bitcoin.de account is an exchange (the Tauri
+  `txNetwork` in `routes/source-funds/model.ts`), and the secret scanner's
+  exchange qualifier words (`lib/secretScanner.ts`, which would list `bitvavo`;
+  the desktop app relies on the backend's redaction instead). Neither changes
+  what the CLI or daemon do.
 
 - [ ] Let an agent request a brokered session that the user approves with
   Touch ID on signed macOS builds: allow `operator unlock --auth touch-id`

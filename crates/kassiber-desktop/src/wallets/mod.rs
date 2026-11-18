@@ -11,8 +11,11 @@
 //! - `node`: routes/NodeConnectionDetail.tsx (+ ConnectionDetail's NodeConnectionContainer).
 //! - `add`: components/kb/AddConnectionDialog.tsx (both steps, every setup form);
 //!   `add::btcpay` and `add::exchange` the BTCPay / exchange setup panels and ExchangeSyncCard.
+//! - `assets`: components/kb/assets/* (the asset scope notice of the exchange card and of an
+//!   import result).
 
 pub mod add;
+pub mod assets;
 pub mod common;
 pub mod conn;
 pub mod detail;
@@ -33,6 +36,7 @@ pub struct Ui {
     pub detail: detail::State,
     pub node: node::State,
     pub add: add::State,
+    pub assets: assets::State,
 }
 
 /// Whether this area renders `path` (the route without its query).
@@ -120,6 +124,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     detail::on_reply(app, tag, r);
     node::on_reply(app, tag, r);
     add::on_reply(app, tag, r);
+    assets::on_reply(app, tag, r);
 }
 
 /// Key presses before the shell sees them; true when handled.

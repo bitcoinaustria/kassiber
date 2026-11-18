@@ -1551,6 +1551,12 @@
       "never": "Not synced since Kassiber started",
       "ok": "{{time}} · {{imported}} new of {{fetched}} read",
       "failed": "{{time}} · failed",
+      "balance": "{{provider}} balance",
+      "balanceMatches": "{{amount}} · matches the book",
+      "balanceMismatch": "{{amount}} · the book shows {{book}}",
+      "balanceUnavailable": "Not stated unambiguously in the history",
+      "binanceSpotTrades": "Binance's API does not list spot trades. For a complete ledger, import Binance's Transaction History CSV export into its own wallet instead.",
+      "balanceMismatchNote": "The book and {{provider}} disagree. Check for excluded transactions, transactions added to this wallet from other sources, or {{provider}} history the API did not return.",
       "skipped_one": "{{count}} entry was skipped because it is not BTC or moves only fiat.",
       "skipped_other": "{{count}} entries were skipped because they are not BTC or move only fiat.",
       "sessionNote": "Sync results are kept until Kassiber restarts; the book stores only the imported transactions."
@@ -2045,6 +2051,44 @@
           "Kassiber contacts Bitcoin.de only when you test the key or press Sync now"
         ]
       }
+    }
+  },
+  "assets": {
+    "found_one": "Also found {{tickers}}: {{rows}} entry",
+    "found_other": "Also found {{tickers}}: {{rows}} entries",
+    "foundBody": "This wallet imports Bitcoin only, so these crypto assets were skipped.",
+    "tickersMore": "{{list}} and {{count}} more",
+    "track": "Also track these assets",
+    "tracked": "Other crypto assets are tracked for this wallet.",
+    "untrack": "Track Bitcoin only",
+    "pickAgain": "Other crypto assets are now tracked. Choose the same file again and import it to add them; entries already imported are not duplicated.",
+    "excluded_one": "Not imported: {{tickers}} ({{rows}} entry). Stocks, ETFs and metals stay out of the book.",
+    "excluded_other": "Not imported: {{tickers}} ({{rows}} entries). Stocks, ETFs and metals stay out of the book.",
+    "unread_one": "Not imported: {{tickers}} ({{rows}} entry). Kassiber reads only Bitcoin from this exchange; record other coins yourself with a generic CSV or JSON import.",
+    "unread_other": "Not imported: {{tickers}} ({{rows}} entries). Kassiber reads only Bitcoin from this exchange; record other coins yourself with a generic CSV or JSON import.",
+    "swapPairs_one": "{{pairs}} crypto-to-crypto swap paired",
+    "swapPairs_other": "{{pairs}} crypto-to-crypto swaps paired",
+    "confirm": {
+      "trackTitle": "Track other crypto assets for this wallet?",
+      "trackBody": {
+        "sync": "Kassiber then syncs this exchange again and keeps the other crypto assets as well. Entries already imported are not duplicated.",
+        "import": "Kassiber then imports the same file again and keeps the other crypto assets as well. Entries already imported are not duplicated.",
+        "pick_file": "Kassiber keeps other crypto assets from the next import on. Kassiber did not keep the file's location, so choose the same file again afterwards. Entries already imported are not duplicated."
+      },
+      "trackButton": {
+        "sync": "Track and sync now",
+        "import": "Track and import again",
+        "pick_file": "Track other assets"
+      },
+      "untrackTitle": "Track Bitcoin only again?",
+      "untrackBody": "Later syncs and imports skip other crypto assets again. Entries already imported stay in the book; exclude them on the Transactions page if you don't want them in your reports.",
+      "untrackButton": "Track Bitcoin only",
+      "passphrase": "Database passphrase",
+      "ack": "Type {{ack}} to confirm the change",
+      "errorPassphrase": "Enter the database passphrase.",
+      "errorAck": "Type {{ack}} to confirm the change.",
+      "errorDenied": "The passphrase was not accepted.",
+      "cancel": "Cancel"
     }
   }
 }

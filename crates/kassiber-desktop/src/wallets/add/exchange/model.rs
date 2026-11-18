@@ -139,6 +139,14 @@ pub fn key_guide(kind: &str) -> KeyGuide {
 
 /// `SECRET_LABEL_KEYS` (Bitpanda reuses Coinbase's label but never shows a secret field;
 /// Bitvavo's secret is Coinbase's "API secret" too).
+/// A standing note on an exchange's sync card: what its API never returns.
+pub fn card_note(kind: &str) -> Option<&'static str> {
+    match kind {
+        "binance" => Some("connections:exchange.sync.binanceSpotTrades"),
+        _ => None,
+    }
+}
+
 pub fn secret_label_key(kind: &str) -> &'static str {
     match kind {
         "kraken" => "connections:exchange.field.secret.kraken",
@@ -206,6 +214,20 @@ impl ErrorInfo {
     }
 }
 
+/// `formatMsatAsBtc`: msat as BTC text, eight decimals, or eleven when not whole sats. Exact:
+/// integer arithmetic, never a float.
+pub fn format_msat_as_btc(msat: i64) -> String {
+    let sign = if msat < 0 { "-" } else { "" };
+    let abs = msat.unsigned_abs();
+    let whole = abs / 100_000_000_000;
+    let frac = abs % 100_000_000_000;
+    if frac.is_multiple_of(1000) {
+        format!("{sign}{whole}.{:08}", frac / 1000)
+    } else {
+        format!("{sign}{whole}.{frac:011}")
+    }
+}
+
 /// `exchangeErrorKind`: the `exchange.error.<kind>` explanation for a daemon error code.
 pub fn error_kind(code: Option<&str>) -> &'static str {
     match code.unwrap_or("") {
@@ -244,6 +266,20 @@ pub fn refused_permissions(info: &ErrorInfo) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+
+    /// Only Binance's card carries a standing note: its API lists no spot
+    /// trades, which only the Transaction History export has.
+    #[test]
+    fn only_binance_notes_what_its_api_never_returns() {
+        assert_eq!(
+            card_note("binance"),
+            Some("connections:exchange.sync.binanceSpotTrades")
+        );
+        for kind in KINDS.iter().filter(|kind| **kind != "binance") {
+            assert_eq!(card_note(kind), None, "{kind}");
+        }
+    }
+
     use super::*;
 
     fn creds(ex: &str, k: &str, s: &str) -> Credentials {
@@ -304,6 +340,14 @@ mod tests {
             let g = key_guide(k);
             assert!(!g.grant.is_empty() && !g.deny.is_empty(), "{k}");
         }
+    }
+
+    #[test]
+    fn msat_reads_as_exact_btc() {
+        assert_eq!(format_msat_as_btc(150_000_000_000), "1.50000000");
+        assert_eq!(format_msat_as_btc(1_000), "0.00000001");
+        assert_eq!(format_msat_as_btc(1), "0.00000000001");
+        assert_eq!(format_msat_as_btc(-2_500_000_000), "-0.02500000");
     }
 
     #[test]

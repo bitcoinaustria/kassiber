@@ -3493,7 +3493,7 @@ fn fields(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> 
 }
 
 /// `renderImportSummary`.
-fn import_summary(tk: &Tk, r: &Value) -> El {
+fn import_summary(app: &App, tk: &Tk, r: &Value) -> El {
     let n = |k: &str| r.get(k).and_then(Value::as_u64);
     let imported = n("imported").unwrap_or(0);
     let skipped = n("skipped").unwrap_or(0);
@@ -3713,6 +3713,7 @@ fn import_summary(tk: &Tk, r: &Value) -> El {
         )
         .child(grid)
         .children(bisq_held_block(tk, r))
+        .children(crate::wallets::assets::import_view(app, tk, r))
         .child(records)
 }
 
@@ -3824,7 +3825,7 @@ pub fn body(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         );
     }
     if let Some(r) = &s.last_import {
-        form = form.child(import_summary(tk, r));
+        form = form.child(import_summary(app, tk, r));
     }
     let _ = notice(tk, Tone::Neutral, "");
     row()

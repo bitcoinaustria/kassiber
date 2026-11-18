@@ -279,6 +279,9 @@ pub struct State {
     pub setup_error: Option<String>,
     /// The last import's result (`lastImportResult`, an `ImportFileResult`).
     pub last_import: Option<Value>,
+    /// The arguments of the file import behind `last_import`, when this dialog chose its path
+    /// (`ImportFileResult.localReplay`): tracking other crypto assets imports it again.
+    pub last_import_replay: Option<crate::wallets::assets::model::Replay>,
     pub bip329_preview: Option<Value>,
     /// Derived addresses (`previewAddresses`): branch, index, address.
     pub preview_addresses: Option<Vec<(String, u64, String)>>,

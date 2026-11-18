@@ -1551,6 +1551,12 @@
       "never": "Seit dem Start von Kassiber nicht synced",
       "ok": "{{time}} · {{imported}} neu von {{fetched}} gelesen",
       "failed": "{{time}} · fehlgeschlagen",
+      "balance": "Saldo laut {{provider}}",
+      "balanceMatches": "{{amount}} · stimmt mit dem Buch überein",
+      "balanceMismatch": "{{amount}} · das Buch zeigt {{book}}",
+      "balanceUnavailable": "Aus dem Verlauf nicht eindeutig ablesbar",
+      "binanceSpotTrades": "Die Binance-API listet keine Spot-Trades. Für ein vollständiges Konto importiere stattdessen den CSV-Export des Binance-Transaktionsverlaufs in eine eigene Wallet.",
+      "balanceMismatchNote": "Buch und {{provider}} weichen ab. Prüfe ausgeschlossene Transaktionen, Transaktionen aus anderen Quellen in dieser Wallet oder {{provider}}-Verlauf, den die API nicht geliefert hat.",
       "skipped_one": "{{count}} Eintrag wurde übersprungen, weil er kein BTC ist oder nur Fiat bewegt.",
       "skipped_other": "{{count}} Einträge wurden übersprungen, weil sie kein BTC sind oder nur Fiat bewegen.",
       "sessionNote": "Sync-Ergebnisse bleiben bis zum Neustart von Kassiber erhalten; das Buch speichert nur die importierten Transaktionen."
@@ -2045,6 +2051,44 @@
           "Kassiber kontaktiert Bitcoin.de nur, wenn du den Key testest oder auf „Sync starten“ drückst"
         ]
       }
+    }
+  },
+  "assets": {
+    "found_one": "Außerdem gefunden: {{tickers}}: {{rows}} Eintrag",
+    "found_other": "Außerdem gefunden: {{tickers}}: {{rows}} Einträge",
+    "foundBody": "Diese Wallet importiert nur Bitcoin, deshalb wurden diese Kryptowährungen übersprungen.",
+    "tickersMore": "{{list}} und {{count}} weitere",
+    "track": "Diese Assets auch erfassen",
+    "tracked": "Andere Kryptowährungen werden für diese Wallet erfasst.",
+    "untrack": "Nur Bitcoin erfassen",
+    "pickAgain": "Andere Kryptowährungen werden jetzt erfasst. Wähle dieselbe Datei noch einmal und importiere sie, um sie hinzuzufügen; bereits importierte Einträge werden nicht verdoppelt.",
+    "excluded_one": "Nicht importiert: {{tickers}} ({{rows}} Eintrag). Aktien, ETFs und Edelmetalle bleiben außerhalb des Buchs.",
+    "excluded_other": "Nicht importiert: {{tickers}} ({{rows}} Einträge). Aktien, ETFs und Edelmetalle bleiben außerhalb des Buchs.",
+    "unread_one": "Nicht importiert: {{tickers}} ({{rows}} Eintrag). Kassiber liest von dieser Börse nur Bitcoin; andere Coins erfasst du selbst mit einem allgemeinen CSV- oder JSON-Import.",
+    "unread_other": "Nicht importiert: {{tickers}} ({{rows}} Einträge). Kassiber liest von dieser Börse nur Bitcoin; andere Coins erfasst du selbst mit einem allgemeinen CSV- oder JSON-Import.",
+    "swapPairs_one": "Krypto-zu-Krypto-Tausch: {{pairs}} Paar verknüpft",
+    "swapPairs_other": "Krypto-zu-Krypto-Tausch: {{pairs}} Paare verknüpft",
+    "confirm": {
+      "trackTitle": "Andere Kryptowährungen für diese Wallet erfassen?",
+      "trackBody": {
+        "sync": "Kassiber startet dann noch einmal einen Sync dieser Börse und übernimmt auch die anderen Kryptowährungen. Bereits importierte Einträge werden nicht verdoppelt.",
+        "import": "Kassiber importiert dieselbe Datei dann noch einmal und übernimmt auch die anderen Kryptowährungen. Bereits importierte Einträge werden nicht verdoppelt.",
+        "pick_file": "Kassiber übernimmt andere Kryptowährungen ab dem nächsten Import. Kassiber hat sich den Speicherort der Datei nicht gemerkt, wähle danach also dieselbe Datei noch einmal. Bereits importierte Einträge werden nicht verdoppelt."
+      },
+      "trackButton": {
+        "sync": "Erfassen und Sync starten",
+        "import": "Erfassen und neu importieren",
+        "pick_file": "Andere Assets erfassen"
+      },
+      "untrackTitle": "Wieder nur Bitcoin erfassen?",
+      "untrackBody": "Spätere Syncs und Importe überspringen andere Kryptowährungen wieder. Bereits importierte Einträge bleiben im Buch; schließe sie auf der Seite Transaktionen aus, wenn du sie nicht in deinen Berichten haben willst.",
+      "untrackButton": "Nur Bitcoin erfassen",
+      "passphrase": "Datenbank-Passphrase",
+      "ack": "Tippe {{ack}}, um die Änderung zu bestätigen",
+      "errorPassphrase": "Gib die Datenbank-Passphrase ein.",
+      "errorAck": "Tippe {{ack}}, um die Änderung zu bestätigen.",
+      "errorDenied": "Die Passphrase wurde nicht akzeptiert.",
+      "cancel": "Abbrechen"
     }
   }
 }

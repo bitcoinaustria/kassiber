@@ -18,6 +18,7 @@ use super::{
 };
 use crate::app::{App, Reply, ToastTone};
 use crate::i18n::{t, tc, tr};
+use crate::wallets::assets::model::Replay;
 
 pub const MAX_GAP: i64 = 5000;
 
@@ -34,6 +35,8 @@ pub struct Job {
     /// The form as submitted: later steps (detection, coverage, the create after them) use
     /// it, not the form's current values, which stay editable while the steps run.
     pub form: super::Form,
+    /// The import this job runs, kept for the result (`withReplay`).
+    pub replay: Option<crate::wallets::assets::model::Replay>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -696,6 +699,7 @@ fn start(app: &mut App, label: &str) {
         done: None,
         stay_open: false,
         form,
+        replay: None,
     });
 }
 
@@ -1178,11 +1182,21 @@ fn submit_file_wallet(app: &mut App, label: &str) {
         } else {
             None
         };
+        // A path the user chose here is kept for importing it again (`withReplay`); a bundle
+        // is not.
+        let replay = bundle.is_none().then(|| Replay {
+            wallet: id.as_str().unwrap_or_default().to_owned(),
+            source_format: fmt.to_owned(),
+            source_file: txt(&f.source_file),
+        });
         match bundle {
             Some(b) => args["source_bundle"] = b,
             None => args["source_file"] = json!(txt(&f.source_file)),
         }
         bisq_args(f, fmt, &mut args);
+        if let Some(j) = stm(app).job.as_mut() {
+            j.replay = replay;
+        }
         send_job(app, Stage::ImportFile, "ui.wallets.import_file", args);
         return;
     }
@@ -1214,10 +1228,18 @@ fn submit_file_wallet(app: &mut App, label: &str) {
     }
     bisq_args(f, fmt, &mut args);
     let sync = f.sync_after && !rpc;
+    // The sync imports the file the user chose here; its result keeps the path for importing
+    // it again (`withReplay`).
+    let replay = sync.then(|| Replay {
+        wallet: label.to_owned(),
+        source_format: fmt.to_owned(),
+        source_file: txt(&f.source_file),
+    });
     if let Some(j) = stm(app).job.as_mut() {
         if sync {
             j.syncs.push_back(label.to_owned());
         }
+        j.replay = replay;
         let body = if f_sync(sync) {
             tr("connections:add.added.bodyImported", &[("label", label)])
         } else {
@@ -1357,6 +1379,16 @@ fn import_result_from_sync(result: &Value) -> Option<Value> {
     has.then(|| result.clone())
 }
 
+/// An import result for the summary, with the replay of the job that produced it; the asset
+/// scope notice under it starts over.
+fn set_last_import(app: &mut App, result: Value) {
+    let replay = stm(app).job.as_mut().and_then(|j| j.replay.take());
+    let s = stm(app);
+    s.last_import = Some(result);
+    s.last_import_replay = replay;
+    crate::wallets::assets::reset(app, crate::wallets::assets::Surface::Import);
+}
+
 fn on_job(app: &mut App, r: &Reply) {
     let Some(stage) = st(app).job.as_ref().map(|j| j.stage.clone()) else {
         return;
@@ -1457,7 +1489,7 @@ fn on_job(app: &mut App, r: &Reply) {
             }
         }
         Stage::WasabiImport | Stage::ImportFile => {
-            stm(app).last_import = Some(d.clone());
+            set_last_import(app, d.clone());
             if meta(selected(app).id).kind() == SetupKind::FileEnrichment {
                 let book = is_exchange_evidence(meta(selected(app).id).source_format);
                 let scope = if book {
@@ -1727,7 +1759,7 @@ fn on_job(app: &mut App, r: &Reply) {
                 .find(|x| x.get("wallet").and_then(Value::as_str) == Some(wallet.as_str()))
                 && let Some(summary) = import_result_from_sync(res)
             {
-                stm(app).last_import = Some(summary);
+                set_last_import(app, summary);
             }
             if results.is_empty()
                 || results
@@ -2190,6 +2222,7 @@ mod tests {
             done: None,
             stay_open: false,
             form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
+            replay: None,
         });
         super::super::open(&mut app, Some("descriptor"));
         let job = st(&app).job.as_ref().expect("the job runs on");
@@ -2217,6 +2250,7 @@ mod tests {
                 done: None,
                 stay_open: false,
                 form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
+                replay: None,
             });
             let reply = Reply {
                 kind: "ui.wallets.import_file".into(),

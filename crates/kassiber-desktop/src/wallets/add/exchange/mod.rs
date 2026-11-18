@@ -325,7 +325,20 @@ pub fn sync_pending(app: &App) -> bool {
         .is_some_and(|w| s.syncs.iter().any(|(x, _, _)| x == w))
 }
 
-fn run_sync(a: &mut App) {
+/// `status.refetch()` for the wallet on screen (after its asset scope changed).
+pub fn refresh_status(app: &mut App) {
+    let Some(wallet) = st(app).sync.wallet.clone() else {
+        return;
+    };
+    app.send(
+        "ui.connections.exchange.status",
+        json!({"wallet": wallet}),
+        "wallets.exchange.status",
+    );
+}
+
+/// Sync now (`state.sync()`), also after the asset scope notice stored `crypto`.
+pub fn run_sync(a: &mut App) {
     let s = &st(a).sync;
     let Some(wallet) = s.wallet.clone() else {
         return;
@@ -694,6 +707,14 @@ pub fn sync_card(app: &App, _cx: &mut Cx<App>, tk: &Tk, c: &Conn, disabled: bool
         .and_then(|l| l["skipped"].as_object())
         .map(|m| m.values().filter_map(Value::as_u64).sum())
         .unwrap_or(0);
+    let ok_last = last.filter(|l| l["status"] == "ok");
+    let balance = ok_last
+        .and_then(|l| l.get("provider_balance"))
+        .and_then(balance_text);
+    let assets = ok_last.and_then(|l| crate::wallets::assets::model::read(l.get("assets")));
+    let scope = row_v
+        .and_then(|r| crate::wallets::assets::model::Scope::parse(&r["asset_scope"]))
+        .unwrap_or_default();
     let pending = mine && sync_pending(app);
     let enabled = !(disabled || pending || needs_rust || key_stored == Some(false));
 
@@ -811,6 +832,47 @@ pub fn sync_card(app: &App, _cx: &mut Cx<App>, tk: &Tk, c: &Conn, disabled: bool
                 pair(t("connections:exchange.sync.lastSync"), last_text),
             ],
         ));
+        if let Some(b) = &balance {
+            let hide = b.masked && app.prefs.hide_sensitive();
+            card = card.child(
+                row()
+                    .w_full()
+                    .py(tk.r(0.375))
+                    .gap(tk.r(0.75))
+                    .justify_between()
+                    .border_sides([0.0, 0.0, 1.0, 0.0], tk.border.alpha(tk.border.a * 0.6))
+                    .border_layout()
+                    .child(
+                        text(tr(
+                            "connections:exchange.sync.balance",
+                            &[("provider", provider)],
+                        ))
+                        .font(tk.txs(400.0))
+                        .color(tk.muted_fg),
+                    )
+                    .child(crate::ui::sensitive(
+                        b.text.clone(),
+                        tk.txs(500.0),
+                        tk.fg,
+                        hide,
+                    )),
+            );
+        }
+    }
+    // Binance's API lists no spot trades: say so on every card, so a
+    // balance mismatch has its likely reason beside it.
+    if let Some(note) = model::card_note(&ex) {
+        card = card.child(xs(tk, t(note), tk.muted_fg));
+    }
+    if balance.as_ref().is_some_and(|b| b.mismatch) {
+        card = card.child(xs(
+            tk,
+            tr(
+                "connections:exchange.sync.balanceMismatchNote",
+                &[("provider", provider)],
+            ),
+            form::amber_ink(tk),
+        ));
     }
     if last.is_some_and(|l| l["status"] == "ok") && skipped > 0 {
         card = card.child(xs(
@@ -818,6 +880,24 @@ pub fn sync_card(app: &App, _cx: &mut Cx<App>, tk: &Tk, c: &Conn, disabled: bool
             tc("connections:exchange.sync.skipped", skipped as usize, &[]),
             tk.muted_fg,
         ));
+    }
+    if let (Some(r), false) = (row_v, needs_rust)
+        && let Some(wallet) = r["wallet_id"].as_str()
+        && let Some(notice) = crate::wallets::assets::view(
+            app,
+            tk,
+            crate::wallets::assets::Input {
+                surface: crate::wallets::assets::Surface::Card,
+                wallet,
+                scope,
+                assets: assets.as_ref(),
+                swap_pairs: ok_last.and_then(|l| l["swap_pairs"].as_u64()),
+                rerun: crate::wallets::assets::model::Rerun::Sync,
+                disabled: disabled || pending,
+            },
+        )
+    {
+        card = card.child(notice);
     }
     if let (Some(e), false) = (&error, needs_rust) {
         card = card.child(error_notice(tk, provider, e));
@@ -828,6 +908,58 @@ pub fn sync_card(app: &App, _cx: &mut Cx<App>, tk: &Tk, c: &Conn, disabled: bool
             .color(tk.muted_fg)
             .wrap(),
     )
+}
+
+/// The card's provider balance line (`ExchangeProviderBalance`, Bitpanda only).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BalanceText {
+    pub text: String,
+    /// The book and the exchange disagree: the card adds a note.
+    pub mismatch: bool,
+    /// An amount the privacy mode hides.
+    pub masked: bool,
+}
+
+/// `provider_balance` as the card states it: unavailable, matches, or both amounts.
+pub fn balance_text(b: &Value) -> Option<BalanceText> {
+    let amount = |k: &str| {
+        format!(
+            "₿ {}",
+            model::format_msat_as_btc(b[k].as_i64().unwrap_or(0))
+        )
+    };
+    let (text, mismatch) = match b["status"].as_str()? {
+        "unavailable" => {
+            return Some(BalanceText {
+                text: t("connections:exchange.sync.balanceUnavailable"),
+                mismatch: false,
+                masked: false,
+            });
+        }
+        "matches" => (
+            tr(
+                "connections:exchange.sync.balanceMatches",
+                &[("amount", &amount("provider_msat"))],
+            ),
+            false,
+        ),
+        "mismatch" => (
+            tr(
+                "connections:exchange.sync.balanceMismatch",
+                &[
+                    ("amount", &amount("provider_msat")),
+                    ("book", &amount("book_msat")),
+                ],
+            ),
+            true,
+        ),
+        _ => return None,
+    };
+    Some(BalanceText {
+        text,
+        mismatch,
+        masked: true,
+    })
 }
 
 // ---- scenes -------------------------------------------------------------------------------
@@ -864,11 +996,16 @@ fn fake_test(a: &mut App, ok: bool, read_only: Option<bool>, error: Option<Error
     });
 }
 
-/// SYNTHETIC: an exchange wallet for the sync card (the demo book has none).
+/// SYNTHETIC: an exchange wallet for the sync card (the demo book has none): the exchange the
+/// card scene set up, Kraken by default.
+pub fn synthetic_conn_for(ex: &str) -> Conn {
+    let ex = if model::is_kind(ex) { ex } else { "kraken" };
+    Conn::parse(&json!({"id": format!("synthetic-{ex}"), "kind": ex,
+        "label": provider_name(ex), "status": "idle", "balance": 0}))
+}
+
 pub fn synthetic_conn() -> Conn {
-    Conn::parse(
-        &json!({"id": "synthetic-kraken", "kind": "kraken", "label": "Kraken", "status": "idle", "balance": 0}),
-    )
+    synthetic_conn_for("kraken")
 }
 
 /// SYNTHETIC: the sync card's status as the daemon reports a wallet synced this session.
@@ -889,10 +1026,13 @@ pub fn synthetic_sync(a: &mut App) {
 /// The `wallets-detail-exchange-card` harness page: the card for the synthetic wallet, as the
 /// wallet detail places it (`kb-surface` in the page column).
 pub fn card_scene_view(app: &App, cx: &mut Cx<App>, tk: &Tk) -> El {
-    col()
-        .w_full()
-        .padding(tk.r(1.25))
-        .child(sync_card(app, cx, tk, &synthetic_conn(), false))
+    col().w_full().padding(tk.r(1.25)).child(sync_card(
+        app,
+        cx,
+        tk,
+        &synthetic_conn_for(&st(app).sync.exchange),
+        false,
+    ))
 }
 
 pub const SCENES: &[crate::app::Scene] = &[
@@ -951,7 +1091,56 @@ pub const SCENES: &[crate::app::Scene] = &[
     ("wallets-add-exchange-bitcoinde", |a| {
         scene_open(a, "bitcoinde")
     }),
+    // SYNTHETIC: a Bitpanda wallet whose last sync skipped other crypto assets and whose BTC
+    // balance differs from the book's: the balance row, its note and the asset scope offer.
+    ("wallets-detail-exchange-card-assets", |a| {
+        a.navigate("/connections");
+        a.wallets.add.exchange.card_scene = true;
+        synthetic_assets_sync(a, "bitcoin");
+    }),
+    // SYNTHETIC: the same card with the confirmation open (a plaintext book's typed
+    // acknowledgement), in German.
+    ("wallets-detail-exchange-card-assets-confirm-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        a.navigate("/connections");
+        a.wallets.add.exchange.card_scene = true;
+        synthetic_assets_sync(a, "bitcoin");
+        let wallet = synthetic_conn_for("bitpanda").id;
+        crate::wallets::assets::scene_confirm(a, crate::wallets::assets::Surface::Card, &wallet);
+    }),
+    // SYNTHETIC: a wallet that tracks other crypto assets, with paired swaps and holdings no
+    // scope imports.
+    ("wallets-detail-exchange-card-crypto", |a| {
+        a.navigate("/connections");
+        a.wallets.add.exchange.card_scene = true;
+        synthetic_assets_sync(a, "crypto");
+    }),
 ];
+
+/// SYNTHETIC: a Bitpanda wallet's status as the daemon reports it after a sync this session
+/// that left assets out under scope `scope` (nothing is read from or written to the book).
+fn synthetic_assets_sync(a: &mut App, scope: &str) {
+    let c = synthetic_conn_for("bitpanda");
+    let assets = if scope == "crypto" {
+        json!({"scope": "crypto", "excluded": {"AAPL": 2, "XAU": 1}})
+    } else {
+        json!({"scope": "bitcoin", "skipped": {"ETH": 30, "SOL": 9, "BEST": 3}, "excluded": {"AAPL": 2}})
+    };
+    let mut row = json!({"wallet_id": c.id, "wallet": "Bitpanda", "exchange": "bitpanda", "provider": "Bitpanda", "backend": "bitpanda-api", "backend_configured": true, "has_api_key": true, "has_api_secret": null,
+        "last_sync": {"status": "ok", "at": "2026-11-13T12:34:00Z", "imported": 12, "fetched": 54, "skipped": {},
+            "provider_balance": {"status": "mismatch", "asset": "BTC", "provider_msat": 12_345_678_000_i64, "book_msat": 12_300_000_000_i64, "difference_msat": 45_678_000_i64},
+            "assets": assets, "swap_pairs": if scope == "crypto" { 4 } else { 0 }}});
+    if scope == "crypto" {
+        row["asset_scope"] = json!("crypto");
+    }
+    a.wallets.add.exchange.sync = SyncState {
+        wallet: Some(c.id.clone()),
+        label: c.label.clone(),
+        exchange: "bitpanda".into(),
+        row: Some(row),
+        ..SyncState::default()
+    };
+}
 
 #[cfg(test)]
 mod test_reply_tests {
@@ -1042,6 +1231,24 @@ mod test_reply_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_balance_line_states_both_amounts_only_on_a_mismatch() {
+        let m = balance_text(&json!({"status": "mismatch", "provider_msat": 150_000_000_000_i64, "book_msat": 1_000}))
+            .unwrap();
+        assert!(m.mismatch && m.masked);
+        assert!(
+            m.text.contains("₿ 1.50000000") && m.text.contains("₿ 0.00000001"),
+            "{}",
+            m.text
+        );
+        let ok = balance_text(&json!({"status": "matches", "provider_msat": 1})).unwrap();
+        assert!(!ok.mismatch && ok.masked && ok.text.contains("₿ 0.00000000001"));
+        let none = balance_text(&json!({"status": "unavailable", "reason": "ambiguous"})).unwrap();
+        assert!(!none.mismatch && !none.masked);
+        assert_eq!(balance_text(&json!({"status": "other"})), None);
+        assert_eq!(balance_text(&json!({})), None);
+    }
 
     #[test]
     fn every_exchange_opens_its_api_setup() {

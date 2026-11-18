@@ -314,7 +314,10 @@ explicit Test connection and Sync now do, under their own consent.
 The desktop sets up and syncs Bitpanda like Kraken, Coinbase and Binance:
 a key guide, Test connection (the write-scope check, currencies and one
 operations row), Create connection and Sync now; see
-[exchange connections in the desktop](exchange-desktop.md). No exchange sync
+[exchange connections in the desktop](exchange-desktop.md). After Sync now,
+the wallet's exchange card shows Bitpanda's balance against the book's
+(masked when amounts are hidden), or that the history does not state it
+unambiguously. No exchange sync
 is exposed to the assistant, so neither is Bitpanda: no assistant tool calls
 the Bitpanda API, and `ui.wallets.request_input` keeps the source list of the
 AI tool catalog (`crates/ai/src/data/catalog.json`, generated from Python's
