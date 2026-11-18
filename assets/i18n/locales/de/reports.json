@@ -107,6 +107,16 @@
       "title": "Keine steuerpflichtigen Zeilen",
       "detail": "Das Paket für {{year}} enthält derzeit keine Veräußerungen und keine Zeilen mit Kennzahl."
     },
+    "coreBlocked": {
+      "title": "Noch nicht bereit für Berichte",
+      "detail": "Kassibers Berichtsprüfung hat vor der Einreichung etwas zu klären gefunden.",
+      "more_one": "{{count}} weiterer Hinderungsgrund.",
+      "more_other": "{{count}} weitere Hinderungsgründe."
+    },
+    "coreUnknown": {
+      "title": "Bereitschaft unbekannt",
+      "detail": "Kassiber konnte seine Berichtsprüfung nicht lesen; die Zahlen sind vorläufig."
+    },
     "ready": "Das Hauptbuch ist aktuell und die Prüfwarteschlange ist leer."
   },
   "metrics": {

@@ -7,7 +7,8 @@
 //!   (`/reports?result=<reference>`);
 //! - `widgets`: selects, info notes, checkboxes and links shared by the above.
 //!
-//! Reads on mount (all local): `ui.reports.capital_gains {year?}`, `ui.wallets.list`,
+//! Reads on mount (all local): `ui.reports.capital_gains {year?}`, `ui.report.blockers` (the
+//! core's report-readiness barrier, read the same maintained way), `ui.wallets.list`,
 //! `ui.source_funds.cases.list`; completeness comes from the shell's `ui.overview.snapshot`.
 //! Exports run only from a press and write into the book's `exports/reports` folder, then ask
 //! where to keep a copy with the native Save dialog (`save_exported_file_as`).
@@ -146,6 +147,10 @@ pub struct Ui {
     pub queue: VecDeque<Option<i32>>,
     pub wallets: Option<Vec<WalletChoice>>,
     pub wallets_requested: bool,
+    /// `ui.report.blockers`: the core's readiness verdict, kept on screen while it is read
+    /// again after a book refresh.
+    pub blockers: Load<Value>,
+    pub blockers_requested: bool,
     pub cases: Vec<(String, String)>,
     pub cases_requested: bool,
     pub popup: Option<Popup>,
@@ -305,6 +310,16 @@ fn step(app: &mut App) -> bool {
         app.reports.report.stale.remove(i);
         send_report(app, key);
     }
+    if !app.reports.report.blockers_requested {
+        let ui = &mut app.reports.report;
+        ui.blockers_requested = true;
+        if matches!(ui.blockers, Load::Idle | Load::Failed(_)) {
+            ui.blockers = Load::Loading;
+        }
+        ui.asked.blockers.push_back(ui.book.clone());
+        app.send("ui.report.blockers", Value::Null, "reports.report.blockers");
+        changed = true;
+    }
     if !app.reports.report.wallets_requested {
         app.reports.report.wallets_requested = true;
         app.send("ui.wallets.list", Value::Null, "reports.report.wallets");
@@ -364,6 +379,7 @@ pub fn on_any_reply(app: &mut App, tag: &str, _r: &Reply) {
         ui.stale = ui.reports.keys().copied().collect();
         ui.cases_requested = false;
         ui.wallets_requested = false;
+        ui.blockers_requested = false;
     }
 }
 
@@ -382,6 +398,19 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             // A failed refetch replaces the shown read: figures the book no longer produces must
             // not stay up as current (the next book refresh reads the year again).
             ui.reports.insert(key, next);
+        }
+        "reports.report.blockers" => {
+            let ui = &mut app.reports.report;
+            let asked = ui.asked.blockers.pop_front();
+            // Only the current book's answer, and only the last one asked.
+            if asked.as_ref() != Some(&ui.book) || !ui.asked.blockers.is_empty() {
+                return;
+            }
+            ui.blockers = match (&r.error, r.data.is_object()) {
+                (Some(e), _) => Load::Failed(e.clone()),
+                (None, true) => Load::Ready(r.data.clone()),
+                (None, false) => Load::Failed(t("reports:page.noData")),
+            };
         }
         "reports.report.wallets" if r.error.is_none() => {
             let choices: Vec<WalletChoice> = r.data["wallets"]
@@ -480,6 +509,8 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
 pub struct Asked {
     pub ln: VecDeque<String>,
     pub explain: VecDeque<(String, u64)>,
+    /// The book each `ui.report.blockers` read was asked for.
+    pub blockers: VecDeque<Option<String>>,
 }
 
 /// Reads the explanation of reference `r` for the current book generation.
@@ -1227,6 +1258,51 @@ mod transient_tests {
             Some(Load::Ready(v)) => assert_eq!(v["book"], "b"),
             _ => panic!("the new book's report lands"),
         }
+    }
+
+    /// The core's readiness verdict is read with the report and again after a book refresh;
+    /// an answer asked for another book does not land.
+    #[test]
+    fn the_core_readiness_is_read_per_book() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route("/reports".into());
+        app.reports.report.book = Some("a".into());
+        step(&mut app);
+        assert!(matches!(app.reports.report.blockers, Load::Loading));
+        assert_eq!(app.reports.report.asked.blockers.len(), 1);
+        let reply = |data: Value| Reply {
+            kind: "ui.report.blockers".into(),
+            data,
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        app.reports.report.book = Some("b".into());
+        on_reply(
+            &mut app,
+            "reports.report.blockers",
+            &reply(json!({"ready": true, "blockers": []})),
+        );
+        assert!(matches!(app.reports.report.blockers, Load::Loading));
+        app.reports
+            .report
+            .asked
+            .blockers
+            .push_back(Some("b".into()));
+        on_reply(
+            &mut app,
+            "reports.report.blockers",
+            &reply(json!({"ready": false, "blockers": [{"title": "t"}]})),
+        );
+        match &app.reports.report.blockers {
+            Load::Ready(v) => assert_eq!(v["ready"], false),
+            _ => panic!("the current book's answer lands"),
+        }
+        on_any_reply(&mut app, "app.overview", &reply(Value::Null));
+        assert!(
+            !app.reports.report.blockers_requested,
+            "a refresh reads it again"
+        );
     }
 
     /// Profitability run for A, then for B before A answers: A's numbers never show as B's,

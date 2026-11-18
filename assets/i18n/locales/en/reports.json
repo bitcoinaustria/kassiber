@@ -107,6 +107,16 @@
       "title": "No taxable rows",
       "detail": "No disposal or filing-field rows are currently included in the {{year}} package."
     },
+    "coreBlocked": {
+      "title": "Not ready for reports",
+      "detail": "Kassiber's report checks found something to resolve before filing.",
+      "more_one": "{{count}} more blocker.",
+      "more_other": "{{count}} more blockers."
+    },
+    "coreUnknown": {
+      "title": "Readiness unknown",
+      "detail": "Kassiber could not read its report checks; treat the figures as provisional."
+    },
     "ready": "The ledger is current and the review queue is clear."
   },
   "metrics": {

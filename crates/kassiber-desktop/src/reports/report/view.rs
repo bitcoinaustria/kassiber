@@ -5,7 +5,7 @@
 use rune::{Color, Cx, El, col, row, text};
 use serde_json::Value;
 
-use super::model::{self, Completeness, Glyph, Region, Report, Tone};
+use super::model::{self, Completeness, CoreReadiness, Glyph, Region, Report, Tone};
 use super::widgets::{arrow_link, card, info_note, select_menu, select_trigger, tnum, toggle};
 use super::{Popup, files};
 use crate::app::{App, Load};
@@ -59,6 +59,15 @@ fn completeness(app: &App) -> (Option<Completeness>, bool) {
     }
 }
 
+/// The core's report-readiness verdict from the page's `ui.report.blockers` read.
+fn core_readiness(app: &App) -> CoreReadiness {
+    match &app.reports.report.blockers {
+        Load::Ready(d) => CoreReadiness::parse(d),
+        Load::Idle | Load::Loading => CoreReadiness::Checking,
+        Load::Failed(_) => CoreReadiness::Unavailable,
+    }
+}
+
 /// The page's content width (`@container/reports`).
 fn page_width(app: &App, cx: &Cx<App>, tk: &Tk) -> f32 {
     avail(
@@ -103,6 +112,7 @@ pub fn page(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         comp.as_ref(),
         pending,
         blocking_source_count(app),
+        &core_readiness(app),
     );
     let provisional = model::provisional(&report, comp.as_ref(), pending);
     let mut page = lc::shell(tk)

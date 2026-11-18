@@ -730,6 +730,51 @@ fn n(v: f64) -> usize {
     v.max(0.0) as usize
 }
 
+/// One of the core's report blockers (`ui.report.blockers`), in its own words.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CoreBlocker {
+    pub title: String,
+    pub detail: String,
+    /// `severity: blocking` (else review or warning).
+    pub blocking: bool,
+}
+
+/// The core's report-readiness verdict (`crates/journals/src/report_blockers.rs` `snapshot`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum CoreReadiness {
+    /// Not answered yet.
+    Checking,
+    /// The read failed: readiness is unknown, so not ready.
+    Unavailable,
+    Ready,
+    /// `ready: false`, with its blockers (possibly none listed).
+    Blocked(Vec<CoreBlocker>),
+}
+
+impl CoreReadiness {
+    /// The verdict from a `ui.report.blockers` answer: only an explicit `ready: true` with no
+    /// blockers is ready.
+    pub fn parse(d: &Value) -> CoreReadiness {
+        let blockers: Vec<CoreBlocker> = d["blockers"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .map(|b| CoreBlocker {
+                        title: s(&b["title"]),
+                        detail: s(&b["detail"]),
+                        blocking: b["severity"] == "blocking",
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if d["ready"] == true && blockers.is_empty() {
+            CoreReadiness::Ready
+        } else {
+            CoreReadiness::Blocked(blockers)
+        }
+    }
+}
+
 /// `buildReportReadiness`.
 pub fn readiness(
     r: &Report,
@@ -738,6 +783,7 @@ pub fn readiness(
     completeness: Option<&Completeness>,
     pending: bool,
     blocking: usize,
+    core: &CoreReadiness,
 ) -> Readiness {
     let ready =
         |title: String, detail: String, tone: Tone, glyph: Glyph, href: Option<&'static str>| {
@@ -817,6 +863,63 @@ pub fn readiness(
             Glyph::Alert,
             Some("/journals"),
         );
+    }
+    // The core's barrier decides readiness; the checks above are its more specific signals.
+    match core {
+        CoreReadiness::Ready => {}
+        CoreReadiness::Checking => {
+            return ready(
+                t("reports:readiness.checking.title"),
+                t("reports:readiness.checking.detail"),
+                Tone::Neutral,
+                Glyph::Loader,
+                None,
+            );
+        }
+        CoreReadiness::Unavailable => {
+            return ready(
+                t("reports:readiness.coreUnknown.title"),
+                t("reports:readiness.coreUnknown.detail"),
+                Tone::Warning,
+                Glyph::Alert,
+                None,
+            );
+        }
+        CoreReadiness::Blocked(blockers) => {
+            let first = blockers
+                .iter()
+                .find(|b| b.blocking)
+                .or_else(|| blockers.first());
+            let mut detail = match first {
+                Some(b) if !b.title.is_empty() && !b.detail.is_empty() => {
+                    format!("{}: {}", b.title, b.detail)
+                }
+                Some(b) if !b.title.is_empty() || !b.detail.is_empty() => {
+                    format!("{}{}", b.title, b.detail)
+                }
+                _ => t("reports:readiness.coreBlocked.detail"),
+            };
+            if blockers.len() > 1 {
+                detail.push(' ');
+                detail.push_str(&tc(
+                    "reports:readiness.coreBlocked.more",
+                    blockers.len() - 1,
+                    &[],
+                ));
+            }
+            let blocking = blockers.is_empty() || blockers.iter().any(|b| b.blocking);
+            return ready(
+                t("reports:readiness.coreBlocked.title"),
+                detail,
+                if blocking { Tone::Alert } else { Tone::Warning },
+                if blocking {
+                    Glyph::ShieldAlert
+                } else {
+                    Glyph::Alert
+                },
+                None,
+            );
+        }
     }
     let austrian = r.region() == Region::At;
     let unassigned = r.unassigned_rows();
@@ -1012,24 +1115,24 @@ mod tests {
         let c = complete();
         crate::i18n::set_lang(crate::i18n::Lang::De);
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&c), false, 0).title,
+            readiness(&r, 2.0, 2025, Some(&c), false, 0, &CoreReadiness::Ready).title,
             "Bereit für Berichte"
         );
         crate::i18n::set_lang(crate::i18n::Lang::En);
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&c), false, 0).title,
+            readiness(&r, 2.0, 2025, Some(&c), false, 0, &CoreReadiness::Ready).title,
             "Ready for reports"
         );
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&c), false, 1).title,
+            readiness(&r, 2.0, 2025, Some(&c), false, 1, &CoreReadiness::Ready).title,
             "Sources block reports"
         );
         assert_eq!(
-            readiness(&r, 2.0, 2025, None, true, 0).title,
+            readiness(&r, 2.0, 2025, None, true, 0, &CoreReadiness::Ready).title,
             "Checking completeness"
         );
         assert_eq!(
-            readiness(&r, 2.0, 2025, None, false, 0).title,
+            readiness(&r, 2.0, 2025, None, false, 0, &CoreReadiness::Ready).title,
             "Completeness unknown"
         );
         let missing = Completeness {
@@ -1038,18 +1141,66 @@ mod tests {
             missing_prices: 1,
         };
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&missing), false, 0).detail,
+            readiness(
+                &r,
+                2.0,
+                2025,
+                Some(&missing),
+                false,
+                0,
+                &CoreReadiness::Ready
+            )
+            .detail,
             "1 transaction has no price; figures are provisional."
         );
         let mut q = generic();
         q.quarantines = 3.0;
         assert_eq!(
-            readiness(&q, 2.0, 2025, Some(&c), false, 0).detail,
+            readiness(&q, 2.0, 2025, Some(&c), false, 0, &CoreReadiness::Ready).detail,
             "3 quarantined items should be resolved before filing."
         );
         assert!(provisional(&q, Some(&c), false));
         assert!(!provisional(&r, Some(&c), false));
         assert!(!provisional(&r, None, true));
+    }
+
+    /// The core's `ready: false` wins over clean local checks, and its blocker shows; only an
+    /// explicit ready is ready.
+    #[test]
+    fn the_core_barrier_decides_readiness() {
+        let r = generic();
+        let c = complete();
+        let core = CoreReadiness::parse(&json!({
+            "ready": false,
+            "blockers": [
+                {"id": "silent_payment_scan_pending:w", "severity": "blocking",
+                 "title": "Silent Payments scan pending",
+                 "detail": "SP has not completed its configured BIP352 scan range yet."},
+                {"id": "missing_prices", "severity": "review", "title": "Missing transaction prices", "detail": "1"}
+            ]
+        }));
+        let got = readiness(&r, 2.0, 2025, Some(&c), false, 0, &core);
+        assert_ne!(got.title, "Ready for reports");
+        assert_eq!(got.tone, Tone::Alert);
+        assert_eq!(
+            got.detail,
+            "Silent Payments scan pending: SP has not completed its configured BIP352 scan range \
+             yet. 1 more blocker."
+        );
+        assert_eq!(
+            CoreReadiness::parse(&json!({"ready": true, "blockers": []})),
+            CoreReadiness::Ready
+        );
+        assert!(matches!(
+            CoreReadiness::parse(&json!({})),
+            CoreReadiness::Blocked(_)
+        ));
+        for core in [CoreReadiness::Checking, CoreReadiness::Unavailable] {
+            assert_ne!(
+                readiness(&r, 2.0, 2025, Some(&c), false, 0, &core).title,
+                "Ready for reports"
+            );
+        }
     }
 
     #[test]
@@ -1178,7 +1329,16 @@ mod tests {
         let groups = breakdown(&at);
         let mut q = generic();
         q.quarantines = 1.0;
-        let detail = readiness(&q, 2.0, 2025, Some(&complete()), false, 0).detail;
+        let detail = readiness(
+            &q,
+            2.0,
+            2025,
+            Some(&complete()),
+            false,
+            0,
+            &CoreReadiness::Ready,
+        )
+        .detail;
         crate::i18n::set_lang(crate::i18n::Lang::En);
         assert_eq!(
             got,
