@@ -2133,7 +2133,9 @@ See [tax countries](docs/reference/tax-countries.md) and
   pairing), Bitpanda, Kraken, Binance (without spot trades, which Binance
   serves only per market; the sync result says so), Coinbase, CoinTracking
   and Blockpit exports, the desktop toggle (exchange card and import result),
-  the per-asset overview backend, and the importer triage: Binance
+  the per-asset overview backend, the choice before a new provider wallet's
+  first import (Add connection: provider files and read-only-key exchanges,
+  "Bitcoin and other crypto" preselected), and the importer triage: Binance
   supplemental, Ledger Live and Coinfinity CSVs follow the scope, generic
   CSV/JSON and BTCPay rows are screened against it, and the bitcoin scope
   refuses a Coinbase convert's BTC leg. The summary PDF's BTC fee and
@@ -2153,6 +2155,18 @@ See [tax countries](docs/reference/tax-countries.md) and
   and CSV; see their pages for which assets each reads). Then further sources
   from the Rotki survey: Bison, Trade Republic and Crypto.com App (CSV; need
   real samples), Revolut, Nexo, KuCoin, Bybit and OKX.
+- [ ] Re-importing newer exports ([imports](docs/reference/imports.md#re-importing-a-newer-export)).
+  Done: re-identified rows (an id column or date format changed) and
+  same-id corrections refuse until the user answers `--changed-rows
+  skip|import` (desktop buttons in Add connection and the exchange card),
+  `corrections_ignored`, `updated` named by every format, identical ID-less
+  generic/River rows kept apart compatibly. Open: the choice for `wallets
+  sync` of a file wallet and for the assistant's attachment import (both
+  refuse), taking the export's values without a rollback, the asset choice for
+  the exchange-evidence imports (Coinfinity, Binance supplemental), and a
+  desktop link from Bitcoin.de's partial-statement refusal to the import runs,
+  ID-less rows whose amount is spelled differently between exports (`0.1` vs
+  `0.10`, pre-existing), and a cancel button for the asset preview.
 - [ ] Bisq and `--changed-rows` (owner decision pending): `wallets import-bisq`
   has no `--changed-rows`, so a Bisq import that the re-import check refuses
   (`import_changed_rows`) can be answered only from the desktop, which sends

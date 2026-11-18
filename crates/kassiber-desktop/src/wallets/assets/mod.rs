@@ -225,7 +225,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
 }
 
 /// "ETH, SOL and 2 more".
-fn ticker_text(tickers: &[String]) -> String {
+pub fn ticker_text(tickers: &[String]) -> String {
     let (shown, more) = model::shown_tickers(tickers);
     let list = shown.join(", ");
     if more > 0 {

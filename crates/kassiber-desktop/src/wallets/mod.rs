@@ -13,8 +13,12 @@
 //!   `add::btcpay` and `add::exchange` the BTCPay / exchange setup panels and ExchangeSyncCard.
 //! - `assets`: components/kb/assets/* (the asset scope notice of the exchange card and of an
 //!   import result).
+//! - `reimport`: an import's counts and kept values, the changed-rows refusal and its answers
+//!   (Rust only).
+//! - `asset_choice`: the asset question before a new provider wallet's import (Rust only).
 
 pub mod add;
+pub mod asset_choice;
 pub mod assets;
 pub mod common;
 pub mod conn;
@@ -22,6 +26,7 @@ pub mod detail;
 pub mod imports;
 pub mod list;
 pub mod node;
+pub mod reimport;
 
 use rune::{Cx, El, KeyEvent, Tx};
 

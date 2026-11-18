@@ -758,6 +758,7 @@
       "importingSamourai": "Samourai wird importiert…",
       "importing": "Wird importiert…",
       "previewingLabels": "Labels werden geprüft…",
+      "checkingAssets": "Assets werden geprüft…",
       "previewLabels": "Labels prüfen",
       "importingLabels": "Labels werden importiert…",
       "saving": "Wird gespeichert…",
@@ -1435,9 +1436,9 @@
       },
       "metric": {
         "rowsRead": "Gelesene Zeilen",
-        "inserted": "Eingefügt",
+        "inserted": "Neu",
         "updated": "Aktualisiert",
-        "unchanged": "Unverändert",
+        "unchanged": "Bereits im Buch",
         "matched": "Zugeordnet",
         "coinsObserved": "Beobachtete Coins",
         "activeCoins": "Aktive Coins",
@@ -2089,6 +2090,53 @@
       "errorAck": "Tippe {{ack}}, um die Änderung zu bestätigen.",
       "errorDenied": "Die Passphrase wurde nicht akzeptiert.",
       "cancel": "Abbrechen"
+    }
+  },
+  "reimport": {
+    "new_one": "{{count}} neu",
+    "new_other": "{{count}} neu",
+    "known_one": "{{count}} bereits im Buch",
+    "known_other": "{{count}} bereits im Buch",
+    "updated_one": "{{count}} aktualisiert",
+    "updated_other": "{{count}} aktualisiert",
+    "corrections_one": "{{count}} Wert im Export weicht vom Buch ab; der Wert im Buch wurde behalten.",
+    "corrections_other": "{{count}} Werte im Export weichen vom Buch ab; die Werte im Buch wurden behalten.",
+    "keptRows_one": "{{count}} Zeile so behalten, wie sie im Buch steht.",
+    "keptRows_other": "{{count}} Zeilen so behalten, wie sie im Buch stehen.",
+    "importedRows_one": "{{count}} Zeile, die wie eine Zeile im Buch aussah, als neue Transaktion importiert.",
+    "importedRows_other": "{{count}} Zeilen, die wie Zeilen im Buch aussahen, als neue Transaktionen importiert.",
+    "toast": "{{label}}: {{counts}}",
+    "refusal": {
+      "title": "Einige Zeilen sehen aus wie Zeilen, die schon im Buch stehen",
+      "reidentified_one": "Dieser Export führt {{count}} Zeile, die schon im Buch steht, unter einer anderen ID.",
+      "reidentified_other": "Dieser Export führt {{count}} Zeilen, die schon im Buch stehen, unter anderen IDs.",
+      "corrected_one": "{{count}} Zeile hat die ID einer Zeile im Buch, aber einen anderen Betrag oder eine andere Gebühr.",
+      "corrected_other": "{{count}} Zeilen haben die ID einer Zeile im Buch, aber einen anderen Betrag oder eine andere Gebühr.",
+      "body": "Es wurde nichts importiert. Kassiber entscheidet das nicht auf Verdacht. Um stattdessen die Werte des Exports zu übernehmen, nimm den früheren Import auf der Seite der Verbindung zurück und importiere diese Datei erneut.",
+      "skip": "Zeilen im Buch behalten",
+      "import": "Als neue Transaktionen importieren",
+      "bodySync": "Es wurde nichts importiert. Kassiber entscheidet das nicht auf Verdacht. Um stattdessen die Werte der Börse zu übernehmen, nimm den früheren Sync auf der Seite der Verbindung zurück und synchronisiere erneut.",
+      "syncToastTitle": "Sync angehalten",
+      "syncToastBody": "{{label}}: Einige Zeilen sehen aus wie Zeilen, die schon im Buch stehen. Antworte auf der Seite der Verbindung."
+    },
+    "choice": {
+      "title": "Welche Assets soll diese Wallet erfassen?",
+      "found_one": "Der Export enthält außerdem {{tickers}}: {{rows}} Eintrag.",
+      "found_other": "Der Export enthält außerdem {{tickers}}: {{rows}} Einträge.",
+      "crypto": "Bitcoin und andere Kryptowährungen",
+      "cryptoBody": "Importiert auch diese Assets.",
+      "bitcoin": "Nur Bitcoin",
+      "bitcoinBody": "Überspringt die anderen Kryptowährungen. Du kannst sie später auf der Seite der Verbindung erfassen.",
+      "bitcoinRefused": "Für diesen Export nicht möglich: Darin wird Bitcoin gegen andere Kryptowährungen getauscht.",
+      "stocks": "Aktien, ETFs und Edelmetalle bleiben in jedem Fall außerhalb des Buchs.",
+      "checking": "Kassiber prüft, welche Assets der Export enthält…",
+      "bitcoinRefusedHistory": "Für dieses Konto nicht möglich: In seinem Verlauf wird Bitcoin gegen andere Kryptowährungen getauscht.",
+      "foundHistory_one": "Der Verlauf des Kontos enthält außerdem {{tickers}}: {{rows}} Eintrag.",
+      "foundHistory_other": "Der Verlauf des Kontos enthält außerdem {{tickers}}: {{rows}} Einträge.",
+      "checkingHistory": "Kassiber prüft, welche Assets das Konto enthält…",
+      "cryptoRefused": "Diese Assets lassen sich aus diesem Export nicht erfassen, daher wird nur Bitcoin importiert: {{reason}}",
+      "stale": "Die Quelle hat sich nach der Prüfung geändert. Kassiber hat sie erneut geprüft; antworte für das, was sie jetzt enthält.",
+      "staleImport": "Die Datei hat sich nach der Prüfung geändert und wurde nicht importiert. Wähle sie auf der Seite der Verbindung erneut, um sie zu importieren."
     }
   }
 }

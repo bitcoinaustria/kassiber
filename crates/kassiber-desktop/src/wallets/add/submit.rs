@@ -37,6 +37,53 @@ pub struct Job {
     pub form: super::Form,
     /// The import this job runs, kept for the result (`withReplay`).
     pub replay: Option<crate::wallets::assets::model::Replay>,
+    /// The last request's kind and arguments, sent again with the user's answer to a
+    /// changed-rows refusal.
+    pub sent: Option<(String, Value)>,
+    /// The import of a new file wallet that the asset question answered, run right after the
+    /// create instead of a sync (`ui.wallets.import_file` with the preview's token).
+    pub import_after: Option<Value>,
+}
+
+/// An import the daemon refused for rows that look like rows the book has, waiting for the
+/// user's answer (docs/reference/imports.md#re-importing-a-newer-export).
+#[derive(Clone, Debug)]
+pub struct Refused {
+    pub stage: Stage,
+    pub label: String,
+    pub kind: String,
+    pub args: Value,
+    pub refusal: crate::wallets::reimport::Refusal,
+    /// The dialog's inputs when it was refused: an answer applies only while they still hold.
+    pub inputs: String,
+    /// The refused job's own ending: keep the dialog open, and its toast.
+    pub stay_open: bool,
+    pub done: Option<(String, String, ToastTone)>,
+}
+
+impl Refused {
+    /// An exchange sync rather than a file import.
+    pub fn is_sync(&self) -> bool {
+        self.stage == Stage::ExchangeSync
+    }
+}
+
+/// The dialog's inputs an import reads (source, file, format, target wallet, history target):
+/// a refusal's answer is sent only while they are the ones it was refused for.
+pub fn current_inputs(app: &App) -> String {
+    let f = &st(app).form;
+    let history = history_target(app)
+        .and_then(|w| w.get("id").and_then(Value::as_str).map(str::to_owned))
+        .unwrap_or_default();
+    format!(
+        "{}\n{}\n{}\n{}\n{}\n{}",
+        selected(app).id,
+        txt(&f.source_file),
+        f.source_format,
+        f.target_wallet.trim(),
+        history,
+        f.label.text.trim()
+    )
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,6 +105,77 @@ pub enum Stage {
     Bip329Preview,
     Bip329Import,
     Sync,
+    /// The asset preview before a new provider wallet (`ui.wallets.import_preview`,
+    /// `ui.connections.exchange.preview`).
+    AssetPreview,
+}
+
+/// The asset question's state for `source`: `Some(scope)` once answered (`None` inside: the
+/// default scope), or `None` while it still has to be asked (the preview is sent).
+fn asset_scope_for(
+    app: &mut App,
+    label: &str,
+    source: crate::wallets::asset_choice::Source,
+) -> Option<Option<&'static str>> {
+    if let Some(ask) = st(app).asset_ask.as_ref().filter(|a| a.source == source) {
+        return Some(ask.scope());
+    }
+    stm(app).asset_ask = None;
+    start(app, label);
+    let (kind, args) = match &source {
+        crate::wallets::asset_choice::Source::File { format, path } => (
+            "ui.wallets.import_preview",
+            json!({"source_file": path, "source_format": format, "label": label}),
+        ),
+        crate::wallets::asset_choice::Source::Exchange(c) => (
+            "ui.connections.exchange.preview",
+            Value::Object(super::exchange::model::credential_args(c)),
+        ),
+    };
+    if let Some(j) = stm(app).job.as_mut() {
+        j.replay = None;
+    }
+    pending_ask(app, source);
+    send_job(app, Stage::AssetPreview, kind, args);
+    None
+}
+
+/// The source the dialog's current inputs would preview, when it is one that may ask.
+pub fn current_ask_source(app: &App) -> Option<crate::wallets::asset_choice::Source> {
+    let src = selected(app);
+    let m = meta(src.id);
+    let f = &st(app).form;
+    match m.kind() {
+        SetupKind::FileWallet => {
+            let format = if src.id == "csv" {
+                f.source_format
+            } else {
+                m.source_format.unwrap_or("")
+            };
+            crate::wallets::asset_choice::FILE_FORMATS
+                .contains(&format)
+                .then(|| crate::wallets::asset_choice::Source::File {
+                    format: format.to_owned(),
+                    path: txt(&f.source_file),
+                })
+        }
+        SetupKind::ExchangeApi => Some(crate::wallets::asset_choice::Source::Exchange(
+            super::exchange::current_credentials(app),
+        )),
+        _ => None,
+    }
+}
+
+/// The user's answer to the asset question.
+pub fn pick_bitcoin_only(app: &mut App, bitcoin_only: bool) {
+    if let Some(ask) = stm(app).asset_ask.as_mut() {
+        ask.bitcoin_only = bitcoin_only;
+    }
+}
+
+/// The source the preview in flight belongs to.
+fn pending_ask(app: &mut App, source: crate::wallets::asset_choice::Source) {
+    stm(app).asset_ask_pending = Some(source);
 }
 
 fn kind(app: &App) -> SetupKind {
@@ -319,6 +437,8 @@ pub fn submit_label(app: &App) -> String {
         "add.submit.importingSamourai"
     } else if matches!(stage, Some(Stage::ImportFile | Stage::WasabiImport)) {
         "add.submit.importing"
+    } else if stage == Some(Stage::AssetPreview) {
+        "add.submit.checkingAssets"
     } else if stage == Some(Stage::Bip329Preview) {
         "add.submit.previewingLabels"
     } else if stage == Some(Stage::Bip329Import) {
@@ -685,6 +805,7 @@ pub fn validate(app: &mut App) -> Vec<(&'static str, String)> {
 fn send_job(app: &mut App, stage: Stage, kind: &str, args: Value) {
     if let Some(j) = stm(app).job.as_mut() {
         j.stage = stage;
+        j.sent = Some((kind.to_owned(), args.clone()));
     }
     let args = scoped(app, args);
     app.send(kind, args, "wallets.add.job");
@@ -700,6 +821,8 @@ fn start(app: &mut App, label: &str) {
         stay_open: false,
         form,
         replay: None,
+        sent: None,
+        import_after: None,
     });
 }
 
@@ -709,6 +832,43 @@ fn form(app: &App) -> &super::Form {
         Some(j) => &j.form,
         None => &st(app).form,
     }
+}
+
+/// The refused import again, with the user's answer.
+pub fn answer_refusal(app: &mut App, answer: crate::wallets::reimport::Answer) {
+    if super::submitting(app) {
+        return;
+    }
+    let Some(r) = stm(app).refused.take() else {
+        return;
+    };
+    // The inputs changed since the refusal: its file, format or wallet is not the one on screen.
+    if r.inputs != current_inputs(app) {
+        return;
+    }
+    start(app, &r.label);
+    if let Some(j) = stm(app).job.as_mut() {
+        // The refused job's own ending, whichever import it was.
+        j.stay_open = r.stay_open;
+        j.done = r.done.clone();
+    }
+    // The answer buttons go away; the dialog's submit keeps the focus.
+    stm(app).focus_required = Some("add-submit");
+    let args = crate::wallets::reimport::Refusal::answered(&r.args, answer);
+    send_job(app, r.stage, &r.kind, args);
+}
+
+/// The asset question's answer for `source` when the user gave one (whether or not the import
+/// runs right away), and its preview token.
+fn answered(
+    app: &App,
+    source: &crate::wallets::asset_choice::Source,
+) -> (Option<&'static str>, Option<String>) {
+    st(app)
+        .asset_ask
+        .as_ref()
+        .filter(|a| &a.source == source)
+        .map_or((None, None), |a| (a.scope(), a.token.clone()))
 }
 
 /// `onSetupSubmit`.
@@ -741,6 +901,8 @@ pub fn submit(app: &mut App) {
         let s = stm(app);
         s.setup_error = None;
         s.last_import = None;
+        s.refused = None;
+        s.asset_error = None;
     }
     let errors = validate(app);
     stm(app).errors = errors.iter().cloned().collect();
@@ -892,7 +1054,27 @@ pub fn submit(app: &mut App) {
             }
         }
         SetupKind::ExchangeApi => {
-            if let Ok(args) = super::exchange::submit(app, &label) {
+            if let Ok(mut args) = super::exchange::submit(app, &label) {
+                // Importing right away: ask which assets first, unless the exchange reads only
+                // Bitcoin (docs/reference/exchange-desktop.md#other-crypto-assets).
+                let exchange = m.exchange.unwrap_or("");
+                let source = crate::wallets::asset_choice::Source::Exchange(
+                    super::exchange::current_credentials(app),
+                );
+                if st(app).form.sync_after && crate::wallets::asset_choice::exchange_asks(exchange)
+                {
+                    if asset_scope_for(app, &label, source.clone()).is_none() {
+                        return;
+                    }
+                    // The create syncs exactly the previewed history.
+                    if let (_, Some(token)) = answered(app, &source) {
+                        args["preview_token"] = json!(token);
+                    }
+                }
+                // An answer stands even when the history is imported later.
+                if let (Some(scope), _) = answered(app, &source) {
+                    args["asset_scope"] = json!(scope);
+                }
                 start(app, &label);
                 send_job(
                     app,
@@ -1221,8 +1403,28 @@ fn submit_file_wallet(app: &mut App, label: &str) {
         return;
     }
     let rpc = m.source_format == Some("wasabi_bundle") && f.wasabi_mode == "rpc";
+    // A provider file imported right away whose wallet may keep other crypto assets: ask first
+    // (docs/reference/imports.md#choosing-the-assets-before-the-first-import).
+    let asks = f.sync_after && !rpc && crate::wallets::asset_choice::FILE_FORMATS.contains(&fmt);
+    let source = crate::wallets::asset_choice::Source::File {
+        format: fmt.to_owned(),
+        path: txt(&f.source_file),
+    };
+    if asks && asset_scope_for(app, label, source.clone()).is_none() {
+        return;
+    }
+    // An answer stands even when the file is imported later; the token binds an import now.
+    let (scope, token) = answered(app, &source);
+    let token = token.filter(|_| asks);
+    let f = &st(app).form;
     let mut args =
         json!({"label": label, "kind": m.wallet_kind.unwrap_or("custom"), "source_format": fmt});
+    if let Some(scope) = scope {
+        args["asset_scope"] = json!(scope);
+    }
+    if let Some(token) = &token {
+        args["preview_token"] = json!(token);
+    }
     if !rpc {
         args["source_file"] = json!(txt(&f.source_file));
     }
@@ -1235,9 +1437,15 @@ fn submit_file_wallet(app: &mut App, label: &str) {
         source_format: fmt.to_owned(),
         source_file: txt(&f.source_file),
     });
+    let import_after = token.as_ref().filter(|_| sync).map(|token| {
+        json!({"wallet": label, "source_file": txt(&f.source_file), "source_format": fmt, "preview_token": token})
+    });
     if let Some(j) = stm(app).job.as_mut() {
-        if sync {
-            j.syncs.push_back(label.to_owned());
+        // The answered import imports exactly the previewed file; any other runs as a sync.
+        match import_after {
+            Some(args) => j.import_after = Some(args),
+            None if sync => j.syncs.push_back(label.to_owned()),
+            None => {}
         }
         j.replay = replay;
         let body = if f_sync(sync) {
@@ -1394,6 +1602,66 @@ fn on_job(app: &mut App, r: &Reply) {
         return;
     };
     if let Some(e) = &r.error {
+        let pending = stm(app).asset_ask_pending.take();
+        let code = r.error_detail["code"].as_str().unwrap_or("");
+        // The preview failed: the exchange's own wording for its errors, the file's message and
+        // hint otherwise.
+        if stage == Stage::AssetPreview {
+            let info = super::exchange::model::ErrorInfo::from_reply(&r.error_detail, Some(e));
+            if pending.as_ref().is_some_and(|s| s.is_history()) {
+                stm(app).asset_error = Some(info);
+                return fail(app, String::new());
+            }
+            let text = [info.message, info.hint]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();
+            return fail(app, text.join(" "));
+        }
+        // The source changed after the asset question: a new wallet asks again; an existing
+        // one (the file's import after its create) says what happened.
+        if code == "import_preview_stale" {
+            if stage == Stage::ImportFile {
+                return fail(app, t("connections:reimport.choice.staleImport"));
+            }
+            fail(app, String::new());
+            let s = stm(app);
+            s.setup_error = None;
+            s.asset_ask = None;
+            s.asset_notice = Some(t("connections:reimport.choice.stale"));
+            return submit(app);
+        }
+        // Rows that look like rows the book has wait for the user's answer.
+        if let (Some(refusal), Some((kind, args))) = (
+            crate::wallets::reimport::Refusal::of(&r.error_detail),
+            st(app).job.as_ref().and_then(|j| j.sent.clone()),
+        ) {
+            let label = st(app)
+                .job
+                .as_ref()
+                .map(|j| j.label.clone())
+                .unwrap_or_default();
+            let (stay_open, done) = st(app)
+                .job
+                .as_ref()
+                .map(|j| (j.stay_open, j.done.clone()))
+                .unwrap_or_default();
+            let inputs = current_inputs(app);
+            fail(app, String::new());
+            let s = stm(app);
+            s.setup_error = None;
+            s.refused = Some(Refused {
+                stage,
+                label,
+                kind,
+                args,
+                refusal,
+                inputs,
+                stay_open,
+                done,
+            });
+            return;
+        }
         fail(app, e.clone());
         return;
     }
@@ -1484,6 +1752,8 @@ fn on_job(app: &mut App, r: &Reply) {
                     "ui.wallets.import_file",
                     json!({"wallet": label, "source_format": "wasabi_bundle", "source_bundle": b.bundle}),
                 );
+            } else if let Some(args) = stm(app).job.as_mut().and_then(|j| j.import_after.take()) {
+                send_job(app, Stage::ImportFile, "ui.wallets.import_file", args);
             } else {
                 next_sync(app);
             }
@@ -1662,6 +1932,27 @@ fn on_job(app: &mut App, r: &Reply) {
                 });
             let provider =
                 super::exchange::provider_name(meta(selected(app).id).exchange.unwrap_or(""));
+            // A create after the asset question synced the previewed history itself.
+            if let Some(sync) = d.get("sync").filter(|s| s.is_object()) {
+                let body = crate::wallets::reimport::toast_body(&label, sync);
+                if let Some(j) = stm(app).job.as_mut() {
+                    j.done = Some((
+                        tr(
+                            "connections:exchange.added.title",
+                            &[("provider", provider)],
+                        ),
+                        body,
+                        ToastTone::Success,
+                    ));
+                }
+                return finish(app);
+            }
+            if let Some(e) = d.get("sync_error").filter(|e| e.is_object()) {
+                // The connection is saved; its first sync failed as Sync now would.
+                let info = super::exchange::model::ErrorInfo::from_reply(e, None);
+                stm(app).asset_error = Some(info);
+                return fail(app, String::new());
+            }
             if form(app).sync_after && wallet.is_object() {
                 if let Some(j) = stm(app).job.as_mut() {
                     j.label = label;
@@ -1695,18 +1986,15 @@ fn on_job(app: &mut App, r: &Reply) {
                 .unwrap_or_default();
             let provider =
                 super::exchange::provider_name(meta(selected(app).id).exchange.unwrap_or(""));
-            let n = d.get("imported").and_then(Value::as_u64).unwrap_or(0) as usize;
+            // New rows, rows already in the book, updated rows, and the values it kept.
+            let body = crate::wallets::reimport::toast_body(&label, d);
             if let Some(j) = stm(app).job.as_mut() {
                 j.done = Some((
                     tr(
                         "connections:exchange.added.title",
                         &[("provider", provider)],
                     ),
-                    tc(
-                        "connections:exchange.added.importedBody",
-                        n,
-                        &[("label", &label)],
-                    ),
+                    body,
                     ToastTone::Success,
                 ));
             }
@@ -1716,6 +2004,23 @@ fn on_job(app: &mut App, r: &Reply) {
             let s = stm(app);
             s.bip329_preview = Some(d.clone());
             s.job = None;
+        }
+        Stage::AssetPreview => {
+            let s = stm(app);
+            s.job = None;
+            s.progress = None;
+            if let Some(source) = s.asset_ask_pending.take() {
+                let ask = crate::wallets::asset_choice::Ask::of(source, d);
+                let (asks, explains) = (ask.choice.is_some(), ask.cannot_keep.is_some());
+                s.asset_ask = Some(ask);
+                if asks {
+                    // The question takes the focus "Checking assets…" had.
+                    s.focus_required = Some(crate::wallets::asset_choice::FIRST_ANSWER);
+                } else if !explains {
+                    // Nothing to ask or explain: go on with the default scope.
+                    submit(app);
+                }
+            }
         }
         Stage::Bip329Import => {
             let n = |p: &str| {
@@ -2223,6 +2528,8 @@ mod tests {
             stay_open: false,
             form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
             replay: None,
+            sent: None,
+            import_after: None,
         });
         super::super::open(&mut app, Some("descriptor"));
         let job = st(&app).job.as_ref().expect("the job runs on");
@@ -2251,6 +2558,8 @@ mod tests {
                 stay_open: false,
                 form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
                 replay: None,
+                sent: None,
+                import_after: None,
             });
             let reply = Reply {
                 kind: "ui.wallets.import_file".into(),
@@ -2299,5 +2608,350 @@ mod tests {
         assert_eq!(iso_date("2024-03-05"), "2024-03-05");
         assert_eq!(iso_date("03/05/2024"), "2024-03-05");
         assert_eq!(iso_date("05.03.2024"), "2024-03-05");
+    }
+
+    fn reply(data: Value, error: Option<Value>) -> Reply {
+        Reply {
+            kind: String::new(),
+            data,
+            error: error
+                .as_ref()
+                .map(|e| e["message"].as_str().unwrap_or("").to_owned()),
+            error_detail: error.unwrap_or(Value::Null),
+            elapsed: std::time::Duration::ZERO,
+        }
+    }
+
+    fn sent(app: &App) -> (Stage, String, Value) {
+        let j = st(app).job.as_ref().expect("a job");
+        let (kind, args) = j.sent.clone().expect("a request");
+        (j.stage.clone(), kind, args)
+    }
+
+    /// A CoinTracking history imported right away, in a dialog of an app without a daemon.
+    fn cointracking(file: &str) -> App {
+        let mut app = crate::app::tests::quiet_app();
+        super::super::select_source_for_setup(&mut app, "cointracking");
+        let f = &mut stm(&mut app).form;
+        f.label = rune::TextEdit::new("CoinTracking history");
+        f.source_file = rune::TextEdit::new(file);
+        f.sync_after = true;
+        app
+    }
+
+    #[test]
+    fn a_provider_file_with_other_crypto_asks_once_and_creates_the_wallet_with_the_answer() {
+        let file = std::env::temp_dir().join(format!("kassiber-ask-{}.csv", std::process::id()));
+        std::fs::write(&file, "Type\n").unwrap();
+        let path = file.to_string_lossy().into_owned();
+        let mut app = cointracking(&path);
+        submit(&mut app);
+        let (stage, kind, args) = sent(&app);
+        assert_eq!(
+            (stage, kind.as_str()),
+            (Stage::AssetPreview, "ui.wallets.import_preview")
+        );
+        assert_eq!(args["source_format"], "cointracking_csv");
+        assert_eq!(args["source_file"], path.as_str());
+        // The preview names other crypto assets: the dialog asks, nothing is created yet.
+        let preview = json!({"choice": true, "bitcoin_only": true, "other_assets": {"ETH": 3}});
+        on_job(&mut app, &reply(preview, None));
+        assert!(st(&app).job.is_none());
+        let ask = st(&app).asset_ask.clone().unwrap();
+        assert_eq!(
+            ask.scope(),
+            Some("crypto"),
+            "Bitcoin and other crypto is preselected"
+        );
+        assert_eq!(current_ask_source(&app), Some(ask.source.clone()));
+        pick_bitcoin_only(&mut app, true);
+        submit(&mut app);
+        let (stage, kind, args) = sent(&app);
+        assert_eq!((stage, kind.as_str()), (Stage::Create, "ui.wallets.create"));
+        assert_eq!(args["asset_scope"], "bitcoin");
+        assert_eq!(args["source_format"], "cointracking_csv");
+        // Another file is asked about again.
+        stm(&mut app).job = None;
+        stm(&mut app).form.source_file = rune::TextEdit::new("/elsewhere.csv");
+        submit(&mut app);
+        assert_eq!(sent(&app).0, Stage::AssetPreview);
+        std::fs::remove_file(file).unwrap();
+    }
+
+    #[test]
+    fn a_bitcoin_only_history_is_not_asked() {
+        let file = std::env::temp_dir().join(format!("kassiber-noask-{}.csv", std::process::id()));
+        std::fs::write(&file, "Type\n").unwrap();
+        let mut app = cointracking(&file.to_string_lossy());
+        submit(&mut app);
+        on_job(
+            &mut app,
+            &reply(json!({"choice": false, "other_assets": {}}), None),
+        );
+        // Straight on to the create, without a scope.
+        let (stage, kind, args) = sent(&app);
+        assert_eq!((stage, kind.as_str()), (Stage::Create, "ui.wallets.create"));
+        assert!(args.get("asset_scope").is_none());
+        std::fs::remove_file(file).unwrap();
+    }
+
+    #[test]
+    fn a_refused_import_waits_for_the_answer_and_sends_it() {
+        let mut app = crate::app::tests::quiet_app();
+        start(&mut app, "River");
+        send_job(
+            &mut app,
+            Stage::ImportFile,
+            "ui.wallets.import_file",
+            json!({"wallet": "w1", "source_format": "river_csv", "source_file": "/r.csv"}),
+        );
+        let error = json!({"code": "import_changed_rows", "message": "This export identifies 2 rows differently", "details": {"reidentified": 2, "corrected": 0}});
+        on_job(&mut app, &reply(Value::Null, Some(error)));
+        assert!(st(&app).job.is_none());
+        assert_eq!(st(&app).setup_error, None);
+        let refused = st(&app).refused.clone().unwrap();
+        assert_eq!(refused.refusal.reidentified, 2);
+        answer_refusal(&mut app, crate::wallets::reimport::Answer::Skip);
+        let (stage, kind, args) = sent(&app);
+        assert_eq!(
+            (stage, kind.as_str()),
+            (Stage::ImportFile, "ui.wallets.import_file")
+        );
+        assert_eq!(args["changed_rows"], "skip");
+        assert_eq!(args["wallet"], "w1");
+        assert!(st(&app).refused.is_none());
+        // Any other failure is shown as before.
+        let mut app = crate::app::tests::quiet_app();
+        start(&mut app, "River");
+        send_job(
+            &mut app,
+            Stage::ImportFile,
+            "ui.wallets.import_file",
+            json!({}),
+        );
+        on_job(
+            &mut app,
+            &reply(
+                Value::Null,
+                Some(json!({"code": "validation", "message": "bad row"})),
+            ),
+        );
+        assert_eq!(st(&app).setup_error.as_deref(), Some("bad row"));
+        assert!(st(&app).refused.is_none());
+    }
+
+    fn previewed(app: &mut App, preview: Value) {
+        on_job(app, &reply(preview, None));
+    }
+
+    #[test]
+    fn an_answer_with_a_token_imports_exactly_the_previewed_file_after_the_create() {
+        let file = std::env::temp_dir().join(format!("kassiber-token-{}.csv", std::process::id()));
+        std::fs::write(&file, "Type\n").unwrap();
+        let path = file.to_string_lossy().into_owned();
+        let mut app = cointracking(&path);
+        submit(&mut app);
+        previewed(
+            &mut app,
+            json!({"choice": true, "bitcoin_only": true, "other_assets": {"ETH": 3}, "preview_token": "tok"}),
+        );
+        assert_eq!(
+            st(&app).focus_required,
+            Some(crate::wallets::asset_choice::FIRST_ANSWER)
+        );
+        submit(&mut app);
+        let (stage, _, args) = sent(&app);
+        assert_eq!(stage, Stage::Create);
+        assert_eq!(
+            (args["asset_scope"].as_str(), args["preview_token"].as_str()),
+            (Some("crypto"), Some("tok"))
+        );
+        on_job(&mut app, &reply(json!({"id": "w"}), None));
+        let (stage, kind, args) = sent(&app);
+        assert_eq!(
+            (stage, kind.as_str()),
+            (Stage::ImportFile, "ui.wallets.import_file")
+        );
+        assert_eq!(args["preview_token"], "tok");
+        assert_eq!(args["wallet"], "CoinTracking history");
+        assert_eq!(args["source_file"], path.as_str());
+        // The file changed after the check: that import says so, it is not retried.
+        on_job(
+            &mut app,
+            &reply(
+                Value::Null,
+                Some(json!({"code": "import_preview_stale", "message": "changed"})),
+            ),
+        );
+        assert_eq!(
+            st(&app).setup_error.as_deref(),
+            Some(
+                "The file changed after the check and was not imported. Choose it again on the connection's page to import it."
+            )
+        );
+        std::fs::remove_file(file).unwrap();
+    }
+
+    #[test]
+    fn a_changed_source_before_the_create_is_asked_again() {
+        let file = std::env::temp_dir().join(format!("kassiber-stale-{}.csv", std::process::id()));
+        std::fs::write(&file, "Type\n").unwrap();
+        let mut app = cointracking(&file.to_string_lossy());
+        submit(&mut app);
+        previewed(
+            &mut app,
+            json!({"choice": true, "other_assets": {"ETH": 3}, "preview_token": "tok"}),
+        );
+        submit(&mut app);
+        assert_eq!(sent(&app).0, Stage::Create);
+        on_job(
+            &mut app,
+            &reply(
+                Value::Null,
+                Some(json!({"code": "import_preview_stale", "message": "changed"})),
+            ),
+        );
+        assert_eq!(sent(&app).0, Stage::AssetPreview);
+        assert!(st(&app).asset_notice.is_some());
+        std::fs::remove_file(file).unwrap();
+    }
+
+    #[test]
+    fn an_answer_stands_when_the_file_is_imported_later() {
+        let file = std::env::temp_dir().join(format!("kassiber-later-{}.csv", std::process::id()));
+        std::fs::write(&file, "Type\n").unwrap();
+        let mut app = cointracking(&file.to_string_lossy());
+        submit(&mut app);
+        previewed(
+            &mut app,
+            json!({"choice": true, "other_assets": {"ETH": 3}, "preview_token": "tok"}),
+        );
+        pick_bitcoin_only(&mut app, true);
+        stm(&mut app).form.sync_after = false;
+        submit(&mut app);
+        let (stage, _, args) = sent(&app);
+        assert_eq!(stage, Stage::Create);
+        assert_eq!(args["asset_scope"], "bitcoin");
+        assert!(args.get("preview_token").is_none());
+        assert!(st(&app).job.as_ref().unwrap().import_after.is_none());
+        std::fs::remove_file(file).unwrap();
+    }
+
+    #[test]
+    fn a_refusal_answers_only_for_the_inputs_it_was_refused_for() {
+        let mut app = cointracking("/a.csv");
+        start(&mut app, "History");
+        send_job(
+            &mut app,
+            Stage::ImportFile,
+            "ui.wallets.import_file",
+            json!({"wallet": "w", "source_file": "/a.csv"}),
+        );
+        let error = json!({"code": "import_changed_rows", "message": "x", "details": {"reidentified": 1, "corrected": 0}});
+        on_job(&mut app, &reply(Value::Null, Some(error.clone())));
+        // Another file on screen: the old answer is not sent.
+        stm(&mut app).form.source_file = rune::TextEdit::new("/b.csv");
+        answer_refusal(&mut app, crate::wallets::reimport::Answer::Skip);
+        assert!(st(&app).job.is_none());
+        // A change through the form's handlers drops the refusal.
+        start(&mut app, "History");
+        send_job(
+            &mut app,
+            Stage::ImportFile,
+            "ui.wallets.import_file",
+            json!({"wallet": "w", "source_file": "/b.csv"}),
+        );
+        on_job(&mut app, &reply(Value::Null, Some(error)));
+        assert!(st(&app).refused.is_some());
+        super::super::inputs_changed(&mut app);
+        assert!(st(&app).refused.is_none());
+    }
+
+    #[test]
+    fn a_refused_import_keeps_its_own_ending() {
+        let mut app = crate::app::tests::quiet_app();
+        start(&mut app, "History");
+        if let Some(j) = stm(&mut app).job.as_mut() {
+            j.stay_open = true;
+        }
+        send_job(
+            &mut app,
+            Stage::ImportFile,
+            "ui.wallets.import_file",
+            json!({"wallet": "w"}),
+        );
+        let error = json!({"code": "import_changed_rows", "message": "x", "details": {"reidentified": 1, "corrected": 0}});
+        on_job(&mut app, &reply(Value::Null, Some(error)));
+        answer_refusal(&mut app, crate::wallets::reimport::Answer::Import);
+        assert!(st(&app).job.as_ref().unwrap().stay_open);
+        assert_eq!(st(&app).focus_required, Some("add-submit"));
+    }
+
+    #[test]
+    fn preview_errors_keep_the_daemons_message_and_hint() {
+        let mut app = crate::app::tests::quiet_app();
+        start(&mut app, "History");
+        send_job(
+            &mut app,
+            Stage::AssetPreview,
+            "ui.wallets.import_preview",
+            json!({}),
+        );
+        on_job(
+            &mut app,
+            &reply(
+                Value::Null,
+                Some(
+                    json!({"code": "validation", "message": "csv row 3 is broken", "hint": "Check the row."}),
+                ),
+            ),
+        );
+        assert_eq!(
+            st(&app).setup_error.as_deref(),
+            Some("csv row 3 is broken Check the row.")
+        );
+    }
+
+    #[test]
+    fn an_exchange_created_after_the_question_toasts_its_first_sync() {
+        let mut app = crate::app::tests::quiet_app();
+        super::super::select_source_for_setup(&mut app, "bitpanda");
+        start(&mut app, "Bitpanda");
+        send_job(
+            &mut app,
+            Stage::ExchangeCreate,
+            "ui.connections.exchange.create",
+            json!({}),
+        );
+        let data = json!({"wallet": {"id": "w", "label": "Bitpanda"}, "sync": {"imported": 5, "unchanged": 0, "updated_records": []}});
+        on_job(&mut app, &reply(data, None));
+        assert!(st(&app).job.is_none());
+        assert_eq!(
+            app.toasts.last().unwrap().body.as_deref(),
+            Some("Bitpanda: 5 new")
+        );
+    }
+
+    #[test]
+    fn the_exchange_added_toast_names_new_known_and_updated_rows() {
+        let mut app = crate::app::tests::quiet_app();
+        super::super::select_source_for_setup(&mut app, "bitpanda");
+        start(&mut app, "Bitpanda");
+        send_job(
+            &mut app,
+            Stage::ExchangeSync,
+            "ui.connections.exchange.sync",
+            json!({"wallet": "w"}),
+        );
+        let data =
+            json!({"imported": 3, "unchanged": 120, "updated": 2, "corrections_ignored": [{}]});
+        on_job(&mut app, &reply(data, None));
+        let toast = app.toasts.last().expect("a toast");
+        assert_eq!(
+            toast.body.as_deref(),
+            Some(
+                "Bitpanda: 3 new · 120 already in the book · 2 updated. 1 value in the export differs from the book; the book's value was kept."
+            )
+        );
     }
 }

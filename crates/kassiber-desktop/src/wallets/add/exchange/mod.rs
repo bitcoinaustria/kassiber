@@ -76,6 +76,8 @@ pub struct SyncState {
     pub last_error: Option<ErrorInfo>,
     pub label: String,
     pub exchange: String,
+    /// Sync now takes the focus back once the refusal's answer buttons are gone.
+    pub focus_sync: bool,
 }
 
 fn st(app: &App) -> &State {
@@ -89,6 +91,11 @@ fn stm(app: &mut App) -> &mut State {
 /// `EXCHANGE_PROVIDER_NAMES`.
 pub fn provider_name(exchange: &str) -> &'static str {
     model::provider_name(exchange)
+}
+
+/// The pasted credentials of the open setup.
+pub fn current_credentials(app: &App) -> Credentials {
+    credentials(st(app))
 }
 
 fn credentials(s: &State) -> Credentials {
@@ -213,26 +220,30 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             };
             match &r.error {
                 None => {
-                    let imported = r.data["imported"].as_u64().unwrap_or(0) as usize;
+                    // New rows, rows already in the book, updated rows, and the values it kept
+                    // (docs/reference/imports.md#re-importing-a-newer-export).
+                    let body = crate::wallets::reimport::toast_body(&label, &r.data);
                     let title = t("chrome:notifications.result.connectionSynced.title");
                     let clock = app.clock;
-                    app.shell.note(
-                        &title,
-                        Some(format!(
-                            "{label} · {}",
-                            tc(
-                                "chrome:notifications.result.connectionSynced.imported",
-                                imported,
-                                &[]
-                            )
-                        )),
-                        ToastTone::Success,
-                        clock,
-                    );
+                    app.shell
+                        .note(&title, Some(body.clone()), ToastTone::Success, clock);
                     app.toast(
                         ToastTone::Success,
                         &title,
-                        Some(label),
+                        Some(body),
+                        Some("exchange-sync"),
+                    );
+                }
+                // Rows that look like rows the book has: nothing failed, the card asks (from the
+                // session's last sync); a short note says where.
+                Some(_) if crate::wallets::reimport::Refusal::of(&r.error_detail).is_some() => {
+                    app.toast(
+                        ToastTone::Info,
+                        &t("connections:reimport.refusal.syncToastTitle"),
+                        Some(tr(
+                            "connections:reimport.refusal.syncToastBody",
+                            &[("label", &label)],
+                        )),
                         Some("exchange-sync"),
                     );
                 }
@@ -289,7 +300,10 @@ pub fn exchange_of(app: &App, c: &Conn) -> Option<String> {
 }
 
 /// Starts the local status read once per exchange wallet.
-pub fn sync_poll(app: &mut App, _tx: &mut Tx, c: &Conn) -> bool {
+pub fn sync_poll(app: &mut App, tx: &mut Tx, c: &Conn) -> bool {
+    if std::mem::take(&mut stm(app).sync.focus_sync) {
+        tx.focus("exchange-sync-now".to_owned(), true);
+    }
     sync_prime(app, c)
 }
 
@@ -339,6 +353,16 @@ pub fn refresh_status(app: &mut App) {
 
 /// Sync now (`state.sync()`), also after the asset scope notice stored `crypto`.
 pub fn run_sync(a: &mut App) {
+    sync_with(a, None);
+}
+
+/// Sync now with the user's answer to rows that look like rows the book has.
+pub fn run_sync_answered(a: &mut App, answer: crate::wallets::reimport::Answer) {
+    stm(a).sync.focus_sync = true;
+    sync_with(a, Some(answer));
+}
+
+fn sync_with(a: &mut App, answer: Option<crate::wallets::reimport::Answer>) {
     let s = &st(a).sync;
     let Some(wallet) = s.wallet.clone() else {
         return;
@@ -348,9 +372,13 @@ pub fn run_sync(a: &mut App) {
     }
     let (label, exchange) = (s.label.clone(), s.exchange.clone());
     stm(a).sync.last_error = None;
+    let mut args = json!({"wallet": wallet});
+    if let Some(answer) = answer {
+        args = crate::wallets::reimport::Refusal::answered(&args, answer);
+    }
     if a.send(
         "ui.connections.exchange.sync",
-        json!({"wallet": wallet}),
+        args,
         "wallets.exchange.sync",
     )
     .is_some()
@@ -899,7 +927,23 @@ pub fn sync_card(app: &App, _cx: &mut Cx<App>, tk: &Tk, c: &Conn, disabled: bool
     {
         card = card.child(notice);
     }
-    if let (Some(e), false) = (&error, needs_rust) {
+    if let Some(line) = ok_last.and_then(crate::wallets::reimport::corrections_line) {
+        card = card.child(xs(tk, line, tk.muted_fg));
+    }
+    // The last sync stopped at rows that look like rows the book has: ask instead of failing.
+    let refusal = last
+        .filter(|l| l["status"] == "error")
+        .and_then(|l| crate::wallets::reimport::Refusal::of(&l["error"]));
+    if let (Some(r), false) = (refusal, needs_rust) {
+        card = card.child(crate::wallets::reimport::refusal_view(
+            tk,
+            "exchange-refusal",
+            &r,
+            true,
+            !enabled,
+            run_sync_answered,
+        ));
+    } else if let (Some(e), false) = (&error, needs_rust) {
         card = card.child(error_notice(tk, provider, e));
     }
     card.child(
@@ -1248,6 +1292,71 @@ mod tests {
         assert!(!none.mismatch && !none.masked);
         assert_eq!(balance_text(&json!({"status": "other"})), None);
         assert_eq!(balance_text(&json!({})), None);
+    }
+
+    fn sync_reply(data: Value, error: Option<Value>) -> Reply {
+        Reply {
+            kind: "ui.connections.exchange.sync".into(),
+            data,
+            error: error
+                .as_ref()
+                .map(|e| e["message"].as_str().unwrap_or("").to_owned()),
+            error_detail: error.unwrap_or(Value::Null),
+            elapsed: std::time::Duration::ZERO,
+        }
+    }
+
+    fn syncing() -> App {
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.add.exchange.sync = SyncState {
+            wallet: Some("w1".into()),
+            label: "Bitpanda".into(),
+            exchange: "bitpanda".into(),
+            ..SyncState::default()
+        };
+        app.wallets.add.exchange.syncs.push_back((
+            "w1".into(),
+            "Bitpanda".into(),
+            "bitpanda".into(),
+        ));
+        app
+    }
+
+    #[test]
+    fn sync_now_toasts_new_known_and_updated_rows_and_asks_instead_of_failing() {
+        let mut app = syncing();
+        on_reply(
+            &mut app,
+            "wallets.exchange.sync",
+            &sync_reply(
+                json!({"imported": 0, "unchanged": 40, "updated_records": [{}]}),
+                None,
+            ),
+        );
+        let toast = app.toasts.last().unwrap();
+        assert_eq!(
+            toast.body.as_deref(),
+            Some("Bitpanda: 0 new · 40 already in the book · 1 updated")
+        );
+        // Rows that look like rows the book has: no failure toast, the card asks.
+        let mut app = syncing();
+        let error = json!({"code": "import_changed_rows", "message": "1 row has the id", "details": {"reidentified": 0, "corrected": 1}});
+        on_reply(
+            &mut app,
+            "wallets.exchange.sync",
+            &sync_reply(Value::Null, Some(error)),
+        );
+        let toast = app.toasts.last().unwrap();
+        assert_eq!(toast.tone, ToastTone::Info);
+        assert_eq!(toast.title, "Sync paused");
+        assert_eq!(
+            toast.body.as_deref(),
+            Some(
+                "Bitpanda: some rows look like rows the book already has. Answer on the connection's page."
+            )
+        );
+        assert!(app.wallets.add.exchange.sync.last_error.is_none());
+        assert!(!sync_pending(&app));
     }
 
     #[test]

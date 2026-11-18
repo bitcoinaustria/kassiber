@@ -758,6 +758,7 @@
       "importingSamourai": "Importing Samourai…",
       "importing": "Importing…",
       "previewingLabels": "Previewing labels…",
+      "checkingAssets": "Checking assets…",
       "previewLabels": "Preview labels",
       "importingLabels": "Importing labels…",
       "saving": "Saving…",
@@ -1435,9 +1436,9 @@
       },
       "metric": {
         "rowsRead": "Rows read",
-        "inserted": "Inserted",
+        "inserted": "New",
         "updated": "Updated",
-        "unchanged": "Unchanged",
+        "unchanged": "Already in the book",
         "matched": "Matched",
         "coinsObserved": "Coins observed",
         "activeCoins": "Active coins",
@@ -2089,6 +2090,53 @@
       "errorAck": "Type {{ack}} to confirm the change.",
       "errorDenied": "The passphrase was not accepted.",
       "cancel": "Cancel"
+    }
+  },
+  "reimport": {
+    "new_one": "{{count}} new",
+    "new_other": "{{count}} new",
+    "known_one": "{{count}} already in the book",
+    "known_other": "{{count}} already in the book",
+    "updated_one": "{{count}} updated",
+    "updated_other": "{{count}} updated",
+    "corrections_one": "{{count}} value in the export differs from the book; the book's value was kept.",
+    "corrections_other": "{{count}} values in the export differ from the book; the book's values were kept.",
+    "keptRows_one": "{{count}} row kept as the book has it.",
+    "keptRows_other": "{{count}} rows kept as the book has them.",
+    "importedRows_one": "{{count}} row that looked like a row in the book imported as a new transaction.",
+    "importedRows_other": "{{count}} rows that looked like rows in the book imported as new transactions.",
+    "toast": "{{label}}: {{counts}}",
+    "refusal": {
+      "title": "Some rows look like rows the book already has",
+      "reidentified_one": "This export lists {{count}} row the book already has under another ID.",
+      "reidentified_other": "This export lists {{count}} rows the book already has under another ID.",
+      "corrected_one": "{{count}} row has the ID of a row the book has, with another amount or fee.",
+      "corrected_other": "{{count}} rows have the ID of a row the book has, with another amount or fee.",
+      "body": "Nothing was imported. Kassiber does not decide on suspicion whether they are the same transactions. To take the export's values instead, roll back the earlier import on the connection's page and import this file again.",
+      "skip": "Keep the book's rows",
+      "import": "Import them as new transactions",
+      "bodySync": "Nothing was imported. Kassiber does not decide on suspicion whether they are the same transactions. To take the exchange's values instead, roll back the earlier sync on the connection's page and sync again.",
+      "syncToastTitle": "Sync paused",
+      "syncToastBody": "{{label}}: some rows look like rows the book already has. Answer on the connection's page."
+    },
+    "choice": {
+      "title": "Which assets should this wallet track?",
+      "found_one": "The export also holds {{tickers}}: {{rows}} entry.",
+      "found_other": "The export also holds {{tickers}}: {{rows}} entries.",
+      "crypto": "Bitcoin and other crypto",
+      "cryptoBody": "Imports these assets too.",
+      "bitcoin": "Bitcoin only",
+      "bitcoinBody": "Skips the other crypto assets. You can track them later on the connection's page.",
+      "bitcoinRefused": "Not possible for this export: it records trades of Bitcoin against other crypto assets.",
+      "stocks": "Stocks, ETFs and metals stay out of the book either way.",
+      "checking": "Checking which assets the export holds…",
+      "bitcoinRefusedHistory": "Not possible for this account: its history has trades of Bitcoin against other crypto assets.",
+      "foundHistory_one": "The account's history also holds {{tickers}}: {{rows}} entry.",
+      "foundHistory_other": "The account's history also holds {{tickers}}: {{rows}} entries.",
+      "checkingHistory": "Checking which assets the account holds…",
+      "cryptoRefused": "These assets cannot be tracked from this export, so only Bitcoin is imported: {{reason}}",
+      "stale": "The source changed after the check. Kassiber checked it again; answer for what it holds now.",
+      "staleImport": "The file changed after the check and was not imported. Choose it again on the connection's page to import it."
     }
   }
 }

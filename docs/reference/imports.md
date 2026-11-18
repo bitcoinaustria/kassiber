@@ -424,6 +424,20 @@ wallet exists. A file the `crypto` scope cannot read names the reason in
 covers what is imported. On the command line, create the wallet with
 `--config '{"asset_scope": "crypto"}'` (or `wallets update` later).
 
+The desktop's **Add connection** asks before it creates a provider wallet
+whose file it imports right away and that holds other crypto assets, so the
+wallet is created with the chosen scope and the file is imported once:
+**Bitcoin and other crypto** (preselected) or **Bitcoin only**, naming the
+tickers and entry count and that stocks, ETFs and metals stay out either way
+(Bitcoin only is unavailable when the file trades Bitcoin against another
+coin). A file without other crypto assets asks nothing; one whose other assets
+the `crypto` scope cannot read says so with the reason before importing Bitcoin
+only. The answer stands even when the file is imported later (the box to import
+right away unticked). The import right after the create carries the preview's
+token: when the file changed after the check, the create asks again, and an
+import after the create refuses and says so. Existing wallets keep the import
+result's notice and its **Also track these assets** confirmation.
+
 ### Reconciliation with descriptor wallets
 
 Descriptor/xpub wallets remain the authoritative, watch-only source for the
@@ -997,6 +1011,15 @@ refusal's hint names the CLI steps for each).
 pass and keep refusing; import the file with the choice instead. The result
 of an import that met such rows has `changed_rows` (`action`, `reidentified`,
 `corrected`).
+
+The desktop shows the refusal in the Add connection dialog and on an
+exchange's Sync now card, with the counts and **Keep the book's rows**
+(`skip`) and **Import them as new transactions** (`import`); an answer applies
+only while the dialog still shows the source and wallet it was refused for, and
+changing them drops the question. A refused exchange sync also shows a short
+"Sync paused" note pointing to the card. Its import summary and sync toasts name
+the new rows, the rows already in the book, the updated rows and, in one line,
+the values the book kept.
 
 Values a matched row keeps where the import never overwrites them are
 reported, not dropped silently: `corrections_ignored` lists each

@@ -51,6 +51,17 @@ on request. Each setup and sync runs the
    has the label is refused (`conflict`), because the CLI sync would import
    into it. The key lives in the book's `backends` row, inside SQLCipher when
    the book is encrypted, and no kind returns it.
+   When the user asks to import the history right away, the dialog's submit
+   first reads it once (`ui.connections.exchange.preview`, the same signed
+   reads as the sync, under a consent for that press; nothing is written;
+   the only time it runs) and, if it holds other crypto assets, asks
+   **Bitcoin and other crypto** (preselected) or **Bitcoin only**, naming the
+   tickers and entry count; `create` stores the answer as `asset_scope` and,
+   with the preview's token, runs the first sync of exactly that history.
+   When the history changed after the check, no connection is left behind
+   and the dialog asks again. Bitfinex and Bitcoin.de read only BTC and are
+   not asked. A history without other crypto assets asks nothing. A preview
+   error is explained like the exchange's other errors.
 6. **Sync now** (`ui.connections.exchange.sync`), either right after creation
    when the user ticks **Import history right after adding the connection**
    (off by default) or from the wallet page. It runs `wallets sync-<kind>
@@ -72,7 +83,16 @@ An exchange wallet's page shows an exchange card instead of the chain refresh:
 whether its key is stored, the last sync of this session (time, new and read
 rows, skipped Bitpanda operations, Bitpanda's BTC balance against the book's)
 or its error, and **Sync now**. The balance is masked when amounts are hidden;
-a mismatch adds a note naming the usual causes. The header
+a mismatch adds a note naming the usual causes. The sync's toast names the
+new rows, the rows already in the book and the updated rows ("3 new · 120
+already in the book · 2 updated"), and the card and toast add one line when
+the exchange states values the book kept (`corrections_ignored`). A sync the
+daemon refused for rows that look like rows the book has
+(`import_changed_rows`, [re-importing a newer export](imports.md#re-importing-a-newer-export))
+is no failure: a short "Sync paused" toast points to the card, which names the
+counts and offers **Keep the book's rows** and **Import them as new
+transactions**, which run Sync now again with `changed_rows`. A kept
+difference is remembered, so the next Sync now does not ask about it again. The header
 Refresh runs the same sync; Full rescan is hidden. Errors are explained by
 code, then the daemon's own message and hint:
 

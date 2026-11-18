@@ -277,6 +277,17 @@ pub struct State {
     pub form_for: &'static str,
     pub errors: HashMap<&'static str, String>,
     pub setup_error: Option<String>,
+    /// An import refused for rows that look like rows the book has, waiting for an answer.
+    pub refused: Option<submit::Refused>,
+    /// The asset preview of the source a new provider wallet imports, and the user's answer.
+    pub asset_ask: Option<crate::wallets::asset_choice::Ask>,
+    /// The source of the asset preview in flight.
+    pub asset_ask_pending: Option<crate::wallets::asset_choice::Source>,
+    /// An exchange's error from the asset preview or the first sync after it, in the
+    /// exchange's own wording.
+    pub asset_error: Option<exchange::model::ErrorInfo>,
+    /// The source changed after the asset question; it was asked again.
+    pub asset_notice: Option<String>,
     /// The last import's result (`lastImportResult`, an `ImportFileResult`).
     pub last_import: Option<Value>,
     /// The arguments of the file import behind `last_import`, when this dialog chose its path
@@ -523,6 +534,10 @@ pub fn reset_form(app: &mut App, src: &'static Source) {
     s.errors.clear();
     s.setup_error = None;
     s.last_import = None;
+    s.refused = None;
+    s.asset_ask = None;
+    s.asset_error = None;
+    s.asset_notice = None;
     s.bip329_preview = None;
     s.preview_addresses = None;
     s.preview_error = None;
@@ -539,6 +554,15 @@ pub fn reset_form(app: &mut App, src: &'static Source) {
         exchange::reset(app, ex);
     }
     submit::apply_default_backend(app);
+}
+
+/// A source, format or target changed: the last result and an unanswered refusal belong to the
+/// old inputs.
+pub fn inputs_changed(app: &mut App) {
+    let s = stm(app);
+    s.last_import = None;
+    s.refused = None;
+    s.asset_notice = None;
 }
 
 pub fn close(app: &mut App) {
