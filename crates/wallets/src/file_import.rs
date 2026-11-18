@@ -75,6 +75,7 @@ pub enum Format {
     Binance,
     Bisq,
     BinanceHistory,
+    Bitvavo,
     BtcpayCsv,
     BtcpayJson,
     Ledger,
@@ -101,6 +102,7 @@ impl Format {
             "binance_supplemental_csv" => Self::Binance,
             "bisq_csv" => Self::Bisq,
             "binance_history_csv" => Self::BinanceHistory,
+            "bitvavo_csv" => Self::Bitvavo,
             "cointracking_csv" => Self::CoinTracking,
             "blockpit_csv" => Self::Blockpit,
             "wasabi_bundle" => Self::Wasabi,
@@ -130,13 +132,14 @@ impl Format {
             Self::Binance => "binance_supplemental_csv",
             Self::Bisq => "bisq_csv",
             Self::BinanceHistory => "binance_history_csv",
+            Self::Bitvavo => "bitvavo_csv",
             Self::Ledger => "generic_ledger",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
         match self {
             // Exchange exports: the registry names each one's parser.
-            Self::BinanceHistory => Ok(exchange_api::load_file(self, file, None)?
+            Self::BinanceHistory | Self::Bitvavo => Ok(exchange_api::load_file(self, file, None)?
                 .map(|(rows, _)| rows)
                 .unwrap_or_default()),
             Self::Document => Err(AppError::new(
@@ -237,11 +240,14 @@ impl Format {
         }
     }
     fn active(self) -> bool {
-        matches!(self, Self::TwentyOne | Self::Strike) || self == Self::Bisq
+        matches!(self, Self::TwentyOne | Self::Strike)
+            || self == Self::Bisq
+            || self == Self::Bitvavo
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
             Self::Binance => ("Binance", "binance", "binance_rows"),
+            Self::Bitvavo => ("Bitvavo", "bitvavo", "bitvavo_rows"),
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),

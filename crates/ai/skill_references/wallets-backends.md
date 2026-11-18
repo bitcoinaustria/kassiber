@@ -377,6 +377,26 @@ observed trades are held, write nothing, and quarantine the transactions they
 name (`bisq_trade_review_required`) until a custody review covers them.
 Altcoin and BSQ markets refuse the import by name.
 
+Bitvavo transaction-history export (custodial ledger):
+
+```bash
+kassiber wallets import-bitvavo --file /path/to/bitvavo-transactions.csv
+```
+
+The export imports in full into the `Bitvavo` wallet, or `--wallet`, under the
+wallet's `asset_scope`. Buys and sells against EUR keep exact
+`exchange_execution` pricing from provider `Bitvavo`; deposits, withdrawals
+and staking import as wallet activity; fiat-only rows are skipped. In the
+default `bitcoin` scope rows without BTC are skipped and counted by ticker in
+`assets`, and a BTC trade against USDC or another crypto asset, or a Convert
+with BTC, refuses the file naming the command that sets the `crypto` scope;
+in `crypto` scope those become paired `swap` legs. A margin or loan row, or a
+row of any type Kassiber does not map, refuses the whole file by name: record
+it through the generic ledger instead. The user's own
+`wallets sync-bitvavo` (a View-only key in a `bitvavo` backend) shares the
+same transaction ids, so importing both keeps one record per transaction. The
+assistant cannot run exchange API syncs.
+
 CoinTracking / Blockpit migration history:
 
 ```bash

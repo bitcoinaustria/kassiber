@@ -10,7 +10,8 @@ runs the [exchange API framework](rust-exchange-sync.md) the CLI's
 
 1. **Pick the exchange.** The Add connection dialog lists Kraken, Coinbase,
    Bitpanda, Bitvavo and Binance API under Exchanges (setup kind
-   `exchange-api`). The Binance supplemental CSV import stays a separate card.
+   `exchange-api`). The Binance supplemental CSV and Bitvavo CSV imports stay
+   separate cards.
 2. **Create a read-only key.** The setup shows where to create the key and
    which of the exchange's permissions to turn on and leave off. The scopes
    follow what each sync reads:
@@ -48,6 +49,16 @@ runs the [exchange API framework](rust-exchange-sync.md) the CLI's
 
 ## Wallet page
 
+A wallet is an exchange API connection only when it is of an exchange kind
+and its configuration names a backend: the configured source decides, for
+every exchange, not the kind alone. A backend beside a file source still
+makes it an API connection. A wallet of an exchange kind that
+imports a file (the Bitvavo CSV, the Binance supplemental CSV, a Kraken
+wallet with a source file) keeps its file refresh, is not listed by
+`status` and is refused by `sync` ("has no exchange API key attached")
+until `create` attaches a backend to it with `wallet`. Attaching keeps its
+file source.
+
 An exchange wallet's page shows an exchange card instead of the chain refresh:
 whether its key is stored, the last sync of this session (time, new and read
 rows, skipped Bitpanda operations) or its error, and **Sync now**. The header
@@ -79,7 +90,7 @@ rest operator), and refuse unknown arguments before any work.
 | --- | --- | --- | --- |
 | `ui.connections.exchange.status` | `wallet?` | none | `connections`: per exchange wallet of the active profile, `wallet_id`, `wallet`, `exchange`, `provider`, `backend`, `backend_configured`, `has_api_key`, `has_api_secret` (null for Bitpanda), `asset_scope` (only once the wallet stores one; absent means `bitcoin`) and `last_sync` (`status`, `at`, `imported`, `fetched`, `skipped`, `provider_balance`, `assets`, `swap_pairs`, or the error envelope's `error`) |
 | `ui.connections.exchange.test` | `backend`, or `exchange`, `api_key`, `api_secret`, `url?` | the check above, once | `exchange`, `ok`, `read_only` (true when the exchange confirmed it, null when it does not say) |
-| `ui.connections.exchange.create` | `exchange`, `api_key`, `api_secret` (not for Bitpanda), `label?`, `url?` | none | `exchange`, `wallet` (`id`, `label`, `kind`), `backend` (the redacted backend row) |
+| `ui.connections.exchange.create` | `exchange`, `api_key`, `api_secret` (not for Bitpanda), `label?` or `wallet?` (attach the backend to that existing wallet of the same exchange, such as a CSV-imported one, instead of creating a wallet), `url?` | none | `exchange`, `wallet` (`id`, `label`, `kind`), `backend` (the redacted backend row) |
 | `ui.connections.exchange.sync` | `wallet` | the CLI sync's reads | the CLI's `wallets.sync-<kind>` data |
 
 `url` defaults to the exchange's public API and exists for tests and

@@ -774,6 +774,13 @@ projections stay Python. Progress and remaining work for this slice:
   import order, not time. This changes journal ordering for every importer,
   so it needs a semantics bump. Bitvavo tags such rows
   `same-second-order-uncertain` meanwhile ([Bitvavo](docs/reference/bitvavo.md)).
+- [ ] Bitvavo follow-ups: confirm with a real account that the CSV
+  `Transaction ID` is the API `transactionId`, that the API withdrawal
+  `sentAmount` excludes the fee and how trades state their quote amount
+  (ambiguous API trades import unpriced until then);
+  bundle the official SVG mark from the press kit; map further BTC types
+  (`rebate`, `distribution`, `withdrawal_cancelled`) once a real export pins
+  them (they refuse the import until then).
 - [ ] Exchange error display: a very short request credential (a one- to
   three-character proxy password) is withheld wherever it occurs, Kassiber's
   own message text included, which garbles the error; consider refusing such

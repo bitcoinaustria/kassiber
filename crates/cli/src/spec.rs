@@ -104,6 +104,7 @@ pub const RUST_ONLY_LEAVES: &[&str] = &[
     "wallets.import-bisq",
     "wallets.import-binance-history",
     "wallets.sync-bitvavo",
+    "wallets.import-bitvavo",
     "journals.verify",
     "backends.trust-certificate",
     "projects.demo",

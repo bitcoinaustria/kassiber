@@ -11,6 +11,8 @@ use super::*;
 use assets::Scope;
 use std::ops::RangeInclusive;
 
+mod export;
+
 const PROVIDER: &str = "Bitvavo";
 /// `maxItems`' documented maximum.
 const PAGE_SIZE: usize = 100;
@@ -40,7 +42,11 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     fetch,
     probe,
     skipped: Some(&["fiat_only_transactions", "non_btc_transactions"]),
-    files: &[],
+    files: &[contract::registry::FileFormat {
+        format: Format::Bitvavo,
+        reads: contract::Reads::AllAssets,
+        load: export::load,
+    }],
     shared_ids: true,
     same_second_tags: true,
 };

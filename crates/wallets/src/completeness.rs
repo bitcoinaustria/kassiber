@@ -385,6 +385,11 @@ mod tests {
             // Rust only (docs/reference/bitvavo.md): an API connection, a CSV
             // export, or both.
             ("bitvavo", r#"{"backend":"b"}"#, "provider-api"),
+            (
+                "bitvavo",
+                r#"{"source_format":"bitvavo_csv"}"#,
+                "exchange-export",
+            ),
             ("custom", r#"{"source_format":"generic_ledger"}"#, "manual"),
             ("custom", r#"{"source_format":" "}"#, "manual"),
             ("custom", r#"{"source_format":"bisq"}"#, "file-import"),

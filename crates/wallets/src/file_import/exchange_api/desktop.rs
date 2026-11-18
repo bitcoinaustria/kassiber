@@ -131,10 +131,23 @@ pub fn sync_target(conn: &Connection, profile: &str, reference: &str) -> Result<
         )
         .with_hint("Use Refresh for wallets that sync from a chain backend or a file."));
     }
-    Ok(target(wallet.id, wallet.label, kind, config))
+    let target = target(wallet.id, wallet.label, kind, config);
+    // A wallet of an exchange kind that imports a file (a CSV export) is an
+    // API connection only once a backend is attached to it.
+    if target.backend.is_none() {
+        return Err(AppError::new(
+            "validation",
+            format!("Wallet '{}' has no exchange API key attached", target.label),
+        )
+        .with_hint(
+            "Refresh it from its file, or attach a read-only API key to it in Add connection.",
+        ));
+    }
+    Ok(target)
 }
 
-/// Every exchange API wallet in the profile, by label.
+/// Every exchange API wallet in the profile (an exchange kind with a backend
+/// attached), by label. A file-only wallet of that kind is not one.
 pub fn targets(conn: &Connection, profile: &str) -> Result<Vec<Target>, AppError> {
     let mut stmt = conn
         .prepare(
@@ -153,6 +166,7 @@ pub fn targets(conn: &Connection, profile: &str) -> Result<Vec<Target>, AppError
         .into_iter()
         .filter(|(_, _, kind, _)| KINDS.contains(&kind.as_str()))
         .map(|(id, label, kind, config)| target(id, label, kind, config))
+        .filter(|target| target.backend.is_some())
         .collect())
 }
 
@@ -166,4 +180,57 @@ pub fn provider_name(kind: &str) -> &'static str {
 /// empty for a kind that is no exchange.
 pub fn default_api_url(kind: &str) -> &'static str {
     contract::registry::by_kind(kind).map_or("", |exchange| exchange.default_url)
+}
+
+/// Attaches backend `backend` to an existing wallet of exchange `kind` that
+/// has none yet, such as a CSV-imported Bitvavo wallet, keeping its file
+/// source. The sync then imports into it and deduplicates against the file.
+pub fn attach_backend(
+    conn: &Connection,
+    profile: &str,
+    reference: &str,
+    kind: &str,
+    backend: &str,
+) -> Result<crate::Wallet, AppError> {
+    let wallet = resolve(conn, profile, reference)?;
+    let (stored_kind, config): (String, Option<String>) = conn
+        .query_row(
+            "SELECT lower(trim(kind)),config_json FROM wallets WHERE id=?",
+            [&wallet.id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(database_error)?;
+    if !KINDS.contains(&kind) || stored_kind != kind {
+        return Err(AppError::new(
+            "validation",
+            format!(
+                "Wallet '{}' is not a {} wallet",
+                wallet.label,
+                provider_name(kind)
+            ),
+        )
+        .with_hint("Attach an exchange key only to a wallet of the same exchange."));
+    }
+    let existing = target(wallet.id.clone(), wallet.label.clone(), stored_kind, config);
+    if let Some(attached) = existing.backend {
+        return Err(AppError::new(
+            "conflict",
+            format!(
+                "Wallet '{}' already syncs through backend '{attached}'",
+                wallet.label
+            ),
+        ));
+    }
+    lifecycle::execute(
+        conn,
+        lifecycle::Operation::Update {
+            profile_id: profile.into(),
+            wallet: wallet.id.clone(),
+            label: None,
+            account: None,
+            config: json!({"backend": backend}),
+            clear: vec![],
+        },
+    )?;
+    resolve(conn, profile, &wallet.id)
 }
