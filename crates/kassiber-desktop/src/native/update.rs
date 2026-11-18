@@ -482,9 +482,13 @@ pub fn dialog(app: &App, tk: &Tk, layer: &mut Vec<El>) {
     layer.push(
         row()
             .key("native-update-scrim")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
+            // Below the title bar, as every full-window wash: the bar still moves the window.
+            .pin(
+                Some(0.0),
+                Some(crate::shell::window_top_inset()),
+                Some(0.0),
+                Some(0.0),
+            )
             .center()
             .fill(Color::BLACK.alpha(if tk.dark { 0.5 } else { 0.25 }))
             .a11y_hidden()
