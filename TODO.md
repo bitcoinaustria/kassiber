@@ -1897,6 +1897,11 @@ See [tax countries](docs/reference/tax-countries.md) and
   current writer stores whole-second UTC (`…Z`), so books agree today; a
   stored offset or fractional second would change lot order, drop a sale
   from the PDF or move it between years (verification of #773, 2026-11-18).
+- [ ] Persist the basis a transfer carries in a wallet-pool book, so the
+  summary PDF's historical wallet holdings can show each wallet's own basis.
+  Transfer legs book no value, so the report averages each asset across
+  wallets; a wallet bought cheaper than the others reads at the average
+  (verification of #773, 2026-11-18; stored data, needs owner sign-off).
 - [ ] Show an income receipt's basis from its acquisition in the outgoing
   ui-tauri Tax panel (`TransactionTaxModel.ts`), as Rune does since #781.
 - [ ] Decide whether single-table machine CSVs (capital gains, transactions,

@@ -354,22 +354,18 @@ fn historical_portfolio(conn: &Connection, profile: &Value, as_of: i64) -> Resul
         key(a).cmp(&key(b))
     });
     let mut results = Vec::new();
-    // A wallet-pool book keeps each wallet's own basis; a global pool
-    // averages each asset across wallets.
-    let wallet_pools = text(profile, "cost_basis_pool_scope") == "wallet";
-    for ((wallet_id, wallet, account, asset), quantity, own_basis) in ordered {
+    // Each asset's basis is its average across wallets. A wallet-pool book's
+    // own per-wallet basis needs the basis transfers carry, which the journal
+    // does not record (transfer legs book no value); see TODO.md.
+    for ((wallet_id, wallet, account, asset), quantity, _) in ordered {
         if *quantity <= Decimal::zero() {
             continue;
         }
-        let avg = if wallet_pools {
-            div(own_basis, quantity)?
-        } else {
-            average
-                .iter()
-                .find(|(a, _)| a == asset)
-                .map(|(_, v)| v.clone())
-                .unwrap_or_else(Decimal::zero)
-        };
+        let avg = average
+            .iter()
+            .find(|(a, _)| a == asset)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_else(Decimal::zero);
         let basis = mul(quantity, &avg)?;
         let rate = market
             .iter()

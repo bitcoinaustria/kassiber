@@ -201,20 +201,6 @@ fn a_uk_summary_closes_on_april_fifth() {
 }
 
 #[test]
-fn a_wallet_scoped_summary_keeps_its_wallet_pool_basis() {
-    let case = Case::new("us", "USD", "FIFO", "wallet");
-    case.tx("cheap", "w", "buy", "2025-01-01T12:00:00Z", BTC, "100");
-    case.tx("dear", "b", "buy", "2025-05-01T12:00:00Z", BTC, "900");
-    case.process();
-    let summary = case.summary(dict([
-        ("year", 2025.into()),
-        ("wallets", Value::List(vec![s("w")])),
-    ]));
-    let row = &list(at(&summary, &["wallet_holdings"]))[0];
-    assert_eq!(number(at(row, &["cost_basis"])), 100.);
-}
-
-#[test]
 fn the_review_rounds_an_exact_half_cent_as_the_austrian_form_does() {
     let case = Case::new("at", "EUR", "MOVING_AVERAGE_AT", "global");
     case.tx("buy", "w", "buy", "2023-01-02T12:00:00Z", BTC, "100");
@@ -331,6 +317,11 @@ fn a_japanese_year_with_a_non_taxable_sale_is_withheld_and_its_coins_carry() {
             .unwrap()
     };
     assert_eq!(at(year(2024.), &["return_income"]), &Value::Null);
+    // The report says why: the refusal is a review flag on the sale.
+    let flags = list(at(&model, &["flags"]));
+    assert!(flags.iter().any(|f| {
+        at(f, &["event"]) == &s("out") && at(f, &["code"]) == &s(jp_tax::NON_TAXABLE_DISPOSAL)
+    }));
     let next = &list(at(year(2025.), &["sheets"]))[0];
     assert_eq!(number(at(next, &["opening_qty"])), 1.);
 }

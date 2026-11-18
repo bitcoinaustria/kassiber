@@ -351,11 +351,21 @@ pub struct Flag {
 }
 
 /// The year's flags: disposals below 70 % of market value, coins whose
-/// revenue passes ¥3,000,000, and a net loss that offsets nothing.
-pub fn flags(years: &[Year], disposals: &[Disposal]) -> Vec<Flag> {
+/// revenue passes ¥3,000,000, a net loss that offsets nothing, and a
+/// disposal reviewed as not taxable, which withholds its coin's year.
+pub fn flags(years: &[Year], disposals: &[Disposal], quarantines: &[Quarantine]) -> Vec<Flag> {
     let threshold = Decimal::from(CLASSIFICATION_REVENUE);
     let mut flags = Vec::new();
     for year in years {
+        for q in quarantines
+            .iter()
+            .filter(|q| q.date.year == year.year && q.reason == NON_TAXABLE_DISPOSAL)
+        {
+            flags.push(Flag {
+                event: q.transaction_id.clone(),
+                code: NON_TAXABLE_DISPOSAL,
+            });
+        }
         for d in disposals.iter().filter(|d| d.date.year == year.year) {
             if d.valuation.as_deref() == Some("seventy_percent") {
                 flags.push(Flag {
@@ -590,7 +600,7 @@ pub fn model(conn: &Connection, profile: &Value, wallet: Option<&str>) -> Result
     let method = Method::of(&text(profile, "gains_algorithm"));
     let (acquisitions, disposals, income, quarantines) = load(conn, &text(profile, "id"), wallet)?;
     let (years, refusals) = years(method, &acquisitions, &disposals, &income, &quarantines)?;
-    let flags = flags(&years, &disposals);
+    let flags = flags(&years, &disposals, &quarantines);
     // The venues of each year: the wallets its disposals and receipts name.
     let venues = |year: i32| -> String {
         let names: BTreeSet<&str> = disposals
