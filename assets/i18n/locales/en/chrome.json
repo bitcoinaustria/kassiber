@@ -799,15 +799,14 @@
   "demo": {
     "badge": "Demo",
     "region": "Demo book",
-    "body": "Sample data on regtest, separate from your own books. It has no sync server; Reset demo starts over.",
+    "body": "Sample data on regtest, separate from your own books. Click the book name to leave or reset it.",
     "leave": "Leave demo",
     "reset": "Reset demo",
-    "more": "More demo actions",
-    "connectAgent": "Connect an agent",
     "preparing": "Preparing the demo book…",
     "startFailed": "The demo book could not be started.",
     "leaveFailed": "Could not leave the demo.",
     "resetDone": "The demo book was reset.",
+    "opened": "You're in the demo book: sample data, separate from your own books. Click the book name to leave it.",
     "tryEntry": "Try the demo book",
     "mcpHint": "In the demo, the agent command opens only the demo book and uses the demo's own agent settings."
   }

@@ -1,8 +1,9 @@
 //! The bundled demo book (docs/reference/demo.md): **Try the demo** on Welcome and in the book
 //! switcher writes a fresh copy with `kassiber projects demo` (on a worker thread; it unpacks
 //! the book and builds its local analysis index, ~3 s) and restarts the daemon on it with the
-//! demo's own offline and agent-access preference files. A banner marks every screen while it
-//! is open, with **Leave demo**, **Reset demo** and **Connect an agent**.
+//! demo's own offline and agent-access preference files. While it is open a **Demo** tag sits
+//! beside the book name in the title bar ([`tag`]) and the book switcher offers **Leave demo**
+//! and **Reset demo** ([`switcher_rows`]); a notice says so once, when it opens.
 //!
 //! - Nothing here reaches the network: the CLI writes local files, and the demo book has no
 //!   sync backend (sync and connection checks fail closed with "no backend"). AI and agents
@@ -14,7 +15,7 @@
 //! - **Every way out is the same.** The demo's preference files travel with the daemon switch
 //!   that opens it (`app::switch_root`'s `env`), never as ambient launch state, so any switch to
 //!   another root (Leave demo, Reset welcome, the lock screen's "Open other books", a book set
-//!   opened from the menu) runs on the user's own files, and `ended` clears the banner, the
+//!   opened from the menu) runs on the user's own files, and `ended` clears the tag, the
 //!   saved state and the copy. Exits that keep the root (Welcome) go back to the launch root
 //!   first ([`leave_then`]), so a book set up afterwards never lands in the copy.
 //! - `KASSIBER_DEMO_ROOT` (development and tests) names the directory that holds demo copies;
@@ -26,7 +27,6 @@ use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::time::Duration;
 
 use rune::{El, Tx, col, row, text};
-use rune_kit::Placement;
 use serde_json::Value;
 
 use crate::app::{App, ToastTone};
@@ -34,7 +34,6 @@ use crate::i18n::t;
 use crate::icons as I;
 use crate::onboarding::model::Identity;
 use crate::theme::Tk;
-use crate::txdetail::widgets::{Size, Variant, button, icon_button};
 use crate::ui::ic;
 
 /// What `projects demo` wrote.
@@ -60,10 +59,13 @@ pub struct Demo {
     /// A `projects demo` run in flight.
     job: Option<Receiver<Result<Session, String>>>,
     pub error: Option<String>,
-    pub menu: bool,
     saved: Option<Saved>,
-    /// The daemon is switching to or from the demo (the banner's and switcher's spinner).
+    /// The daemon is switching to or from the demo (the tag's and switcher's spinner).
     pub switching: bool,
+    /// The demo's own stack goal (`overview::goal::target`): `None` until it is edited in the
+    /// demo (a round target above the demo's stack), `Some(None)` once removed there. The
+    /// owner's goal lives in the shared overview layout and never shows against demo coins.
+    pub goal: Option<Option<u64>>,
 }
 
 impl Demo {
@@ -219,7 +221,6 @@ pub fn start(app: &mut App) {
         return;
     }
     app.demo.error = None;
-    app.demo.menu = false;
     let (send, recv) = channel();
     std::thread::spawn(move || {
         let _ = send.send(run_create());
@@ -281,7 +282,7 @@ fn identity() -> Identity {
 }
 
 /// Restarts the daemon on the new copy with the demo's preference files (in the background:
-/// the banner and switcher show "Preparing" until it is ready).
+/// the tag and switcher show "Preparing" until it is ready).
 fn open(app: &mut App, session: Session) {
     let reset = app.demo.active.is_some();
     // What Leave demo goes back to: the book open now, or (a reset) what the first open saved.
@@ -313,15 +314,15 @@ fn open(app: &mut App, session: Session) {
             }
             app.demo.saved = saved;
             app.demo.active = Some(session);
+            app.demo.goal = None;
             crate::onboarding::enter_app(app, identity());
-            if reset {
-                app.toast(
-                    ToastTone::Success,
-                    &t("chrome:demo.resetDone"),
-                    None,
-                    Some("demo"),
-                );
-            }
+            // The one notice: the tag in the title bar marks the demo from here on.
+            let (tone, key) = if reset {
+                (ToastTone::Success, "chrome:demo.resetDone")
+            } else {
+                (ToastTone::Info, "chrome:demo.opened")
+            };
+            app.toast(tone, &t(key), None, Some("demo"));
         },
     );
 }
@@ -343,7 +344,7 @@ pub fn leave(app: &mut App) {
 
 /// The one way out of the demo: the daemon goes back to the root the demo replaced (the
 /// launch's own root for Welcome) on the user's own preference files, the copy and the demo's
-/// state go (`ended`, from the switch), then `then`. While it switches the banner shows
+/// state go (`ended`, from the switch), then `then`. While it switches the tag shows
 /// "Preparing"; requests made meanwhile reach the restored daemon, never the copy. If the
 /// switch fails the demo stays open.
 pub fn leave_then(app: &mut App, then: Then) {
@@ -351,7 +352,6 @@ pub fn leave_then(app: &mut App, then: Then) {
         return;
     }
     let saved = app.demo.saved.clone().unwrap_or_default();
-    app.demo.menu = false;
     app.demo.switching = true;
     let root = match then {
         Then::Welcome => app.onboarding.seed.clone(),
@@ -416,7 +416,7 @@ pub fn leave_then(app: &mut App, then: Then) {
     );
 }
 
-/// The daemon left the demo's environment (any switch away from it): the banner, the saved
+/// The daemon left the demo's environment (any switch away from it): the tag, the saved
 /// state and the copy go. Nothing of the demo is kept.
 pub fn ended(app: &mut App) {
     let Some(session) = app.demo.active.take() else {
@@ -424,7 +424,7 @@ pub fn ended(app: &mut App) {
     };
     app.demo.saved = None;
     app.demo.error = None;
-    app.demo.menu = false;
+    app.demo.goal = None;
     remove_copy(&session.state_root);
 }
 
@@ -437,116 +437,78 @@ fn remove_copy(root: &Path) {
 
 // ---- Views -------------------------------------------------------------------------------
 
-/// The banner at the top of every page while the demo is open.
-pub fn banner(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Option<El> {
-    if app.demo.active.is_none() || app.locked {
-        return None;
-    }
-    let amber = rune::color::hex(if tk.dark { "#fbbf24" } else { "#b45309" }).expect("hex");
-    let busy = app.demo.busy();
-    let badge = row()
-        .gap(tk.r(0.375))
-        .center_y()
-        .a11y_hidden()
-        .child(ic(&I::FLASK_CONICAL, tk.r(0.875), amber))
-        .child(
-            text(t("chrome:demo.badge"))
-                .font(tk.txs(600.0))
-                .color(amber),
-        );
-    let leave = button(
-        tk,
-        "demo-leave",
-        Variant::Outline,
-        Size::Xs,
-        Some(&I::LOG_OUT),
-        &t("chrome:demo.leave"),
-        !busy,
-    )
-    .on_press(leave);
-    let more = icon_button(
-        tk,
-        "demo-more",
-        Variant::Ghost,
-        tk.r(1.75),
-        &I::ELLIPSIS,
-        tk.r(1.0),
-        t("chrome:demo.more"),
-    )
-    .expanded(app.demo.menu)
-    .on_press(|s: &mut App| s.demo.menu = !s.demo.menu);
-    let mut status = row().gap(tk.r(0.375)).center_y();
-    if busy {
-        status = status
-            .child(
-                ic(&I::LOADER_CIRCLE, tk.r(0.875), tk.muted_fg)
-                    .looping(rune::LoopSpec::rotation(1.0)),
-            )
-            .child(
-                text(t("chrome:demo.preparing"))
-                    .font(tk.txs(400.0))
-                    .color(tk.muted_fg),
-            );
-    }
-    if app.demo.menu {
-        use crate::ui::kit_menu::{Entry, Item, mount};
-        let entries = vec![
-            Entry::Item(
-                Item::new(t("chrome:demo.reset"))
-                    .icon(&I::ROTATE_CCW)
-                    .disabled(busy)
-                    .on_select(start),
-            ),
-            Entry::Item(
-                Item::new(t("chrome:demo.connectAgent"))
-                    .icon(&I::PLUG)
-                    .on_select(|s: &mut App| {
-                        s.demo.menu = false;
-                        crate::settings::open_section(s, "assistant");
-                    }),
-            ),
-        ];
-        mount(
-            tk,
-            layer,
-            "demo-menu",
-            "demo-more",
-            Placement::BottomEnd,
-            4.0,
-            tk.r(12.0),
-            entries,
-            std::rc::Rc::new(|s: &mut App| s.demo.menu = false),
-        );
-    }
+/// The **Demo** tag beside the book name in the title bar while the demo is open (part of the
+/// book crumb, so a press opens the switcher with Leave and Reset). A spinner while switching.
+pub fn tag(app: &App, tk: &Tk) -> Option<El> {
+    app.demo.active.as_ref()?;
+    let amber = amber(tk);
+    let glyph = if app.demo.busy() {
+        ic(&I::LOADER_CIRCLE, tk.r(0.75), amber).looping(rune::LoopSpec::rotation(1.0))
+    } else {
+        ic(&I::FLASK_CONICAL, tk.r(0.75), amber)
+    };
     Some(
         row()
-            .key("demo-banner")
-            .w_full()
-            .px(tk.r(1.0))
-            .py(tk.r(0.375))
-            .gap(tk.r(0.75))
+            .key("demo-tag")
+            .gap(tk.r(0.25))
+            .px(tk.r(0.375))
+            .h(tk.r(1.25))
             .center_y()
-            .fill(amber.alpha(0.06))
-            .border_sides([0.0, 0.0, 1.0, 0.0], amber.alpha(0.25))
-            .role("region")
-            .label(t("chrome:demo.region"))
-            .child(badge)
+            .radius(tk.r(0.375))
+            .fill(amber.alpha(0.12))
+            .a11y_hidden()
+            .child(glyph)
             .child(
-                text(t("chrome:demo.body"))
-                    .font(tk.txs(400.0))
-                    .color(tk.muted_fg)
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .truncate(),
-            )
-            .child(status)
-            .child(leave)
-            .child(more),
+                text(t("chrome:demo.badge"))
+                    .font(tk.txs(600.0))
+                    .color(amber),
+            ),
     )
 }
 
-/// The book switcher's demo row (above **Manage books**).
-pub fn switcher_row(app: &App, tk: &Tk) -> El {
+/// The demo's mark colour (amber, as the web's demo badge).
+fn amber(tk: &Tk) -> rune::Color {
+    rune::color::hex(if tk.dark { "#fbbf24" } else { "#b45309" }).expect("hex")
+}
+
+/// The book switcher's demo rows (above **Manage books**): **Try the demo book**, or in the demo
+/// **Leave demo** and **Reset demo**.
+pub fn switcher_rows(app: &App, tk: &Tk) -> Vec<El> {
+    let mut rows = vec![switcher_row(app, tk)];
+    if app.demo.active.is_some() && !app.demo.busy() {
+        rows.push(
+            menu_row(
+                tk,
+                "sh-books-demo-reset",
+                &I::ROTATE_CCW,
+                t("chrome:demo.reset"),
+            )
+            .on_press(|s: &mut App| {
+                s.shell.popup = None;
+                start(s);
+            }),
+        );
+    }
+    rows
+}
+
+fn menu_row(tk: &Tk, key: &str, glyph: &'static rune::Icon, label: String) -> El {
+    row()
+        .key(key)
+        .w_full()
+        .px(tk.r(0.5))
+        .py(tk.r(0.375))
+        .gap(tk.r(0.5))
+        .center_y()
+        .radius(tk.r(0.25))
+        .hover(tk.accent)
+        .role("button")
+        .label(label.clone())
+        .child(ic(glyph, tk.r(1.0), tk.muted_fg))
+        .child(text(label).font(tk.tsm(400.0)).color(tk.fg))
+}
+
+fn switcher_row(app: &App, tk: &Tk) -> El {
     let busy = app.demo.busy();
     let in_demo = app.demo.active.is_some();
     let label = t(if busy {
@@ -652,9 +614,20 @@ pub static SCENES: &[crate::app::Scene] = &[
         settle(a);
         settle(a);
     }),
-    ("demo-menu", |a| {
+    // Stack goal in the demo: the owner's goal (₿ 10 here) stays theirs; the demo measures
+    // against a round target above its own stack.
+    ("demo-goal", |a| {
+        use crate::overview::grid::model::{Size, WidgetId};
+        a.ov.layout.set_goal_sats(Some(10 * 100_000_000));
+        a.ov.layout.add(WidgetId::Goal, Size::Medium);
         live(a);
-        a.demo.menu = true;
+    }),
+    // The switcher inside the demo: Leave demo and Reset demo.
+    ("demo-switcher-open", |a| {
+        live(a);
+        a.shell.popup = Some(crate::shell::Popup::Books);
+        a.send("ui.profiles.snapshot", Value::Null, "app.profiles");
+        settle(a);
     }),
     ("demo-transactions", |a| {
         live(a);

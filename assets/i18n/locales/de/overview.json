@@ -284,6 +284,7 @@
     "perBtc": "{{value}} / BTC",
     "noSource": "Keine Quelle",
     "manual": "Manuell",
+    "sample": "Beispielkurse",
     "synced": "Synced {{date}}",
     "notSynced": "Nicht synced",
     "justNow": "gerade eben",

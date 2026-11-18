@@ -235,7 +235,7 @@ pub fn dest(app: &App, id: WidgetId) -> Option<(&'static str, String)> {
 /// What a click on the tile does, and what that is called: its destination, or Stack goal's sheet.
 pub fn action(app: &App, id: WidgetId) -> Option<(String, crate::app::Handler)> {
     if id == WidgetId::Goal {
-        let label = if app.ov.layout.goal_sats().is_some() {
+        let label = if super::goal::has_target(app) {
             super::goal::edit_goal()
         } else {
             super::goal::set_goal()
@@ -685,9 +685,9 @@ fn widget_entries(app: &App, tk: &Tk, id: WidgetId) -> Vec<Entry> {
         // Needs attention with nothing in it (seen only while editing): nowhere to go.
         None => {}
     }
-    if id == WidgetId::Goal && app.ov.layout.goal_sats().is_some() {
+    if id == WidgetId::Goal && super::goal::has_target(app) {
         out.push(item("ov-menu-goal-clear", copy::clear_goal(), |a| {
-            a.ov.layout.set_goal_sats(None);
+            super::goal::set_target(a, None);
         }));
     }
     if !out.is_empty() {

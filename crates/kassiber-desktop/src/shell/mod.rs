@@ -968,7 +968,6 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, page: El, layer: &mut Vec<El>)
         .border(1.0, tk.border.alpha(tk.border.a * 0.7))
         .border_layout()
         .clip_rounded(tk.r(1.0))
-        .children(crate::demo::banner(app, tk, layer))
         .child({
             // The docked transaction detail panel sits beside the scrolling page (both screens).
             let main = col()

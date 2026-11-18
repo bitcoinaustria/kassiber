@@ -8,9 +8,14 @@ disposable copy, kept apart from the user's own books.
 
 ## Starting it
 
-- Desktop: **Try the demo** on Welcome, or **Try the demo book** in the book
-  switcher. A banner then marks every screen, with **Leave demo** and a menu
-  holding **Reset demo** and **Connect an agent**.
+- Desktop: **Try the demo** on Welcome or the lock screen, or **Try the demo
+  book** in the book switcher. A notice says so once; then a **Demo** tag sits
+  beside the book name in the title bar, and the book switcher (a click on the
+  book name) holds **Leave demo** and **Reset demo**. In the demo the Overview
+  shows no sync line or **Add connection** (nothing connects to it), prices are
+  labelled **Sample prices**, and **Stack goal** uses the demo's own target (a
+  round one above its stack) instead of the user's, which is never changed
+  there.
 - CLI: `kassiber projects demo [--path DIR]`, which prints the new copy's
   `data_root`. Use it with `--data-root` like any explicit book.
 
