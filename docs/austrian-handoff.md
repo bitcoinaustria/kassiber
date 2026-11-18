@@ -276,10 +276,15 @@ it falls back to `at_regime=alt` once only Alt inventory remains. An owner
 settles a mixed Alt+Neu disposal with a reviewed per-transaction override:
 `transactions.at_regime_override`, set through metadata, reaches the engine
 as the request row's `regime_override` (`alt` or `neu`) and replaces the
-tracker's regime for that row. A disposal then carries no
-`at_regime_basis=wahlrecht`; a move takes its out leg's override, and its
-regime flows still come from the tracker. Without an override, mixed holdings
-keep the Neu-first default.
+tracker's regime for that row. The tracker also depletes the overridden
+regime, so a sale reviewed as Alt leaves the wallet's Neu for its next sale
+(Python's tracker depleted the time's regime, and the following sale then
+found Alt only). Likewise an acquisition reviewed as Alt or Neu adds its
+quantity to that regime's inventory in its wallet, the regime its lot
+carries (Python's tracker added it to the time's regime, so a wallet's sale
+could take another wallet's basis). A disposal then carries no `at_regime_basis=wahlrecht`; a
+move takes its out leg's override, and its regime flows still come from the
+tracker. Without an override, mixed holdings keep the Neu-first default.
 
 ## Cutoff constant duplication
 

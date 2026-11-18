@@ -227,9 +227,12 @@ fn detail(row: Value) -> Result<Value> {
     let quantity = decimal(&s(quantity_msat.to_string()))?
         .div(&Decimal::from(100_000_000_000_i64), &DECIMAL)
         .map_err(arithmetic)?;
-    let proceeds = decimal(value(&row, "proceeds"))?;
-    let basis = decimal(value(&row, "cost_basis"))?;
-    let gain = decimal(value(&row, "gain_loss"))?;
+    // The journal's exact decimals; the REAL columns are rounded copies
+    // (a gain of 1.00499999999999999 is 1.005 there), read only by journals
+    // older than the exact columns.
+    let proceeds = crate::layer_reads::exact(&row, "proceeds")?;
+    let basis = crate::layer_reads::exact(&row, "cost_basis")?;
+    let gain = crate::layer_reads::exact(&row, "gain_loss")?;
     let income = if text(&row, "entry_type") == "income" {
         gain.clone()
     } else {
@@ -320,7 +323,7 @@ fn detail(row: Value) -> Result<Value> {
 /// `_austrian_e1kv_rows`: the year's classified rows, in journal order.
 pub(crate) fn e1kv_rows(conn: &Connection, profile: &Value, year: i64) -> Result<Vec<Value>> {
     let (start, end) = calendar::window(year);
-    let raw = rows(conn,"SELECT je.occurred_at,je.transaction_id,je.entry_type,je.asset,je.quantity,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,w.label AS wallet,t.external_id AS transaction_external_id,COALESCE(NULLIF(t.kind_override,''),t.kind) AS transaction_kind,t.note AS transaction_note FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.at_category IS NOT NULL AND je.at_category!='neu_swap' AND je.entry_type NOT IN ('fee','transfer_fee') AND COALESCE(t.taxability_override,1)!=0 AND je.occurred_at>=? AND je.occurred_at<? ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",[&text(profile, "id"),&start,&end])?;
+    let raw = rows(conn,"SELECT je.occurred_at,je.transaction_id,je.entry_type,je.asset,je.quantity,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.gain_loss,0) AS gain_loss,je.cost_basis_exact,je.proceeds_exact,je.gain_loss_exact,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,w.label AS wallet,t.external_id AS transaction_external_id,COALESCE(NULLIF(t.kind_override,''),t.kind) AS transaction_kind,t.note AS transaction_note FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.at_category IS NOT NULL AND je.at_category!='neu_swap' AND je.entry_type NOT IN ('fee','transfer_fee') AND COALESCE(t.taxability_override,1)!=0 AND je.occurred_at>=? AND je.occurred_at<? ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",[&text(profile, "id"),&start,&end])?;
     let mut details = Vec::new();
     for row in raw {
         if calendar::vienna(&text(&row, "occurred_at"))?.0 == year {

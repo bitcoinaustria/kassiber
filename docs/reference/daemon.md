@@ -1101,7 +1101,9 @@ report unsafe. Rate limits are normal state: a 429/`Retry-After` cools down the
 affected source/provider only, while other queued jobs can continue. The
 `blocking_reports` flag, not the cooldown label alone, decides whether reports
 must wait. Final accounting exports enforce that persisted flag in both the
-desktop daemon and CLI. Read-only previews, raw transaction exports, and audit
+desktop daemon and CLI, and also wait while a configured Silent Payments
+wallet's scan is pending or incomplete (the `silent_payment_scan_*` report
+blockers): before its first scan such a wallet has no freshness row to flag. Read-only previews, raw transaction exports, and audit
 packages remain available so a failed source can still be investigated and
 repaired without producing a misleading final report.
 
