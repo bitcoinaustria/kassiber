@@ -92,6 +92,7 @@ fn cli_proxy_kind(got: String, expected: String) -> (String, String) {
 /// text, whitespace collapsed, the rest of the usage, help or error must
 /// still match Python's.
 fn rust_only(got: String, expected: String) -> (String, String) {
+    let (got, expected) = rust_only_flag(got, expected);
     let names: Vec<&str> = kassiber_cli::spec::RUST_ONLY_LEAVES
         .iter()
         .flat_map(|leaf| leaf.split('.').skip(1))
@@ -119,6 +120,21 @@ fn rust_only(got: String, expected: String) -> (String, String) {
             .replace(&format!(", '{name}'"), "");
     }
     (collapse(&got), collapse(&expected))
+}
+
+/// `--changed-rows` (`spec::CHANGED_ROWS_LEAVES`) is a Rust-only flag: its
+/// usage and help are dropped from the Rust text, whitespace collapsed, and
+/// the rest must still match Python's.
+fn rust_only_flag(got: String, expected: String) -> (String, String) {
+    if !got.contains("--changed-rows") || expected.contains("--changed-rows") {
+        return (got, expected);
+    }
+    let collapse = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let help = collapse(kassiber_cli::spec::CHANGED_ROWS_HELP);
+    let got = collapse(&got)
+        .replace(&format!(" --changed-rows {{skip,import}} {help}"), "")
+        .replace(" [--changed-rows {skip,import}]", "");
+    (got, collapse(&expected))
 }
 
 /// `--cost-basis-pool-scope` has no parser default in Rust (the country
@@ -227,6 +243,12 @@ fn matches_python_argparse() {
                                 .collect(),
                         );
                         let got = dumps(&dict, &Options::new().compact().sort_keys(true)).unwrap();
+                        // The Rust-only `--changed-rows` defaults to null.
+                        let got = if text(ok).contains("changed_rows") {
+                            got
+                        } else {
+                            got.replace("\"changed_rows\":null,", "")
+                        };
                         got == registry_default(&argv, &got, text(ok))
                     }
                     (Err(Stop::Error { parser, message }), _, Some(error), _) => {

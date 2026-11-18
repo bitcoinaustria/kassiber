@@ -50,7 +50,7 @@ fn bitcoinde_csv_imports_the_statement_in_full_mode_once() {
     // An active custodial ledger imports in full only.
     let file = std::env::temp_dir().join(format!("kassiber-bitcoinde-mode-{}.csv", std::process::id()));
     std::fs::write(&file, BITCOINDE_CSV).unwrap();
-    let request = Request { profile_id: "p".into(), wallet: String::new(), file: file.to_str().unwrap().into(), format: Format::Bitcoinde, mode: Some("relevant".into()), companion: None, timezone: None };
+    let request = Request { profile_id: "p".into(), wallet: String::new(), file: file.to_str().unwrap().into(), format: Format::Bitcoinde, mode: Some("relevant".into()), companion: None, timezone: None, changed_rows: None };
     let error = execute(&book(), request, None).unwrap_err();
     std::fs::remove_file(file).unwrap();
     assert_eq!(error.message, "bitcoinde_csv is an active custodial ledger import");

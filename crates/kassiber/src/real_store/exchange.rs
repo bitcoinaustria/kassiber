@@ -32,7 +32,7 @@ fn allowed(operation: &str) -> &'static [&'static str] {
             "api_secret",
             "url",
         ],
-        _ => &["wallet"],
+        _ => &["wallet", "changed_rows"],
     }
 }
 
@@ -406,7 +406,11 @@ impl RealBook {
             )
             .with_hint("Add the exchange again with a read-only API key."));
         };
-        let result = self.import_exchange_api(&profile, &target.id, &backend, &target.kind);
+        let changed_rows = text(args, "changed_rows")?
+            .map(|value| kassiber_wallets::file_import::ChangedRows::parse(&value))
+            .transpose()?;
+        let result =
+            self.import_exchange_api(&profile, &target.id, &backend, &target.kind, changed_rows);
         let at = kassiber_setup::Sources::now(&SetupSources, self.conn()?)?;
         let record = match &result {
             Ok(payload) => {
@@ -421,6 +425,9 @@ impl RealBook {
                     // scope left out, for the card's "also track" prompt.
                     "assets",
                     "swap_pairs",
+                    // docs/reference/imports.md#re-importing-a-newer-export
+                    "corrections_ignored",
+                    "changed_rows",
                 ] {
                     if let Some(value) = get(payload, key) {
                         record.push((key, value.clone()));

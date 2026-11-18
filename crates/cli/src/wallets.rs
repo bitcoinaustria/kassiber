@@ -87,6 +87,7 @@ pub fn execute(
                 &wallet,
                 namespace.text("backend").unwrap_or_default(),
                 command.strip_prefix("sync-").expect("sync command"),
+                changed_rows(namespace)?,
             );
         }
         "sync" => {
@@ -107,6 +108,7 @@ pub fn execute(
                     mode: None,
                     companion: None,
                     timezone: None,
+                    changed_rows: changed_rows(namespace)?,
                 },
                 column_map,
             )
@@ -140,6 +142,7 @@ pub fn execute(
                 mode: namespace.text("mode").map(str::to_owned),
                 companion: namespace.text("transactions").map(str::to_owned),
                 timezone: namespace.text("timezone").map(str::to_owned),
+                changed_rows: changed_rows(namespace)?,
                 file: namespace.text("file").unwrap_or_default().into(),
                 format: match namespace.text("wallets_command") {
                     Some("import-wasabi") => kassiber_wallets::file_import::Format::Wasabi,
@@ -249,6 +252,17 @@ fn column_map(
 }
 
 /// `wallets identify` arguments; an absent repeatable flag is no input.
+/// `--changed-rows`: the answer to rows that look like a stored row
+/// (docs/reference/imports.md#re-importing-a-newer-export).
+fn changed_rows(
+    namespace: &Namespace,
+) -> Result<Option<kassiber_wallets::file_import::ChangedRows>, AppError> {
+    namespace
+        .text("changed_rows")
+        .map(kassiber_wallets::file_import::ChangedRows::parse)
+        .transpose()
+}
+
 fn identify_args(namespace: &Namespace) -> kassiber_wallets::identify::CliArgs {
     let list = |name: &str| match namespace.get(name) {
         Some(Value::List(items)) => items.iter().map(kassiber_envelope::py_str).collect(),

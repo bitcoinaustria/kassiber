@@ -291,6 +291,22 @@ This is display only. Stored rows, pairs and journals are unaffected, and the
 current build reads them correctly again. Use the current build for any book
 with other assets.
 
+## Remembered re-import answers
+
+A `--changed-rows skip` answer ([re-importing a newer export](imports.md#re-importing-a-newer-export))
+is remembered in the wallet's `config_json` under `changed_rows_kept`:
+`{stored transaction id: [{"key": digest of the incoming row's id, date,
+direction, asset, amount and fee, "batch": the import run that recorded it},
+...]}`, at most 16 per stored row. Rolling that run back (`imports rollback`)
+retires the answer, so the same difference asks again; `batch` is null when
+the run stored no row and so left nothing to roll back. It uses no new
+table, so no schema group, migration or semantics bump: the answer changes no
+transaction or journal input. Older builds and the released Python app keep
+the key untouched and ignore it, so their imports and syncs fall back to
+their own behaviour for these rows. The key is not part of the wallet's safe
+projection (`wallets get`) or of the assistant's view. A wallet edit that
+rewrites the configuration may drop it; the next import then asks again.
+
 ## Intentionally not inferred during upgrade
 
 ### Journal calculation semantics and older writers

@@ -30,6 +30,7 @@ fn run(format: Format, scope: &str, content: &str) -> Result<Py, AppError> {
             mode,
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     )

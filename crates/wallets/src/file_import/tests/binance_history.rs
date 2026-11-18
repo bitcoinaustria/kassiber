@@ -46,6 +46,7 @@ fn import_after(
         mode: None,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let result = execute(&conn, request(), None);
     if result.is_ok() {

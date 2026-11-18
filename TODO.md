@@ -2153,6 +2153,13 @@ See [tax countries](docs/reference/tax-countries.md) and
   and CSV; see their pages for which assets each reads). Then further sources
   from the Rotki survey: Bison, Trade Republic and Crypto.com App (CSV; need
   real samples), Revolut, Nexo, KuCoin, Bybit and OKX.
+- [ ] Bisq and `--changed-rows` (owner decision pending): `wallets import-bisq`
+  has no `--changed-rows`, so a Bisq import that the re-import check refuses
+  (`import_changed_rows`) can be answered only from the desktop, which sends
+  `changed_rows` for every format.
+- [ ] Desktop "import again" for Bisq (owner decision pending): the saved
+  re-import keeps only the file path, so re-importing a Bisq source refuses
+  for lack of the Funds > Transactions export and the time zone.
 - [ ] Coinbase API keys: Coinbase expired the legacy HMAC keys the sync
   signs with in February 2025 and accepts only CDP keys, which sign a
   short-lived JWT per request (ES256 or Ed25519), so `wallets sync-coinbase`

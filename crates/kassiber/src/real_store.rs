@@ -2865,6 +2865,7 @@ impl Book for RealBook {
         wallet: &str,
         backend: &str,
         kind: &str,
+        changed_rows: Option<kassiber_wallets::file_import::ChangedRows>,
     ) -> Result<Value, AppError> {
         use kassiber_net::{Consent, Gate, Ledger, Offline};
         use kassiber_wallets::file_import::{exchange_api, Identity};
@@ -2896,7 +2897,7 @@ impl Book for RealBook {
         let identity: Option<Identity> = None;
         // This command is the user's explicit request for exactly this
         // backend's signed history; the grant covers only the reported route.
-        exchange_api::execute(
+        exchange_api::execute_with(
             self.conn()?,
             profile,
             wallet,
@@ -2906,6 +2907,7 @@ impl Book for RealBook {
             env!("CARGO_PKG_VERSION"),
             &mut |route| Some(Consent::explicit_trigger(route.request())),
             identity.as_ref(),
+            changed_rows,
         )
     }
     fn import_ledger_file(

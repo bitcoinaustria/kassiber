@@ -605,11 +605,15 @@ preview to confirm a descriptor produces the expected wallet before
 committing.
 
 `ui.wallets.import_file` accepts `wallet`, `source_file`, and `source_format`
-for wallet-scoped CSV/JSON imports. `source_format="bisq_csv"` also requires
-`companion_file` and `timezone`, and imports the [Bisq](../exchanges/bisq.md) escrow ledger in
-full mode, with `wallet` optional. Wallet CSV import results include
-`inserted_records`, `updated_records`, and `unchanged` so the desktop can show
-what changed after an exchange CSV import. For
+for wallet-scoped CSV/JSON imports, and `changed_rows` (`skip` or `import`),
+the answer to an `import_changed_rows` refusal
+([re-importing a newer export](imports.md#re-importing-a-newer-export)).
+`source_format="bisq_csv"` also requires `companion_file` and `timezone`, and
+imports the [Bisq](../exchanges/bisq.md) escrow ledger in full mode, with
+`wallet` optional. Wallet CSV import results include `inserted_records`,
+`updated_records`, and `unchanged` so the desktop can show what changed after
+an exchange CSV import, `updated` when above zero, and `corrections_ignored`
+and `changed_rows` when there is something to report. For
 `source_format="bullbitcoin_csv"` or `source_format="coinfinity_csv"`, `wallet`
 is optional. The default `mode="relevant"` treats the export as book-wide
 exchange evidence and enriches only unique matching transactions in the active

@@ -47,6 +47,16 @@ pub(super) fn import_into(
     format: Format,
     wallet: &str,
 ) -> Result<Py, AppError> {
+    import_with(conn, content, format, wallet, None)
+}
+/// [`import_into`] with the user's answer to changed rows.
+pub(super) fn import_with(
+    conn: &Connection,
+    content: &str,
+    format: Format,
+    wallet: &str,
+    changed_rows: Option<ChangedRows>,
+) -> Result<Py, AppError> {
     let file = std::env::temp_dir().join(format!(
         "kassiber-import-{}-{:?}.csv",
         std::process::id(),
@@ -63,6 +73,7 @@ pub(super) fn import_into(
             mode: None,
             companion: None,
             timezone: None,
+            changed_rows,
         },
         None,
     );
@@ -255,7 +266,7 @@ fn csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_link
     import(&conn, &content("chain_script", "1")).unwrap();
     assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE payment_hash_source='chain_script_unique_outpoint' AND swap_refund_funding_vout=0"),1);
     let content = |kind: &str, source: &str| {
-        format!("date,txid,amount,kind,raw_json\n2025-01-01,wasabi,1,{kind},\"{{\"\"source\"\":\"\"{source}\"\"}}\"\n")
+        format!("date,txid,amount,kind,raw_json\n2025-01-04,wasabi,1,{kind},\"{{\"\"source\"\":\"\"{source}\"\"}}\"\n")
     };
     import(&conn, &content("deposit", "wasabi_gethistory")).unwrap();
     import(&conn, &content("withdrawal", "other")).unwrap();
@@ -283,11 +294,13 @@ fn csv_import_dedupe_batch_membership_and_journal_invalidation() {
     let result = import(&conn, content).unwrap();
     assert_eq!(
         kassiber_envelope::get(&result, "imported"),
-        Some(&Py::from(2))
+        Some(&Py::from(3))
     );
+    // Identical ID-less rows stay two rows; only the second `same` row
+    // matches the first.
     assert_eq!(
         kassiber_envelope::get(&result, "skipped"),
-        Some(&Py::from(2))
+        Some(&Py::from(1))
     );
     assert_eq!(
         scalar(
@@ -308,15 +321,15 @@ fn csv_import_dedupe_batch_membership_and_journal_invalidation() {
             &conn,
             "SELECT count(*) FROM transactions WHERE external_id IS NULL"
         ),
-        1
+        2
     );
     assert_eq!(
         scalar(&conn, "SELECT count(*) FROM import_batch_transactions"),
-        2
+        3
     );
-    assert_eq!(scalar(&conn, "SELECT rows_inserted FROM import_batches"), 2);
+    assert_eq!(scalar(&conn, "SELECT rows_inserted FROM import_batches"), 3);
     assert_eq!(scalar(&conn, "SELECT rows_updated FROM import_batches"), 0);
-    assert_eq!(scalar(&conn, "SELECT rows_skipped FROM import_batches"), 2);
+    assert_eq!(scalar(&conn, "SELECT rows_skipped FROM import_batches"), 1);
     assert_eq!(
         scalar(
             &conn,
@@ -732,7 +745,16 @@ fn parsed_rows(text: &str) -> Result<Vec<Json>, AppError> {
 #[test]
 fn json_import_identity_fee_relaxation_routing_and_atomicity() {
     let conn = fixture();
-    let run = |value: Json| import_kind(&conn, &value.to_string(), Format::Json);
+    // These rows share dates and amounts on purpose; each is its own row.
+    let run = |value: Json| {
+        import_with(
+            &conn,
+            &value.to_string(),
+            Format::Json,
+            "Source",
+            Some(ChangedRows::Import),
+        )
+    };
     let idless = json!([
         {"date":"2025-01-01","amount":1},
         {"date":"2025-01-02","amount":1},
@@ -741,11 +763,11 @@ fn json_import_identity_fee_relaxation_routing_and_atomicity() {
     let result = run(idless.clone()).unwrap();
     assert_eq!(
         kassiber_envelope::get(&result, "imported"),
-        Some(&Py::from(2))
+        Some(&Py::from(3))
     );
     assert_eq!(
         scalar(&conn, "SELECT count(*) FROM import_batch_transactions"),
-        2
+        3
     );
     let result = run(idless).unwrap();
     assert_eq!(
@@ -1142,6 +1164,7 @@ fn bull(conn: &Connection, mode: &str) -> Py {
         mode: Some(mode.into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     if mode == "relevant" {
         exchange::enrich(conn, &request, &rows).unwrap()
@@ -1357,6 +1380,7 @@ fn bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation()
                 mode: Some("full".into()),
                 companion: None,
                 timezone: None,
+                changed_rows: None,
             },
             None,
         );
@@ -1437,6 +1461,7 @@ fn bull_relevant_validates_only_matched_prices_and_preserves_committed_raw() {
         mode: None,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let error = exchange::enrich(&conn, &request, &rows).unwrap_err();
     assert_eq!(error.code, "validation");
@@ -1504,6 +1529,7 @@ fn bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read()
         mode: Some("full".into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let identity = Identity {
         ids: vec![],
@@ -1565,6 +1591,7 @@ fn bull_relevant_preserves_reference_error_order_and_rollback() {
             mode: Some("relevant".into()),
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     )
@@ -1613,6 +1640,7 @@ fn bull_reads_only_btc_and_names_other_crypto_orders() {
                 mode: Some("full".into()),
                 companion: None,
                 timezone: None,
+                changed_rows: None,
             },
             None,
         );
@@ -1695,6 +1723,7 @@ fn coinfinity(conn: &Connection, mode: &str) -> Py {
         mode: Some(mode.into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     if mode == "relevant" {
         exchange::enrich(conn, &request, &rows).unwrap()
@@ -1814,6 +1843,7 @@ fn coinfinity_coordinator_failure_rolls_back_transactions_flags_run_and_invalida
                 mode: Some("full".into()),
                 companion: None,
                 timezone: None,
+                changed_rows: None,
             },
             None,
         );
@@ -1909,6 +1939,7 @@ fn coinfinity_economic_matching_window_scope_exclusion_and_ambiguity() {
         mode: None,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let result = exchange::enrich(&conn, &request, &rows).unwrap();
     assert_eq!(
@@ -1950,6 +1981,7 @@ fn coinfinity_default_wallet_admission_precedes_entropy_and_commits_before_file_
         mode: Some("full".into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let identity = Identity {
         ids: vec![],
@@ -2066,6 +2098,7 @@ fn coinfinity_economic_matching_preserves_closed_observation() {
         mode: None,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let result = exchange::enrich(&conn, &request, &rows).unwrap();
     assert_eq!(
@@ -2171,6 +2204,7 @@ fn twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_
         mode,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let error = execute(
         &conn,
@@ -2275,6 +2309,7 @@ fn twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions()
         mode: None,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let wallet = resolve(&conn, "p", "Source").unwrap();
     let mut outcome = Vec::new();
@@ -2353,6 +2388,7 @@ fn pocket(conn: &Connection, mode: &str) -> Py {
         mode: Some(mode.into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     if mode == "relevant" {
         exchange::enrich(conn, &request, &rows).unwrap()
@@ -2462,6 +2498,7 @@ fn pocket_default_wallet_admission_precedes_entropy_and_file_access() {
         mode: Some("full".into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let identity = Identity {
         ids: vec!["provider".into()],
@@ -2502,6 +2539,7 @@ fn pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation() {
             mode: Some("full".into()),
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     );
@@ -2556,6 +2594,7 @@ fn pocket_reimport_matches_provider_identity_when_fee_changes() {
         mode: Some("full".into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let result = apply(
         &conn,
@@ -2680,6 +2719,7 @@ fn ledgerlive_refusals_and_late_failure_leave_the_book_unchanged() {
             mode: None,
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     )
@@ -2802,6 +2842,7 @@ fn strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses() {
         mode,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let error = execute(&conn, request(Some("relevant".into())), None).unwrap_err();
     assert_eq!(
@@ -3091,6 +3132,7 @@ fn cointracking_admission_and_late_failure_leave_every_write_uncommitted() {
             mode: None,
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     )
@@ -3322,6 +3364,7 @@ fn blockpit_admission_and_late_failure_leave_every_write_uncommitted() {
             mode: None,
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     )
@@ -3512,6 +3555,16 @@ fn binance_import(
     mode: &str,
     wallet: &str,
 ) -> Result<Py, AppError> {
+    binance_import_with(conn, content, mode, wallet, None)
+}
+
+fn binance_import_with(
+    conn: &Connection,
+    content: &str,
+    mode: &str,
+    wallet: &str,
+    changed_rows: Option<ChangedRows>,
+) -> Result<Py, AppError> {
     let file = std::env::temp_dir().join(format!(
         "binance-coordinator-{}-{:?}.csv",
         std::process::id(),
@@ -3528,6 +3581,7 @@ fn binance_import(
             mode: Some(mode.into()),
             companion: None,
             timezone: None,
+            changed_rows,
         },
         None,
     );
@@ -3597,15 +3651,27 @@ fn binance_full_coordinator_preserves_overlap_reference_ids_enrichment_and_reimp
             Some(&Py::from(0))
         );
         assert_eq!(scalar(&conn,"SELECT count(*) FROM import_batches WHERE source_format='binance_supplemental_csv'"),1);
-        let enriched = binance_import(
+        // The quote amount is part of an ID-less row's economic identity, so
+        // a changed price is a different trade, not an enrichment: the same
+        // second, amount and fee under another id waits for the user.
+        let repriced = BINANCE_AUTO.replace("100.00 EUR", "200.00 EUR");
+        let error = binance_import(&conn, &repriced, "full", "Source").unwrap_err();
+        assert_eq!(error.code, "import_changed_rows");
+        assert_eq!(
+            error
+                .details
+                .as_ref()
+                .and_then(|d| kassiber_envelope::get(d, "reidentified")),
+            Some(&Py::from(1))
+        );
+        let enriched = binance_import_with(
             &conn,
-            &BINANCE_AUTO.replace("100.00 EUR", "200.00 EUR"),
+            &repriced,
             "full",
             "Source",
+            Some(ChangedRows::Import),
         )
         .unwrap();
-        // The quote amount is part of an ID-less row's economic identity, so
-        // a changed price is a different trade, not an enrichment.
         assert_eq!(
             kassiber_envelope::get(&enriched, "imported"),
             Some(&Py::from(1))
@@ -3920,6 +3986,7 @@ fn ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches() {
                     mode: None,
                     companion: None,
                     timezone: None,
+                    changed_rows: None,
                 },
                 Some(&mapping),
                 None,
@@ -4016,7 +4083,13 @@ fn btcpay_metadata_binds_to_the_stored_text_identity() {
             "['one', {'text': 'two'}, None, False]",
         ),
     ] {
-        let body = json!([{"TransactionId":identity,"Timestamp":"2025-01-02","Amount":"0.001 BTC","Comment":"receipt"}]).to_string();
+        // A day each, so the second is not a re-identified copy of the first.
+        let day = if stored == "True" {
+            "2025-01-02"
+        } else {
+            "2025-01-03"
+        };
+        let body = json!([{"TransactionId":identity,"Timestamp":day,"Amount":"0.001 BTC","Comment":"receipt"}]).to_string();
         let result = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
         assert_eq!(
             kassiber_envelope::get(&result, "btcpay_notes_set"),
@@ -4233,7 +4306,7 @@ fn btcpay_metadata_lookup_is_the_untrimmed_string_identity_and_scoped() {
         );
         // A list id is no binding error: the row is stored and its metadata
         // found under the same str() identity.
-        let body = json!([{"TransactionId":["invalid"],"Timestamp":"2025-01-02","Amount":"1 BTC","Comment":"note"}]).to_string();
+        let body = json!([{"TransactionId":["invalid"],"Timestamp":"2025-01-04","Amount":"1 BTC","Comment":"note"}]).to_string();
         let result = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
         assert_eq!(
             kassiber_envelope::get(&result, "btcpay_notes_set"),
@@ -4629,6 +4702,7 @@ fn wasabi_missing_file_refusal_is_atomic() {
                 mode: None,
                 companion: None,
                 timezone: None,
+                changed_rows: None,
             },
             None,
         )
@@ -5480,6 +5554,7 @@ fn import_bisq_in(
         mode: None,
         companion: transactions.map(|_| companion.to_str().unwrap().into()),
         timezone: timezone.map(str::to_owned),
+        changed_rows: None,
     };
     let result = execute(conn, request, None);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -6135,6 +6210,7 @@ fn bisq_checks_the_book_under_the_write_lock() {
                 mode: None,
                 companion: Some(companion.to_str().unwrap().into()),
                 timezone: Some("UTC".into()),
+                changed_rows: None,
             },
             None,
         )
@@ -6180,6 +6256,7 @@ fn bisq_imports_only_into_a_bisq_wallet() {
         mode: None,
         companion: Some(transactions.to_str().unwrap().into()),
         timezone: Some("UTC".into()),
+        changed_rows: None,
     };
     let error = execute(&conn, request("Source"), None).unwrap_err();
     let refusal = "Bisq trades import into a bisq wallet; 'Source' is a custom wallet";
@@ -6317,6 +6394,7 @@ fn asset_scope_is_validated_and_defaults_to_bitcoin() {
 }
 
 mod binance_history;
+mod reimport;
 mod supplemental_assets;
 mod tax_platform_assets;
 

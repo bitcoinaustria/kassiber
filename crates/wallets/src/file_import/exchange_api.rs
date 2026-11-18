@@ -76,6 +76,26 @@ pub fn execute(
     consent: &mut dyn FnMut(&Route) -> Option<Consent>,
     identity: Option<&Identity>,
 ) -> Result<Py, AppError> {
+    execute_with(
+        conn, profile, wallet_ref, backend, expected, gate, version, consent, identity, None,
+    )
+}
+
+/// [`execute`] with the user's answer to rows under a stored row's id with
+/// another amount or fee (`ChangedRows`); without one such a sync refuses.
+#[allow(clippy::too_many_arguments)]
+pub fn execute_with(
+    conn: &Connection,
+    profile: &str,
+    wallet_ref: &str,
+    backend: &Json,
+    expected: &str,
+    gate: &Gate,
+    version: &str,
+    consent: &mut dyn FnMut(&Route) -> Option<Consent>,
+    identity: Option<&Identity>,
+    changed_rows: Option<ChangedRows>,
+) -> Result<Py, AppError> {
     let backend = to_py(backend)?;
     let (name, kind) = backend_kind(&backend, expected)?;
     let mut ids = Ids { identity, at: 0 };
@@ -145,11 +165,13 @@ pub fn execute(
         wallet: wallet.id.clone(),
         file: String::new(),
         format: Format::Json,
-        mode: None,
         companion: None,
         timezone: None,
+        mode: None,
+        changed_rows,
     };
     kassiber_store::begin_write_savepoint(conn, "exchange_api_import").map_err(database_error)?;
+    let mut selected = vec![];
     let result = apply_records(
         conn,
         &request,
@@ -159,6 +181,7 @@ pub fn execute(
         &mut ids,
         None,
         Some(&format!("{kind}:api:{}", lossy(&name))),
+        &mut selected,
     )
     .and_then(|result| {
         if exchange.same_second_tags {
@@ -185,7 +208,7 @@ pub fn execute(
     // A revoked or offline route never publishes a book.
     // Both legs of each swap are stored now; pair them in the same write.
     .and_then(|mut result| {
-        let pairs = swaps::pair(conn, profile, &wallet.id, &rows, &normalized)?;
+        let pairs = swaps::pair(conn, profile, &rows, &normalized, &selected)?;
         kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs.unwrap_or(0)));
         Ok(result)
     })

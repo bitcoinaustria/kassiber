@@ -1923,7 +1923,12 @@ the staged file inside a rolled-back savepoint and returns its exact effect
 with a plan digest, the file's SHA-256 and the book's input version;
 `ui_wallets_import_attachment_apply` repeats it and commits only when all three
 still match, after once-only consent. The approval row shows the plan the daemon
-recomputes then, and its summary names the row count and target. Only file
+recomputes then, and its summary names the row count and target. When the
+book keeps values the file states differently, the plan, its digest and the
+apply result carry `corrections_ignored` as counts per field and the first 20
+transaction ids, never the values; a file whose rows look like rows the book
+has under another id or amount is a blocker (`import_changed_rows`) the user
+answers in the desktop or CLI ([re-importing](imports.md#re-importing-a-newer-export)). Only file
 and exchange wallets, or a new `custom` wallet, are targets. Applied imports
 are ordinary import runs: `ui_imports_list`, `ui_imports_rollback_plan` and the
 consented, plan-bound `ui_imports_rollback` undo them, except when a rollback

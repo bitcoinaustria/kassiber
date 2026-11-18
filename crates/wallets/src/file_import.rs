@@ -8,6 +8,7 @@ pub use bisq::holds::{quarantines as bisq_hold_quarantines, REASON as BISQ_HOLD_
 mod btcpay;
 mod bull;
 mod bull_wallet;
+mod changed;
 mod coinfinity;
 pub(crate) mod csv;
 pub mod document;
@@ -25,6 +26,7 @@ pub mod samourai;
 mod strike;
 mod swaps;
 mod synthetic;
+pub use changed::{ChangedRows, HINT as CHANGED_ROWS_HINT};
 pub use synthetic::synthetic_csv_identity;
 mod tax_platform;
 mod twentyone;
@@ -56,6 +58,9 @@ pub struct Request {
     pub companion: Option<String>,
     /// The IANA zone of a local-time export's clock (Bisq writes no offset).
     pub timezone: Option<String>,
+    /// What to do with rows that look like a stored row under another id
+    /// or amount (`changed::Conflict`); `None` refuses such an import.
+    pub changed_rows: Option<ChangedRows>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
@@ -1755,11 +1760,18 @@ fn run(
     };
     // Relevant mode normalizes and validates each row in reference order;
     // a matched price refusal precedes normalization of any later row.
-    let records = if mode == Some("relevant") {
+    let mut records = if mode == Some("relevant") {
         Vec::new()
     } else {
         rows.iter().map(normalize).collect::<Result<Vec<_>, _>>()?
     };
+    // Identical ID-less rows of a generic file stay separate rows.
+    if matches!(
+        request.format,
+        Format::Csv | Format::Json | Format::Ledger | Format::River
+    ) {
+        changed::number_occurrences(&mut records);
+    }
     // A format without its own asset tally stores the asset each row names.
     if let (None, Some(wallet)) = (&tally, &wallet) {
         let scope = assets::Scope::of_wallet(conn, &wallet.id)?;
@@ -1777,10 +1789,11 @@ fn run(
             .map_err(database_error)?;
         savepoint.open = true;
     }
+    let mut selected = vec![];
     let result = if mode == Some("relevant") {
         exchange::enrich(conn, &request, &rows)
     } else {
-        apply(
+        apply_records(
             conn,
             &request,
             wallet.as_ref().expect("wallet import"),
@@ -1788,11 +1801,13 @@ fn run(
             &records,
             &mut ids,
             column_map,
+            None,
+            &mut selected,
         )
         .and_then(|mut result| {
             // Both legs of each provider-reported swap are stored; pair them.
             let wallet = wallet.as_ref().expect("wallet import");
-            let pairs = swaps::pair(conn, &request.profile_id, &wallet.id, &rows, &records)?;
+            let pairs = swaps::pair(conn, &request.profile_id, &rows, &records, &selected)?;
             // A converted format always reports its pairs and what its
             // scope left out.
             if let (Some(tally), Some(scope)) = (&tally, scope) {
@@ -1992,8 +2007,53 @@ struct Inserted {
     unchanged: i64,
     skipped: i64,
     inserted_ids: Vec<String>,
+    /// Per record, in order: the transaction it is now, inserted or matched
+    /// (`None` for a row left out), so a later step names exactly that row.
+    selected: Vec<Option<String>>,
     /// `reset_decisions` while the book keeps "Reset book data" records.
     reset: Option<Py>,
+    /// Provider values the stored rows kept (`changed::ignored`).
+    corrections: Vec<Py>,
+    /// Rows the user's `changed_rows` answer applied to: (re-identified,
+    /// corrected).
+    changed: (i64, i64),
+    /// `skip` answers to remember once the run is recorded: (stored
+    /// transaction id, incoming key).
+    answered: Vec<(String, String)>,
+}
+
+/// `find`, then for a row whose provider id is a chain txid the ID-less row
+/// an earlier export of the same history stored.
+fn lookup(
+    conn: &Connection,
+    wallet: &str,
+    r: &Record,
+    fp: &str,
+) -> Result<Option<Fields>, AppError> {
+    let existing = find(conn, wallet, r, fp)?;
+    if existing.is_some()
+        || r.fingerprint_identity.is_none()
+        || string(&r.fields, "external_id_kind") != "txid"
+    {
+        return Ok(existing);
+    }
+    let mut idless = Record {
+        fields: r.fields.clone(),
+        amount: r.amount.clone(),
+        fee: r.fee.clone(),
+        fingerprint_identity: r.fingerprint_identity.clone(),
+        ignore_fee: false,
+        binding_errors: BTreeMap::new(),
+        economics: r.economics,
+        tolerance: r.tolerance,
+        deferred: None,
+        bull: None,
+    };
+    idless
+        .fields
+        .insert("external_id".into(), Sql::Text(String::new()));
+    Ok(find(conn, wallet, &idless, &fingerprint(wallet, &idless))?
+        .filter(|row| row.get("external_id").is_none_or(|v| *v == Sql::Null)))
 }
 
 /// `insert_wallet_records`' row loop: enrich a matching transaction or insert
@@ -2005,12 +2065,25 @@ fn insert_records(
     records: &[Record],
     ids: &mut Ids<'_>,
     match_existing_only: bool,
+    screen: Option<&changed::Screen<'_>>,
 ) -> Result<Inserted, AppError> {
-    insert_settled_records(conn, scope, wallet, records, ids, match_existing_only, None)
+    insert_settled_records(
+        conn,
+        scope,
+        wallet,
+        records,
+        ids,
+        match_existing_only,
+        None,
+        screen,
+    )
 }
 
 /// [`insert_records`] for an LND wallet's import, whose live settlement
-/// evidence may correct a stored payment's date.
+/// evidence may correct a stored payment's date. With a `screen`, rows that
+/// look like a stored row under another id or amount follow the user's
+/// `changed_rows` answer, or refuse the import (`changed`).
+#[allow(clippy::too_many_arguments)]
 fn insert_settled_records(
     conn: &Connection,
     scope: (&String, &String, &String),
@@ -2019,6 +2092,7 @@ fn insert_settled_records(
     ids: &mut Ids<'_>,
     match_existing_only: bool,
     settlement_ids: Option<&[String]>,
+    screen: Option<&changed::Screen<'_>>,
 ) -> Result<Inserted, AppError> {
     let (profile, workspace, currency) = scope;
     let mut imported = Vec::new();
@@ -2026,6 +2100,7 @@ fn insert_settled_records(
     let mut unchanged = 0;
     let mut skipped = 0;
     let mut inserted_ids = Vec::new();
+    let mut selected: Vec<Option<String>> = Vec::with_capacity(records.len());
     let reset_active = kassiber_setup::book_reset::has_state(conn, profile)?;
     let mut reset_rebound = 0_i64;
     // Stored ID-less rows match by economic identity and occurrence number,
@@ -2051,24 +2126,107 @@ fn insert_settled_records(
             BTreeMap::new()
         };
     let mut incoming: BTreeMap<String, i64> = BTreeMap::new();
-    let total = records.len();
-    import_progress(&wallet.label, 0, total, None);
-    for (index, (r, identity)) in records.iter().zip(&identities).enumerate() {
-        let index = index + 1;
-        if let Some((economic, _, _)) = identity {
+    // The stored row a record's occurrence names under another external id:
+    // the record is that row.
+    let slots: Vec<Option<String>> = records
+        .iter()
+        .zip(&identities)
+        .map(|(r, identity)| {
+            let (economic, _, _) = identity.as_ref()?;
             let occurrence = incoming.entry(economic.clone()).or_default();
             *occurrence += 1;
-            if stored
+            stored
                 .get(economic)
                 .and_then(|slots| slots.get(occurrence))
-                .is_some_and(|row| row.external_id != string(&r.fields, "external_id"))
-            {
-                skipped += 1;
-                unchanged += 1;
-                if index % 200 == 0 || index == total {
-                    import_progress(&wallet.label, index, total, Some((imported.len(), skipped)));
+                .filter(|row| row.external_id != string(&r.fields, "external_id"))
+                .map(|row| row.id.clone())
+        })
+        .collect();
+    let found = match screen {
+        Some(screen) => {
+            let mut matched = Vec::with_capacity(records.len());
+            for (r, slot) in records.iter().zip(&slots) {
+                if slot.is_some()
+                    || r.deferred.is_some()
+                    || ["external_id", "asset"]
+                        .iter()
+                        .any(|key| r.binding_errors.contains_key(*key))
+                {
+                    // Matched, or refused by the loop below.
+                    matched.push(Some(slot.clone()));
+                    continue;
                 }
-                continue;
+                let fp = fingerprint(&wallet.id, r);
+                matched.push(lookup(conn, &wallet.id, r, &fp)?.map(|row| Some(string(&row, "id"))));
+            }
+            changed::conflicts(conn, &wallet.id, records, &matched, screen)?
+        }
+        None => BTreeMap::new(),
+    };
+    let choice = screen.and_then(|screen| screen.changed_rows);
+    let mut corrections = Vec::new();
+    let mut changed = (0_i64, 0_i64);
+    // `skip` answers to remember: (stored transaction id, incoming key).
+    let mut answered: Vec<(String, String)> = Vec::new();
+    let total = records.len();
+    import_progress(&wallet.label, 0, total, None);
+    for (index, (r, slot)) in records.iter().zip(&slots).enumerate() {
+        let position = index;
+        let index = index + 1;
+        if slot.is_some() {
+            selected.push(slot.clone());
+            skipped += 1;
+            unchanged += 1;
+            if index % 200 == 0 || index == total {
+                import_progress(&wallet.label, index, total, Some((imported.len(), skipped)));
+            }
+            continue;
+        }
+        if let Some(item) = found.get(&position) {
+            let stored = item.conflict.stored();
+            let corrected = matches!(item.conflict, changed::Conflict::Corrected(_));
+            // An earlier `skip` of this very difference answers it again,
+            // unless the user now asks to import it.
+            let remembered = item.remembered && choice != Some(ChangedRows::Import);
+            let decision = if remembered {
+                Some(ChangedRows::Skip)
+            } else {
+                if corrected {
+                    changed.1 += 1;
+                } else {
+                    changed.0 += 1;
+                }
+                choice
+            };
+            match decision {
+                None => {
+                    let sync = screen.is_some_and(|screen| screen.sync);
+                    return Err(changed::refusal(records, &found, sync));
+                }
+                Some(ChangedRows::Import) => {}
+                Some(ChangedRows::Skip) => {
+                    if corrected {
+                        corrections.extend(changed::ignored(stored, r, None));
+                    }
+                    if !remembered {
+                        let answer = (string(stored, "id"), item.key.clone());
+                        if !answered.contains(&answer) {
+                            answered.push(answer);
+                        }
+                    }
+                    selected.push(Some(string(stored, "id")));
+                    skipped += 1;
+                    unchanged += 1;
+                    if index % 200 == 0 || index == total {
+                        import_progress(
+                            &wallet.label,
+                            index,
+                            total,
+                            Some((imported.len(), skipped)),
+                        );
+                    }
+                    continue;
+                }
             }
         }
         // Python's fingerprint converts the amount to msat, after the
@@ -2082,29 +2240,7 @@ fn insert_settled_records(
                 return Err(error.clone());
             }
         }
-        let mut existing = find(conn, &wallet.id, r, &fp)?;
-        if existing.is_none()
-            && r.fingerprint_identity.is_some()
-            && string(&r.fields, "external_id_kind") == "txid"
-        {
-            let mut idless = Record {
-                fields: r.fields.clone(),
-                amount: r.amount.clone(),
-                fee: r.fee.clone(),
-                fingerprint_identity: r.fingerprint_identity.clone(),
-                ignore_fee: false,
-                binding_errors: BTreeMap::new(),
-                economics: r.economics,
-                tolerance: r.tolerance,
-                deferred: None,
-                bull: None,
-            };
-            idless
-                .fields
-                .insert("external_id".into(), Sql::Text(String::new()));
-            existing = find(conn, &wallet.id, &idless, &fingerprint(&wallet.id, &idless))?
-                .filter(|row| row.get("external_id").is_none_or(|v| *v == Sql::Null));
-        }
+        let existing = lookup(conn, &wallet.id, r, &fp)?;
         let fiat = string(&r.fields, "fiat_currency");
         price_currency(r, currency)?;
         if let Some(existing) = existing {
@@ -2121,6 +2257,9 @@ fn insert_settled_records(
             } else {
                 merge(&existing, r, &fp, settlement)?
             };
+            if screen.is_some() {
+                corrections.extend(changed::ignored(&existing, r, Some(&changes)));
+            }
             if changes.is_empty() {
                 unchanged += 1;
             } else {
@@ -2173,8 +2312,10 @@ fn insert_settled_records(
                     changes.keys().cloned().collect(),
                 ));
             }
+            selected.push(Some(id));
             skipped += 1;
         } else if match_existing_only || r.bull.as_ref().is_some_and(|b| b.match_only) {
+            selected.push(None);
             skipped += 1;
         } else {
             // After "Reset book data" the re-observed row takes its old id
@@ -2242,6 +2383,7 @@ fn insert_settled_records(
                 kassiber_envelope::set(&mut inserted, "review", s(reason));
             }
             imported.push(inserted);
+            selected.push(Some(id.clone()));
             inserted_ids.push(id);
         }
         if index % 200 == 0 || index == total {
@@ -2264,7 +2406,11 @@ fn insert_settled_records(
         unchanged,
         skipped,
         inserted_ids,
+        selected,
         reset,
+        corrections,
+        changed,
+        answered,
     })
 }
 /// Tag a Bull Bitcoin wallet row held out of accounting for review: the
@@ -2325,7 +2471,17 @@ fn apply(
     ids: &mut Ids<'_>,
     column_map: Option<&ledger::ColumnMap>,
 ) -> Result<Py, AppError> {
-    apply_records(conn, request, wallet, rows, records, ids, column_map, None)
+    apply_records(
+        conn,
+        request,
+        wallet,
+        rows,
+        records,
+        ids,
+        column_map,
+        None,
+        &mut vec![],
+    )
 }
 #[allow(clippy::too_many_arguments)]
 fn apply_records(
@@ -2337,6 +2493,8 @@ fn apply_records(
     ids: &mut Ids<'_>,
     column_map: Option<&ledger::ColumnMap>,
     api_source: Option<&str>,
+    // Out: the transaction each record is now (`Inserted::selected`).
+    selected: &mut Vec<Option<String>>,
 ) -> Result<Py, AppError> {
     let profile = &request.profile_id;
     let (workspace, currency): (String, String) = conn
@@ -2378,13 +2536,25 @@ fn apply_records(
         None
     };
     exchange_api::before_insert(request.format, api_source, conn, &wallet.id, records)?;
+    // A file is compared with earlier runs of its format; an API sync, whose
+    // ids are the exchange's own, only with rows under the same id.
+    let screen = changed::Screen {
+        format: (api_source.is_none() && request.format != Format::Document)
+            .then(|| request.format.name()),
+        changed_rows: request.changed_rows,
+        sync: api_source.is_some(),
+    };
     let Inserted {
         imported,
         updated,
         unchanged,
         skipped,
         inserted_ids,
+        selected: chosen,
         reset,
+        corrections,
+        changed: (reidentified, corrected),
+        answered,
     } = insert_records(
         conn,
         (profile, &workspace, &currency),
@@ -2392,7 +2562,9 @@ fn apply_records(
         records,
         ids,
         false,
+        Some(&screen),
     )?;
+    *selected = chosen;
     if exchange_api::tags_same_second(request.format) {
         exchange_api::tag_same_second(conn, profile, &wallet.id, &inserted_ids, ids)?;
     }
@@ -2416,10 +2588,27 @@ fn apply_records(
         ("imported", Py::from(imported.len() as i64)),
         ("skipped", Py::from(skipped)),
         ("unchanged", Py::from(unchanged)),
+    ];
+    // Every import that enriched rows says how many; the formats below name
+    // the count in their own place.
+    let names_updated_later = api_source.is_some()
+        || request.format.evidence()
+        || request.format.active()
+        || request.format == Format::Document;
+    if updated_count > 0 && !names_updated_later {
+        result.push(("updated", Py::from(updated_count)));
+    }
+    result.extend([
         ("journal_invalidated", Py::Bool(invalidated)),
         ("inserted_records", Py::List(imported)),
         ("updated_records", Py::List(updated)),
-    ];
+    ]);
+    if !corrections.is_empty() {
+        result.push(("corrections_ignored", Py::List(corrections)));
+    }
+    if let Some(summary) = changed::summary(request.changed_rows, reidentified, corrected) {
+        result.push(("changed_rows", summary));
+    }
     if let Some(reset) = reset {
         result.push(("reset_decisions", reset));
     }
@@ -2494,7 +2683,9 @@ fn apply_records(
             invalidated,
         )?;
     }
-    if !inserted_ids.is_empty() && !matches!(request.format, Format::Wasabi | Format::Document) {
+    let batch = if !inserted_ids.is_empty()
+        && !matches!(request.format, Format::Wasabi | Format::Document)
+    {
         let batch = ids.next(conn)?;
         conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,?,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),column_map.map(|map| config::stored_json(&map.raw)),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() || request.format.active() { updated_count } else { 0 },skipped]).map_err(database_error)?;
         // Each row's place among the run's created rows is its source
@@ -2502,8 +2693,13 @@ fn apply_records(
         for (position, id) in (1_i64..).zip(inserted_ids) {
             conn.execute("INSERT OR IGNORE INTO import_batch_transactions(batch_id,transaction_id,source_position) VALUES(?,?,?)",params![batch,id,position]).map_err(database_error)?;
         }
-        result.push(("import_batch_id", s(batch)));
-    }
+        result.push(("import_batch_id", s(batch.as_str())));
+        Some(batch)
+    } else {
+        None
+    };
+    // A `skip` answer stands while the run that recorded it is in the book.
+    changed::remember(conn, &wallet.id, &answered, batch.as_deref())?;
     if request.format.evidence() || request.format.active() {
         result.push((request.format.provider().2, Py::from(records.len() as i64)));
     }
@@ -2601,6 +2797,7 @@ pub(crate) fn import_records(
         &mut ids,
         spec.match_existing_only,
         (kind == "lnd").then_some(spec.settlement_ids),
+        None,
     )?;
     let invalidated = !inserted.imported.is_empty() || !inserted.updated.is_empty();
     if invalidated {

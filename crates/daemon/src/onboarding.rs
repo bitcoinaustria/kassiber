@@ -286,6 +286,7 @@ fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppEr
                 mode: None,
                 companion: None,
                 timezone: None,
+                changed_rows: changed_rows(args)?,
             },
             payload: bundle.clone(),
         });
@@ -351,9 +352,18 @@ fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppEr
             mode,
             companion: crate::wallets::companion_file(args)?,
             timezone: crate::imports::optional_string(args, "timezone")?,
+            changed_rows: changed_rows(args)?,
         },
         column_map,
     })
+}
+
+/// `changed_rows`: the user's answer to rows that look like a stored row
+/// (docs/reference/imports.md#re-importing-a-newer-export).
+pub(crate) fn changed_rows(args: &Value) -> Result<Option<file_import::ChangedRows>, AppError> {
+    optional_string(args, "changed_rows")?
+        .map(|value| file_import::ChangedRows::parse(&value))
+        .transpose()
 }
 
 /// `_import_samourai_payload`: watch-only source sets only.

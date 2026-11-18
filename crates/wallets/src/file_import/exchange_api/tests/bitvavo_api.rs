@@ -202,6 +202,32 @@ fn bitvavo_csv_and_api_dedupe_in_either_order() {
     }
 }
 
+/// An API answer that corrects a row the export stored (same id, another
+/// amount) is never a second row: the sync refuses until the user chooses,
+/// and skipping keeps the stored row and names the amount it kept.
+#[test]
+fn bitvavo_api_correction_of_an_exported_row_waits_for_the_users_choice() {
+    let mut script = Script::new();
+    script.history[3] = item("dep-btc", "deposit", "2024-01-03T00:00:00.000Z", &[("received", "BTC", "0.006"), ("fees", "BTC", "0")]);
+    let (conn, fake) = (book(), serve_script(script));
+    import_into(&conn, CSV, crate::file_import::Format::Bitvavo, "").unwrap();
+    let gate = Gate::new(|| kassiber_net::Offline::Online, kassiber_net::Ledger::default());
+    let sync = |choice| {
+        let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
+        execute_with(&conn, "p", "", &backend("bitvavo", &fake.url), "bitvavo", &gate, "test", consent, None, choice)
+    };
+    let error = sync(None).unwrap_err();
+    assert_eq!(error.code, "import_changed_rows");
+    assert_eq!(error.message, "1 row has the id of a stored row with another amount or fee; first 'bitvavo:dep-btc': amount 0.005 in the book, 0.006 in the file");
+    // A sync is synced again, not imported as a file.
+    assert_eq!(error.hint.as_deref(), Some(crate::file_import::changed::SYNC_HINT));
+    let result = sync(Some(ChangedRows::Skip)).unwrap();
+    assert_eq!(at(&result, "imported"), &Py::from(0));
+    let ignored = kassiber_pyjson::dumps(at(&result, "corrections_ignored"), &kassiber_pyjson::Options::new().sort_keys(true)).unwrap();
+    assert!(ignored.contains(r#""external_id": "bitvavo:dep-btc", "field": "amount", "file": "0.006", "stored": "0.005""#), "{ignored}");
+    assert_eq!(count(&conn, "SELECT count(*) FROM transactions WHERE external_id='bitvavo:dep-btc'"), 1);
+}
+
 /// One BTC row Kassiber cannot book exactly refuses the whole sync by name,
 /// after the history and before the balance.
 #[test]

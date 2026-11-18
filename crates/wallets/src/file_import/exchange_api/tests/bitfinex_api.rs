@@ -162,7 +162,7 @@ fn all_three() -> Vec<u8> {
 fn import(conn: &Connection, content: &[u8]) -> Result<Py, AppError> {
     let file = std::env::temp_dir().join(format!("kassiber-bitfinex-{}-{:?}.zip", std::process::id(), std::thread::current().id()));
     std::fs::write(&file, content).unwrap();
-    let request = Request { profile_id: "p".into(), wallet: String::new(), file: file.to_str().unwrap().into(), format: Format::Bitfinex, mode: None, companion: None, timezone: None };
+    let request = Request { profile_id: "p".into(), wallet: String::new(), file: file.to_str().unwrap().into(), format: Format::Bitfinex, mode: None, companion: None, timezone: None, changed_rows: None };
     let result = crate::file_import::execute(conn, request, None);
     std::fs::remove_file(file).unwrap();
     result

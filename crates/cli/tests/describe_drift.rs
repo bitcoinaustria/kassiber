@@ -80,6 +80,25 @@ fn python_catalog() -> Value {
             .expect("preceding leaf");
         commands.insert(at + 1, kassiber_pytext::loads(entry).unwrap());
     }
+    // `--changed-rows` is a Rust-only flag, the last argument of each leaf
+    // that takes it (docs/reference/imports.md#re-importing-a-newer-export).
+    let flag = kassiber_pytext::loads(&format!(
+        r#"{{"name":"changed_rows","flags":["--changed-rows"],"positional":false,"required":false,"repeatable":false,"choices":["skip","import"],"secret_input":false,"help":{}}}"#,
+        dumps(&Value::Str(kassiber_cli::spec::CHANGED_ROWS_HELP.into()), &Options::new()).unwrap()
+    ))
+    .unwrap();
+    for command in commands.iter_mut() {
+        let Some(Value::Str(kind)) = get(command, "kind").cloned() else {
+            continue;
+        };
+        if !kassiber_cli::spec::CHANGED_ROWS_LEAVES.contains(&kind.as_str().unwrap()) {
+            continue;
+        }
+        let Value::List(arguments) = field(command, "arguments") else {
+            panic!("arguments")
+        };
+        arguments.push(flag.clone());
+    }
     // The Rust-only backend kinds are extra, sorted `--kind` choices.
     for command in commands.iter_mut() {
         let Some(Value::List(arguments)) = get(command, "arguments").cloned() else {

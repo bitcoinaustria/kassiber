@@ -228,6 +228,13 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 
 `amount` should be positive. If you pass a negative amount, Kassiber normalizes it and infers direction when possible.
 
+A row without `txid`/`id` is identified by its date, direction, asset, amount
+and fee, plus its occurrence among identical rows of the file (River's
+reference-less rows the same way). The first occurrence keeps the identity
+earlier builds gave every copy, which merged identical rows into one; a
+re-import of such a file adds only the merged copies, never a second set. See
+[re-importing a newer export](#re-importing-a-newer-export).
+
 `asset` (default `BTC`) must be one the wallet holds
 ([plan 24](../plan/24-crypto-assets.md)): `BTC`, `LBTC` or a 64-hex Liquid
 asset id in any wallet, another crypto ticker (`ETH`) only when the wallet's
@@ -652,7 +659,7 @@ the AI-assisted path (below) is allowed to propose a plan at all.
 | `Fiat Value` | Fair-market value in the book currency. Use it for Income/Mining/Spend/Gift rows that have no cash leg. |
 | `Counterparty` | Optional. Exchange, merchant, or person. |
 | `Note` | Optional free text, stored as the transaction description. |
-| `Tx-ID` | Optional but recommended — the dedup key. Without it, rows dedup by their economic fingerprint (date/direction/asset/amount/fee), so two genuinely identical rows need a `Tx-ID` to be kept apart. |
+| `Tx-ID` | Optional but recommended — the dedup key. Without it, rows dedup by their economic fingerprint (date/direction/asset/amount/fee) and their occurrence among identical rows, so two identical rows stay two rows. Earlier builds merged them; re-importing such a file adds only the copies they merged. |
 
 Each row carries exactly **one Bitcoin leg** (`BTC`, `LBTC`, or `SATS`); the
 other side, when present, must use a supported fiat code such as EUR, USD or
@@ -908,6 +915,74 @@ none and order by their content.
 Deleting the whole connection (`wallets delete --cascade`, or the desktop
 connection's delete action) remains the blunt option when the wallet itself was
 a mistake.
+
+## Re-importing a newer export
+
+Importing the same file again, or a newer export that overlaps the old one,
+adds only the rows the book does not have: a row matches a stored row of the
+same wallet by its provider id (and direction, asset and amount), or, without
+an id, by its date, direction, asset, amount and fee. A matched row is never
+duplicated; the import may add a better price or fill an empty kind,
+description or counterparty, and counts it in `updated` (every format names
+`updated` when it is above zero; the list is always in `updated_records`).
+
+Two kinds of rows match nothing but look like a stored row. Kassiber does not
+guess which one the export means, so the import **refuses**, writes nothing,
+and names the count and the cause (`import_changed_rows`, with up to 20
+example rows in `details.rows`):
+
+- **Re-identified rows**: the same date, direction, asset, amount and fee as
+  a row an earlier run of the same file format stored in this wallet, under
+  another id. An optional id column that appeared or disappeared
+  (CoinTracking's `Tx-ID`, Coinfinity's `Order ID`, River's reference), or a
+  changed date format behind an ID-less row's synthetic id (Coinfinity,
+  Pocket, Ledger Live, Binance supplemental), re-identifies every row of an
+  export: "This export identifies 12 rows differently from the earlier
+  import". Only runs recorded as import batches count, so rows imported before
+  batches existed and API syncs (whose ids are the exchange's own) are not
+  compared this way. A date format that changes the instant (seconds
+  dropped, another time zone) cannot be recognized.
+- **Corrected rows**: the id, direction and asset of a stored row with
+  another amount or fee, from a file or an API sync: "1 row has the id of a
+  stored row with another amount or fee; first 'bitvavo:dep-btc': amount
+  0.005 in the book, 0.006 in the file". Earlier builds stored such a row as
+  a second transaction.
+
+A stored row answers for at most one row of the export, and a stored row the
+export matches exactly is not available to another; rows inserted by the same
+import never count. So a second payment under a shared transaction id, or a
+new fill of an order whose earlier fills all match, imports as before.
+
+Run the import again with the choice:
+
+- `--changed-rows skip`: the stored rows stay as they are and only the other
+  rows are imported. The skipped copies are not stored; the answer is
+  remembered for that stored row and that exact incoming row (wallet
+  `changed_rows_kept`, see [database compatibility](database-compatibility.md#remembered-re-import-answers)),
+  so the same export or the next API sync does not ask again and reports the
+  kept values in `corrections_ignored`. A new difference asks again, and so
+  does the same one after the import run that recorded the answer is rolled
+  back.
+- `--changed-rows import`: the rows are separate transactions (this also
+  overrides a remembered `skip`).
+
+Every identical copy of a row in the export gets the same answer.
+
+To take the export's values instead, roll back the earlier run
+([import runs](#import-runs-and-rolling-one-back)) and import the new file;
+for an exchange API sync, roll back the earlier sync and sync again (the
+refusal's hint names the CLI steps for each).
+`wallets sync` of a file wallet and the assistant's import have no choice to
+pass and keep refusing; import the file with the choice instead. The result
+of an import that met such rows has `changed_rows` (`action`, `reidentified`,
+`corrected`).
+
+Values a matched row keeps where the import never overwrites them are
+reported, not dropped silently: `corrections_ignored` lists each
+(`transaction_id`, `external_id`, `field`, `stored`, `file`) for a fee an
+exchange price lets differ, a moved date or another kind under the same id,
+and the amount and fee of each corrected row the user chose to skip. Both
+keys appear only when there is something to report.
 
 ## Onboarding an unsupported exchange with the assistant
 
@@ -1428,6 +1503,10 @@ Behavior:
 - `Method`, `Source`, and `Destination` are preserved in the description/note
 - machine output includes inserted/updated transaction summaries so desktop
   imports can show what changed
+- rows without a `Transaction ID` are identified by their date, direction,
+  amount and fee and their occurrence among identical rows, so identical
+  reference-less rows stay separate rows (earlier builds merged them; a
+  re-import adds only the merged copies)
 
 You can also create a wallet whose source file is a River export:
 

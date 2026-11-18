@@ -25,6 +25,7 @@ use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
 use kassiber_pyjson::{Key, Value as Py};
 use kassiber_store::rusqlite::{Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::io::Read;
 
 pub const PLAN_SCHEMA_VERSION: i64 = 1;
@@ -739,6 +740,7 @@ pub fn plan_or_apply(
                         mode: None,
                         companion: None,
                         timezone: None,
+                        changed_rows: None,
                     },
                     mapping.as_ref(),
                     identities.import,
@@ -849,6 +851,11 @@ pub fn plan_or_apply(
             ("target", described.clone()),
             ("rows", dict(rows.clone())),
         ];
+        // Values the book keeps over the file's, bound into the plan's
+        // digest; counted by field, without the values themselves.
+        if let Some(kept) = corrections_projection(get(&outcome, "corrections_ignored")) {
+            plan.push(("corrections_ignored", kept));
+        }
         plan.extend(effects.iter().cloned());
         let ready = blockers.is_empty();
         plan.extend([
@@ -911,6 +918,9 @@ pub fn plan_or_apply(
         ),
         ("rows", get(&plan, "rows").cloned().unwrap_or(Py::Null)),
     ];
+    if let Some(kept) = get(&plan, "corrections_ignored") {
+        result.push(("corrections_ignored", kept.clone()));
+    }
     result.extend(effects);
     result.extend([
         (
@@ -929,6 +939,45 @@ pub fn plan_or_apply(
     Ok(dict(result))
 }
 
+/// At most this many kept rows are named in a plan.
+const KEPT_SHOWN: usize = 20;
+
+/// `corrections_ignored` as an assistant plan carries it: the count, the
+/// count per field and the first stored transaction ids, never the stored or
+/// file values (they are cell values the assistant may not see).
+fn corrections_projection(items: Option<&Py>) -> Option<Py> {
+    let Some(Py::List(items)) = items else {
+        return None;
+    };
+    if items.is_empty() {
+        return None;
+    }
+    let mut fields: BTreeMap<String, i64> = BTreeMap::new();
+    let mut ids: Vec<Py> = Vec::new();
+    for item in items {
+        *fields
+            .entry(get(item, "field").map(py_str).unwrap_or_default())
+            .or_default() += 1;
+        let id = get(item, "transaction_id").cloned().unwrap_or(Py::Null);
+        if ids.len() < KEPT_SHOWN && !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    Some(dict([
+        ("count", Py::from(items.len() as i64)),
+        (
+            "fields",
+            dict(
+                fields
+                    .iter()
+                    .map(|(k, n)| (k.as_str(), Py::from(*n)))
+                    .collect::<Vec<_>>(),
+            ),
+        ),
+        ("transaction_ids", Py::List(ids)),
+    ]))
+}
+
 /// `expected.get(key) != version` for an integer version: Python compares a
 /// JSON `7`, `7.0` or `True` (for 1) equal to it.
 pub fn same_int(value: Option<&Py>, version: i64) -> bool {
@@ -937,5 +986,37 @@ pub fn same_int(value: Option<&Py>, version: i64) -> bool {
         Some(Py::Bool(flag)) => i64::from(*flag) == version,
         Some(Py::Float(number)) => *number == version as f64,
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod corrections_tests {
+    use super::*;
+
+    #[test]
+    fn a_plan_names_kept_values_by_field_without_the_values() {
+        assert_eq!(corrections_projection(None), None);
+        assert_eq!(corrections_projection(Some(&Py::List(vec![]))), None);
+        let item = |id: &str, field: &str| {
+            dict([
+                ("transaction_id", s(id)),
+                ("external_id", s("secret-ref")),
+                ("field", s(field)),
+                ("stored", s("0.1")),
+                ("file", s("0.2")),
+            ])
+        };
+        let mut items: Vec<Py> = (0..30).map(|n| item(&format!("t{n}"), "fee")).collect();
+        items.push(item("t0", "amount"));
+        let kept = corrections_projection(Some(&Py::List(items))).unwrap();
+        let text = kassiber_pyjson::dumps(&kept, &kassiber_pyjson::Options::new().sort_keys(true))
+            .unwrap();
+        assert!(text.starts_with(r#"{"count": 31, "fields": {"amount": 1, "fee": 30}, "transaction_ids": ["t0", "t1""#), "{text}");
+        for leaked in ["secret-ref", "0.1", "0.2"] {
+            assert!(!text.contains(leaked), "{text}");
+        }
+        assert!(
+            matches!(get(&kept, "transaction_ids"), Some(Py::List(ids)) if ids.len() == KEPT_SHOWN)
+        );
     }
 }

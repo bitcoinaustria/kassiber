@@ -616,8 +616,8 @@
   {
     "id": "W-import-empty-batch",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "if !inserted_ids.is_empty() && !matches!(request.format, Format::Wasabi | Format::Document) {",
-    "replace": "if true {",
+    "find": "    let batch = if !inserted_ids.is_empty()\n        && !matches!(request.format, Format::Wasabi | Format::Document)\n    {",
+    "replace": "    let batch = if true {",
     "expect_failing": [
       "csv_import_dedupe_batch_membership_and_journal_invalidation"
     ],
@@ -1046,8 +1046,8 @@
   {
     "id": "W-json-promotion",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "existing.is_none()\n            && r.fingerprint_identity.is_some()",
-    "replace": "false && existing.is_none()\n            && r.fingerprint_identity.is_some()",
+    "find": "    if existing.is_some()\n        || r.fingerprint_identity.is_none()",
+    "replace": "    if true || existing.is_some()\n        || r.fingerprint_identity.is_none()",
     "expect_failing": [
       "json_import_identity_fee_relaxation_routing_and_atomicity"
     ],
@@ -2301,8 +2301,8 @@
   {
     "id": "W-bull-normalization-order",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "let records = if mode == Some(\"relevant\") {",
-    "replace": "let records = if false && mode == Some(\"relevant\") {",
+    "find": "let mut records = if mode == Some(\"relevant\") {",
+    "replace": "let mut records = if false && mode == Some(\"relevant\") {",
     "expect_failing": [
       "bull_relevant_preserves_reference_error_order_and_rollback"
     ],
@@ -7595,8 +7595,8 @@
   {
     "id": "W-wasabi-no-run",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "if !inserted_ids.is_empty() && !matches!(request.format, Format::Wasabi | Format::Document) {",
-    "replace": "if !inserted_ids.is_empty() && request.format != Format::Document {",
+    "find": "        && !matches!(request.format, Format::Wasabi | Format::Document)\n    {",
+    "replace": "        && request.format != Format::Document\n    {",
     "expect_failing": [
       "wasabi_coordinator_preserves_review_notes_inventory_and_identities"
     ],
@@ -9124,8 +9124,8 @@
   {
     "id": "W-records-match-existing-only",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "        } else if match_existing_only || r.bull.as_ref().is_some_and(|b| b.match_only) {\n            skipped += 1;",
-    "replace": "        } else if r.bull.as_ref().is_some_and(|b| b.match_only) {\n            skipped += 1;",
+    "find": "        } else if match_existing_only || r.bull.as_ref().is_some_and(|b| b.match_only) {\n            selected.push(None);\n            skipped += 1;",
+    "replace": "        } else if r.bull.as_ref().is_some_and(|b| b.match_only) {\n            selected.push(None);\n            skipped += 1;",
     "expect_failing": [
       "record_imports_match_existing_only_and_label_their_source"
     ],
@@ -9934,5 +9934,140 @@
       "untallied_formats_refuse_assets_their_wallet_does_not_hold"
     ],
     "rule": "A generic row's Bitcoin alias (XBT) is refused as an alias of BTC, not as a non-crypto asset."
+  },
+  {
+    "id": "RI-refuse-undecided",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "                    return Err(changed::refusal(records, &found, sync));",
+    "replace": "                    let _ = sync;",
+    "expect_failing": [
+      "an_id_column_that_appears_or_disappears_waits_for_the_users_choice",
+      "a_provider_correction_under_the_same_id_is_never_a_second_row_silently"
+    ],
+    "rule": "Rows that look like a stored row refuse the import until the user answers changed_rows."
+  },
+  {
+    "id": "RI-skip-keeps-stored",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "    let choice = screen.and_then(|screen| screen.changed_rows);",
+    "replace": "    let choice = screen\n        .and_then(|screen| screen.changed_rows)\n        .map(|_| ChangedRows::Import);",
+    "expect_failing": [
+      "an_id_column_that_appears_or_disappears_waits_for_the_users_choice",
+      "a_provider_correction_under_the_same_id_is_never_a_second_row_silently"
+    ],
+    "rule": "Skip keeps the stored rows and imports none of the export's copies."
+  },
+  {
+    "id": "RI-corrected",
+    "file": "crates/wallets/src/file_import/changed.rs",
+    "find": "            if let Some(row) = free(same_id(conn, wallet, r)?) {",
+    "replace": "            if let Some(row) = free(same_id(conn, wallet, r)?).filter(|_| false) {",
+    "expect_failing": [
+      "a_provider_correction_under_the_same_id_is_never_a_second_row_silently"
+    ],
+    "rule": "A row under a stored row's id with another amount or fee is never a second row silently."
+  },
+  {
+    "id": "RI-reidentified",
+    "file": "crates/wallets/src/file_import/changed.rs",
+    "find": "            if let Some(row) = free(same_economics(conn, wallet, format, r)?) {",
+    "replace": "            if let Some(row) = free(same_economics(conn, wallet, format, r)?).filter(|_| false) {",
+    "expect_failing": [
+      "an_id_column_that_appears_or_disappears_waits_for_the_users_choice",
+      "a_changed_date_format_behind_a_synthetic_id_waits_for_the_users_choice"
+    ],
+    "rule": "A row with a stored row's date, direction, asset, amount and fee under another id is not a new row silently."
+  },
+  {
+    "id": "RI-claimed-by-matches",
+    "file": "crates/wallets/src/file_import/changed.rs",
+    "find": "    let mut claimed: BTreeSet<String> = matched.iter().flatten().flatten().cloned().collect();",
+    "replace": "    let mut claimed: BTreeSet<String> = BTreeSet::new();",
+    "expect_failing": [
+      "a_new_row_under_an_id_whose_stored_rows_all_match_is_imported"
+    ],
+    "rule": "A stored row the export matches exactly answers for no other row."
+  },
+  {
+    "id": "RI-occurrences",
+    "file": "crates/wallets/src/file_import/changed.rs",
+    "find": "        if *n > 1 {",
+    "replace": "        if *n > 1 && false {",
+    "expect_failing": [
+      "identical_idless_rows_stay_separate_and_an_earlier_merged_import_gains_only_the_copies",
+      "csv_import_dedupe_batch_membership_and_journal_invalidation"
+    ],
+    "rule": "Identical ID-less rows of a generic file stay separate rows; the first keeps the old identity."
+  },
+  {
+    "id": "RI-ignored-values",
+    "file": "crates/wallets/src/file_import/changed.rs",
+    "find": "            if old != new && !written(key) {",
+    "replace": "            if false && old != new && !written(key) {",
+    "expect_failing": [
+      "values_the_stored_row_keeps_are_reported",
+      "a_provider_correction_under_the_same_id_is_never_a_second_row_silently"
+    ],
+    "rule": "Provider values a stored row keeps are reported in corrections_ignored."
+  },
+  {
+    "id": "RI-updated-named",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "    if updated_count > 0 && !names_updated_later {",
+    "replace": "    if false && updated_count > 0 && !names_updated_later {",
+    "expect_failing": [
+      "enriched_rows_are_counted_for_every_format"
+    ],
+    "rule": "Every import that enriched rows names updated."
+  },
+  {
+    "id": "RI-copies-share-answer",
+    "file": "crates/wallets/src/file_import/changed.rs",
+    "find": "        if let Some(first) = by_key.get(&key) {",
+    "replace": "        if let Some(first) = by_key.get(&key).filter(|_| false) {",
+    "expect_failing": [
+      "every_identical_copy_of_a_corrected_row_gets_the_same_answer"
+    ],
+    "rule": "Every identical copy of an incoming row gets the same answer."
+  },
+  {
+    "id": "RI-remember-skip",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "    changed::remember(conn, &wallet.id, &answered, batch.as_deref())?;",
+    "replace": "    let _ = (&answered, &batch);",
+    "expect_failing": [
+      "a_kept_difference_does_not_ask_again_but_a_new_difference_does"
+    ],
+    "rule": "A skip is remembered so the same difference does not ask again."
+  },
+  {
+    "id": "RI-remember-bound-to-run",
+    "file": "crates/wallets/src/file_import/changed.rs",
+    "find": "        Json::String(batch) if live.contains(batch) => Some(key),",
+    "replace": "        Json::String(batch) if live.contains(batch) || true => Some(key),",
+    "expect_failing": [
+      "a_kept_difference_asks_again_once_its_import_run_is_rolled_back"
+    ],
+    "rule": "A remembered skip stands only while the import run that recorded it is in the book."
+  },
+  {
+    "id": "RI-sync-hint",
+    "file": "crates/wallets/src/file_import/changed.rs",
+    "find": "        .with_hint(if sync { SYNC_HINT } else { HINT })",
+    "replace": "        .with_hint(if sync && false { SYNC_HINT } else { HINT })",
+    "expect_failing": [
+      "bitvavo_api_correction_of_an_exported_row_waits_for_the_users_choice"
+    ],
+    "rule": "A refused exchange sync advises syncing again, not importing a file again."
+  },
+  {
+    "id": "RI-attachment-kept-bounded",
+    "file": "crates/wallets/src/file_import/attachment.rs",
+    "find": "        if ids.len() < KEPT_SHOWN && !ids.contains(&id) {",
+    "replace": "        if !ids.contains(&id) {",
+    "expect_failing": [
+      "a_plan_names_kept_values_by_field_without_the_values"
+    ],
+    "rule": "An assistant plan names a bounded number of kept rows."
   }
 ]

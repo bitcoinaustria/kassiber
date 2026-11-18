@@ -3169,5 +3169,25 @@
       "bitcoinde_csv_names_other_coins_as_unread_in_either_scope"
     ],
     "rule": "An importer that reads only BTC reports the coins it left out as assets.unread, rows per ticker, which the desktop shows."
+  },
+  {
+    "id": "exchange-sync-corrections-refuse",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "        mode: None,\n        changed_rows,\n    };",
+    "replace": "        mode: None,\n        changed_rows: changed_rows.or(Some(ChangedRows::Import)),\n    };",
+    "rule": "An API sync that corrects a stored row's amount refuses until the user answers.",
+    "expect_failing": [
+      "bitvavo_api_correction_of_an_exported_row_waits_for_the_users_choice"
+    ]
+  },
+  {
+    "id": "swap-pairs-the-selected-legs",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "            selected.push(Some(id.clone()));",
+    "replace": "            selected.push(conn.query_row(\"SELECT id FROM transactions WHERE wallet_id=? AND external_id=? ORDER BY rowid LIMIT 1\", [wallet.id.as_str(), string(&r.fields, \"external_id\").as_str()], |row| row.get(0)).ok());",
+    "rule": "A swap pairs the legs the import stored, never the earlier row that shares a leg's id, direction and asset.",
+    "expect_failing": [
+      "a_corrected_swap_imported_as_new_rows_pairs_its_new_legs"
+    ]
   }
 ]

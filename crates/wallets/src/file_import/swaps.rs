@@ -7,33 +7,33 @@
 //! Austria; taxable elsewhere), so the tax engine decides the treatment.
 use super::*;
 
-/// Authors one pair per `swap_ref` among `rows` (in step with `records`) and
-/// returns how many it created, or `None` when no row names a swap. A swap
-/// whose legs are already paired keeps its pair, so a re-run creates none.
+/// Authors one pair per `swap_ref` among `rows` (in step with `records` and
+/// `selected`, the transaction each record is now) and returns how many it
+/// created, or `None` when no row names a swap. A swap whose legs are
+/// already paired keeps its pair, so a re-run creates none. The legs are the
+/// transactions this import stored or matched, never another row that
+/// shares a leg's id (a corrected leg imported as a new row).
 pub(super) fn pair(
     conn: &Connection,
     profile: &str,
-    wallet: &str,
     rows: &[csv::Row],
     records: &[Record],
+    selected: &[Option<String>],
 ) -> Result<Option<i64>, AppError> {
-    // swap_ref -> (outbound (external id, asset), inbound (external id, asset))
-    type Legs = (Vec<(String, String)>, Vec<(String, String)>);
+    // swap_ref -> (outbound transactions, inbound transactions)
+    type Legs = (Vec<Option<String>>, Vec<Option<String>>);
     let mut legs: BTreeMap<String, Legs> = BTreeMap::new();
-    for (row, record) in rows.iter().zip(records) {
+    for ((row, record), transaction) in rows.iter().zip(records).zip(selected) {
         let reference = text(&row.data, "swap_ref");
         if reference.is_empty() {
             continue;
         }
-        let field = |key: &str| match record.fields.get(key) {
-            Some(Sql::Text(value)) => value.clone(),
-            _ => String::new(),
-        };
         let entry = legs.entry(reference).or_default();
-        let leg = (field("external_id"), field("asset"));
-        match field("direction").as_str() {
-            "outbound" => entry.0.push(leg),
-            _ => entry.1.push(leg),
+        match record.fields.get("direction") {
+            Some(Sql::Text(direction)) if direction == "outbound" => {
+                entry.0.push(transaction.clone())
+            }
+            _ => entry.1.push(transaction.clone()),
         }
     }
     if legs.is_empty() {
@@ -63,19 +63,19 @@ pub(super) fn pair(
                 ),
             ));
         };
-        let (out, into) = (
-            stored(conn, wallet, out, "outbound")?,
-            stored(conn, wallet, into, "inbound")?,
-        );
-        if paired.contains(&out) || paired.contains(&into) {
+        // A leg the import left out (a match-only row) pairs nothing.
+        let (Some(out), Some(into)) = (out, into) else {
+            continue;
+        };
+        if paired.contains(out) || paired.contains(into) {
             continue;
         }
         kassiber_transfers::pair_provider_swap(
             conn,
             &scope,
             &dict([
-                ("tx_out", s(out)),
-                ("tx_in", s(into)),
+                ("tx_out", s(out.as_str())),
+                ("tx_in", s(into.as_str())),
                 ("kind", s("manual")),
                 ("pair_source", s("provider")),
                 (
@@ -87,20 +87,4 @@ pub(super) fn pair(
         created += 1;
     }
     Ok(Some(created))
-}
-
-/// The id of the wallet's stored row of this leg: its external id, direction
-/// and asset, so a provider id two rows share never pairs the wrong one.
-fn stored(
-    conn: &Connection,
-    wallet: &str,
-    (external_id, asset): &(String, String),
-    direction: &str,
-) -> Result<String, AppError> {
-    conn.query_row(
-        "SELECT id FROM transactions WHERE wallet_id=? AND external_id=? AND direction=? AND asset=?",
-        [wallet, external_id, direction, asset],
-        |r| r.get(0),
-    )
-    .map_err(database_error)
 }

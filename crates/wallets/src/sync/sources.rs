@@ -252,6 +252,7 @@ pub(crate) fn import_file(
             timezone: get(&config, "source_timezone")
                 .filter(|v| kassiber_envelope::truthy(v))
                 .map(py_str),
+            changed_rows: None,
         },
         None,
     )?;

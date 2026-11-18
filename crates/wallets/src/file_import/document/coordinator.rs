@@ -165,6 +165,7 @@ pub fn import_draft(
         mode: None,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let paths =
         kassiber_paths::Context::from_env().map_err(|e| AppError::new(e.code, e.message))?;
