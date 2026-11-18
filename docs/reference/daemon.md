@@ -275,6 +275,12 @@ document bytes, backend identities, descriptors, xpubs, and raw importer JSON
 are removed before provider context. The kind is AI-only and intentionally
 absent from the desktop invoke allowlist.
 
+`ui.report.blockers` (read, arguments ignored) is the core's report-readiness
+barrier: `ready` and the `blockers` that hold the book's reports back. It is
+a maintained read like `ui.reports.capital_gains` (a book whose report-read
+refresh policy is on may refresh first; nothing else leaves the machine). The
+AI tools and the desktop Reports page read it; the Tauri shell does not.
+
 `ui.transfers.dismissals.list` reads the profile's transfer-candidate
 dismissals (`include_expired`, `limit` up to 500) with both legs' full ids,
 wallet, direction, asset, amount and time, and `expires_at` (null: never). It

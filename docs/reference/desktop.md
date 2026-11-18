@@ -733,8 +733,13 @@ estimate and offers no E 1kv tax report. Generic books get no estimate, and a re
 screen does not recognise reads as generic, never as Austrian. While the
 completeness read is still loading, the readiness pill says so and nothing is
 marked Provisional; a failed read or one without completeness stays
-"Completeness unknown". When a readiness notice names a blocker, the header
-pill is hidden rather than repeating it.
+"Completeness unknown". The page also reads the core's report barrier
+(`ui.report.blockers`, the same maintained read as the report): its own checks
+name the specific cause first, but the year never reads "Ready for reports"
+while the core answers `ready: false`, has not answered, or failed to answer;
+the notice then shows the core's first blocker (a pending Silent Payments scan,
+for example) and how many more there are. When a readiness notice names a
+blocker, the header pill is hidden rather than repeating it.
 
 The breakdown card states the result the way the report does. An Austrian book
 lists its E 1kv fields and KZ 801 on the E 1 with the core's amounts, then what
@@ -743,15 +748,21 @@ a field. Rows without a field may still be taxable, so they show in amber, mark
 the figures Provisional and keep the year from "Ready for export". A generic book lists short-term gains, long-term gains, and income.
 Each row's transaction count links to Transactions filtered to exactly those
 transactions (`txids`, from the payload's `breakdown`); a group of more than 128
-opens the whole year instead, since the Transactions filter takes no more. How
+opens the whole tax year instead, since the Transactions filter takes no more:
+the year's own bounds in the book's zone (its `taxYear`, else the country's
+calendar year), computed with the core's zone calendar
+(`crates/tax-countries/src/calendar.rs`, compiled into the app) and passed as
+the list's `since`/`until`, shown as a clearable date-range chip. How
 a single gain was calculated opens from the Calculation row on the
 transaction's Tax tab, which `ui.journals.events.list` feeds with an
 `explanationReference` for realized disposals and income.
 
-A Rules card lists the region, the book's stored gains algorithm, the core's
+A Rules card lists the book's country, its stored gains algorithm, the core's
 rate (none when the core gives none), the Altbestand rule for an Austrian book
-or the "Long-term after" holding period for a generic one, and the tax-year
-boundary, and links to Books, where they change. The Files panel writes the
+or the holding rule for another (no long-term rate, held more than a year past
+the anniversary of acquisition, or a generic book's own day count), and the
+tax-year boundary with the zone the payload's `taxYear` carries, and links to
+Books, where they change. The Files panel writes the
 tax report as PDF, XLSX, or CSV (the year's E 1kv for an Austrian book, the
 complete history for a generic one), the bookkeeping handoff, the summary PDF,
 and the audit package; the ledger's own exports stay on Transactions. The

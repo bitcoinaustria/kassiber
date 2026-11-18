@@ -133,9 +133,10 @@ pub struct Reuse {
 }
 
 pub struct Open {
-    /// `App::book_generation` this panel's record was read for (0 before its first read): a
-    /// book refresh since (an exclusion in the table, reprocessed journals) re-reads it.
-    pub generation: u64,
+    /// `App::book_generation` this panel's record was read for (None before its first read): a
+    /// book refresh since (an exclusion in the table, reprocessed journals) re-reads it. The
+    /// first generation is 0 too, so 0 cannot also mean unread.
+    pub generation: Option<u64>,
     /// This panel's identity for the requests it sends: unique per `Open`, so a reply finds the
     /// panel (active or parked) that asked, and a replaced panel (coin trail, retry) hears none.
     pub serial: u64,
@@ -203,7 +204,7 @@ impl Open {
     fn new(query: &str, tab: Tab, trail: Vec<String>) -> Open {
         let empty = draft::baseline(&Value::Null);
         Open {
-            generation: 0,
+            generation: None,
             serial: NEXT_SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             query: query.to_owned(),
             tab,
@@ -638,8 +639,8 @@ fn load_record(app: &mut App, panel: u64, record: Value, keep_draft: bool) {
         o.trail.push(from);
     }
     o.record = Some(record);
-    if o.generation == 0 {
-        o.generation = generation;
+    if o.generation.is_none() {
+        o.generation = Some(generation);
     }
     o.loading = false;
     o.error = None;
@@ -927,10 +928,10 @@ pub fn follow_generation(app: &mut App) -> bool {
     let Some(o) = app.detail.open.as_mut() else {
         return false;
     };
-    if o.generation == 0 || o.generation == generation || o.loading || o.record.is_none() {
+    if o.generation.is_none_or(|g| g == generation) || o.loading || o.record.is_none() {
         return false;
     }
-    o.generation = generation;
+    o.generation = Some(generation);
     reload(app);
     true
 }

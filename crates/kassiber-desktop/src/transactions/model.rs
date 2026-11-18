@@ -7,7 +7,7 @@
 use serde_json::{Map, Value, json};
 
 use crate::format::{self, Day};
-use crate::i18n::t;
+use crate::i18n::{t, tr};
 
 // ---- Periods ------------------------------------------------------------------------------
 
@@ -990,12 +990,60 @@ impl Dir {
     }
 }
 
+/// A date range a link opened the list on (`?since=&until=`, the Reports page's fiscal year):
+/// inclusive instants, with the zone its days are named in.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DateRange {
+    pub window: Window,
+    pub zone: Option<String>,
+}
+
+impl DateRange {
+    /// `?since=…&until=…[&zone=…]`: both ends as whole `YYYY-MM-DDTHH:MM:SSZ` instants, in order.
+    pub fn parse(
+        since: Option<String>,
+        until: Option<String>,
+        zone: Option<String>,
+    ) -> Option<Self> {
+        let instant = |v: &str| {
+            let b = v.as_bytes();
+            b.len() == 20
+                && b[10] == b'T'
+                && b[19] == b'Z'
+                && Day::parse(v).is_some()
+                && format::parse_ts(v).is_some()
+        };
+        let (since, until) = (since?, until?);
+        (instant(&since) && instant(&until) && since <= until).then(|| DateRange {
+            window: Window { since, until },
+            zone: zone.filter(|z| crate::tax_calendar::calendar::zone(z).is_some()),
+        })
+    }
+
+    /// The chip: the range's first and last day in its zone (UTC without one).
+    pub fn label(&self) -> String {
+        let zone = self.zone.as_deref().unwrap_or("UTC");
+        let day = |v: &str| {
+            crate::tax_calendar::local_day(zone, v).unwrap_or_else(|| v.chars().take(10).collect())
+        };
+        tr(
+            "transactions:table.chip.dateRange",
+            &[
+                ("start", &day(&self.window.since)),
+                ("end", &day(&self.window.until)),
+            ],
+        )
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Filters {
     pub chart: Option<ChartSel>,
     pub quick: Option<Quick>,
     pub breakdown: Option<Breakdown>,
     pub txids: Vec<String>,
+    /// The date range a link asked for; it narrows the period's window.
+    pub range: Option<DateRange>,
     pub status: Option<Status>,
     pub flow: Option<Flow>,
     pub payment: Option<String>,
@@ -1020,7 +1068,7 @@ impl Filters {
         .count()
     }
     pub fn any_chip(&self) -> bool {
-        self.active_count() > 0 || !self.txids.is_empty()
+        self.active_count() > 0 || !self.txids.is_empty() || self.range.is_some()
     }
     /// "Clear all": chart, quick, breakdown, txids and the table filters (sort included).
     pub fn clear_all(&mut self) {
@@ -1120,7 +1168,12 @@ pub fn list_args(
     if let Some(w) = f.leg_wallet() {
         m.insert("wallet".into(), json!(w));
     }
-    let period_window = period_window(resolved, years);
+    // A linked date range narrows the period's window (or stands alone under `all`).
+    let period_window = match (period_window(resolved, years), &f.range) {
+        (Some(p), Some(r)) => Some(intersect(&p, &r.window).unwrap_or_else(|| r.window.clone())),
+        (None, Some(r)) => Some(r.window.clone()),
+        (p, None) => p,
+    };
     if f.txids.is_empty()
         && let Some(w) = &period_window
     {

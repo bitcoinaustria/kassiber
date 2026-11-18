@@ -106,6 +106,7 @@ pub const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.profiles.update",
     "ui.profiles.switch",
     "ui.profiles.reset_data",
+    "ui.report.blockers",
     "ui.reports.capital_gains",
     "ui.reports.explain_capital_gain",
     "ui.reports.summary",

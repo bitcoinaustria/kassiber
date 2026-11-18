@@ -450,7 +450,9 @@
       "clearPayment": "Clear {{label}} filter",
       "clearWithFees": "Clear with fees filter",
       "transactionSet": "{{count}} selected",
-      "clearTransactionSet": "Clear selection"
+      "clearTransactionSet": "Clear selection",
+      "dateRange": "{{start}} – {{end}}",
+      "clearDateRange": "Clear date range"
     },
     "empty": "No transactions found matching your filters.",
     "pairedTransfer": {

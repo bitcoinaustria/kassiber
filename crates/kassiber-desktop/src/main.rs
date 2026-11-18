@@ -38,6 +38,7 @@ mod secret_floor;
 mod secrets;
 mod settings;
 mod shell;
+mod tax_calendar;
 mod theme;
 mod toastopen;
 mod transactions;
@@ -557,6 +558,11 @@ static SCENES: &[crate::app::Scene] = &[
     }),
     ("transactions-chips", |a| {
         a.navigate("/transactions?period=all&status=pending&flow=incoming&fees=with-fees&sort=amount&order=desc");
+        transactions::prime(a, false);
+    }),
+    // A Reports fiscal-year link: the UK's 2024-25 in London time.
+    ("transactions-range", |a| {
+        a.navigate("/transactions?period=all&since=2024-04-05T23%3A00%3A00Z&until=2025-04-05T22%3A59%3A59Z&zone=Europe%2FLondon");
         transactions::prime(a, false);
     }),
     ("transactions-expanded", |a| {

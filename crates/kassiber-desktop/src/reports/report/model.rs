@@ -96,8 +96,9 @@ pub struct Report {
     pub rows_before_fields: f64,
     pub needs_journals: bool,
     pub quarantines: f64,
-    /// `taxYear`: the book's own tax year (first day `MM-DD`, zone) when it isn't 1 January
-    /// (docs/reference/tax.md "Tax years"); None for a calendar-year book.
+    /// `taxYear`: the book's own tax year (first day `MM-DD`, zone) when the core cuts it
+    /// itself (docs/reference/tax.md "Tax years"): a start other than 1 January, or a calendar
+    /// year in a zone the book chose. None for a book on its country's calendar year.
     pub tax_year: Option<((u32, u32), String)>,
 }
 
@@ -140,7 +141,7 @@ impl Report {
                     ))
                 })
                 .filter(|((m, dd), _): &((u32, u32), String)| {
-                    (1..=12).contains(m) && *dd >= 1 && (*m, *dd) != (1, 1)
+                    (1..=12).contains(m) && (1..=31).contains(dd)
                 }),
             year: d["year"].as_i64().unwrap_or(0) as i32,
             available_years: d["availableYears"]
@@ -214,6 +215,45 @@ impl Report {
         region(&self.jurisdiction)
     }
 
+    /// The rules row's region: the book's country by its registry name, `Generic` for the
+    /// generic book or a code the copy doesn't know.
+    pub fn region_name(&self) -> String {
+        let code = self.jurisdiction.trim().to_lowercase();
+        match crate::reports::books::model::country(&code) {
+            Some(c) if c.code != "generic" => crate::reports::books::model::region_label(c.code),
+            _ => t("reports:rules.generic"),
+        }
+    }
+
+    /// The rules rows' holding period: (label, value), None when the report states none. The
+    /// registry's kind decides: a country without a long-term rate (the core's `longTermDays`
+    /// is then its never sentinel, `i64::MAX`), one that counts to the anniversary of the
+    /// acquisition (sent as 365), or the book's own day count.
+    pub fn holding_rule(&self) -> Option<(String, String)> {
+        use crate::reports::books::model::{self as registry, LongTerm};
+        let kind = registry::country(&self.jurisdiction).map(|c| c.long_term);
+        let days = self.long_term_days;
+        match kind {
+            Some(LongTerm::Never) => {
+                Some((t("reports:rules.longTerm"), t("reports:rules.noLongTerm")))
+            }
+            Some(LongTerm::MoreThanOneYear) => Some((
+                t("reports:rules.longTerm"),
+                t("reports:rules.moreThanOneYear"),
+            )),
+            _ => match days? {
+                // Past any holding period a book can choose: the never sentinel.
+                d if d >= LONG_TERM_NEVER_FROM => {
+                    Some((t("reports:rules.longTerm"), t("reports:rules.noLongTerm")))
+                }
+                d => Some((
+                    t("reports:rules.longTermAfter"),
+                    tc("reports:rules.days", d.max(0.0) as usize, &[]),
+                )),
+            },
+        }
+    }
+
     fn bucket(&self, key: &str) -> Option<&Bucket> {
         self.breakdown.iter().find(|b| b.key == key)
     }
@@ -257,10 +297,18 @@ impl Report {
             .collect()
     }
 
+    /// The book's own tax-year start when it isn't 1 January.
+    fn offset_start(&self) -> Option<(u32, u32)> {
+        self.tax_year
+            .as_ref()
+            .map(|(start, _)| *start)
+            .filter(|start| *start != (1, 1))
+    }
+
     /// A year's name in the picker: `2025`, or `2025-26` for a book whose tax year doesn't
     /// start on 1 January (named by its first day's year).
     pub fn year_label(&self, y: i32) -> String {
-        match &self.tax_year {
+        match self.offset_start() {
             Some(_) => format!("{y}-{:02}", (y + 1).rem_euclid(100)),
             None => y.to_string(),
         }
@@ -269,18 +317,12 @@ impl Report {
     /// The trigger's period: `1 Jan – 31 Dec 2025`, or the book's own year
     /// (`1 Jul 2025 – 30 Jun 2026`).
     pub fn period_of(&self, y: i32) -> String {
-        let Some(((m, d), _)) = &self.tax_year else {
+        let Some((m, d)) = self.offset_start() else {
             return period(y);
         };
-        let first = crate::format::Day { y, m: *m, d: *d };
+        let first = crate::format::Day { y, m, d };
         let last = crate::format::Day::from_epoch_days(
-            crate::format::Day {
-                y: y + 1,
-                m: *m,
-                d: *d,
-            }
-            .epoch_days()
-                - 1,
+            crate::format::Day { y: y + 1, m, d }.epoch_days() - 1,
         );
         tr(
             "reports:date.range",
@@ -291,14 +333,51 @@ impl Report {
         )
     }
 
-    /// The rules row's tax year: the registry's for the country, the book's own when it has one.
+    /// The rules row's tax year: the book's own (start and zone) when the core sends it, else
+    /// the registry's for the country.
     pub fn tax_year_rule(&self) -> String {
         match &self.tax_year {
+            Some(((1, 1), zone)) => tr("reports:taxYear.calendar", &[("zone", zone)]),
             Some(((m, d), zone)) => tr(
                 "reports:taxYear.starts",
                 &[("start", &day_month(*m, *d)), ("zone", zone)],
             ),
             None => describe_tax_year(&self.jurisdiction),
+        }
+    }
+
+    /// The zone and first day the core cuts the book's years in (`tax_years::Cut`): the book's
+    /// own `taxYear` when sent, else the country's calendar year in its registry zone (UTC for
+    /// the generic book, whose years are its timestamps' years).
+    fn year_cut(&self) -> (String, (u32, u32)) {
+        match &self.tax_year {
+            Some((start, zone)) => (zone.clone(), *start),
+            None => (
+                crate::reports::books::model::country(&self.jurisdiction)
+                    .map(|c| c.timezone)
+                    .unwrap_or("UTC")
+                    .to_owned(),
+                (1, 1),
+            ),
+        }
+    }
+
+    /// `transactionsHref`: exactly the given transactions, else the book's tax year `year` by
+    /// its own bounds in its zone (a fiscal year is not the calendar year the Transactions
+    /// period names). The calendar year only when the zone has no calendar here.
+    pub fn transactions_href(&self, year: i32, ids: &[String]) -> String {
+        if !ids.is_empty() {
+            return format!("/transactions?period={year}&txids={}", ids.join("%2C"));
+        }
+        let (zone, start) = self.year_cut();
+        match crate::tax_calendar::tax_year_window(&zone, start, year) {
+            Some((since, until)) => format!(
+                "/transactions?period=all&since={}&until={}&zone={}",
+                encode(&since),
+                encode(&until),
+                encode(&zone)
+            ),
+            None => format!("/transactions?period={year}"),
         }
     }
 
@@ -334,6 +413,10 @@ fn field_copy(code: &str) -> Option<&'static (&'static str, &'static str, Option
 fn field_label(code: &str) -> String {
     t(&format!("reports:field.{code}"))
 }
+
+/// `longTermDays` at or above this is no day count but the core's `LongTerm::Never`
+/// sentinel (`i64::MAX`): a century of holding.
+const LONG_TERM_NEVER_FROM: f64 = 36_525.0;
 
 /// First tax year with the crypto Kennzahlen; the core decides, this names it.
 pub const E1KV_FIRST_TAX_YEAR: i32 = 2022;
@@ -398,23 +481,17 @@ pub fn period(year: i32) -> String {
     )
 }
 
-/// (timezone, tax-year start (month, day)) from the tax country registry.
+/// (timezone, tax-year start (month, day)) from the tax country registry
+/// (`reports::books::model`'s copy of `crates/tax-countries` `COUNTRIES`).
 fn country_zone(code: &str) -> Option<(&'static str, (u32, u32))> {
-    Some(match code.trim().to_lowercase().as_str() {
-        "generic" => ("UTC", (1, 1)),
-        "at" => ("Europe/Vienna", (1, 1)),
-        "us" => ("UTC", (1, 1)),
-        "de" => ("Europe/Berlin", (1, 1)),
-        "ch" => ("Europe/Zurich", (1, 1)),
-        "ie" => ("Europe/Dublin", (1, 1)),
-        "gb" => ("Europe/London", (4, 6)),
-        "es" => ("Europe/Madrid", (1, 1)),
-        "jp" => ("Asia/Tokyo", (1, 1)),
-        _ => return None,
-    })
+    let c = crate::reports::books::model::country(code)?;
+    let start = c.tax_year_start;
+    let m = start.get(0..2)?.parse().ok()?;
+    let d = start.get(3..5)?.parse().ok()?;
+    Some((c.timezone, (m, d)))
 }
 
-/// `describeTaxYear`.
+/// `describeTaxYear`: a book without its own `taxYear` keeps its country's calendar year.
 pub fn describe_tax_year(jurisdiction: &str) -> String {
     let (zone, (m, d)) = country_zone(jurisdiction).unwrap_or(("UTC", (1, 1)));
     if m == 1 && d == 1 {
@@ -437,15 +514,6 @@ pub fn signed_fiat(v: f64, cur: &str) -> String {
         ""
     };
     format!("{sign}{}", format::fiat(v.abs(), cur))
-}
-
-/// `transactionsHref`: the year, or exactly the given transactions.
-pub fn transactions_href(year: i32, ids: &[String]) -> String {
-    if ids.is_empty() {
-        format!("/transactions?period={year}")
-    } else {
-        format!("/transactions?period={year}&txids={}", ids.join("%2C"))
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -471,13 +539,13 @@ pub struct Group {
     pub rows: Vec<BreakdownRow>,
 }
 
-fn links(year: i32, b: Option<&Bucket>) -> (usize, Option<String>, bool) {
+fn links(r: &Report, year: i32, b: Option<&Bucket>) -> (usize, Option<String>, bool) {
     let count = b.map(|b| b.transaction_count).unwrap_or(0);
     if count == 0 {
         return (0, None, false);
     }
     let ids = b.map(|b| b.transaction_ids.as_slice()).unwrap_or(&[]);
-    (count, Some(transactions_href(year, ids)), !ids.is_empty())
+    (count, Some(r.transactions_href(year, ids)), !ids.is_empty())
 }
 
 /// `reportBreakdown`: the Austrian fields with what stays off the return, or a generic book's
@@ -494,7 +562,7 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
             let Some(b) = r.bucket(key).filter(|b| b.row_count != 0.0) else {
                 continue;
             };
-            let (n, href, exact) = links(year, Some(b));
+            let (n, href, exact) = links(r, year, Some(b));
             rows.push(BreakdownRow {
                 key: key.into(),
                 code: None,
@@ -526,7 +594,7 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
         .map(|f| {
             let copy = field_copy(&f.code);
             let b = r.bucket(&f.code);
-            let (n, href, exact) = links(year, b);
+            let (n, href, exact) = links(r, year, b);
             BreakdownRow {
                 key: f.code.clone(),
                 code: Some(format!("KZ {}", f.code)),
@@ -596,7 +664,7 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
         let Some(b) = r.bucket(key).filter(|b| b.row_count != 0.0) else {
             continue;
         };
-        let (n, href, exact) = links(year, Some(b));
+        let (n, href, exact) = links(r, year, Some(b));
         off.push(BreakdownRow {
             key: key.into(),
             code: None,
@@ -662,6 +730,51 @@ fn n(v: f64) -> usize {
     v.max(0.0) as usize
 }
 
+/// One of the core's report blockers (`ui.report.blockers`), in its own words.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CoreBlocker {
+    pub title: String,
+    pub detail: String,
+    /// `severity: blocking` (else review or warning).
+    pub blocking: bool,
+}
+
+/// The core's report-readiness verdict (`crates/journals/src/report_blockers.rs` `snapshot`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum CoreReadiness {
+    /// Not answered yet.
+    Checking,
+    /// The read failed: readiness is unknown, so not ready.
+    Unavailable,
+    Ready,
+    /// `ready: false`, with its blockers (possibly none listed).
+    Blocked(Vec<CoreBlocker>),
+}
+
+impl CoreReadiness {
+    /// The verdict from a `ui.report.blockers` answer: only an explicit `ready: true` with no
+    /// blockers is ready.
+    pub fn parse(d: &Value) -> CoreReadiness {
+        let blockers: Vec<CoreBlocker> = d["blockers"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .map(|b| CoreBlocker {
+                        title: s(&b["title"]),
+                        detail: s(&b["detail"]),
+                        blocking: b["severity"] == "blocking",
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if d["ready"] == true && blockers.is_empty() {
+            CoreReadiness::Ready
+        } else {
+            CoreReadiness::Blocked(blockers)
+        }
+    }
+}
+
 /// `buildReportReadiness`.
 pub fn readiness(
     r: &Report,
@@ -670,6 +783,7 @@ pub fn readiness(
     completeness: Option<&Completeness>,
     pending: bool,
     blocking: usize,
+    core: &CoreReadiness,
 ) -> Readiness {
     let ready =
         |title: String, detail: String, tone: Tone, glyph: Glyph, href: Option<&'static str>| {
@@ -749,6 +863,63 @@ pub fn readiness(
             Glyph::Alert,
             Some("/journals"),
         );
+    }
+    // The core's barrier decides readiness; the checks above are its more specific signals.
+    match core {
+        CoreReadiness::Ready => {}
+        CoreReadiness::Checking => {
+            return ready(
+                t("reports:readiness.checking.title"),
+                t("reports:readiness.checking.detail"),
+                Tone::Neutral,
+                Glyph::Loader,
+                None,
+            );
+        }
+        CoreReadiness::Unavailable => {
+            return ready(
+                t("reports:readiness.coreUnknown.title"),
+                t("reports:readiness.coreUnknown.detail"),
+                Tone::Warning,
+                Glyph::Alert,
+                None,
+            );
+        }
+        CoreReadiness::Blocked(blockers) => {
+            let first = blockers
+                .iter()
+                .find(|b| b.blocking)
+                .or_else(|| blockers.first());
+            let mut detail = match first {
+                Some(b) if !b.title.is_empty() && !b.detail.is_empty() => {
+                    format!("{}: {}", b.title, b.detail)
+                }
+                Some(b) if !b.title.is_empty() || !b.detail.is_empty() => {
+                    format!("{}{}", b.title, b.detail)
+                }
+                _ => t("reports:readiness.coreBlocked.detail"),
+            };
+            if blockers.len() > 1 {
+                detail.push(' ');
+                detail.push_str(&tc(
+                    "reports:readiness.coreBlocked.more",
+                    blockers.len() - 1,
+                    &[],
+                ));
+            }
+            let blocking = blockers.is_empty() || blockers.iter().any(|b| b.blocking);
+            return ready(
+                t("reports:readiness.coreBlocked.title"),
+                detail,
+                if blocking { Tone::Alert } else { Tone::Warning },
+                if blocking {
+                    Glyph::ShieldAlert
+                } else {
+                    Glyph::Alert
+                },
+                None,
+            );
+        }
     }
     let austrian = r.region() == Region::At;
     let unassigned = r.unassigned_rows();
@@ -944,24 +1115,24 @@ mod tests {
         let c = complete();
         crate::i18n::set_lang(crate::i18n::Lang::De);
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&c), false, 0).title,
+            readiness(&r, 2.0, 2025, Some(&c), false, 0, &CoreReadiness::Ready).title,
             "Bereit für Berichte"
         );
         crate::i18n::set_lang(crate::i18n::Lang::En);
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&c), false, 0).title,
+            readiness(&r, 2.0, 2025, Some(&c), false, 0, &CoreReadiness::Ready).title,
             "Ready for reports"
         );
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&c), false, 1).title,
+            readiness(&r, 2.0, 2025, Some(&c), false, 1, &CoreReadiness::Ready).title,
             "Sources block reports"
         );
         assert_eq!(
-            readiness(&r, 2.0, 2025, None, true, 0).title,
+            readiness(&r, 2.0, 2025, None, true, 0, &CoreReadiness::Ready).title,
             "Checking completeness"
         );
         assert_eq!(
-            readiness(&r, 2.0, 2025, None, false, 0).title,
+            readiness(&r, 2.0, 2025, None, false, 0, &CoreReadiness::Ready).title,
             "Completeness unknown"
         );
         let missing = Completeness {
@@ -970,18 +1141,66 @@ mod tests {
             missing_prices: 1,
         };
         assert_eq!(
-            readiness(&r, 2.0, 2025, Some(&missing), false, 0).detail,
+            readiness(
+                &r,
+                2.0,
+                2025,
+                Some(&missing),
+                false,
+                0,
+                &CoreReadiness::Ready
+            )
+            .detail,
             "1 transaction has no price; figures are provisional."
         );
         let mut q = generic();
         q.quarantines = 3.0;
         assert_eq!(
-            readiness(&q, 2.0, 2025, Some(&c), false, 0).detail,
+            readiness(&q, 2.0, 2025, Some(&c), false, 0, &CoreReadiness::Ready).detail,
             "3 quarantined items should be resolved before filing."
         );
         assert!(provisional(&q, Some(&c), false));
         assert!(!provisional(&r, Some(&c), false));
         assert!(!provisional(&r, None, true));
+    }
+
+    /// The core's `ready: false` wins over clean local checks, and its blocker shows; only an
+    /// explicit ready is ready.
+    #[test]
+    fn the_core_barrier_decides_readiness() {
+        let r = generic();
+        let c = complete();
+        let core = CoreReadiness::parse(&json!({
+            "ready": false,
+            "blockers": [
+                {"id": "silent_payment_scan_pending:w", "severity": "blocking",
+                 "title": "Silent Payments scan pending",
+                 "detail": "SP has not completed its configured BIP352 scan range yet."},
+                {"id": "missing_prices", "severity": "review", "title": "Missing transaction prices", "detail": "1"}
+            ]
+        }));
+        let got = readiness(&r, 2.0, 2025, Some(&c), false, 0, &core);
+        assert_ne!(got.title, "Ready for reports");
+        assert_eq!(got.tone, Tone::Alert);
+        assert_eq!(
+            got.detail,
+            "Silent Payments scan pending: SP has not completed its configured BIP352 scan range \
+             yet. 1 more blocker."
+        );
+        assert_eq!(
+            CoreReadiness::parse(&json!({"ready": true, "blockers": []})),
+            CoreReadiness::Ready
+        );
+        assert!(matches!(
+            CoreReadiness::parse(&json!({})),
+            CoreReadiness::Blocked(_)
+        ));
+        for core in [CoreReadiness::Checking, CoreReadiness::Unavailable] {
+            assert_ne!(
+                readiness(&r, 2.0, 2025, Some(&c), false, 0, &core).title,
+                "Ready for reports"
+            );
+        }
     }
 
     #[test]
@@ -1015,6 +1234,80 @@ mod tests {
         assert_eq!(decode(&encode("{\"a\":1}")), "{\"a\":1}");
     }
 
+    /// A calendar-year book in a zone it chose names that zone, not the country's or UTC.
+    #[test]
+    fn a_calendar_tax_year_keeps_the_books_zone() {
+        let r = Report::parse(&json!({
+            "jurisdictionCode": "GENERIC", "year": 2025,
+            "taxYear": {"taxYearStart": "01-01", "timezone": "Pacific/Auckland", "yearLabel": "2025"}
+        }));
+        assert!(
+            r.tax_year_rule().contains("Pacific/Auckland"),
+            "{}",
+            r.tax_year_rule()
+        );
+        assert_eq!(
+            (r.year_label(2025), r.period_of(2025)),
+            ("2025".into(), "1 Jan – 31 Dec 2025".into())
+        );
+    }
+
+    /// The rules name the book's country and its real holding rule: no day count for a country
+    /// without a long-term rate (the core's `i64::MAX` sentinel), the anniversary rule for one
+    /// that counts more than a year, and the book's own days for a generic book.
+    #[test]
+    fn the_rules_state_the_countrys_holding_rule() {
+        let of = |code: &str, days: Value| {
+            Report::parse(&json!({"jurisdictionCode": code, "year": 2025, "longTermDays": days}))
+        };
+        let gb = of("GB", json!(i64::MAX));
+        assert_eq!(gb.region_name(), "United Kingdom");
+        assert_eq!(
+            gb.holding_rule(),
+            Some(("Long-term".into(), "No long-term rate".into()))
+        );
+        let us = of("US", json!(365));
+        assert_eq!(us.region_name(), "United States");
+        assert_eq!(
+            us.holding_rule().map(|(_, v)| v),
+            Some("Held more than one year, past the anniversary of acquisition".into())
+        );
+        let generic = of("GENERIC", json!(400));
+        assert_eq!(generic.region_name(), "Generic");
+        assert_eq!(
+            generic.holding_rule(),
+            Some(("Long-term after".into(), "400 days".into()))
+        );
+        assert_eq!(of("GENERIC", Value::Null).holding_rule(), None);
+    }
+
+    /// A group too large for exact links (no `transactionIds`) opens the book's fiscal year by
+    /// its bounds in its zone, not the calendar year: the UK's 2024-25 includes January 2025.
+    #[test]
+    fn a_large_group_opens_the_fiscal_year_range() {
+        let r = Report::parse(&json!({
+            "jurisdictionCode": "GB", "year": 2024,
+            "taxYear": {"taxYearStart": "04-06", "timezone": "Europe/London", "yearLabel": "2024-25"},
+            "breakdown": [{"key": "short_term", "rowCount": 300, "transactionCount": 300, "transactionIds": null}]
+        }));
+        let g = breakdown(&r);
+        assert_eq!(
+            g[0].rows[0].href.as_deref(),
+            Some(
+                "/transactions?period=all&since=2024-04-05T23%3A00%3A00Z\
+                 &until=2025-04-05T22%3A59%3A59Z&zone=Europe%2FLondon"
+            )
+        );
+        assert!(!g[0].rows[0].exact);
+        // A calendar-year book in its country's zone: Vienna midnight, not UTC.
+        let mut at = generic();
+        at.jurisdiction = "AT".into();
+        assert!(
+            at.transactions_href(2025, &[])
+                .contains("since=2024-12-31T23%3A00%3A00Z")
+        );
+    }
+
     /// The page's own copy follows the UI language: Austrian months, decimal comma, plurals.
     #[test]
     fn german_copy() {
@@ -1036,7 +1329,16 @@ mod tests {
         let groups = breakdown(&at);
         let mut q = generic();
         q.quarantines = 1.0;
-        let detail = readiness(&q, 2.0, 2025, Some(&complete()), false, 0).detail;
+        let detail = readiness(
+            &q,
+            2.0,
+            2025,
+            Some(&complete()),
+            false,
+            0,
+            &CoreReadiness::Ready,
+        )
+        .detail;
         crate::i18n::set_lang(crate::i18n::Lang::En);
         assert_eq!(
             got,
