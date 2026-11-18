@@ -76,6 +76,7 @@ pub enum Format {
     Bisq,
     BinanceHistory,
     Bitvavo,
+    Bitstamp,
     BtcpayCsv,
     BtcpayJson,
     Ledger,
@@ -103,6 +104,7 @@ impl Format {
             "bisq_csv" => Self::Bisq,
             "binance_history_csv" => Self::BinanceHistory,
             "bitvavo_csv" => Self::Bitvavo,
+            "bitstamp_csv" => Self::Bitstamp,
             "cointracking_csv" => Self::CoinTracking,
             "blockpit_csv" => Self::Blockpit,
             "wasabi_bundle" => Self::Wasabi,
@@ -133,15 +135,18 @@ impl Format {
             Self::Bisq => "bisq_csv",
             Self::BinanceHistory => "binance_history_csv",
             Self::Bitvavo => "bitvavo_csv",
+            Self::Bitstamp => "bitstamp_csv",
             Self::Ledger => "generic_ledger",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
         match self {
             // Exchange exports: the registry names each one's parser.
-            Self::BinanceHistory | Self::Bitvavo => Ok(exchange_api::load_file(self, file, None)?
-                .map(|(rows, _)| rows)
-                .unwrap_or_default()),
+            Self::BinanceHistory | Self::Bitvavo | Self::Bitstamp => {
+                Ok(exchange_api::load_file(self, file, None)?
+                    .map(|(rows, _)| rows)
+                    .unwrap_or_default())
+            }
             Self::Document => Err(AppError::new(
                 "validation",
                 "Document imports require reviewed draft rows",
@@ -243,11 +248,13 @@ impl Format {
         matches!(self, Self::TwentyOne | Self::Strike)
             || self == Self::Bisq
             || self == Self::Bitvavo
+            || self == Self::Bitstamp
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
             Self::Binance => ("Binance", "binance", "binance_rows"),
             Self::Bitvavo => ("Bitvavo", "bitvavo", "bitvavo_rows"),
+            Self::Bitstamp => ("Bitstamp", "bitstamp", "bitstamp_rows"),
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),

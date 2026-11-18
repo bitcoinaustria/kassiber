@@ -2098,6 +2098,26 @@ balance as `reported_balance`.
 [Bitvavo](bitvavo.md) records the key setup, API, CSV layout, mapping and
 every refusal.
 
+### Bitstamp API and CSV
+
+Rust backend only. The read-only API sync (`wallets sync-bitstamp`, a key
+with only Account balance and User transactions in a `bitstamp` backend)
+and the RFC 4180 transaction CSV (`wallets import-bitstamp`, active
+custodial ledger in `full` mode) land in one `bitstamp` wallet with one id
+per transaction, `bitstamp:<id>`, so importing both in either order keeps one
+record each. Both follow the wallet's `asset_scope`: in `bitcoin` scope rows
+without BTC are skipped and counted by ticker in `assets`, and a BTC trade
+against another crypto asset is refused naming the scope command; in
+`crypto` scope every crypto asset is kept, trades between two of them as
+paired `swap` legs and a CSV fee in a third asset as a fee-only row. Buys
+and sells for fiat get exact `exchange_execution` pricing; deposits,
+withdrawals, transfers between Bitstamp accounts and referral rewards import
+unpriced. Staking, conversions, derivatives and any undocumented type of a
+kept asset refuse the whole import by name. The sync reports the account's
+BTC balance as `reported_balance`.
+[Bitstamp](bitstamp.md) records the key setup, API, CSV layout, mapping and
+every refusal.
+
 ### Binance API and Supplemental CSV
 
 Create a backend with `kind=binance`; store the API key in `token` and the API

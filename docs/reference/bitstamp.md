@@ -66,6 +66,26 @@ an id) or `validation` naming the row: no numeric type, a time that is not
 currency amount or pair rate, of any asset, that is null or not a plain
 decimal. Times have no documented zone and are read as UTC.
 
+## CSV export
+
+Transaction history → export all in the **RFC 4180** format. Header:
+`ID,Account,Type,Subtype,Datetime,Amount,Amount currency,Value,Value currency,Rate,Rate currency,Fee,Fee currency,Order ID`.
+An active custodial ledger, imported in `full` mode like Strike.
+
+- `ID` is the API's transaction id (assumption from third-party parsers).
+- `Type` `Deposit`, `Withdrawal`, `Market` (`Subtype` `Buy`/`Sell`),
+  `Referral reward`, `Staking reward`, `Sub Account Transfer`, `Inter
+  Account Transfer` map to the API's types; any other type is unknown.
+- `Datetime` `YYYY-MM-DDTHH:MM:SS[.ffffff]` with `Z`, `±HH:MM` or no zone
+  (UTC). `Amount`, `Value`, `Rate`, `Fee` are unsigned decimals; the type
+  gives the direction. Outside a market row a `Value` is a second currency
+  leg. An empty `Fee` is no fee; `Fee currency` is checked.
+- Refused by name: the legacy export (`Type,Datetime,Account,Amount,Value,Rate,Fee,Sub Type`,
+  no ids), a missing column, several `Account` values, a repeated `ID`
+  with different values, a transfer of a kept asset between accounts (the export does
+  not sign it; sync that account through the API), a market row of a kept asset that is
+  neither Buy nor Sell.
+
 ## Mapping
 
 The wallet's `asset_scope` ([other crypto assets](../plan/24-crypto-assets.md))

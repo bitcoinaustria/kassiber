@@ -394,6 +394,11 @@ mod tests {
                 "exchange-export",
             ),
             ("bitstamp", r#"{"backend":"b"}"#, "provider-api"),
+            (
+                "bitstamp",
+                r#"{"source_format":"bitstamp_csv"}"#,
+                "exchange-export",
+            ),
             ("custom", r#"{"source_format":"generic_ledger"}"#, "manual"),
             ("custom", r#"{"source_format":" "}"#, "manual"),
             ("custom", r#"{"source_format":"bisq"}"#, "file-import"),

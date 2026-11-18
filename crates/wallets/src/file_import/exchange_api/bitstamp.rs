@@ -10,6 +10,8 @@
 use super::*;
 use assets::Scope;
 
+mod export;
+
 const PROVIDER: &str = "Bitstamp";
 /// Rows per page, Bitstamp's maximum (and its fixed size with `since_id`).
 const PAGE: usize = 1000;
@@ -46,7 +48,11 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     fetch,
     probe,
     skipped: Some(&["fiat_only_transactions", "non_btc_transactions"]),
-    files: &[],
+    files: &[contract::registry::FileFormat {
+        format: Format::Bitstamp,
+        reads: contract::Reads::AllAssets,
+        load: export::load,
+    }],
     shared_ids: true,
     same_second_tags: true,
 };

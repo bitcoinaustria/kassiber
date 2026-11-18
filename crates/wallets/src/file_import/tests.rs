@@ -6444,3 +6444,110 @@ fn bitvavo_csv_orders_same_second_rows_and_tags_them_across_imports() {
         ["bitvavo:aaa-later", "bitvavo:zzz-earlier"]
     );
 }
+
+/// Bitstamp's RFC 4180 export (docs/exchanges/samples/bitstamp/example.csv):
+/// the API fixture's transactions as the export writes them.
+pub(super) const BITSTAMP_CSV: &str =
+    include_str!("../../../../docs/exchanges/samples/bitstamp/example.csv");
+const BITSTAMP_HEADER: &str = "ID,Account,Type,Subtype,Datetime,Amount,Amount currency,Value,Value currency,Rate,Rate currency,Fee,Fee currency,Order ID\n";
+fn bitstamp_book() -> Connection {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR'", [])
+        .unwrap();
+    conn
+}
+
+/// The export maps through the API's rules (exchange_api/tests/bitstamp_api.rs
+/// checks the rows): EUR and ETH rows are skipped, an identical repeated row
+/// is read once, and a re-import adds nothing.
+#[test]
+fn bitstamp_csv_imports_its_btc_rows_into_an_active_wallet() {
+    let conn = bitstamp_book();
+    let twice = format!(
+        "{BITSTAMP_CSV}3,Main Account,Deposit,,2024-01-03T00:00:00Z,0.00500000,BTC,,,,,,,\n"
+    );
+    let result = import_kind(&conn, &twice, Format::Bitstamp).unwrap();
+    let get = |key: &str| kassiber_envelope::get(&result, key).cloned();
+    assert_eq!(
+        (get("mode"), get("bitstamp_rows"), get("imported")),
+        (Some(s("full")), Some(Py::from(5)), Some(Py::from(5)))
+    );
+    let again = import_kind(&conn, BITSTAMP_CSV, Format::Bitstamp).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions WHERE pricing_method='bitstamp' AND pricing_quality='exact'"), 2);
+}
+
+/// What the export cannot book exactly refuses the whole file by name.
+#[test]
+fn bitstamp_csv_refuses_what_it_cannot_book_by_name() {
+    let line = |row: &str| format!("{BITSTAMP_HEADER}{row}\n");
+    #[rustfmt::skip]
+    let cases = [
+        (line("50,Main Account,Market,Buy,2024-03-01T00:00:00Z,0.01,BTC,400.00,USDT,40000,USDT,0.4,USDT,1"),
+            "Bitstamp transaction '50' (type 'Market') trades BTC against USDT, which is not a fiat currency"),
+        (line("50,Main Account,Market,Sell,2024-03-01T00:00:00Z,0.5,ETH,0.025,BTC,0.05,BTC,0.0001,BTC,1"),
+            "Bitstamp transaction '50' (type 'Market') trades BTC against ETH, which is not a fiat currency"),
+        (line("50,Main Account,Market,Buy,2024-03-01T00:00:00Z,0.01,BTC,400.00,EUR,40000,EUR,0.5,BNB,1"),
+            "Bitstamp transaction '50' (type 'Market') charges its fee in BNB, not EUR"),
+        (line("50,Main Account,Market,Buy,2024-03-01T00:00:00Z,1.0,ETH,2000,EUR,2000,EUR,0.0001,BTC,1"),
+            "Bitstamp transaction '50' (type 'Market') has a BTC fee but no single BTC amount"),
+        (line("50,Main Account,Deposit reverted,,2024-03-01T00:00:00Z,-0.01,BTC,,,,,,,"),
+            "Bitstamp transaction '50' (type 'Deposit reverted') has a type Kassiber does not map"),
+        (line("50,Main Account,Staking reward,,2024-03-01T00:00:00Z,0.01,BTC,,,,,,,"),
+            "Bitstamp transaction '50' (type 'Staking reward') is type 27, which Kassiber does not import"),
+        (line("50,Main Account,Inter Account Transfer,,2024-03-01T00:00:00Z,0.01,BTC,,,,,,,"),
+            "Bitstamp CSV line 2 (Inter Account Transfer) does not say which way its BTC moved"),
+        (line("50,Main Account,Market,,2024-03-01T00:00:00Z,0.01,BTC,400.00,EUR,40000,EUR,,,1"),
+            "Bitstamp CSV line 2 is a market trade that is neither Buy nor Sell"),
+        (line("50,Main Account,Withdrawal,,2024-03-01T00:00:00Z,-0.01,BTC,,,,,,,"),
+            "Bitstamp CSV line 2 has a Amount that is not a plain unsigned decimal"),
+        (line("50,Main Account,Deposit,,2024-03-01T00:00:00Z,0.01,BTC,400.00,,,,,,"),
+            "Bitstamp CSV line 2 has a value without a currency"),
+        (line("50,Main Account,Deposit,,2024-03-01T00:00:00Z,0.01,BTC,,,,,0.1,,"),
+            "Bitstamp CSV line 2 has a fee without a currency"),
+        (line("50,Main Account,Deposit,,Mar. 01 2024,0.01,BTC,,,,,,,"),
+            "Bitstamp CSV line 2 has a date and time Kassiber cannot read"),
+        (line(",Main Account,Deposit,,2024-03-01T00:00:00Z,0.01,BTC,,,,,,,"), "Bitstamp CSV line 2 has no transaction ID"),
+        (format!("{BITSTAMP_HEADER}50,Main Account,Deposit,,2024-03-01T00:00:00Z,0.01,BTC,,,,,,,\n50,Main Account,Deposit,,2024-03-01T00:00:00Z,0.02,BTC,,,,,,,\n"),
+            "Bitstamp CSV line 3 repeats transaction ID 50 with different values"),
+        (format!("{BITSTAMP_HEADER}50,Main Account,Deposit,,2024-03-01T00:00:00Z,0.01,BTC,,,,,,,\n51,Savings,Deposit,,2024-03-01T00:00:00Z,0.02,BTC,,,,,,,\n"),
+            "Bitstamp CSV holds several accounts"),
+        ("Type,Datetime,Account,Amount,Value,Rate,Fee,Sub Type\nDeposit,\"Jan. 02, 2024, 10:00 AM\",Main Account,0.01 BTC,,,,\n".to_owned(),
+            "This is Bitstamp's legacy transaction export, which has no transaction IDs"),
+        ("ID,Type,Datetime,Amount\n1,Deposit,2024-03-01T00:00:00Z,0.01\n".to_owned(),
+            "Bitstamp CSV is missing required columns: Account, Subtype, Amount currency, Value, Value currency, Rate, Rate currency, Fee, Fee currency, Order ID"),
+    ];
+    for (content, expected) in cases {
+        let conn = fixture();
+        let error = import_kind(&conn, &content, Format::Bitstamp).unwrap_err();
+        assert_eq!(error.message, expected, "{content}");
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    }
+}
+
+/// A later import's row in a second an earlier import filled with the
+/// opposite direction is tagged for review with it.
+#[test]
+fn bitstamp_csv_tags_same_second_rows_across_imports() {
+    let conn = bitstamp_book();
+    let buy =
+        "60,Main Account,Market,Buy,2024-08-01T10:00:00.9Z,0.001,BTC,60.00,EUR,60000,EUR,0.15,EUR,";
+    let sell = "61,Main Account,Market,Sell,2024-08-01T10:00:00.1Z,0.001,BTC,60.00,EUR,60000,EUR,0.15,EUR,";
+    import_kind(
+        &conn,
+        &format!("{BITSTAMP_HEADER}{buy}\n"),
+        Format::Bitstamp,
+    )
+    .unwrap();
+    import_kind(
+        &conn,
+        &format!("{BITSTAMP_HEADER}{buy}\n{sell}\n"),
+        Format::Bitstamp,
+    )
+    .unwrap();
+    let tagged = "SELECT count(*) FROM transaction_tags x JOIN tags g ON g.id=x.tag_id WHERE g.code='same-second-order-uncertain'";
+    assert_eq!(scalar(&conn, tagged), 2);
+}

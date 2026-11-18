@@ -139,9 +139,9 @@
   },
   {
     "kind": "bitstamp",
-    "summary": "Bitstamp read-only API wallet for BTC trades and wallet movements.",
+    "summary": "Bitstamp read-only API and transaction CSV import wallet for BTC trades and wallet movements.",
     "requires": "",
-    "config_fields": "backend"
+    "config_fields": "backend, source_file, source_format"
   },
   {
     "kind": "wasabi",

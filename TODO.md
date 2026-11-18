@@ -768,12 +768,27 @@ projections stay Python. Progress and remaining work for this slice:
   paired swap legs, third-asset fees as fee-only rows; `bitcoin` scope
   refuses BTC-altcoin trades naming the scope command). See
   [Bitvavo](docs/reference/bitvavo.md#mapping).
+- [x] Bitstamp follows the wallet's `asset_scope` in the API and the CSV
+  (skip tally by ticker in `assets`, trades between two crypto assets as
+  paired swap legs, a CSV third-asset fee as a fee-only row; `bitcoin` scope
+  refuses BTC-altcoin trades naming the scope command). See
+  [Bitstamp](docs/reference/bitstamp.md#mapping).
 - [ ] Framework: a sub-second tie-break for same-second rows across import
   batches. Stored times are whole seconds and source positions cover one
   batch, so a later import's row precedes or follows an earlier one's by
   import order, not time. This changes journal ordering for every importer,
   so it needs a semantics bump. Bitvavo tags such rows
   `same-second-order-uncertain` meanwhile ([Bitvavo](docs/reference/bitvavo.md)).
+- [x] Add the Rust-only Bitstamp API sync (`wallets sync-bitstamp`,
+  `user_transactions` by `since_id` plus the BTC balance as
+  `reported_balance`) and RFC 4180 CSV import (`wallets import-bitstamp`) on
+  one mapping with shared ids; altcoin trades, third-asset fees and
+  undocumented types refused by name. See [Bitstamp](docs/reference/bitstamp.md).
+- [ ] Bitstamp follow-ups: confirm with a real account that the CSV `ID` is
+  the API id, that a withdrawal's fee is charged on top and the API fee is in
+  the trade's quote currency (also for crypto-quoted swaps); map further
+  types (staking 25-27, unknown CSV types such as `Deposit reverted`) once a
+  real export pins them.
 - [ ] Bitvavo follow-ups: confirm with a real account that the CSV
   `Transaction ID` is the API `transactionId`, that the API withdrawal
   `sentAmount` excludes the fee and how trades state their quote amount

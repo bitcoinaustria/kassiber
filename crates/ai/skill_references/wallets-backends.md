@@ -397,6 +397,25 @@ it through the generic ledger instead. The user's own
 same transaction ids, so importing both keeps one record per transaction. The
 assistant cannot run exchange API syncs.
 
+Bitstamp transaction history (RFC 4180 export, custodial ledger):
+
+```bash
+kassiber wallets import-bitstamp --file /path/to/bitstamp-transactions.csv
+```
+
+The export imports in full into the `Bitstamp` wallet, or `--wallet`, under
+the wallet's `asset_scope`. Trades against fiat keep exact execution value
+with the fiat fee; deposits, withdrawals and referral rewards import. In the
+default `bitcoin` scope rows without BTC are skipped and counted by ticker in
+`assets`, and BTC traded against another coin or a stablecoin refuses the
+file naming the command that sets the `crypto` scope; in `crypto` scope such
+trades become paired `swap` legs and a fee in a third coin a fee-only row.
+The legacy export without transaction IDs, unsigned transfers between
+Bitstamp accounts and any row of a type Kassiber does not map refuse the
+whole file by name. Rows share their ids with the user's own `wallets
+sync-bitstamp`, so both keep one record per transaction; the API sync is set
+up by the user in the desktop or CLI, never in chat.
+
 CoinTracking / Blockpit migration history:
 
 ```bash

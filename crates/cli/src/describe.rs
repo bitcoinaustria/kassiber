@@ -186,6 +186,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.import-strike",
     "wallets.import-bisq",
     "wallets.import-bitvavo",
+    "wallets.import-bitstamp",
     "wallets.import-ledger-live",
     "wallets.import-cointracking",
     "wallets.import-blockpit",
