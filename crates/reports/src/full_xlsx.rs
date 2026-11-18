@@ -315,6 +315,25 @@ mod tests {
         let refused = export().unwrap_err();
         assert_eq!(refused.code, "report_freshness_blocked");
         assert!(!root.path().join("reports").exists());
+        // The CLI's final report exports are refused alike, before writing.
+        for command in [
+            "reports.export-xlsx",
+            "reports.export-csv",
+            "reports.export-capital-gains-csv",
+            "reports.export-austrian-e1kv-csv",
+            "reports.export-austrian-e1kv-xlsx",
+            "reports.export-exit-tax-xlsx",
+        ] {
+            let target = root.path().join("cli-export");
+            let args = dict([
+                ("file", s(target.to_str().unwrap())),
+                ("dir", s(target.to_str().unwrap())),
+            ]);
+            let refused =
+                export_request::execute(conn, command, &args, root.path(), &Fixed).unwrap_err();
+            assert_eq!(refused.code, "report_freshness_blocked", "{command}");
+            assert!(!target.exists(), "{command}");
+        }
         // Scanning, but not complete: still refused.
         conn.execute_batch("INSERT INTO freshness_source_states(profile_id,source_key,source_type,source_label,status,blocking_reports,checkpoint_json,updated_at) VALUES('p','onchain_wallet:sp','wallet','Silent','fresh',0,'{\"silent_payment\":{\"scan_complete\":false}}','fixed')").unwrap();
         assert_eq!(export().unwrap_err().code, "report_freshness_blocked");

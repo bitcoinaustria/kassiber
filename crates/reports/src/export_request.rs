@@ -276,7 +276,9 @@ fn execute_admitted(
         || command == "ui.reports.export_year_handoff";
     if !desktop && command != "transactions.export" {
         // The CLI admits final accounting exports against source freshness
-        // before it reads anything else, as Python's command handler does.
+        // before it reads anything else. Python admitted only its PDFs and
+        // the year handoff; every report the desktop admits is admitted here
+        // too, so a pending scan or failed source blocks both alike.
         if matches!(
             command,
             "reports.export-year-handoff"
@@ -284,6 +286,12 @@ fn execute_admitted(
                 | "reports.export-summary-pdf"
                 | "reports.export-exit-tax-pdf"
                 | "reports.export-austrian-e1kv-pdf"
+                | "reports.export-xlsx"
+                | "reports.export-csv"
+                | "reports.export-capital-gains-csv"
+                | "reports.export-austrian-e1kv-csv"
+                | "reports.export-austrian-e1kv-xlsx"
+                | "reports.export-exit-tax-xlsx"
         ) {
             let (_, profile) = kassiber_setup::references::scope(conn, raw)?;
             freshness(conn, &profile)?;
