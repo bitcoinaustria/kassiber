@@ -827,6 +827,24 @@ projections stay Python. Progress and remaining work for this slice:
   mix coins; the CSV names other-coin statements and rows it skips); a cross-process
   nonce lock if concurrent CLI and desktop syncs of one key turn out common
   (a refused nonce asks to sync again meanwhile).
+- [ ] Exchange contract follow-ups: bring Bull Bitcoin, Coinfinity, Pocket,
+  River, Strike and 21bitcoin onto the [exchange contract](docs/reference/exchange-contract.md)
+  where they are exchange-shaped (they keep their Python-pinned identities and
+  evidence matching for now); Kraken and Coinbase export parsers (a
+  parser-only job on the contract); fold Bitstamp's and Bitpanda's trade
+  shaping into one shared trade shaper with Bitvavo's; replace the legacy
+  underscore keys (`_tax_platform_row_identity`, `_match_existing_ignore_fee`,
+  `_exchange_evidence_match_by_economics`) with typed fields where no stored
+  identity moves; name the Binance Transaction History import in the
+  assistant's `wallets-backends` reference.
+- [ ] Read Binance's withdrawal `applyTime` as Binance sends it, a
+  `YYYY-MM-DD HH:MM:SS` UTC string: the API sync reads the time as a number
+  of milliseconds, as the Python reference did, and the fakes and vectors use
+  numbers; add a fixture with the string.
+- [ ] Map Binance's `network: "BTC"` rail on stored rows in
+  `network::guard_history` as `guard_import` does on import, so a wallet
+  update (an `asset_scope` change) is not refused by its own Binance API rows
+  (on main before the exchange contract).
 - [ ] Exchange error display: a very short request credential (a one- to
   three-character proxy password) is withheld wherever it occurs, Kassiber's
   own message text included, which garbles the error; consider refusing such

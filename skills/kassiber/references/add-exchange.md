@@ -60,16 +60,24 @@ code change.
   importer only when you want *repeatable* imports of the raw provider export,
   exact execution pricing applied automatically, and a shareable connection in
   the desktop modal.
-- **Scope: Kassiber is the BTC-side subledger.** Only `BTC` / `LBTC` rows are
-  imported. On a multi-asset exchange (ETH, USDT, altcoins), the non-BTC legs
-  are **out of scope** — skip them, or keep them as excluded evidence; never
-  model a full multi-asset ledger here. A BTC↔fiat trade is in scope; a
-  BTC↔ETH trade is a disposal on the BTC side only and needs care (often
-  quarantine). Capture this in the spec.
+- **Asset scope.** Bitcoin (`BTC`, `LBTC`) is always imported. Other crypto
+  assets are imported only into a wallet whose `asset_scope` is `crypto`
+  ([plan 24](../../../docs/plan/24-crypto-assets.md)); stocks, ETFs, metals
+  and indices never are. For an exchange the scope is a **filter** over the
+  same events ([exchange contract](../../../docs/reference/exchange-contract.md)):
+  a BTC row reads the same in both scopes, an event without Bitcoin is counted
+  (`assets.skipped`, or `assets.unread` from an importer that reads only BTC)
+  before its type is read, a BTC↔other-coin trade books as two paired `swap`
+  legs in the `crypto` scope and is refused with the scope command in the
+  `bitcoin` scope. Capture which assets the provider's files and API show.
+- **Refusals.** Refuse ambiguity by name instead of solving it with machinery:
+  an unknown type, an unstated fee, an amount finer than the book stores, a
+  margin or derivatives row, two trades the export cannot tell apart. The whole
+  import stops, naming the row, and nothing is stored.
 - **Export format.** CSV is the supported shape for a dedicated importer.
-  **XLSX/XLSM** → readable as-is on the generic-ledger path (`openpyxl` is a
-  dependency); a *dedicated* importer still parses CSV, so ask for Save-As-CSV
-  when you are writing one. **JSON** → use the generic `import-json` path or a
+  **XLSX/XLSM** → readable as-is on the generic-ledger path (`import-ledger`,
+  native Rust reader); a *dedicated* importer still parses CSV, so ask for
+  Save-As-CSV when you are writing one. **JSON** → use the generic `import-json` path or a
   JSON parser. **PDF/photo statements** → not parseable as data, but importable
   through the local-AI OCR draft path (`wallets preview-document` /
   `import-document`), which is loopback-only and quarantines by per-cell
@@ -168,18 +176,15 @@ This is the normal situation, not a failure. Handle it like this:
   decision, even types the sample never hit. If neither sample nor docs pin a
   type's meaning down, record the open question and make the parser fail-safe on
   it (below) rather than blocking the whole importer.
-- **The parser must fail-safe on any unrecognized row type** — never assign a
-  tax-bearing kind (`buy` / `sell` / `income` / `interest` / ...) to a row whose
-  type is not in the known map. Instead:
-  - if the row carries a BTC amount, import it conservatively as `deposit` /
-    `withdrawal` by amount sign, add a `<slug>-unmapped-type` tag, and preserve
-    the raw type value in `raw_json` so it surfaces for review;
-  - if the row cannot even be safely shaped (no amount, ambiguous direction),
-    raise `AppError` with the offending type in the message so the import fails
-    loudly instead of dropping data silently.
-  This guarantees an unseen row type can never become a *wrong* taxable event —
-  the worst case is a conservative, flagged row a human resolves later.
-- **Keep one obvious place to extend the map.** The `_<slug>_kind` lookup is the
+- **The parser must fail closed on any unrecognized row type** — never assign
+  a tax-bearing kind (`buy` / `sell` / `income` / `interest` / ...) to a row
+  whose type is not in the known map. An exchange importer refuses the import,
+  naming the row and its type; because the scope filter runs first, an
+  unknown type in a coin the wallet does not keep is only counted and never
+  stops a Bitcoin wallet. This guarantees an unseen row type can never become
+  a *wrong* taxable event.
+- **Keep one obvious place to extend the map.** The exchange's kind table
+  (one `match` from the provider's type to the contract's `Kind`) is the
   single source of truth for type→kind; when a new type later shows up, mapping
   it is a one-line change plus a spec table row. Do not scatter type handling
   across the parser.
@@ -198,133 +203,99 @@ This is the normal situation, not a failure. Handle it like this:
 
 ### 6. API connection?
 
-- **CSV/file export only** → build a file importer. This is the supported,
-  common path; everything below assumes it.
-- **Provider has an API** → live sync is *desirable* but note the current
-  reality: Kassiber's live-sync backends are `esplora`, `electrum`,
-  `bitcoinrpc`, and BTCPay Greenfield only. There is **no generic exchange-API
-  sync backend pattern yet**. Capture the API (auth model, endpoints, rate
-  limits) in the spec as a follow-up, and ship the CSV importer first. Do not
-  build a network fetcher into the file importers under
-  `crates/wallets/src/file_import/` — they parse local files only. The existing
-  exchange API syncs (Kraken, Coinbase, Binance, Bitpanda) live in
-  `crates/wallets/src/file_import/exchange_api/` and are their own consent-bound
-  path; see [privacy and security](../../../docs/reference/privacy-and-security.md).
+- **CSV/file export only** → an export parser on the exchange contract (or,
+  for a non-custodial broker whose rows only enrich existing ones, an evidence
+  importer like `pocket.rs`).
+- **Provider has an API** → an API transport on the same contract, built
+  together with the export parser: both read into one event shape and share the
+  mapping, so a transaction in both gets one record and id. Only a read-only
+  key the user creates in their own normal account (no partner programs, OAuth
+  apps or institutional tiers); record how to create it and which permissions
+  to tick, and refuse a key the API shows can trade or withdraw where the API
+  tells. Every request runs only after the user's explicit sync, under its
+  consent; see [privacy and security](../../../docs/reference/privacy-and-security.md).
 
 ---
 
 ## Part 2 — Implementation checklist
 
-Only start once `docs/exchanges/<slug>.md` is complete. The normalized record
-shape every parser returns is documented under "Generic transaction imports" in
-[docs/reference/imports.md](../../../docs/reference/imports.md); read it before
-writing the parser. Mirror the closest existing importer — read its module in
-`crates/wallets/src/file_import/` (for example `strike.rs`, `twentyone.rs`,
-`pocket.rs`, `bull.rs`, `coinfinity.rs`) and its `## ` section in
-`docs/reference/imports.md` as worked examples:
+Only start once `docs/exchanges/<slug>.md` is complete. Every exchange works the
+same way; only its API and export formats differ. Read the
+[exchange contract](../../../docs/reference/exchange-contract.md) and mirror the
+closest exchange in `crates/wallets/src/file_import/exchange_api/`: Bitvavo (API +
+CSV, one event shape), Bitstamp (API + CSV), Bitfinex and Bitcoin.de (BTC-only
+readers with cross-checks), Binance's `history.rs` (an export without ids).
 
-| Provider | Custodial model | Default mode | Mirror for... |
-|---|---|---|---|
-| `strike` | custodial wallet + exchange | `full`, skip fiat-only | Lightning + on-chain rows, provider-scoped ids |
-| `21bitcoin` | custodial ledger | `full`/`relevant` | withdrawals that pair out to a receiving wallet |
-| `pocketbitcoin` | non-custodial broker | `relevant` | matching when the export has no on-chain txid |
-| `bullbitcoin` / `coinfinity` | non-custodial broker | `relevant` | order/execution evidence enriching existing rows |
-| `bisq` | non-custodial escrow (2-of-2) | `full` | per-trade escrow legs that pair with the user's on-chain wallet; a second export for txids and dates |
+1. **The exchange module** — `exchange_api/<slug>.rs` for the API transport
+   (signed reads through `Client`, paging and limits, the key check `probe`,
+   the provider's own BTC balance as a `Balance` where it states one) and
+   `exchange_api/<slug>/export.rs` for each file export. Both read rows into
+   `Event`s and hand them to the `Mapper`: `admit` with the event's assets
+   first, then `push` the shaped events (`Movement`, `Trade` with exact
+   `Pricing` only when the provider states it, `Swap(reference)` legs,
+   third-asset `Fee` rows). Keep the kind table in the module. Give every
+   record a stable identity — `<slug>:<provider id>`, the on-chain txid kept
+   in `raw_json` for transfer pairing, never as the identity — the same in the
+   API and the export.
 
-Touch these places, in order. Each is required for the connection to work
-end-to-end and to pass the drift tests. Search for the closest existing
-importer's slug (for example `pocketbitcoin_csv`, `import-pocket`) to find every
-site; the list below is what that search returns today.
+2. **The registry** — one `Descriptor` (`EXCHANGE`) in the module and its entry
+   in `exchange_api/contract/registry.rs`: kind, provider name, which assets it
+   reads (`AllAssets` or `BitcoinOnly`), default URL, key-only or key and
+   secret, `fetch`/`probe`, its `FileFormat`s, `shared_ids`, same-second tags
+   and any hooks. The sync, the desktop key check and the file coordinator read
+   only the registry. Add the kind to `exchange_api::KINDS`, a `Format` variant
+   in `crates/wallets/src/file_import.rs` (`from_source_format`, `name`, the
+   registry arm in `load`), the wallet kind (`config.rs`,
+   `connections_catalog.json`, `completeness.rs`), the source format
+   (`connections.rs`, `sync/sources.rs`), `crates/setup/src/backend_runtime.rs`
+   and the daemon's `onboarding.rs` arm.
 
-1. **`crates/wallets/src/file_import/<slug>.rs`** — the parser, with
-   `pub(super) fn parse(rows: Vec<csv::Row>)` like the other modules. In
-   `crates/wallets/src/file_import.rs`, declare the module, add a `Format`
-   variant, map it in `from_source_format` and back to `<slug>_csv`, call its
-   `parse` in `load`, and add it to `evidence()` or `active()` and `provider()`
-   when it is an evidence broker or an active custodial ledger. Map each row
-   per the spec's row-type table. Return `AppError` on unparseable input. Skip fiat-only rows for BTC-side custodial
-   ledgers. Set `pricing_source_kind="exchange_execution"`,
-   `pricing_provider="<DisplayName>"`, and `pricing_quality="exact"` only when
-   the export gives an exact price. Give every row a **stable** `txid` — the
-   on-chain hash when present, else a provider-scoped id (`<slug>:<ref>`) from a
-   stable column — so re-importing an updated export dedupes instead of
-   duplicating rows.
+3. **The CLI** — `wallets sync-<slug>` and `wallets import-<slug>` parsers
+   appended to `crates/cli/src/spec_data.rs` (the parser count and the
+   `wallets` subparser names), `RUST_ONLY_LEAVES` in `spec.rs`, the dispatch
+   arms in `crates/cli/src/wallets.rs`, `IMPLEMENTED` in `describe.rs`, the
+   capability in `crates/runtime/src/capabilities.rs`, and the Rust-only
+   sibling entries in `crates/cli/tests/describe_drift.rs` and
+   `crates/runtime/tests/capabilities.rs`.
 
-2. **Wallet kind and source format** — add `<slug>` to `WALLET_KINDS` in
-   `crates/wallets/src/config.rs` and its catalog row to
-   `crates/wallets/src/connections_catalog.json` (`config_fields:
-   "source_file, source_format"`, like the other CSV-source kinds). Add
-   `<slug>_csv` to `SOURCE_FORMATS` in `crates/wallets/src/connections.rs`, and
-   to `ACTIVE_FORMATS` or `EVIDENCE_FORMATS` in
-   `crates/wallets/src/sync/sources.rs` when it is one of those.
+4. **`assets/logos/integrations/<slug>.svg`** — the connection logo. Prefer a
+   vector from the provider's brand kit (SVGO, `viewBox` only), square-ish for
+   the 32 px tile; respect the trademark terms.
 
-3. **`crates/daemon/src/onboarding.rs`** — add the `<slug>_csv` arm to the
-   desktop import dispatch, mirroring the `strike_csv` / `21bitcoin_csv` /
-   `pocketbitcoin_csv` arms and choosing the `full` vs `relevant` default per
-   the custodial decision.
+5. **The desktop (Rune)** — the catalog sources in
+   `crates/kassiber-desktop/src/overview/catalog.rs` and their setups in
+   `crates/kassiber-desktop/src/wallets/add/meta.rs`; for an API the exchange
+   model in `wallets/add/exchange/model.rs` (kind, key guide with the
+   permissions to grant and deny, secret label); logo bounds in `logos.rs`;
+   `en` and `de` strings in `assets/i18n/locales/*/connections.json` (key
+   parity is tested). `crates/daemon/tests/desktop_boundaries.rs` checks the
+   exchange list.
 
-4. **The CLI command** — add the `wallets import-<slug>` parser to
-   `crates/cli/src/spec_data.rs` (`--workspace`, `--profile`, `--wallet`;
-   `--file` required; `--mode` if the provider uses relevant/full), mirroring
-   the `kassiber wallets import-strike` entry and adding its name to the
-   `wallets` subparser list. Then add the dispatch arm in
-   `crates/cli/src/wallets.rs`, the dotted path to `IMPLEMENTED` in
-   `crates/cli/src/describe.rs`, and the path to its capability class in
-   `crates/runtime/src/capabilities.rs` next to `wallets.import-strike`.
+6. **Tests** — the API over the loopback fake (`exchange_api/tests/<slug>_api.rs`:
+   documented response shapes, signing, paging, refused keys, consent and
+   offline make zero requests, echoed credentials withheld, the balance); the
+   export in `crates/wallets/src/file_import/tests.rs` or its own test module
+   (every documented row type, an unknown type refused, both scopes); an
+   API-then-export import into one wallet without duplicates; a mutation entry
+   in `crates/wallets/scripts/exchange_mutations.json` per rule, killed by a
+   named test.
 
-5. **`assets/logos/integrations/<slug>.svg`** (repository root, shared by both
-   desktop apps) — the connection logo.
-   Prefer a **vector** (`.svg`): it stays crisp at every size and the existing
-   assets are almost all tiny SVGs (~0.3–3 KB). Source the official brand mark
-   from the provider's press/brand kit or site, optimize it (e.g. SVGO; strip
-   width/height so `viewBox` drives scaling), and commit it under this name.
-   Only fall back to a trimmed, transparent `.png`/`.jpg` (like `strike.jpg` /
-   `21bitcoin.png`) when no usable vector exists. If you cannot get a clean logo
-   at all, use the generated `sourceIcon("XX", "#bg", "#fg")` monogram in the
-   catalog entry instead of shipping a blurry raster. Keep it square-ish so it
-   fits the 32 px tile; respect the provider's trademark usage terms.
+7. **Docs, in the same change** — `docs/reference/<slug>.md` (requests, key
+   steps and permissions, mapping, refusals, balance scope, export format),
+   `docs/reference/imports.md`, `docs/reference/rust-exchange-sync.md`,
+   `docs/reference/exchange-desktop.md`, the egress list in
+   `docs/reference/privacy-and-security.md`,
+   `crates/ai/skill_references/wallets-backends.md`, and `TODO.md`. Keep
+   importer inventories out of `README.md` and `AGENTS.md`.
 
-6. **`ui-tauri/src/lib/connectionCatalog.tsx`** — add the catalog entry so it
-   shows in the desktop Add Connection modal. Steps:
-   - `import <slug>Icon from "@shared/logos/integrations/<slug>.svg";` at the top.
-   - Add the `<slug>_csv` member to the `ConnectionSourceFormat` union.
-   - Add a `CONNECTION_SOURCES` entry mirroring `strike`: `id`, `title`,
-     `description`, `category: "exchanges"`, `image: <slug>Icon`,
-     `imageClassName: "size-8 rounded-lg"`, `status: "ready"`, `pathLabel`,
-     `formatLabel: "<slug>_csv"`, `docsHref`, `setupKind: "file-wallet"`,
-     `walletKind: "<slug>"`, `sourceFormat: "<slug>_csv"`, and a `details: []`
-     bullet list.
-   - **Sizing/fit:** `imageClassName` controls the tile render. If the logo
-     needs a light backing in dark mode (dark marks on transparency), add
-     `imageFrameClassName: lightLogoFrame` like the other dark-on-light logos so
-     it doesn't disappear. Check it renders cleanly in both themes.
-   - A `status: "ready"` entry **must** reference the real `walletKind` and
-     `sourceFormat`, or the catalog checks in
-     `crates/daemon/tests/desktop_boundaries.rs` fail.
-   - Catalog `title` / `description` / `details` are inline English literals
-     here (not `t()` keys). Only if you add keys to `connections.json` (e.g. a
-     format label or import-mode helper) must you add them to **both** `en` and
-     `de`, or the i18n key-parity test fails — see
-     [docs/reference/i18n.md](../../../docs/reference/i18n.md).
-   - The Rune desktop's copy of the catalog (`crates/kassiber-desktop/src/overview/catalog.rs`)
-     is generated from this file: rerun `tools/connection-catalog/dump.mjs` and `gen.py`
-     there (usage at the top of `gen.py`).
-
-7. **Tests** — pin the behavior in `crates/wallets/src/file_import/tests.rs`:
-   a small fixture CSV covering the main row types (and at least one
-   unrecognized type to prove the fail-safe fallback), an import through
-   `import_kind(..., Format::<Variant>)`, and assertions on inserted counts,
-   `kind`, msat amounts, and pricing. Follow the test-selection guidance in
-   [CONTRIBUTING.md](../../../CONTRIBUTING.md#verification-and-review).
-   Verify the new command appears in `kassiber --machine commands describe
-   wallets import-<slug>` and in `wallets import-<slug> --help`.
-
-8. **Docs, in the same change:**
-   - `docs/reference/imports.md` — a "## <DisplayName>" section (supported-paths
-     bullet, format-reference link, behavior list, CLI example).
-   - `crates/ai/skill_references/wallets-backends.md` — add the import example.
-   - Keep importer inventories out of `README.md` and `AGENTS.md`; they link
-     to the owning reference instead.
+An evidence broker (non-custodial, its rows only enrich existing ones) keeps
+the older file-importer pattern: a parser in `crates/wallets/src/file_import/`
+mirroring `pocket.rs` or `coinfinity.rs`, listed in `evidence()` and
+`EVIDENCE_FORMATS`.
+A non-custodial escrow keeps its own importer too: Bisq's
+`crates/wallets/src/file_import/bisq.rs` books per-trade escrow legs (`full`
+mode) that pair with the user's on-chain wallet, with a second export for the
+txids and dates.
 
 ---
 

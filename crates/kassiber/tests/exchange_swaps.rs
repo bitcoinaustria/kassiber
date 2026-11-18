@@ -257,6 +257,16 @@ fn an_austrian_kraken_eth_round_trip_carries_basis_into_btc() {
     assert_eq!(pair["in"]["external_id"], "kraken:L2B", "{pair}");
     assert_eq!(pair["policy"], "carrying-value", "{pair}");
     assert_eq!(pair["pair_source"], "provider", "{pair}");
+    // Only an import authors a provider pair; no caller may claim the source.
+    let claimed = daemon(
+        home.path(),
+        "ui.transfers.pair",
+        &json!({"tx_out": stored("L2")["id"], "tx_in": stored("L2B")["id"], "pair_source": "provider"}),
+    );
+    assert!(
+        claimed.to_string().contains("pair_source") && claimed["ok"] != json!(true),
+        "{claimed}"
+    );
 
     // Kraken states no fiat value for the swap and the book has no BTC rate,
     // so journals hold both legs until they are priced, and the BTC sale

@@ -221,6 +221,10 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 - `kind`
 - `description`
 - `counterparty`
+- `swap_ref` (optional): the reference both legs of one crypto-to-crypto swap
+  share; the import pairs the outgoing and the incoming leg with that
+  reference, so the profile's country decides the swap's tax treatment
+  ([plan 24](../plan/24-crypto-assets.md))
 
 `amount` should be positive. If you pass a negative amount, Kassiber normalizes it and infers direction when possible.
 
@@ -519,7 +523,7 @@ kassiber wallets import-ledger --workspace W --profile P --wallet WID --file led
 `ledger-template` does not need a database. The `.xlsx` template ships a
 `Transactions` sheet (with a `Type` dropdown) plus a `Legend` sheet; the `.csv`
 template is the header row with example rows. The importer reads `.xlsx` (via
-the `openpyxl` dependency) and CSV/TSV (delimiter sniffed). Legacy binary `.xls`
+the native Rust XLSX reader) and CSV/TSV (delimiter sniffed). Legacy binary `.xls`
 is not read — save as `.xlsx` or CSV first.
 
 The native Rust importer reads stored and DEFLATE-compressed XLSX members in

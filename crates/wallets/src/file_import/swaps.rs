@@ -17,8 +17,9 @@ pub(super) fn pair(
     rows: &[csv::Row],
     records: &[Record],
 ) -> Result<Option<i64>, AppError> {
-    // swap_ref -> (outbound external ids, inbound external ids)
-    let mut legs: BTreeMap<String, (Vec<String>, Vec<String>)> = BTreeMap::new();
+    // swap_ref -> (outbound (external id, asset), inbound (external id, asset))
+    type Legs = (Vec<(String, String)>, Vec<(String, String)>);
+    let mut legs: BTreeMap<String, Legs> = BTreeMap::new();
     for (row, record) in rows.iter().zip(records) {
         let reference = text(&row.data, "swap_ref");
         if reference.is_empty() {
@@ -29,9 +30,10 @@ pub(super) fn pair(
             _ => String::new(),
         };
         let entry = legs.entry(reference).or_default();
+        let leg = (field("external_id"), field("asset"));
         match field("direction").as_str() {
-            "outbound" => entry.0.push(field("external_id")),
-            _ => entry.1.push(field("external_id")),
+            "outbound" => entry.0.push(leg),
+            _ => entry.1.push(leg),
         }
     }
     if legs.is_empty() {
@@ -61,14 +63,16 @@ pub(super) fn pair(
                 ),
             ));
         };
-        let (out, into) = (stored(conn, wallet, out)?, stored(conn, wallet, into)?);
+        let (out, into) = (
+            stored(conn, wallet, out, "outbound")?,
+            stored(conn, wallet, into, "inbound")?,
+        );
         if paired.contains(&out) || paired.contains(&into) {
             continue;
         }
-        kassiber_transfers::execute(
+        kassiber_transfers::pair_provider_swap(
             conn,
             &scope,
-            "transfers.pair",
             &dict([
                 ("tx_out", s(out)),
                 ("tx_in", s(into)),
@@ -85,11 +89,17 @@ pub(super) fn pair(
     Ok(Some(created))
 }
 
-/// The id of the wallet's stored row with this external id.
-fn stored(conn: &Connection, wallet: &str, external_id: &str) -> Result<String, AppError> {
+/// The id of the wallet's stored row of this leg: its external id, direction
+/// and asset, so a provider id two rows share never pairs the wrong one.
+fn stored(
+    conn: &Connection,
+    wallet: &str,
+    (external_id, asset): &(String, String),
+    direction: &str,
+) -> Result<String, AppError> {
     conn.query_row(
-        "SELECT id FROM transactions WHERE wallet_id=? AND external_id=?",
-        [wallet, external_id],
+        "SELECT id FROM transactions WHERE wallet_id=? AND external_id=? AND direction=? AND asset=?",
+        [wallet, external_id, direction, asset],
         |r| r.get(0),
     )
     .map_err(database_error)
