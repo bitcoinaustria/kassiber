@@ -32,6 +32,7 @@ pub const KINDS: &[&str] = &[
     "bitpanda",
     "bitvavo",
     "bitstamp",
+    "bitfinex",
     "wasabi",
     "samourai",
     "untracked",

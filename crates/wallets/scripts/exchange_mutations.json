@@ -2117,6 +2117,306 @@
     "rule": "Bitstamp's X-Auth-Signature header is a request credential, so an echo refuses the sync."
   },
   {
+    "id": "bitfinex-refuses-write-keys",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex.rs",
+    "find": "if write {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitfinex_refuses_keys_with_write_permissions_before_any_history"
+    ],
+    "rule": "A key with any write permission is refused before any history is read."
+  },
+  {
+    "id": "bitfinex-signature-covers-body",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex.rs",
+    "find": "for part in [\"/api/\", path, nonce, body] {",
+    "replace": "for part in [\"/api/\", path, nonce] {",
+    "expect_failing": [
+      "bitfinex_signature_matches_an_independent_hmac_sha384"
+    ],
+    "rule": "bfx-signature signs /api/ + path + nonce + body."
+  },
+  {
+    "id": "bitfinex-numbers-as-written",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex.rs",
+    "find": "Json::Number(number) => s(number.to_string()),",
+    "replace": "Json::Number(number) => s(number.as_f64().map_or(number.to_string(), kassiber_pyjson::float_repr)),",
+    "expect_failing": [
+      "bitfinex_api_numbers_are_read_from_their_exact_text"
+    ],
+    "rule": "API numbers are kept as written, never rounded through a float."
+  },
+  {
+    "id": "bitfinex-page-ends-at-oldest",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex.rs",
+    "find": "oldest.into_iter().min()",
+    "replace": "oldest.into_iter().max()",
+    "expect_failing": [
+      "bitfinex_pages_by_end_time_and_rereads_the_boundary"
+    ],
+    "rule": "The next page ends at the oldest millisecond of the last one, inclusively."
+  },
+  {
+    "id": "bitfinex-documented-error-codes",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex.rs",
+    "find": "known_number(&Py::from(n), &ERROR_CODES)",
+    "replace": "Py::from(n)",
+    "expect_failing": [
+      "bitfinex_errors_keep_only_documented_codes"
+    ],
+    "rule": "An error keeps a documented Bitfinex code or \"unknown\", never another value."
+  },
+  {
+    "id": "bitfinex-balance-exchange-wallet",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex.rs",
+    "find": "Some(\"exchange\" | \"funding\")",
+    "replace": "Some(\"exchange\" | \"funding\" | \"margin\")",
+    "expect_failing": [
+      "bitfinex_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "The reported balance is the BTC of the exchange and funding wallets, never the margin wallet."
+  },
+  {
+    "id": "bitfinex-unknown-ledger-entry-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "_ => return Err(refused(\"has a description Kassiber does not map\".into())),",
+    "replace": "_ => {}",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "A BTC ledger entry with a description Kassiber does not map refuses the import."
+  },
+  {
+    "id": "bitfinex-exchange-wallet-only",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "if wallet != \"exchange\" && !(wallet == \"funding\" && funding) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "Only the exchange wallet, and the funding wallet's interest and transfers, are read; margin and other wallets refuse by name."
+  },
+  {
+    "id": "bitfinex-one-entry-per-trade",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "Some(other) => Err(refused(format!(\"books what ledger entry {other} books\"))),",
+    "replace": "Some(_) => Ok(()),",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "Two ledger entries cannot book the same trade, fee or withdrawal."
+  },
+  {
+    "id": "bitfinex-btc-fee-entry-required",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "if t.entry[0].is_some() && t.btc_fee.is_some() && t.entry[1].is_none() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "A trade booked in the ledger with a BTC fee needs its fee entry."
+  },
+  {
+    "id": "bitfinex-withdrawal-fee-proof",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "row.amount.is_negative() && !row.fees.is_zero() && !(principal && fee_entry.is_some());",
+    "replace": "false;",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "Inside the ledger's dates a withdrawal fee is booked only when the ledger shows the principal and a separate fee entry."
+  },
+  {
+    "id": "bitfinex-movement-entries-add-up",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "\"COMPLETED\" => whole,",
+    "replace": "\"COMPLETED\" => true,",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "A completed movement's ledger entries add up to its amount."
+  },
+  {
+    "id": "bitfinex-sell-fiat-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "(false, false) => (Ok(quantity), zero, gross.sub(&fee, &EXACT)),",
+    "replace": "(false, false) => (Ok(quantity), zero, Ok(gross)),",
+    "expect_failing": [
+      "bitfinex_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A sale's fiat fee lowers its proceeds."
+  },
+  {
+    "id": "bitfinex-buy-btc-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "(true, true) => (quantity.sub(&fee, &EXACT), zero, Ok(gross)),",
+    "replace": "(true, true) => (Ok(quantity), zero, Ok(gross)),",
+    "expect_failing": [
+      "bitfinex_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A buy's BTC fee leaves fewer coins for the same cost."
+  },
+  {
+    "id": "bitfinex-derivatives-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "true => Err(refused(\"is a derivatives trade\".into())),",
+    "replace": "true => Ok(None),",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "A BTC derivatives trade refuses by name."
+  },
+  {
+    "id": "bitfinex-trade-altcoin-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "if let Some(other) = not_fiat(&base, &quote) {",
+    "replace": "if let Some(other) = None::<String> {",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "BTC traded against anything but USD, EUR, GBP or JPY refuses by name."
+  },
+  {
+    "id": "bitfinex-margin-order-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "!o.to_ascii_uppercase().starts_with(\"EXCHANGE \")",
+    "replace": "false",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "A trade whose order type is not EXCHANGE is margin and refuses."
+  },
+  {
+    "id": "bitfinex-btc-msat-precision",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "if row.amount.is_zero() || !whole_msat(&row.amount) || !row.price.is_positive() {",
+    "replace": "if row.amount.is_zero() || !row.price.is_positive() {",
+    "expect_failing": [
+      "bitfinex_api_numbers_are_read_from_their_exact_text"
+    ],
+    "rule": "A BTC amount finer than a millisatoshi refuses."
+  },
+  {
+    "id": "bitfinex-movement-txid-evidence",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "raw.push((\"txid\", s(hash.to_ascii_lowercase())));",
+    "replace": "",
+    "expect_failing": [
+      "bitfinex_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A movement carries its on-chain txid in raw_json for transfer pairing."
+  },
+  {
+    "id": "bitfinex-txid-lowercased",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "raw.push((\"txid\", s(hash.to_ascii_lowercase())));",
+    "replace": "raw.push((\"txid\", s(hash)));",
+    "expect_failing": [
+      "bitfinex_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A movement's on-chain txid is stored lowercased, as transfer pairing reads it."
+  },
+  {
+    "id": "bitfinex-funding-interest-booked",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "records.push((row.at.clone(), interest(row)?));",
+    "replace": "",
+    "expect_failing": [
+      "bitfinex_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "A margin funding payment in the funding wallet imports as lending_interest."
+  },
+  {
+    "id": "bitfinex-funding-wallet-scope",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "!(wallet == \"funding\" && funding)",
+    "replace": "!(wallet == \"funding\")",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "The funding wallet admits only interest payments and transfers; anything else there refuses by name."
+  },
+  {
+    "id": "bitfinex-transfer-needs-other-leg",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "book(entry, fits, \"is a transfer without its other leg\")?;",
+    "replace": "let _ = book(entry, fits, \"is a transfer without its other leg\");",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "An outgoing transfer leg pairs one-to-one with its incoming leg, or the import is refused."
+  },
+  {
+    "id": "bitfinex-transfer-window",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "let near = (seconds(&e.at) - seconds(&entry.at)).abs() <= TRADE_WINDOW;",
+    "replace": "let near = true;",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "Transfer legs pair only within 60 s."
+  },
+  {
+    "id": "bitfinex-transfers-counted",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "(\"internal_transfers\", Py::from(legs.len() as i64)),",
+    "replace": "(\"internal_transfers\", Py::from(0)),",
+    "expect_failing": [
+      "bitfinex_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "Paired transfer legs are skipped and counted as internal_transfers."
+  },
+  {
+    "id": "bitfinex-unchecked-fee-before-ledger",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "let before = first.is_none_or(|first| requested < first);",
+    "replace": "let before = true;",
+    "expect_failing": [
+      "bitfinex_withdrawal_fees_come_from_movements_only_before_the_ledger"
+    ],
+    "rule": "Only a withdrawal requested before the ledger read's first entry may keep the fee its movement states."
+  },
+  {
+    "id": "bitfinex-unchecked-fee-tagged",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "r.data[\"description\"] == UNCHECKED",
+    "replace": "r.data[\"description\"] == \"none\"",
+    "expect_failing": [
+      "bitfinex_withdrawal_fees_come_from_movements_only_before_the_ledger"
+    ],
+    "rule": "A withdrawal with its fee from movements carries the bitfinex-fee-unchecked review tag."
+  },
+  {
+    "id": "bitfinex-ledger-shown-withdrawal-needs-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "if unproven && (evidence.contains_key(&row.id) || !before) {",
+    "replace": "if unproven && !before {",
+    "expect_failing": [
+      "bitfinex_withdrawal_fees_come_from_movements_only_before_the_ledger"
+    ],
+    "rule": "A withdrawal the ledger shows must have its fee proven, whatever the dates."
+  },
+  {
+    "id": "bitfinex-fallback-by-request-time",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "let requested = seconds(&row.started);",
+    "replace": "let requested = seconds(&row.at);",
+    "expect_failing": [
+      "bitfinex_withdrawal_fees_come_from_movements_only_before_the_ledger"
+    ],
+    "rule": "The fallback compares the withdrawal's request time, not its completion, with the ledger's first entry."
+  },
+  {
+    "id": "bitfinex-btc-ledger-trade-base",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "Described::Trade(_, base, ..) if base != \"BTC\" => {",
+    "replace": "Described::Trade(_, base, ..) if base == \"none\" => {",
+    "expect_failing": [
+      "bitfinex_refuses_what_it_cannot_book_by_name"
+    ],
+    "rule": "A BTC-ledger trade entry must name BTC as its base to prove a BTC trade."
+  },
+  {
     "id": "bitvavo-scope-tally-by-ticker",
     "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
     "find": "        if mapper.admit(&codes) {",
@@ -2312,6 +2612,16 @@
     "rule": "A swap's BTC fee finer than a millisatoshi refuses the import."
   },
   {
+    "id": "bitfinex-names-other-assets",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "    mapper.admit(&codes);",
+    "replace": "    let _ = &codes;",
+    "expect_failing": [
+      "bitfinex_counts_other_assets_as_unread_in_either_scope"
+    ],
+    "rule": "A Bitfinex row in another asset is counted as unread in either scope: Kassiber reads only BTC from Bitfinex."
+  },
+  {
     "id": "exchange-z-alias-kraken-only",
     "file": "crates/wallets/src/file_import/exchange_api.rs",
     "find": "        \"XETH\" => \"ETH\".into(),\n        _ => code,",
@@ -2460,5 +2770,15 @@
       "binance_history_numbers_identical_rows_and_keeps_out_of_api_wallets"
     ],
     "rule": "An export whose rows the API cannot match is refused in a wallet that syncs that API."
+  },
+  {
+    "id": "assets-unread-structured",
+    "file": "crates/wallets/src/file_import/assets.rs",
+    "find": "fields.push((\"unread\", counts(&self.unread)));",
+    "replace": "let _ = &self.unread;",
+    "expect_failing": [
+      "bitfinex_counts_other_assets_as_unread_in_either_scope"
+    ],
+    "rule": "An importer that reads only BTC reports the coins it left out as assets.unread, rows per ticker, which the desktop shows."
   }
 ]

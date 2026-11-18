@@ -16,6 +16,7 @@ use kassiber_pyjson::{Key, PyStr};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 mod binance;
+pub(super) mod bitfinex;
 mod bitpanda;
 pub(super) mod bitstamp;
 pub(super) mod bitvavo;
@@ -35,9 +36,10 @@ const MAX_ROWS: usize = 1_000_000;
 /// Python has no overall budget; each read still has the backend timeout.
 const BUDGET: Duration = Duration::from_secs(3600);
 
-/// Bitpanda, Bitvavo and Bitstamp are Rust only; Python knows the first three.
-pub const KINDS: [&str; 6] = [
-    "kraken", "coinbase", "binance", "bitpanda", "bitvavo", "bitstamp",
+/// Bitpanda, Bitvavo, Bitstamp and Bitfinex are Rust only; Python knows the
+/// first three.
+pub const KINDS: [&str; 7] = [
+    "kraken", "coinbase", "binance", "bitpanda", "bitvavo", "bitstamp", "bitfinex",
 ];
 
 /// The resolved backend as Python's `runtime_config["backends"][name]`.
@@ -160,6 +162,9 @@ pub fn execute(
                 _ => vec![],
             };
             tag_same_second(conn, profile, &wallet.id, &inserted, &mut ids)?;
+        }
+        if let Some(after_insert) = exchange.after_insert {
+            after_insert(conn, profile, &wallet.id, &rows, &mut ids)?;
         }
         Ok(result)
     })
@@ -420,9 +425,11 @@ fn backend_kind(backend: &Py, expected: &str) -> Result<(PyStr, String), AppErro
                 name.clone(),
                 format!("' has kind '{kind}', expected an exchange API kind").into(),
             ]))
-            .with_hint(
-                "Use a backend kind of kraken, coinbase, binance, bitpanda, bitvavo, or bitstamp.",
-            ));
+            .with_hint(format!(
+                "Use a backend kind of {}, or {}.",
+                KINDS[..KINDS.len() - 1].join(", "),
+                KINDS[KINDS.len() - 1]
+            )));
     }
     if !expected.is_empty() && kind != expected {
         return Err(

@@ -81,7 +81,7 @@ pub fn execute(
     }
     let operation = match namespace.text("wallets_command").unwrap_or_default() {
         command @ ("sync-kraken" | "sync-coinbase" | "sync-binance" | "sync-bitpanda"
-        | "sync-bitvavo" | "sync-bitstamp") => {
+        | "sync-bitvavo" | "sync-bitstamp" | "sync-bitfinex") => {
             return book.import_exchange_api(
                 &profile_id,
                 &wallet,

@@ -165,6 +165,9 @@ pub(super) struct Mapper {
     fiat_only: i64,
     other: i64,
     internal: i64,
+    /// The exchange's own `skipped` counts, where they are not the shared
+    /// three (Bitfinex counts canceled and unfinished movements).
+    counted: Option<Py>,
 }
 
 impl Mapper {
@@ -190,6 +193,7 @@ impl Mapper {
             fiat_only: 0,
             other: 0,
             internal: 0,
+            counted: None,
         }
     }
 
@@ -266,6 +270,11 @@ impl Mapper {
     /// importer does not read.
     pub fn notice(&mut self, text: String) {
         self.tally.notice(text);
+    }
+
+    /// Sets the envelope's `skipped` to the exchange's own counts.
+    pub fn counted(&mut self, counts: Py) {
+        self.counted = Some(counts);
     }
 
     /// The wallet's asset scope.
@@ -353,14 +362,14 @@ impl Mapper {
     pub fn finish(mut self) -> Mapped {
         self.tally.unread(self.exchange.provider, &self.unread);
         let counts = [self.fiat_only, self.other, self.internal];
-        let skipped = self.exchange.skipped.map(|keys| {
+        let skipped = self.counted.or(self.exchange.skipped.map(|keys| {
             dict(
                 keys.iter()
                     .zip(counts)
                     .map(|(key, count)| (*key, Py::from(count)))
                     .collect::<Vec<_>>(),
             )
-        });
+        }));
         Mapped {
             records: self.records,
             tally: self.tally,

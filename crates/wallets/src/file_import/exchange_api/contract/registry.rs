@@ -42,15 +42,23 @@ pub(in crate::file_import) struct Descriptor {
     /// opposite-direction row of an earlier import: the exchange orders
     /// within a second, the book's whole-second times cannot.
     pub same_second_tags: bool,
+    /// What the exchange marks after an import stored its rows (Bitfinex's
+    /// withdrawals whose fee split the ledger does not prove).
+    pub after_insert: Option<AfterInsert>,
 }
 
-pub(in crate::file_import) static EXCHANGES: [&Descriptor; 6] = [
+/// A step after an import's rows are stored, in the same write.
+pub(in crate::file_import) type AfterInsert =
+    fn(&Connection, &str, &str, &[csv::Row], &mut Ids<'_>) -> Result<(), AppError>;
+
+pub(in crate::file_import) static EXCHANGES: [&Descriptor; 7] = [
     &kraken::EXCHANGE,
     &coinbase::EXCHANGE,
     &binance::EXCHANGE,
     &bitpanda::EXCHANGE,
     &bitvavo::EXCHANGE,
     &bitstamp::EXCHANGE,
+    &bitfinex::EXCHANGE,
 ];
 
 /// One file export of an exchange.

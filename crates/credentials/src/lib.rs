@@ -53,7 +53,7 @@ const SENSITIVE_KEY_PARTS: [&str; 26] = [
 ];
 
 /// Request headers whose whole value authenticates the request.
-const CREDENTIAL_HEADERS: [&str; 16] = [
+const CREDENTIAL_HEADERS: [&str; 18] = [
     "authorization",
     "proxy-authorization",
     "cookie",
@@ -68,6 +68,9 @@ const CREDENTIAL_HEADERS: [&str; 16] = [
     // Bitvavo: the key, and the HMAC a server could echo back.
     "bitvavo-access-key",
     "bitvavo-access-signature",
+    // Bitfinex: the key and the request signature (the nonce is public).
+    "bfx-apikey",
+    "bfx-signature",
     "rune",
     // Bitstamp v2: `BITSTAMP <key>`, the request's signature and its
     // single-use nonce.
@@ -676,6 +679,9 @@ mod tests {
             ("Bitvavo-Access-Key", "bitvavo-key"),
             ("Bitvavo-Access-Signature", "bitvavo-signature"),
             ("Bitvavo-Access-Timestamp", "1700000000000"),
+            ("bfx-apikey", "bitfinex-key"),
+            ("bfx-signature", "bitfinex-signature"),
+            ("bfx-nonce", "1700000000000000"),
         ];
         assert_eq!(
             request_credentials(None, &headers, None),
@@ -683,7 +689,9 @@ mod tests {
                 "kraken-signature",
                 "coinbase-signature",
                 "bitvavo-key",
-                "bitvavo-signature"
+                "bitvavo-signature",
+                "bitfinex-key",
+                "bitfinex-signature"
             ]
         );
     }

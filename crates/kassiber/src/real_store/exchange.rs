@@ -81,13 +81,15 @@ fn exchange(args: &Value) -> Result<String, AppError> {
     let kind = text(args, "exchange")?
         .map(|kind| kassiber_pytext::lower(&kind))
         .ok_or_else(|| {
-            AppError::new("validation", "Choose an exchange")
-                .with_hint("One of kraken, coinbase, binance, bitpanda, bitvavo or bitstamp.")
+            AppError::new("validation", "Choose an exchange").with_hint(
+                "One of kraken, coinbase, binance, bitpanda, bitvavo, bitstamp or bitfinex.",
+            )
         })?;
     if !exchange_api::KINDS.contains(&kind.as_str()) {
         return Err(
-            AppError::new("validation", format!("Unsupported exchange '{kind}'"))
-                .with_hint("One of kraken, coinbase, binance, bitpanda, bitvavo or bitstamp."),
+            AppError::new("validation", format!("Unsupported exchange '{kind}'")).with_hint(
+                "One of kraken, coinbase, binance, bitpanda, bitvavo, bitstamp or bitfinex.",
+            ),
         );
     }
     Ok(kind)
