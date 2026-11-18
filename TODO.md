@@ -1890,6 +1890,21 @@ See [tax countries](docs/reference/tax-countries.md) and
 - [ ] Store a sale's or swap's fiat commission apart from its value, so
   Irish line 1(k) and UK proceeds can be shown before costs and a UK swap's
   fee split 50/50 (GB-FEE-SWAP); the vectors model it, books cannot yet.
+- [ ] Decide what a transaction reviewed as not taxable
+  (`taxability_override = 0`) means on the UK and Japanese reports. The
+  US, German, Spanish, Irish and Swiss layers now leave its disposals and
+  income off their forms, as the review figures do. In the UK and Japan the
+  same rows also drive the section 104 pools and the 計算書's quantities and
+  closing balance, so they still list such a sale; dropping it there would
+  misstate holdings. A per-country decision (exclude from the gain lines but
+  keep the movement, or refuse) is needed.
+- [ ] Order and select journal rows by instant, not stored timestamp text.
+  The Austrian regime tracker and ledger walk sort `occurred_at` as text, the
+  summary PDF compares it with UTC boundary strings, and the schema-2 summary
+  year reads the local date while US Form 8949 reads the UTC date. Every
+  current writer stores whole-second UTC (`…Z`), so books agree today; a
+  stored offset or fractional second would change lot order, drop a sale
+  from the PDF or move it between years (verification of #773, 2026-11-18).
 - [ ] Decide whether single-table machine CSVs (capital gains, transactions,
   platform formats) of a preview country carry the preview notice; the
   shared-design reports do, and a notice row would break those files'
