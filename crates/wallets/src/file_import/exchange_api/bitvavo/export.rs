@@ -6,7 +6,6 @@
 //! statuses, Europe/Amsterdam or UTC wall times, no guessed amounts.
 use super::*;
 use super::{self as shared, Event, Leg};
-use kassiber_pytext::zone::Zone;
 
 const PROVIDER: &str = "Bitvavo";
 pub(super) const HEADERS: [&str; 14] = [
@@ -97,7 +96,8 @@ fn event(columns: &exchange::Columns) -> Result<Option<Event>, AppError> {
         }
     }
     let kind = kassiber_pytext::lower(&text("Type"));
-    let at = time(&text("Timezone"), &text("Date"), &text("Time")).map_err(|what| bad(&what))?;
+    let at = contract::wall_time(&text("Timezone"), &text("Date"), &text("Time"))
+        .map_err(|what| bad(&what))?;
     // A currency and a signed amount, both present or both blank.
     let leg = |currency: &str, amount: &str| -> Result<Option<(String, Decimal)>, AppError> {
         match (text(currency), text(amount)) {
@@ -152,60 +152,4 @@ fn event(columns: &exchange::Columns) -> Result<Option<Event>, AppError> {
         raw: kassiber_pytext::loads(&columns.json().to_string())
             .map_err(|e| AppError::new("internal_error", e.to_string()))?,
     }))
-}
-
-/// `Date` and `Time` (`YYYY-MM-DD`, `HH:MM:SS[.fff]`), wall time in `zone`,
-/// as Unix milliseconds. A wall time the clock change skips or repeats has
-/// no single instant and is refused.
-fn time(zone: &str, date: &str, clock: &str) -> Result<i64, String> {
-    use kassiber_pytext::zone::{civil_from_days, days_from_civil};
-    let zone = match zone {
-        "Europe/Amsterdam" => Zone::eu("Europe/Amsterdam", 3600),
-        "UTC" | "Etc/UTC" => Zone::utc("UTC"),
-        _ => {
-            let zone: String = zone.chars().take(40).collect();
-            return Err(format!(
-                "time zone '{zone}'; Kassiber reads Bitvavo exports in Europe/Amsterdam or UTC"
-            ));
-        }
-    };
-    let bad = || "a Date or Time Kassiber cannot read".to_owned();
-    let digits = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
-    let fields = |text: &str, separator: char, widths: [usize; 3]| -> Option<[i64; 3]> {
-        let parts: Vec<&str> = text.split(separator).collect();
-        let ok = parts.len() == 3
-            && parts
-                .iter()
-                .zip(widths)
-                .all(|(p, w)| p.len() == w && digits(p));
-        ok.then(|| [0, 1, 2].map(|i| parts[i].parse().unwrap_or(-1)))
-    };
-    let (whole, fraction) = clock.split_once('.').unwrap_or((clock, "0"));
-    let ([year, month, day], [hour, minute, second]) = (
-        fields(date, '-', [4, 2, 2]).ok_or_else(bad)?,
-        fields(whole, ':', [2, 2, 2]).ok_or_else(bad)?,
-    );
-    let days = days_from_civil(year, month, day);
-    // Bitvavo launched in 2018; the EU summer-time rule read here holds since 1996.
-    if !digits(fraction)
-        || year < 1996
-        || civil_from_days(days) != (year, month, day)
-        || hour > 23
-        || minute > 59
-        || second > 59
-    {
-        return Err(bad());
-    }
-    // The fraction to whole milliseconds (`.5` is 500, `.473` 473).
-    let millis: i64 = format!("{:0<3}", &fraction[..fraction.len().min(3)])
-        .parse()
-        .map_err(|_| bad())?;
-    let local = days * 86_400 + hour * 3600 + minute * 60 + second;
-    match (
-        zone.local_offset_fold(local, false),
-        zone.local_offset_fold(local, true),
-    ) {
-        (Some(a), Some(b)) if a == b => Ok((local - a) * 1_000 + millis),
-        _ => Err("a wall time the summer-time change skips or repeats".into()),
-    }
 }

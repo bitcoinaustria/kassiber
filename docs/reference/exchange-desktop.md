@@ -13,7 +13,8 @@ on request. Each setup and sync runs the
 1. **Pick the exchange.** The Add connection dialog lists Kraken, Coinbase,
    Bitpanda, Bitvavo, Bitstamp API, Bitfinex, Bitcoin.de and Binance API under
    Exchanges (setup kind `exchange-api`). The Binance supplemental CSV,
-   Bitvavo CSV, Bitstamp CSV and Bitfinex CSV imports stay separate cards.
+   Bitvavo CSV, Bitstamp CSV, Bitfinex CSV and Bitcoin.de CSV imports stay
+   separate cards.
 2. **Create a read-only key.** The setup shows where to create the key and
    which of the exchange's permissions to turn on and leave off. The scopes
    follow what each sync reads:

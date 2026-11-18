@@ -314,6 +314,12 @@ pub(super) fn net_inbound(
     Ok(Some(PriceNumber::Finite(net_amount)))
 }
 
+/// The hint of an importer that reads only BTC from `provider` when a wallet
+/// whose scope is `crypto` meets another asset.
+pub(crate) fn only_btc(provider: &str) -> String {
+    format!("Kassiber does not import other assets from {provider}. Set this wallet's asset_scope to bitcoin to import its BTC, and record the other assets yourself (generic CSV/JSON import).")
+}
+
 /// The command that sets a wallet's scope to `crypto`, for hints that tell
 /// the user how to keep the assets the `bitcoin` scope leaves out.
 pub(crate) fn keep_command(wallet: &str) -> String {

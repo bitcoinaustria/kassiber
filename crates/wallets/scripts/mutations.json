@@ -2279,6 +2279,16 @@
     "rule": "Skip orders unless exactly one side is a supported Bitcoin-family asset."
   },
   {
+    "id": "W-bull-other-crypto-scope",
+    "file": "crates/wallets/src/file_import/bull.rs",
+    "find": "    if let (Some(scope), Some(coin)) = (scope, coin) {",
+    "replace": "    if let (Some(scope), Some(coin)) = (scope.filter(|_| false), coin) {",
+    "expect_failing": [
+      "bull_reads_only_btc_and_names_other_crypto_orders"
+    ],
+    "rule": "A Bull Bitcoin wallet import counts another crypto asset's order as unread or refuses it by name, and never books BTC traded against it as a fiat-priced trade."
+  },
+  {
     "id": "W-bull-missing-txid",
     "file": "crates/wallets/src/file_import/bull.rs",
     "find": "columns.opt(&[\"TRANSACTION_ID\"])",

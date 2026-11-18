@@ -1128,7 +1128,7 @@ fn python_twentyone_import_vectors() {
 }
 
 fn bull(conn: &Connection, mode: &str) -> Py {
-    let rows = bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap()).unwrap();
+    let rows = bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap(), None, &mut Default::default()).unwrap();
     let records = rows
         .iter()
         .map(normalize)
@@ -1180,7 +1180,7 @@ fn bull_profile_matching_fee_precedence_ambiguity_and_scope() {
     assert_eq!(scalar(&conn, "SELECT fee FROM transactions"), 1000000);
     assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE kind='buy' AND fiat_value_exact='100' AND occurred_at='2025-01-01T00:00:00Z'"),1);
     conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('other','ws','p','Other','custom','{}','2025-01-01'),('foreign','ws','q','Foreign','custom','{}','2025-01-01');").unwrap();
-    let row=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap()).unwrap();
+    let row=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap(), None, &mut Default::default()).unwrap();
     let r = normalize(&row[0]).unwrap();
     let mut fields = r.fields.clone();
     for (k, v) in [
@@ -1428,7 +1428,7 @@ fn bull_relevant_validates_only_matched_prices_and_preserves_committed_raw() {
     );
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
     import(&conn, "date,txid,amount\n2025-01-01,match,0.002\n").unwrap();
-    let rows=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap()).unwrap();
+    let rows=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap(), None, &mut Default::default()).unwrap();
     let request = Request {
         profile_id: "p".into(),
         wallet: "Source".into(),
@@ -1584,6 +1584,100 @@ fn bull_relevant_preserves_reference_error_order_and_rollback() {
         version
     );
     assert!(conn.is_autocommit());
+}
+
+/// Kassiber reads only BTC from Bull Bitcoin (docs/plan/24-crypto-assets.md):
+/// another crypto asset's order is counted as `unread` in the `bitcoin`
+/// scope and refused by name in the `crypto` scope; BTC traded against
+/// another crypto asset is refused instead of being booked as
+/// a fiat-priced trade. Other ISO 4217 currencies keep pricing the order.
+#[test]
+fn bull_reads_only_btc_and_names_other_crypto_orders() {
+    const HEAD: &str = "ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\n";
+    let buy = "completed,100,USD,0.002,BTC,2025-01-02,buy\n";
+    let usdt = "completed,100,USD,100,USDT,2025-01-03,usdt\n";
+    let full = |conn: &Connection, content: String| {
+        let file = std::env::temp_dir().join(format!(
+            "bull-scope-{}-{:?}.csv",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::write(&file, content).unwrap();
+        let result = execute(
+            conn,
+            Request {
+                profile_id: "p".into(),
+                wallet: "Source".into(),
+                file: file.to_string_lossy().into_owned(),
+                format: Format::Bull,
+                mode: Some("full".into()),
+                companion: None,
+                timezone: None,
+            },
+            None,
+        );
+        std::fs::remove_file(file).unwrap();
+        result
+    };
+    let conn = fixture();
+    let result = full(&conn, format!("{HEAD}{buy}{usdt}{usdt}")).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_pyjson::dumps(
+            kassiber_envelope::get(&result, "assets").unwrap(),
+            &Default::default()
+        )
+        .unwrap(),
+        r#"{"scope": "bitcoin", "skipped": {}, "excluded": {}, "unread": {"USDT": 2}, "next_step": "Kassiber reads only BTC from Bull Bitcoin, in either asset scope, and left out entries in USDT (2); record them yourself (generic CSV/JSON import)"}"#
+    );
+    // A wallet that tracks other crypto assets cannot get them from here.
+    let conn = fixture();
+    assets::Scope::Crypto.store(&conn, "p", "wallet").unwrap();
+    let error = full(&conn, format!("{HEAD}{buy}{usdt}")).unwrap_err();
+    assert_eq!(
+        error.message,
+        "Bull Bitcoin CSV line 3 books USDT; Kassiber reads only BTC from Bull Bitcoin"
+    );
+    assert!(error
+        .hint
+        .unwrap()
+        .contains("Set this wallet's asset_scope to bitcoin"));
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    // BTC paid with or for another crypto asset has no fiat price to keep.
+    for row in [
+        "completed,0.002,BTC,100,USDT,2025-01-04,swap\n",
+        "completed,100,ETH,0.002,LBTC,2025-01-04,swap\n",
+    ] {
+        let coin = if row.contains("ETH") { "ETH" } else { "USDT" };
+        let message = format!(
+            "Bull Bitcoin CSV line 3 trades BTC against {coin}, which is not a fiat currency"
+        );
+        let conn = fixture();
+        assert_eq!(
+            full(&conn, format!("{HEAD}{buy}{row}"))
+                .unwrap_err()
+                .message,
+            message
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    }
+    // Without a target wallet, the reference's reading: another coin's order
+    // is left out; a currency outside the priced fiat list still prices a BTC
+    // order.
+    let rows = bull::parse(
+        csv::rows(&format!(
+            "{HEAD}{usdt}completed,0.002,BTC,95000,CRC,2025-01-05,crc\n"
+        ))
+        .unwrap(),
+        None,
+        &mut Default::default(),
+    )
+    .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].data["fiat_currency"], json!("CRC"));
 }
 
 fn coinfinity(conn: &Connection, mode: &str) -> Py {
@@ -6551,3 +6645,7 @@ fn bitstamp_csv_tags_same_second_rows_across_imports() {
     let tagged = "SELECT count(*) FROM transaction_tags x JOIN tags g ON g.id=x.tag_id WHERE g.code='same-second-order-uncertain'";
     assert_eq!(scalar(&conn, tagged), 2);
 }
+
+#[rustfmt::skip]
+mod bitcoinde_csv;
+pub(super) use bitcoinde_csv::{import_bitcoinde, BITCOINDE_CSV};

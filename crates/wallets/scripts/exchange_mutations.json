@@ -1631,7 +1631,7 @@
   },
   {
     "id": "bitvavo-csv-ambiguous-wall-time",
-    "file": "crates/wallets/src/file_import/exchange_api/bitvavo/export.rs",
+    "file": "crates/wallets/src/file_import/exchange_api/contract.rs",
     "find": "(Some(a), Some(b)) if a == b => Ok((local - a) * 1_000 + millis),",
     "replace": "(Some(a), _) => Ok((local - a) * 1_000 + millis),",
     "expect_failing": [
@@ -2533,7 +2533,8 @@
     "find": "if exact_msat(&line.cashflow.copy_abs()).is_none() {",
     "replace": "if false {",
     "expect_failing": [
-      "bitcoinde_refuses_unmappable_bookings"
+      "bitcoinde_refuses_unmappable_bookings",
+      "bitcoinde_csv_refuses_what_it_cannot_map_exactly"
     ],
     "rule": "A BTC amount finer than a millisatoshi refuses the import, named as such."
   },
@@ -2543,7 +2544,8 @@
     "find": "                return Err(line.refuse(\"has a type Kassiber does not map\", REVIEW))",
     "replace": "                line.cashflow.is_positive()",
     "expect_failing": [
-      "bitcoinde_refuses_unmappable_bookings"
+      "bitcoinde_refuses_unmappable_bookings",
+      "bitcoinde_csv_refuses_what_it_cannot_map_exactly"
     ],
     "rule": "A booking of a type Kassiber does not map, or a registration that moves BTC, refuses the import by name."
   },
@@ -2563,7 +2565,8 @@
     "find": "if !order.is_empty() {",
     "replace": "if true {",
     "expect_failing": [
-      "bitcoinde_the_running_balance_orders_and_names_bookings"
+      "bitcoinde_the_running_balance_orders_and_names_bookings",
+      "bitcoinde_csv_refuses_what_it_cannot_map_exactly"
     ],
     "rule": "A statement that does not start from a zero balance is refused as missing history, naming the opening balance."
   },
@@ -2605,7 +2608,8 @@
     "find": "} else if exact_msat(&moved) != exact_msat(expected) {",
     "replace": "} else if exact_msat(&moved) != exact_msat(expected) && false {",
     "expect_failing": [
-      "bitcoinde_refuses_unmappable_bookings"
+      "bitcoinde_refuses_unmappable_bookings",
+      "bitcoinde_csv_refuses_what_it_cannot_map_exactly"
     ],
     "rule": "A trade booking whose BTC differs from its trade details is refused."
   },
@@ -2669,6 +2673,46 @@
       "bitcoinde_imports_only_append"
     ],
     "rule": "An API sync records its rows as an import run in the proven order."
+  },
+  {
+    "id": "bitcoinde-csv-active-ledger",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "            || self == Self::Bitcoinde\n",
+    "replace": "",
+    "expect_failing": [
+      "bitcoinde_csv_imports_the_statement_in_full_mode_once"
+    ],
+    "rule": "The Bitcoin.de statement is an active custodial ledger imported in full mode."
+  },
+  {
+    "id": "bitcoinde-csv-btc-rows-only",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde/export.rs",
+    "find": "coin if !coin.is_empty() && coin != \"BTC\" => {",
+    "replace": "coin if coin.is_empty() && coin != \"BTC\" => {",
+    "expect_failing": [
+      "bitcoinde_csv_names_other_coins_as_unread_in_either_scope"
+    ],
+    "rule": "A statement row of another coin never reaches the BTC mapping: skipped and named in bitcoin scope, refused naming the coin in crypto scope."
+  },
+  {
+    "id": "bitcoinde-csv-spot-market",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde/export.rs",
+    "find": "if !market.eq_ignore_ascii_case(&format!(\"BTC / {quote}\")) {",
+    "replace": "if market.is_empty() {",
+    "expect_failing": [
+      "bitcoinde_csv_refuses_what_it_cannot_map_exactly"
+    ],
+    "rule": "A CSV trade is priced only when its market is BTC against the cash shown."
+  },
+  {
+    "id": "bitcoinde-csv-partner-cash",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde/export.rs",
+    "find": "                    Some(partner) => partner,",
+    "replace": "                    Some(_) => needed(\"fiat_after\")?,",
+    "expect_failing": [
+      "bitcoinde_csv_reads_both_layouts_and_the_proven_order"
+    ],
+    "rule": "An older express trade is priced at the euros after the bank's fee, which changed hands."
   },
   {
     "id": "bitcoinde-signature-header-withheld",
@@ -2936,6 +2980,36 @@
     "rule": "A Bitcoin.de read waits for API credits before it takes the process-wide nonce lock, so another sync is not held up."
   },
   {
+    "id": "bitcoinde-reimport-keeps-price",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "        if !dec(&old)?\n            .sub(&dec(&value)?, &CTX)",
+    "replace": "        if false && !dec(&old)?\n            .sub(&dec(&value)?, &CTX)",
+    "expect_failing": [
+      "bitcoinde_reimport_refuses_a_changed_fiat_value"
+    ],
+    "rule": "A CSV or API re-import never changes a stored Bitcoin.de trade's price: a different fiat value refuses it, naming the booking."
+  },
+  {
+    "id": "bitcoinde-csv-names-other-coins",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde/export.rs",
+    "find": "                    mapper.admit(&[&coin]);\n",
+    "replace": "                    let _ = &coin;\n",
+    "expect_failing": [
+      "bitcoinde_csv_names_other_coins_as_unread_in_either_scope"
+    ],
+    "rule": "Another coin's row in the statement is counted as unread, rows per coin, in either scope."
+  },
+  {
+    "id": "bitcoinde-csv-reads-scope",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "        reads: contract::Reads::BitcoinOnly,\n        load: export::load,",
+    "replace": "        reads: contract::Reads::AllAssets,\n        load: export::load,",
+    "expect_failing": [
+      "bitcoinde_csv_names_other_coins_as_unread_in_either_scope"
+    ],
+    "rule": "The Bitcoin.de statement import reads only BTC, in either scope, and counts other coins as unread."
+  },
+  {
     "id": "exchange-z-alias-kraken-only",
     "file": "crates/wallets/src/file_import/exchange_api.rs",
     "find": "        \"XETH\" => \"ETH\".into(),\n        _ => code,",
@@ -3091,7 +3165,8 @@
     "find": "fields.push((\"unread\", counts(&self.unread)));",
     "replace": "let _ = &self.unread;",
     "expect_failing": [
-      "bitfinex_counts_other_assets_as_unread_in_either_scope"
+      "bitfinex_counts_other_assets_as_unread_in_either_scope",
+      "bitcoinde_csv_names_other_coins_as_unread_in_either_scope"
     ],
     "rule": "An importer that reads only BTC reports the coins it left out as assets.unread, rows per ticker, which the desktop shows."
   }

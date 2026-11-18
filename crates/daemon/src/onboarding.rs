@@ -325,9 +325,8 @@ fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppEr
             let wallet = optional_string(args, "wallet")?;
             (wallet, Some(mode()?.unwrap_or_else(|| "full".into())), None)
         }
-        "strike_csv" | "bisq_csv" | "bitvavo_csv" | "bitstamp_csv" | "bitfinex_csv" => {
-            (optional_string(args, "wallet")?, Some("full".into()), None)
-        }
+        "strike_csv" | "bisq_csv" | "bitvavo_csv" | "bitstamp_csv" | "bitfinex_csv"
+        | "bitcoinde_csv" => (optional_string(args, "wallet")?, Some("full".into()), None),
         _ => {
             let wallet = required("wallet", "Wallet")?;
             let column_map = match get(args, "column_map") {

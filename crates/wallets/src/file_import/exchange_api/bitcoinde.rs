@@ -11,6 +11,8 @@ use std::cell::Cell;
 use std::collections::BTreeSet;
 use std::sync::Mutex;
 
+mod export;
+
 const PROVIDER: &str = "Bitcoin.de";
 /// The MD5 of the empty POST parameter string every GET signs.
 const EMPTY_MD5: &str = "d41d8cd98f00b204e9800998ecf8427e";
@@ -67,7 +69,11 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     fetch,
     probe,
     skipped: None,
-    files: &[],
+    files: &[contract::registry::FileFormat {
+        format: Format::Bitcoinde,
+        reads: contract::Reads::BitcoinOnly,
+        load: export::load,
+    }],
     shared_ids: true,
     same_second_tags: false,
     after_insert: None,

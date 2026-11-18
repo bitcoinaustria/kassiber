@@ -151,9 +151,9 @@
   },
   {
     "kind": "bitcoinde",
-    "summary": "Bitcoin.de read-only Trading API sync for BTC trades and wallet movements.",
+    "summary": "Bitcoin.de read-only Trading API sync and BTC account statement CSV importer for BTC trades and wallet movements.",
     "requires": "",
-    "config_fields": "backend"
+    "config_fields": "backend, source_file, source_format"
   },
   {
     "kind": "wasabi",

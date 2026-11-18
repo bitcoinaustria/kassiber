@@ -17,6 +17,7 @@ const ACTIVE_FORMATS: &[&str] = &[
     "bitvavo_csv",
     "bitstamp_csv",
     "bitfinex_csv",
+    "bitcoinde_csv",
 ];
 const EVIDENCE_FORMATS: &[&str] = &[
     "bullbitcoin_csv",

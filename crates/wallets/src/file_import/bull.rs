@@ -1,8 +1,17 @@
 //! Bull Bitcoin order exports are commercial evidence, never observer authority.
+//!
+//! Kassiber reads only BTC from Bull Bitcoin (docs/plan/24-crypto-assets.md).
+//! A wallet import counts an order in another crypto asset as `unread` when
+//! the wallet's asset scope is `bitcoin` and refuses it by the coin's name
+//! when it is `crypto`, and refuses BTC traded against another crypto asset
+//! by name in either, instead of booking it as a fiat-priced trade.
+use super::assets::{Scope, Tally};
 use super::exchange::Columns;
 use super::river::{abs, arithmetic, number, repr};
+use super::tax_platform::{ticker, Ticker};
 use super::*;
 
+const PROVIDER: &str = "Bull Bitcoin";
 const REQUIRED: &[&str] = &[
     "ORDER_STATUS",
     "PAYIN_AMOUNT",
@@ -12,13 +21,33 @@ const REQUIRED: &[&str] = &[
     "COMPLETED_AT (UTC)",
     "TRANSACTION_ID",
 ];
-pub(super) fn parse(rows: Vec<csv::Row>) -> Result<Vec<csv::Row>, AppError> {
+/// The orders to import. With a `scope` (a target wallet), other crypto
+/// assets' orders are counted in `tally` (`bitcoin`) or refused (`crypto`);
+/// without one (the reference's reading, which relevant mode without a
+/// wallet uses) the import never refuses them here: such an order matches no
+/// book row, and BTC priced in another coin fails the profile currency check.
+pub(super) fn parse(
+    rows: Vec<csv::Row>,
+    scope: Option<Scope>,
+    tally: &mut Tally,
+) -> Result<Vec<csv::Row>, AppError> {
     exchange::headers(&rows, REQUIRED, "Bull Bitcoin")?;
-    rows.into_iter()
-        .filter_map(|row| record(row).transpose())
-        .collect()
+    let mut unread = BTreeMap::new();
+    let mut out = vec![];
+    for (line, row) in (2..).zip(rows) {
+        if let Some(record) = record(row, line, scope, &mut unread)? {
+            out.push(record);
+        }
+    }
+    tally.unread(PROVIDER, &unread);
+    Ok(out)
 }
-fn record(row: csv::Row) -> Result<Option<csv::Row>, AppError> {
+fn record(
+    row: csv::Row,
+    line: usize,
+    scope: Option<Scope>,
+    unread: &mut BTreeMap<String, i64>,
+) -> Result<Option<csv::Row>, AppError> {
     let columns = Columns::new(&row);
     for key in ["ORDER_STATUS", "PAYIN_STATUS", "PAYOUT_STATUS"] {
         if columns
@@ -34,6 +63,34 @@ fn record(row: csv::Row) -> Result<Option<csv::Row>, AppError> {
     let payout_currency = columns
         .opt(&["PAYOUT_CURRENCY"])
         .map(|s| kassiber_pytext::upper(&s));
+    // A wallet import: another crypto asset on either side (paid in, else
+    // paid out). Without a target wallet, the reference's reading.
+    let other = |code: &Option<String>| {
+        code.clone()
+            .filter(|code| matches!(ticker(code), Ticker::Crypto))
+    };
+    let coin = other(&payin_currency).or_else(|| other(&payout_currency));
+    if let (Some(scope), Some(coin)) = (scope, coin) {
+        let name = format!("Bull Bitcoin CSV line {line}");
+        let bitcoin = exchange::bitcoin(payin_currency.as_deref())
+            .or_else(|| exchange::bitcoin(payout_currency.as_deref()));
+        if bitcoin.is_some() {
+            return Err(AppError::new(
+                "validation",
+                format!("{name} trades BTC against {coin}, which is not a fiat currency"),
+            )
+            .with_hint("Kassiber reads only BTC bought or sold for fiat from Bull Bitcoin. Record this order yourself (generic CSV/JSON import) after checking it in Bull Bitcoin, and import the export without it."));
+        }
+        if scope == Scope::Crypto {
+            return Err(AppError::new(
+                "validation",
+                format!("{name} books {coin}; Kassiber reads only BTC from Bull Bitcoin"),
+            )
+            .with_hint(assets::only_btc(PROVIDER)));
+        }
+        *unread.entry(coin).or_default() += 1;
+        return Ok(None);
+    }
     let payin = number(columns.get(&["PAYIN_AMOUNT"]))?;
     let payout = number(columns.get(&["PAYOUT_AMOUNT"]))?;
     let (Some(payin), Some(payout)) = (payin, payout) else {

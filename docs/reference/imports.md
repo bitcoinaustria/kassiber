@@ -27,6 +27,7 @@ written.
 - Bisq 1 trade history and Funds > Transactions CSV exports (escrow ledger)
 - Bitvavo transaction-history CSV exports and the Bitvavo read-only API sync
 - Bitfinex Reports trades, movements and ledgers CSV exports and the Bitfinex read-only API sync
+- Bitcoin.de BTC account statement CSV exports and the Bitcoin.de read-only API sync
 - CoinTracking transaction CSV exports with complete history (Bitcoin rows;
   other crypto assets with the wallet's `asset_scope` set to `crypto`)
 - Blockpit transaction CSV exports with filters cleared (Bitcoin rows; other
@@ -51,6 +52,7 @@ Format references used by the dedicated importers:
 - Bisq 1 Portfolio > History and Funds > Transactions CSV exports, pinned from the source: <https://github.com/bisq-network/bisq/blob/7d6f5b089f2ef0e53d182805c74c3899f43f44ea/desktop/src/main/java/bisq/desktop/main/portfolio/closedtrades/ClosedTradesView.java> and <https://github.com/bisq-network/bisq/blob/7d6f5b089f2ef0e53d182805c74c3899f43f44ea/desktop/src/main/java/bisq/desktop/main/funds/transactions/TransactionsListItem.java> ([spec](../exchanges/bisq.md))
 - Bitvavo transaction-history CSV export (Transaction history → Export), layout pinned by public samples: <https://support.bitvavo.com/hc/en-us/articles/44936625205137-How-can-I-download-my-tax-report>; Bitvavo REST API: <https://docs.bitvavo.com/docs/rest-api/introduction/>
 - Bitfinex Reports CSV columns: `bfx-report` (<https://github.com/bitfinexcom/bfx-report>); API v2: <https://docs.bitfinex.com/docs/rest-auth>
+- Bitcoin.de BTC account statement CSV (mein Bitcoin.de → Kontoauszug), layout pinned by public samples; Trading API v4 as archived: <https://web.archive.org/web/20201202191159/https://www.bitcoin.de/de/api/tapi/v4/docu>
 - CoinTracking transaction CSV export: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000031008-create-backup-restore-or-export-your-account-data>
 - CoinTracking transaction types: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000042783>
 - Blockpit transaction CSV export: <https://intercom.help/blockpit/en/articles/12137149-how-to-export-my-blockpit-transactions-as-a-csv-file>
@@ -1477,6 +1479,11 @@ Behavior:
 
 - Bitcoin/Liquid/Lightning -> fiat rows become outbound `sell` transactions
 - fiat -> Bitcoin/Liquid/Lightning rows become inbound `buy` transactions
+- Kassiber reads only BTC from Bull Bitcoin: an order in another crypto asset
+  (for example USDT) is left out and counted in the result's `assets.unread`
+  when the wallet's asset scope is `bitcoin`, and refused by the coin's name
+  when it is `crypto`; BTC paid with or for another crypto asset refuses the
+  import naming the CSV line, because it has no fiat price to keep
 - formatted amounts may include an `LBTC` suffix without losing decimal precision
 - payout/payin fiat amounts are stored as exact `exchange_execution` pricing
   from provider `Bull Bitcoin`
@@ -2144,6 +2151,24 @@ keeps its movement fee, tagged `bitfinex-fee-unchecked`. Export with
 the `YYYY-MM-DD` date format in UTC, all three exports in one zip.
 [Bitfinex](bitfinex.md) records the key setup, API, CSV, mapping and every
 refusal.
+
+### Bitcoin.de API and CSV
+
+Rust backend only. The read-only API sync (`wallets sync-bitcoinde`, a key
+granted only showPermissions, showAccountLedger and showMyTrades in a
+`bitcoinde` backend; a key that can write is refused) and the BTC account
+statement CSV (`wallets import-bitcoinde`, `full` mode) share one mapping and
+land in one `bitcoinde` wallet. BTC/EUR trades get exact `exchange_execution`
+pricing at the euros that changed hands; deposits, payouts with their network
+fee and affiliate, kickback and welcome credits import unpriced. Bookings
+without a trade id are named by their second and running balance, which must
+chain from zero in one order; imports are append-only, and a stored trade's
+price never changes. Kassiber reads only BTC from Bitcoin.de: in `bitcoin`
+scope the CSV skips another coin's statement or row and names it in
+`assets.unread` and `assets.next_step`; a wallet whose `asset_scope` is `crypto` is refused (the
+sync before any request, the CSV naming the coin). Unmapped types and
+anything Kassiber cannot book exactly refuse the whole import by name. [Bitcoin.de](bitcoinde.md) records the key setup,
+API, CSV layout, mapping and every refusal.
 
 ### Binance API and Supplemental CSV
 

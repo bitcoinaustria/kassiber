@@ -78,6 +78,7 @@ pub enum Format {
     Bitvavo,
     Bitstamp,
     Bitfinex,
+    Bitcoinde,
     BtcpayCsv,
     BtcpayJson,
     Ledger,
@@ -107,6 +108,7 @@ impl Format {
             "bitvavo_csv" => Self::Bitvavo,
             "bitstamp_csv" => Self::Bitstamp,
             "bitfinex_csv" => Self::Bitfinex,
+            "bitcoinde_csv" => Self::Bitcoinde,
             "cointracking_csv" => Self::CoinTracking,
             "blockpit_csv" => Self::Blockpit,
             "wasabi_bundle" => Self::Wasabi,
@@ -139,17 +141,20 @@ impl Format {
             Self::Bitvavo => "bitvavo_csv",
             Self::Bitstamp => "bitstamp_csv",
             Self::Bitfinex => "bitfinex_csv",
+            Self::Bitcoinde => "bitcoinde_csv",
             Self::Ledger => "generic_ledger",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
         match self {
             // Exchange exports: the registry names each one's parser.
-            Self::BinanceHistory | Self::Bitvavo | Self::Bitstamp | Self::Bitfinex => {
-                Ok(exchange_api::load_file(self, file, None)?
-                    .map(|(rows, _)| rows)
-                    .unwrap_or_default())
-            }
+            Self::BinanceHistory
+            | Self::Bitvavo
+            | Self::Bitstamp
+            | Self::Bitfinex
+            | Self::Bitcoinde => Ok(exchange_api::load_file(self, file, None)?
+                .map(|(rows, _)| rows)
+                .unwrap_or_default()),
             Self::Document => Err(AppError::new(
                 "validation",
                 "Document imports require reviewed draft rows",
@@ -170,7 +175,7 @@ impl Format {
             )),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
             Self::River => river::parse(csv::load(file)?),
-            Self::Bull => bull::parse(csv::load(file)?),
+            Self::Bull => bull::parse(csv::load(file)?, None, &mut Default::default()),
             Self::BullWallet => bull_wallet::parse(csv::load(file)?),
             Self::Coinfinity => coinfinity::parse(
                 csv::rows(&csv::read_sig(file)?)?,
@@ -218,6 +223,11 @@ impl Format {
                 )?;
                 Ok((rows, Some(tally)))
             }
+            Self::Bull => {
+                let mut tally = assets::Tally::default();
+                let rows = bull::parse(csv::load(file)?, Some(target.scope), &mut tally)?;
+                Ok((rows, Some(tally)))
+            }
             _ => self.load(file).map(|rows| (rows, None)),
         }
     }
@@ -230,6 +240,7 @@ impl Format {
                 | Self::Binance
                 | Self::Coinfinity
                 | Self::LedgerLive
+                | Self::Bull
         ) || exchange_api::file_exchange(self)
     }
     fn evidence(self) -> bool {
@@ -253,6 +264,7 @@ impl Format {
             || self == Self::Bitvavo
             || self == Self::Bitstamp
             || self == Self::Bitfinex
+            || self == Self::Bitcoinde
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
@@ -260,6 +272,7 @@ impl Format {
             Self::Bitvavo => ("Bitvavo", "bitvavo", "bitvavo_rows"),
             Self::Bitstamp => ("Bitstamp", "bitstamp", "bitstamp_rows"),
             Self::Bitfinex => ("Bitfinex", "bitfinex", "bitfinex_rows"),
+            Self::Bitcoinde => ("Bitcoin.de", "bitcoinde", "bitcoinde_rows"),
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),

@@ -416,6 +416,11 @@ mod tests {
             ),
             // Rust only (docs/reference/bitcoinde.md): API and statement CSV.
             ("bitcoinde", r#"{"backend":"b"}"#, "provider-api"),
+            (
+                "bitcoinde",
+                r#"{"source_format":"bitcoinde_csv"}"#,
+                "exchange-export",
+            ),
             ("custom", r#"{"source_format":"generic_ledger"}"#, "manual"),
             ("custom", r#"{"source_format":" "}"#, "manual"),
             ("custom", r#"{"source_format":"bisq"}"#, "file-import"),
