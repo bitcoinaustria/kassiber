@@ -414,6 +414,8 @@ year before 2022 has none (`not_applicable`, no crypto Kennzahlen yet), and
 previewing a book that is not the active one withholds it with
 `report_scope_not_active`. `delta` lists the years that change, after minus
 before; its `estimated_tax_eur_cents` is null when either side is withheld.
+A change in an omitted year is not in `delta`, so the desktop preview says how
+many older years it did not compare instead of reporting no change.
 The preview stores the computed journal inside a savepoint that is always
 rolled back, so it never persists. Apply recomputes both sides and refuses an
 artifact whose `delta` does not match them.

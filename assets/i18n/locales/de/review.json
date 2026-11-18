@@ -1346,7 +1346,10 @@
         "kennzahlDown": "{{year}}: KZ {{code}} sinkt um {{amount}}.",
         "taxWithheld": "{{year}}: Die Steuerschätzung ist zurückgehalten, bis die Berichte bereit sind; ihre Änderung ist daher nicht bekannt.",
         "taxUnavailable": "{{year}}: keine Steuerschätzung zum Vergleich.",
-        "yearChanged": "{{year}}: Die Steuerzahlen ändern sich."
+        "yearChanged": "{{year}}: Die Steuerzahlen ändern sich.",
+        "noneInCompared": "Keine Änderung in den verglichenen Steuerjahren.",
+        "yearsOmitted_one": "{{count}} älteres Steuerjahr wurde nicht verglichen und kann sich ändern.",
+        "yearsOmitted_other": "{{count}} ältere Steuerjahre wurden nicht verglichen und können sich ändern."
       }
     },
     "unlink": {
