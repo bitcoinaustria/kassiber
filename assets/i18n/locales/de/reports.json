@@ -107,6 +107,16 @@
       "title": "Keine steuerpflichtigen Zeilen",
       "detail": "Das Paket für {{year}} enthält derzeit keine Veräußerungen und keine Zeilen mit Kennzahl."
     },
+    "coreBlocked": {
+      "title": "Noch nicht bereit für Berichte",
+      "detail": "Kassibers Berichtsprüfung hat vor der Einreichung etwas zu klären gefunden.",
+      "more_one": "{{count}} weiterer Hinderungsgrund.",
+      "more_other": "{{count}} weitere Hinderungsgründe."
+    },
+    "coreUnknown": {
+      "title": "Bereitschaft unbekannt",
+      "detail": "Kassiber konnte seine Berichtsprüfung nicht lesen; die Zahlen sind vorläufig."
+    },
     "ready": "Das Hauptbuch ist aktuell und die Prüfwarteschlange ist leer."
   },
   "metrics": {
@@ -137,6 +147,9 @@
     "altbestandRule": "Vor dem 1. März 2021 angeschafft · nach einem Jahr steuerfrei",
     "taxYear": "Steuerjahr",
     "taxYearAt": "Kalenderjahr, Wiener Zeit",
+    "longTerm": "Langfristig",
+    "noLongTerm": "Kein langfristiger Steuersatz",
+    "moreThanOneYear": "Mehr als ein Jahr gehalten, über den Jahrestag der Anschaffung hinaus",
     "longTermAfter": "Langfristig nach",
     "days_one": "{{count}} Tag",
     "days_other": "{{count}} Tagen",

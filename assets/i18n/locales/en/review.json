@@ -1341,7 +1341,12 @@
         "incomeUp": "{{year}}: {{amount}} more income.",
         "incomeDown": "{{year}}: {{amount}} less income.",
         "taxUp": "{{year}}: about {{amount}} more tax.",
-        "taxDown": "{{year}}: about {{amount}} less tax."
+        "taxDown": "{{year}}: about {{amount}} less tax.",
+        "kennzahlUp": "{{year}}: KZ {{code}} rises by {{amount}}.",
+        "kennzahlDown": "{{year}}: KZ {{code}} falls by {{amount}}.",
+        "taxWithheld": "{{year}}: the tax estimate is withheld until reports are ready, so its change is not known.",
+        "taxUnavailable": "{{year}}: no tax estimate to compare.",
+        "yearChanged": "{{year}}: the tax figures change."
       }
     },
     "unlink": {

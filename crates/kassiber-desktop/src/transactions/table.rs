@@ -980,6 +980,18 @@ fn chips(app: &App, tk: &Tk) -> Option<El> {
             },
         ));
     }
+    if let Some(range) = &f.range {
+        r = r.child(chip(
+            tk,
+            "txs-chip-range".into(),
+            range.label(),
+            t("transactions:table.chip.clearDateRange"),
+            |a| {
+                a.txs.filters.range = None;
+                changed(a);
+            },
+        ));
+    }
     if let Some(s) = f.status {
         r = r.child(chip(
             tk,

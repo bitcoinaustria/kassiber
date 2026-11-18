@@ -1289,8 +1289,7 @@ mod tests {
         let mut app = crate::app::tests::quiet_app();
         let mut a = shown("a");
         a.loading = false;
-        a.generation = app.book_generation.max(1);
-        app.book_generation = a.generation;
+        a.generation = Some(app.book_generation);
         app.detail.open = Some(a);
         assert!(!super::super::follow_generation(&mut app));
         app.book_generation += 1;
@@ -1299,6 +1298,23 @@ mod tests {
             !super::super::follow_generation(&mut app),
             "once per refresh"
         );
+    }
+
+    /// A panel first read at launch (book generation 0) follows the first book refresh: the
+    /// first journal run re-reads its record and Tax panel instead of leaving them stale.
+    #[test]
+    fn a_panel_read_at_generation_zero_follows_the_first_refresh() {
+        let mut app = crate::app::tests::quiet_app();
+        assert_eq!(app.book_generation, 0);
+        let mut a = shown("a");
+        a.record = None;
+        a.loading = true;
+        let serial = a.serial;
+        app.detail.open = Some(a);
+        super::super::load_record(&mut app, serial, json!({ "id": "a" }), false);
+        assert!(!super::super::follow_generation(&mut app), "current");
+        app.book_generation = 1;
+        assert!(super::super::follow_generation(&mut app));
     }
 
     /// Saving pinned tab A, then opening the same transaction in another tab: the answer is
