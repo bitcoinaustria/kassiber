@@ -874,7 +874,22 @@ fn tax_lines(artifact: &Value, hidden: bool) -> Vec<String> {
             ));
         }
     }
-    if out.is_empty() {
+    // The plan compares only the latest years and counts the rest per side; a change there
+    // isn't in `delta`, so "no changes" would overclaim.
+    let omitted = ["before", "after"]
+        .iter()
+        .filter_map(|side| artifact[side]["tax"]["years_omitted"].as_u64())
+        .max()
+        .unwrap_or(0);
+    if omitted > 0 {
+        if out.is_empty() {
+            out.push(t("review:transfersPage.effects.tax.noneInCompared"));
+        }
+        out.push(tr(
+            "review:transfersPage.effects.tax.yearsOmitted",
+            &[("count", &omitted.to_string())],
+        ));
+    } else if out.is_empty() {
         out.push(t("review:transfersPage.effects.tax.none"));
     }
     out
@@ -1614,5 +1629,40 @@ mod tax_tests {
             "estimated_tax_eur_cents": 2750
         }]);
         assert_eq!(tax_lines(&up, false).len(), 2);
+    }
+
+    /// Pairing a 2015 sale in a book with ten later income years removes a 2015 gain the plan
+    /// never compared: 2015 is counted in `before.tax.years_omitted` and `delta` is empty.
+    #[test]
+    fn omitted_years_are_never_no_changes() {
+        let artifact = json!({
+            "before": {"tax": {"fiat_currency": "EUR", "years": [], "years_omitted": 1}},
+            "after": {"tax": {"fiat_currency": "EUR", "years": [], "years_omitted": 0}},
+            "delta": {"years": []}
+        });
+        assert_eq!(
+            tax_lines(&artifact, false),
+            vec![
+                "No changes in the tax years compared.",
+                "1 older tax year was not compared and may change.",
+            ]
+        );
+        // Listed changes keep their lines; the larger side's count follows them.
+        let mut changed = artifact.clone();
+        changed["after"]["tax"]["years_omitted"] = json!(3);
+        changed["delta"]["years"] = json!([{
+            "year": 2024, "realized_gain_loss": "-300.00", "income": "0.00"
+        }]);
+        let lines = tax_lines(&changed, false);
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert!(lines[0].starts_with("2024:"), "{lines:?}");
+        assert_eq!(
+            lines[1],
+            "3 older tax years were not compared and may change."
+        );
+        // Nothing omitted: the plain sentence stands.
+        let mut whole = artifact;
+        whole["before"]["tax"]["years_omitted"] = json!(0);
+        assert_eq!(tax_lines(&whole, false), vec!["No tax year changes."]);
     }
 }

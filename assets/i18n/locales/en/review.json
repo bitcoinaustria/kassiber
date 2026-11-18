@@ -1346,7 +1346,10 @@
         "kennzahlDown": "{{year}}: KZ {{code}} falls by {{amount}}.",
         "taxWithheld": "{{year}}: the tax estimate is withheld until reports are ready, so its change is not known.",
         "taxUnavailable": "{{year}}: no tax estimate to compare.",
-        "yearChanged": "{{year}}: the tax figures change."
+        "yearChanged": "{{year}}: the tax figures change.",
+        "noneInCompared": "No changes in the tax years compared.",
+        "yearsOmitted_one": "{{count}} older tax year was not compared and may change.",
+        "yearsOmitted_other": "{{count}} older tax years were not compared and may change."
       }
     },
     "unlink": {
