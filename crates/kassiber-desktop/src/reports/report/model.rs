@@ -96,8 +96,9 @@ pub struct Report {
     pub rows_before_fields: f64,
     pub needs_journals: bool,
     pub quarantines: f64,
-    /// `taxYear`: the book's own tax year (first day `MM-DD`, zone) when it isn't 1 January
-    /// (docs/reference/tax.md "Tax years"); None for a calendar-year book.
+    /// `taxYear`: the book's own tax year (first day `MM-DD`, zone) when the core cuts it
+    /// itself (docs/reference/tax.md "Tax years"): a start other than 1 January, or a calendar
+    /// year in a zone the book chose. None for a book on its country's calendar year.
     pub tax_year: Option<((u32, u32), String)>,
 }
 
@@ -140,7 +141,7 @@ impl Report {
                     ))
                 })
                 .filter(|((m, dd), _): &((u32, u32), String)| {
-                    (1..=12).contains(m) && *dd >= 1 && (*m, *dd) != (1, 1)
+                    (1..=12).contains(m) && (1..=31).contains(dd)
                 }),
             year: d["year"].as_i64().unwrap_or(0) as i32,
             available_years: d["availableYears"]
@@ -214,6 +215,45 @@ impl Report {
         region(&self.jurisdiction)
     }
 
+    /// The rules row's region: the book's country by its registry name, `Generic` for the
+    /// generic book or a code the copy doesn't know.
+    pub fn region_name(&self) -> String {
+        let code = self.jurisdiction.trim().to_lowercase();
+        match crate::reports::books::model::country(&code) {
+            Some(c) if c.code != "generic" => crate::reports::books::model::region_label(c.code),
+            _ => t("reports:rules.generic"),
+        }
+    }
+
+    /// The rules rows' holding period: (label, value), None when the report states none. The
+    /// registry's kind decides: a country without a long-term rate (the core's `longTermDays`
+    /// is then its never sentinel, `i64::MAX`), one that counts to the anniversary of the
+    /// acquisition (sent as 365), or the book's own day count.
+    pub fn holding_rule(&self) -> Option<(String, String)> {
+        use crate::reports::books::model::{self as registry, LongTerm};
+        let kind = registry::country(&self.jurisdiction).map(|c| c.long_term);
+        let days = self.long_term_days;
+        match kind {
+            Some(LongTerm::Never) => {
+                Some((t("reports:rules.longTerm"), t("reports:rules.noLongTerm")))
+            }
+            Some(LongTerm::MoreThanOneYear) => Some((
+                t("reports:rules.longTerm"),
+                t("reports:rules.moreThanOneYear"),
+            )),
+            _ => match days? {
+                // Past any holding period a book can choose: the never sentinel.
+                d if d >= LONG_TERM_NEVER_FROM => {
+                    Some((t("reports:rules.longTerm"), t("reports:rules.noLongTerm")))
+                }
+                d => Some((
+                    t("reports:rules.longTermAfter"),
+                    tc("reports:rules.days", d.max(0.0) as usize, &[]),
+                )),
+            },
+        }
+    }
+
     fn bucket(&self, key: &str) -> Option<&Bucket> {
         self.breakdown.iter().find(|b| b.key == key)
     }
@@ -257,10 +297,18 @@ impl Report {
             .collect()
     }
 
+    /// The book's own tax-year start when it isn't 1 January.
+    fn offset_start(&self) -> Option<(u32, u32)> {
+        self.tax_year
+            .as_ref()
+            .map(|(start, _)| *start)
+            .filter(|start| *start != (1, 1))
+    }
+
     /// A year's name in the picker: `2025`, or `2025-26` for a book whose tax year doesn't
     /// start on 1 January (named by its first day's year).
     pub fn year_label(&self, y: i32) -> String {
-        match &self.tax_year {
+        match self.offset_start() {
             Some(_) => format!("{y}-{:02}", (y + 1).rem_euclid(100)),
             None => y.to_string(),
         }
@@ -269,18 +317,12 @@ impl Report {
     /// The trigger's period: `1 Jan – 31 Dec 2025`, or the book's own year
     /// (`1 Jul 2025 – 30 Jun 2026`).
     pub fn period_of(&self, y: i32) -> String {
-        let Some(((m, d), _)) = &self.tax_year else {
+        let Some((m, d)) = self.offset_start() else {
             return period(y);
         };
-        let first = crate::format::Day { y, m: *m, d: *d };
+        let first = crate::format::Day { y, m, d };
         let last = crate::format::Day::from_epoch_days(
-            crate::format::Day {
-                y: y + 1,
-                m: *m,
-                d: *d,
-            }
-            .epoch_days()
-                - 1,
+            crate::format::Day { y: y + 1, m, d }.epoch_days() - 1,
         );
         tr(
             "reports:date.range",
@@ -291,9 +333,11 @@ impl Report {
         )
     }
 
-    /// The rules row's tax year: the registry's for the country, the book's own when it has one.
+    /// The rules row's tax year: the book's own (start and zone) when the core sends it, else
+    /// the registry's for the country.
     pub fn tax_year_rule(&self) -> String {
         match &self.tax_year {
+            Some(((1, 1), zone)) => tr("reports:taxYear.calendar", &[("zone", zone)]),
             Some(((m, d), zone)) => tr(
                 "reports:taxYear.starts",
                 &[("start", &day_month(*m, *d)), ("zone", zone)],
@@ -334,6 +378,10 @@ fn field_copy(code: &str) -> Option<&'static (&'static str, &'static str, Option
 fn field_label(code: &str) -> String {
     t(&format!("reports:field.{code}"))
 }
+
+/// `longTermDays` at or above this is no day count but the core's `LongTerm::Never`
+/// sentinel (`i64::MAX`): a century of holding.
+const LONG_TERM_NEVER_FROM: f64 = 36_525.0;
 
 /// First tax year with the crypto Kennzahlen; the core decides, this names it.
 pub const E1KV_FIRST_TAX_YEAR: i32 = 2022;
@@ -398,23 +446,17 @@ pub fn period(year: i32) -> String {
     )
 }
 
-/// (timezone, tax-year start (month, day)) from the tax country registry.
+/// (timezone, tax-year start (month, day)) from the tax country registry
+/// (`reports::books::model`'s copy of `crates/tax-countries` `COUNTRIES`).
 fn country_zone(code: &str) -> Option<(&'static str, (u32, u32))> {
-    Some(match code.trim().to_lowercase().as_str() {
-        "generic" => ("UTC", (1, 1)),
-        "at" => ("Europe/Vienna", (1, 1)),
-        "us" => ("UTC", (1, 1)),
-        "de" => ("Europe/Berlin", (1, 1)),
-        "ch" => ("Europe/Zurich", (1, 1)),
-        "ie" => ("Europe/Dublin", (1, 1)),
-        "gb" => ("Europe/London", (4, 6)),
-        "es" => ("Europe/Madrid", (1, 1)),
-        "jp" => ("Asia/Tokyo", (1, 1)),
-        _ => return None,
-    })
+    let c = crate::reports::books::model::country(code)?;
+    let start = c.tax_year_start;
+    let m = start.get(0..2)?.parse().ok()?;
+    let d = start.get(3..5)?.parse().ok()?;
+    Some((c.timezone, (m, d)))
 }
 
-/// `describeTaxYear`.
+/// `describeTaxYear`: a book without its own `taxYear` keeps its country's calendar year.
 pub fn describe_tax_year(jurisdiction: &str) -> String {
     let (zone, (m, d)) = country_zone(jurisdiction).unwrap_or(("UTC", (1, 1)));
     if m == 1 && d == 1 {
@@ -1013,6 +1055,53 @@ mod tests {
         assert_eq!(year_from_route("/reports?year=2022"), Some(2022));
         assert_eq!(year_from_route("/reports"), None);
         assert_eq!(decode(&encode("{\"a\":1}")), "{\"a\":1}");
+    }
+
+    /// A calendar-year book in a zone it chose names that zone, not the country's or UTC.
+    #[test]
+    fn a_calendar_tax_year_keeps_the_books_zone() {
+        let r = Report::parse(&json!({
+            "jurisdictionCode": "GENERIC", "year": 2025,
+            "taxYear": {"taxYearStart": "01-01", "timezone": "Pacific/Auckland", "yearLabel": "2025"}
+        }));
+        assert!(
+            r.tax_year_rule().contains("Pacific/Auckland"),
+            "{}",
+            r.tax_year_rule()
+        );
+        assert_eq!(
+            (r.year_label(2025), r.period_of(2025)),
+            ("2025".into(), "1 Jan – 31 Dec 2025".into())
+        );
+    }
+
+    /// The rules name the book's country and its real holding rule: no day count for a country
+    /// without a long-term rate (the core's `i64::MAX` sentinel), the anniversary rule for one
+    /// that counts more than a year, and the book's own days for a generic book.
+    #[test]
+    fn the_rules_state_the_countrys_holding_rule() {
+        let of = |code: &str, days: Value| {
+            Report::parse(&json!({"jurisdictionCode": code, "year": 2025, "longTermDays": days}))
+        };
+        let gb = of("GB", json!(i64::MAX));
+        assert_eq!(gb.region_name(), "United Kingdom");
+        assert_eq!(
+            gb.holding_rule(),
+            Some(("Long-term".into(), "No long-term rate".into()))
+        );
+        let us = of("US", json!(365));
+        assert_eq!(us.region_name(), "United States");
+        assert_eq!(
+            us.holding_rule().map(|(_, v)| v),
+            Some("Held more than one year, past the anniversary of acquisition".into())
+        );
+        let generic = of("GENERIC", json!(400));
+        assert_eq!(generic.region_name(), "Generic");
+        assert_eq!(
+            generic.holding_rule(),
+            Some(("Long-term after".into(), "400 days".into()))
+        );
+        assert_eq!(of("GENERIC", Value::Null).holding_rule(), None);
     }
 
     /// The page's own copy follows the UI language: Austrian months, decimal comma, plurals.

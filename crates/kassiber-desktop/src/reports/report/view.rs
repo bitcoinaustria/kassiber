@@ -10,7 +10,7 @@ use super::widgets::{arrow_link, card, info_note, select_menu, select_trigger, t
 use super::{Popup, files};
 use crate::app::{App, Load};
 use crate::format;
-use crate::i18n::{t, tc, tr};
+use crate::i18n::{t, tr};
 use crate::icons as I;
 use crate::reports::ledger::common::{self as lc, Col, ColW, avail, column_widths, tw};
 use crate::theme::Tk;
@@ -899,15 +899,10 @@ fn rules(tk: &Tk, r: &Report, year: i32) -> El {
         ]
     } else {
         let mut v = vec![
-            (t("reports:rules.region"), t("reports:rules.generic")),
+            (t("reports:rules.region"), r.region_name()),
             (t("reports:rules.method"), model::method_label(&r.method)),
         ];
-        if let Some(days) = r.long_term_days {
-            v.push((
-                t("reports:rules.longTermAfter"),
-                tc("reports:rules.days", days.max(0.0) as usize, &[]),
-            ));
-        }
+        v.extend(r.holding_rule());
         v.push((t("reports:rules.tax"), t("reports:rules.noRate")));
         v.push((t("reports:rules.taxYear"), r.tax_year_rule()));
         v
