@@ -1341,7 +1341,12 @@
         "incomeUp": "{{year}}: {{amount}} mehr Einkünfte.",
         "incomeDown": "{{year}}: {{amount}} weniger Einkünfte.",
         "taxUp": "{{year}}: etwa {{amount}} mehr Steuer.",
-        "taxDown": "{{year}}: etwa {{amount}} weniger Steuer."
+        "taxDown": "{{year}}: etwa {{amount}} weniger Steuer.",
+        "kennzahlUp": "{{year}}: KZ {{code}} steigt um {{amount}}.",
+        "kennzahlDown": "{{year}}: KZ {{code}} sinkt um {{amount}}.",
+        "taxWithheld": "{{year}}: Die Steuerschätzung ist zurückgehalten, bis die Berichte bereit sind; ihre Änderung ist daher nicht bekannt.",
+        "taxUnavailable": "{{year}}: keine Steuerschätzung zum Vergleich.",
+        "yearChanged": "{{year}}: Die Steuerzahlen ändern sich."
       }
     },
     "unlink": {
