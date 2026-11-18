@@ -178,15 +178,14 @@ fn format_date(iso: Option<&str>) -> String {
     }
 }
 
-/// Badge (`rounded-full px-2 py-0.5 text-xs font-medium`), filled.
-fn badge(tk: &Tk, label: String, fill: Color, ink: Color) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.75))
-        .fill(fill)
-        .center_y()
-        .child(text(label).font(tk.txs(500.0)).color(ink))
+/// A status label: destructive ink on a destructive fill, else muted (`crate::ui::tag`).
+fn badge(tk: &Tk, label: String, fill: Color, _ink: Color) -> El {
+    let ink = if fill == tk.muted {
+        tk.muted_fg
+    } else {
+        tk.destructive
+    };
+    crate::ui::tag(tk, ink, None, label)
 }
 
 pub fn view(app: &App, tk: &Tk) -> Option<El> {

@@ -379,29 +379,19 @@ fn panel(app: &App, tk: &Tk) -> El {
                         .color(tk.muted_fg),
                 )
                 .child(
-                    crate::ui::outline_surface(
+                    crate::ui::button::button(
                         tk,
-                        row()
-                            .key("sh-add-connection")
-                            .h(tk.r(2.0))
-                            .px(tk.r(0.625))
-                            .gap(tk.r(0.375))
-                            .center_y()
-                            .radius(tk.r(0.375))
-                            .role("button")
-                            .label(t("chrome:network.addConnection"))
-                            .focusable(true)
-                            .on_press(|s: &mut App| {
-                                s.shell.popup = None;
-                                s.shell.settings_open = true;
-                            }),
+                        "sh-add-connection",
+                        crate::ui::button::Variant::Outline,
+                        crate::ui::button::Size::Sm,
+                        Some(&I::PLUS),
+                        &t("chrome:network.addConnection"),
+                        true,
                     )
-                    .child(ic(&I::PLUS, tk.r(0.875), tk.fg))
-                    .child(
-                        text(t("chrome:network.addConnection"))
-                            .font(tk.tsm(500.0))
-                            .color(tk.fg),
-                    ),
+                    .on_press(|s: &mut App| {
+                        s.shell.popup = None;
+                        s.shell.settings_open = true;
+                    }),
                 ),
         );
     } else {

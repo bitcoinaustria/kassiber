@@ -373,27 +373,15 @@ fn model_s(v: &Value, k: &str) -> String {
 
 /// `Button variant="destructive" size="sm"` (`h-8`).
 fn destructive_btn(tk: &Tk, key: String, label: &str) -> El {
-    let fill = if tk.dark {
-        tk.destructive.alpha(0.6)
-    } else {
-        tk.destructive
-    };
-    row()
-        .key(key)
-        .h(tk.r(2.0))
-        .px(tk.r(0.75))
-        .center()
-        .radius(tk.r(0.375))
-        .fill(fill)
-        .hover(fill.alpha(0.9))
-        .role("button")
-        .label(label.to_owned())
-        .focusable(true)
-        .child(
-            text(label.to_owned())
-                .font(tk.tsm(500.0))
-                .color(Color::WHITE),
-        )
+    crate::ui::button::button(
+        tk,
+        key,
+        crate::ui::button::Variant::Destructive,
+        crate::ui::button::Size::Sm,
+        None,
+        label,
+        true,
+    )
 }
 
 // ---- The create dialog -------------------------------------------------------------------------

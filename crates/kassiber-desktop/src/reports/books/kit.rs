@@ -298,48 +298,14 @@ pub fn note(tk: &Tk, s: &str) -> El {
         .w_full()
 }
 
-/// `TaxCountryPreviewBadge` (`Badge variant="outline" ml-1.5`).
+/// `TaxCountryPreviewBadge`: a muted label after the country.
 pub fn preview_badge(tk: &Tk) -> El {
-    badge_outline(
-        tk,
-        &t("common:taxCountry.previewBadge"),
-        None,
-        tk.fg,
-        tk.border,
-    )
-    .ml(tk.r(0.375))
+    crate::ui::tag(tk, tk.muted_fg, None, t("common:taxCountry.previewBadge")).ml(tk.r(0.375))
 }
 
-/// `Badge variant="secondary"`: `rounded-full px-2 py-0.5 text-xs font-medium bg-secondary`.
+/// A neutral label (`crate::ui::tag`).
 pub fn badge_secondary(tk: &Tk, label: &str, glyph: Option<&'static Icon>) -> El {
-    badge_base(tk, label, glyph, tk.fg)
-        .fill(tk.muted)
-        .border(1.0, Color::TRANSPARENT)
-}
-
-/// `Badge variant="outline"` in `ink` with a `border` colour.
-pub fn badge_outline(
-    tk: &Tk,
-    label: &str,
-    glyph: Option<&'static Icon>,
-    ink: Color,
-    border: Color,
-) -> El {
-    badge_base(tk, label, glyph, ink).border(1.0, border)
-}
-
-fn badge_base(tk: &Tk, label: &str, glyph: Option<&'static Icon>, ink: Color) -> El {
-    let mut b = row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .gap(tk.r(0.25))
-        .center()
-        .radius(999.0)
-        .border_layout();
-    if let Some(g) = glyph {
-        b = b.child(ic(g, tk.r(0.75), ink));
-    }
-    b.child(text(label.to_owned()).font(tk.txs(500.0)).color(ink))
+    crate::ui::tag(tk, tk.muted_fg, glyph, label)
 }
 
 /// Amber ink (`text-amber-700 dark:text-amber-300`).

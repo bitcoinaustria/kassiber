@@ -21,8 +21,6 @@ use crate::ui::{ic, popup};
 pub type Action = Rc<dyn Fn(&mut App)>;
 
 pub enum Entry {
-    Label(String),
-    Sep,
     /// `DropdownMenuCheckboxItem`.
     Check {
         key: String,
@@ -56,11 +54,8 @@ fn row_h(tk: &Tk) -> f32 {
     tk.r(0.375) * 2.0 + tk.r(1.25)
 }
 
-fn entry_h(tk: &Tk, e: &Entry) -> f32 {
-    match e {
-        Entry::Sep => 1.0 + tk.r(0.25) * 2.0,
-        _ => row_h(tk),
-    }
+fn entry_h(tk: &Tk, _e: &Entry) -> f32 {
+    row_h(tk)
 }
 
 /// `kb-glass-popover rounded-md border bg-popover p-1`, with the glass popover's drop shadow.
@@ -117,32 +112,11 @@ fn render(
     anchor: &str,
     open_sub: Option<&'static str>,
     entries: Vec<Entry>,
-    width: f32,
 ) -> Option<El> {
-    let inner = width - 2.0 * (tk.r(0.25) + 1.0);
     let mut sub_el: Option<El> = None;
     for e in entries {
         let h = entry_h(tk, &e);
         match e {
-            Entry::Label(l) => {
-                p.add(
-                    row()
-                        .w_full()
-                        .h(h)
-                        .px(tk.r(0.5))
-                        .center_y()
-                        .child(text(l).font(tk.tsm(500.0)).color(tk.fg)),
-                );
-            }
-            Entry::Sep => {
-                p.add(
-                    el().h(1.0)
-                        .mx(-tk.r(0.25))
-                        .my(tk.r(0.25))
-                        .w(inner + tk.r(0.5))
-                        .fill(tk.border),
-                );
-            }
             Entry::Check {
                 key,
                 label,
@@ -263,7 +237,7 @@ fn render(
                     if let Some(mh) = max_h {
                         sp = sp.max_h(mh - 2.0 * edge);
                     }
-                    let _ = render(tk, &mut sp, anchor, None, entries, sw);
+                    let _ = render(tk, &mut sp, anchor, None, entries);
                     let mut out = Vec::new();
                     // The surface styles its own element: keep the list (its `menu` role) inside.
                     sp.mount_sub(
@@ -305,7 +279,7 @@ pub fn mount(
     let entries = number(entries);
     let inner = width - 2.0 * (tk.r(0.25) + 1.0);
     let mut p = popup::Popup::menu(anchor, close_all).list_key(format!("{key}-list"));
-    let sub = render(tk, &mut p, anchor, open_sub, entries, width);
+    let sub = render(tk, &mut p, anchor, open_sub, entries);
     let wrap = move |l: El| {
         let mut s = surface(tk, col().w(inner).min_h(0.0).child(l))
             .w(width)

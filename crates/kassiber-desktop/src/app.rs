@@ -206,6 +206,8 @@ pub struct App {
     pub next_toast: u64,
     /// App clock (seconds) as of the last poll.
     pub clock: f64,
+    /// When the artwork variant on screen next changes (`crate::art::poll`).
+    pub art_due: f64,
     /// Whether `cx.system_dark()` said dark at the last view (for ThemeMode::System).
     pub system_dark: bool,
     pub locked: bool,
@@ -493,6 +495,7 @@ impl App {
             toasts: vec![],
             next_toast: 0,
             clock: 0.0,
+            art_due: 0.0,
             system_dark: true,
             locked: false,
             timings: VecDeque::new(),

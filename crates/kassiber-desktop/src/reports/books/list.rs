@@ -194,16 +194,8 @@ pub fn view(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
         .gap(tk.r(0.75))
         .center_y()
         .justify_between()
-        .child(
-            text(t("onboarding:books.intro"))
-                .font(tk.tsm(400.0))
-                .color(tk.muted_fg)
-                .wrap()
-                .max_w(tk.r(48.0))
-                .grow(1.0)
-                .min_w(0.0),
-        )
-        .child(actions);
+        .justify_end()
+        .child(actions.help(t("onboarding:books.intro")));
     let mut out = page(tk).child(header);
     if let Some(e) = &b.switch_error {
         out = out.child(
@@ -247,19 +239,6 @@ pub fn view(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
 fn workspace_section(app: &App, tk: &Tk, active: &str, w: &Workspace, layer: &mut Vec<El>) -> El {
     let menu_key = format!("books-ws-actions-{}", w.id);
     let ws_id = w.id.clone();
-    let overview = {
-        let id = w.id.clone();
-        button(
-            tk,
-            format!("birds-eye-{}", w.id),
-            Variant::Ghost,
-            Size::Sm,
-            Some(&I::EYE),
-            &t("onboarding:books.workspace.overview"),
-            true,
-        )
-        .on_press(move |a: &mut App| a.navigate(&format!("/books/{id}/birds-eye")))
-    };
     let actions_label = tr("onboarding:books.workspace.actions", &[("name", &w.name)]);
     let more = button_surface(
         tk,
@@ -288,8 +267,19 @@ fn workspace_section(app: &App, tk: &Tk, active: &str, w: &Workspace, layer: &mu
         },
     );
     if app.reports.books.popup.as_deref() == Some(&format!("ws:{}", w.id)) {
-        let (a, bw) = (w.clone(), w.clone());
+        let (a, bw, oid) = (w.clone(), w.clone(), w.id.clone());
         let items = vec![
+            (
+                kit::menu_item(
+                    tk,
+                    "books-ws-overview",
+                    &I::EYE,
+                    &t("onboarding:books.workspace.overview"),
+                )
+                .on_press(move |s: &mut App| s.navigate(&format!("/books/{oid}/birds-eye"))),
+                "books-ws-overview".to_owned(),
+                t("onboarding:books.workspace.overview"),
+            ),
             (
                 kit::menu_item(
                     tk,
@@ -338,14 +328,27 @@ fn workspace_section(app: &App, tk: &Tk, active: &str, w: &Workspace, layer: &mu
                 .a11y_hidden()
                 .child(ic(&I::LANDMARK, tk.r(1.0), tk.muted_fg)),
         )
-        .child(
+        .child({
+            // The set's name opens its overview.
+            let id = w.id.clone();
             col()
+                .key(format!("birds-eye-{}", w.id))
                 .grow(1.0)
                 .min_w(0.0)
+                .role("link")
+                .label(format!(
+                    "{} · {}",
+                    w.name,
+                    t("onboarding:books.workspace.overview")
+                ))
+                .focusable(true)
+                .hover_group()
+                .on_press(move |a: &mut App| a.navigate(&format!("/books/{id}/birds-eye")))
                 .child(
                     text(w.name.clone())
                         .font(tk.tsm(600.0))
                         .color(tk.fg)
+                        .group_opacity(1.0, 0.75)
                         .truncate()
                         .role("heading"),
                 )
@@ -354,9 +357,8 @@ fn workspace_section(app: &App, tk: &Tk, active: &str, w: &Workspace, layer: &mu
                         .font(tk.txs(400.0))
                         .color(tk.muted_fg)
                         .truncate(),
-                ),
-        )
-        .child(overview)
+                )
+        })
         .child(more);
     let mut card = surface(tk)
         .w_full()

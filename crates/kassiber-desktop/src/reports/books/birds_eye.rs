@@ -1,6 +1,7 @@
-//! The book set rollup (routes/BirdsEye.tsx): `ui.workspace.overview.snapshot` as four metric
-//! cards, the refresh panel, the read-only note, the shared BTC activity chart, the per-book
-//! cards with their drill-down buttons, the per-book fiat rows and the recent activity list.
+//! The book set rollup (`ui.workspace.overview.snapshot`): the set's name and totals, what needs
+//! attention (only then), one list of its books (a row opens its book; its other pages are in
+//! the row's menu; fiat basis and YTD on hover), the refresh panel while a run lasts, and the
+//! shared BTC activity chart and recent activity once there is any.
 //!
 //! "Refresh book set" (`ui.workspace.freshness.run`) syncs every book from its sources: network
 //! egress, sent only from that button. Opening a book or a transaction switches the active book
@@ -9,7 +10,7 @@
 use rune::{Color, Cx, El, Icon, TextStyle, col, el, row, text};
 use serde_json::{Value, json};
 
-use super::kit::{amber, badge_outline, badge_secondary};
+use super::kit::amber;
 use super::list::{page, skeleton};
 use crate::app::{App, Currency, Reply, ToastTone};
 use crate::format;
@@ -17,7 +18,7 @@ use crate::i18n::{t, tc, tr};
 use crate::icons as I;
 use crate::model::{self, Flow, RecentRow, Snapshot, TxStatus};
 use crate::theme::Tk;
-use crate::txdetail::widgets::{Size, Variant, button, button_surface, button_with, spinner};
+use crate::txdetail::widgets::{Variant, spinner};
 use crate::ui::{hairline, ic, sensitive, surface};
 
 /// One refresh progress line.
@@ -457,134 +458,36 @@ fn badge_key(c: &(String, bool, bool)) -> Option<&'static str> {
     })
 }
 
-fn amber_badge(tk: &Tk, label: &str, glyph: Option<&'static Icon>) -> El {
-    badge_outline(
-        tk,
-        label,
-        glyph,
-        amber(tk),
-        rune::color::hex("#f59e0b")
-            .unwrap_or(Color::WHITE)
-            .alpha(0.4),
-    )
-}
-
-/// `MetricCard`: `py-4 px-4 space-y-2`, icon + `text-xs` label, `text-xl` value, detail.
-fn metric(tk: &Tk, key: &str, glyph: &'static Icon, label: &str, value: El, detail: El) -> El {
-    surface(tk)
-        .key(key.to_owned())
-        .grow(1.0)
-        .min_w(0.0)
-        .px(tk.r(1.0))
-        .py(tk.r(1.0))
-        .gap(tk.r(0.5))
-        .child(
-            row()
-                .gap(tk.r(0.5))
-                .center_y()
-                .child(ic(glyph, tk.r(1.0), tk.muted_fg))
-                .child(
-                    text(label.to_owned())
-                        .font(tk.txs(500.0))
-                        .color(tk.muted_fg),
-                ),
-        )
-        .child(value)
-        .child(detail)
-}
-
-fn metric_value(tk: &Tk, s: String, hidden: bool) -> El {
-    // `text-xl font-semibold tracking-tight tabular-nums`; "Hidden" is a word, not a blur.
-    let _ = hidden;
-    text(s)
-        .font(
-            tk.txl(600.0)
-                .features("'tnum' 1")
-                .tracking(-tk.r(1.25) * 0.025),
-        )
-        .color(tk.fg)
-}
-
-fn detail(tk: &Tk, s: String, warn: bool) -> El {
-    text(s)
-        .font(tk.txs(400.0))
-        .color(if warn { amber(tk) } else { tk.muted_fg })
-        .wrap()
-        .w_full()
-}
-
-/// A shadcn `Card` with a `border-b` header (`text-base` title) and a `grid gap-3` body.
-fn card(tk: &Tk, key: &str, title: &str, body: El) -> El {
-    surface(tk)
-        .key(key.to_owned())
-        .w_full()
-        .min_w(0.0)
-        .py(tk.card_pad())
-        .gap(tk.r(1.0))
-        .child(
-            row()
-                .w_full()
-                .px(tk.card_pad())
-                .pb(tk.card_pad())
-                .border_sides([0.0, 0.0, 1.0, 0.0], tk.border)
-                .child(
-                    text(title.to_owned())
-                        .font(tk.tbase(600.0).lh(tk.r(1.0)))
-                        .color(tk.fg)
-                        .role("heading"),
-                ),
-        )
-        .child(body.px(tk.card_pad()).pt(tk.r(1.0)))
-}
-
-fn dashed(tk: &Tk, s: String) -> El {
-    row()
-        .w_full()
-        .padding(tk.r(1.0))
-        .radius(tk.r(0.5))
-        .border(1.0, tk.border)
-        .border_dash(4.0, 3.0)
-        .child(
-            text(s)
-                .font(tk.tsm(400.0))
-                .color(tk.muted_fg)
-                .wrap()
-                .w_full(),
-        )
+/// A quiet attention line: amber ink and its icon, no box.
+fn attention(tk: &Tk, label: String) -> El {
+    crate::ui::tag(tk, amber(tk), Some(&I::TRIANGLE_ALERT), label)
 }
 
 pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, ws: &str, layer: &mut Vec<El>) -> El {
     let s = &app.reports.books.be;
     if s.ws != ws || (s.loading && s.data.is_none()) {
-        return skeleton(app, tk, 4, tk.r(11.0));
+        return skeleton(app, tk, 0, tk.r(11.0));
     }
     if let Some(e) = &s.error {
         return page(tk).child(
-            surface(tk)
+            row()
                 .w_full()
-                .px(tk.r(1.25))
-                .py(tk.r(1.0))
-                .fill(tk.destructive.alpha(0.1))
-                .border(1.0, tk.destructive.alpha(0.3))
+                .gap(tk.r(0.5))
                 .role("alert")
+                .child(ic(&I::TRIANGLE_ALERT, tk.r(1.0), tk.destructive))
                 .child(
                     text(e.clone())
                         .font(tk.tsm(400.0))
                         .color(tk.destructive)
                         .wrap()
-                        .w_full(),
+                        .grow(1.0)
+                        .min_w(0.0),
                 ),
         );
     }
     let empty = json!({});
     let d = s.data.as_ref().unwrap_or(&empty);
     let hide = app.prefs.hide_sensitive();
-    let hidden = t("common:state.hidden");
-    let win = if app.shell.window_w > 0.0 {
-        app.shell.window_w
-    } else {
-        1440.0
-    };
     let books: Vec<Value> = d["books"].as_array().cloned().unwrap_or_default();
     let fiat = &d["fiat"];
     let mixed = fiat["mixed"].as_bool().unwrap_or(false);
@@ -607,299 +510,199 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, ws: &str, layer: &mut Vec<El>)
         .as_u64()
         .map(|v| v as usize)
         .unwrap_or(books.len().saturating_sub(ready));
+    let quarantines = d["status"]["quarantines"].as_u64().unwrap_or(0) as usize;
     let title = d["workspace"]["label"]
         .as_str()
         .map(str::to_owned)
         .unwrap_or_else(|| t("overview:birdsEye.fallbackTitle"));
 
-    // Header: the set's name and badges; Books and Refresh book set.
-    let mut name = row()
+    // Header: the set's name (the read-only note on hover) and its totals; then only what needs
+    // attention; the set-wide refresh as a quiet icon on the right.
+    let fc = fiat["fiatCurrency"].as_str().unwrap_or("EUR").to_owned();
+    let btc = format::btc(fiat["btcBalance"].as_f64().unwrap_or(0.0), 8, false);
+    let fiat_value = if mixed {
+        None
+    } else if roll.2 {
+        Some("—".to_owned())
+    } else {
+        Some(format::fiat(
+            fiat["eurBalance"].as_f64().unwrap_or(0.0),
+            &fc,
+        ))
+    };
+    let totals_style = tk.tsm(400.0).features("'tnum' 1");
+    let dot = || {
+        text("·")
+            .font(tk.tsm(400.0))
+            .color(tk.muted_fg)
+            .a11y_hidden()
+    };
+    let mut totals = row()
         .min_w(0.0)
         .gap(tk.r(0.5))
         .center_y()
+        .child(sensitive(btc, totals_style, tk.fg, hide).key("be-total-btc"));
+    match fiat_value {
+        Some(v) => {
+            totals = totals
+                .child(dot())
+                .child(sensitive(v, totals_style, tk.fg, hide).key("be-total-fiat"));
+        }
+        None => {
+            totals = totals.child(dot()).child(crate::ui::tag(
+                tk,
+                tk.muted_fg,
+                None,
+                t("overview:birdsEye.mixedFiatBadge"),
+            ));
+        }
+    }
+    totals = totals.child(dot()).child(
+        text(tc("overview:birdsEye.metric.books", books.len(), &[]))
+            .font(tk.tsm(400.0))
+            .color(tk.muted_fg),
+    );
+    let name = col()
+        .min_w(0.0)
+        .grow(1.0)
+        .gap(tk.r(0.25))
         .child(
             text(title)
                 .font(tk.tlg(600.0).lh(tk.r(1.125) * 1.25))
                 .color(tk.fg)
-                .role("heading"),
+                .role("heading")
+                .help(t("overview:birdsEye.readonlyNote")),
         )
-        .child(badge_secondary(tk, &t("overview:birdsEye.badge"), None));
-    if mixed {
-        name = name.child(badge_outline(
-            tk,
-            &t("overview:birdsEye.mixedFiatBadge"),
-            None,
-            tk.fg,
-            tk.border,
-        ));
-    }
-    let refreshing = s.refreshing;
-    let refresh = refresh_button(tk, refreshing);
+        .child(totals);
     let header = row()
         .w_full()
         .gap(tk.r(0.75))
-        .center_y()
+        .items_start()
         .justify_between()
         .child(name)
-        .child(
-            row()
-                .gap(tk.r(0.75))
-                .center_y()
-                .child(
-                    button(
-                        tk,
-                        "be-books",
-                        Variant::Outline,
-                        Size::Sm,
-                        None,
-                        &t("overview:birdsEye.booksLink"),
-                        true,
-                    )
-                    .px(tk.r(1.0))
-                    .role("link")
-                    .on_press(|a: &mut App| a.navigate("/books")),
-                )
-                .child(refresh),
-        );
-
-    // Metrics.
-    let fc = fiat["fiatCurrency"].as_str().unwrap_or("EUR").to_owned();
-    let btc = if hide {
-        hidden.clone()
-    } else {
-        format::btc(fiat["btcBalance"].as_f64().unwrap_or(0.0), 8, false)
-    };
-    let fiat_value = if hide {
-        hidden.clone()
-    } else if mixed {
-        t("overview:birdsEye.metric.mixed")
-    } else if roll.2 {
-        "—".into()
-    } else {
-        format::fiat(fiat["eurBalance"].as_f64().unwrap_or(0.0), &fc)
-    };
-    let fiat_detail = if basis_incomplete > 0 {
-        detail(
+        .child(refresh_button(tk, s.refreshing));
+    let mut signals: Vec<El> = Vec::new();
+    if blocked > 0 {
+        signals.push(attention(
+            tk,
+            tc("overview:birdsEye.metric.booksNeedAttention", blocked, &[]),
+        ));
+    }
+    if basis_incomplete > 0 {
+        signals.push(attention(
             tk,
             tc(
                 "overview:birdsEye.metric.basisIncompleteBooks",
                 basis_incomplete,
                 &[],
             ),
-            true,
-        )
+        ));
     } else if roll.2 && !mixed {
-        detail(tk, t("overview:completeness.valueUnavailable"), true)
-    } else if mixed {
-        detail(
+        signals.push(attention(tk, t("overview:completeness.valueUnavailable")));
+    }
+    if quarantines > 0 {
+        signals.push(attention(
             tk,
-            fiat["label"]
-                .as_str()
-                .map(str::to_owned)
-                .unwrap_or_else(|| t("overview:birdsEye.metric.perBookFiatOnly")),
-            false,
-        )
-    } else {
-        detail(
+            tc("overview:birdsEye.bookRow.quarantines", quarantines, &[]),
+        ));
+    }
+    if d["status"]["needsJournals"].as_bool().unwrap_or(false) {
+        signals.push(attention(
             tk,
-            fiat["fiatCurrency"]
-                .as_str()
-                .map(str::to_owned)
-                .unwrap_or_else(|| t("overview:birdsEye.metric.noFiatCurrency")),
-            false,
-        )
-    };
-    let cards = vec![
-        metric(
-            tk,
-            "be-m-btc",
-            &I::GAUGE,
-            &t("overview:birdsEye.metric.btcTotal"),
-            metric_value(tk, btc, hide),
-            detail(
-                tk,
-                tc("overview:birdsEye.metric.books", books.len(), &[]),
-                false,
-            ),
-        ),
-        metric(
-            tk,
-            "be-m-fiat",
-            &I::CHART_COLUMN,
-            &t(if mixed {
-                "overview:birdsEye.metric.fiatRollup"
-            } else {
-                "overview:birdsEye.metric.fiatTotal"
-            }),
-            metric_value(tk, fiat_value, hide),
-            fiat_detail,
-        ),
-        metric(
-            tk,
-            "be-m-ready",
-            &I::CIRCLE_CHECK,
-            &t("overview:birdsEye.metric.readiness"),
-            metric_value(tk, format!("{ready}/{}", books.len()), false),
-            detail(
-                tk,
-                if blocked > 0 {
-                    tc("overview:birdsEye.metric.booksNeedAttention", blocked, &[])
-                } else {
-                    t("overview:birdsEye.metric.allBooksReady")
-                },
-                false,
-            ),
-        ),
-        metric(
-            tk,
-            "be-m-quarantine",
-            &I::SHIELD_ALERT,
-            &t("overview:birdsEye.metric.quarantine"),
-            metric_value(
-                tk,
-                d["status"]["quarantines"].as_u64().unwrap_or(0).to_string(),
-                false,
-            ),
-            detail(
-                tk,
-                t(if d["status"]["needsJournals"].as_bool().unwrap_or(false) {
-                    "overview:birdsEye.metric.journalsNeedProcessing"
-                } else {
-                    "overview:birdsEye.metric.noStaleJournals"
-                }),
-                false,
-            ),
-        ),
-    ];
-    // `grid gap-3 md:grid-cols-2 xl:grid-cols-4`.
-    let per_row = if win >= 1280.0 {
-        4
-    } else if win >= 768.0 {
-        2
-    } else {
-        1
-    };
-    let mut grid = col().w_full().gap(tk.card_gap());
-    let mut it = cards.into_iter().peekable();
-    while it.peek().is_some() {
-        let mut r = row().w_full().gap(tk.card_gap()).items_stretch();
-        for _ in 0..per_row {
-            if let Some(c) = it.next() {
-                r = r.child(c);
-            }
-        }
-        grid = grid.child(r);
+            t("overview:birdsEye.metric.journalsNeedProcessing"),
+        ));
     }
 
-    let mut out = page(tk)
-        .busy(s.loading || refreshing)
-        .child(header)
-        .child(grid);
-    if refreshing || !s.progress.is_empty() || s.summary.is_some() {
+    let mut out = page(tk).busy(s.loading || s.refreshing).child(header);
+    if !signals.is_empty() {
+        out = out.child(
+            row()
+                .key("be-signals")
+                .w_full()
+                .gap(tk.r(1.0))
+                .flex_wrap()
+                .center_y()
+                .children(signals),
+        );
+    }
+
+    // The books: one list; a row opens its book, its other pages are in the row's menu.
+    let disabled = s.switching;
+    let mut list = surface(tk)
+        .key("be-books-card")
+        .w_full()
+        .min_w(0.0)
+        .clip_rounded(tk.r(0.75))
+        .role("list")
+        .label(t("overview:birdsEye.booksCard.title"));
+    if books.is_empty() {
+        list = list.child(
+            row().w_full().padding(tk.card_pad()).child(
+                text(t("overview:birdsEye.booksCard.empty"))
+                    .font(tk.tsm(400.0))
+                    .color(tk.muted_fg),
+            ),
+        );
+    }
+    for (i, b) in books.iter().enumerate() {
+        if i > 0 {
+            list = list.child(hairline(tk.border));
+        }
+        let pid = b["profile"]["id"].as_str().unwrap_or_default();
+        let fr = fiat_books
+            .iter()
+            .find(|r| r["profileId"].as_str() == Some(pid));
+        list = list.child(book_row(app, tk, layer, b, fr, hide, disabled, mixed));
+    }
+    out = out.child(list);
+    if s.refreshing || !s.progress.is_empty() || s.summary.is_some() {
+        let win = if app.shell.window_w > 0.0 {
+            app.shell.window_w
+        } else {
+            1440.0
+        };
         out = out.child(refresh_panel(tk, s, win));
     }
-    // The read-only note: `rounded-lg border bg-muted/25 px-3 py-2 text-xs`.
-    out = out.child(
-        row()
-            .w_full()
-            .px(tk.r(0.75))
-            .py(tk.r(0.5))
-            .gap(tk.r(0.375))
-            .items_start()
-            .radius(tk.r(0.5))
-            .border(1.0, tk.border)
-            .fill(tk.muted.alpha(0.25))
-            .child(ic(&I::INFO, tk.r(0.875), tk.muted_fg).mt(tk.r(0.0625)))
-            .child(
-                text(t("overview:birdsEye.readonlyNote"))
-                    .font(tk.txs(400.0))
-                    .color(tk.muted_fg)
-                    .wrap()
-                    .grow(1.0)
-                    .min_w(0.0),
-            ),
-    );
-    if let Some(snap) = s.chart.as_deref() {
+    // The shared chart and the recent activity, once there is any.
+    if let Some(snap) = s.chart.as_deref()
+        && (!snap.portfolio_series.is_empty()
+            || !snap.txs.is_empty()
+            || !snap.activity_txs.is_empty())
+    {
         out = out.child(crate::chart::view(app, cx, tk, snap, layer));
     }
-
-    // Books and Fiat rows: `xl:grid-cols-[minmax(0,1fr)_360px]`.
-    let disabled = s.switching;
-    let mut book_list = col().w_full().gap(tk.r(0.75));
-    if books.is_empty() {
-        book_list = book_list.child(dashed(tk, t("overview:birdsEye.booksCard.empty")));
-    }
-    for b in &books {
-        book_list = book_list.child(book_row(tk, b, hide, disabled, win));
-    }
-    let mut fiat_list = col().w_full().gap(tk.r(0.5));
-    if fiat_books.is_empty() {
-        fiat_list = fiat_list.child(dashed(tk, t("overview:birdsEye.fiatCard.empty")));
-    }
-    for r in &fiat_books {
-        fiat_list = fiat_list.child(fiat_row(tk, r, hide));
-    }
-    let books_card = card(
-        tk,
-        "be-books-card",
-        &t("overview:birdsEye.booksCard.title"),
-        book_list,
-    );
-    let fiat_card = card(
-        tk,
-        "be-fiat-card",
-        &t("overview:birdsEye.fiatCard.title"),
-        fiat_list,
-    );
-    out = out.child(if win >= 1280.0 {
-        row()
-            .w_full()
-            .gap(tk.card_gap())
-            .items_start()
-            .child(books_card.grow(1.0))
-            .child(fiat_card.w(360.0))
-    } else {
-        col()
-            .w_full()
-            .gap(tk.card_gap())
-            .child(books_card)
-            .child(fiat_card)
-    });
-    if let Some(rs) = s.recent.as_deref() {
-        out = out.child(recent_table(app, tk, d, rs));
+    if let Some(rs) = s.recent.as_deref()
+        && let Some(table) = recent_table(app, tk, d, rs)
+    {
+        out = out.child(table);
     }
     out
 }
 
-/// The primary `h-8 gap-2` Refresh book set button; a spinner replaces its glyph while the run
-/// lasts, and it is disabled then.
+/// The set-wide refresh (`ui.workspace.freshness.run`, network egress: only from here): a quiet
+/// icon button, the spinner while the run lasts.
 fn refresh_button(tk: &Tk, running: bool) -> El {
     let label = t("overview:birdsEye.refresh");
+    let side = tk.r(2.0);
     let glyph = if running {
-        ic(&I::LOADER_CIRCLE, tk.r(1.0), tk.primary_fg).looping(rune::LoopSpec::rotation(0.9))
+        ic(&I::LOADER_CIRCLE, tk.r(1.0), tk.muted_fg).looping(rune::LoopSpec::rotation(0.9))
     } else {
-        ic(&I::REFRESH_CW, tk.r(1.0), tk.primary_fg)
+        ic(&I::REFRESH_CW, tk.r(1.0), tk.muted_fg)
     };
-    let mut b = button_surface(
+    let mut b = crate::ui::button::surface(
         tk,
-        row()
-            .key("be-refresh")
-            .h(tk.r(2.0))
-            .px(tk.r(0.75))
-            .gap(tk.r(0.5))
-            .center(),
-        Variant::Default,
+        row().key("be-refresh").size(side, side).center(),
+        Variant::Ghost,
     )
+    .radius(crate::ui::button::radius(tk, side))
     .role("button")
     .label(label.clone())
+    .help(label)
     .focusable(!running)
     .disabled(running)
     .busy(running)
-    .child(glyph)
-    .child(text(label).font(tk.tsm(500.0)).color(tk.primary_fg));
-    if running {
-        b = b.opacity(0.5);
-    } else {
+    .child(glyph);
+    if !running {
         b = b.on_press(|a: &mut App| refresh(a));
     }
     b
@@ -1041,10 +844,19 @@ fn phase_label(phase: &str) -> &str {
     }
 }
 
-/// `BookRow` (the per-book card): name and badges, counts, the hint when not ready, BTC and
-/// fiat, then one button per book page.
-fn book_row(tk: &Tk, b: &Value, hide: bool, disabled: bool, win: f32) -> El {
-    let hidden = t("common:state.hidden");
+/// One book: name, its sources and transactions, what needs attention (only then), BTC and fiat
+/// (basis and YTD on hover); pressing it opens the book, its other pages are in the "⋯" menu.
+#[allow(clippy::too_many_arguments)]
+fn book_row(
+    app: &App,
+    tk: &Tk,
+    layer: &mut Vec<El>,
+    b: &Value,
+    fr: Option<&Value>,
+    hide: bool,
+    disabled: bool,
+    mixed: bool,
+) -> El {
     let ready = b["readiness"]["ready"].as_bool().unwrap_or(false);
     let pid = b["profile"]["id"].as_str().unwrap_or_default().to_owned();
     let label = b["profile"]["label"]
@@ -1064,244 +876,197 @@ fn book_row(tk: &Tk, b: &Value, hide: bool, disabled: bool, win: f32) -> El {
             .map(|a| a.iter().filter_map(|c| c["balance"].as_f64()).sum())
             .unwrap_or(0.0)
     });
-    let mut badges = row()
+    let n = |v: &Value| v.as_u64().unwrap_or(0) as usize;
+    let mut name = row().min_w(0.0).gap(tk.r(0.75)).center_y().child(
+        text(label.clone())
+            .font(tk.tsm(500.0))
+            .color(tk.fg)
+            .truncate(),
+    );
+    if mixed {
+        name = name.child(crate::ui::tag(tk, tk.muted_fg, None, fc.clone()));
+    }
+    if let Some(k) = badge_key(&comp) {
+        name = name.child(crate::ui::tag(tk, amber(tk), None, t(k)));
+    }
+    let small = tk.txs(400.0);
+    let sep = || text("·").font(small).color(tk.muted_fg).a11y_hidden();
+    let mut meta = row()
+        .min_w(0.0)
         .gap(tk.r(0.5))
         .center_y()
-        .child(text(label.clone()).font(tk.tsm(500.0)).color(tk.fg));
-    // A badge only when the book needs attention; a ready book shows none.
-    if !ready {
-        badges = badges.child(badge_outline(
-            tk,
-            &t("overview:birdsEye.bookRow.attention"),
-            Some(&I::TRIANGLE_ALERT),
-            tk.fg,
-            tk.border,
-        ));
-    }
-    badges = badges.child(badge_outline(tk, &fc, None, tk.fg, tk.border));
-    if let Some(k) = badge_key(&comp) {
-        badges = badges.child(amber_badge(tk, &t(k), None));
-    }
-    let n = |v: &Value| v.as_u64().unwrap_or(0) as usize;
-    let counts = row()
-        .gap(tk.r(1.0))
         .child(
             text(tc(
                 "overview:birdsEye.bookRow.wallets",
                 b["connections"].as_array().map(|a| a.len()).unwrap_or(0),
                 &[],
             ))
-            .font(tk.txs(400.0))
+            .font(small)
             .color(tk.muted_fg),
         )
+        .child(sep())
         .child(
             text(tc(
                 "overview:birdsEye.bookRow.txs",
                 n(&b["status"]["transactionCount"]),
                 &[],
             ))
-            .font(tk.txs(400.0))
-            .color(tk.muted_fg),
-        )
-        .child(
-            text(tc(
-                "overview:birdsEye.bookRow.journalRows",
-                n(&b["journals"]["journal_entry_count"]),
-                &[],
-            ))
-            .font(tk.txs(400.0))
-            .color(tk.muted_fg),
-        )
-        .child(
-            text(tc(
-                "overview:birdsEye.bookRow.quarantines",
-                n(&b["journals"]["quarantine_count"]),
-                &[],
-            ))
-            .font(tk.txs(400.0))
+            .font(small)
             .color(tk.muted_fg),
         );
-    let mut left = col().min_w(0.0).gap(tk.r(0.5)).child(badges).child(counts);
+    let q = n(&b["journals"]["quarantine_count"]);
+    if q > 0 {
+        meta = meta.child(sep()).child(
+            text(tc("overview:birdsEye.bookRow.quarantines", q, &[]))
+                .font(small)
+                .color(amber(tk)),
+        );
+    }
+    let mut left = col()
+        .min_w(0.0)
+        .grow(1.0)
+        .gap(tk.r(0.25))
+        .child(name)
+        .child(meta);
     if !ready {
         let hint = b["readiness"]["hints"][0]
             .as_str()
             .or_else(|| b["journals"]["reason"].as_str())
-            .unwrap_or_default()
-            .to_owned();
-        left = left.child(text(hint).font(tk.txs(400.0)).color(amber(tk)).wrap());
+            .filter(|h| !h.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| t("overview:birdsEye.bookRow.attention"));
+        left = left.child(attention(tk, hint));
     }
-    let btc_s = if hide {
-        hidden.clone()
-    } else {
-        format::btc(btc, 8, false)
-    };
-    let fiat_s = if hide {
-        hidden
-    } else if comp.2 {
-        "—".into()
+    let fiat_s = if comp.2 {
+        "—".to_owned()
     } else {
         format::fiat(b["fiat"]["eurBalance"].as_f64().unwrap_or(0.0), &fc)
     };
-    // `grid gap-1 text-sm sm:grid-cols-2 lg:min-w-[260px]`.
-    let amounts = row()
-        .gap(tk.r(0.25))
-        .child(
-            text(btc_s)
-                .font(tk.tsm(400.0).features("'tnum' 1"))
-                .color(tk.fg)
-                .grow(1.0),
+    // The fiat row's basis and YTD (basis-derived figures "—" while the basis isn't exact).
+    let fiat_help = fr.map(|r| {
+        let c = completeness(&r["completeness"]);
+        let money = |v: f64| {
+            if hide {
+                t("common:state.hidden")
+            } else if !c.1 {
+                "—".to_owned()
+            } else {
+                format::fiat(v, &fc)
+            }
+        };
+        format!(
+            "{} · {}",
+            tr(
+                "overview:birdsEye.fiatCard.basis",
+                &[("value", &money(r["costBasis"].as_f64().unwrap_or(0.0)))],
+            ),
+            tr(
+                "overview:birdsEye.fiatCard.ytd",
+                &[("value", &money(r["realizedYTD"].as_f64().unwrap_or(0.0)))],
+            )
         )
-        .child(
-            text(fiat_s)
-                .font(tk.tsm(400.0).features("'tnum' 1"))
-                .color(tk.fg)
-                .grow(1.0),
-        );
-    let top = if win >= 1024.0 {
-        row()
-            .w_full()
-            .gap(tk.r(0.75))
-            .items_start()
-            .justify_between()
-            .child(left.grow(1.0))
-            .child(amounts.min_w(260.0))
-    } else {
-        col()
-            .w_full()
-            .gap(tk.r(0.75))
-            .child(left)
-            .child(amounts.w_full())
-    };
-    let mut buttons = row().w_full().gap(tk.r(0.5)).flex_wrap().mt(tk.r(0.75));
-    for (id, key, route, glyph) in BOOK_ROUTES {
-        let (p, l) = (pid.clone(), label.clone());
-        let mut btn = button_with(
-            tk,
-            format!("book-route-{pid}-{id}"),
-            Variant::Outline,
-            Size::Sm,
-            Some(glyph),
-            Some(tk.r(0.875)),
-            &t(key),
-            !disabled,
-        );
-        if !disabled {
-            btn = btn.on_press(move |a: &mut App| open_book_route(a, &p, &l, key, route));
-        }
-        buttons = buttons.child(btn);
+    });
+    let mut fiat_el = sensitive(fiat_s, small.features("'tnum' 1"), tk.muted_fg, hide);
+    if let Some(h) = fiat_help {
+        fiat_el = fiat_el.help(h);
     }
-    surface(tk)
-        .key(format!("be-book-{pid}"))
-        .w_full()
-        .padding(tk.r(0.75))
-        .role("group")
-        .label(label)
-        .child(top)
-        .child(buttons)
-}
-
-/// `FiatBookRow`: the book's fiat balance, basis and YTD (basis-derived figures "—" while the
-/// basis isn't exact; the value needs a market rate). Its `title` hint becomes the help text.
-fn fiat_row(tk: &Tk, r: &Value, hide: bool) -> El {
-    let comp = completeness(&r["completeness"]);
-    let fc = r["fiatCurrency"].as_str().unwrap_or("EUR").to_owned();
-    let basis_hidden = !comp.1;
-    let hint = if !comp.1 {
-        Some(t(if comp.0 == "stale" {
-            "overview:completeness.hint.stale"
-        } else {
-            "overview:completeness.hint.incomplete"
-        }))
-    } else if comp.2 {
-        Some(t("overview:completeness.hint.unavailable"))
-    } else {
-        None
-    };
-    let money = |v: f64, h: bool| {
-        if hide {
-            t("common:state.hidden")
-        } else if h {
-            "—".to_owned()
-        } else {
-            format::fiat(v, &fc)
-        }
-    };
-    let label = r["profileLabel"].as_str().unwrap_or_default().to_owned();
-    let mut name = row().gap(tk.r(0.5)).center_y().child(
-        text(label.clone())
-            .font(tk.tsm(500.0))
-            .color(tk.fg)
-            .truncate(),
-    );
-    if let Some(k) = badge_key(&comp) {
-        name = name.child(amber_badge(tk, &t(k), Some(&I::TRIANGLE_ALERT)));
-    }
-    let mut el = col()
-        .key(format!(
-            "be-fiat-{}",
-            r["profileId"].as_str().unwrap_or_default()
+    let amounts = col()
+        .items_end()
+        .gap(tk.r(0.125))
+        .child(sensitive(
+            format::btc(btc, 8, false),
+            tk.tsm(400.0).features("'tnum' 1"),
+            tk.fg,
+            hide,
         ))
-        .w_full()
-        .padding(tk.r(0.75))
-        .radius(tk.r(0.5))
-        .border(1.0, tk.border)
-        .fill(tk.muted.alpha(0.2))
-        .role("group")
-        .label(label)
-        .child(
-            row()
-                .w_full()
-                .gap(tk.r(0.75))
-                .items_start()
-                .justify_between()
-                .child(
-                    col().min_w(0.0).grow(1.0).child(name).child(
-                        text(fc.clone())
-                            .font(tk.txs(400.0))
-                            .color(tk.muted_fg)
-                            .mt(tk.r(0.25)),
-                    ),
-                )
-                .child(
-                    text(money(r["balance"].as_f64().unwrap_or(0.0), comp.2))
-                        .font(tk.tsm(500.0))
-                        .color(tk.fg),
-                ),
-        )
-        .child(
-            row()
-                .w_full()
-                .mt(tk.r(0.75))
-                .gap(tk.r(0.5))
-                .child(
-                    text(tr(
-                        "overview:birdsEye.fiatCard.basis",
-                        &[(
-                            "value",
-                            &money(r["costBasis"].as_f64().unwrap_or(0.0), basis_hidden),
-                        )],
-                    ))
-                    .font(tk.txs(400.0))
-                    .color(tk.muted_fg)
-                    .grow(1.0),
-                )
-                .child(
-                    text(tr(
-                        "overview:birdsEye.fiatCard.ytd",
-                        &[(
-                            "value",
-                            &money(r["realizedYTD"].as_f64().unwrap_or(0.0), basis_hidden),
-                        )],
-                    ))
-                    .font(tk.txs(400.0))
-                    .color(tk.muted_fg)
-                    .grow(1.0),
-                ),
-        );
-    if let Some(h) = hint {
-        el = el.help(h.clone()).description(h);
+        .child(fiat_el);
+    let (p, l) = (pid.clone(), label.clone());
+    let mut main = row()
+        .key(format!("be-book-{pid}"))
+        .grow(1.0)
+        .min_w(0.0)
+        .px(tk.card_pad())
+        .py(tk.r(0.75))
+        .gap(tk.r(1.0))
+        .center_y()
+        .role("button")
+        .label(tr(
+            "nav:openBook.body",
+            &[("book", &label), ("page", &t("nav:book.overview"))],
+        ))
+        .focusable(!disabled)
+        .disabled(disabled)
+        .child(left)
+        .child(amounts);
+    if !disabled {
+        main = main
+            .hover(tk.muted.alpha(0.4))
+            .on_press(move |a: &mut App| {
+                open_book_route(a, &p, &l, "nav:book.overview", "/overview")
+            });
     }
-    el
+    // The book's other pages.
+    let menu_key = format!("be-book-actions-{pid}");
+    let pop = format!("be:{pid}");
+    let is_open = app.reports.books.popup.as_deref() == Some(pop.as_str());
+    let more = crate::ui::button::icon_button(
+        tk,
+        menu_key.clone(),
+        Variant::Ghost,
+        tk.r(1.75),
+        &I::ELLIPSIS,
+        tk.r(1.0),
+        tr("onboarding:books.row.actions", &[("name", &label)]),
+    );
+    let toggle_key = pop.clone();
+    let more = crate::ui::popup::trigger(
+        more,
+        crate::ui::popup::Kind::Menu,
+        is_open,
+        move |a: &mut App| {
+            a.reports.books.popup = if a.reports.books.popup.as_deref() == Some(toggle_key.as_str())
+            {
+                None
+            } else {
+                Some(toggle_key.clone())
+            };
+        },
+    );
+    if is_open {
+        let items = BOOK_ROUTES
+            .iter()
+            .map(|&(id, key, route, glyph)| {
+                let k = format!("book-route-{pid}-{id}");
+                let name = t(key);
+                let (p, l) = (pid.clone(), label.clone());
+                let mut item = super::kit::menu_item(tk, &k, glyph, &name);
+                if !disabled {
+                    item = item.on_press(move |a: &mut App| {
+                        a.reports.books.popup = None;
+                        open_book_route(a, &p, &l, key, route)
+                    });
+                }
+                (item, k, name)
+            })
+            .collect();
+        super::kit::dropdown(
+            tk,
+            layer,
+            &menu_key,
+            tk.r(13.0),
+            rune_kit::Placement::BottomEnd,
+            items,
+        );
+    }
+    row()
+        .w_full()
+        .min_w(0.0)
+        .center_y()
+        .pr(tk.r(0.75))
+        .role("listitem")
+        .label(label)
+        .child(main)
+        .child(more)
 }
 
 // ---- Recent activity by book (RecentTransactionsTable with `scopeLabel`, no Show all) --------
@@ -1416,8 +1181,11 @@ fn status_text(s: TxStatus) -> String {
     })
 }
 
-fn recent_table(app: &App, tk: &Tk, d: &Value, s: &Snapshot) -> El {
+fn recent_table(app: &App, tk: &Tk, d: &Value, s: &Snapshot) -> Option<El> {
     let rows = model::recent_rows(s);
+    if rows.is_empty() {
+        return None;
+    }
     let source = if d["activityTxs"].as_array().is_some_and(|a| !a.is_empty()) {
         &d["activityTxs"]
     } else {
@@ -1445,22 +1213,7 @@ fn recent_table(app: &App, tk: &Tk, d: &Value, s: &Snapshot) -> El {
                 .font(tk.tsm(500.0))
                 .color(tk.fg),
         );
-    let body = if rows.is_empty() {
-        col().w_full().padding(tk.r(1.0)).child(
-            row()
-                .w_full()
-                .h(96.0)
-                .center()
-                .radius(tk.r(0.5))
-                .border(1.0, tk.border)
-                .border_dash(4.0, 3.0)
-                .child(
-                    text(t("overview:recentTx.empty"))
-                        .font(tk.tsm(400.0))
-                        .color(tk.muted_fg),
-                ),
-        )
-    } else {
+    let body = {
         let mut list = col().key("be-recent-list").w_full();
         for (i, r) in rows.iter().take(RECENT_ROWS).enumerate() {
             if i > 0 {
@@ -1471,14 +1224,16 @@ fn recent_table(app: &App, tk: &Tk, d: &Value, s: &Snapshot) -> El {
         }
         list
     };
-    surface(tk)
-        .border_layout()
-        .key("be-recent")
-        .w_full()
-        .clip_rounded(tk.r(0.75))
-        .child(header)
-        .child(hairline(tk.border))
-        .child(body)
+    Some(
+        surface(tk)
+            .border_layout()
+            .key("be-recent")
+            .w_full()
+            .clip_rounded(tk.r(0.75))
+            .child(header)
+            .child(hairline(tk.border))
+            .child(body),
+    )
 }
 
 fn recent_row(
@@ -1522,21 +1277,16 @@ fn recent_row(
             .min_w(0.0),
         );
     if r.status != TxStatus::Confirmed {
-        let (sb, sf, sr) = status_chip(tk, r.status);
+        let (_, sf, _) = status_chip(tk, r.status);
         meta = meta.child(
-            row()
-                .px(tk.r(0.25))
-                .radius(tk.r(0.375))
-                .fill(sb)
-                .border(1.0, sr)
-                .child(
-                    text(status_text(r.status))
-                        .font(TextStyle {
-                            weight: 500.0,
-                            ..small
-                        })
-                        .color(sf),
-                ),
+            row().child(
+                text(status_text(r.status))
+                    .font(TextStyle {
+                        weight: 500.0,
+                        ..small
+                    })
+                    .color(sf),
+            ),
         );
     }
     if !scope.is_empty() {

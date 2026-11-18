@@ -97,6 +97,10 @@ pub fn toolbar(app: &App, tk: &Tk, g: &Geo, view: View, layer: &mut Vec<El>) -> 
             )
             .y;
             let mut entries = vec![];
+            // The menu does not grow to a row's natural width, and the badge keeps its size, so
+            // the year itself was cut ("20…"). Size it from the widest badge: the year, the
+            // badge (about 6.5 px a character at this size), the check and the paddings.
+            let mut widest = 0usize;
             for (y, n) in &g.years {
                 let y = *y;
                 let count = tc(
@@ -108,6 +112,7 @@ pub fn toolbar(app: &App, tk: &Tk, g: &Geo, view: View, layer: &mut Vec<El>) -> 
                     *n,
                     &[],
                 );
+                widest = widest.max(count.chars().count());
                 entries.push(Entry::Item(
                     MenuItem::new(y.to_string())
                         .badge(count)
@@ -125,7 +130,7 @@ pub fn toolbar(app: &App, tk: &Tk, g: &Geo, view: View, layer: &mut Vec<El>) -> 
                 &format!("year-chip-{v}"),
                 Placement::TopStart,
                 6.0,
-                160.0,
+                year_menu_width(widest),
                 entries,
                 Rc::new(|a: &mut App| a.chart.popup = None),
             );
@@ -370,4 +375,21 @@ fn gear(app: &App, tk: &Tk, g: &Geo, view: View, layer: &mut Vec<El>) -> El {
         Rc::new(|a: &mut App| a.chart.popup = None),
     );
     trigger
+}
+
+/// The year menu's width for its widest badge (in characters): the year (4 digits), the badge,
+/// the check and the row's gaps and paddings fit without cutting the year.
+fn year_menu_width(badge_chars: usize) -> f32 {
+    (100.0 + 6.5 * badge_chars as f32).max(160.0)
+}
+
+#[cfg(test)]
+mod year_menu_tests {
+    /// "so far · 107 tx" and longer counts widen the menu; short ones keep the minimum.
+    #[test]
+    fn the_year_menu_fits_its_widest_badge() {
+        assert_eq!(super::year_menu_width(5), 160.0);
+        assert!(super::year_menu_width("so far · 107 tx".chars().count()) >= 195.0);
+        assert!(super::year_menu_width(22) > super::year_menu_width(15));
+    }
 }

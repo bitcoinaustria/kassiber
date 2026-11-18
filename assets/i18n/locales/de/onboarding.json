@@ -187,6 +187,8 @@
           "help": "Ein Pool bis Ende 2024; am 1. Jänner 2025 werden die verbleibenden Anschaffungskosten auf die Wallets aufgeteilt."
         },
         "unsupported": "Mit {{method}} nicht verfügbar.",
+        "regionUnsupported": "In Büchern für {{country}} nicht verfügbar.",
+        "default": "Standard",
         "only": "Bücher für {{country}} können nur diesen Pool verwenden.",
         "perCoin": "Jeder Coin hat seinen eigenen Pool: BTC und L-BTC teilen sich nie einen. Anschaffungskosten wandern zwischen ihnen nur wie unter Prüfoptionen eingestellt."
       },

@@ -564,34 +564,6 @@
    }
   },
   {
-   "name": "onboarding-quick",
-   "rune": {
-    "scene": "onboarding-quick",
-    "args": []
-   },
-   "tauri": {
-    "path": "/",
-    "state": {
-     "identity": null
-    },
-    "steps": [
-     {
-      "wait": 1200
-     },
-     {
-      "click": {
-       "textIncludes": "Or create with recommended defaults",
-       "sel": "button"
-      }
-     },
-     {
-      "wait": 350
-     }
-    ],
-    "ready": "none"
-   }
-  },
-  {
    "name": "onboarding-start-light",
    "rune": {
     "scene": "onboarding-start-light",

@@ -342,22 +342,6 @@ pub fn neutral(tk: &Tk) -> Pill {
         ring: tk.border,
     }
 }
-/// The count chip (`bg-gray-50 text-gray-600 ring-gray-500/10`, dark `gray-800/50 gray-400 gray-400/20`).
-pub fn gray(tk: &Tk) -> Pill {
-    if tk.dark {
-        Pill {
-            fill: h("#1f2937").alpha(0.5),
-            ink: h("#9ca3af"),
-            ring: h("#9ca3af").alpha(0.2),
-        }
-    } else {
-        Pill {
-            fill: h("#f9fafb"),
-            ink: h("#4b5563"),
-            ring: h("#6b7280").alpha(0.1),
-        }
-    }
-}
 
 /// `channelStateTone`.
 pub fn state_tone(tk: &Tk, state: &str) -> Pill {

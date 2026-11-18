@@ -733,55 +733,47 @@ fn chart(app: &App, cx: &mut Cx<App>, tk: &Tk, d: &super::Dash, layer: &mut Vec<
                 })),
         );
     }
-    // `h-7 rounded-md border px-2 text-xs font-medium`, pressed: `border-input bg-accent`.
-    let toggle = |key: &str, label: String, on: bool, f: fn(&mut App)| {
-        row()
-            .key(key.to_owned())
-            .h(tk.r(1.75))
-            .px(tk.r(0.5) + 1.0)
-            .center()
-            .radius(tk.r(0.375))
-            .fill(if on { tk.accent } else { tk.background })
-            .border(1.0, if on { tk.input } else { tk.border })
-            .hover(if on { tk.accent } else { tk.background })
-            .role("button")
-            .checked(on)
-            .label(label.clone())
-            .focusable(true)
-            .on_press(f)
-            .child(
-                text(label)
-                    .font(tk.txs(500.0))
-                    .color(if on { tk.fg } else { tk.muted_fg }),
-            )
+    // Two segmented controls: what the bars measure, and which flows they show.
+    let seg = |key: &str, label: String, on: bool, f: fn(&mut App)| {
+        crate::ui::segment(tk, key, label, on).on_press(f)
     };
     let toggles = row()
-        .gap(tk.r(0.25))
+        .gap(tk.r(0.5))
         .flex_wrap()
         .justify_end()
-        .child(toggle(
-            "txs-metric-amount",
-            t("transactions:chartMetric.amount"),
-            !ui.chart_count,
-            |a| a.txs.chart_count = false,
+        .child(crate::ui::segmented(
+            tk,
+            vec![
+                seg(
+                    "txs-metric-amount",
+                    t("transactions:chartMetric.amount"),
+                    !ui.chart_count,
+                    |a| a.txs.chart_count = false,
+                ),
+                seg(
+                    "txs-metric-count",
+                    t("transactions:chartMetric.count"),
+                    ui.chart_count,
+                    |a| a.txs.chart_count = true,
+                ),
+            ],
         ))
-        .child(toggle(
-            "txs-metric-count",
-            t("transactions:chartMetric.count"),
-            ui.chart_count,
-            |a| a.txs.chart_count = true,
-        ))
-        .child(toggle(
-            "txs-mode-external",
-            t("transactions:chartMode.external"),
-            ui.chart_external,
-            |a| a.txs.chart_external = true,
-        ))
-        .child(toggle(
-            "txs-mode-all",
-            t("transactions:chartMode.all"),
-            !ui.chart_external,
-            |a| a.txs.chart_external = false,
+        .child(crate::ui::segmented(
+            tk,
+            vec![
+                seg(
+                    "txs-mode-external",
+                    t("transactions:chartMode.external"),
+                    ui.chart_external,
+                    |a| a.txs.chart_external = true,
+                ),
+                seg(
+                    "txs-mode-all",
+                    t("transactions:chartMode.all"),
+                    !ui.chart_external,
+                    |a| a.txs.chart_external = false,
+                ),
+            ],
         ));
 
     // ---- The plot, positioned like the Recharts SVG ----
@@ -1166,14 +1158,7 @@ fn tooltip(app: &App, tk: &Tk, b: &Bar, c: &str) -> El {
         let review = st["review"].as_f64().unwrap_or(0.0) as usize;
         let failed = st["failed"].as_f64().unwrap_or(0.0) as usize;
         if missing + review + failed > 0 {
-            let chip = |label: String, fg: Color| {
-                row()
-                    .px(tk.r(0.375))
-                    .py(tk.r(0.125))
-                    .radius(tk.r(0.375))
-                    .fill(fg.alpha(0.1))
-                    .child(text(label).font(tk.txs(400.0)).color(fg))
-            };
+            let chip = |label: String, fg: Color| text(label).font(tk.txs(400.0)).color(fg);
             let mut chips = row().gap(tk.r(0.25)).flex_wrap().pt(tk.r(0.125));
             if missing > 0 {
                 chips = chips.child(chip(

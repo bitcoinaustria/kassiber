@@ -705,32 +705,6 @@
    }
   },
   {
-   "name": "reports-logs-settings-menu",
-   "rune": {
-    "scene": "reports-logs-settings-menu",
-    "args": []
-   },
-   "tauri": {
-    "path": "/logs",
-    "state": {
-     "developerToolsEnabled": true
-    },
-    "steps": [
-     {
-      "wait": 800
-     },
-     {
-      "click": {
-       "label": "Log settings"
-      }
-     },
-     {
-      "wait": 500
-     }
-    ]
-   }
-  },
-  {
    "name": "reports-logs-export-menu",
    "rune": {
     "scene": "reports-logs-export-menu",

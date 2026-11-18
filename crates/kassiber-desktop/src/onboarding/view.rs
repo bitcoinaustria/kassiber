@@ -142,6 +142,31 @@ fn page(app: &App, tk: &Tk, layer: &mut Vec<El>, panel_h: f32) -> El {
 
 // ---- Start (`StartChoicePanel`) -----------------------------------------------------------------
 
+/// "Try the demo": a fresh local copy of the bundled demo book, separate from the user's books.
+pub fn demo_button(app: &App, tk: &Tk, blocked: bool) -> El {
+    let busy = app.demo.busy();
+    let label = t(if busy {
+        "onboarding:start.tryDemo.titleOpening"
+    } else {
+        "onboarding:start.tryDemo.title"
+    });
+    let enabled = !busy && !blocked;
+    let mut demo = f::button_lg(
+        tk,
+        "onb-demo",
+        Variant::Ghost,
+        Some(&I::FLASK_CONICAL),
+        &label,
+        None,
+        enabled,
+    )
+    .help(t("onboarding:start.tryDemo.tooltip"));
+    if enabled {
+        demo = demo.on_press(crate::demo::start);
+    }
+    demo
+}
+
 fn start(app: &App, tk: &Tk, layer: &mut Vec<El>, panel_h: f32) -> El {
     let i = ink(tk);
     let ui = &app.onboarding;
@@ -184,56 +209,19 @@ fn start(app: &App, tk: &Tk, layer: &mut Vec<El>, panel_h: f32) -> El {
     if !ui.importing {
         open = open.on_press_tx(|a: &mut App, tx: &mut rune::Tx| super::begin_import(a, tx));
     }
-    // The bundled demo book (`crate::demo`): a fresh local copy, separate from the user's books.
-    let demo_busy = app.demo.busy();
-    let demo_label = t(if demo_busy {
-        "onboarding:start.tryDemo.titleOpening"
-    } else {
-        "onboarding:start.tryDemo.title"
-    });
-    let mut demo = f::button_lg(
-        tk,
-        "onb-demo",
-        Variant::Ghost,
-        Some(&I::FLASK_CONICAL),
-        &demo_label,
-        None,
-        !demo_busy && !ui.importing,
-    )
-    .help(t("onboarding:start.tryDemo.tooltip"));
-    if !demo_busy && !ui.importing {
-        demo = demo.on_press(crate::demo::start);
+    let mut buttons = row()
+        .w_full()
+        .flex_wrap()
+        .gaps(tk.r(0.75), tk.r(0.75))
+        .center_y()
+        .child(create)
+        .child(open);
+    // The bundled demo book (`crate::demo`): with developer tools on (the lock screen offers it
+    // too).
+    if app.prefs.developer_tools {
+        buttons = buttons.child(demo_button(app, tk, ui.importing));
     }
-    actions = actions.child(
-        row()
-            .w_full()
-            .flex_wrap()
-            .gaps(tk.r(0.75), tk.r(0.75))
-            .center_y()
-            .child(create)
-            .child(open)
-            .child(demo),
-    );
-    let quick = t("onboarding:start.quickStart");
-    actions = actions.child(
-        row()
-            .child(
-                row()
-                    .key("onb-quick")
-                    .gap(tk.r(0.375))
-                    .center_y()
-                    .px(tk.r(0.25))
-                    .py(tk.r(0.125))
-                    .radius(tk.r(0.375))
-                    .role("button")
-                    .label(quick.clone())
-                    .focusable(true)
-                    .on_press(super::begin_quick_start)
-                    .child(text(quick).font(tk.tsm(500.0)).color(i.ink2))
-                    .child(ic(&I::ARROW_RIGHT, tk.r(0.875), i.ink2)),
-            )
-            .offset(-tk.r(0.25), 0.0),
-    );
+    actions = actions.child(buttons);
     // `text-balance`: two lines of even length where the column holds it in two.
     let words = t("onboarding:start.headline");
     let shown = if lg { balance(&words) } else { words.clone() };
@@ -248,9 +236,8 @@ fn start(app: &App, tk: &Tk, layer: &mut Vec<El>, panel_h: f32) -> El {
         .role("heading")
         .level(1)
         .wrap();
-    let left_w = if lg { (inner_w - gap) / 2.1 } else { inner_w };
     let left = col()
-        .w(left_w)
+        .w(inner_w)
         .gap(tk.r(2.25))
         .child(crate::shell::wordmark::animated(
             app,
@@ -262,24 +249,12 @@ fn start(app: &App, tk: &Tk, layer: &mut Vec<El>, panel_h: f32) -> El {
         .child(headline)
         .child(actions);
 
-    let art_h = if lg { tk.r(30.0) } else { tk.r(14.0) };
-    let art_w = if lg {
-        (inner_w - gap) * 1.1 / 2.1
-    } else {
-        inner_w
-    };
-    let state = ui.chain;
-    let art = super::chain::view(
-        super::chain::Paint {
-            tk,
-            mined: 3,
-            state,
-            since_beat: (app.clock - state.at).max(0.0),
-            clock: app.clock,
-            live: true,
-        },
-        art_w,
-        art_h,
+    // The chain spans the page as a band above the content.
+    let art = crate::art::calm::view(
+        tk,
+        app.clock,
+        inner_w,
+        if lg { tk.r(17.0) } else { tk.r(11.0) },
     );
 
     let mut highlights = row().gap(tk.r(1.5)).role("list");
@@ -311,14 +286,7 @@ fn start(app: &App, tk: &Tk, layer: &mut Vec<El>, panel_h: f32) -> El {
         .child(highlights)
         .child(language_select(app, tk, layer));
 
-    let grid = if lg {
-        col()
-            .gap(gap)
-            .child(row().w(inner_w).gap(gap).center_y().child(left).child(art))
-            .child(footer)
-    } else {
-        col().gap(gap).child(art).child(left).child(footer)
-    };
+    let grid = col().gap(gap).child(art).child(left).child(footer);
     col()
         .key("onb-start")
         .w_full()

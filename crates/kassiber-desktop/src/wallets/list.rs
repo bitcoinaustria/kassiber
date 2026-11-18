@@ -358,7 +358,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
 /// The sync line on the header's left (an owner request; the web's header holds only `Add wallet`):
 /// "Syncing…" while a refresh runs, else the newest successful sync across the sources, with the
 /// exact time on hover, and the failed-source count when any failed.
-fn sync_line(app: &App, tk: &Tk) -> El {
+pub fn sync_line(app: &App, tk: &Tk) -> El {
     let mut r = row()
         .key("wallets-sync-line")
         .gap(tk.r(0.5))
@@ -417,22 +417,17 @@ fn header(app: &App, tk: &Tk) -> El {
         .gap(tk.r(1.0))
         .child(sync_line(app, tk))
         .child(
-            row()
-                .key("wallets-add")
-                .h(tk.r(2.0))
-                .min_w(112.0)
-                .px(tk.r(0.625))
-                .gap(tk.r(0.5))
-                .center()
-                .radius(tk.r(0.375))
-                .fill(tk.primary)
-                .hover(tk.primary.alpha(0.9))
-                .role("button")
-                .label(label.clone())
-                .focusable(true)
-                .on_press(|a: &mut App| super::add::open(a, None))
-                .child(ic(&I::PLUS, tk.r(1.0), tk.primary_fg))
-                .child(text(label).font(tk.tsm(500.0)).color(tk.primary_fg)),
+            crate::ui::button::button(
+                tk,
+                "wallets-add",
+                crate::ui::button::Variant::Default,
+                crate::ui::button::Size::Sm,
+                Some(&I::PLUS),
+                &label,
+                true,
+            )
+            .min_w(112.0)
+            .on_press(|a: &mut App| super::add::open(a, None)),
         )
 }
 
@@ -705,60 +700,38 @@ fn filters(app: &App, tk: &Tk, layer: &mut Vec<El>, count: usize) -> El {
     let sm = win_w(app) >= 640.0;
     let menu_label = t("connections:filters.menu");
     let open = st.popup.is_some();
-    let (bfill, bborder, bhover) = if tk.dark {
-        (
-            tk.input.alpha(tk.input.a * 0.3),
-            tk.input,
-            tk.input.alpha(tk.input.a * 0.5),
+    use crate::ui::button::{Size, Variant};
+    // The label shows from 640 pt; narrower, the trigger is the icon alone.
+    let mut trigger = if sm {
+        crate::ui::button::button(
+            tk,
+            "wallets-filters",
+            Variant::Outline,
+            Size::Default,
+            Some(&I::SLIDERS_HORIZONTAL),
+            &menu_label,
+            true,
         )
     } else {
-        (tk.card, tk.border, tk.accent)
-    };
-    let mut trigger = row()
-        .key("wallets-filters")
-        .h(tk.r(if sm { 2.25 } else { 2.0 }))
-        .px(tk.r(0.625))
-        .gap(tk.r(if sm { 0.5 } else { 0.375 }))
-        .center()
-        .radius(tk.r(0.375))
-        .fill(bfill)
-        .border(1.0, if active > 0 { tk.primary } else { bborder })
-        .border_layout()
-        .hover(bhover)
-        .role("button")
-        .label(menu_label.clone())
-        .focusable(true)
-        .menu_trigger(open, |a: &mut App| {
-            a.wallets.list.popup = if a.wallets.list.popup.is_some() {
-                None
-            } else {
-                Some(Popup::Filters)
-            }
-        })
-        .child(ic(
+        crate::ui::button::icon_button(
+            tk,
+            "wallets-filters",
+            Variant::Outline,
+            tk.r(2.0),
             &I::SLIDERS_HORIZONTAL,
-            tk.r(if sm { 1.0 } else { 0.875 }),
-            tk.fg,
-        ));
-    if tk.dark {
-        trigger = trigger.box_shadow(Shadow {
-            y: 1.0,
-            color: Color::WHITE.alpha(0.06),
-            inset: true,
-            ..Shadow::default()
-        });
-    } else {
-        trigger = trigger.box_shadow(Shadow {
-            y: 1.0,
-            blur: 2.0,
-            color: Color::BLACK.alpha(0.05),
-            ..Shadow::default()
-        });
+            tk.r(0.875),
+            menu_label.clone(),
+        )
     }
-    if sm {
-        trigger = trigger.child(text(menu_label.clone()).font(tk.tsm(500.0)).color(tk.fg));
-    }
+    .menu_trigger(open, |a: &mut App| {
+        a.wallets.list.popup = if a.wallets.list.popup.is_some() {
+            None
+        } else {
+            Some(Popup::Filters)
+        }
+    });
     if active > 0 {
+        trigger = trigger.border(1.0, tk.primary);
         trigger = trigger.child(
             row()
                 .min_w(tk.r(1.0))
@@ -774,30 +747,7 @@ fn filters(app: &App, tk: &Tk, layer: &mut Vec<El>, count: usize) -> El {
                 ),
         );
     }
-    // `bg-gray-50 text-gray-600 ring-gray-500/10` (dark `bg-gray-800/50 text-gray-400 ring-gray-400/20`).
-    let gray = |s: &str| rune::color::hex(s).expect("hex");
-    let (cfill, cink, cring) = if tk.dark {
-        (
-            gray("#1f2937").alpha(0.5),
-            gray("#9ca3af"),
-            gray("#9ca3af").alpha(0.2),
-        )
-    } else {
-        (gray("#f9fafb"), gray("#4b5563"), gray("#6b7280").alpha(0.1))
-    };
-    let count_badge = row()
-        .ml(tk.r(0.25))
-        .px(tk.r(0.5))
-        .py(tk.r(0.25))
-        .radius(tk.r(0.375))
-        .fill(cfill)
-        .border(1.0, cring)
-        .center_y()
-        .child(
-            text(count.to_string())
-                .font(if sm { tk.txs(500.0) } else { tk.t2xs(500.0) })
-                .color(cink),
-        );
+    let count_badge = crate::ui::count(tk, count, if sm { tk.tbase(400.0) } else { tk.tsm(400.0) });
     let head = row()
         .w_full()
         .px(if sm { tk.card_pad() } else { tk.r(0.75) })
@@ -1509,23 +1459,13 @@ fn wallet_row(
     let id = c.id.clone();
     r = r.on_press(move |a: &mut App| a.navigate(&format!("/connections/{id}")));
     r = r.child(cell(next(), tk.r(0.5), tk.r(1.5)).child(name_row));
-    // Kind: `Badge variant="outline" rounded-md`.
-    r = r.child(
-        cell(next(), tk.r(0.5), tk.r(0.5)).child(
-            row()
-                .px(tk.r(0.5))
-                .py(tk.r(0.125))
-                .radius(tk.r(0.375))
-                .border(1.0, tk.border)
-                .border_layout()
-                .center_y()
-                .child(
-                    text(super::conn::category_display(c.category_label()))
-                        .font(tk.txs(500.0))
-                        .color(tk.fg),
-                ),
-        ),
-    );
+    // Kind: a muted label.
+    r = r.child(cell(next(), tk.r(0.5), tk.r(0.5)).child(crate::ui::tag(
+        tk,
+        tk.muted_fg,
+        None,
+        super::conn::category_display(c.category_label()),
+    )));
     r = r.child(
         cell(next(), tk.r(0.5), tk.r(0.5))
             .justify_end()

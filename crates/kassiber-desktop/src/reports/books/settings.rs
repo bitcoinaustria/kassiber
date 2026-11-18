@@ -976,6 +976,7 @@ fn tax_year_section(
 
 /// One pool-scope choice: the radio, its name, its one-line explanation, and why it can't be
 /// chosen with this method.
+#[allow(clippy::too_many_arguments)]
 fn scope_option(
     app: &App,
     tk: &Tk,
@@ -983,6 +984,8 @@ fn scope_option(
     state: &ScopeState,
     selected: bool,
     method: &str,
+    country: &str,
+    legal: bool,
 ) -> El {
     let busy = app.reports.books.submitting;
     let enabled = *state == ScopeState::Available && !busy;
@@ -993,11 +996,25 @@ fn scope_option(
         .gap(tk.r(0.125))
         .a11y_hidden()
         .child(
-            text(label.clone())
-                .font(tk.tsm(500.0))
-                .color(tk.fg)
-                .wrap()
-                .w_full(),
+            row()
+                .w_full()
+                .gap(tk.r(0.5))
+                .center_y()
+                .child(
+                    text(label.clone())
+                        .font(tk.tsm(500.0))
+                        .color(tk.fg)
+                        .wrap()
+                        .shrink(),
+                )
+                .children(legal.then(|| {
+                    crate::ui::tag(
+                        tk,
+                        tk.muted_fg,
+                        None,
+                        t("onboarding:books.settings.pool.default"),
+                    )
+                })),
         );
     let mut desc = Vec::new();
     if let Some(h) = model::pool_scope_help(scope) {
@@ -1019,6 +1036,20 @@ fn scope_option(
             text(why.clone())
                 .font(tk.txs(400.0))
                 .color(kit::amber(tk))
+                .wrap()
+                .w_full(),
+        );
+        desc.push(why);
+    }
+    if *state == ScopeState::RegionUnsupported {
+        let why = tr(
+            "onboarding:books.settings.pool.regionUnsupported",
+            &[("country", &model::region_label(country))],
+        );
+        texts = texts.child(
+            text(why.clone())
+                .font(tk.txs(400.0))
+                .color(tk.muted_fg)
                 .wrap()
                 .w_full(),
         );
@@ -1077,7 +1108,14 @@ fn scope_option(
     r
 }
 
-fn cost_basis_section(app: &App, tk: &Tk, layer: &mut Vec<El>, f: &Form, c: &Settings) -> El {
+fn cost_basis_section(
+    app: &App,
+    tk: &Tk,
+    layer: &mut Vec<El>,
+    f: &Form,
+    c: &Settings,
+    first: bool,
+) -> El {
     let busy = app.reports.books.submitting;
     let methods = method_options(f, c);
     let opts = methods
@@ -1103,7 +1141,10 @@ fn cost_basis_section(app: &App, tk: &Tk, layer: &mut Vec<El>, f: &Form, c: &Set
             &t("onboarding:books.renameProfile.austrianMethodNote"),
         ));
     }
-    let states = sm::scope_states(c, &f.method);
+    // Every pool is shown; the ones the country's rules don't offer say so, and a country with
+    // one legal pool marks it as the default.
+    let states = sm::all_scope_states(c, &f.method);
+    let legal = sm::legal_scope(c).map(str::to_owned);
     let pool_label = t("onboarding:books.settings.pool.label");
     let mut group = col()
         .key("books-set-pool")
@@ -1113,25 +1154,25 @@ fn cost_basis_section(app: &App, tk: &Tk, layer: &mut Vec<El>, f: &Form, c: &Set
         .label(pool_label.clone())
         .focus_group();
     for (s, st) in &states {
-        group = group.child(scope_option(app, tk, s, st, *s == f.pool, &f.method));
-    }
-    fields.push(labelled(tk, &pool_label, group));
-    if states.len() <= 1 {
-        fields.push(note(
+        group = group.child(scope_option(
+            app,
             tk,
-            &tr(
-                "onboarding:books.settings.pool.only",
-                &[("country", &model::region_label(&f.country))],
-            ),
+            s,
+            st,
+            *s == f.pool,
+            &f.method,
+            &f.country,
+            legal.as_deref() == Some(s.as_str()),
         ));
     }
+    fields.push(labelled(tk, &pool_label, group));
     fields.push(note(tk, &t("onboarding:books.settings.pool.perCoin")));
     section(
         tk,
         "books-set-sec-basis",
         &t("onboarding:books.settings.sections.costBasis"),
         None,
-        false,
+        first,
         fields,
     )
 }
@@ -1691,13 +1732,23 @@ pub fn mount(app: &App, tk: &Tk, layer: &mut Vec<El>) {
     }
     let title = t("onboarding:books.renameProfile.title");
     let desc = t("onboarding:books.settings.description");
+    // Wide enough, the sections sit in two columns (the book, its country and tax year; the cost
+    // basis, holding period and review options), so the form fits a screen instead of a long
+    // scroll; a narrow window keeps one column.
+    let win_w = if app.shell.window_w > 0.0 {
+        app.shell.window_w
+    } else {
+        1440.0
+    };
+    let wide = win_w >= tk.r(66.0);
+    let width = if wide { tk.r(62.0) } else { width };
     let mut body = col()
         .w_full()
         .gap(tk.r(1.25))
         .child(dialog_header(tk, &title, &desc));
     let name_label = t("onboarding:books.renameProfile.nameLabel");
     // The name needs no section heading of its own ("Book" over "Book name").
-    body = body.child(col().key("books-set-sec-book").w_full().child(labelled(
+    let name_field = col().key("books-set-sec-book").w_full().child(labelled(
         tk,
         &name_label,
         input(
@@ -1712,12 +1763,37 @@ pub fn mount(app: &App, tk: &Tk, layer: &mut Vec<El>) {
             |a| &mut a.reports.books.name,
             "name",
         ),
-    )));
-    body = body.child(country_section(app, tk, &mut inner, f, &c));
-    body = body.child(tax_year_section(app, tk, &mut inner, f, &c, switched));
-    body = body.child(cost_basis_section(app, tk, &mut inner, f, &c));
-    body = body.child(holding_section(app, tk, f, &c, switched));
-    body = body.child(review_section(app, tk, f));
+    ));
+    let left = col()
+        .gap(tk.r(1.25))
+        .child(name_field)
+        .child(country_section(app, tk, &mut inner, f, &c))
+        .child(tax_year_section(app, tk, &mut inner, f, &c, switched));
+    if wide {
+        let right = col()
+            .gap(tk.r(1.25))
+            .child(cost_basis_section(app, tk, &mut inner, f, &c, true))
+            .child(holding_section(app, tk, f, &c, switched))
+            .child(review_section(app, tk, f));
+        body = body.child(
+            row()
+                .key("books-set-columns")
+                .w_full()
+                .gap(tk.r(2.0))
+                .items_start()
+                .child(left.grow(1.0).w(0.0).min_w(0.0))
+                .child(right.grow(1.0).w(0.0).min_w(0.0)),
+        );
+    } else {
+        body = body.child(left.w_full()).child(
+            col()
+                .w_full()
+                .gap(tk.r(1.25))
+                .child(cost_basis_section(app, tk, &mut inner, f, &c, false))
+                .child(holding_section(app, tk, f, &c, switched))
+                .child(review_section(app, tk, f)),
+        );
+    }
     if let Some(e) = &b.error {
         body = body.child(error_box(tk, e));
     }

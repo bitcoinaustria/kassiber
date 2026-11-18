@@ -118,26 +118,19 @@ pub fn details(app: &App, tk: &Tk, o: &Open, r: &Value, layer: &mut Vec<El>) -> 
     let tags: El = if o.draft.tags.is_empty() {
         value(tk, t("transactions:details.tagsNone")).color(tk.muted_fg)
     } else {
-        // `Badge variant="secondary" rounded-md`: px-2 py-0.5 text-xs font-medium.
-        o.draft
-            .tags
-            .iter()
-            .fold(row().gap(tk.r(0.25)).flex_wrap(), |acc, tag| {
-                acc.child(
-                    row()
-                        .px(tk.r(0.5))
-                        .py(tk.r(0.125))
-                        .radius(tk.r(0.375))
-                        .fill(tk.muted)
-                        .child(super::widgets::sens(
-                            tk,
-                            tag.clone(),
-                            tk.txs(500.0),
-                            tk.fg,
-                            hide,
-                        )),
-                )
-            })
+        // The tags as plain labels.
+        o.draft.tags.iter().fold(
+            row().gaps(tk.r(0.75), tk.r(0.25)).flex_wrap(),
+            |acc, tag| {
+                acc.child(super::widgets::sens(
+                    tk,
+                    tag.clone(),
+                    tk.txs(500.0),
+                    tk.fg,
+                    hide,
+                ))
+            },
+        )
     };
     let txn_id = opt_s(r, "externalId").unwrap_or_default();
     let ext_differs =

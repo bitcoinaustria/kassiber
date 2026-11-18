@@ -326,47 +326,33 @@ fn connector(c: &Ctx, content: El) -> El {
         )
 }
 
-/// A muted pill (`rounded-md border bg-muted/35 px-1.5 text-2xs`).
+/// A muted label.
 fn pill(c: &Ctx, s: String) -> El {
     let tk = c.tk;
-    row()
-        .px(tk.r(0.375))
-        .py(1.0)
-        .radius(tk.r(0.375))
-        .border(1.0, tk.border.alpha(0.7))
-        .fill(tk.muted.alpha(0.35))
-        .min_w(0.0)
-        .child(
-            text(s.clone())
-                .font(tk.t2xs(500.0).features("'tnum' 1"))
-                .color(tk.muted_fg)
-                .single_line()
-                .truncate()
-                .min_w(0.0)
-                .help_when_truncated(s),
-        )
+    row().min_w(0.0).child(
+        text(s.clone())
+            .font(tk.t2xs(500.0).features("'tnum' 1"))
+            .color(tk.muted_fg)
+            .single_line()
+            .truncate()
+            .min_w(0.0)
+            .help_when_truncated(s),
+    )
 }
 
-/// A pill that needs a look (the table kit's amber tone).
+/// A label that needs a look (the table kit's amber ink).
 fn warn_pill(c: &Ctx, s: String) -> El {
     let tk = c.tk;
-    let (bg, fg, ring) = crate::ui::table::tone(tk, crate::ui::table::Tone::Warning);
-    row()
-        .px(tk.r(0.375))
-        .py(1.0)
-        .radius(tk.r(0.375))
-        .border(1.0, ring)
-        .fill(bg)
-        .min_w(0.0)
-        .child(
-            text(s.clone())
-                .font(tk.t2xs(500.0).features("'tnum' 1"))
-                .color(fg)
-                .single_line()
-                .truncate()
-                .min_w(0.0)
-                .help_when_truncated(s),
-        )
+    let (_, fg, _) = crate::ui::table::tone(tk, crate::ui::table::Tone::Warning);
+    row().min_w(0.0).child(
+        text(s.clone())
+            .font(tk.t2xs(500.0).features("'tnum' 1"))
+            .color(fg)
+            .single_line()
+            .truncate()
+            .min_w(0.0)
+            .help_when_truncated(s),
+    )
 }
 
 fn fee_percent(fee: f64, base: Option<f64>) -> Option<String> {

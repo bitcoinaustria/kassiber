@@ -89,43 +89,20 @@ fn cols_w(app: &App, cx: &Cx<App>) -> f32 {
         })
 }
 
-/// A ringed chip: `inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium`
-/// with a 1 pt inset ring (status and pricing styles).
+/// A status or pricing label in its style's ink (`crate::ui::tag`).
 fn ring_chip(tk: &Tk, c: Chip, glyph: Option<&'static rune::Icon>, label: String) -> El {
-    let mut r = row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.25))
-        .gap(tk.r(0.25))
-        .center_y()
-        .radius(tk.r(0.375))
-        .fill(c.bg)
-        .border(1.0, c.ring)
-        .min_w(0.0);
-    if let Some(g) = glyph {
-        r = r.child(ic(g, tk.r(0.75), c.fg));
-    }
-    r.child(text(label).font(tk.txs(500.0)).color(c.fg).truncate())
+    crate::ui::tag(tk, c.fg, glyph, label)
 }
 
-/// shadcn `Badge` with `rounded-md`: `border px-2 py-0.5 text-xs font-medium`; `secondary` is
-/// `bg-secondary` with a transparent border, `outline` is `border-border text-foreground`.
-fn badge(tk: &Tk, label: String, outline: bool, hidden: bool) -> El {
-    // Rune draws borders inside the box; the web's 1 pt border adds to it, hence the +1.
-    let r = row()
-        .px(tk.r(0.5) + 1.0)
-        .py(tk.r(0.125) + 1.0)
-        .radius(tk.r(0.375))
+/// A neutral label; `hidden` masks it (privacy mode).
+fn badge(tk: &Tk, label: String, _outline: bool, hidden: bool) -> El {
+    row()
+        .min_w(0.0)
         .center_y()
-        .min_w(0.0);
-    let r = if outline {
-        r.border(1.0, tk.border)
-    } else {
-        r.fill(tk.accent)
-    };
-    r.child(sensitive(label, tk.txs(500.0), tk.fg, hidden).truncate())
+        .child(sensitive(label, tk.txs(500.0), tk.muted_fg, hidden).truncate())
 }
 
-/// The loan badge: an outline `Badge` with `loanRoleBadgeClassName`'s border and text.
+/// The loan label in `loanRoleBadgeClassName`'s ink.
 fn loan_badge(tk: &Tk, role: &str) -> El {
     let (key, fam) = match role {
         "collateral_release" => ("returnedBadge", "emerald"),
@@ -135,12 +112,8 @@ fn loan_badge(tk: &Tk, role: &str) -> El {
     };
     let fg = tw(fam, if tk.dark { 400 } else { 700 });
     row()
-        .px(tk.r(0.5) + 1.0)
-        .py(tk.r(0.125) + 1.0)
         .gap(tk.r(0.25))
         .center_y()
-        .radius(tk.r(0.375))
-        .border(1.0, tw(fam, 500).alpha(0.4))
         .child(ic(&I::COINS, tk.r(0.75), fg))
         .child(
             text(t(&format!("transactions:table.row.collateral.{key}")))
@@ -539,12 +512,8 @@ fn build_row(app: &App, tk: &Tk, r: &Row, c: Cols) -> El {
             let cc = coarse_chip(tk);
             top = top.child(
                 row()
-                    .px(tk.r(0.375))
-                    .py(tk.r(0.125))
                     .gap(tk.r(0.25))
                     .center_y()
-                    .radius(tk.r(0.375))
-                    .fill(cc.bg)
                     .help(t("transactions:table.coarse.title"))
                     .child(ic(&I::TRIANGLE_ALERT, tk.r(0.75), cc.fg))
                     .child(
@@ -1094,18 +1063,15 @@ fn check(key: &str, label: String, checked: bool, on: impl Fn(&mut App) + 'stati
 }
 
 fn status_entries(f: &Filters) -> Vec<Entry> {
-    let mut e = vec![
-        Entry::Label(t("transactions:table.filter.statusLabel")),
-        check(
-            "txs-f-status-all",
-            t("transactions:table.filter.allStatuses"),
-            f.status.is_none(),
-            |a| {
-                a.txs.filters.status = None;
-                changed(a);
-            },
-        ),
-    ];
+    let mut e = vec![check(
+        "txs-f-status-all",
+        t("transactions:table.filter.allStatuses"),
+        f.status.is_none(),
+        |a| {
+            a.txs.filters.status = None;
+            changed(a);
+        },
+    )];
     for s in Status::ALL {
         e.push(check(
             &format!("txs-f-status-{}", s.label()),
@@ -1121,18 +1087,15 @@ fn status_entries(f: &Filters) -> Vec<Entry> {
 }
 
 fn flow_entries(f: &Filters) -> Vec<Entry> {
-    let mut e = vec![
-        Entry::Label(t("transactions:table.filter.flowLabel")),
-        check(
-            "txs-f-flow-all",
-            t("transactions:table.filter.allFlows"),
-            f.flow.is_none(),
-            |a| {
-                a.txs.filters.flow = None;
-                changed(a);
-            },
-        ),
-    ];
+    let mut e = vec![check(
+        "txs-f-flow-all",
+        t("transactions:table.filter.allFlows"),
+        f.flow.is_none(),
+        |a| {
+            a.txs.filters.flow = None;
+            changed(a);
+        },
+    )];
     for fl in Flow::ALL {
         e.push(check(
             &format!("txs-f-flow-{}", fl.label()),
@@ -1148,18 +1111,15 @@ fn flow_entries(f: &Filters) -> Vec<Entry> {
 }
 
 fn network_entries(f: &Filters) -> Vec<Entry> {
-    let mut e = vec![
-        Entry::Label(t("transactions:table.filter.networkLabel")),
-        check(
-            "txs-f-net-all",
-            t("transactions:table.filter.allNetworks"),
-            f.payment.is_none(),
-            |a| {
-                a.txs.filters.payment = None;
-                changed(a);
-            },
-        ),
-    ];
+    let mut e = vec![check(
+        "txs-f-net-all",
+        t("transactions:table.filter.allNetworks"),
+        f.payment.is_none(),
+        |a| {
+            a.txs.filters.payment = None;
+            changed(a);
+        },
+    )];
     for p in PAYMENTS.iter() {
         e.push(check(
             &format!("txs-f-net-{p}"),
@@ -1176,20 +1136,17 @@ fn network_entries(f: &Filters) -> Vec<Entry> {
 
 fn wallet_entries(app: &App) -> Vec<Entry> {
     let f = &app.txs.filters;
-    let mut e = vec![
-        Entry::Label(t("transactions:table.filter.walletLabel")),
-        check(
-            "txs-f-wallet-all",
-            t("transactions:table.filter.allWallets"),
-            f.leg_wallet().is_none(),
-            |a| {
-                if a.txs.filters.leg_wallet().is_some() {
-                    a.txs.filters.breakdown = None;
-                }
-                changed(a);
-            },
-        ),
-    ];
+    let mut e = vec![check(
+        "txs-f-wallet-all",
+        t("transactions:table.filter.allWallets"),
+        f.leg_wallet().is_none(),
+        |a| {
+            if a.txs.filters.leg_wallet().is_some() {
+                a.txs.filters.breakdown = None;
+            }
+            changed(a);
+        },
+    )];
     for w in app.txs.wallet_options() {
         let checked = f.leg_wallet() == Some(w.as_str());
         let key = w.clone();
@@ -1207,7 +1164,6 @@ fn wallet_entries(app: &App) -> Vec<Entry> {
 
 fn fee_entries(f: &Filters) -> Vec<Entry> {
     vec![
-        Entry::Label(t("transactions:table.filter.feesLabel")),
         check(
             "txs-f-fees-all",
             t("transactions:table.filter.allFees"),
@@ -1233,41 +1189,26 @@ fn filters_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
     let f = &app.txs.filters;
     let n = f.active_count();
     let open = matches!(app.txs.popup, Some(Popup::Filters | Popup::FiltersSub(_)));
-    // Button outline sm, `h-9 gap-2` with an icon (`px-2.5`), `border-primary` while filtered.
-    let mut trigger = row()
-        .key("txs-filters")
-        .h(tk.r(2.25))
-        .px(tk.r(0.625) + 1.0)
-        .gap(tk.r(0.5))
-        .center_y()
-        .radius(tk.r(0.375))
-        .fill(outline_fill(tk))
-        .border(
-            1.0,
-            if n > 0 {
-                tk.primary
-            } else {
-                outline_border(tk)
-            },
-        )
-        .hover(outline_hover(tk))
-        .role("button")
-        .label(t("transactions:table.filter.menuAria"))
-        .focusable(true)
-        .menu_trigger(open, |a: &mut App| {
-            a.txs.popup = if matches!(a.txs.popup, Some(Popup::Filters | Popup::FiltersSub(_))) {
-                None
-            } else {
-                Some(Popup::Filters)
-            }
-        })
-        .child(ic(&I::SLIDERS_HORIZONTAL, tk.r(1.0), tk.fg))
-        .child(
-            text(t("transactions:table.filter.menuTrigger"))
-                .font(tk.tsm(500.0))
-                .color(tk.fg),
-        );
+    // Outline button with an icon, `border-primary` while filtered.
+    let mut trigger = crate::ui::button::button(
+        tk,
+        "txs-filters",
+        crate::ui::button::Variant::Outline,
+        crate::ui::button::Size::Default,
+        Some(&I::SLIDERS_HORIZONTAL),
+        &t("transactions:table.filter.menuTrigger"),
+        true,
+    )
+    .label(t("transactions:table.filter.menuAria"))
+    .menu_trigger(open, |a: &mut App| {
+        a.txs.popup = if matches!(a.txs.popup, Some(Popup::Filters | Popup::FiltersSub(_))) {
+            None
+        } else {
+            Some(Popup::Filters)
+        }
+    });
     if n > 0 {
+        trigger = trigger.border(1.0, tk.primary);
         // `grid min-w-4 place-items-center rounded-full bg-primary px-1 text-2xs font-semibold leading-4`.
         trigger = trigger.child(
             row()
@@ -1291,8 +1232,6 @@ fn filters_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
             _ => None,
         };
         let entries = vec![
-            Entry::Label(t("transactions:table.filter.menuLabel")),
-            Entry::Sep,
             Entry::Sub {
                 name: "status",
                 label: t("transactions:table.filter.statusTrigger"),
@@ -1355,58 +1294,28 @@ fn filters_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
     trigger
 }
 
-fn outline_fill(tk: &Tk) -> Color {
-    if tk.dark {
-        tk.input.alpha(tk.input.a * 0.3)
-    } else {
-        tk.background
-    }
-}
-fn outline_border(tk: &Tk) -> Color {
-    if tk.dark { tk.input } else { tk.border }
-}
-fn outline_hover(tk: &Tk) -> Color {
-    if tk.dark {
-        tk.input.alpha(tk.input.a * 0.5)
-    } else {
-        tk.accent
-    }
-}
-
 /// Expand / Restore: a 2.25 rem outline icon button in both modes (its text is `sr-only`).
 fn expand_button(app: &App, tk: &Tk) -> El {
     let ex = app.txs.expanded;
-    row()
-        .key("txs-expand")
-        .size(tk.r(2.25), tk.r(2.25))
-        .center()
-        .radius(tk.r(0.375))
-        .fill(outline_fill(tk))
-        .border(1.0, outline_border(tk))
-        .hover(outline_hover(tk))
-        .role("button")
-        .label(if ex {
+    crate::ui::button::icon_button(
+        tk,
+        "txs-expand",
+        crate::ui::button::Variant::Outline,
+        tk.r(2.25),
+        if ex { &I::MINIMIZE_2 } else { &I::MAXIMIZE_2 },
+        tk.r(1.0),
+        if ex {
             t("transactions:table.expand.collapseAria")
         } else {
             t("transactions:table.expand.expandAria")
-        })
-        .help(if ex {
-            t("transactions:table.expand.collapseAria")
-        } else {
-            t("transactions:table.expand.expandAria")
-        })
-        .focusable(true)
-        .on_press_tx(|a: &mut App, tx: &mut Tx| {
-            a.txs.expanded = !a.txs.expanded;
-            a.txs.popup = None;
-            tx.scroll_to_instant("app-main", 0.0, 0.0);
-            tx.scroll_to_instant("txs-scroll", 0.0, 0.0);
-        })
-        .child(ic(
-            if ex { &I::MINIMIZE_2 } else { &I::MAXIMIZE_2 },
-            tk.r(1.0),
-            tk.fg,
-        ))
+        },
+    )
+    .on_press_tx(|a: &mut App, tx: &mut Tx| {
+        a.txs.expanded = !a.txs.expanded;
+        a.txs.popup = None;
+        tx.scroll_to_instant("app-main", 0.0, 0.0);
+        tx.scroll_to_instant("txs-scroll", 0.0, 0.0);
+    })
 }
 
 /// The table's actions as the expanded period nav shows them: chips, Filters, Restore.
@@ -1885,29 +1794,23 @@ pub fn confirm_dialog(app: &App, tk: &Tk, layer: &mut Vec<El>) {
                     .on_press(close),
                 )
                 .child(
-                    row()
-                        .key("txs-confirm-ok")
-                        .h(tk.r(2.0))
-                        .px(tk.r(0.75))
-                        .center()
-                        .radius(tk.r(0.375))
-                        .fill(tk.destructive)
-                        .role("button")
-                        .label(t("common:actions.confirm"))
-                        .focusable(true)
-                        .on_press(move |s: &mut App| {
-                            s.txs.confirm_exclude = None;
-                            s.send(
-                                "ui.transactions.metadata.update",
-                                json!({"transaction": id, "excluded": true}),
-                                "txs.exclude",
-                            );
-                        })
-                        .child(
-                            text(t("common:actions.confirm"))
-                                .font(tk.tsm(500.0))
-                                .color(Color::WHITE),
-                        ),
+                    crate::ui::button::button(
+                        tk,
+                        "txs-confirm-ok",
+                        crate::ui::button::Variant::Destructive,
+                        crate::ui::button::Size::Sm,
+                        None,
+                        &t("common:actions.confirm"),
+                        true,
+                    )
+                    .on_press(move |s: &mut App| {
+                        s.txs.confirm_exclude = None;
+                        s.send(
+                            "ui.transactions.metadata.update",
+                            json!({"transaction": id, "excluded": true}),
+                            "txs.exclude",
+                        );
+                    }),
                 ),
         );
     layer.push(

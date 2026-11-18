@@ -222,12 +222,6 @@ pub static SCENES: &[crate::app::Scene] = &[
         setup_at(a, 3);
         a.onboarding.migrate_open = true;
     }),
-    // "Or create with recommended defaults": Security, with the built-in servers chosen.
-    ("onboarding-quick", |a| {
-        welcome(a);
-        super::begin_quick_start(a);
-        super::prime(a);
-    }),
     ("onboarding-review", review),
     ("onboarding-review-light", |a| {
         light(a);

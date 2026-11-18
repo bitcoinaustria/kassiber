@@ -341,12 +341,8 @@ fn source_badge(tk: &Tk, source: &str, label: &str) -> El {
     };
     row()
         .h(tk.r(1.25))
-        .px(tk.r(0.375))
         .gap(tk.r(0.25))
         .center_y()
-        .radius(tk.r(0.375))
-        .fill(tone.bg)
-        .border(1.0, tone.border)
         .child(ic(glyph, tk.r(0.625), tone.text))
         .child(text(label.to_owned()).font(tk.t2xs(500.0)).color(tone.text))
 }
@@ -364,11 +360,7 @@ fn family_badge(tk: &Tk, fam: &str) -> El {
     };
     row()
         .h(tk.r(1.25))
-        .px(tk.r(0.375))
         .center_y()
-        .radius(tk.r(0.375))
-        .fill(tone.bg)
-        .border(1.0, tone.border)
         .child(text(fam.to_owned()).font(tk.t2xs(500.0)).color(tone.text))
 }
 
@@ -422,18 +414,7 @@ pub fn history(app: &App, tk: &Tk, o: &Open) -> El {
         );
     }
     if !events.is_empty() {
-        ends = ends.child(
-            row()
-                .px(tk.r(0.5))
-                .py(tk.r(0.125))
-                .radius(tk.r(0.375))
-                .fill(tk.muted)
-                .child(
-                    text(events.len().to_string())
-                        .font(tk.txs(500.0))
-                        .color(tk.fg),
-                ),
-        );
+        ends = ends.child(crate::ui::count(tk, events.len(), tk.txs(500.0)));
     }
     summary = summary.child(ends.child(ic(
         if open {
