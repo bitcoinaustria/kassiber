@@ -420,7 +420,8 @@
     "find": "Py::Str(code) => known_code(&lossy(code), &KNOWN_ERRORS),",
     "replace": "Py::Str(code) => Py::Str(code.clone()),",
     "expect_failing": [
-      "bitpanda_auth_errors_withhold_the_echoed_key"
+      "bitpanda_auth_errors_withhold_the_echoed_key",
+      "provider_codes_are_local_values_never_the_providers_string"
     ],
     "rule": "A 401/403 error code is one of Kassiber's known keys or \"unknown\", never Bitpanda's string."
   },
@@ -1511,6 +1512,139 @@
     "rule": "A Kraken sync replaces the dead-end generic-ledger hint for a crypto-quoted trade with the scope command or the generic CSV/JSON import."
   },
   {
+    "id": "bitvavo-signature-covers-path",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "format!(\"{timestamp}GET{path}\").as_bytes(),",
+    "replace": "format!(\"{timestamp}GET\").as_bytes(),",
+    "expect_failing": [
+      "bitvavo_reads_only_and_maps_every_btc_event",
+      "bitvavo_signs_the_path_the_base_url_carries"
+    ],
+    "rule": "Bitvavo signs timestamp, method and the full path with /v2 and the query."
+  },
+  {
+    "id": "bitvavo-page-count-fixed",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "if *total.get_or_insert(pages) != pages {",
+    "replace": "if *total.get_or_insert(pages) != pages && false {",
+    "expect_failing": [
+      "bitvavo_malformed_pages_fail_closed"
+    ],
+    "rule": "A history whose page count moves while it is read fails closed."
+  },
+  {
+    "id": "bitvavo-balance-includes-in-order",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "for key in [\"available\", \"inOrder\"] {",
+    "replace": "for key in [\"available\"] {",
+    "expect_failing": [
+      "bitvavo_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "The reported spot balance is available plus in order, as its scope says."
+  },
+  {
+    "id": "bitvavo-btc-msat-precision",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": ".any(|leg| is_bitcoin(&leg.asset) && exact_msat(&leg.amount).is_none())",
+    "replace": ".any(|_| false)",
+    "expect_failing": [
+      "bitvavo_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A BTC amount finer than a millisatoshi refuses the import, never rounded."
+  },
+  {
+    "id": "bitvavo-unmapped-type-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "_ => return Err(\"has a type Kassiber does not map\"),",
+    "replace": "_ => Kind::Movement { inbound: true, kind: \"deposit\" },",
+    "expect_failing": [
+      "bitvavo_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A BTC row of a Bitvavo type Kassiber does not map refuses the import by name."
+  },
+  {
+    "id": "bitvavo-stablecoin-quote-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "    if !is_fiat(&cash.asset) {",
+    "replace": "    if cash.asset.is_empty() {",
+    "expect_failing": [
+      "bitvavo_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "BTC traded against a stablecoin or altcoin is never priced as a fiat trade: refused in bitcoin scope, a swap in crypto scope."
+  },
+  {
+    "id": "bitvavo-buy-cost-adds-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "            a.add(fee, &CTX)",
+    "replace": "            Ok::<_, DecimalError>(a.clone())",
+    "expect_failing": [
+      "bitvavo_reads_only_and_maps_every_btc_event",
+      "bitvavo_trade_values_follow_the_source_reading"
+    ],
+    "rule": "A buy stated before its fee costs the amount plus the fiat fee."
+  },
+  {
+    "id": "bitvavo-api-ambiguous-fee-unpriced",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "(true, true) => return Ok(TradeValue::Ambiguous),",
+    "replace": "(true, true) => Some(with_fee(cash)?),",
+    "expect_failing": [
+      "bitvavo_trade_values_follow_the_source_reading"
+    ],
+    "rule": "An API trade whose fee reading is ambiguous imports without exact pricing."
+  },
+  {
+    "id": "bitvavo-chronological-store-order",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "    unique.sort_by_key(|event| event.at);\n",
+    "replace": "",
+    "expect_failing": [
+      "bitvavo_api_orders_same_second_rows_and_tags_them_across_syncs"
+    ],
+    "rule": "Bitvavo rows are stored oldest first by their millisecond time, so same-second rows keep the order they happened in."
+  },
+  {
+    "id": "bitvavo-api-tags-same-second",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "            tag_same_second(conn, profile, &wallet.id, &inserted, &mut ids)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "bitvavo_api_orders_same_second_rows_and_tags_them_across_syncs"
+    ],
+    "rule": "A Bitvavo API sync tags rows whose same-second order across syncs is uncertain."
+  },
+  {
+    "id": "exchange-same-second-tag",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "            uncertain.insert(id.clone());\n            uncertain.extend(earlier);\n",
+    "replace": "",
+    "expect_failing": [
+      "bitvavo_api_orders_same_second_rows_and_tags_them_across_syncs"
+    ],
+    "rule": "A row imported into a second an earlier import filled with an opposite-direction row is tagged for review with it."
+  },
+  {
+    "id": "exchange-same-second-profile-index",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "WHERE profile_id=?1 AND occurred_at=?3",
+    "replace": "WHERE ?1<>'' AND occurred_at=?3",
+    "expect_failing": [
+      "same_second_tagging_uses_the_profile_time_index"
+    ],
+    "rule": "Same-second tagging reads one second of one profile through the profile/time index, never by scanning the table."
+  },
+  {
+    "id": "exchange-exact-msat-without-rounding",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "    let scale = u32::try_from(exponent.checked_add(DECIMALS)?).ok()?;",
+    "replace": "    let scale = u32::try_from(exponent.checked_add(DECIMALS)?.max(0)).ok()?;",
+    "expect_failing": [
+      "exact_amounts_are_whole_msat_by_their_own_digits",
+      "bitvavo_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A BTC amount is whole msat by its own digits; finer amounts are refused, never rounded."
+  },
+  {
     "id": "exchange-echoed-page-refused",
     "file": "crates/wallets/src/file_import/exchange_api.rs",
     "find": "    if client.http.echoed() {",
@@ -1539,6 +1673,87 @@
       "sync_errors_withhold_every_request_credential"
     ],
     "rule": "A numeric error detail equal to a request credential is dropped."
+  },
+  {
+    "id": "exchange-provider-numbers-documented",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": ".filter(|n| documented.iter().any(|range| range.contains(n)))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "provider_codes_are_local_values_never_the_providers_string"
+    ],
+    "rule": "A numeric provider code outside the documented ranges is reported as unknown."
+  },
+  {
+    "id": "bitvavo-scope-tally-by-ticker",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "        if mapper.admit(&codes) {",
+    "replace": "        if !codes.is_empty() {",
+    "expect_failing": [
+      "bitvavo_bitcoin_scope_counts_other_assets_and_names_the_scope_command"
+    ],
+    "rule": "In bitcoin scope each other asset a skipped Bitvavo transaction moves is counted by ticker, in the sync and the export."
+  },
+  {
+    "id": "bitvavo-kept-assets-follow-scope",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "let kept = |code: &str| is_bitcoin(code) || (scope == Scope::Crypto && !is_fiat(code));",
+    "replace": "let kept = |code: &str| !is_fiat(code);",
+    "expect_failing": [
+      "bitvavo_bitcoin_scope_counts_other_assets_and_names_the_scope_command",
+      "bitvavo_refuses_btc_rows_it_cannot_book_by_name"
+    ],
+    "rule": "A bitcoin-scope wallet keeps no other crypto asset: a BTC trade against one is refused, never booked as a swap."
+  },
+  {
+    "id": "bitvavo-bitcoin-scope-names-scope-command",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "&\"is a Convert swap between BTC and another asset\",\n                    keep,",
+    "replace": "&\"is a Convert swap between BTC and another asset\",\n                    REVIEW,",
+    "expect_failing": [
+      "bitvavo_bitcoin_scope_counts_other_assets_and_names_the_scope_command"
+    ],
+    "rule": "A bitcoin-scope refusal of a BTC-altcoin Convert names the command that sets the crypto scope."
+  },
+  {
+    "id": "bitvavo-swap-legs-share-ref",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "            \"swap\" => Some(contract::Kind::Swap(reference.clone())),",
+    "replace": "            \"swap\" => None,",
+    "expect_failing": [
+      "bitvavo_crypto_scope_maps_trades_swaps_fees_and_movements_of_every_asset"
+    ],
+    "rule": "Both legs of a Bitvavo swap share its swap_ref, so the import pairs them."
+  },
+  {
+    "id": "bitvavo-third-asset-fee-only",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "\"fee\" => assets::fee_only(canonical(&row.leg.amount)?),",
+    "replace": "\"fee\" => (canonical(&row.leg.amount)?, canonical(&row.fee)?),",
+    "expect_failing": [
+      "bitvavo_crypto_scope_maps_trades_swaps_fees_and_movements_of_every_asset"
+    ],
+    "rule": "A fee in a third asset is a fee-only spend of that asset, never a sale."
+  },
+  {
+    "id": "bitvavo-api-swap-fee-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "let quote = (reading == FeeReading::AfterFee).then_some(cash.asset.as_str());",
+    "replace": "let quote = Some(cash.asset.as_str());",
+    "expect_failing": [
+      "bitvavo_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "The API does not say whether a swap's amounts include a fee in a traded asset, so such a swap is refused by name."
+  },
+  {
+    "id": "bitvavo-asset-must-be-ticker",
+    "file": "crates/wallets/src/file_import/exchange_api/bitvavo.rs",
+    "find": "find(|leg| !ticker(&leg.asset))",
+    "replace": "find(|_| false)",
+    "expect_failing": [
+      "bitvavo_crypto_scope_refuses_what_it_cannot_place"
+    ],
+    "rule": "An asset code that is not a plain ticker is refused by name, never stored as written."
   },
   {
     "id": "exchange-z-alias-kraken-only",

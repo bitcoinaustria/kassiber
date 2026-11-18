@@ -17,11 +17,13 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 mod binance;
 mod bitpanda;
+pub(super) mod bitvavo;
 mod coinbase;
 mod contract;
 pub mod desktop;
 mod kraken;
-use contract::{Balance, Descriptor, Event, Kind, Mapper};
+use contract::Mapper;
+use contract::{Balance, Descriptor, Event, Kind};
 #[cfg(test)]
 mod tests;
 
@@ -32,8 +34,8 @@ const MAX_ROWS: usize = 1_000_000;
 /// Python has no overall budget; each read still has the backend timeout.
 const BUDGET: Duration = Duration::from_secs(3600);
 
-/// Bitpanda is Rust only; Python knows the first three.
-pub const KINDS: [&str; 4] = ["kraken", "coinbase", "binance", "bitpanda"];
+/// Bitpanda and Bitvavo are Rust only; Python knows the first three.
+pub const KINDS: [&str; 5] = ["kraken", "coinbase", "binance", "bitpanda", "bitvavo"];
 
 /// The resolved backend as Python's `runtime_config["backends"][name]`.
 /// The trusted command boundary supplies a fresh consent for [`Route::request`].
@@ -145,6 +147,19 @@ pub fn execute(
         None,
         Some(&format!("{kind}:api:{}", lossy(&name))),
     )
+    .and_then(|result| {
+        if exchange.same_second_tags {
+            let inserted: Vec<String> = match at(&result, "inserted_records") {
+                Py::List(items) => items
+                    .iter()
+                    .map(|item| lossy(&text(at(item, "transaction_id"))))
+                    .collect(),
+                _ => vec![],
+            };
+            tag_same_second(conn, profile, &wallet.id, &inserted, &mut ids)?;
+        }
+        Ok(result)
+    })
     // A revoked or offline route never publishes a book.
     // Both legs of each swap are stored now; pair them in the same write.
     .and_then(|mut result| {
@@ -189,6 +204,12 @@ pub fn execute(
 /// exchange contract.
 pub(super) fn file_exchange(format: Format) -> bool {
     contract::registry::by_format(format).is_some()
+}
+
+/// Whether an import of `format` tags rows whose order within one second
+/// Kassiber cannot know ([`tag_same_second`]).
+pub(super) fn tags_same_second(format: Format) -> bool {
+    contract::registry::by_format(format).is_some_and(|(exchange, _)| exchange.same_second_tags)
 }
 
 /// An exchange file export's records as import rows, and the rows the
@@ -396,7 +417,7 @@ fn backend_kind(backend: &Py, expected: &str) -> Result<(PyStr, String), AppErro
                 name.clone(),
                 format!("' has kind '{kind}', expected an exchange API kind").into(),
             ]))
-            .with_hint("Use a backend kind of kraken, coinbase, or binance."));
+            .with_hint("Use a backend kind of kraken, coinbase, binance, bitpanda, or bitvavo."));
     }
     if !expected.is_empty() && kind != expected {
         return Err(
@@ -619,6 +640,24 @@ impl Client<'_> {
                 Ok(request)
             },
         )
+    }
+    /// [`Self::response`] with headers `sign` builds afresh for every
+    /// attempt, so a retried request carries a new timestamp and signature.
+    fn signed_response(
+        &self,
+        url: &str,
+        accepted: &'static [u16],
+        sign: impl Fn() -> Result<Vec<(&'static str, String)>, AppError>,
+    ) -> Result<kassiber_net::HttpResponse, AppError> {
+        let (consent, deadline) = (self.consent, self.deadline);
+        self.http
+            .authenticated_response(url, consent, deadline, self.source, accepted, || {
+                let mut request = HttpRequest::new("GET", url).map_err(|e| e.app_error())?;
+                for (name, value) in sign()? {
+                    request = request.header(name, &value).map_err(|e| e.app_error())?;
+                }
+                Ok(request)
+            })
     }
 }
 
@@ -1158,6 +1197,45 @@ fn known_code(code: &str, table: &[&'static str]) -> Py {
         .find(|known| **known == code)
         .map_or_else(|| s("unknown"), |known| s(*known))
 }
+/// A numeric provider code inside one of the `documented` ranges, else
+/// "unknown" (null when absent).
+fn known_number(code: &Py, documented: &[std::ops::RangeInclusive<i64>]) -> Py {
+    match code {
+        Py::Null => Py::Null,
+        Py::Int(number) => i64::try_from(number.clone())
+            .ok()
+            .filter(|n| documented.iter().any(|range| range.contains(n)))
+            .map_or_else(|| s("unknown"), Py::from),
+        _ => s("unknown"),
+    }
+}
+
+/// `<provider> transaction '<id>' has <what>`: a row Kassiber cannot read
+/// exactly; nothing is imported.
+pub(super) fn malformed(provider: &str, id: &str, what: &str) -> AppError {
+    AppError::new(
+        "validation",
+        format!("{provider} transaction '{id}' has {what}"),
+    )
+    .with_hint(format!(
+        "{provider} returned a transaction Kassiber cannot read exactly; nothing was imported."
+    ))
+}
+/// `<provider> transaction '<id>' (type '<kind>') <reason>`: a row Kassiber
+/// refuses to book; nothing is imported and `hint` says what to do.
+pub(super) fn refusal(
+    provider: &str,
+    id: &str,
+    kind: &str,
+    reason: impl std::fmt::Display,
+    hint: &str,
+) -> AppError {
+    AppError::new(
+        "validation",
+        format!("{provider} transaction '{id}' (type '{kind}') {reason}"),
+    )
+    .with_hint(hint.to_owned())
+}
 
 /// A BTC amount as whole msat by its own digits, without context rounding:
 /// `None` when it is finer than a millisatoshi, negative or out of range.
@@ -1177,6 +1255,15 @@ pub(super) fn exact_msat(btc: &Decimal) -> Option<i64> {
     let scale = u32::try_from(exponent.checked_add(DECIMALS)?).ok()?;
     i64::try_from(coefficient.checked_mul(10u128.checked_pow(scale)?)?).ok()
 }
+/// Whole msat as a BTC decimal.
+pub(super) fn btc_decimal(msat: i64) -> Result<Decimal, AppError> {
+    let (whole, rest) = (
+        msat.div_euclid(100_000_000_000),
+        msat.rem_euclid(100_000_000_000),
+    );
+    format!("{whole}.{rest:011}").parse().map_err(decimal_error)
+}
+
 /// A decimal written plainly: digits with an optional fraction and, when
 /// `signed` (a file export), a leading minus or an exponent (`1e-05`).
 /// Anything else (blank, `NaN`, separators, `+`) is `None`.
@@ -1199,4 +1286,101 @@ pub(super) fn strict_decimal(text: &str, signed: bool) -> Option<Decimal> {
         }
     }
     text.parse().ok()
+}
+/// One spelling per number (`0.0040` and `0.004` are both `0.004`), so two
+/// sources that compute an amount differently store the same text and
+/// fingerprint.
+pub(super) fn canonical(value: &Decimal) -> Result<PriceNumber, AppError> {
+    let fixed = value.to_fixed_string().map_err(decimal_error)?;
+    let trimmed = match fixed.contains('.') {
+        true => fixed.trim_end_matches('0').trim_end_matches('.'),
+        false => fixed.as_str(),
+    };
+    PriceNumber::parse(trimmed)
+}
+
+/// Tag on rows whose order within one second Kassiber cannot know: stored
+/// times are whole seconds, and a later import's rows take source positions
+/// after an earlier import's, whatever their milliseconds.
+pub(super) const ORDER_TAG: &str = "same-second-order-uncertain";
+/// The rows of a wallet in one second with the other direction, read
+/// through the profile/time index (`idx_transactions_profile_page`).
+pub(super) const SAME_SECOND_SQL: &str =
+    "SELECT id FROM transactions WHERE profile_id=?1 AND occurred_at=?3 AND wallet_id=?2 AND direction<>?4";
+
+/// After an import into `wallet`: each row it inserted into a second that
+/// already held an opposite-direction row from an earlier import is tagged
+/// [`ORDER_TAG`] with those rows, for review; their order decides FIFO and
+/// LIFO basis. Returns how many rows carry the tag.
+pub(super) fn tag_same_second(
+    conn: &Connection,
+    profile: &str,
+    wallet: &str,
+    inserted: &[String],
+    ids: &mut Ids<'_>,
+) -> Result<i64, AppError> {
+    let new: std::collections::BTreeSet<&str> = inserted.iter().map(String::as_str).collect();
+    let mut uncertain = std::collections::BTreeSet::<String>::new();
+    let mut row = conn
+        .prepare("SELECT occurred_at, direction FROM transactions WHERE id=?")
+        .map_err(database_error)?;
+    let mut same_second = conn.prepare(SAME_SECOND_SQL).map_err(database_error)?;
+    for id in inserted {
+        let (occurred, direction): (String, String) = row
+            .query_row([id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(database_error)?;
+        let earlier = same_second
+            .query_map([profile, wallet, &occurred, &direction], |r| {
+                r.get::<_, String>(0)
+            })
+            .map_err(database_error)?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(database_error)?;
+        let earlier: Vec<String> = earlier
+            .into_iter()
+            .filter(|e| !new.contains(e.as_str()))
+            .collect();
+        if !earlier.is_empty() {
+            uncertain.insert(id.clone());
+            uncertain.extend(earlier);
+        }
+    }
+    if uncertain.is_empty() {
+        return Ok(0);
+    }
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT id FROM tags WHERE profile_id=? AND code=?",
+            [profile, ORDER_TAG],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(database_error)?;
+    let tag = match existing {
+        Some(tag) => tag,
+        None => {
+            let workspace: String = conn
+                .query_row(
+                    "SELECT workspace_id FROM profiles WHERE id=?",
+                    [profile],
+                    |r| r.get(0),
+                )
+                .map_err(database_error)?;
+            let id = ids.next(conn)?;
+            conn.execute(
+                "INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES(?,?,?,?,?,?)",
+                kassiber_store::rusqlite::params![id, workspace, profile, ORDER_TAG, "Same-second order uncertain", ids.time(conn)?],
+            )
+            .map_err(database_error)?;
+            id
+        }
+    };
+    for transaction in &uncertain {
+        conn.execute(
+            "INSERT OR IGNORE INTO transaction_tags(transaction_id,tag_id) VALUES(?,?)",
+            [transaction.as_str(), tag.as_str()],
+        )
+        .map_err(database_error)?;
+    }
+    Ok(uncertain.len() as i64)
 }

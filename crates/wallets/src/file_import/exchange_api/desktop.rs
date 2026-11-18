@@ -57,7 +57,7 @@ pub fn probe(
     Ok(dict([
         ("exchange", s(kind.as_str())),
         ("ok", Py::Bool(true)),
-        // Kraken and Coinbase do not say what else a key may do.
+        // Kraken, Coinbase and Bitvavo do not say what else a key may do.
         ("read_only", read_only.map_or(Py::Null, Py::Bool)),
     ]))
 }

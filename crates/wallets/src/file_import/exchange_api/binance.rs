@@ -43,6 +43,7 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
         load: history::load,
     }],
     shared_ids: false,
+    same_second_tags: false,
 };
 
 fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<Option<Balance>, AppError> {

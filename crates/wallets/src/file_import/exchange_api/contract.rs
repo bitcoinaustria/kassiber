@@ -352,12 +352,14 @@ impl Mapper {
 
     pub fn finish(mut self) -> Mapped {
         self.tally.unread(self.exchange.provider, &self.unread);
-        let skipped = self.exchange.skipped.map(|[fiat_only, other, internal]| {
-            dict([
-                (fiat_only, Py::from(self.fiat_only)),
-                (other, Py::from(self.other)),
-                (internal, Py::from(self.internal)),
-            ])
+        let counts = [self.fiat_only, self.other, self.internal];
+        let skipped = self.exchange.skipped.map(|keys| {
+            dict(
+                keys.iter()
+                    .zip(counts)
+                    .map(|(key, count)| (*key, Py::from(count)))
+                    .collect::<Vec<_>>(),
+            )
         });
         Mapped {
             records: self.records,

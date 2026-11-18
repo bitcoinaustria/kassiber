@@ -31,20 +31,25 @@ pub(in crate::file_import) struct Descriptor {
     pub probe: fn(&Client<'_>) -> Result<Option<bool>, AppError>,
     /// The envelope's `skipped` keys for fiat-only, other-asset and internal
     /// events, where the exchange reports them.
-    pub skipped: Option<[&'static str; 3]>,
+    pub skipped: Option<&'static [&'static str]>,
     /// The exchange's file exports.
     pub files: &'static [FileFormat],
     /// Whether a transaction in the API and in a file export gets the same
     /// record identity, so both may feed one wallet. Where it does not
     /// (Binance's export has no ids), a wallet takes one source only.
     pub shared_ids: bool,
+    /// Whether an import tags rows that land in a second already holding an
+    /// opposite-direction row of an earlier import: the exchange orders
+    /// within a second, the book's whole-second times cannot.
+    pub same_second_tags: bool,
 }
 
-pub(in crate::file_import) static EXCHANGES: [&Descriptor; 4] = [
+pub(in crate::file_import) static EXCHANGES: [&Descriptor; 5] = [
     &kraken::EXCHANGE,
     &coinbase::EXCHANGE,
     &binance::EXCHANGE,
     &bitpanda::EXCHANGE,
+    &bitvavo::EXCHANGE,
 ];
 
 /// One file export of an exchange.

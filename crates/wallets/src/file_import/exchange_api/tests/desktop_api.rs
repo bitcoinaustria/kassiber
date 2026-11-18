@@ -253,9 +253,40 @@ fn bitpanda_check_refuses_trading_keys_then_reads_with_both_scopes() {
     }
 }
 
+/// Bitvavo's documented shapes: an empty BTC balance and one empty page.
+fn bitvavo() -> loopback::Fake {
+    serve("bitvavo", |_, _, target| {
+        match target.split('?').next().unwrap() {
+            "/v2/balance" => (200, "[]".into()),
+            "/v2/account/history" => (
+                200,
+                r#"{"items":[],"currentPage":1,"totalPages":0,"maxItems":1}"#.into(),
+            ),
+            _ => (
+                404,
+                r#"{"errorCode":110,"error":"Invalid endpoint."}"#.into(),
+            ),
+        }
+    })
+}
+
+#[test]
+fn bitvavo_check_reads_the_balance_and_one_history_row_and_cannot_tell_the_scope() {
+    let fake = bitvavo();
+    let result = check(&backend("bitvavo", &fake.url), true, false)
+        .0
+        .unwrap();
+    // Bitvavo does not reveal a key's permissions.
+    assert_eq!(at(&result, "read_only"), &Py::Null);
+    assert!(fake.seen.lock().unwrap().iter().all(|r| r.signed));
+    assert_eq!(targets(&fake), ["/v2/balance", "/v2/account/history"]);
+    let seen = fake.seen.lock().unwrap()[1].target.clone();
+    assert!(seen.ends_with("&page=1&maxItems=1"), "{seen}");
+}
+
 #[test]
 fn checks_need_consent_an_open_gate_and_credentials() {
-    for kind in ["kraken", "coinbase", "binance", "bitpanda"] {
+    for kind in ["kraken", "coinbase", "binance", "bitpanda", "bitvavo"] {
         let fake = serve(kind, |_, _, _| (500, "{}".into()));
         let refused = check(&backend(kind, &fake.url), false, false)
             .0
@@ -280,7 +311,7 @@ fn checks_need_consent_an_open_gate_and_credentials() {
 
 #[test]
 fn checks_withhold_an_echoed_key_and_secret() {
-    for kind in ["kraken", "coinbase", "binance", "bitpanda"] {
+    for kind in ["kraken", "coinbase", "binance", "bitpanda", "bitvavo"] {
         let stored = backend(kind, "http://127.0.0.1:9");
         // The secret as the backend stores it (Kraken's is base64).
         // Bitpanda has none: it authenticates with the key alone.
@@ -292,17 +323,22 @@ fn checks_withhold_an_echoed_key_and_secret() {
         let fake = serve(kind, move |_, _, _| {
             (
                 401,
-                json!({"error": {"code": format!("bad {} {echoed}", loopback::KEY)}, "msg": loopback::KEY})
-                    .to_string(),
+                if kind == "bitvavo" {
+                    // Bitvavo's error shape: a code and a message.
+                    json!({"errorCode": 309, "error": format!("bad {} {echoed}", loopback::KEY)})
+                } else {
+                    json!({"error": {"code": format!("bad {} {echoed}", loopback::KEY)}, "msg": loopback::KEY})
+                }
+                .to_string(),
             )
         });
         let error = check(&backend(kind, &fake.url), true, false).0.unwrap_err();
         let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
         assert!(!shown.contains(loopback::KEY), "{kind}: {shown}");
         assert!(!shown.contains(&secret), "{kind}: {shown}");
-        // Bitpanda keeps only a known error code, so its free text (and the
-        // echo in it) is dropped rather than shown redacted.
-        if kind != "bitpanda" {
+        // Bitpanda and Bitvavo keep only a known error code, so their free
+        // text (and the echo in it) is dropped rather than shown redacted.
+        if !matches!(kind, "bitpanda" | "bitvavo") {
             assert!(shown.contains("<redacted>"), "{kind}: {shown}");
         }
     }

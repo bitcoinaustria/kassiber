@@ -757,6 +757,23 @@ projections stay Python. Progress and remaining work for this slice:
 - [ ] Binance fiat paging: refuse rows > total (a server that ignores `page`
   would answer every page with the same rows, which Kassiber would then store
   as duplicates instead of refusing the sync).
+- [x] Add the Rust-only Bitvavo API sync (`wallets sync-bitvavo`, View-only
+  key, `/v2/account/history` plus the BTC spot balance as
+  `reported_balance`) and transaction-history CSV import
+  (`wallets import-bitvavo`) on one mapping with shared ids, altcoin and
+  stablecoin refusals by name, desktop cards and named mutation killers. See
+  [Bitvavo](docs/reference/bitvavo.md).
+- [x] Bitvavo follows the wallet's `asset_scope` in the API and the CSV
+  (skip tally by ticker in `assets`, crypto-quoted trades and Converts as
+  paired swap legs, third-asset fees as fee-only rows; `bitcoin` scope
+  refuses BTC-altcoin trades naming the scope command). See
+  [Bitvavo](docs/reference/bitvavo.md#mapping).
+- [ ] Framework: a sub-second tie-break for same-second rows across import
+  batches. Stored times are whole seconds and source positions cover one
+  batch, so a later import's row precedes or follows an earlier one's by
+  import order, not time. This changes journal ordering for every importer,
+  so it needs a semantics bump. Bitvavo tags such rows
+  `same-second-order-uncertain` meanwhile ([Bitvavo](docs/reference/bitvavo.md)).
 - [ ] Exchange error display: a very short request credential (a one- to
   three-character proxy password) is withheld wherever it occurs, Kassiber's
   own message text included, which garbles the error; consider refusing such

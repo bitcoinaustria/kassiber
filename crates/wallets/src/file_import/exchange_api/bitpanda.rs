@@ -33,13 +33,14 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     key_only: true,
     fetch,
     probe,
-    skipped: Some([
+    skipped: Some(&[
         "fiat_only_operations",
         "non_btc_operations",
         "internal_btc_moves",
     ]),
     files: &[],
     shared_ids: true,
+    same_second_tags: false,
 };
 /// What [`reported`] sums: each BTC wallet's balance after its latest BTC
 /// transaction.

@@ -433,6 +433,19 @@ mod loopback {
             }
             // Bitpanda reads carry the key alone, and only GET is ever sent.
             "bitpanda" => method == "GET" && header("x-api-key") == KEY && body.is_empty(),
+            // Bitvavo signs timestamp + method + path (with /v2 and the
+            // query) + body; only GET with an empty body is ever sent.
+            "bitvavo" => {
+                let stamp = header("Bitvavo-Access-Timestamp");
+                let expected =
+                    hmac_sha256_hex(SECRET.as_bytes(), format!("{stamp}GET{target}").as_bytes());
+                method == "GET"
+                    && body.is_empty()
+                    && header("Bitvavo-Access-Key") == KEY
+                    && header("Bitvavo-Access-Window") == "10000"
+                    && stamp.len() == 13
+                    && header("Bitvavo-Access-Signature") == expected
+            }
             _ => {
                 let query = target.split_once('?').map(|(_, q)| q).unwrap_or("");
                 let Some((unsigned, signature)) = query.rsplit_once("&signature=") else {
@@ -583,6 +596,8 @@ mod loopback {
 mod binance_api;
 mod bitpanda_api;
 mod coinbase_api;
+#[rustfmt::skip]
+mod bitvavo_api;
 mod desktop_api;
 mod kraken_api;
 
@@ -1182,7 +1197,7 @@ fn stored_secret(kind: &str) -> String {
 /// error names no value.
 #[test]
 fn every_exchange_refuses_a_page_that_echoes_a_credential() {
-    for kind in ["kraken", "coinbase", "binance"] {
+    for kind in ["kraken", "coinbase", "binance", "bitvavo"] {
         for mapped in [true, false] {
             let echo = format!("{} {}", loopback::KEY, stored_secret(kind));
             let id = if mapped { loopback::KEY } else { "row-1" };
@@ -1213,6 +1228,12 @@ fn every_exchange_refuses_a_page_that_echoes_a_credential() {
                     ("binance", path) => {
                         serde_json::from_str(&binance_body(&format!("{path}?"), &[])).unwrap()
                     }
+                    ("bitvavo", "/v2/account/history") => {
+                        json!({"items": [{"transactionId": id, "type": "deposit",
+                        "executedAt": "2024-01-03T00:00:00Z", "receivedCurrency": "BTC", "receivedAmount": "0.001", "address": echo}],
+                        "currentPage": 1, "totalPages": 1})
+                    }
+                    ("bitvavo", _) => json!([]),
                     _ => json!({"rows": []}),
                 };
                 (200, body.to_string())
@@ -1251,6 +1272,40 @@ fn a_kraken_error_echoing_its_signature_withholds_it() {
     );
 }
 
+/// Provider error codes reach an error only as Kassiber's own values: a code
+/// from the adapter's table, else "unknown"; never the provider's string,
+/// so a code that echoes the API key cannot pass.
+#[test]
+fn provider_codes_are_local_values_never_the_providers_string() {
+    let bitpanda = serve("bitpanda", |_, _, target| {
+        match target.split('?').next().unwrap() {
+            "/v1/trading-limits" => (401, r#"{"error":{"code":"insufficient_scope"}}"#.into()),
+            _ => (
+                401,
+                format!(r#"{{"error":{{"code":"{}"}}}}"#, loopback::KEY),
+            ),
+        }
+    });
+    let bitvavo = serve("bitvavo", |_, _, _| {
+        (403, r#"{"errorCode":987654,"error":"x"}"#.into())
+    });
+    for (kind, fake, field) in [
+        ("bitpanda", bitpanda, "bitpanda_error"),
+        ("bitvavo", bitvavo, "bitvavo_error_code"),
+    ] {
+        let error = run(&backend(kind, &fake.url), kind, "", true, online())
+            .result
+            .unwrap_err();
+        let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+        assert!(!shown.contains(loopback::KEY), "{shown}");
+        assert_eq!(
+            at(error.details.as_ref().unwrap(), field),
+            &s("unknown"),
+            "{kind}"
+        );
+    }
+}
+
 /// Every sync error is shown with every request credential withheld at any
 /// length; a numeric detail equal to one is dropped; the hint is Kassiber's.
 #[test]
@@ -1268,5 +1323,63 @@ fn sync_errors_withhold_every_request_credential() {
     assert_eq!(
         kassiber_pyjson::dumps(error.details.as_ref().unwrap(), &Default::default()).unwrap(),
         r#"{"http_status": 401, "code": null, "text": ["echo <redacted>"]}"#
+    );
+}
+
+/// BTC amounts are whole msat by their own digits, never rounded; decimals
+/// are read only as written plainly.
+#[test]
+fn exact_amounts_are_whole_msat_by_their_own_digits() {
+    let d = |v: &str| v.parse::<Decimal>().unwrap();
+    for (amount, msat) in [
+        ("0.00000000001", Some(1)),
+        ("0.100000000000000", Some(10_000_000_000)),
+        ("0.000000000001", None),
+        ("0.100000000000000000000000000000000001", None),
+        ("-0.1", None),
+    ] {
+        assert_eq!(exact_msat(&d(amount)), msat, "{amount}");
+    }
+    assert_eq!(
+        exact_msat(&btc_decimal(399_990_000).unwrap()),
+        Some(399_990_000)
+    );
+    for (text, signed, plain) in [
+        ("1.5", false, true),
+        ("1e-05", false, false),
+        ("1e-05", true, true),
+        ("-1", false, false),
+        ("-1", true, true),
+        ("1.", true, false),
+        (".5", true, false),
+        ("NaN", true, false),
+        ("+1", true, false),
+    ] {
+        assert_eq!(strict_decimal(text, signed).is_some(), plain, "{text}");
+    }
+}
+
+/// Same-second tagging reads one second of one profile through the
+/// profile/time index, never by scanning the table.
+#[test]
+fn same_second_tagging_uses_the_profile_time_index() {
+    let conn = crate::file_import::tests::fixture();
+    let plan: Vec<String> = conn
+        .prepare(&format!("EXPLAIN QUERY PLAN {SAME_SECOND_SQL}"))
+        .unwrap()
+        .query_map(["p", "w", "2024-01-01T00:00:00Z", "inbound"], |r| r.get(3))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert!(
+        plan.iter()
+            .any(|step| step.contains("INDEX idx_transactions_profile_page")),
+        "{plan:?}"
+    );
+    assert!(
+        !plan
+            .iter()
+            .any(|step| step.starts_with("SCAN transactions")),
+        "{plan:?}"
     );
 }

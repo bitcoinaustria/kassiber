@@ -14,9 +14,10 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     key_only: false,
     fetch,
     probe,
-    skipped: Some(["fiat_only_entries", "other_asset_entries", "internal_moves"]),
+    skipped: Some(&["fiat_only_entries", "other_asset_entries", "internal_moves"]),
     files: &[],
     shared_ids: true,
+    same_second_tags: false,
 };
 
 fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<Option<Balance>, AppError> {

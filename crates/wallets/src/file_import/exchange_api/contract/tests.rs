@@ -4,7 +4,7 @@ use registry::EXCHANGES;
 
 static EVERY_ASSET: Descriptor = Descriptor {
     reads: Reads::AllAssets,
-    skipped: Some(["fiat_only", "other", "internal"]),
+    skipped: Some(&["fiat_only", "other", "internal"]),
     ..kraken::EXCHANGE
 };
 

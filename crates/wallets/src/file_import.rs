@@ -2361,6 +2361,9 @@ fn apply_records(
         ids,
         false,
     )?;
+    if exchange_api::tags_same_second(request.format) {
+        exchange_api::tag_same_second(conn, profile, &wallet.id, &inserted_ids, ids)?;
+    }
     let invalidated = !imported.is_empty() || !updated.is_empty();
     if invalidated {
         invalidate_journals(conn, profile)?;
