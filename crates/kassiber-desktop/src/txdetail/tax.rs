@@ -126,9 +126,16 @@ fn effect(events: &[Value]) -> Effect {
         };
     }
     if !income.is_empty() {
+        // The income row's own `costBasisEur` is 0: nothing was paid for the income. The basis
+        // the receipt creates is the value its acquisition row books.
+        let acquired: Vec<Value> = events
+            .iter()
+            .filter(|e| ty(e) == "acquisition")
+            .cloned()
+            .collect();
         return Effect {
             state: "income",
-            cost: sum(&income, "costBasisEur").or_else(|| sum(&income, "fiatValueEur")),
+            cost: sum(&acquired, "fiatValueEur").or_else(|| sum(&income, "fiatValueEur")),
             proceeds: None,
             gain: None,
         };
@@ -840,5 +847,33 @@ mod currency_tests {
         assert_eq!(row_currency(None, &json!({"fiatCurrency": "USD"})), "USD");
         assert_eq!(row_currency(None, &json!({"fiatCurrency": ""})), "EUR");
         assert_eq!(row_currency(None, &json!({})), "EUR");
+    }
+}
+
+#[cfg(test)]
+mod effect_tests {
+    use super::effect;
+    use serde_json::json;
+
+    /// A €100 mining receipt books an acquisition (the new lot) and an income row whose own cost
+    /// basis is 0. The panel's basis is the lot's €100.
+    #[test]
+    fn income_basis_is_the_acquired_value() {
+        let events = [
+            json!({"entryType": "acquisition", "fiatValueEur": 100.0, "costBasisEur": null}),
+            json!({"entryType": "income", "fiatValueEur": 100.0, "costBasisEur": 0.0,
+                   "proceedsEur": 100.0, "gainLossEur": 100.0}),
+        ];
+        let eff = effect(&events);
+        assert_eq!(eff.state, "income");
+        assert_eq!(eff.cost, Some(100.0));
+        assert_eq!(eff.proceeds, None);
+        assert_eq!(eff.gain, None);
+    }
+
+    #[test]
+    fn income_without_an_acquisition_row_uses_the_received_value() {
+        let events = [json!({"entryType": "income", "fiatValueEur": 42.5, "costBasisEur": 0.0})];
+        assert_eq!(effect(&events).cost, Some(42.5));
     }
 }
