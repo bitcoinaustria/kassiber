@@ -702,5 +702,30 @@
     "contents": "Transaction references: {{references}} · Evidence: {{evidence}}",
     "ownership": "Sharing this report links the named wallets and disclosed transactions to your identity.",
     "printGraphics": "PDF graphics"
+  },
+  "bank": {
+    "title": "Bank statements",
+    "description": "Import statements you downloaded from your own bank (CAMT.053 or CSV). Kassiber suggests a transfer for a Bitcoin purchase only when its amount matches exactly and nothing else could fit; accepted lines become evidence on the purchase's fiat source. Nothing connects to your bank, and bank lines never become transactions or balances.",
+    "import": "Import statement",
+    "pickTitle": "Choose a bank statement",
+    "fileFilter": "Bank statements",
+    "imported": "Imported: {{new}} new lines, {{existing}} already present.",
+    "alreadyImported": "This statement was already imported.",
+    "suggestionsTitle": "Suggested matches",
+    "noSuggestions": "No suggested matches. Import a statement covering the days before your purchases.",
+    "linesLabel": "Bank lines",
+    "purchasesLabel": "Purchases",
+    "reasonsLabel": "Why this match",
+    "accept": "Accept as evidence",
+    "reject": "Not a match",
+    "acceptedTitle": "Accepted bank evidence",
+    "unpriced_one": "{{count}} purchase has no exact fiat value and cannot be matched.",
+    "unpriced_other": "{{count}} purchases have no exact fiat value and cannot be matched.",
+    "exactMatch": "Exact match",
+    "ambiguous_one": "{{count}} purchase or transfer fits more than one counterpart and is not suggested; accept the right pair by hand.",
+    "ambiguous_other": "{{count}} purchases or transfers fit more than one counterpart and are not suggested; accept the right pairs by hand.",
+    "accountLabel": "Your account",
+    "accountPlaceholder": "IBAN or a name, e.g. Giro",
+    "accountHelp": "Needed for CSV exports, which do not say which account they are from. Kept in your book."
   }
 }

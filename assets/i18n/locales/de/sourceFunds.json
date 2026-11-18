@@ -702,5 +702,30 @@
     "contents": "Transaktionsreferenzen: {{references}} · Belege: {{evidence}}",
     "ownership": "Dieser Bericht verknüpft die genannten Wallets und offengelegten Transaktionen mit deiner Identität.",
     "printGraphics": "Grafiken im PDF"
+  },
+  "bank": {
+    "title": "Kontoauszüge",
+    "description": "Importiere Kontoauszüge, die du bei deiner eigenen Bank heruntergeladen hast (CAMT.053 oder CSV). Kassiber schlägt eine Überweisung für einen Bitcoin-Kauf nur vor, wenn der Betrag exakt passt und nichts anderes in Frage kommt; bestätigte Buchungen werden zum Nachweis der Fiat-Quelle des Kaufs. Kassiber verbindet sich nicht mit deiner Bank, und Kontobuchungen werden nie zu Transaktionen oder Salden.",
+    "import": "Kontoauszug importieren",
+    "pickTitle": "Kontoauszug auswählen",
+    "fileFilter": "Kontoauszüge",
+    "imported": "Importiert: {{new}} neue Buchungen, {{existing}} bereits vorhanden.",
+    "alreadyImported": "Dieser Kontoauszug wurde bereits importiert.",
+    "suggestionsTitle": "Vorgeschlagene Zuordnungen",
+    "noSuggestions": "Keine Zuordnungsvorschläge. Importiere einen Kontoauszug, der die Tage vor deinen Käufen abdeckt.",
+    "linesLabel": "Kontobuchungen",
+    "purchasesLabel": "Käufe",
+    "reasonsLabel": "Warum diese Zuordnung",
+    "accept": "Als Nachweis bestätigen",
+    "reject": "Keine Zuordnung",
+    "acceptedTitle": "Bestätigte Nachweise aus Kontoauszügen",
+    "unpriced_one": "{{count}} Kauf hat keinen exakten Fiat-Wert und kann nicht zugeordnet werden.",
+    "unpriced_other": "{{count}} Käufe haben keinen exakten Fiat-Wert und können nicht zugeordnet werden.",
+    "exactMatch": "Exakte Zuordnung",
+    "ambiguous_one": "{{count}} Kauf oder Überweisung passt zu mehr als einem Gegenstück und wird nicht vorgeschlagen; bestätige das richtige Paar von Hand.",
+    "ambiguous_other": "{{count}} Käufe oder Überweisungen passen zu mehr als einem Gegenstück und werden nicht vorgeschlagen; bestätige die richtigen Paare von Hand.",
+    "accountLabel": "Dein Konto",
+    "accountPlaceholder": "IBAN oder ein Name, z. B. Giro",
+    "accountHelp": "Nötig für CSV-Exporte, die das Konto nicht nennen. Bleibt in deinem Buch."
   }
 }

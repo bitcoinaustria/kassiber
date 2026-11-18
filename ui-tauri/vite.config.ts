@@ -344,6 +344,11 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.documents.create",
   "ui.documents.attach",
   "ui.documents.import_report",
+  "ui.documents.import_statement",
+  "ui.source_funds.bank_lines.list",
+  "ui.source_funds.bank_lines.suggest",
+  "ui.source_funds.bank_lines.accept",
+  "ui.source_funds.bank_lines.reject",
 ]);
 /**
  * Kinds the bridge accepts on the stream endpoint. AI chat is here because
