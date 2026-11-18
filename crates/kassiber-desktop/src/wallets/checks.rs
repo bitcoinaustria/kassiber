@@ -16,7 +16,7 @@ use crate::app::{App, Privacy, Reply};
 use crate::i18n::{has, t, tc, tr};
 use crate::icons as I;
 use crate::theme::Tk;
-use crate::txdetail::widgets::{Size, Variant, button};
+use crate::ui::button::{Size, Variant, button};
 use crate::ui::ic;
 use crate::wallets::conn::Conn;
 
@@ -373,29 +373,20 @@ pub fn on_key(app: &mut App, ev: &KeyEvent) -> bool {
 
 // ---- View ------------------------------------------------------------------------------------
 
+/// A checkpoint's status as a label in its ink (`crate::ui::tag`; the app draws no pills).
 fn status_badge(tk: &Tk, status: &str) -> El {
-    let (_, amber_border, amber_ink) = amber(tk);
-    let (border, ink) = match status {
-        "matches" => (emerald_text(tk).alpha(0.5), emerald_text(tk)),
-        "differs" => (amber_border, amber_ink),
-        _ => (tk.border, tk.muted_fg),
+    let (_, _, amber_ink) = amber(tk);
+    let (key, ink) = match status {
+        "matches" => ("matches", emerald_text(tk)),
+        "differs" => ("differs", amber_ink),
+        _ => ("unknown", tk.muted_fg),
     };
-    let key = match status {
-        "matches" | "differs" => status,
-        _ => "unknown",
-    };
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .border(1.0, border)
-        .border_layout()
-        .center_y()
-        .child(
-            text(t(&format!("connections:balanceChecks.status.{key}")))
-                .font(tk.txs(500.0))
-                .color(ink),
-        )
+    crate::ui::tag(
+        tk,
+        ink,
+        None,
+        t(&format!("connections:balanceChecks.status.{key}")),
+    )
 }
 
 fn line(tk: &Tk, s: String) -> El {
