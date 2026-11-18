@@ -443,6 +443,12 @@ What the Rust backend does, and where it differs from the rules above.
   reviewed service airdrop or a gift's recipient class yet, so every airdrop
   and gift is refused. A book with any refusal shows the refusals and
   withholds every SA108 figure.
+- **Reviewed non-taxable sales** (`taxability_override = 0`): the sale still
+  leaves the section 104 pool, but its computation is no gain or loss, is not
+  counted on SA108 and is not listed; a non-taxable receipt is no income.
+  Because the same-day rule makes a day's disposals of a token one disposal,
+  a non-taxable sale on a day with a taxable one of the same token is
+  refused as `non_taxable_same_day_disposal`.
 - **Country layer** (`crates/reports/src/gb_tax.rs`, sections in
   `report_design/gb.rs`): the engine's journal entries grouped per token and
   London day, each fragment's rule read from its lot's London date (same

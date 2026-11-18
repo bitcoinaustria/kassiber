@@ -173,10 +173,18 @@ pub fn refused(year: i32) -> Option<&'static str> {
 }
 
 /// A disposal's or receipt's reason that withholds its coin's year: the
-/// units have no known acquisition (JP-R15, no automatic 5 % rule).
+/// units have no known acquisition (JP-R15, no automatic 5 % rule), or a
+/// disposal was reviewed as not taxable, which the 計算書 has no line for
+/// (its units still leave the holding).
 pub fn withholds(reason: &str) -> bool {
-    matches!(reason, "insufficient_lots" | "missing_cost_basis")
+    matches!(
+        reason,
+        "insufficient_lots" | "missing_cost_basis" | NON_TAXABLE_DISPOSAL
+    )
 }
+
+/// The reason a disposal reviewed as not taxable withholds its coin's year.
+pub const NON_TAXABLE_DISPOSAL: &str = "non_taxable_disposal_unsupported";
 
 /// Every Tokyo year with a movement or a quarantined row, the computed ones
 /// in order and the refused ones apart.
@@ -478,7 +486,8 @@ pub fn load(
          je.proceeds,je.proceeds_exact,je.cost_basis,je.cost_basis_exact,\
          je.fiat_value,je.calculation_json,je.calculation_compact,\
          COALESCE(w.label,'') AS wallet,\
-         COALESCE(NULLIF(t.kind_override,''),t.kind,'') AS kind \
+         COALESCE(NULLIF(t.kind_override,''),t.kind,'') AS kind,\
+         COALESCE(t.taxability_override,1)!=0 AS taxable \
          FROM journal_entries je LEFT JOIN wallets w ON w.id=je.wallet_id \
          LEFT JOIN transactions t ON t.id=je.transaction_id \
          WHERE je.profile_id=?1 AND (?2 IS NULL OR je.wallet_id=?2) \
@@ -487,6 +496,7 @@ pub fn load(
         kassiber_store::rusqlite::params![profile_id, wallet],
     )?;
     let (mut acquisitions, mut disposals, mut income) = (Vec::new(), Vec::new(), Vec::new());
+    let mut quarantines = Vec::new();
     for entry in &entries {
         let (us, date) = instant(&text(entry, "occurred_at"), &zone)?;
         let transaction_id = text(entry, "transaction_id");
@@ -501,6 +511,9 @@ pub fn load(
                 quantity,
                 value: decimal(value(entry, "fiat_value"))?,
             }),
+            // A reviewed non-taxable receipt is no income; its units enter
+            // the holding through its acquisition.
+            "income" if crate::layer_reads::non_taxable(entry) => {}
             "income" => income.push(Income {
                 transaction_id,
                 wallet: text(entry, "wallet"),
@@ -512,6 +525,14 @@ pub fn load(
                 value: exact(entry, "proceeds")?,
             }),
             entry_type => {
+                if crate::layer_reads::non_taxable(entry) {
+                    quarantines.push(Quarantine {
+                        transaction_id: transaction_id.clone(),
+                        asset: asset.clone(),
+                        date,
+                        reason: NON_TAXABLE_DISPOSAL.into(),
+                    });
+                }
                 let calculation = crate::gain_explanation::calculation(entry);
                 let fact = |key: &str| {
                     calculation
@@ -538,7 +559,6 @@ pub fn load(
             }
         }
     }
-    let mut quarantines = Vec::new();
     for row in rows(
         conn,
         "SELECT q.transaction_id,q.reason,t.asset,t.occurred_at FROM journal_quarantines q \
