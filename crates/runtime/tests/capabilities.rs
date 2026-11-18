@@ -49,6 +49,7 @@ fn tables_match_python() {
         ("wallets.import-binance-history", "wallets.import-river"),
         ("wallets.sync-bitvavo", "wallets.sync-binance"),
         ("wallets.import-bitvavo", "wallets.import-strike"),
+        ("wallets.sync-bitstamp", "wallets.sync-binance"),
         ("journals.verify", "journals.list"),
         // Pinning a certificate is a trust decision, admin like revealing a token.
         ("backends.trust-certificate", "backends.reveal-token"),

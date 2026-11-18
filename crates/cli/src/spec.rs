@@ -105,6 +105,7 @@ pub const RUST_ONLY_LEAVES: &[&str] = &[
     "wallets.import-binance-history",
     "wallets.sync-bitvavo",
     "wallets.import-bitvavo",
+    "wallets.sync-bitstamp",
     "journals.verify",
     "backends.trust-certificate",
     "projects.demo",
@@ -131,7 +132,7 @@ pub fn rust_only_new(dotted: &str) -> bool {
 }
 /// Backend kinds only the Rust backend accepts, extra `--kind` choices of
 /// `backends create` and `backends update`.
-pub const RUST_ONLY_BACKEND_KINDS: &[&str] = &["bitpanda", "bitvavo"];
+pub const RUST_ONLY_BACKEND_KINDS: &[&str] = &["bitpanda", "bitvavo", "bitstamp"];
 
 /// The `--cost-basis-pool-scope` help: each country's scopes, its default
 /// when it has a choice.

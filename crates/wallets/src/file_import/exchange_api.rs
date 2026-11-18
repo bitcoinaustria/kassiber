@@ -17,6 +17,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 mod binance;
 mod bitpanda;
+pub(super) mod bitstamp;
 pub(super) mod bitvavo;
 mod coinbase;
 mod contract;
@@ -34,8 +35,10 @@ const MAX_ROWS: usize = 1_000_000;
 /// Python has no overall budget; each read still has the backend timeout.
 const BUDGET: Duration = Duration::from_secs(3600);
 
-/// Bitpanda and Bitvavo are Rust only; Python knows the first three.
-pub const KINDS: [&str; 5] = ["kraken", "coinbase", "binance", "bitpanda", "bitvavo"];
+/// Bitpanda, Bitvavo and Bitstamp are Rust only; Python knows the first three.
+pub const KINDS: [&str; 6] = [
+    "kraken", "coinbase", "binance", "bitpanda", "bitvavo", "bitstamp",
+];
 
 /// The resolved backend as Python's `runtime_config["backends"][name]`.
 /// The trusted command boundary supplies a fresh consent for [`Route::request`].
@@ -417,7 +420,9 @@ fn backend_kind(backend: &Py, expected: &str) -> Result<(PyStr, String), AppErro
                 name.clone(),
                 format!("' has kind '{kind}', expected an exchange API kind").into(),
             ]))
-            .with_hint("Use a backend kind of kraken, coinbase, binance, bitpanda, or bitvavo."));
+            .with_hint(
+                "Use a backend kind of kraken, coinbase, binance, bitpanda, bitvavo, or bitstamp.",
+            ));
     }
     if !expected.is_empty() && kind != expected {
         return Err(

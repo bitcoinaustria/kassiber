@@ -44,12 +44,13 @@ pub(in crate::file_import) struct Descriptor {
     pub same_second_tags: bool,
 }
 
-pub(in crate::file_import) static EXCHANGES: [&Descriptor; 5] = [
+pub(in crate::file_import) static EXCHANGES: [&Descriptor; 6] = [
     &kraken::EXCHANGE,
     &coinbase::EXCHANGE,
     &binance::EXCHANGE,
     &bitpanda::EXCHANGE,
     &bitvavo::EXCHANGE,
+    &bitstamp::EXCHANGE,
 ];
 
 /// One file export of an exchange.

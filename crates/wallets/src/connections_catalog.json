@@ -138,6 +138,12 @@
     "config_fields": "backend, source_file, source_format"
   },
   {
+    "kind": "bitstamp",
+    "summary": "Bitstamp read-only API wallet for BTC trades and wallet movements.",
+    "requires": "",
+    "config_fields": "backend"
+  },
+  {
     "kind": "wasabi",
     "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
     "requires": "",

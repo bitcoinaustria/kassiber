@@ -81,7 +81,7 @@ fn create(f: &Fixture, c: &mut Config, name: &str, kind: &str, chain: &str) -> V
 /// kinds: the `backends kinds` catalog and the unsupported-kind hint.
 /// The backend kinds only the Rust backend accepts, in catalog order; they
 /// sort right after `bitcoinrpc`.
-const RUST_ONLY: [&str; 2] = ["bitpanda", "bitvavo"];
+const RUST_ONLY: [&str; 3] = ["bitpanda", "bitstamp", "bitvavo"];
 
 fn with_rust_only_kinds(value: &mut Value) {
     match value {

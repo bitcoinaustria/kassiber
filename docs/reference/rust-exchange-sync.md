@@ -29,9 +29,10 @@ kind, desktop action or AI tool calls an exchange API:
   backend addresses configured"}` without I/O.
 
 The Rust backend keeps these boundaries. The three CLI commands run natively.
-Two more, `wallets sync-bitpanda` and `wallets sync-bitvavo`, exist only in
-Rust and follow the same framework; [Bitpanda](bitpanda.md) and
-[Bitvavo](bitvavo.md) record their APIs, mappings and refusals.
+Three more, `wallets sync-bitpanda`, `wallets sync-bitvavo` and
+`wallets sync-bitstamp`, exist only in Rust and follow the same framework;
+[Bitpanda](bitpanda.md), [Bitvavo](bitvavo.md) and [Bitstamp](bitstamp.md)
+record their APIs, mappings and refusals.
 `ui.wallets.sync` and the AI tool now answer the direct path natively when
 every selected wallet is sourceless (exchange API wallets and empty manual
 wallets). They still return `native_fallback_required` for any other direct-path
@@ -104,6 +105,7 @@ All three share these rules:
 | Coinbase | `GET /v2/accounts`, then `GET /v2/accounts/<quoted id>/transactions` for each crypto account (BTC/LBTC and, in either asset scope, every other crypto asset; Python read only BTC accounts) | follows `pagination.next_uri` until absent | `CB-ACCESS-KEY`, `CB-ACCESS-SIGN` = hex HMAC-SHA256(secret, timestamp ‖ `GET` ‖ path), `CB-ACCESS-TIMESTAMP`, `CB-VERSION: 2017-11-27` |
 | Binance | `GET /sapi/v1/fiat/payments` (`transactionType=0`) from `1498867200000` to now; `/sapi/v1/capital/deposit/hisrec` and `/sapi/v1/capital/withdraw/history` (`coin=BTC`), `/sapi/v1/asset/assetDividend` (`asset=BTC`), `/sapi/v1/convert/tradeFlow`, each in time windows from `1498867200000` to now; then `/api/v3/account` (Python sent one request each for the first four, and no Convert or balance read) | deposits and withdrawals by `offset`; dividends and converts by halving a full window ([imports](imports.md#binance-api-and-supplemental-csv)) | `X-MBX-APIKEY`, query `...&timestamp=<ms>&signature=` hex HMAC-SHA256(secret, query) |
 | Bitvavo (Rust only) | `GET /v2/account/history?fromDate=0&toDate=<ms>&page=<n>&maxItems=100`, then `GET /v2/balance?symbol=BTC` for the reported balance | `page` from 1 to the first page's `totalPages`; a page that is not the one asked for, or a moving count, fails closed | `Bitvavo-Access-Key`, `Bitvavo-Access-Signature` = hex HMAC-SHA256(secret, timestamp ‖ `GET` ‖ path with `/v2` and query), `Bitvavo-Access-Timestamp` (ms), `Bitvavo-Access-Window: 10000`; re-signed on each retry |
+| Bitstamp (Rust only) | `POST /api/v2/user_transactions/` with `limit=1000&since_id=<n>&sort=asc`, then `POST /api/v2/account_balances/btc/` for the reported balance | `since_id` from 1, then one past the last id, until a page holds fewer than 1,000 rows; ids out of cursor order fail closed | `X-Auth: BITSTAMP <key>`, `X-Auth-Signature` = hex HMAC-SHA256(secret, `BITSTAMP <key>` ‖ method ‖ host ‖ path ‖ content type ‖ nonce ‖ timestamp ‖ `v2` ‖ body), `X-Auth-Nonce` (random UUID per attempt), `X-Auth-Timestamp`, `X-Auth-Version: v2` |
 
 Kraken API errors (`error` truthy) fail as `auth_error` when any entry mentions
 `permission`, otherwise `protocol_error`, with `details.kraken_errors`.
