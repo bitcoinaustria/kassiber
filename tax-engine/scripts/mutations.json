@@ -839,12 +839,23 @@
   {
     "id": "regimes-election-without-alt",
     "file": "tax-engine/core/src/ledger/regimes.rs",
-    "find": "                if regime == Regime::Neu && self.alt.get(key) > 0 {",
-    "replace": "                if regime == Regime::Neu {",
+    "find": "                } else if regime == Regime::Neu && self.alt.get(key) > 0 {",
+    "replace": "                } else if regime == Regime::Neu {",
     "expect_failing": [
       "ledger::regimes::tests::a_sale_from_a_neu_only_wallet_is_forced_neu"
     ],
     "rule": "A Neu disposal from a wallet holding no Alt is forced, not an election."
+  },
+  {
+    "id": "regimes-override-depletes-the-time-regime",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                    regime = chosen;\n",
+    "replace": "                    let _ = chosen;\n",
+    "expect_failing": [
+      "a_reviewed_alt_sale_leaves_neu_inventory_for_the_next_sale",
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides"
+    ],
+    "rule": "A sale's reviewed regime is the one it depletes: an Alt election leaves the wallet's Neu for its next sale."
   },
   {
     "id": "regimes-availability-not-per-wallet",

@@ -1713,9 +1713,10 @@ mod tests {
             ],
         );
         let normalized = run_pass(&request).unwrap();
-        // The move spends A's Neu left after the election (48 BTC) first,
-        // its fee from that slice, then 12.001 BTC of Alt; its override
-        // twin keeps its own flows.
+        // The election takes 1 BTC of A's Neu and the Alt override 1 BTC of
+        // its Alt, so the move spends the 49 BTC of Neu left first, its fee
+        // from that slice, then 11.001 BTC of Alt; its override twin keeps
+        // its own flows.
         assert_eq!(
             regimes(&request, &normalized),
             vec![
@@ -1729,10 +1730,10 @@ mod tests {
                     "move-out",
                     "neu",
                     [
-                        12_001_000_000_u64,
-                        48_000_000_000_u64,
-                        12_001_000_000_u64,
-                        47_999_000_000_u64
+                        11_001_000_000_u64,
+                        49_000_000_000_u64,
+                        11_001_000_000_u64,
+                        48_999_000_000_u64
                     ]
                 ]),
                 json!([

@@ -12,10 +12,12 @@
 //!
 //! - an inbound row adds its amount to its time's regime (its fee and its
 //!   regime override move nothing);
-//! - an outbound row disposes of its time's regime, except that a Neu-time
-//!   disposal from a wallet holding Alt but no Neu is Alt, and one from a
-//!   wallet holding both records an election (Wahlrecht). It takes its
-//!   amount and fee from that regime alone, down to zero;
+//! - an outbound row disposes of its regime override when it has one, else
+//!   of its time's regime, except that a Neu-time disposal from a wallet
+//!   holding Alt but no Neu is Alt, and one from a wallet holding both
+//!   records an election (Wahlrecht). It takes its amount and fee from that
+//!   regime alone, down to zero. (Python's tracker ignored the override, so
+//!   a reviewed Alt sale depleted Neu and the next sale found Alt only.)
 //! - a move (one without a held leg) is applied at its out leg: it takes
 //!   what it sends from its source, from its preferred regime first and then
 //!   the other (its time's, or Alt when the source holds Alt but no Neu),
@@ -250,7 +252,12 @@ impl<'a> Tracker<'a> {
             }
             Direction::Outbound => {
                 let mut regime = regime;
-                if regime == Regime::Neu && self.alt.get(key) > 0 {
+                if let Some(chosen) = row.regime_override {
+                    // A reviewed regime is the one the sale disposes of, so
+                    // it is the one it depletes: an Alt election leaves the
+                    // wallet's Neu for its next sale.
+                    regime = chosen;
+                } else if regime == Regime::Neu && self.alt.get(key) > 0 {
                     if self.neu.get(key) == 0 {
                         regime = Regime::Alt;
                     } else {
