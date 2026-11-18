@@ -510,8 +510,11 @@ fn breakdown(
         Some(arrow_link(
             tk,
             "rep-year-link",
-            &tr("reports:breakdown.yearLink", &[("year", &year.to_string())]),
-            model::transactions_href(year, &[]),
+            &tr(
+                "reports:breakdown.yearLink",
+                &[("year", &r.year_label(year))],
+            ),
+            r.transactions_href(year, &[]),
         )),
     );
     let card = card(tk, "rep-breakdown")

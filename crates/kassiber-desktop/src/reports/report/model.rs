@@ -346,6 +346,41 @@ impl Report {
         }
     }
 
+    /// The zone and first day the core cuts the book's years in (`tax_years::Cut`): the book's
+    /// own `taxYear` when sent, else the country's calendar year in its registry zone (UTC for
+    /// the generic book, whose years are its timestamps' years).
+    fn year_cut(&self) -> (String, (u32, u32)) {
+        match &self.tax_year {
+            Some((start, zone)) => (zone.clone(), *start),
+            None => (
+                crate::reports::books::model::country(&self.jurisdiction)
+                    .map(|c| c.timezone)
+                    .unwrap_or("UTC")
+                    .to_owned(),
+                (1, 1),
+            ),
+        }
+    }
+
+    /// `transactionsHref`: exactly the given transactions, else the book's tax year `year` by
+    /// its own bounds in its zone (a fiscal year is not the calendar year the Transactions
+    /// period names). The calendar year only when the zone has no calendar here.
+    pub fn transactions_href(&self, year: i32, ids: &[String]) -> String {
+        if !ids.is_empty() {
+            return format!("/transactions?period={year}&txids={}", ids.join("%2C"));
+        }
+        let (zone, start) = self.year_cut();
+        match crate::tax_calendar::tax_year_window(&zone, start, year) {
+            Some((since, until)) => format!(
+                "/transactions?period=all&since={}&until={}&zone={}",
+                encode(&since),
+                encode(&until),
+                encode(&zone)
+            ),
+            None => format!("/transactions?period={year}"),
+        }
+    }
+
     /// The years the picker lists: the report's, plus the shown one, newest first.
     pub fn years(&self, effective: i32) -> Vec<i32> {
         let mut v: Vec<i32> = if self.available_years.is_empty() {
@@ -481,15 +516,6 @@ pub fn signed_fiat(v: f64, cur: &str) -> String {
     format!("{sign}{}", format::fiat(v.abs(), cur))
 }
 
-/// `transactionsHref`: the year, or exactly the given transactions.
-pub fn transactions_href(year: i32, ids: &[String]) -> String {
-    if ids.is_empty() {
-        format!("/transactions?period={year}")
-    } else {
-        format!("/transactions?period={year}&txids={}", ids.join("%2C"))
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct BreakdownRow {
     pub key: String,
@@ -513,13 +539,13 @@ pub struct Group {
     pub rows: Vec<BreakdownRow>,
 }
 
-fn links(year: i32, b: Option<&Bucket>) -> (usize, Option<String>, bool) {
+fn links(r: &Report, year: i32, b: Option<&Bucket>) -> (usize, Option<String>, bool) {
     let count = b.map(|b| b.transaction_count).unwrap_or(0);
     if count == 0 {
         return (0, None, false);
     }
     let ids = b.map(|b| b.transaction_ids.as_slice()).unwrap_or(&[]);
-    (count, Some(transactions_href(year, ids)), !ids.is_empty())
+    (count, Some(r.transactions_href(year, ids)), !ids.is_empty())
 }
 
 /// `reportBreakdown`: the Austrian fields with what stays off the return, or a generic book's
@@ -536,7 +562,7 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
             let Some(b) = r.bucket(key).filter(|b| b.row_count != 0.0) else {
                 continue;
             };
-            let (n, href, exact) = links(year, Some(b));
+            let (n, href, exact) = links(r, year, Some(b));
             rows.push(BreakdownRow {
                 key: key.into(),
                 code: None,
@@ -568,7 +594,7 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
         .map(|f| {
             let copy = field_copy(&f.code);
             let b = r.bucket(&f.code);
-            let (n, href, exact) = links(year, b);
+            let (n, href, exact) = links(r, year, b);
             BreakdownRow {
                 key: f.code.clone(),
                 code: Some(format!("KZ {}", f.code)),
@@ -638,7 +664,7 @@ pub fn breakdown(r: &Report) -> Vec<Group> {
         let Some(b) = r.bucket(key).filter(|b| b.row_count != 0.0) else {
             continue;
         };
-        let (n, href, exact) = links(year, Some(b));
+        let (n, href, exact) = links(r, year, Some(b));
         off.push(BreakdownRow {
             key: key.into(),
             code: None,
@@ -1102,6 +1128,33 @@ mod tests {
             Some(("Long-term after".into(), "400 days".into()))
         );
         assert_eq!(of("GENERIC", Value::Null).holding_rule(), None);
+    }
+
+    /// A group too large for exact links (no `transactionIds`) opens the book's fiscal year by
+    /// its bounds in its zone, not the calendar year: the UK's 2024-25 includes January 2025.
+    #[test]
+    fn a_large_group_opens_the_fiscal_year_range() {
+        let r = Report::parse(&json!({
+            "jurisdictionCode": "GB", "year": 2024,
+            "taxYear": {"taxYearStart": "04-06", "timezone": "Europe/London", "yearLabel": "2024-25"},
+            "breakdown": [{"key": "short_term", "rowCount": 300, "transactionCount": 300, "transactionIds": null}]
+        }));
+        let g = breakdown(&r);
+        assert_eq!(
+            g[0].rows[0].href.as_deref(),
+            Some(
+                "/transactions?period=all&since=2024-04-05T23%3A00%3A00Z\
+                 &until=2025-04-05T22%3A59%3A59Z&zone=Europe%2FLondon"
+            )
+        );
+        assert!(!g[0].rows[0].exact);
+        // A calendar-year book in its country's zone: Vienna midnight, not UTC.
+        let mut at = generic();
+        at.jurisdiction = "AT".into();
+        assert!(
+            at.transactions_href(2025, &[])
+                .contains("since=2024-12-31T23%3A00%3A00Z")
+        );
     }
 
     /// The page's own copy follows the UI language: Austrian months, decimal comma, plurals.

@@ -38,6 +38,7 @@ mod secret_floor;
 mod secrets;
 mod settings;
 mod shell;
+mod tax_calendar;
 mod theme;
 mod toastopen;
 mod transactions;
