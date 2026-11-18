@@ -1831,6 +1831,15 @@
           "Rows use Strike BTC Price as exact CSV pricing when present"
         ]
       },
+      "bisq": {
+        "description": "Peer-to-peer trades as escrow ledgers with exact contract pricing.",
+        "details": [
+          "Needs Portfolio > History and Funds > Transactions exports from Bisq 1",
+          "Each completed BTC/fiat trade becomes deposit, trade and payout legs that net to zero",
+          "Legs pair by txid with the watch-only Bisq wallet; sync that wallet first and name the export's time zone",
+          "Mediated, arbitrated or incomplete trades are held for review; altcoin and BSQ trades are refused"
+        ]
+      },
       "21bitcoin": {
         "description": "Custodial platform ledger import with exact trade pricing.",
         "details": [

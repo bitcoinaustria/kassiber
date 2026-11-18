@@ -769,19 +769,14 @@ pub static SOURCES: &[Source] = &[
     },
     Source {
         id: "bisq",
-        title: "Bisq",
-        description: "Peer-to-peer trades as escrow ledgers with exact contract pricing.",
+        title: Label::Name("Bisq"),
+        description: "connections:catalog.sources.bisq.description",
         category: "exchanges",
         planned: false,
         dev_only: false,
-        path_label: Some("CSV import"),
-        format_label: Some("bisq_csv"),
-        details: &[
-            "Needs Portfolio > History and Funds > Transactions exports from Bisq 1",
-            "Each completed BTC/fiat trade becomes deposit, trade and payout legs that net to zero",
-            "Legs pair by txid with the watch-only Bisq wallet; sync that wallet first and name the export's time zone",
-            "Mediated, arbitrated or incomplete trades are held for review; altcoin and BSQ trades are refused",
-        ],
+        path_label: Some("connections:catalog.paths.csvImport"),
+        format_label: Some(Label::Name("bisq_csv")),
+        details: "connections:catalog.sources.bisq.details",
         art: Art::File(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),

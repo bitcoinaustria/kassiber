@@ -1831,6 +1831,15 @@
           "Zeilen nutzen Strike BTC Price als exakte CSV-Bewertung, wenn vorhanden"
         ]
       },
+      "bisq": {
+        "description": "Peer-to-Peer-Handel als Treuhandbuchungen mit exakten Vertragspreisen.",
+        "details": [
+          "Braucht die Exporte aus Portfolio → Verlauf und Gelder → Transaktionen von Bisq 1",
+          "Jeder abgeschlossene BTC/Fiat-Handel wird zu Einzahlungs-, Handels- und Auszahlungsbuchungen, die sich auf null ausgleichen",
+          "Die Buchungen paaren sich per txid mit der Watch-only-Bisq-Wallet; synchronisiere diese Wallet zuerst und gib die Zeitzone des Exports an",
+          "Vermittelte, per Schiedsverfahren entschiedene oder unvollständige Handel werden zur Prüfung zurückgehalten; Altcoin- und BSQ-Handel werden abgelehnt"
+        ]
+      },
       "21bitcoin": {
         "description": "Import der Buchungshistorie einer verwahrenden Plattform mit exakten Handelspreisen.",
         "details": [
