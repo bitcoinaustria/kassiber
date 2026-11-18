@@ -200,8 +200,18 @@ fn division_by_an_infinity_is_a_signed_subnormal_zero() {
     assert_eq!(repr(&divide(&zero, &amount).unwrap()), "-0E+4");
 }
 
+/// The vectors whose Python output Kassiber departs from on purpose, with
+/// the reason and the output it gives instead
+/// (`tests/vectors/python_exchange_api_departures.json`). Every entry must
+/// still differ from Python's output; the vectors file itself stays frozen.
+const DEPARTURES: &str = "tests/vectors/python_exchange_api_departures.json";
+
 /// Every Python normalizer vector, replayed through the Rust normalizer that
 /// receives the same assembled payload. `raw_json` is compared by digest.
+/// A vector listed in [`DEPARTURES`] must give that file's output.
+/// `KASSIBER_GOLDEN_WRITE=1` (refused under `CI`) writes every differing
+/// vector's output to the departures file, with `KASSIBER_GOLDEN_REASON` as
+/// the reason of a new entry (docs/reference/testing.md#changing-a-frozen-golden).
 #[test]
 fn normalizers_match_python_reference_vectors() {
     let vectors = kassiber_pytext::loads(include_str!(
@@ -212,6 +222,31 @@ fn normalizers_match_python_reference_vectors() {
         panic!("vector list")
     };
     assert!(vectors.len() > 4000);
+    let write = std::env::var_os("KASSIBER_GOLDEN_WRITE").is_some_and(|v| v == "1");
+    assert!(
+        !(write && std::env::var_os("CI").is_some()),
+        "KASSIBER_GOLDEN_WRITE is refused in CI"
+    );
+    let dump = |value: &Py| kassiber_pyjson::dumps(value, &Default::default()).unwrap();
+    let Py::List(departures) = kassiber_pytext::loads(include_str!(
+        "../../../tests/vectors/python_exchange_api_departures.json"
+    ))
+    .unwrap() else {
+        panic!("departure list")
+    };
+    let key = |exchange: &str, name: &str| format!("{exchange} {name}");
+    let mut listed: BTreeMap<String, (Py, String)> = departures
+        .iter()
+        .map(|entry| {
+            let text = |field: &str| kassiber_envelope::py_str(at(entry, field));
+            (
+                key(&text("exchange"), &text("name")),
+                (at(entry, "reason").clone(), dump(at(entry, "expected"))),
+            )
+        })
+        .collect();
+    assert_eq!(listed.len(), departures.len(), "a vector is listed twice");
+    let mut written: Vec<String> = vec![];
     let mut failures = vec![];
     for vector in &vectors {
         let exchange = kassiber_envelope::py_str(at(vector, "exchange"));
@@ -276,16 +311,51 @@ fn normalizers_match_python_reference_vectors() {
                 ]),
             )]),
         };
-        let dump = |value: &Py| kassiber_pyjson::dumps(value, &Default::default()).unwrap();
-        if dump(&actual) != dump(at(vector, "expected")) {
+        let python = dump(at(vector, "expected"));
+        let departure = listed.remove(&key(exchange.kind, &name));
+        if write {
+            if dump(&actual) != python {
+                let reason = departure.map(|(reason, _)| reason).unwrap_or_else(|| {
+                    s(std::env::var("KASSIBER_GOLDEN_REASON").expect("KASSIBER_GOLDEN_REASON"))
+                });
+                written.push(dump(&dict([
+                    ("exchange", s(exchange.kind)),
+                    ("name", s(name.as_str())),
+                    ("reason", reason),
+                    ("expected", actual),
+                ])));
+            }
+            continue;
+        }
+        let expected = match departure {
+            Some((_, expected)) => {
+                assert_ne!(
+                    python, expected,
+                    "{} {name} is listed as a departure but Python gives the same output",
+                    exchange.kind
+                );
+                expected
+            }
+            None => python,
+        };
+        if dump(&actual) != expected {
             failures.push(format!(
-                "{} {name}\n  rust:   {}\n  python: {}",
+                "{} {name}\n  rust:     {}\n  expected: {expected}",
                 exchange.kind,
                 dump(&actual),
-                dump(at(vector, "expected"))
             ));
         }
     }
+    if write {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(DEPARTURES);
+        std::fs::write(path, format!("[\n{}\n]\n", written.join(",\n"))).unwrap();
+        return;
+    }
+    assert!(
+        listed.is_empty(),
+        "departures name no vector: {:?}",
+        listed.keys()
+    );
     assert!(
         failures.is_empty(),
         "{} of {} vectors differ:\n{}",
@@ -510,6 +580,7 @@ mod loopback {
     }
 }
 
+mod binance_api;
 mod bitpanda_api;
 mod coinbase_api;
 mod desktop_api;
@@ -806,25 +877,83 @@ fn coinbase_signs_pages_follows_its_collection_and_keeps_coinbase_network_metada
     );
 }
 
+/// Whether a windowed Binance read (`startTime`/`endTime`) covers `ms`.
+fn binance_window(target: &str, ms: u64) -> bool {
+    let param = |name: &str| {
+        target
+            .split(['?', '&'])
+            .find_map(|p| p.strip_prefix(&format!("{name}=")))
+            .and_then(|v| v.parse::<u64>().ok())
+    };
+    matches!((param("startTime"), param("endTime")), (Some(start), Some(end)) if start <= ms && ms <= end)
+}
+
+/// A Binance fake: the four BTC histories (each row only in the window that
+/// holds it), Convert orders and the spot account; `rows` overrides a path.
+fn binance_body(target: &str, rows: &[(&str, u64, &str)]) -> String {
+    let path = target.split('?').next().unwrap();
+    let hits: Vec<&str> = rows
+        .iter()
+        .filter(|(at, ms, _)| {
+            let windowed = !matches!(path, "/sapi/v1/fiat/payments" | "/api/v3/account");
+            *at == path && (!windowed || binance_window(target, *ms))
+        })
+        .map(|(_, _, row)| *row)
+        .collect();
+    let (list, total) = (hits.join(","), hits.len());
+    match path {
+        "/sapi/v1/fiat/payments" => format!(r#"{{"data":[{list}],"total":{total}}}"#),
+        "/sapi/v1/capital/deposit/hisrec" | "/sapi/v1/capital/withdraw/history" => {
+            format!("[{list}]")
+        }
+        "/sapi/v1/asset/assetDividend" => format!(r#"{{"rows":[{list}],"total":{total}}}"#),
+        "/sapi/v1/convert/tradeFlow" => format!(r#"{{"list":[{list}],"moreData":false}}"#),
+        "/api/v3/account" => format!(r#"{{"balances":[{list}]}}"#),
+        _ => "{}".into(),
+    }
+}
+
 #[test]
 fn binance_signs_each_history_query_in_reference_order() {
     let fake = serve("binance", |_, _, target| {
-        let path = target.split('?').next().unwrap();
-        let body = match path {
-            "/sapi/v1/fiat/payments" => {
-                r#"{"data":[{"orderNo":"F1","status":"Completed","cryptoCurrency":"BTC","fiatCurrency":"EUR","obtainAmount":"0.01","sourceAmount":"-400.5","createTime":1700000000123}]}"#
-            }
-            "/sapi/v1/capital/deposit/hisrec" => {
-                r#"[{"coin":"BTC","status":"Confirming","amount":"0.005","insertTime":1700000100000,"txId":"d1"}]"#
-            }
-            "/sapi/v1/capital/withdraw/history" => {
-                r#"[{"coin":"BTC","status":6,"amount":"0.004","transactionFee":"0.0001","applyTime":1700000500000,"id":"w-1"}]"#
-            }
-            _ => {
-                r#"{"rows":[{"id":7,"asset":"BTC","amount":"0.0000123","divTime":1700000700000,"enInfo":"BTC Mining Pool"}]}"#
-            }
-        };
-        (200, body.into())
+        let rows = [
+            (
+                "/sapi/v1/fiat/payments",
+                0,
+                r#"{"orderNo":"F1","status":"Completed","cryptoCurrency":"BTC","fiatCurrency":"EUR","obtainAmount":"0.01","sourceAmount":"-400.5","createTime":1700000000123}"#,
+            ),
+            (
+                "/sapi/v1/capital/deposit/hisrec",
+                1700000100000,
+                r#"{"coin":"BTC","status":1,"amount":"0.005","insertTime":1700000100000,"txId":"d1"}"#,
+            ),
+            (
+                "/sapi/v1/capital/withdraw/history",
+                1700000500000,
+                r#"{"coin":"BTC","status":6,"amount":"0.004","transactionFee":"0.0001","applyTime":1700000500000,"id":"w-1"}"#,
+            ),
+            (
+                "/sapi/v1/asset/assetDividend",
+                1700000700000,
+                r#"{"id":7,"asset":"BTC","amount":"0.0000123","divTime":1700000700000,"enInfo":"BTC Mining Pool"}"#,
+            ),
+            (
+                "/sapi/v1/convert/tradeFlow",
+                1700000800000,
+                r#"{"orderId":"C1","orderStatus":"SUCCESS","fromAsset":"EUR","fromAmount":"100","toAsset":"BTC","toAmount":"0.0025","createTime":1700000800000}"#,
+            ),
+            (
+                "/sapi/v1/convert/tradeFlow",
+                1700000900000,
+                r#"{"orderId":"C2","orderStatus":"SUCCESS","fromAsset":"ETH","fromAmount":"1","toAsset":"USDT","toAmount":"2000","createTime":1700000900000}"#,
+            ),
+            (
+                "/api/v3/account",
+                0,
+                r#"{"asset":"BTC","free":"0.0135","locked":"0.0001"}"#,
+            ),
+        ];
+        (200, binance_body(target, &rows))
     });
     let run = run(
         &backend("binance", &fake.url),
@@ -833,25 +962,57 @@ fn binance_signs_each_history_query_in_reference_order() {
         true,
         online(),
     );
-    assert_eq!(at(&run.result.unwrap(), "imported"), &Py::from(4));
+    let result = run.result.unwrap();
+    // The card buy, deposit, withdrawal, dividend and BTC-for-EUR convert;
+    // the ETH-for-USDT convert is counted, never booked.
+    assert_eq!(at(&result, "imported"), &Py::from(5), "{result:?}");
+    let assets = kassiber_pyjson::dumps(at(&result, "assets"), &Default::default()).unwrap();
+    assert!(
+        assets.contains(r#""unread": {"ETH": 1, "USDT": 1}"#),
+        "{assets}"
+    );
+    assert!(
+        assets.contains("does not read Binance spot trades"),
+        "{assets}"
+    );
+    // 0.01 + 0.005 - 0.004 - 0.0001 + 0.0000123 + 0.0025 BTC in the book.
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap(),
+        r#"{"status": "mismatch", "asset": "BTC", "provider_msat": 1360000000, "book_msat": 1341230000, "difference_msat": -18770000}"#
+    );
     let seen = fake.seen.lock().unwrap().clone();
     assert!(seen.iter().all(|r| r.signed), "{seen:?}");
-    let paths: Vec<_> = seen
-        .iter()
-        .map(|r| r.target.split('?').next().unwrap().to_owned())
-        .collect();
+    let mut paths: Vec<String> = vec![];
+    for r in &seen {
+        let path = r.target.split('?').next().unwrap().to_owned();
+        if paths.last() != Some(&path) {
+            paths.push(path);
+        }
+    }
     assert_eq!(
         paths,
         [
             "/sapi/v1/fiat/payments",
             "/sapi/v1/capital/deposit/hisrec",
             "/sapi/v1/capital/withdraw/history",
-            "/sapi/v1/asset/assetDividend"
+            "/sapi/v1/asset/assetDividend",
+            "/sapi/v1/convert/tradeFlow",
+            "/api/v3/account"
         ]
     );
     assert!(seen[0]
         .target
         .contains("transactionType=0&beginTime=1498867200000&endTime="));
+    // Only BTC's own histories are read.
+    for r in &seen {
+        let path = r.target.split('?').next().unwrap();
+        if path.contains("capital") {
+            assert!(r.target.contains("coin=BTC&startTime="), "{}", r.target);
+        }
+        if path.contains("assetDividend") {
+            assert!(r.target.contains("asset=BTC&startTime="), "{}", r.target);
+        }
+    }
     assert_eq!(
         count(
             &run.conn,
@@ -864,17 +1025,25 @@ fn binance_signs_each_history_query_in_reference_order() {
 /// One Binance sync whose deposit and withdrawal name `rail`.
 fn binance_rail_run(rail: &'static str) -> loopback::Run {
     let fake = serve("binance", move |_, _, target| {
-        let body = match target.split('?').next().unwrap() {
-            "/sapi/v1/capital/deposit/hisrec" => format!(
-                r#"[{{"coin":"BTC","network":"{rail}","status":1,"amount":"0.005","insertTime":1700000100000,"txId":"d1"}}]"#
+        let deposit = format!(
+            r#"{{"coin":"BTC","network":"{rail}","status":1,"amount":"0.005","insertTime":1700000100000,"txId":"d1"}}"#
+        );
+        let withdrawal = format!(
+            r#"{{"coin":"BTC","network":"{rail}","status":6,"amount":"0.004","transactionFee":"0.0001","applyTime":1700000500000,"id":"w-1"}}"#
+        );
+        let rows = [
+            (
+                "/sapi/v1/capital/deposit/hisrec",
+                1700000100000,
+                deposit.as_str(),
             ),
-            "/sapi/v1/capital/withdraw/history" => format!(
-                r#"[{{"coin":"BTC","network":"{rail}","status":6,"amount":"0.004","transactionFee":"0.0001","applyTime":1700000500000,"id":"w-1"}}]"#
+            (
+                "/sapi/v1/capital/withdraw/history",
+                1700000500000,
+                withdrawal.as_str(),
             ),
-            "/sapi/v1/fiat/payments" => r#"{"data":[]}"#.to_owned(),
-            _ => r#"{"rows":[]}"#.to_owned(),
-        };
-        (200, body)
+        ];
+        (200, binance_body(target, &rows))
     });
     run(
         &backend("binance", &fake.url),
@@ -1032,11 +1201,18 @@ fn every_exchange_refuses_a_page_that_echoes_a_credential() {
                         "amount": {"amount": "-0.001", "currency": "BTC"}, "echo": echo}], "pagination": {}})
                     }
                     ("binance", "/sapi/v1/capital/deposit/hisrec") => {
-                        json!([{"coin": "BTC", "network": "BTC", "status": 1,
-                        "amount": "0.005", "insertTime": 1700000100000_i64, "txId": id, "echo": echo}])
+                        let row = json!({"coin": "BTC", "network": "BTC", "status": 1,
+                        "amount": "0.005", "insertTime": 1700000100000_i64, "txId": id, "echo": echo});
+                        let row = row.to_string();
+                        let body = binance_body(
+                            target,
+                            &[("/sapi/v1/capital/deposit/hisrec", 1700000100000, &row)],
+                        );
+                        serde_json::from_str(&body).unwrap()
                     }
-                    ("binance", "/sapi/v1/fiat/payments") => json!({"data": []}),
-                    ("binance", "/sapi/v1/capital/withdraw/history") => json!([]),
+                    ("binance", path) => {
+                        serde_json::from_str(&binance_body(&format!("{path}?"), &[])).unwrap()
+                    }
                     _ => json!({"rows": []}),
                 };
                 (200, body.to_string())

@@ -212,15 +212,45 @@
     "rule": "The signature covers exactly the sent query."
   },
   {
-    "id": "binance-status-confirming",
+    "id": "binance-status-undocumented-refuses",
     "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
-    "find": "\"credited\", \"confirming\"]",
-    "replace": "\"credited\"]",
+    "find": "Some(false),\n        _ => None,",
+    "replace": "Some(false),\n        _ => Some(true),",
     "expect_failing": [
       "normalizers_match_python_reference_vectors",
-      "binance_signs_each_history_query_in_reference_order"
+      "binance_books_only_settled_deposits_and_withdrawals"
     ],
-    "rule": "Confirming transfers import."
+    "rule": "A Binance transfer status Binance does not document refuses the sync."
+  },
+  {
+    "id": "binance-fiat-payments-read-every-page",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "            if rows.len() >= total {",
+    "replace": "            if true {",
+    "rule": "Binance fiat payments are read until the answer's total.",
+    "expect_failing": [
+      "binance_reads_every_fiat_payment_and_dividend_past_a_short_page"
+    ]
+  },
+  {
+    "id": "binance-dividend-window-splits-past-total",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "                        > page.len()",
+    "replace": "                        > usize::MAX",
+    "rule": "A dividend window whose total is more than it returned is split.",
+    "expect_failing": [
+      "binance_reads_every_fiat_payment_and_dividend_past_a_short_page"
+    ]
+  },
+  {
+    "id": "binance-cancelled-withdrawal-is-not-settled",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "| (true, \"1\" | \"6\" | \"credited\") | (false, \"6\") => {",
+    "replace": "| (true, \"1\" | \"6\" | \"credited\") | (false, \"6\" | \"1\") => {",
+    "rule": "A cancelled Binance withdrawal books nothing.",
+    "expect_failing": [
+      "binance_books_only_settled_deposits_and_withdrawals"
+    ]
   },
   {
     "id": "binance-fiat-denominated",
@@ -1519,5 +1549,45 @@
       "assets_follow_normalize_asset_code_and_exchange_aliases"
     ],
     "rule": "Only fiat fields drop Kraken's Z prefix: a four-letter Z crypto ticker (ZETA) stays as written."
+  },
+  {
+    "id": "binance-reads-only-btc-histories",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "    let btc = [(\"coin\", \"BTC\")];",
+    "replace": "    let btc: [(&str, &str); 0] = [];",
+    "expect_failing": [
+      "binance_signs_each_history_query_in_reference_order"
+    ],
+    "rule": "The Binance API reads only BTC's own deposit and withdrawal histories, in either scope."
+  },
+  {
+    "id": "binance-btc-swap-convert-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "        (Class::Fiat, _) => (true, &to, \"toAmount\", &from, \"fromAmount\"),",
+    "replace": "        _ if true => (true, &to, \"toAmount\", &from, \"fromAmount\"),",
+    "expect_failing": [
+      "binance_btc_swap_convert_is_refused_in_either_scope"
+    ],
+    "rule": "A Convert between BTC and another coin is refused in either scope: the API never books the other leg."
+  },
+  {
+    "id": "binance-names-unread-spot-trades",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "    mapper.notice(SPOT_TRADES.into());\n",
+    "replace": "",
+    "expect_failing": [
+      "binance_reads_the_same_btc_histories_in_either_scope"
+    ],
+    "rule": "Every Binance sync says that the API does not read spot trades and names the Transaction History CSV."
+  },
+  {
+    "id": "binance-balance-exact-msat",
+    "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
+    "find": "            let part = exact_msat(&value)\n",
+    "replace": "            let part = exact_msat(&value).or(Some(0))\n",
+    "expect_failing": [
+      "binance_balance_must_be_exact"
+    ],
+    "rule": "Binance's spot BTC balance is read as whole msat by its own digits, or the sync fails closed."
   }
 ]

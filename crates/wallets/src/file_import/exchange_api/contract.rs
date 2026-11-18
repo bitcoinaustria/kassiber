@@ -249,6 +249,12 @@ impl Mapper {
         }
     }
 
+    /// Names, in the envelope's `next_step`, a history the exchange's
+    /// importer does not read.
+    pub fn notice(&mut self, text: String) {
+        self.tally.notice(text);
+    }
+
     /// The wallet's asset scope.
     pub fn scope(&self) -> Scope {
         self.scope

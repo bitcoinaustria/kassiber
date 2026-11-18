@@ -1005,3 +1005,45 @@ fn known_code(code: &str, table: &[&'static str]) -> Py {
         .find(|known| **known == code)
         .map_or_else(|| s("unknown"), |known| s(*known))
 }
+
+/// A BTC amount as whole msat by its own digits, without context rounding:
+/// `None` when it is finer than a millisatoshi, negative or out of range.
+pub(super) fn exact_msat(btc: &Decimal) -> Option<i64> {
+    const DECIMALS: i64 = 11;
+    if btc.is_zero() {
+        return Some(0);
+    }
+    if btc.is_sign_negative() {
+        return None;
+    }
+    let (mut coefficient, mut exponent) = (btc.coefficient_u128()?, btc.exponent());
+    while exponent < -DECIMALS && coefficient % 10 == 0 {
+        coefficient /= 10;
+        exponent += 1;
+    }
+    let scale = u32::try_from(exponent.checked_add(DECIMALS)?).ok()?;
+    i64::try_from(coefficient.checked_mul(10u128.checked_pow(scale)?)?).ok()
+}
+/// A decimal written plainly: digits with an optional fraction and, when
+/// `signed` (a file export), a leading minus or an exponent (`1e-05`).
+/// Anything else (blank, `NaN`, separators, `+`) is `None`.
+pub(super) fn strict_decimal(text: &str, signed: bool) -> Option<Decimal> {
+    let digits = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+    let unsigned = text.strip_prefix('-').filter(|_| signed).unwrap_or(text);
+    let (mantissa, exponent) = match unsigned.split_once(['e', 'E']) {
+        Some((mantissa, exponent)) if signed => (mantissa, Some(exponent)),
+        Some(_) => return None,
+        None => (unsigned, None),
+    };
+    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    if whole.is_empty() || !digits(whole) || !digits(fraction) || mantissa.ends_with('.') {
+        return None;
+    }
+    if let Some(exponent) = exponent {
+        let exponent = exponent.strip_prefix(['-', '+']).unwrap_or(exponent);
+        if exponent.is_empty() || !digits(exponent) || exponent.len() > 3 {
+            return None;
+        }
+    }
+    text.parse().ok()
+}

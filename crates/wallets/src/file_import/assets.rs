@@ -122,6 +122,11 @@ pub(crate) struct Tally {
     notices: Vec<String>,
 }
 impl Tally {
+    /// Names a history the import did not read, in `next_step`.
+    pub(crate) fn notice(&mut self, text: String) {
+        self.notices.push(text);
+    }
+
     /// Counts, rows per ticker, the crypto assets an importer that reads only
     /// BTC from `provider` left out, as `unread` and in `next_step`: not as
     /// `skipped`, which would offer a scope that does not keep them.

@@ -747,11 +747,15 @@ projections stay Python. Progress and remaining work for this slice:
   exchange: a registry of exchanges replaces per-name dispatch, and the asset
   scope is a filter over each exchange's events. Bitpanda, Kraken and
   Coinbase read every asset (Coinbase every crypto account, in either scope);
-  Binance reads BTC only. A `bitcoin`-scope Kraken wallet now books BTC Buy Crypto and BTC
+  Binance's API reads BTC only (windowed BTC histories, BTC Convert orders,
+  the spot BTC balance); its spot trades need the Transaction History CSV. A `bitcoin`-scope Kraken wallet now books BTC Buy Crypto and BTC
   staking/earn rewards (owner decision 2026-11-18).
   Every sync reports `assets` (other coins as `unread` from a BTC-only
   reader) and `swap_pairs`, and an exchange that states its BTC balance
   reports both `provider_balance` and `reported_balance`.
+- [ ] Binance fiat paging: refuse rows > total (a server that ignores `page`
+  would answer every page with the same rows, which Kassiber would then store
+  as duplicates instead of refusing the sync).
 - [ ] Exchange error display: a very short request credential (a one- to
   three-character proxy password) is withheld wherever it occurs, Kassiber's
   own message text included, which garbles the error; consider refusing such
