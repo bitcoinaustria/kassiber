@@ -113,3 +113,45 @@ fn a_reviewed_alt_sale_leaves_neu_inventory_for_the_next_sale() {
     assert_eq!(disposals(&run(&req)), expected);
     assert_eq!(disposals(&actual), expected);
 }
+
+#[test]
+fn a_purchase_reviewed_as_alt_is_alt_inventory_of_its_wallet() {
+    // Cold holds one purchase reviewed as Alt, Hot one Neu purchase. Cold's
+    // sale disposes of its own Alt coin, not Hot's Neu basis.
+    let mut alt = row(
+        "alt",
+        "A",
+        "inbound",
+        timestamp("2022-05-01", 12, 0),
+        1,
+        100,
+    );
+    alt["regime_override"] = json!("alt");
+    let req = request(
+        true,
+        "Hot",
+        vec![
+            alt,
+            row(
+                "neu",
+                "B",
+                "inbound",
+                timestamp("2022-05-02", 12, 0),
+                1,
+                200,
+            ),
+            row(
+                "sale",
+                "A",
+                "outbound",
+                timestamp("2024-07-10", 12, 0),
+                1,
+                400,
+            ),
+        ],
+    );
+    assert_eq!(
+        disposals(&run(&req)),
+        vec![json!(["alt_taxfree", "100E0", "300E0"])]
+    );
+}

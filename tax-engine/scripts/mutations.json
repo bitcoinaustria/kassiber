@@ -858,6 +858,17 @@
     "rule": "A sale's reviewed regime is the one it depletes: an Alt election leaves the wallet's Neu for its next sale."
   },
   {
+    "id": "regimes-inbound-override-is-available-as-time-regime",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                let regime = row.regime_override.unwrap_or(regime);\n",
+    "replace": "",
+    "expect_failing": [
+      "a_purchase_reviewed_as_alt_is_alt_inventory_of_its_wallet",
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides"
+    ],
+    "rule": "A purchase's reviewed regime is the inventory it makes available in its wallet."
+  },
+  {
     "id": "regimes-availability-not-per-wallet",
     "file": "tax-engine/core/src/ledger/regimes.rs",
     "find": "    if row.wallet_id.is_empty() {",

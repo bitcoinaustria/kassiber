@@ -248,6 +248,9 @@ impl<'a> Tracker<'a> {
         let regime = timestamp_regime(row)?;
         match row.direction {
             Direction::Inbound => {
+                // A reviewed regime is the one the acquisition's lot carries
+                // (normalize marks it so), so it is the one it makes available.
+                let regime = row.regime_override.unwrap_or(regime);
                 self.bucket(regime).add(key, row.amount_msat.into());
             }
             Direction::Outbound => {

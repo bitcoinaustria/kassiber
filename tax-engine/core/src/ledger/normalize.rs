@@ -1651,8 +1651,8 @@ mod tests {
         let request = austrian(
             vec![
                 row("alt-buy", "A", "inbound", ALT, 100_000_000_000, json!({})),
-                // An inbound override is the event's regime, but the tracker
-                // keeps the time's: B holds Alt only.
+                // An inbound override is the event's regime and the one the
+                // tracker makes available: B holds Neu only.
                 row(
                     "said-neu",
                     "B",
@@ -1725,7 +1725,7 @@ mod tests {
                 json!(["neu-buy", "neu", null]),
                 json!(["sale", "neu", "wahlrecht"]),
                 json!(["said-alt", "alt", null]),
-                json!(["b-sale", "alt", null]),
+                json!(["b-sale", "neu", null]),
                 json!([
                     "move-out",
                     "neu",
