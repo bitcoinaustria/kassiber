@@ -94,7 +94,8 @@ pub fn view(app: &App, tk: &Tk, s: &Snapshot, width: f32) -> El {
                 .color(tk.muted_fg)
                 .truncate(),
         );
-    } else {
+    } else if app.demo.active.is_none() {
+        // The demo book has no sync server: no "last synced" line there.
         left = left.child(crate::wallets::list::sync_line(app, tk));
     }
 
@@ -123,6 +124,8 @@ pub fn view(app: &App, tk: &Tk, s: &Snapshot, width: f32) -> El {
         .label(aria)
     }
     .on_press(|s: &mut App| super::open_add_connection(s));
+    // Nothing connects to the demo book (it has no backend): no Add connection there.
+    let button = app.demo.active.is_none().then_some(button);
     row()
         .key("welcome")
         .w_full()

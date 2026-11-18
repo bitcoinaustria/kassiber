@@ -158,6 +158,12 @@ fn on_list_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
 pub fn crumb(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
     let open = app.shell.popup == Some(Popup::Books);
     let book = book_label(app);
+    // The demo tag is drawn only; its name joins the book's.
+    let spoken = if app.demo.active.is_some() {
+        format!("{book}, {}", t("chrome:demo.region"))
+    } else {
+        book.clone()
+    };
     let trigger = row()
         .key("sh-book-crumb")
         // `px-1 -mx-1`: the hover fill bleeds past the text, which stays on the crumb's edge.
@@ -174,8 +180,13 @@ pub fn crumb(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
         })
         .hover(tk.row_hover)
         .role("button")
-        .label(tr("chrome:shell.switchBooksLabel", &[("book", &book)]))
-        .help(tr("chrome:shell.switchBooksLabel", &[("book", &book)]))
+        .label(tr("chrome:shell.switchBooksLabel", &[("book", &spoken)]))
+        // In the demo the tag's explanation is the hover help (the name keeps the action).
+        .help(if app.demo.active.is_some() {
+            t("chrome:demo.body")
+        } else {
+            tr("chrome:shell.switchBooksLabel", &[("book", &book)])
+        })
         .expanded(open)
         .focusable(true)
         .no_window_drag()
@@ -193,6 +204,7 @@ pub fn crumb(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
                 .max_w(tk.r(10.0))
                 .truncate(),
         )
+        .children(crate::demo::tag(app, tk))
         .child(ic(&I::CHEVRONS_UP_DOWN, tk.r(0.75), tk.muted_fg.alpha(0.5)));
     if open {
         super::mount_popup_at(
@@ -376,7 +388,7 @@ fn popover(app: &App, tk: &Tk) -> El {
         col()
             .w_full()
             .padding(super::menu_pad(tk))
-            .child(crate::demo::switcher_row(app, tk))
+            .children(crate::demo::switcher_rows(app, tk))
             .child(
                 row()
                     .key("sh-books-manage")

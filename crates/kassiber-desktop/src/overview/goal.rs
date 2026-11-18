@@ -105,6 +105,34 @@ pub fn goal_text(sats: u64) -> String {
     }
 }
 
+/// Whether a target is set: the owner's (the shared layout), or in the demo the demo's own.
+pub fn has_target(app: &App) -> bool {
+    if app.demo.active.is_some() {
+        app.demo.goal != Some(None)
+    } else {
+        app.ov.layout.goal_sats().is_some()
+    }
+}
+
+/// The target the widget measures `stack` (BTC) against. In the demo, never the owner's goal
+/// (the layout is shared across books): a round one above the demo's stack until edited there.
+pub fn target(app: &App, stack: f64) -> Option<u64> {
+    if app.demo.active.is_some() {
+        app.demo.goal.unwrap_or_else(|| Some(suggest(stack)))
+    } else {
+        app.ov.layout.goal_sats()
+    }
+}
+
+/// Saves or removes the target where [`target`] reads it (the demo's own is never stored).
+pub fn set_target(a: &mut App, sats: Option<u64>) {
+    if a.demo.active.is_some() {
+        a.demo.goal = Some(sats);
+    } else {
+        a.ov.layout.set_goal_sats(sats);
+    }
+}
+
 /// A round target just above the stack: what the sheet offers and a gallery preview shows.
 pub fn suggest(balance_btc: f64) -> u64 {
     const STEPS: [f64; 16] = [
@@ -368,11 +396,7 @@ pub fn body(app: &App, tk: &Tk, s: &Snapshot, x: &hm::Extras, slot: &Slot) -> El
     let hide = app.prefs.hide_sensitive();
     let hide_shares = app.prefs.hide_shares();
     let stack = hm::display_balance_btc(s, x).max(0.0);
-    let goal = app
-        .ov
-        .layout
-        .goal_sats()
-        .or_else(|| slot.pv.then(|| suggest(stack)));
+    let goal = target(app, stack).or_else(|| slot.pv.then(|| suggest(stack)));
     let Some(goal) = goal else {
         let mut b =
             crate::ui::outline_button(tk, &slot.key("goal-set"), Some(&I::TARGET), &set_goal());
@@ -571,13 +595,11 @@ pub fn body(app: &App, tk: &Tk, s: &Snapshot, x: &hm::Extras, slot: &Slot) -> El
 
 /// Opens the goal sheet on the current target (or a round one above the stack).
 pub fn open_sheet(a: &mut App) {
-    let sats = a.ov.layout.goal_sats().unwrap_or_else(|| {
-        let stack = a
-            .snapshot()
-            .map(|s| hm::display_balance_btc(s, &hm::Extras::parse(a.read("ui.overview.snapshot"))))
-            .unwrap_or(0.0);
-        suggest(stack)
-    });
+    let stack = a
+        .snapshot()
+        .map(|s| hm::display_balance_btc(s, &hm::Extras::parse(a.read("ui.overview.snapshot"))))
+        .unwrap_or(0.0);
+    let sats = target(a, stack).unwrap_or_else(|| suggest(stack));
     let mut e = TextEdit::new(goal_text(sats));
     e.focused = true;
     a.ov.goal_edit = e;
@@ -595,7 +617,7 @@ fn close(a: &mut App) {
 pub fn save(a: &mut App, tx: &mut Tx) {
     match parse_goal(&a.ov.goal_edit.text) {
         Ok(sats) => {
-            a.ov.layout.set_goal_sats(Some(sats));
+            set_target(a, Some(sats));
             close(a);
             tx.announce(saved(), rune::LiveRegion::Polite);
         }
@@ -607,7 +629,7 @@ pub fn save(a: &mut App, tx: &mut Tx) {
 }
 
 fn clear(a: &mut App, tx: &mut Tx) {
-    a.ov.layout.set_goal_sats(None);
+    set_target(a, None);
     close(a);
     tx.announce(removed(), rune::LiveRegion::Polite);
 }
@@ -640,7 +662,7 @@ pub fn mount_sheet(app: &App, tk: &Tk, layer: &mut Vec<El>) {
         field = field.child(controls::error_line(tk, error_text(e)));
     }
     let mut buttons = row().w_full().gap(tk.r(0.5)).center_y();
-    if app.ov.layout.goal_sats().is_some() {
+    if has_target(app) {
         buttons = buttons.child(
             controls::btn_lg(
                 tk,

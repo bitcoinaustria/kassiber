@@ -515,8 +515,12 @@ pub fn readiness(s: &Snapshot, blocking_sources: usize) -> Readiness {
 // ---- Stats cards ----------------------------------------------------------------------------
 
 /// `marketRateCompactLabel`'s source names.
+/// The rate source of the demo book's synthetic prices.
+pub const DEMO_RATE_SOURCE: &str = "regtest-demo-synthetic";
+
 pub fn source_label(source: &str) -> String {
     let named = match source {
+        DEMO_RATE_SOURCE => "Sample prices",
         "coinbase-exchange" => "Coinbase Exchange",
         "kraken-csv" => "Kraken CSV",
         "coingecko" => "CoinGecko",
