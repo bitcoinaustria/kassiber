@@ -154,6 +154,8 @@ pub(super) struct Mapped {
 /// [`Mapper::push`], in the order the records are stored.
 pub(super) struct Mapper {
     exchange: &'static Descriptor,
+    /// Which assets this source reads (the exchange's API, or one export).
+    reads: Reads,
     scope: Scope,
     /// The wallet's label, for hints that name the scope command.
     wallet: String,
@@ -167,8 +169,19 @@ pub(super) struct Mapper {
 
 impl Mapper {
     pub fn new(exchange: &'static Descriptor, scope: Scope, wallet: &str) -> Self {
+        Self::reading(exchange, exchange.reads, scope, wallet)
+    }
+
+    /// A mapper for one of the exchange's sources that reads `reads`.
+    pub fn reading(
+        exchange: &'static Descriptor,
+        reads: Reads,
+        scope: Scope,
+        wallet: &str,
+    ) -> Self {
         Self {
             exchange,
+            reads,
             scope,
             wallet: wallet.to_owned(),
             records: vec![],
@@ -220,7 +233,7 @@ impl Mapper {
         let mut kept = false;
         for (code, class) in codes.iter().zip(&classes) {
             match class {
-                Class::Crypto if self.exchange.reads == Reads::BitcoinOnly => {
+                Class::Crypto if self.reads == Reads::BitcoinOnly => {
                     *self.unread.entry((*code).to_owned()).or_default() += 1;
                 }
                 Class::Crypto => kept |= self.tally.admit(self.scope, code, *class),
@@ -241,7 +254,7 @@ impl Mapper {
     /// third-asset fee in a `bitcoin` wallet) is counted.
     pub fn keeps(&mut self, code: &str, class: Class) -> bool {
         match class {
-            Class::Crypto if self.exchange.reads == Reads::BitcoinOnly => {
+            Class::Crypto if self.reads == Reads::BitcoinOnly => {
                 *self.unread.entry(code.to_owned()).or_default() += 1;
                 false
             }

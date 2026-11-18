@@ -8,6 +8,8 @@
 use super::*;
 use assets::Class;
 
+pub(super) mod history;
+
 /// Binance.com spot trading launched in July 2017; Python reads from there.
 const START_MS: &str = "1498867200000";
 const START: u64 = 1_498_867_200_000;
@@ -35,6 +37,12 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     fetch,
     probe,
     skipped: None,
+    files: &[contract::registry::FileFormat {
+        format: Format::BinanceHistory,
+        reads: contract::Reads::AllAssets,
+        load: history::load,
+    }],
+    shared_ids: false,
 };
 
 fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<Option<Balance>, AppError> {

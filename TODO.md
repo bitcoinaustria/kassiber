@@ -748,7 +748,8 @@ projections stay Python. Progress and remaining work for this slice:
   scope is a filter over each exchange's events. Bitpanda, Kraken and
   Coinbase read every asset (Coinbase every crypto account, in either scope);
   Binance's API reads BTC only (windowed BTC histories, BTC Convert orders,
-  the spot BTC balance); its spot trades need the Transaction History CSV. A `bitcoin`-scope Kraken wallet now books BTC Buy Crypto and BTC
+  the spot BTC balance); its spot trades need the Transaction History CSV,
+  which `wallets import-binance-history` imports for every asset. A `bitcoin`-scope Kraken wallet now books BTC Buy Crypto and BTC
   staking/earn rewards (owner decision 2026-11-18).
   Every sync reports `assets` (other coins as `unread` from a BTC-only
   reader) and `swap_pairs`, and an exchange that states its BTC balance

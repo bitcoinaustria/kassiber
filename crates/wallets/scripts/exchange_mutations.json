@@ -1589,5 +1589,105 @@
       "binance_balance_must_be_exact"
     ],
     "rule": "Binance's spot BTC balance is read as whole msat by its own digits, or the sync fails closed."
+  },
+  {
+    "id": "binance-history-one-pair-per-second",
+    "file": "crates/wallets/src/file_import/exchange_api/binance/history.rs",
+    "find": "(Some(sent), Some(received)) if moved.len() == 2 => (sent, received),",
+    "replace": "(Some(sent), Some(received)) if moved.len() >= 2 => (sent, received),",
+    "expect_failing": [
+      "binance_history_refuses_what_it_cannot_book_by_row"
+    ],
+    "rule": "A second whose trade rows are more than one pair is refused by name, never guessed apart."
+  },
+  {
+    "id": "binance-history-received-fee-netted",
+    "file": "crates/wallets/src/file_import/exchange_api/binance/history.rs",
+    "find": "received_total = received_total.sub(&fee, &CTX).map_err(decimal_error)?;",
+    "replace": "received_total = received_total.clone();",
+    "expect_failing": [
+      "binance_history_books_btc_the_same_in_either_scope_and_counts_the_rest"
+    ],
+    "rule": "A fee in the received coin is netted from what arrived, so the book holds what the account holds."
+  },
+  {
+    "id": "binance-history-filter-before-operation",
+    "file": "crates/wallets/src/file_import/exchange_api/binance/history.rs",
+    "find": "        let fees_only = if mapper.admit(&coins) {",
+    "replace": "        let fees_only = if { let _ = &coins; true } {",
+    "expect_failing": [
+      "binance_history_books_btc_the_same_in_either_scope_and_counts_the_rest"
+    ],
+    "rule": "The asset scope filters an export's events before their operation is read: an unknown operation in another coin never stops a Bitcoin wallet."
+  },
+  {
+    "id": "binance-csv-never-nets-both-directions",
+    "file": "crates/wallets/src/file_import/exchange_api/binance/history.rs",
+    "find": "directions.iter().find(|(_, (out, into))| *out && *into)",
+    "replace": "directions.iter().find(|(_, (out, into))| false && *out && *into)",
+    "rule": "A second that buys and sells one coin is never netted into one trade.",
+    "expect_failing": [
+      "binance_history_never_nets_a_buy_and_a_sale_in_one_second"
+    ]
+  },
+  {
+    "id": "binance-csv-internal-moves-match-both-sides",
+    "file": "crates/wallets/src/file_import/exchange_api/binance/history.rs",
+    "find": "    if let Some(line) = unmatched.into_iter().min_by_key(|line| line.number) {",
+    "replace": "    if let Some(line) = unmatched.into_iter().min_by_key(|line| line.number).filter(|_| false) {",
+    "rule": "A move between Binance wallets is left out only when its debit and credit are both in the export.",
+    "expect_failing": [
+      "binance_history_drops_only_internal_moves_whose_two_sides_match"
+    ]
+  },
+  {
+    "id": "binance-csv-row-precision-before-sums",
+    "file": "crates/wallets/src/file_import/exchange_api/binance/history.rs",
+    "find": "        exact_row(line)?;",
+    "replace": "        let _ = line;",
+    "rule": "Each row's BTC is whole msat before rows are summed.",
+    "expect_failing": [
+      "binance_history_checks_each_rows_precision_before_summing"
+    ]
+  },
+  {
+    "id": "binance-csv-scope-filters-principal-legs",
+    "file": "crates/wallets/src/file_import/exchange_api/binance/history.rs",
+    "find": "            .filter(|line| !trading || op(&line.operation) != Some(Op::Fee))",
+    "replace": "            .filter(|_| true)",
+    "rule": "The scope filters a Binance trade by the coins it trades, never by its fee.",
+    "expect_failing": [
+      "binance_history_a_btc_fee_of_another_coins_trade_is_its_own_row_in_both_scopes"
+    ]
+  },
+  {
+    "id": "exchange-file-guard-reads-stored-sources",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "            Some((exchange, _)) => guard_file_rows(conn, exchange, wallet),",
+    "replace": "            Some(_) => Ok(()),",
+    "rule": "An export without ids is refused in a wallet that holds rows of the exchange's other sources.",
+    "expect_failing": [
+      "binance_history_refuses_a_wallet_holding_rows_of_another_binance_source"
+    ]
+  },
+  {
+    "id": "binance-history-identical-rows-numbered",
+    "file": "crates/wallets/src/file_import/exchange_api/binance/history.rs",
+    "find": "        n => format!(\"{key}#{n}\").into(),",
+    "replace": "        n => {\n            let _ = n;\n            key.into()\n        }",
+    "expect_failing": [
+      "binance_history_numbers_identical_rows_and_keeps_out_of_api_wallets"
+    ],
+    "rule": "Identical export rows keep apart by their occurrence, since the export has no ids."
+  },
+  {
+    "id": "binance-history-keeps-out-of-api-wallets",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "    if exchange.shared_ids || !synced {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "binance_history_numbers_identical_rows_and_keeps_out_of_api_wallets"
+    ],
+    "rule": "An export whose rows the API cannot match is refused in a wallet that syncs that API."
   }
 ]

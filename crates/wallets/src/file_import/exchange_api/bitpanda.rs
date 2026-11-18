@@ -38,6 +38,8 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
         "non_btc_operations",
         "internal_btc_moves",
     ]),
+    files: &[],
+    shared_ids: true,
 };
 /// What [`reported`] sums: each BTC wallet's balance after its latest BTC
 /// transaction.

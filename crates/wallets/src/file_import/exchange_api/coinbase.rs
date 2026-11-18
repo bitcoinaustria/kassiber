@@ -42,6 +42,8 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     fetch,
     probe,
     skipped: None,
+    files: &[],
+    shared_ids: true,
 };
 
 /// Every crypto account's transactions, in every asset scope; the scope only

@@ -74,6 +74,7 @@ pub enum Format {
     Blockpit,
     Binance,
     Bisq,
+    BinanceHistory,
     BtcpayCsv,
     BtcpayJson,
     Ledger,
@@ -99,6 +100,7 @@ impl Format {
             "ledgerlive_csv" => Self::LedgerLive,
             "binance_supplemental_csv" => Self::Binance,
             "bisq_csv" => Self::Bisq,
+            "binance_history_csv" => Self::BinanceHistory,
             "cointracking_csv" => Self::CoinTracking,
             "blockpit_csv" => Self::Blockpit,
             "wasabi_bundle" => Self::Wasabi,
@@ -127,11 +129,16 @@ impl Format {
             Self::Blockpit => "blockpit_csv",
             Self::Binance => "binance_supplemental_csv",
             Self::Bisq => "bisq_csv",
+            Self::BinanceHistory => "binance_history_csv",
             Self::Ledger => "generic_ledger",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
         match self {
+            // Exchange exports: the registry names each one's parser.
+            Self::BinanceHistory => Ok(exchange_api::load_file(self, file, None)?
+                .map(|(rows, _)| rows)
+                .unwrap_or_default()),
             Self::Document => Err(AppError::new(
                 "validation",
                 "Document imports require reviewed draft rows",
@@ -179,6 +186,9 @@ impl Format {
         file: &str,
         target: tax_platform::Target<'_>,
     ) -> Result<(Vec<csv::Row>, Option<assets::Tally>), AppError> {
+        if let Some((rows, tally)) = exchange_api::load_file(self, file, Some(target))? {
+            return Ok((rows, Some(tally)));
+        }
         match self {
             Self::CoinTracking | Self::Blockpit => {
                 tax_platform::load_for(file, self, target).map(|(rows, tally)| (rows, Some(tally)))
@@ -209,7 +219,7 @@ impl Format {
                 | Self::Binance
                 | Self::Coinfinity
                 | Self::LedgerLive
-        )
+        ) || exchange_api::file_exchange(self)
     }
     fn evidence(self) -> bool {
         matches!(
@@ -2313,6 +2323,8 @@ fn apply_records(
         )
         .map_err(database_error)?;
     let configuration = serde_json::from_str(&configuration).unwrap_or(Json::Null);
+    exchange_api::guard_file_wallet(request.format, &configuration)?;
+    exchange_api::guard_sources(request.format, api_source, conn, &wallet.id)?;
     for r in records {
         let raw = serde_json::from_str(&string(&r.fields, "raw_json")).unwrap_or(Json::Null);
         network::guard_import(

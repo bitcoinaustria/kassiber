@@ -126,6 +126,7 @@ pub fn execute(
         | "import-cointracking"
         | "import-blockpit"
         | "import-binance-supplemental"
+        | "import-binance-history"
         | "import-btcpay"
         | "import-wasabi" => {
             return book.import_wallet_file(kassiber_wallets::file_import::Request {
@@ -151,6 +152,9 @@ pub fn execute(
                     }
                     Some("import-binance-supplemental") => {
                         kassiber_wallets::file_import::Format::Binance
+                    }
+                    Some("import-binance-history") => {
+                        kassiber_wallets::file_import::Format::BinanceHistory
                     }
                     Some("import-blockpit") => kassiber_wallets::file_import::Format::Blockpit,
                     Some("import-ledger-live") => kassiber_wallets::file_import::Format::LedgerLive,

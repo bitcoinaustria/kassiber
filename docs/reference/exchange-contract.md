@@ -43,6 +43,13 @@ read, whether the event is mapped:
 So a row type Kassiber does not map in another coin never stops a Bitcoin
 wallet's import, and turning the scope on never changes a Bitcoin row.
 
+A trade is filtered by the assets it trades, never by a fee row in a third
+asset. Where a parser books such a fee as its own `Fee` row (Kraken, the
+Binance Transaction History CSV), another asset's trade that pays its fee in
+BTC books only that BTC fee-only row in a `bitcoin` wallet, the same row the
+`crypto` scope books next to the trade; a BTC trade's fee in a coin the scope
+does not keep is counted, not refused.
+
 `Mapper::admit_classed` takes the provider's own class for each asset
 (Bitpanda's stocks and metals are `Excluded`): an excluded asset is counted in
 `assets.excluded` and never kept; traded against a kept crypto asset, the
@@ -63,6 +70,17 @@ The envelope then carries `provider_balance` (the figure against the wallet's
 book balance after the import: `matches`, `mismatch` or `unavailable`) and,
 when the figure is known, `reported_balance` (`{asset, amount_msat, as_of,
 scope}`). A mismatch is reported, never corrected.
+
+## File exports
+
+An exchange's file exports are `FileFormat`s in its `Descriptor`: the import
+format, which assets the parser reads (an export may hold every asset where
+the API reads only BTC, as Binance's Transaction History does) and the
+parser, which hands its events to the same `Mapper`. A file import reads the
+wallet's scope and label like a sync. Where the API and an export give one
+transaction different identities (`shared_ids: false`; Binance's export has
+no ids), a wallet takes one source only: an export is refused in a wallet
+with a backend, and a sync in a wallet that holds `<kind>:csv:` rows.
 
 ## Stored identities
 

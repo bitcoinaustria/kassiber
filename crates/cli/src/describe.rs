@@ -187,6 +187,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.import-cointracking",
     "wallets.import-blockpit",
     "wallets.import-binance-supplemental",
+    "wallets.import-binance-history",
     "wallets.import-pocket",
     "wallets.import-pocketbitcoin",
     "wallets.import-phoenix",

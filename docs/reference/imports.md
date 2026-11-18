@@ -2140,6 +2140,52 @@ regtest book. Any other rail, such as `LIGHTNING` or a token network like
 `BSC`, is refused as a contradicting network rather than guessed, and refuses
 the whole batch. The stored raw row keeps Binance's own value.
 
+### Binance Transaction History CSV
+
+Binance's Transaction History export (Orders → Transaction History → Export,
+all statements; Binance limits one file to a year) is the account's complete
+ledger: one row per balance change of every Binance wallet, spot trades
+included. Import each file unchanged into a Binance wallet without a backend:
+
+```bash
+kassiber wallets create --workspace W --profile P --label "Binance" --kind binance \
+  --config '{"source_format": "binance_history_csv"}'
+kassiber wallets import-binance-history --workspace W --profile P \
+  --wallet Binance --file /path/to/binance-transaction-history.csv
+```
+
+The columns must be exactly `User_ID,UTC_Time,Account,Operation,Coin,Change,Remark`
+and `UTC_Time` a `YYYY-MM-DD HH:MM:SS` UTC time. It goes through the
+[exchange contract](exchange-contract.md): every asset is read, and the
+wallet's `asset_scope` filters events before their operation is read, so an
+operation Kassiber does not map in another coin never stops a `bitcoin`
+wallet; it is counted in `assets.skipped`.
+
+| Operations | Imported as |
+| --- | --- |
+| `Buy`, `Sell`, `Transaction Buy/Spend/Revenue/Sold/Related`, `Binance Convert`, `Large OTC trading`, `Small Assets Exchange BNB`, with `Fee`/`Transaction Fee` rows | one trade per second and account (several fills of one side of one pair summed): against fiat a buy valued at the fiat spent plus a fiat fee, or a sale valued at the fiat received net of it; between two coins two `swap` legs sharing a `swap_ref`; a fee in the received coin is netted from what arrived; a fee in a third coin is its own fee-only row where the scope keeps that coin and counted in `assets.skipped` where not. The scope filters a trade by the coins it trades, never by its fee: a BTC trade that pays its fee in BNB imports in the `bitcoin` scope with the BNB counted, and another coin's trade that pays its fee in BTC books only that BTC fee-only row there, the same row the `crypto` scope books next to the trade |
+| `Deposit`, `Withdraw` | wallet movements (a withdrawal's change is what left the account) |
+| Simple Earn, savings, staking, Launchpool, airdrop, distribution, referral and cashback credits | `income` (`Super BNB Mining`, `Pool Distribution`: `mining`), unpriced |
+| moves between Binance wallets and into or out of Earn, savings and staking | skipped when each debit has a credit of the same user, coin, second and amount in the export (the coin stays the user's); a side without its match refuses by name |
+| `Fiat Deposit`, `Fiat Withdraw` | skipped: fiat is not a holding |
+
+A second whose trade rows are not one pair (one coin out and one in), a
+second that buys and sells the same coin (the export does not say which rows
+belong together, so they are never netted), a margin, futures, isolated or
+options account or operation, a P2P trade (paid outside Binance), an
+operation not listed, a row whose BTC change is finer than a millisatoshi (or
+another coin's finer than its stored units), checked row by row before rows
+are summed, and a row that moves the other way than its operation are
+refused, naming the row. The export has no ids: each record's identity is
+the row's own time, account, operation, coin and change (`binance:csv:...`,
+a trade by its pair), numbered for identical rows, so importing the same file
+or an overlapping one again adds nothing. Because those identities cannot be
+matched to the API's, an export is refused in a wallet that syncs the Binance
+API or holds rows of another Binance source (an API sync, also one run with
+an explicit `--backend` that left the wallet's configuration empty, or a
+supplemental CSV), and an API sync in a wallet that holds the export's rows.
+The check reads the wallet's stored rows inside the import's write.
+
 Supplemental Binance CSV import currently supports:
 
 - autoinvest BTC rows funded by fiat (`binance_supplemental_csv`) as exact

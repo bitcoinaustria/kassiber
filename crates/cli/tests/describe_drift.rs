@@ -17,7 +17,10 @@ use kassiber_pyjson::{dumps, Options, Value};
 /// (`docs/reference/rust-shell.md#rust-only-commands`): every other byte
 /// must still be Python's.
 /// Each Rust-only leaf and the Python leaf it is described like.
-const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[("sync-bitpanda", "sync-binance")];
+const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[
+    ("sync-bitpanda", "sync-binance"),
+    ("import-binance-history", "import-river"),
+];
 /// Rust-only leaves with a grammar of their own and the Python leaf they
 /// follow: Python has nothing to compare, so they describe themselves.
 const RUST_ONLY_OWN: &[(&str, &str)] = &[("import-bisq", "import-strike")];

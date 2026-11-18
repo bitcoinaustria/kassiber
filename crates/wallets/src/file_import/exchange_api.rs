@@ -69,6 +69,7 @@ pub fn execute(
     let scope = assets::Scope::of_wallet(conn, &wallet.id)?;
     let exchange = exchange(&kind)?;
     let label = exchange.provider;
+    guard_api_wallet(conn, exchange, &wallet.id)?;
     let prepared = prepare(&backend, exchange, &name)?;
     let book = book_id(conn)?;
     let binding: [u8; 32] = Sha256::digest(
@@ -182,6 +183,158 @@ pub fn execute(
         }
     }
     Ok(result)
+}
+
+/// Whether `format` is an exchange's file export, read through the
+/// exchange contract.
+pub(super) fn file_exchange(format: Format) -> bool {
+    contract::registry::by_format(format).is_some()
+}
+
+/// An exchange file export's records as import rows, and the rows the
+/// wallet's asset scope left out; `None` for a format no exchange owns.
+/// Without a target wallet the export is read in the `bitcoin` scope.
+pub(super) fn load_file(
+    format: Format,
+    file: &str,
+    target: Option<tax_platform::Target<'_>>,
+) -> Result<Option<(Vec<csv::Row>, assets::Tally)>, AppError> {
+    let Some((exchange, export)) = contract::registry::by_format(format) else {
+        return Ok(None);
+    };
+    let (scope, wallet) = target.map_or((assets::Scope::Bitcoin, ""), |t| (t.scope, t.wallet));
+    let mut mapper = Mapper::reading(exchange, export.reads, scope, wallet);
+    (export.load)(file, &mut mapper)?;
+    let mapped = mapper.finish();
+    let rows = mapped
+        .records
+        .into_iter()
+        .map(|record| csv::Row {
+            headers: vec![],
+            data: generic_json::projection(&record),
+            rest: None,
+            original: Some(record),
+        })
+        .collect();
+    Ok(Some((rows, mapped.tally)))
+}
+
+/// Refuses an exchange file export into a wallet that syncs the exchange's
+/// API when the two sources give a transaction different identities
+/// (Binance's export has no ids): the same transaction would be stored twice.
+pub(super) fn guard_file_wallet(format: Format, configuration: &Json) -> Result<(), AppError> {
+    let Some((exchange, _)) = contract::registry::by_format(format) else {
+        return Ok(());
+    };
+    let synced = configuration
+        .get("backend")
+        .and_then(Json::as_str)
+        .is_some_and(|backend| !backend.trim().is_empty());
+    if exchange.shared_ids || !synced {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "validation",
+        format!(
+            "This wallet syncs the {} API, and the {} export cannot be matched to its rows",
+            exchange.provider, exchange.provider
+        ),
+    )
+    .with_hint(format!(
+        "Import the {} export into its own wallet, without a backend; use either the export or the API sync for one account, not both.",
+        exchange.provider
+    )))
+}
+
+/// Refuses an import of an exchange export, or a sync of its API
+/// (`api_source` `<kind>:api:<backend>`), into a wallet that holds rows of
+/// the exchange's other source when the two give a transaction different
+/// identities. Runs inside the import's write, on the stored rows.
+pub(super) fn guard_sources(
+    format: Format,
+    api_source: Option<&str>,
+    conn: &Connection,
+    wallet: &str,
+) -> Result<(), AppError> {
+    match api_source {
+        Some(source) => match source
+            .split_once(':')
+            .and_then(|(kind, _)| contract::registry::by_kind(kind))
+        {
+            Some(exchange) => guard_api_wallet(conn, exchange, wallet),
+            None => Ok(()),
+        },
+        None => match contract::registry::by_format(format) {
+            Some((exchange, _)) => guard_file_rows(conn, exchange, wallet),
+            None => Ok(()),
+        },
+    }
+}
+
+/// Refuses an exchange file export into a wallet that holds rows of the
+/// exchange's other sources (its API sync, also one that left the wallet's
+/// configuration empty, and older imports) when the export gives a
+/// transaction another identity: the same transaction would be stored twice.
+fn guard_file_rows(conn: &Connection, exchange: &Descriptor, wallet: &str) -> Result<(), AppError> {
+    if exchange.shared_ids {
+        return Ok(());
+    }
+    let prefix = format!("{}:csv:", exchange.kind);
+    let held: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM transactions WHERE wallet_id=?1 AND counterparty=?2 AND (external_id IS NULL OR substr(external_id,1,length(?3))<>?3)",
+            kassiber_store::rusqlite::params![wallet, exchange.provider, prefix],
+            |r| r.get(0),
+        )
+        .map_err(database_error)?;
+    if held == 0 {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "validation",
+        format!(
+            "This wallet holds rows of another {} source, which the {} export cannot be matched to",
+            exchange.provider, exchange.provider
+        ),
+    )
+    .with_hint(format!(
+        "Import the {} export into its own wallet; use either the export or the API sync for one account, not both.",
+        exchange.provider
+    )))
+}
+
+/// Refuses an API sync into a wallet that holds an exchange file export's
+/// rows when the two sources give a transaction different identities.
+fn guard_api_wallet(
+    conn: &Connection,
+    exchange: &Descriptor,
+    wallet: &str,
+) -> Result<(), AppError> {
+    if exchange.shared_ids {
+        return Ok(());
+    }
+    let prefix = format!("{}:csv:", exchange.kind);
+    let held: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM transactions WHERE wallet_id=? AND substr(external_id,1,length(?2))=?2",
+            kassiber_store::rusqlite::params![wallet, prefix],
+            |r| r.get(0),
+        )
+        .map_err(database_error)?;
+    if held == 0 {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "validation",
+        format!(
+            "This wallet holds rows from a {} export, which the API sync cannot match",
+            exchange.provider
+        ),
+    )
+    .with_hint(format!(
+        "Sync the {} API into its own wallet; use either the export or the API sync for one account, not both.",
+        exchange.provider
+    )))
 }
 
 /// The exchange's own BTC balance against the wallet's book balance after the
