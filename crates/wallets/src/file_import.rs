@@ -2364,6 +2364,7 @@ fn apply_records(
     } else {
         None
     };
+    exchange_api::before_insert(request.format, api_source, conn, &wallet.id, records)?;
     let Inserted {
         imported,
         updated,

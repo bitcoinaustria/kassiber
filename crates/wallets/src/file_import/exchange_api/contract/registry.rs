@@ -45,13 +45,30 @@ pub(in crate::file_import) struct Descriptor {
     /// What the exchange marks after an import stored its rows (Bitfinex's
     /// withdrawals whose fee split the ledger does not prove).
     pub after_insert: Option<AfterInsert>,
+    /// What the exchange checks against the wallet's stored rows before an
+    /// import stores any (Bitcoin.de refuses a booking stored with other
+    /// values).
+    pub before_insert: Option<BeforeInsert>,
+    /// What an API sync records about itself after its rows are stored, in
+    /// the same write (Bitcoin.de's statement coverage).
+    pub after_sync: Option<AfterSync>,
 }
+
+/// A check of an import's records against the wallet's stored rows: the
+/// connection, the wallet and the records.
+pub(in crate::file_import) type BeforeInsert =
+    fn(&Connection, &str, &[Record]) -> Result<(), AppError>;
+
+/// A sync's own record after its rows are stored: the connection, profile,
+/// wallet, the result envelope and the id source.
+pub(in crate::file_import) type AfterSync =
+    fn(&Connection, &str, &str, &mut Py, &mut Ids<'_>) -> Result<(), AppError>;
 
 /// A step after an import's rows are stored, in the same write.
 pub(in crate::file_import) type AfterInsert =
     fn(&Connection, &str, &str, &[csv::Row], &mut Ids<'_>) -> Result<(), AppError>;
 
-pub(in crate::file_import) static EXCHANGES: [&Descriptor; 7] = [
+pub(in crate::file_import) static EXCHANGES: [&Descriptor; 8] = [
     &kraken::EXCHANGE,
     &coinbase::EXCHANGE,
     &binance::EXCHANGE,
@@ -59,6 +76,7 @@ pub(in crate::file_import) static EXCHANGES: [&Descriptor; 7] = [
     &bitvavo::EXCHANGE,
     &bitstamp::EXCHANGE,
     &bitfinex::EXCHANGE,
+    &bitcoinde::EXCHANGE,
 ];
 
 /// One file export of an exchange.

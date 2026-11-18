@@ -47,6 +47,8 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     shared_ids: true,
     same_second_tags: false,
     after_insert: Some(mapping::tag_unchecked),
+    before_insert: None,
+    after_sync: None,
 };
 
 fn read<'r, T>(

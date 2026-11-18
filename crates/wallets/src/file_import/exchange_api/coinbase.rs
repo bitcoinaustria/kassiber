@@ -46,6 +46,8 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     shared_ids: true,
     same_second_tags: false,
     after_insert: None,
+    before_insert: None,
+    after_sync: None,
 };
 
 /// Every crypto account's transactions, in every asset scope; the scope only

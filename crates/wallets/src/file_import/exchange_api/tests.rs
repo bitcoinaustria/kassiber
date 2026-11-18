@@ -474,6 +474,19 @@ mod loopback {
                     && header("bfx-signature")
                         == bitfinex::signature(SECRET, &target[1..], nonce, body)
             }
+            // Bitcoin.de signs `GET#URL#KEY#NONCE#MD5("")` with the full URL.
+            "bitcoinde" => {
+                let nonce = header("X-API-NONCE");
+                let signed = format!(
+                    "GET#http://{}{target}#{KEY}#{nonce}#d41d8cd98f00b204e9800998ecf8427e",
+                    header("Host")
+                );
+                method == "GET"
+                    && body.is_empty()
+                    && header("X-API-KEY") == KEY
+                    && header("X-API-SIGNATURE")
+                        == hmac_sha256_hex(SECRET.as_bytes(), signed.as_bytes())
+            }
             _ => {
                 let query = target.split_once('?').map(|(_, q)| q).unwrap_or("");
                 let Some((unsigned, signature)) = query.rsplit_once("&signature=") else {
@@ -504,16 +517,24 @@ mod loopback {
     ) -> Fake {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let log = seen.clone();
+        let last_nonce = Mutex::new(0u64);
         let server = HandledProvider::start(move |request| {
             let (method, target) = (request.method.as_str(), request.target.as_str());
             let path = target.split('?').next().unwrap();
-            let is_signed = signed(
+            let mut is_signed = signed(
                 kind,
                 method,
                 if kind == "kraken" { path } else { target },
                 &request.headers,
                 &request.body,
             );
+            // Bitcoin.de refuses a nonce not above the key's previous one.
+            if kind == "bitcoinde" {
+                let nonce = request.header("X-API-NONCE").and_then(|n| n.parse().ok());
+                let mut last = last_nonce.lock().unwrap();
+                is_signed &= nonce.is_some_and(|n: u64| n > *last);
+                *last = (*last).max(nonce.unwrap_or(0));
+            }
             // A form body is shown as the query it encodes.
             let shown = if method == "POST" {
                 format!("{target}?{}", String::from_utf8_lossy(&request.body))
@@ -624,6 +645,8 @@ mod loopback {
 mod binance_api;
 #[rustfmt::skip]
 mod bitfinex_api;
+#[rustfmt::skip]
+mod bitcoinde_api;
 mod bitpanda_api;
 mod coinbase_api;
 #[rustfmt::skip]

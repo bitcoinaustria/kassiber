@@ -42,6 +42,8 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     shared_ids: true,
     same_second_tags: false,
     after_insert: None,
+    before_insert: None,
+    after_sync: None,
 };
 /// What [`reported`] sums: each BTC wallet's balance after its latest BTC
 /// transaction.

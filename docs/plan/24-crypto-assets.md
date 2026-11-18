@@ -211,7 +211,7 @@ The coordinator stores the rows (other assets exactly, or refused), authors
 the swap pairs, and adds `swap_pairs` and `assets: {scope, skipped: {TICKER:
 rows}, excluded: {TICKER: rows}, unread?: {TICKER: rows}, next_step?}` to the
 result envelope. `unread` counts the crypto rows of an importer that reads
-only BTC from its provider (Bitfinex, the Binance API), which no scope keeps.
+only BTC from its provider (Bitfinex, Bitcoin.de, the Binance API), which no scope keeps.
 `next_step` also names any history the importer never reads (Binance spot
 trades).
 File exports without a provider asset type take a row's ticker

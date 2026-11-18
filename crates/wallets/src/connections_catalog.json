@@ -150,6 +150,12 @@
     "config_fields": "backend, source_file, source_format"
   },
   {
+    "kind": "bitcoinde",
+    "summary": "Bitcoin.de read-only Trading API sync for BTC trades and wallet movements.",
+    "requires": "",
+    "config_fields": "backend"
+  },
+  {
     "kind": "wasabi",
     "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
     "requires": "",

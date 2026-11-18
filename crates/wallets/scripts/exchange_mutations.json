@@ -2427,6 +2427,260 @@
     "rule": "A withdrawal with its fee from movements carries the bitfinex-fee-unchecked review tag."
   },
   {
+    "id": "bitcoinde-write-key-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": ".filter(|m| !READ_ONLY.split(' ').any(|read| read == m.as_str()))",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "bitcoinde_refuses_keys_that_can_write"
+    ],
+    "rule": "A Bitcoin.de key granted any method but the documented reads is refused before history is read."
+  },
+  {
+    "id": "bitcoinde-signature-covers-url",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "let signed = format!(\"GET#{url}#{}#{sent}#{EMPTY_MD5}\", client.key);",
+    "replace": "let signed = format!(\"GET##{}#{sent}#{EMPTY_MD5}\", client.key);",
+    "expect_failing": [
+      "bitcoinde_reads_only_and_maps_every_btc_booking"
+    ],
+    "rule": "Bitcoin.de signs the method, the full URL with its query, the key, the nonce and the empty-body MD5."
+  },
+  {
+    "id": "bitcoinde-nonce-rises",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "nonce.set(next.max(nonce.get().saturating_add(1)));",
+    "replace": "nonce.set(next.min(1));",
+    "expect_failing": [
+      "bitcoinde_reads_only_and_maps_every_btc_booking",
+      "bitcoinde_throttling_is_retried_with_a_fresh_nonce"
+    ],
+    "rule": "Every Bitcoin.de attempt, retries included, sends a nonce above the last one."
+  },
+  {
+    "id": "bitcoinde-waits-for-credits",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "        std::thread::sleep(Duration::from_secs(wait));\n",
+    "replace": "",
+    "expect_failing": [
+      "bitcoinde_waits_for_credits_and_refuses_a_long_deficit"
+    ],
+    "rule": "A read waits until the reported credits plus one per idle second cover its cost."
+  },
+  {
+    "id": "bitcoinde-page-is-the-one-asked-for",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "if current != page && !(data.is_empty() && last < page) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitcoinde_malformed_pages_fail_closed"
+    ],
+    "rule": "A Bitcoin.de page that is not the one asked for fails closed."
+  },
+  {
+    "id": "bitcoinde-error-code-documented-only",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "let code = known_number(at(&first, \"code\"), &documented);",
+    "replace": "let code = at(&first, \"code\").clone();",
+    "expect_failing": [
+      "bitcoinde_errors_keep_the_status_and_a_documented_code"
+    ],
+    "rule": "A Bitcoin.de error keeps only a documented code number, else \"unknown\", never the provider's value."
+  },
+  {
+    "id": "bitcoinde-unavailable-is-retryable",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": ".retryable(kind == \"upstream_error\")",
+    "replace": ".retryable(false)",
+    "expect_failing": [
+      "bitcoinde_errors_keep_the_status_and_a_documented_code"
+    ],
+    "rule": "Bitcoin.de's unavailable Trading API (codes 12 and 13) is a retryable upstream error."
+  },
+  {
+    "id": "bitcoinde-numbers-keep-their-digits",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "Json::Number(n) if n.to_string().contains(['.', 'e', 'E']) => s(n.to_string()),",
+    "replace": "Json::Number(n) if false => s(n.to_string()),",
+    "expect_failing": [
+      "bitcoinde_numeric_amounts_keep_every_digit"
+    ],
+    "rule": "A fractional JSON number is read by its written digits, never through a float."
+  },
+  {
+    "id": "bitcoinde-partner-stays-out",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "let projected = dict(kept.collect::<Vec<_>>());",
+    "replace": "let projected = { drop(kept); trade.clone() };",
+    "expect_failing": [
+      "bitcoinde_reads_only_and_maps_every_btc_booking"
+    ],
+    "rule": "The stored trade leaves out the trading partner's name, bank and rating."
+  },
+  {
+    "id": "bitcoinde-trade-list-is-btceur",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "if pair != \"btceur\" {",
+    "replace": "if pair.is_empty() {",
+    "expect_failing": [
+      "bitcoinde_refuses_unmappable_bookings"
+    ],
+    "rule": "A trade-list entry on another pair than BTC/EUR is refused by name."
+  },
+  {
+    "id": "bitcoinde-msat-precision",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "if exact_msat(&line.cashflow.copy_abs()).is_none() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitcoinde_refuses_unmappable_bookings"
+    ],
+    "rule": "A BTC amount finer than a millisatoshi refuses the import, named as such."
+  },
+  {
+    "id": "bitcoinde-unmapped-type-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "                return Err(line.refuse(\"has a type Kassiber does not map\", REVIEW))",
+    "replace": "                line.cashflow.is_positive()",
+    "expect_failing": [
+      "bitcoinde_refuses_unmappable_bookings"
+    ],
+    "rule": "A booking of a type Kassiber does not map, or a registration that moves BTC, refuses the import by name."
+  },
+  {
+    "id": "bitcoinde-direction-checked",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "if inbound != line.cashflow.is_positive() {",
+    "replace": "if inbound != inbound {",
+    "expect_failing": [
+      "bitcoinde_refuses_unmappable_bookings"
+    ],
+    "rule": "A booking that moves BTC against its type's direction is refused."
+  },
+  {
+    "id": "bitcoinde-opening-from-zero",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "if !order.is_empty() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "bitcoinde_the_running_balance_orders_and_names_bookings"
+    ],
+    "rule": "A statement that does not start from a zero balance is refused as missing history, naming the opening balance."
+  },
+  {
+    "id": "bitcoinde-undecided-order-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "let [(index, after)] = next[..] else {",
+    "replace": "let Some(&(index, after)) = next.first() else {",
+    "expect_failing": [
+      "bitcoinde_the_running_balance_orders_and_names_bookings",
+      "bitcoinde_refuses_unmappable_bookings"
+    ],
+    "rule": "A second whose balances allow more than one booking order is refused, never guessed."
+  },
+  {
+    "id": "bitcoinde-payout-carries-its-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "                    fee = lines[paid].cashflow.copy_abs();\n",
+    "replace": "",
+    "expect_failing": [
+      "bitcoinde_reads_only_and_maps_every_btc_booking",
+      "bitcoinde_the_running_balance_orders_and_names_bookings"
+    ],
+    "rule": "A payout carries the network fee of its transaction booked next to it."
+  },
+  {
+    "id": "bitcoinde-txid-is-evidence",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "raw.insert(0, (\"txid\", s(reference.to_ascii_lowercase())));",
+    "replace": "drop(reference);",
+    "expect_failing": [
+      "bitcoinde_the_running_balance_orders_and_names_bookings"
+    ],
+    "rule": "A 64-hex reference travels as the lowercase raw_json txid for transfer pairing."
+  },
+  {
+    "id": "bitcoinde-trade-amount-checked",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "} else if exact_msat(&moved) != exact_msat(expected) {",
+    "replace": "} else if exact_msat(&moved) != exact_msat(expected) && false {",
+    "expect_failing": [
+      "bitcoinde_refuses_unmappable_bookings"
+    ],
+    "rule": "A trade booking whose BTC differs from its trade details is refused."
+  },
+  {
+    "id": "bitcoinde-buyer-receives-after-fee",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "Type::Buy => (true, \"buy\", &terms.btc_after),",
+    "replace": "Type::Buy => (true, \"buy\", &terms.btc_before),",
+    "expect_failing": [
+      "bitcoinde_reads_only_and_maps_every_btc_booking"
+    ],
+    "rule": "A buyer receives the BTC after the whole Bitcoin.de fee."
+  },
+  {
+    "id": "bitcoinde-stored-rows-come-back",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "let changed = stored.iter().filter(|b| !incoming.contains(*b));",
+    "replace": "let changed = stored.iter().filter(|_| false);",
+    "expect_failing": [
+      "bitcoinde_imports_only_append"
+    ],
+    "rule": "Rows earlier Bitcoin.de runs stored must come back unchanged, or nothing is imported."
+  },
+  {
+    "id": "bitcoinde-new-rows-follow-stored",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "newest.is_some_and(|n| b.5.as_str() <= n)",
+    "replace": "newest.is_some_and(|_| false)",
+    "expect_failing": [
+      "bitcoinde_imports_only_append"
+    ],
+    "rule": "New Bitcoin.de rows must follow the newest stored second."
+  },
+  {
+    "id": "bitcoinde-binding-by-import-run",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "WHERE wallet_id=?1 AND id IN (SELECT",
+    "replace": "WHERE wallet_id=?1 OR wallet_id=?1 AND id IN (SELECT",
+    "expect_failing": [
+      "bitcoinde_imports_only_append"
+    ],
+    "rule": "Only rows Bitcoin.de import runs wrote bind an import, never rows that merely look like them."
+  },
+  {
+    "id": "bitcoinde-binding-applies",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "    exchange_api::before_insert(request.format, api_source, conn, &wallet.id, records)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "bitcoinde_imports_only_append"
+    ],
+    "rule": "Every Bitcoin.de CSV import and API sync is bound to what the wallet already holds."
+  },
+  {
+    "id": "bitcoinde-api-sync-is-a-run",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "            after_sync(conn, profile, &wallet.id, &mut result, &mut ids).map(|()| result)",
+    "replace": "            {\n                let _ = after_sync;\n                Ok(result)\n            }",
+    "expect_failing": [
+      "bitcoinde_reads_only_and_maps_every_btc_booking",
+      "bitcoinde_imports_only_append"
+    ],
+    "rule": "An API sync records its rows as an import run in the proven order."
+  },
+  {
+    "id": "bitcoinde-signature-header-withheld",
+    "file": "crates/credentials/src/lib.rs",
+    "find": "    \"x-api-signature\",",
+    "replace": "    \"x-not-a-credential\",",
+    "expect_failing": [
+      "bitcoinde_an_echoed_signature_refuses_the_sync"
+    ],
+    "rule": "Bitcoin.de's request signature is a credential: an answer echoing it refuses the sync."
+  },
+  {
     "id": "bitfinex-ledger-shown-withdrawal-needs-fee",
     "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
     "find": "if unproven && (evidence.contains_key(&row.id) || !before) {",
@@ -2670,6 +2924,16 @@
       "bitfinex_counts_other_assets_as_unread_in_either_scope"
     ],
     "rule": "The Bitfinex Reports import reads only BTC, in either scope, and counts the other assets as unread."
+  },
+  {
+    "id": "bitcoinde-wait-before-nonce-lock",
+    "file": "crates/wallets/src/file_import/exchange_api/bitcoinde.rs",
+    "find": "        self.wait_for(cost)?;\n        let mut last = Nonce::lock();\n",
+    "replace": "        let mut last = Nonce::lock();\n        self.wait_for(cost)?;\n",
+    "expect_failing": [
+      "bitcoinde_waits_for_credits_without_holding_the_nonce_lock"
+    ],
+    "rule": "A Bitcoin.de read waits for API credits before it takes the process-wide nonce lock, so another sync is not held up."
   },
   {
     "id": "exchange-z-alias-kraken-only",

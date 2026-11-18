@@ -50,6 +50,8 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     shared_ids: true,
     same_second_tags: true,
     after_insert: None,
+    before_insert: None,
+    after_sync: None,
 };
 
 fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<Option<Balance>, AppError> {

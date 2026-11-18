@@ -16,6 +16,7 @@ use kassiber_pyjson::{Key, PyStr};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 mod binance;
+pub(super) mod bitcoinde;
 pub(super) mod bitfinex;
 mod bitpanda;
 pub(super) mod bitstamp;
@@ -36,10 +37,17 @@ const MAX_ROWS: usize = 1_000_000;
 /// Python has no overall budget; each read still has the backend timeout.
 const BUDGET: Duration = Duration::from_secs(3600);
 
-/// Bitpanda, Bitvavo, Bitstamp and Bitfinex are Rust only; Python knows the
-/// first three.
-pub const KINDS: [&str; 7] = [
-    "kraken", "coinbase", "binance", "bitpanda", "bitvavo", "bitstamp", "bitfinex",
+/// Bitpanda, Bitvavo, Bitstamp, Bitfinex and Bitcoin.de are Rust only; Python
+/// knows the first three.
+pub const KINDS: [&str; 8] = [
+    "kraken",
+    "coinbase",
+    "binance",
+    "bitpanda",
+    "bitvavo",
+    "bitstamp",
+    "bitfinex",
+    "bitcoinde",
 ];
 
 /// The resolved backend as Python's `runtime_config["backends"][name]`.
@@ -168,6 +176,12 @@ pub fn execute(
         }
         Ok(result)
     })
+    .and_then(|mut result| match exchange.after_sync {
+        Some(after_sync) => {
+            after_sync(conn, profile, &wallet.id, &mut result, &mut ids).map(|()| result)
+        }
+        None => Ok(result),
+    })
     // A revoked or offline route never publishes a book.
     // Both legs of each swap are stored now; pair them in the same write.
     .and_then(|mut result| {
@@ -212,6 +226,27 @@ pub fn execute(
 /// exchange contract.
 pub(super) fn file_exchange(format: Format) -> bool {
     contract::registry::by_format(format).is_some()
+}
+
+/// The exchange's own check before an import of its export, or a sync of its
+/// API (`api_source` `<kind>:api:<backend>`), stores rows.
+pub(super) fn before_insert(
+    format: Format,
+    api_source: Option<&str>,
+    conn: &Connection,
+    wallet: &str,
+    records: &[Record],
+) -> Result<(), AppError> {
+    let exchange = match api_source {
+        Some(source) => source
+            .split_once(':')
+            .and_then(|(kind, _)| contract::registry::by_kind(kind)),
+        None => contract::registry::by_format(format).map(|(exchange, _)| exchange),
+    };
+    match exchange.and_then(|exchange| exchange.before_insert) {
+        Some(before_insert) => before_insert(conn, wallet, records),
+        None => Ok(()),
+    }
 }
 
 /// The exchange's own step after an import of its export stored the rows.

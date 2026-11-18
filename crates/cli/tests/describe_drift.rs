@@ -26,6 +26,7 @@ const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[
     ("import-bitstamp", "import-bitvavo"),
     ("sync-bitfinex", "sync-bitstamp"),
     ("import-bitfinex", "import-bitstamp"),
+    ("sync-bitcoinde", "sync-bitfinex"),
 ];
 /// Rust-only leaves with a grammar of their own and the Python leaf they
 /// follow: Python has nothing to compare, so they describe themselves.
