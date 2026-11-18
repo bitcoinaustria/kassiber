@@ -86,11 +86,6 @@ fn stm(app: &mut App) -> &mut State {
     &mut app.wallets.add.exchange
 }
 
-/// `isExchangeKind`.
-pub fn is_exchange_kind(kind: &str) -> bool {
-    model::is_kind(kind)
-}
-
 /// `EXCHANGE_PROVIDER_NAMES`.
 pub fn provider_name(exchange: &str) -> &'static str {
     model::provider_name(exchange)
@@ -276,19 +271,21 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     }
 }
 
-/// The exchange of wallet `c` (`isExchangeKind(walletDetail.kind)`): the wallets list's kind,
-/// else the snapshot's.
+/// The exchange of wallet `c` (`exchangeApiKind(walletDetail)`): the wallets list's row, which
+/// must name a backend (a CSV-imported wallet of an exchange kind is no API connection); the
+/// snapshot's kind only when the list has no row for it.
 pub fn exchange_of(app: &App, c: &Conn) -> Option<String> {
     let listed = app
         .read("ui.wallets.list")
         .and_then(|d| d["wallets"].as_array())
-        .and_then(|a| a.iter().find(|w| w["id"].as_str() == Some(c.id.as_str())))
-        .and_then(|w| w["kind"].as_str())
-        .map(str::to_owned);
-    listed
-        .filter(|k| model::is_kind(k))
-        .or_else(|| model::is_kind(&c.kind).then(|| c.kind.clone()))
-        .map(|k| k.trim().to_lowercase())
+        .and_then(|a| a.iter().find(|w| w["id"].as_str() == Some(c.id.as_str())));
+    match listed {
+        Some(w) => model::api_kind(
+            w["kind"].as_str().unwrap_or(""),
+            w["backend"]["name"].as_str(),
+        ),
+        None => model::is_kind(&c.kind).then(|| c.kind.trim().to_lowercase()),
+    }
 }
 
 /// Starts the local status read once per exchange wallet.
@@ -835,9 +832,16 @@ pub fn sync_card(app: &App, _cx: &mut Cx<App>, tk: &Tk, c: &Conn, disabled: bool
 
 // ---- scenes -------------------------------------------------------------------------------
 
-/// The catalog source of an exchange's API setup (`binance-api`; the others share the name).
+/// The catalog source of an exchange's API setup (`binance-api`, `bitvavo-api`, `bitstamp-api`,
+/// `bitcoinde-api`, whose CSV import has the plain name; the others share the name).
 pub fn source_id(ex: &str) -> &str {
-    if ex == "binance" { "binance-api" } else { ex }
+    match ex {
+        "binance" => "binance-api",
+        "bitvavo" => "bitvavo-api",
+        "bitstamp" => "bitstamp-api",
+        "bitcoinde" => "bitcoinde-api",
+        _ => ex,
+    }
 }
 
 fn scene_open(a: &mut App, ex: &str) {
@@ -937,6 +941,16 @@ pub const SCENES: &[crate::app::Scene] = &[
         a.wallets.add.exchange.card_scene = true;
         synthetic_sync(a);
     }),
+    ("wallets-add-exchange-bitvavo", |a| scene_open(a, "bitvavo")),
+    ("wallets-add-exchange-bitstamp", |a| {
+        scene_open(a, "bitstamp")
+    }),
+    ("wallets-add-exchange-bitfinex", |a| {
+        scene_open(a, "bitfinex")
+    }),
+    ("wallets-add-exchange-bitcoinde", |a| {
+        scene_open(a, "bitcoinde")
+    }),
 ];
 
 #[cfg(test)]
@@ -1022,5 +1036,24 @@ mod test_reply_tests {
         let o = st(&app).outcome.as_ref().unwrap();
         assert_eq!(o.credentials.api_key, "B");
         assert!(!st(&app).test_pending);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_exchange_opens_its_api_setup() {
+        assert_eq!(source_id("bitvavo"), "bitvavo-api");
+        assert_eq!(source_id("bitfinex"), "bitfinex");
+        assert_eq!(source_id("kraken"), "kraken");
+        for k in model::KINDS {
+            assert_eq!(
+                crate::wallets::add::meta::meta(source_id(k)).exchange,
+                Some(k),
+                "{k}"
+            );
+        }
     }
 }

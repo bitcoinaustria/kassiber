@@ -66,8 +66,10 @@ Bitcoin and Liquid only.
   unrealized result only with a complete basis. The assistant reads them
   through its projection: when `basisComplete` is false the basis arrives as
   `partialCostBasis` and `costBasis` is `null`, in the book overview and in
-  each book of the book-set overview. The desktop does not show other assets
-  yet (step 4); when it does, it shows such a basis as incomplete.
+  each book of the book-set overview. The desktop app lists other assets in
+  its Holdings by Asset card under Other assets, with their quantity and the
+  market value the daemon priced, and shows no basis; a desktop view that adds
+  the basis has to show a partial one as incomplete.
 - **Swaps.** A crypto-to-crypto trade is two rows: the outbound leg (kind
   `swap`) and the inbound leg (kind `swap`), each with its fiat value when the
   provider gives one, and the same `swap_ref`. The import authors the pair

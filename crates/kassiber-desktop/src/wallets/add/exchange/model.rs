@@ -4,10 +4,27 @@
 use serde_json::{Map, Value, json};
 
 /// `EXCHANGE_KINDS`.
-pub const KINDS: [&str; 4] = ["kraken", "coinbase", "binance", "bitpanda"];
+pub const KINDS: [&str; 8] = [
+    "kraken",
+    "coinbase",
+    "binance",
+    "bitpanda",
+    "bitvavo",
+    "bitstamp",
+    "bitfinex",
+    "bitcoinde",
+];
 
 pub fn is_kind(kind: &str) -> bool {
     KINDS.contains(&kind.trim().to_lowercase().as_str())
+}
+
+/// `exchangeApiKind`: the exchange a wallet syncs from through its API, or `None`. Only a wallet
+/// with a backend attached is an API connection: a wallet of the same kind that imports a CSV
+/// export (Bitvavo, Bitfinex, the Binance supplemental CSV) keeps its file refresh.
+pub fn api_kind(kind: &str, backend_name: Option<&str>) -> Option<String> {
+    let kind = kind.trim().to_lowercase();
+    (is_kind(&kind) && backend_name.is_some_and(|b| !b.trim().is_empty())).then_some(kind)
 }
 
 /// Bitpanda authenticates with the key alone; the others sign with a secret.
@@ -21,6 +38,10 @@ pub fn provider_name(kind: &str) -> &'static str {
         "coinbase" => "Coinbase",
         "binance" => "Binance",
         "bitpanda" => "Bitpanda",
+        "bitvavo" => "Bitvavo",
+        "bitstamp" => "Bitstamp",
+        "bitfinex" => "Bitfinex",
+        "bitcoinde" => "Bitcoin.de",
         _ => "Exchange",
     }
 }
@@ -32,7 +53,8 @@ pub struct KeyGuide {
     pub deny: &'static [&'static str],
 }
 
-/// `EXCHANGE_KEY_GUIDES`.
+/// `EXCHANGE_KEY_GUIDES`. What each sync reads decides the scopes (docs/reference/rust-exchange-sync.md
+/// and the exchanges' own pages: bitpanda.md, bitvavo.md, bitstamp.md, bitfinex.md, bitcoinde.md).
 pub fn key_guide(kind: &str) -> KeyGuide {
     match kind {
         "coinbase" => KeyGuide {
@@ -60,6 +82,48 @@ pub fn key_guide(kind: &str) -> KeyGuide {
             grant: &["Transaction", "Trade (Read)"],
             deny: &["Trade (Write)", "Earn (Write)", "Balances"],
         },
+        "bitvavo" => KeyGuide {
+            key_page_url: "https://account.bitvavo.com/user/api",
+            grant: &["View access"],
+            deny: &[
+                "Trade digital assets",
+                "Withdraw digital assets",
+                "Internal Transfer",
+                "Administrative",
+            ],
+        },
+        // Bitstamp has no read that reveals write scope; the guide is the only safeguard, so
+        // every non-read section is named.
+        "bitstamp" => KeyGuide {
+            key_page_url: "https://www.bitstamp.net/settings/access-control/api/",
+            grant: &["Account balance", "User transactions"],
+            deny: &["Orders", "Withdrawals", "Deposits", "Transfers"],
+        },
+        "bitfinex" => KeyGuide {
+            key_page_url: "https://setting.bitfinex.com/api",
+            grant: &[
+                "Account History: Get historical balances entries and trade information",
+                "Wallets: Get wallet balances and addresses",
+            ],
+            deny: &[
+                "Orders: Create and cancel orders",
+                "Margin Trading: Claim a position",
+                "Margin Funding: Offer, cancel and close funding",
+                "Wallets: Transfer between your wallets",
+                "Withdraw: Create a new withdrawal",
+                "Settings: Write account settings",
+            ],
+        },
+        "bitcoinde" => KeyGuide {
+            key_page_url: "https://www.bitcoin.de/de/userprofile/tapi",
+            grant: &["showPermissions", "showAccountLedger", "showMyTrades"],
+            deny: &[
+                "createOrder",
+                "executeTrade",
+                "createWithdrawal",
+                "requestDepositAddress",
+            ],
+        },
         _ => KeyGuide {
             key_page_url: "https://pro.kraken.com/app/settings/api",
             grant: &["Query closed orders & trades", "Query ledger entries"],
@@ -73,11 +137,15 @@ pub fn key_guide(kind: &str) -> KeyGuide {
     }
 }
 
-/// `SECRET_LABEL_KEYS` (Bitpanda reuses Coinbase's label; it never shows a secret field).
+/// `SECRET_LABEL_KEYS` (Bitpanda reuses Coinbase's label but never shows a secret field;
+/// Bitvavo's secret is Coinbase's "API secret" too).
 pub fn secret_label_key(kind: &str) -> &'static str {
     match kind {
         "kraken" => "connections:exchange.field.secret.kraken",
         "binance" => "connections:exchange.field.secret.binance",
+        "bitstamp" => "connections:exchange.field.secret.bitstamp",
+        "bitfinex" => "connections:exchange.field.secret.bitfinex",
+        "bitcoinde" => "connections:exchange.field.secret.bitcoinde",
         _ => "connections:exchange.field.secret.coinbase",
     }
 }
@@ -191,9 +259,51 @@ mod tests {
         assert!(
             is_kind("kraken") && is_kind(" Coinbase ") && is_kind("binance") && is_kind("bitpanda")
         );
-        assert!(!is_kind("bitstamp") && !is_kind(""));
-        assert!(needs_secret("kraken") && !needs_secret("bitpanda"));
+        assert!(
+            is_kind("bitvavo")
+                && is_kind("Bitstamp")
+                && is_kind("bitfinex")
+                && is_kind("bitcoinde")
+        );
+        assert!(!is_kind("bitcoin.de") && !is_kind("river") && !is_kind(""));
+        assert!(needs_secret("kraken") && needs_secret("bitvavo") && !needs_secret("bitpanda"));
         assert_eq!(provider_name("binance"), "Binance");
+        assert_eq!(provider_name("bitcoinde"), "Bitcoin.de");
+    }
+
+    #[test]
+    fn only_a_wallet_with_a_backend_is_an_api_connection() {
+        assert_eq!(
+            api_kind(" Bitvavo ", Some("bitvavo-api")),
+            Some("bitvavo".into())
+        );
+        // A CSV-imported wallet of an exchange kind keeps its file refresh.
+        assert_eq!(api_kind("bitvavo", None), None);
+        assert_eq!(api_kind("bitfinex", Some("  ")), None);
+        assert_eq!(api_kind("river", Some("river-api")), None);
+    }
+
+    #[test]
+    fn new_exchanges_have_guides_and_secret_labels() {
+        assert_eq!(key_guide("bitvavo").grant, &["View access"]);
+        assert!(key_guide("bitstamp").deny.contains(&"Withdrawals"));
+        assert_eq!(key_guide("bitfinex").deny.len(), 6);
+        assert_eq!(
+            key_guide("bitcoinde").key_page_url,
+            "https://www.bitcoin.de/de/userprofile/tapi"
+        );
+        assert_eq!(
+            secret_label_key("bitvavo"),
+            "connections:exchange.field.secret.coinbase"
+        );
+        assert_eq!(
+            secret_label_key("bitfinex"),
+            "connections:exchange.field.secret.bitfinex"
+        );
+        for k in KINDS {
+            let g = key_guide(k);
+            assert!(!g.grant.is_empty() && !g.deny.is_empty(), "{k}");
+        }
     }
 
     #[test]

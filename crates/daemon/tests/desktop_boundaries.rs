@@ -295,14 +295,24 @@ fn exchange_connection_kinds_are_desktop_kinds() {
         assert!(tauri.contains(kind) && vite.contains(kind), "{kind}");
         assert!(desktop_allowlist().contains(kind), "{kind}");
     }
-    let exchanges: Vec<String> = catalog_entries()
-        .iter()
-        .filter(|e| field(e, "setupKind").as_deref() == Some("exchange-api"))
-        .filter_map(|e| field(e, "exchange"))
-        .collect::<BTreeSet<_>>()
+    // The exchanges the desktop app sets up with a read-only API key.
+    let model = read("crates/kassiber-desktop/src/wallets/add/exchange/model.rs");
+    let exchanges: Vec<String> = quoted_list(&model, "pub const KINDS: [&str; ", "];")
         .into_iter()
         .collect();
-    assert_eq!(exchanges, ["binance", "bitpanda", "coinbase", "kraken"]);
+    assert_eq!(
+        exchanges,
+        [
+            "binance",
+            "bitcoinde",
+            "bitfinex",
+            "bitpanda",
+            "bitstamp",
+            "bitvavo",
+            "coinbase",
+            "kraken"
+        ]
+    );
 }
 
 #[test]

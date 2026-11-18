@@ -965,10 +965,13 @@
       "pocketbitcoinCsv": "Pocket Bitcoin CSV",
       "twentyonebitcoinCsv": "21bitcoin CSV",
       "strikeCsv": "Strike CSV",
+      "bitstampCsv": "Bitstamp CSV",
       "ledgerliveCsv": "Ledger Live CSV",
       "cointrackingCsv": "CoinTracking transaction CSV",
       "blockpitCsv": "Blockpit transaction CSV",
       "binanceSupplementalCsv": "Binance supplemental CSV",
+      "binanceHistoryCsv": "Binance Transaction History CSV",
+      "bitfinexReports": "Bitfinex Reports zip or CSV",
       "btcpayCsv": "BTCPay CSV",
       "wasabiBundle": "Wasabi JSON bundle",
       "samouraiSourceSet": "Samourai descriptor source set",
@@ -1479,6 +1482,10 @@
       "coinbase": "In Coinbase, open Settings → API and create a key for your BTC wallet. Copy the API key and its secret. Kassiber signs requests with that key and secret; key files from the Coinbase Developer Platform are not supported yet.",
       "binance": "In Binance, open Account → API Management, create a system-generated key and edit its restrictions. Copy the API key and the secret key; Binance shows the secret only once. Kassiber refuses a key that can do more than read.",
       "bitpanda": "In Bitpanda, open Account settings → API Keys → New API key. Bitpanda shows the key only once, and it expires after at most a year. Kassiber refuses a key that can trade.",
+      "bitvavo": "In Bitvavo, open Settings → API → Add new API key. Turn on only View access, optionally add this computer's IP address to the IP whitelist, and confirm with your 2FA code. Copy the API key and the secret; Bitvavo shows them only once. Bitvavo does not tell Kassiber what a key may do, so leave trading and withdrawals off yourself.",
+      "bitstamp": "In Bitstamp, open Settings → API access and create a new key. Turn on only the read permissions below, confirm with your two-factor code, copy the API key and the secret (Bitstamp shows the secret only once), then activate the key from the confirmation email. Bitstamp does not tell Kassiber what else a key may do, so leave every trading, withdrawal, deposit and transfer permission off.",
+      "bitfinex": "In Bitfinex, open Account → API Keys → Create New Key and choose only read permissions. Bitfinex emails a confirmation link; after it, copy the API key and the API key secret, which Bitfinex shows only once. Optionally restrict the key to your IP address. Kassiber refuses a key with any write permission.",
+      "bitcoinde": "In Bitcoin.de, open mein Bitcoin.de → Trading-API and create a new key. Tick only the methods below and leave every order, trade and withdrawal method off; optionally restrict the key to your IP address. Copy the API key and the API secret; Bitcoin.de shows the secret only once. Kassiber refuses a key that can do more than read.",
       "grant": "Turn on only",
       "deny": "Leave off",
       "open": "Open the {{provider}} API key page"
@@ -1488,7 +1495,10 @@
       "secret": {
         "kraken": "Private key",
         "coinbase": "API secret",
-        "binance": "Secret key"
+        "binance": "Secret key",
+        "bitstamp": "API secret",
+        "bitfinex": "API key secret",
+        "bitcoinde": "API secret"
       },
       "stored": "Kassiber saves the key with this book (encrypted if the book is) and never shows it again."
     },
@@ -1884,11 +1894,21 @@
         "description": "Binance BTC buys, transfers and income through a read-only API key.",
         "details": [
           "Needs a key with only Enable Reading; a key that can trade, transfer or withdraw is refused",
-          "Fiat BTC buys keep their exact execution value; deposits, withdrawals and BTC income import too",
+          "Fiat BTC buys and Converts keep their exact execution value; deposits, withdrawals and BTC income import too",
+        "Binance's API does not list spot trades: import the Transaction History CSV for a complete ledger",
           "Kassiber contacts Binance only when you test the key or press Sync now"
         ]
       },
-      "binance": {
+      "binance-history": {
+      "title": "Binance Transaction History",
+      "description": "Binance's complete ledger, spot trades included, from its Transaction History export.",
+      "details": [
+        "Export all statements under Orders → Transaction History and import each file unchanged",
+        "Spot trades, Converts, deposits, withdrawals and Earn rewards import; other crypto assets follow the wallet's asset scope",
+        "Use it instead of the Binance API connection, not beside it: the export has no ids to match the API's rows"
+      ]
+    },
+    "binance": {
         "title": "Binance CSV",
         "description": "BTC supplemental rows from Binance exports.",
         "details": [
@@ -1952,6 +1972,77 @@
         "description": "JSONL wallet label import and export.",
         "details": [
           "Labels are stored locally and bridged to matching transactions"
+        ]
+      },
+      "bitvavo": {
+        "description": "Bitvavo transaction-history CSV import with exact trade pricing.",
+        "details": [
+          "Export Transaction history from Bitvavo and import it unchanged",
+          "BTC buys and sells against EUR keep exact execution pricing; deposits, withdrawals and staking import as BTC activity",
+          "Trades against altcoins or stablecoins (USDC) are refused by name; fiat-only rows are skipped",
+          "Shares transaction ids with the Bitvavo API connection, so importing both keeps one record each"
+        ]
+      },
+      "bitcoinde": {
+        "description": "Bitcoin.de BTC account statement (Kontoauszug) CSV import.",
+        "details": [
+          "Download the BTC statement for the whole period and import it unchanged; later imports may only add newer bookings",
+          "Buys and sells store the exact euros that changed hands; payouts carry their network fee",
+          "Other coins' statements are refused; bookings the API also returns are stored once"
+        ]
+      },
+      "bitvavo-api": {
+        "description": "Bitvavo history through a read-only API key.",
+        "details": [
+          "Needs a key with only View access; Bitvavo does not reveal a key's permissions, so leave trading and withdrawals off",
+          "BTC buys and sells against EUR, deposits, withdrawals and staking import; altcoin and stablecoin trades are refused by name",
+          "Kassiber contacts Bitvavo only when you test the key or press Sync now"
+        ]
+      },
+      "bitstamp-api": {
+        "title": "Bitstamp API",
+        "description": "Bitstamp history and BTC balance through a read-only API key.",
+        "details": [
+          "Needs a key with only Account balance and User transactions; Bitstamp cannot tell Kassiber whether a key can trade, so leave every other permission off",
+          "Fiat BTC trades keep their exact value; deposits, withdrawals, account transfers and referral rewards import too",
+          "Reads the whole transaction history, oldest first; the CSV export imports into the same wallet without duplicates",
+          "Kassiber contacts Bitstamp only when you test the key or press Sync now"
+        ]
+      },
+      "bitstamp": {
+        "title": "Bitstamp CSV",
+        "description": "Bitstamp transaction history export as an active custodial ledger.",
+        "details": [
+          "Import the transaction history exported in the RFC 4180 format; the legacy export has no transaction IDs and is refused",
+          "Rows share their IDs with the API, so the export and the API sync dedupe in one wallet",
+          "Fiat-only and other-asset rows are skipped; BTC traded against another coin is refused"
+        ]
+      },
+      "bitfinex": {
+        "description": "Bitfinex BTC spot trades and movements through a read-only API key.",
+        "details": [
+          "Needs a key with only read permissions (Account History and Wallets); a key with any write permission is refused",
+          "BTC trades against USD, EUR, GBP or JPY keep their exact execution value; BTC deposits, withdrawals and funding interest import too",
+          "Margin, derivatives and BTC traded against another coin refuse the sync by name",
+          "Kassiber contacts Bitfinex only when you test the key or press Sync now"
+        ]
+      },
+      "bitfinex-csv": {
+        "title": "Bitfinex CSV",
+        "description": "Bitfinex Reports trades, movements and ledgers exports.",
+        "details": [
+          "Export Trades, Movements and Ledgers from Bitfinex Reports with the YYYY-MM-DD date format and UTC",
+          "Uses the same ids as the API, so a CSV import and an API sync never duplicate rows",
+          "Import the Reports zip with all three exports: a trade is accepted only when the ledger shows it in the exchange wallet (not margin)"
+        ]
+      },
+      "bitcoinde-api": {
+        "description": "Bitcoin.de BTC statement and BTC/EUR trades through a read-only API key.",
+        "details": [
+          "Needs a key with only showPermissions, showAccountLedger and showMyTrades; a key that can trade or withdraw is refused",
+          "BTC/EUR trades keep the exact euros that changed hands; deposits, payouts with their network fee and credits import too",
+          "The statement lists bookings up to the previous day; today's bookings arrive with the next sync",
+          "Kassiber contacts Bitcoin.de only when you test the key or press Sync now"
         ]
       }
     }

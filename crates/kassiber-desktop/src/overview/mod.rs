@@ -980,6 +980,20 @@ pub static SCENES: &[crate::app::Scene] = &[
         }
         a.prefs.currency = crate::app::Currency::Fiat;
     }),
+    // SYNTHETIC: other crypto assets a `crypto`-scoped wallet keeps (`otherAssets`, which the
+    // demo book has none of), one priced and one without a price, in fiat mode.
+    ("overview-assets-other-crypto", |a| {
+        show_assets(a);
+        edit_raw(a, |r| {
+            r["otherAssets"] = serde_json::json!([
+                {"asset": "ETH", "quantity": "3", "quantityUnits": 300_000_000_000_i64,
+                 "walletCount": 2, "source": "books", "marketValue": 6000.0},
+                {"asset": "SOL", "quantity": "12.5", "quantityUnits": 1_250_000_000_000_i64,
+                 "walletCount": 1, "source": "transactions", "marketValue": null}
+            ]);
+        });
+        a.prefs.currency = crate::app::Currency::Fiat;
+    }),
     // SYNTHETIC: every balance zeroed, the empty state.
     ("overview-assets-empty", |a| {
         show_assets(a);

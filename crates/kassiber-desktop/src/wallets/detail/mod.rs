@@ -318,12 +318,14 @@ pub fn sync_mode(app: &App, c: &Conn) -> String {
         .unwrap_or_default()
 }
 
-/// `isExchangeKind(walletDetail?.kind)`: the exchange kind of an exchange API wallet.
+/// `exchangeApiKind(walletDetail)`: the exchange of an exchange API wallet. A wallet of an
+/// exchange kind without a backend (a CSV import) refreshes from its file instead.
 pub fn exchange_kind(app: &App, c: &Conn) -> Option<String> {
-    wallet_detail(app, c)
-        .and_then(|w| s(w, "kind"))
-        .filter(|k| crate::wallets::add::exchange::is_exchange_kind(k))
-        .map(str::to_owned)
+    let w = wallet_detail(app, c)?;
+    crate::wallets::add::exchange::model::api_kind(
+        s(w, "kind")?,
+        w.get("backend").and_then(|b| s(b, "name")),
+    )
 }
 
 /// `walletSyncNeedsBackend` (once the wallets list answered; never for exchange wallets).

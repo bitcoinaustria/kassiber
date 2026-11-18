@@ -1,10 +1,11 @@
 //! The Holdings by Asset model: what the book holds per asset rather than per source.
 //!
-//! Generic on purpose. Today every row is bitcoin on one of its layers (on-chain BTC, Lightning,
-//! L-BTC), read from the overview snapshot's per-connection balances. Fiat cash, stablecoins and
-//! other assets (an extension or a CSV-only import, not decided yet) slot in as further rows
-//! without changing the card: each row carries its own unit, and the grouping keeps every total
-//! inside one unit.
+//! Generic on purpose. Bitcoin rows are bitcoin on one of its layers (on-chain BTC, Lightning,
+//! L-BTC), read from the overview snapshot's per-connection balances. Other crypto assets a
+//! `crypto`-scoped wallet keeps (docs/plan/24-crypto-assets.md) come from the snapshot's
+//! `otherAssets`, one row per asset. Fiat cash and stablecoins slot in as further rows without
+//! changing the card: each row carries its own unit, and the grouping keeps every total inside
+//! one unit.
 //!
 //! Rules:
 //! - A row's balance is an exact integer of the asset's smallest unit (`units`, `precision`
@@ -13,7 +14,9 @@
 //!   one group with a combined BTC total. Each fiat currency is its own group. Stablecoins and
 //!   anything else stand alone in "Other assets", which has no total: their units differ.
 //! - A fiat value is only ever a price times a quantity the book holds: BTC-denominated rows at
-//!   the snapshot's BTC market rate, fiat cash at face value when it is the display currency.
+//!   the snapshot's BTC market rate, other crypto assets at the value the daemon priced from
+//!   the book's own rates (`otherAssets[].marketValue`), fiat cash at face value when it is the
+//!   display currency.
 //!   Anything else (no market rate, another fiat currency, an unknown asset) has no value and
 //!   the card says "no price"; nothing is guessed or converted.
 //! - Shares are within the group, by units, never across groups.
@@ -24,8 +27,8 @@ use crate::model::{Rail, Snapshot};
 pub const MSAT_PER_BTC: i128 = 100_000_000_000;
 
 /// What kind of unit an asset's balance is in.
-// `Stablecoin` and `Other` are the model's mixed-unit path (listed, never totalled), which its
-// tests exercise; no book source produces them yet, and removing them would remove that path.
+// `Stablecoin` is the model's other mixed-unit path (listed, never totalled), which its tests
+// exercise; no book source produces it yet, and removing it would remove that path.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnitKind {
@@ -263,6 +266,39 @@ pub fn sources<'a>(s: &'a Snapshot, raw: Option<&'a serde_json::Value>) -> Vec<S
         .collect()
 }
 
+/// The snapshot's `otherAssets` (one per crypto asset other than Bitcoin, in whole units of
+/// 10^-11, as every crypto quantity is stored) as `Other` rows: listed apart, never totalled
+/// with Bitcoin, valued only when the daemon gave a market value.
+pub fn other_rows(raw: Option<&serde_json::Value>) -> Vec<AssetRow> {
+    let Some(list) = raw
+        .and_then(|r| r.get("otherAssets"))
+        .and_then(|v| v.as_array())
+    else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter_map(|a| {
+            let code = a.get("asset")?.as_str()?.trim();
+            let units = i128::from(a.get("quantityUnits")?.as_i64()?);
+            (!code.is_empty()).then(|| AssetRow {
+                asset_id: code.to_owned(),
+                name: code.to_owned(),
+                symbol: code.to_owned(),
+                precision: 11,
+                kind: UnitKind::Other,
+                layer: None,
+                units,
+                fiat_value: a
+                    .get("marketValue")
+                    .and_then(|v| v.as_f64())
+                    .filter(|v| v.is_finite()),
+                share: 0.0,
+                synthetic: false,
+            })
+        })
+        .collect()
+}
+
 /// The BTC market rate the card may value with: none while the snapshot says it is missing.
 pub fn btc_rate(s: &Snapshot) -> Option<f64> {
     let r = s.rate();
@@ -400,6 +436,31 @@ mod tests {
         assert_eq!(by("L-BTC").units, 600_090_000);
         assert_eq!(by("LN-BTC").units, 1_000);
         assert_eq!(by("L-BTC").kind, UnitKind::Pegged);
+    }
+
+    #[test]
+    fn other_crypto_assets_list_apart_with_their_own_unit() {
+        let raw = serde_json::json!({"otherAssets": [
+            {"asset": "ETH", "quantity": "3", "quantityUnits": 300_000_000_000_i64, "marketValue": 6000.0},
+            {"asset": "SOL", "quantity": "0.5", "quantityUnits": 50_000_000_000_i64, "marketValue": null},
+            {"asset": "", "quantityUnits": 1},
+            {"asset": "BAD", "quantityUnits": "1"}
+        ]});
+        let rows = other_rows(Some(&raw));
+        assert_eq!(rows.len(), 2);
+        assert_eq!((rows[0].units, rows[0].precision), (300_000_000_000, 11));
+        assert_eq!(rows[0].fiat_value, Some(6000.0));
+        assert_eq!(rows[1].fiat_value, None);
+        let mut all = bitcoin_rows(&[src("address", "bitcoin", 1.0)], Some(60_000.0));
+        all.extend(rows);
+        let groups = build(all);
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].total_units, Some(MSAT_PER_BTC));
+        assert_eq!(groups[1].denomination, Denomination::Mixed);
+        assert_eq!(groups[1].total_units, None);
+        assert_eq!(groups[1].rows[0].symbol, "ETH");
+        assert!(other_rows(Some(&serde_json::json!({}))).is_empty());
+        assert!(other_rows(None).is_empty());
     }
 
     #[test]

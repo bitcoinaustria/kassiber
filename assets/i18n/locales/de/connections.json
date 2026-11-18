@@ -965,10 +965,13 @@
       "pocketbitcoinCsv": "Pocket Bitcoin CSV",
       "twentyonebitcoinCsv": "21bitcoin CSV",
       "strikeCsv": "Strike CSV",
+      "bitstampCsv": "Bitstamp CSV",
       "ledgerliveCsv": "Ledger Live CSV",
       "cointrackingCsv": "CoinTracking-Transaktionen (CSV)",
       "blockpitCsv": "Blockpit-Transaktionen (CSV)",
       "binanceSupplementalCsv": "Binance Supplemental CSV",
+      "binanceHistoryCsv": "Binance-Transaktionsverlauf (CSV)",
+      "bitfinexReports": "Bitfinex-Reports-ZIP oder -CSV",
       "btcpayCsv": "BTCPay CSV",
       "wasabiBundle": "Wasabi-JSON-Bundle",
       "samouraiSourceSet": "Samourai-Descriptor-Source-Set",
@@ -1479,6 +1482,10 @@
       "coinbase": "Öffne in Coinbase Einstellungen → API und erstelle einen Key für deine BTC-Wallet. Kopiere den API-Key und sein Secret. Kassiber signiert mit diesem Key und Secret; Key-Dateien der Coinbase Developer Platform werden noch nicht unterstützt.",
       "binance": "Öffne in Binance Konto → API-Verwaltung, erstelle einen systemgenerierten Key und bearbeite seine Beschränkungen. Kopiere den API-Key und den Secret Key; Binance zeigt das Secret nur einmal an. Kassiber lehnt einen Key ab, der mehr als lesen darf.",
       "bitpanda": "Öffne in Bitpanda Kontoeinstellungen → API-Keys → Neuer API-Key. Bitpanda zeigt den Key nur einmal an, und er läuft spätestens nach einem Jahr ab. Kassiber lehnt einen Key ab, der handeln darf.",
+      "bitvavo": "Öffne in Bitvavo Einstellungen → API → Neuen API-Key hinzufügen. Aktiviere nur View access, trage bei Bedarf die IP-Adresse dieses Computers in die IP-Whitelist ein und bestätige mit deinem 2FA-Code. Kopiere den API-Key und das Secret; Bitvavo zeigt beide nur einmal an. Bitvavo verrät Kassiber nicht, was ein Key darf, also lass Handel und Auszahlungen selbst ausgeschaltet.",
+      "bitstamp": "Öffne in Bitstamp Einstellungen → API-Zugang und erstelle einen neuen Key. Schalte nur die unten genannten Leseberechtigungen ein, bestätige mit deinem Zwei-Faktor-Code, kopiere den API-Key und das Secret (Bitstamp zeigt das Secret nur einmal an) und aktiviere den Key über die Bestätigungs-E-Mail. Bitstamp verrät Kassiber nicht, was ein Key sonst noch darf, also lass alle Berechtigungen für Handel, Auszahlungen, Einzahlungen und Überträge ausgeschaltet.",
+      "bitfinex": "Öffne in Bitfinex Konto → API Keys → Create New Key und wähle nur Leserechte. Bitfinex schickt einen Bestätigungslink per E-Mail; danach kopierst du den API-Key und das API-Key-Secret, das Bitfinex nur einmal anzeigt. Optional beschränkst du den Key auf deine IP-Adresse. Kassiber lehnt einen Key mit Schreibrechten ab.",
+      "bitcoinde": "Öffne in Bitcoin.de mein Bitcoin.de → Trading-API und erstelle einen neuen Key. Hake nur die unten genannten Methoden an und lass alle Order-, Handels- und Auszahlungsmethoden aus; optional beschränkst du den Key auf deine IP-Adresse. Kopiere den API-Key und das API-Secret; Bitcoin.de zeigt das Secret nur einmal an. Kassiber lehnt einen Key ab, der mehr als lesen darf.",
       "grant": "Nur einschalten",
       "deny": "Ausgeschaltet lassen",
       "open": "API-Key-Seite von {{provider}} öffnen"
@@ -1488,7 +1495,10 @@
       "secret": {
         "kraken": "Private Key",
         "coinbase": "API-Secret",
-        "binance": "Secret Key"
+        "binance": "Secret Key",
+        "bitstamp": "API-Secret",
+        "bitfinex": "API-Key-Secret",
+        "bitcoinde": "API-Secret"
       },
       "stored": "Kassiber speichert den Key mit diesem Buch (verschlüsselt, wenn das Buch es ist) und zeigt ihn nie wieder an."
     },
@@ -1884,11 +1894,21 @@
         "description": "BTC-Käufe, Übertragungen und Einkünfte von Binance über einen API-Key, der nur lesen darf.",
         "details": [
           "Braucht einen Key nur mit Enable Reading; ein Key, der handeln, übertragen oder abheben kann, wird abgelehnt",
-          "BTC-Käufe mit Fiat behalten ihren exakten Ausführungswert; Ein- und Auszahlungen sowie BTC-Einkünfte werden ebenfalls importiert",
+          "BTC-Käufe mit Fiat und Converts behalten ihren exakten Ausführungswert; Ein- und Auszahlungen sowie BTC-Einkünfte werden ebenfalls importiert",
+        "Die Binance-API listet keine Spot-Trades: Für ein vollständiges Konto importiere den CSV-Export des Transaktionsverlaufs",
           "Kassiber kontaktiert Binance nur, wenn du den Key testest oder auf „Sync starten“ drückst"
         ]
       },
-      "binance": {
+      "binance-history": {
+      "title": "Binance-Transaktionsverlauf",
+      "description": "Das vollständige Binance-Konto, Spot-Trades eingeschlossen, aus dem Export des Transaktionsverlaufs.",
+      "details": [
+        "Exportiere unter Orders → Transaction History alle Kontoauszüge und importiere jede Datei unverändert",
+        "Spot-Trades, Converts, Ein- und Auszahlungen und Earn-Erträge werden importiert; andere Krypto-Assets folgen dem Asset-Umfang der Wallet",
+        "Nutze ihn statt der Binance-API-Verbindung, nicht daneben: Der Export hat keine IDs, die zu den Zeilen der API passen"
+      ]
+    },
+    "binance": {
         "title": "Binance-CSV",
         "description": "Ergänzende BTC-Zeilen aus Binance-Exporten.",
         "details": [
@@ -1952,6 +1972,77 @@
         "description": "Import und Export von Wallet-Labels als JSONL.",
         "details": [
           "Labels werden lokal gespeichert und passenden Transaktionen zugeordnet"
+        ]
+      },
+      "bitvavo": {
+        "description": "Import des Bitvavo-Transaktionsverlaufs (CSV) mit exakten Handelspreisen.",
+        "details": [
+          "Exportiere in Bitvavo den Transaktionsverlauf und importiere ihn unverändert",
+          "BTC-Käufe und -Verkäufe gegen EUR behalten den exakten Ausführungspreis; Ein- und Auszahlungen sowie Staking werden als BTC-Bewegungen importiert",
+          "Trades gegen Altcoins oder Stablecoins (USDC) werden unter Nennung des Assets abgelehnt; reine Fiat-Zeilen werden übersprungen",
+          "Nutzt dieselben Transaktions-IDs wie die Bitvavo-API-Verbindung, daher bleibt bei beiden Importen jeder Eintrag nur einmal erhalten"
+        ]
+      },
+      "bitcoinde": {
+        "description": "Import des Bitcoin.de-BTC-Kontoauszugs (CSV).",
+        "details": [
+          "Lade den BTC-Kontoauszug für den gesamten Zeitraum herunter und importiere ihn unverändert; spätere Importe dürfen nur neuere Buchungen hinzufügen",
+          "Käufe und Verkäufe speichern die exakten Euro-Beträge, die tatsächlich geflossen sind; Auszahlungen tragen ihre Netzwerkgebühr",
+          "Kontoauszüge anderer Coins werden abgelehnt; Buchungen, die auch die API liefert, werden nur einmal gespeichert"
+        ]
+      },
+      "bitvavo-api": {
+        "description": "Bitvavo-Verlauf über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit View access; Bitvavo verrät nicht, was ein Key darf, also lass Handel und Auszahlungen ausgeschaltet",
+          "BTC-Käufe und -Verkäufe gegen EUR, Ein- und Auszahlungen sowie Staking werden importiert; Altcoin- und Stablecoin-Trades werden unter Nennung des Assets abgelehnt",
+          "Kassiber kontaktiert Bitvavo nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "bitstamp-api": {
+        "title": "Bitstamp-API",
+        "description": "Bitstamp-Verlauf und BTC-Guthaben über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit Account balance und User transactions; Bitstamp kann Kassiber nicht sagen, ob ein Key handeln darf, also lass alle anderen Berechtigungen ausgeschaltet",
+          "BTC-Trades gegen Fiat behalten ihren exakten Wert; Ein- und Auszahlungen, Kontoüberträge und Empfehlungsprämien werden ebenfalls importiert",
+          "Liest den gesamten Transaktionsverlauf, älteste Einträge zuerst; der CSV-Export lässt sich ohne Duplikate in dieselbe Wallet importieren",
+          "Kassiber kontaktiert Bitstamp nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "bitstamp": {
+        "title": "Bitstamp-CSV",
+        "description": "Export des Bitstamp-Transaktionsverlaufs als aktives verwahrtes Konto.",
+        "details": [
+          "Importiere den im RFC-4180-Format exportierten Transaktionsverlauf; der alte Export hat keine Transaktions-IDs und wird abgelehnt",
+          "Die Zeilen haben dieselben IDs wie in der API, daher werden Export und API-Sync in einer Wallet dedupliziert",
+          "Reine Fiat-Zeilen und Zeilen anderer Assets werden übersprungen; BTC, das gegen einen anderen Coin gehandelt wurde, wird abgelehnt"
+        ]
+      },
+      "bitfinex": {
+        "description": "Bitfinex-BTC-Spot-Trades und -Bewegungen über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit Leserechten (Account History und Wallets); ein Key mit irgendeinem Schreibrecht wird abgelehnt",
+          "BTC-Trades gegen USD, EUR, GBP oder JPY behalten ihren exakten Ausführungswert; BTC-Ein- und -Auszahlungen sowie Funding-Zinsen werden ebenfalls importiert",
+          "Margin, Derivate und BTC, das gegen einen anderen Coin gehandelt wurde, lassen den Sync unter Nennung des Assets scheitern",
+          "Kassiber kontaktiert Bitfinex nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "bitfinex-csv": {
+        "title": "Bitfinex-CSV",
+        "description": "Exporte von Trades, Movements und Ledgers aus Bitfinex Reports.",
+        "details": [
+          "Exportiere Trades, Movements und Ledgers aus Bitfinex Reports mit dem Datumsformat YYYY-MM-DD und UTC",
+          "Nutzt dieselben IDs wie die API, daher verdoppeln ein CSV-Import und ein API-Sync nie Zeilen",
+          "Importiere die Reports-ZIP mit allen drei Exporten: Ein Trade wird nur angenommen, wenn das Ledger ihn in der Exchange-Wallet zeigt (nicht Margin)"
+        ]
+      },
+      "bitcoinde-api": {
+        "description": "Bitcoin.de-BTC-Kontoauszug und BTC/EUR-Trades über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit showPermissions, showAccountLedger und showMyTrades; ein Key, der handeln oder auszahlen kann, wird abgelehnt",
+          "BTC/EUR-Trades behalten die exakten Euro-Beträge, die tatsächlich geflossen sind; Einzahlungen, Auszahlungen mit ihrer Netzwerkgebühr und Gutschriften werden ebenfalls importiert",
+          "Der Kontoauszug listet Buchungen bis zum Vortag; die Buchungen von heute kommen mit dem nächsten Sync",
+          "Kassiber kontaktiert Bitcoin.de nur, wenn du den Key testest oder auf „Sync starten“ drückst"
         ]
       }
     }
