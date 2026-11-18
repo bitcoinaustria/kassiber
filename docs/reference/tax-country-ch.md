@@ -68,6 +68,8 @@ the case is judged on all facts. Kassiber shows each criterion as `met`,
 - **CH-KS36-C2** — Transaction volume (all purchase prices plus all sale
   proceeds of the calendar year; a swap counts both legs) is at most **five
   times** the securities-and-cash holdings at the start of the tax period.
+  A purchase counts at the value the journal booked for it, which a
+  rate-priced purchase has though its transaction stores no fiat value.
   Kassiber only knows the crypto part, so it computes the limit from the
   crypto wealth at the previous 31 December (`basis: crypto_only`) and marks
   it indicative; with no start value it is `not_assessable` (vectors ch-12,
@@ -124,7 +126,9 @@ acquisition of a firm claim, ESTV AP 2.2.2).
 - **CH-WEALTH** — Crypto is movable capital assets subject to the cantonal
   wealth tax, declared at market value at the end of the tax period
   (Art. 13, 14 StHG; ESTV AP 2.2.1). Kassiber reports holdings per wallet and
-  asset at the end of 31 December, Europe/Zurich.
+  asset at the end of 31 December, Europe/Zurich, for every year with an
+  event, every year between them with a holding, and the latest year with a
+  stated year-end value while coins are still held then.
 - **CH-WEALTH-ESTV** — For the most common cryptocurrencies the ESTV publishes
   official year-end tax values (Kursliste; Dossier 4.2.2.1.4: averages of
   several platforms). Kassiber makes no network request for them: the user

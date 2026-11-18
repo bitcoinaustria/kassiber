@@ -354,6 +354,9 @@ fn historical_portfolio(conn: &Connection, profile: &Value, as_of: i64) -> Resul
         key(a).cmp(&key(b))
     });
     let mut results = Vec::new();
+    // Each asset's basis is its average across wallets. A wallet-pool book's
+    // own per-wallet basis needs the basis transfers carry, which the journal
+    // does not record (transfer legs book no value); see TODO.md.
     for ((wallet_id, wallet, account, asset), quantity, _) in ordered {
         if *quantity <= Decimal::zero() {
             continue;
@@ -722,6 +725,8 @@ fn flow_periods(
     ))
 }
 
+/// Disposals; `realized_periods` adds the fee entries of a country that
+/// disposes of fee units.
 const DISPOSALS: &str = "je.entry_type='disposal' AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' AND je.occurred_at>=? AND je.occurred_at<=?";
 
 /// `_summary_pdf_realized_periods`: the periods and the realized total.
@@ -733,7 +738,19 @@ fn realized_periods(
     end: i64,
 ) -> Result<(Vec<Value>, Decimal)> {
     let (filter, params) = bounds(profile, wallets, "je.wallet_id", start, end)?;
-    let rows = query(conn, &format!("SELECT je.occurred_at,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.gain_loss,0) AS gain_loss FROM journal_entries je LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND {filter} AND {DISPOSALS} ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC"), params)?;
+    // A country that disposes of fee units realizes their gain as its form
+    // reports it; elsewhere a fee entry realizes nothing.
+    let country = kassiber_pytext::lower(kassiber_pytext::strip(&text(profile, "tax_country")));
+    let realized = if crate::country::realizes_fee_units(&country) {
+        DISPOSALS.replacen(
+            "je.entry_type='disposal'",
+            "je.entry_type IN ('disposal','fee','transfer_fee')",
+            1,
+        )
+    } else {
+        DISPOSALS.to_owned()
+    };
+    let rows = query(conn, &format!("SELECT je.occurred_at,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.gain_loss,0) AS gain_loss FROM journal_entries je LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND {filter} AND {realized} ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC"), params)?;
     let mut buckets: BTreeMap<String, ([Decimal; 3], i64)> = BTreeMap::new();
     let mut realized = Decimal::zero();
     for row in &rows {
@@ -1064,14 +1081,16 @@ pub fn model(
     let history = balance_history(conn, profile, &wallets, start, end)?;
     let (flow, flow_totals) = flow_periods(conn, profile, &wallets, start, end)?;
     let (realized, realized_total) = realized_periods(conn, profile, &wallets, start, end)?;
-    let zero = Value::Float(0.0);
-    let first = history.first();
-    let last = history.last();
-    let pick =
-        |row: Option<&Value>, key: &str| row.map(|r| value(r, key).clone()).unwrap_or(zero.clone());
-    let start_value = pick(first, "market_value");
-    let end_value = pick(last, "market_value");
-    let end_basis = pick(last, "cumulative_cost_basis");
+    // The holdings at the period's bounds: before its first instant and at
+    // its last, as the holdings table reads them. The monthly history
+    // buckets include their whole first and last month and leave out months
+    // with nothing held, so they are not the bounds.
+    let opening_rows = portfolio(conn, profile, &wallets, Some(start - 1_000_000))?;
+    let start_value = total(&opening_rows, "market_value")?;
+    let start_quantity = total(&opening_rows, "quantity")?;
+    let end_value = total(&portfolio_rows, "market_value")?;
+    let end_basis = total(&portfolio_rows, "cost_basis")?;
+    let end_quantity = total(&portfolio_rows, "quantity")?;
     let unrealized =
         Value::Float(full_pdf::py_float(&end_value)? - full_pdf::py_float(&end_basis)?);
     let integrity = data_integrity(conn, profile, &wallets, start, end)?;
@@ -1156,8 +1175,8 @@ pub fn model(
                 ("realized_pnl", float(&realized_total)?),
                 ("unrealized_pnl", unrealized),
                 ("end_cost_basis", end_basis),
-                ("btc_stack_start", pick(first, "quantity")),
-                ("btc_stack_end", pick(last, "quantity")),
+                ("btc_stack_start", start_quantity),
+                ("btc_stack_end", end_quantity),
                 ("fees_btc", float(&flow_totals.fees_btc)?),
                 ("fees_fiat", float(&flow_totals.fees_fiat)?),
             ]),

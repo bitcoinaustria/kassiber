@@ -47,6 +47,9 @@ pub struct Disposal {
     /// Incidental costs the book records apart from the value; a Kassiber
     /// book nets a fiat commission into its value, so they are zero there.
     pub incidental: Decimal,
+    /// False for a sale reviewed as not taxable: it still leaves the pool,
+    /// but its computation is no gain or loss of the year.
+    pub taxable: bool,
     pub pieces: Vec<Piece>,
 }
 
@@ -122,6 +125,9 @@ pub struct Computation {
     pub incidental: Decimal,
     pub matches: Vec<Match>,
     pub gain: Decimal,
+    /// Whether the day's disposals are taxable (`load` refuses a day that
+    /// mixes reviewed non-taxable and taxable ones).
+    pub taxable: bool,
 }
 
 /// A token's section 104 pool at a moment.
@@ -211,6 +217,7 @@ pub fn computations(
             incidental: Decimal::zero(),
             matches: Vec::new(),
             gain: Decimal::zero(),
+            taxable: group.iter().all(|d| d.taxable),
         };
         let mut same = (Decimal::zero(), Decimal::zero());
         let mut thirty: BTreeMap<Date, (Decimal, Decimal)> = BTreeMap::new();
@@ -376,13 +383,19 @@ pub fn years(
     income: &[Income],
     history: &PoolHistory,
 ) -> Result<Vec<Year>> {
-    let mut labels: BTreeSet<i32> = computations.iter().map(|c| c.tax_year).collect();
+    let mut labels: BTreeSet<i32> = computations
+        .iter()
+        .filter(|c| c.taxable)
+        .map(|c| c.tax_year)
+        .collect();
     labels.extend(income.iter().map(|i| tax_year(i.date).0));
     let mut out = Vec::new();
     for year in labels {
         let (first, last) = years::tax_year_bounds(year, TAX_YEAR_START);
-        let in_year: Vec<&Computation> =
-            computations.iter().filter(|c| c.tax_year == year).collect();
+        let in_year: Vec<&Computation> = computations
+            .iter()
+            .filter(|c| c.tax_year == year && c.taxable)
+            .collect();
         let mut item = Year {
             year,
             disposals: in_year.len(),
@@ -627,7 +640,8 @@ pub fn load(conn: &Connection, profile_id: &str) -> Result<Loaded> {
         "SELECT je.transaction_id,je.occurred_at,je.entry_type,je.asset,je.quantity,\
          je.fiat_value,je.fiat_value_exact,je.proceeds,je.proceeds_exact,je.cost_basis,je.cost_basis_exact,\
          je.gain_loss,je.gain_loss_exact,je.calculation_json,je.calculation_compact,\
-         COALESCE(w.label,'') AS wallet,COALESCE(NULLIF(t.kind_override,''),t.kind,'') AS kind \
+         COALESCE(w.label,'') AS wallet,COALESCE(NULLIF(t.kind_override,''),t.kind,'') AS kind,\
+         COALESCE(t.taxability_override,1)!=0 AS taxable \
          FROM journal_entries je LEFT JOIN wallets w ON w.id=je.wallet_id \
          LEFT JOIN transactions t ON t.id=je.transaction_id \
          WHERE je.profile_id=?1 \
@@ -654,6 +668,9 @@ pub fn load(conn: &Connection, profile_id: &str) -> Result<Loaded> {
                 quantity,
                 cost: exact("fiat_value")?,
             }),
+            // A reviewed non-taxable receipt is no income; its coins
+            // still enter the pool through its acquisition.
+            "income" if crate::layer_reads::non_taxable(entry) => {}
             "income" => loaded.income.push(Income {
                 transaction_id,
                 wallet: text(entry, "wallet"),
@@ -702,6 +719,7 @@ pub fn load(conn: &Connection, profile_id: &str) -> Result<Loaded> {
                     expenses,
                     incidental: Decimal::zero(),
                     pieces,
+                    taxable: !crate::layer_reads::non_taxable(entry),
                 });
             }
         }
@@ -713,6 +731,29 @@ pub fn load(conn: &Connection, profile_id: &str) -> Result<Loaded> {
             transaction_id: held.transaction_id,
         })
         .collect();
+    // The same-day rule makes a day's disposals of a token one disposal, so
+    // a sale reviewed as not taxable cannot share its day with a taxable one.
+    let mut days: BTreeMap<(&str, Date), (bool, bool)> = BTreeMap::new();
+    for disposal in &loaded.disposals {
+        let day = days
+            .entry((disposal.asset.as_str(), disposal.date))
+            .or_default();
+        if disposal.taxable {
+            day.0 = true;
+        } else {
+            day.1 = true;
+        }
+    }
+    let mut mixed = Vec::new();
+    for disposal in &loaded.disposals {
+        if !disposal.taxable && days[&(disposal.asset.as_str(), disposal.date)] == (true, true) {
+            mixed.push(Refusal {
+                code: "non_taxable_same_day_disposal".into(),
+                transaction_id: disposal.event.clone(),
+            });
+        }
+    }
+    loaded.refusals.extend(mixed);
     Ok(loaded)
 }
 
@@ -756,8 +797,11 @@ pub fn model(conn: &Connection, profile: &Value, wallet: Option<&str>) -> Result
             ("cost", dec(&p.cost)),
         ])
     };
+    // A reviewed non-taxable sale moved the pool; it is no computation of
+    // the year.
     let computation_values = computations
         .iter()
+        .filter(|c| c.taxable)
         .map(|c| {
             let matches = c
                 .matches

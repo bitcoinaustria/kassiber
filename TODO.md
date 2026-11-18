@@ -1890,14 +1890,6 @@ See [tax countries](docs/reference/tax-countries.md) and
 - [ ] Store a sale's or swap's fiat commission apart from its value, so
   Irish line 1(k) and UK proceeds can be shown before costs and a UK swap's
   fee split 50/50 (GB-FEE-SWAP); the vectors model it, books cannot yet.
-- [ ] Decide what a transaction reviewed as not taxable
-  (`taxability_override = 0`) means on the UK and Japanese reports. The
-  US, German, Spanish, Irish and Swiss layers now leave its disposals and
-  income off their forms, as the review figures do. In the UK and Japan the
-  same rows also drive the section 104 pools and the 計算書's quantities and
-  closing balance, so they still list such a sale; dropping it there would
-  misstate holdings. A per-country decision (exclude from the gain lines but
-  keep the movement, or refuse) is needed.
 - [ ] Order and select journal rows by instant, not stored timestamp text.
   The Austrian regime tracker and ledger walk sort `occurred_at` as text, the
   summary PDF compares it with UTC boundary strings, and the schema-2 summary
@@ -1905,18 +1897,13 @@ See [tax countries](docs/reference/tax-countries.md) and
   current writer stores whole-second UTC (`…Z`), so books agree today; a
   stored offset or fractional second would change lot order, drop a sale
   from the PDF or move it between years (verification of #773, 2026-11-18).
-- [ ] Fix the report findings of the second verification (2026-11-18,
-  repros reproduced on #779). P1: the review figures and summary PDF leave
-  out a UK sale's realized fee units (£260 shown, journal and SA108 £290);
-  the Swiss wealth statement skips a year without trades. P2: Swiss KS 36
-  counts a stored-rate purchase as zero volume; the summary PDF shows
-  opening/closing holdings from mid-year activity, closes the UK year at
-  month-end instead of April 5, and averages basis across wallet pools for a
-  wallet-scoped export; the review shows a half-cent exact gain one cent
-  higher than E 1kv because its sums cross a Python `float` (fixing it
-  changes review figures for every book). Rune shows an income receipt's
-  basis as zero (it reads the income row, not the acquisition) and says
-  "No tax year changes" when a link preview omits older years.
+- [ ] Persist the basis a transfer carries in a wallet-pool book, so the
+  summary PDF's historical wallet holdings can show each wallet's own basis.
+  Transfer legs book no value, so the report averages each asset across
+  wallets; a wallet bought cheaper than the others reads at the average
+  (verification of #773, 2026-11-18; stored data, needs owner sign-off).
+- [ ] Show an income receipt's basis from its acquisition in the outgoing
+  ui-tauri Tax panel (`TransactionTaxModel.ts`), as Rune does since #781.
 - [ ] Decide whether single-table machine CSVs (capital gains, transactions,
   platform formats) of a preview country carry the preview notice; the
   shared-design reports do, and a notice row would break those files'

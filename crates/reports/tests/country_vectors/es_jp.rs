@@ -319,7 +319,7 @@ pub(super) fn jp_compute(vector: &Value) -> Value {
     for year in &years {
         out_years.insert(year.year.to_string(), jp_tax::year_json(year, method));
     }
-    let flags: Vec<Value> = jp_tax::flags(&years, &disposals)
+    let flags: Vec<Value> = jp_tax::flags(&years, &disposals, &quarantines)
         .into_iter()
         .map(|flag| json!({"event": flag.event, "code": flag.code}))
         .collect();
