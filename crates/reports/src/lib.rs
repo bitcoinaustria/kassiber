@@ -51,6 +51,7 @@ pub mod privacy_mirror;
 pub mod psbt_privacy;
 pub mod report_design;
 pub mod review_figures;
+pub mod scan_readiness;
 mod snapshot_write;
 mod snapshots;
 mod source_funds_assemble;

@@ -89,11 +89,27 @@ pub fn managed(root: &Path, stem: &str, suffix: &str, stamp: &str) -> Result<Pat
     }
     Ok(candidate)
 }
+/// Final export admission: refused while a source's freshness blocks
+/// reports, or while a configured Silent Payments wallet's scan is pending
+/// or incomplete (it has no freshness failure to show before its first
+/// scan, but its holdings are unknown).
 pub(super) fn freshness(conn: &Connection, profile: &Value) -> Result<()> {
     let id = text(profile, "id");
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM freshness_source_states WHERE profile_id=? AND blocking_reports=1", [&id], |r| r.get(0)).map_err(sql_error)?;
     if count == 0 {
-        return Ok(());
+        let scans = crate::scan_readiness::silent_payment_blockers(conn, &id)?;
+        if scans.is_empty() {
+            return Ok(());
+        }
+        return Err(AppError::new(
+            "report_freshness_blocked",
+            "Final report export is blocked by an incomplete Silent Payments scan",
+        )
+        .with_hint("Scan the Silent Payments wallet before exporting a final report.")
+        .with_details(dict([
+            ("source_count", Value::Int(scans.len().into())),
+            ("blockers", Value::List(scans)),
+        ])));
     }
     let sources = rows(conn,"SELECT source_type,source_label,status,stale_reason,last_error_code FROM freshness_source_states WHERE profile_id=? AND blocking_reports=1 ORDER BY source_type,source_label,source_key LIMIT 20",[&id])?;
     Err(AppError::new(
