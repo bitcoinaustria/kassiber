@@ -2171,7 +2171,7 @@ $ daemon
 > #6
 < {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1263 bytes fnv128 eacabc95dc078d1c3d1d6c3d2ae7480e]
 > #7
-< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6623 bytes fnv128 a9ed66f1cc3e54ea3dafbe3559d5a493]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6531 bytes fnv128 a0688ff5b1822bf44bd3fb3b3ad5537f]
 > #8
 < {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2511 bytes fnv128 d7e0ea5571c7f892330e13155cc7377a]
 > #9
@@ -2199,9 +2199,9 @@ $ daemon
 + filed_report_snapshots: id=t:"<uuid#37>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [774 bytes fnv128 600a1027cb7da7d1c351e7667c048e1e]
 + filed_report_snapshots: id=t:"<uuid#33>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [798 bytes fnv128 417d21c6a597f6b6880969867eb29d13]
 + filed_report_snapshots: id=t:"<uuid#35>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [799 bytes fnv128 80be9f231f73f8ef88460f54e06d2001]
-+ filed_report_snapshots: id=t:"<uuid#36>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [745 bytes fnv128 e548e29e6199528806556ee83b6b6e46]
++ filed_report_snapshots: id=t:"<uuid#36>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [745 bytes fnv128 53b64c6f3198863db3910a812f72469d]
 + (116 tables, 97 empty)
-… [4674 bytes, 12 lines fnv128 984efb3e55649e22141a1c717574bc74]
+… [4674 bytes, 12 lines fnv128 bb808202f0b55e423171be7f5a86db93]
 # fixture reports
 $ daemon
 > #0
