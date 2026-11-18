@@ -19,7 +19,7 @@ use crate::i18n::{has, t, tc, tr};
 use crate::icons as I;
 use crate::overview::add_connection::Source;
 use crate::theme::Tk;
-use crate::txdetail::widgets::{Size, Variant, button};
+use crate::ui::button::{Size, Variant, button};
 use crate::wallets::conn::Conn;
 
 /// This card's state (`app.wallets.sources`); a book switch starts it over.
@@ -663,10 +663,10 @@ pub fn card(app: &App, tk: &Tk, c: &Conn) -> Option<El> {
                     .color(tk.muted_fg),
             )
             .child(text(t(&key)).font(tk.t2xs(400.0)).color(tk.muted_fg).wrap());
-        if let Some((href, title)) = src.and_then(|s| Some((s.docs_href?, s.title))) {
+        if let Some((href, title)) = src.and_then(|s| Some((s.docs_href?, s.title()))) {
             let label = tr(
                 "connections:coverage.card.providerGuide",
-                &[("provider", title)],
+                &[("provider", &title)],
             );
             hint = hint.child(
                 row()
