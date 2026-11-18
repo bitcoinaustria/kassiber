@@ -403,6 +403,27 @@ never overwrite the authoritative observation. A prior tax report is supporting
 evidence for the migration and later review, not a substitute for transaction
 history.
 
+### Choosing the assets before the first import
+
+`ui.wallets.import_preview` (`source_file`, `source_format`, `label?`;
+local, nothing stored) reads a provider file under both asset scopes before
+its wallet exists and answers `other_assets` (rows per crypto ticker the
+`bitcoin` scope would skip, the `assets.skipped` an import would report),
+`excluded` and `unread` (as an import reports them), `bitcoin_only` (with
+`bitcoin_only_error` when the `bitcoin` scope cannot import the file, such
+as a trade of BTC against another coin) and `choice` (whether there is
+anything to choose). Formats that keep no other crypto asset, and Bitfinex
+and Bitcoin.de, which read only BTC, offer no choice. When neither scope can
+read the file the preview returns the error the import would, before any
+wallet exists. A file the `crypto` scope cannot read names the reason in
+`crypto_error` (the other assets cannot be kept, so there is no choice).
+`ui.wallets.create` takes the answer as `asset_scope`. The preview's
+`preview_token` binds the book and the file's bytes: `ui.wallets.create` and
+`ui.wallets.import_file` with it refuse a file that changed since
+(`import_preview_stale`, nothing created or imported), so the answer always
+covers what is imported. On the command line, create the wallet with
+`--config '{"asset_scope": "crypto"}'` (or `wallets update` later).
+
 ### Reconciliation with descriptor wallets
 
 Descriptor/xpub wallets remain the authoritative, watch-only source for the

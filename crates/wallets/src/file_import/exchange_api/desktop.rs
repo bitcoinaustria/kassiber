@@ -10,28 +10,26 @@ use super::*;
 /// One check has two minutes; it reads a page or two at most.
 const PROBE_BUDGET: Duration = Duration::from_secs(120);
 
-/// `ui.connections.exchange.test`: the fewest signed reads that prove the
-/// key reads what the sync needs, and, where the exchange tells, that it
-/// cannot trade or withdraw. Nothing is written.
-pub fn probe(
+/// The signed reads of one desktop request bound to `action` (its kind),
+/// the book, the exchange and the transport, under the consent the caller
+/// mints for exactly that route.
+#[allow(clippy::too_many_arguments)]
+fn with_client<T>(
     conn: &Connection,
-    backend: &Json,
+    backend: &Py,
+    (name, exchange): (&PyStr, &'static Descriptor),
+    action: &str,
     gate: &Gate,
     version: &str,
     consent: &mut dyn FnMut(&Route) -> Option<Consent>,
-) -> Result<Py, AppError> {
-    let backend = to_py(backend)?;
-    let (name, kind) = backend_kind(&backend, "")?;
-    let exchange = exchange(&kind)?;
-    let prepared = prepare(&backend, exchange, &name)?;
+    budget: Duration,
+    read: impl FnOnce(&Client<'_>) -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let prepared = prepare(backend, exchange, name)?;
+    let kind = exchange.kind;
     let binding: [u8; 32] = Sha256::digest(
-        serde_json::to_vec(&json!([
-            "ui.connections.exchange.test",
-            book_id(conn)?,
-            kind,
-            prepared.transport
-        ]))
-        .expect("JSON binding"),
+        serde_json::to_vec(&json!([action, book_id(conn)?, kind, prepared.transport]))
+            .expect("JSON binding"),
     )
     .into();
     let transport = Backend::new(&prepared.transport, false)?.with_action_binding(binding);
@@ -45,21 +43,113 @@ pub fn probe(
         gate,
         request: &route.request,
         consent: consent.as_ref(),
-        deadline: Instant::now() + PROBE_BUDGET,
+        deadline: Instant::now() + budget,
         base,
         key,
         secret,
         source: exchange.provider,
     };
-    let read_only = (exchange.probe)(&client)
-        // An echoed request credential (a signature, say) leaves every error.
-        .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
+    // An echoed request credential (a signature, say) leaves every error.
+    read(&client).map_err(|error| scrub_error(error, &client.http.display_credentials()))
+}
+
+/// `ui.connections.exchange.test`: the fewest signed reads that prove the
+/// key reads what the sync needs, and, where the exchange tells, that it
+/// cannot trade or withdraw. Nothing is written.
+pub fn probe(
+    conn: &Connection,
+    backend: &Json,
+    gate: &Gate,
+    version: &str,
+    consent: &mut dyn FnMut(&Route) -> Option<Consent>,
+) -> Result<Py, AppError> {
+    let backend = to_py(backend)?;
+    let (name, kind) = backend_kind(&backend, "")?;
+    let exchange = exchange(&kind)?;
+    let read_only = with_client(
+        conn,
+        &backend,
+        (&name, exchange),
+        "ui.connections.exchange.test",
+        gate,
+        version,
+        consent,
+        PROBE_BUDGET,
+        exchange.probe,
+    )?;
     Ok(dict([
         ("exchange", s(kind.as_str())),
         ("ok", Py::Bool(true)),
         // Kraken, Coinbase and Bitvavo do not say what else a key may do.
         ("read_only", read_only.map_or(Py::Null, Py::Bool)),
     ]))
+}
+
+/// `ui.connections.exchange.preview`: the history a pasted key reads, under
+/// the `crypto` scope, counted by asset before the connection exists, so the
+/// user chooses the new wallet's scope before its one sync
+/// (docs/reference/exchange-desktop.md#other-crypto-assets). The same signed
+/// reads as the sync, under a consent for this route; nothing is written.
+/// Bitfinex and Bitcoin.de read only BTC: no request, no choice.
+pub fn preview(
+    conn: &Connection,
+    backend: &Json,
+    gate: &Gate,
+    version: &str,
+    consent: &mut dyn FnMut(&Route) -> Option<Consent>,
+) -> Result<Py, AppError> {
+    let backend = to_py(backend)?;
+    let (name, kind) = backend_kind(&backend, "")?;
+    let exchange = exchange(&kind)?;
+    let source = ("exchange", kind.as_str());
+    // An exchange whose API reads only BTC has no other asset to offer.
+    if exchange.reads == contract::Reads::BitcoinOnly {
+        return Ok(assets::Preview::default().envelope(source));
+    }
+    let mapped = with_client(
+        conn,
+        &backend,
+        (&name, exchange),
+        "ui.connections.exchange.preview",
+        gate,
+        version,
+        consent,
+        BUDGET,
+        |client| {
+            // The `crypto` scope's read: every event the sync could keep.
+            let mut mapper = Mapper::new(exchange, assets::Scope::Crypto, "");
+            (exchange.fetch)(client, &mut mapper)?;
+            if client.http.echoed() {
+                return Err(echo_refusal(exchange.provider));
+            }
+            Ok(mapper.finish())
+        },
+    )?;
+    let mut preview = assets::Preview::from_tally(&mapped.tally);
+    // The sync after the answer imports only this history (`check_history`).
+    let (_, normalized) = normalized_rows(mapped.records.clone())?;
+    let token = history_token(&book_id(conn)?, &kind, &normalized);
+    let field = |record: &Py, key: &str| {
+        kassiber_envelope::get(record, key)
+            .map(kassiber_envelope::py_str)
+            .unwrap_or_default()
+    };
+    let assets: Vec<String> = mapped.records.iter().map(|r| field(r, "asset")).collect();
+    preview.count_rows(assets.iter().map(String::as_str));
+    // The `bitcoin` scope refuses a trade of BTC against another crypto
+    // asset; in the `crypto` scope it is a pair of swap legs.
+    if mapped.records.iter().any(|r| {
+        field(r, "kind") == "swap" && assets::class(&field(r, "asset")) == assets::Class::Bitcoin
+    }) {
+        preview.bitcoin_refused = Some(format!(
+            "{} trades Bitcoin against other crypto assets in this history, which a Bitcoin-only wallet cannot import",
+            exchange.provider
+        ));
+    }
+    preview.crypto = true;
+    let mut envelope = preview.envelope(source);
+    kassiber_envelope::set(&mut envelope, "preview_token", s(token));
+    Ok(envelope)
 }
 
 /// The provider wallet for a new connection: `label`, `kind` and
@@ -72,6 +162,21 @@ pub fn create_wallet(
     backend: &str,
     identity: Option<&Identity>,
 ) -> Result<crate::Wallet, AppError> {
+    create_scoped_wallet(conn, profile, label, kind, backend, None, identity)
+}
+
+/// [`create_wallet`] with the asset scope the user chose before the first
+/// sync (docs/reference/exchange-desktop.md#other-crypto-assets); `None`
+/// stores none, which reads as `bitcoin`.
+pub fn create_scoped_wallet(
+    conn: &Connection,
+    profile: &str,
+    label: &str,
+    kind: &str,
+    backend: &str,
+    scope: Option<assets::Scope>,
+    identity: Option<&Identity>,
+) -> Result<crate::Wallet, AppError> {
     if !KINDS.contains(&kind) {
         return Err(AppError::new(
             "validation",
@@ -79,7 +184,7 @@ pub fn create_wallet(
         ));
     }
     let mut ids = Ids { identity, at: 0 };
-    super::create_wallet(conn, profile, label, kind, backend, &mut ids)
+    super::create_wallet(conn, profile, label, kind, backend, scope, &mut ids)
 }
 
 /// An exchange wallet in a profile and the backend its sync reads.

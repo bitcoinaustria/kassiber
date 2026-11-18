@@ -318,6 +318,60 @@ fn binance_balance_must_be_exact() {
     }
 }
 
+/// Binance's API sync reads only BTC, so its desktop check asks no asset
+/// question and hands out no history token: a wallet in either scope syncs
+/// the same BTC rows, past one dividend page of 500 rows.
+#[test]
+fn binance_preview_asks_nothing_and_both_scopes_sync_every_dividend() {
+    let dividends = (0..600_u64)
+        .map(|i| json!({"id": i, "tranId": 10_000 + i, "asset": "BTC", "amount": "0.00001", "divTime": T - i * DAY, "enInfo": "BTC Mining Pool"}))
+        .collect();
+    let fake = binance(Histories {
+        dividends,
+        ..Histories::default()
+    });
+    let gate = Gate::new(
+        || kassiber_net::Offline::Online,
+        kassiber_net::Ledger::default(),
+    );
+    let conn = crate::file_import::tests::fixture();
+    let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
+    let preview = desktop::preview(
+        &conn,
+        &backend("binance", &fake.url),
+        &gate,
+        "test",
+        consent,
+    )
+    .unwrap();
+    assert_eq!(at(&preview, "choice"), &Py::Bool(false), "{preview:?}");
+    assert_eq!(at(&preview, "bitcoin_only"), &Py::Bool(true), "{preview:?}");
+    assert!(
+        !format!("{preview:?}").contains("preview_token"),
+        "{preview:?}"
+    );
+    for scope in ["bitcoin", "crypto"] {
+        let conn = crate::file_import::tests::fixture();
+        wallet(scope)(&conn);
+        let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
+        let result = execute_with(
+            &conn,
+            "p",
+            "",
+            &backend("binance", &fake.url),
+            "binance",
+            &gate,
+            "test",
+            consent,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(at(&result, "imported"), &Py::from(600), "{scope}");
+    }
+}
+
 /// Fiat payments are read page by page until Binance's `total`, and a
 /// dividend window that holds more than its answer returned is split: a
 /// short page never ends a read early.

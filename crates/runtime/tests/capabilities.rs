@@ -101,6 +101,13 @@ fn tables_match_python() {
             "ui.connections.btcpay.key_guide",
         ),
         ("ui.connections.exchange.test", "ui.connections.btcpay.test"),
+        // The asset preview before a new connection is a test-like read.
+        (
+            "ui.connections.exchange.preview",
+            "ui.connections.btcpay.test",
+        ),
+        // The asset preview of a provider file before its wallet exists.
+        ("ui.wallets.import_preview", "ui.wallets.ledger_preview"),
         (
             "ui.connections.exchange.create",
             "ui.connections.btcpay.create",

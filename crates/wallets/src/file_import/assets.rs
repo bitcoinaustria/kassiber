@@ -201,6 +201,69 @@ impl Tally {
     }
 }
 
+/// What a source holds besides Bitcoin before anything is stored, for the
+/// choice of a new wallet's scope (`ui.wallets.import_preview`,
+/// `ui.connections.exchange.preview`; docs/reference/imports.md#choosing-the-assets-before-the-first-import).
+#[derive(Debug, Default)]
+pub(crate) struct Preview {
+    /// Rows per crypto ticker the `bitcoin` scope would skip.
+    pub other: BTreeMap<String, i64>,
+    pub excluded: BTreeMap<String, i64>,
+    pub unread: BTreeMap<String, i64>,
+    /// Why the `bitcoin` scope cannot import the source, if it cannot.
+    pub bitcoin_refused: Option<String>,
+    /// Whether the `crypto` scope can import it.
+    pub crypto: bool,
+    /// Why the `crypto` scope cannot import it, if it cannot.
+    pub crypto_refused: Option<String>,
+}
+impl Preview {
+    /// Counts from a `bitcoin`-scope tally.
+    pub(crate) fn from_tally(tally: &Tally) -> Self {
+        Self {
+            other: tally.skipped.clone(),
+            excluded: tally.excluded.clone(),
+            unread: tally.unread.clone(),
+            ..Self::default()
+        }
+    }
+
+    /// Counts the kept rows of a `crypto`-scope read by their crypto asset.
+    pub(crate) fn count_rows<'a>(&mut self, assets: impl IntoIterator<Item = &'a str>) {
+        for code in assets {
+            if class(code) == Class::Crypto {
+                *self.other.entry(code.into()).or_default() += 1;
+            }
+        }
+    }
+
+    pub(crate) fn envelope(&self, source: (&str, &str)) -> Py {
+        let counts = |map: &BTreeMap<String, i64>| {
+            dict(
+                map.iter()
+                    .map(|(code, rows)| (code.as_str(), Py::from(*rows)))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let mut fields = vec![
+            (source.0, s(source.1)),
+            ("other_assets", counts(&self.other)),
+            ("excluded", counts(&self.excluded)),
+            ("unread", counts(&self.unread)),
+            ("bitcoin_only", Py::Bool(self.bitcoin_refused.is_none())),
+        ];
+        if let Some(reason) = &self.bitcoin_refused {
+            fields.push(("bitcoin_only_error", s(reason.as_str())));
+        }
+        if let Some(reason) = &self.crypto_refused {
+            fields.push(("crypto_error", s(reason.as_str())));
+        }
+        // A question only when there is something to choose.
+        fields.push(("choice", Py::Bool(self.crypto && !self.other.is_empty())));
+        dict(fields)
+    }
+}
+
 /// The canonical asset a row of a file export keeps under `scope`, for
 /// exports without a provider asset type: Bitcoin (BTC, LBTC) always; another
 /// crypto ticker in the `crypto` scope, else `None` and counted in `tally`.

@@ -1589,6 +1589,116 @@ pub fn execute_wasabi_payload(
     Ok(result)
 }
 
+/// `ui.wallets.import_preview`: which other crypto assets a provider file
+/// holds, read under both asset scopes before a wallet exists, so the user
+/// chooses the new wallet's scope before its one import. Nothing is stored.
+/// A format that keeps no other crypto asset, or reads only BTC (an exchange
+/// export the registry marks so, Bull Bitcoin), offers no choice. When neither scope can read the file the
+/// `bitcoin` scope's error is returned, as the import would.
+pub fn preview_assets(file: &str, format: Format, label: &str) -> Result<Py, AppError> {
+    let source = ("source_format", format.name());
+    let reads_bitcoin_only =
+        format == Format::Bull || exchange_api::file_reads_bitcoin_only(format);
+    if !format.scoped() {
+        return Ok(assets::Preview::default().envelope(source));
+    }
+    let load = |scope| {
+        format.load_for(
+            file,
+            tax_platform::Target {
+                scope,
+                wallet: label,
+            },
+        )
+    };
+    let crypto = (!reads_bitcoin_only).then(|| load(assets::Scope::Crypto));
+    // A file the `crypto` scope cannot read says why, so the other assets
+    // are not dropped from the question silently.
+    let crypto_refused = match &crypto {
+        Some(Err(error)) => Some(error.message.clone()),
+        _ => None,
+    };
+    let mut preview = match load(assets::Scope::Bitcoin) {
+        Ok((_, tally)) => tally
+            .as_ref()
+            .map(assets::Preview::from_tally)
+            .unwrap_or_default(),
+        Err(error) => match &crypto {
+            Some(Ok((rows, tally))) => {
+                let mut preview = tally
+                    .as_ref()
+                    .map(assets::Preview::from_tally)
+                    .unwrap_or_default();
+                preview.count_rows(rows.iter().map(|row| {
+                    row.data
+                        .get("asset")
+                        .and_then(Json::as_str)
+                        .unwrap_or_default()
+                }));
+                preview.bitcoin_refused = Some(error.message);
+                preview
+            }
+            _ => return Err(error),
+        },
+    };
+    preview.crypto = matches!(crypto, Some(Ok(_)));
+    preview.crypto_refused = crypto_refused;
+    Ok(preview.envelope(source))
+}
+
+/// The refusal for a source that changed after its asset preview.
+pub const PREVIEW_STALE: &str = "import_preview_stale";
+
+pub(crate) fn preview_stale(what: &str) -> AppError {
+    AppError::new(
+        PREVIEW_STALE,
+        format!(
+            "The {what} changed after Kassiber checked its assets; check it again before importing"
+        ),
+    )
+    .with_hint(
+        "Nothing was imported. Run the asset check again and answer for what the source holds now.",
+    )
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The token a provider file's asset preview hands out: bound to the
+/// book's profile, the format and the file's bytes, so a create or import
+/// that carries it refuses a file that changed since (`check_file_preview`).
+pub fn file_preview_token(profile: &str, format: Format, file: &str) -> Result<String, AppError> {
+    let bytes = std::fs::read(file).map_err(|_| {
+        AppError::new("not_found", format!("Source file not found: {file}"))
+            .with_hint("Choose an existing local export file.")
+    })?;
+    let bound = json!([
+        "kassiber.import_preview.file.v1",
+        profile,
+        format.name(),
+        sha256_hex(&bytes)
+    ]);
+    Ok(sha256_hex(bound.to_string().as_bytes()))
+}
+
+/// Refuses a file that is no longer the one `token` previewed.
+pub fn check_file_preview(
+    profile: &str,
+    format: Format,
+    file: &str,
+    token: &str,
+) -> Result<(), AppError> {
+    if file_preview_token(profile, format, file)? == token {
+        Ok(())
+    } else {
+        Err(preview_stale("file"))
+    }
+}
+
 /// What the desktop's `ui.wallets.import_file` and `ui.wallets.import_samourai`
 /// ask the book to import before the local journal step.
 pub enum DesktopImport {

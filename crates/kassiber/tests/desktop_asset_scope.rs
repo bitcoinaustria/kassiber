@@ -128,3 +128,65 @@ fn an_encrypted_book_asks_for_the_passphrase_before_changing_the_scope() {
     assert_eq!(kind_of(&done), UPDATE, "{done:?}");
     assert_eq!(stored_config(&desk, "exchange")["asset_scope"], "crypto");
 }
+
+/// The asset question's preview binds the file it read
+/// (docs/reference/imports.md#choosing-the-assets-before-the-first-import):
+/// a create or import with its token refuses the file once it changed.
+#[test]
+fn a_preview_token_binds_the_create_and_import_to_the_previewed_file() {
+    let desk = Desk::new("desktop_asset_scope_unrecorded");
+    desk.change("INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,asset,created_at) SELECT 'treasury',workspace_id,id,'treasury','Treasury','asset','BTC','fixed' FROM profiles LIMIT 1");
+    let file = desk.base_path().join("history.csv");
+    let header = "Type,Buy Amount,Buy Currency,Sell Amount,Sell Currency,Fee,Fee Currency,Exchange,Trade-Group,Comment,Date,Tx-ID\n";
+    std::fs::write(&file, format!("{header}Trade,0.1,BTC,3000,EUR,,,Kraken,,,2025-02-01,t-btc\nDeposit,3,ETH,,,,,Kraken,,,2025-02-03,d-eth\n")).unwrap();
+    let file_path = file.to_string_lossy().into_owned();
+    let preview = desk.ask(
+        "ui.wallets.import_preview",
+        &format!(r#"{{"source_file": "{file_path}", "source_format": "cointracking_csv", "label": "History"}}"#),
+    );
+    assert_eq!(
+        kind_of(&preview),
+        "ui.wallets.import_preview",
+        "{preview:?}"
+    );
+    assert_eq!(path_text(&preview, &["data", "choice"]), "true");
+    let token = path(&preview, &["data", "preview_token"])
+        .and_then(text)
+        .unwrap()
+        .to_owned();
+    let create = |label: &str| {
+        desk.ask(
+            "ui.wallets.create",
+            &format!(r#"{{"label": "{label}", "kind": "cointracking", "source_file": "{file_path}", "source_format": "cointracking_csv", "asset_scope": "crypto", "preview_token": "{token}"}}"#),
+        )
+    };
+    let created = create("History");
+    assert_eq!(kind_of(&created), "ui.wallets.create", "{created:?}");
+    let import = || {
+        desk.ask(
+            "ui.wallets.import_file",
+            &format!(r#"{{"wallet": "History", "source_file": "{file_path}", "source_format": "cointracking_csv", "preview_token": "{token}"}}"#),
+        )
+    };
+    // The file changes after the check: neither a create nor an import reads it.
+    std::fs::write(&file, format!("{header}Trade,0.1,BTC,3000,EUR,,,Kraken,,,2025-02-01,t-btc\nDeposit,3,DOT,,,,,Kraken,,,2025-02-03,d-dot\n")).unwrap();
+    assert_eq!(error_code(&import()), "import_preview_stale");
+    assert_eq!(error_code(&create("History 2")), "import_preview_stale");
+    let wallets: i64 = desk
+        .connection()
+        .query_row(
+            "SELECT count(*) FROM wallets WHERE label='History 2'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(wallets, 0);
+}
+
+fn path_text(value: &Value, keys: &[&str]) -> String {
+    match path(value, keys) {
+        Some(Value::Bool(b)) => b.to_string(),
+        Some(other) => text(other).unwrap_or_default().to_owned(),
+        None => String::new(),
+    }
+}

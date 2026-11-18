@@ -377,6 +377,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.document_import.import",
     "ui.wallets.import_samourai",
     "ui.wallets.ledger_preview",
+    "ui.wallets.import_preview",
     "ui.imports.list",
     "ui.imports.rollback",
     "ui.wallets.preview_descriptor",
@@ -394,6 +395,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     // Exchange connections: docs/reference/exchange-desktop.md.
     "ui.connections.exchange.status",
     "ui.connections.exchange.test",
+    "ui.connections.exchange.preview",
     "ui.connections.exchange.create",
     "ui.connections.exchange.sync",
     "ui.connections.node.snapshot",

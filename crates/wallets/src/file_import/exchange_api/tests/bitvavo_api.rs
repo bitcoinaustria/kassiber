@@ -214,7 +214,7 @@ fn bitvavo_api_correction_of_an_exported_row_waits_for_the_users_choice() {
     let gate = Gate::new(|| kassiber_net::Offline::Online, kassiber_net::Ledger::default());
     let sync = |choice| {
         let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
-        execute_with(&conn, "p", "", &backend("bitvavo", &fake.url), "bitvavo", &gate, "test", consent, None, choice)
+        execute_with(&conn, "p", "", &backend("bitvavo", &fake.url), "bitvavo", &gate, "test", consent, None, choice, None)
     };
     let error = sync(None).unwrap_err();
     assert_eq!(error.code, "import_changed_rows");
@@ -226,6 +226,76 @@ fn bitvavo_api_correction_of_an_exported_row_waits_for_the_users_choice() {
     let ignored = kassiber_pyjson::dumps(at(&result, "corrections_ignored"), &kassiber_pyjson::Options::new().sort_keys(true)).unwrap();
     assert!(ignored.contains(r#""external_id": "bitvavo:dep-btc", "field": "amount", "file": "0.006", "stored": "0.005""#), "{ignored}");
     assert_eq!(count(&conn, "SELECT count(*) FROM transactions WHERE external_id='bitvavo:dep-btc'"), 1);
+}
+
+/// `ui.connections.exchange.preview`: the history a pasted key reads, counted
+/// by asset before any wallet exists; nothing is written, nothing is sent
+/// without consent, and an exchange Kassiber reads only BTC from is not asked.
+#[test]
+fn bitvavo_preview_counts_other_assets_before_a_wallet_exists() {
+    let (conn, fake) = (book(), serve_script(Script::new()));
+    let gate = Gate::new(|| kassiber_net::Offline::Online, kassiber_net::Ledger::default());
+    let before = count(&conn, "SELECT count(*) FROM wallets") + count(&conn, "SELECT count(*) FROM transactions");
+    let refused = desktop::preview(&conn, &backend("bitvavo", &fake.url), &gate, "test", &mut |_| None);
+    assert!(refused.is_err());
+    assert!(fake.seen.lock().unwrap().is_empty());
+    let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
+    let mut result = desktop::preview(&conn, &backend("bitvavo", &fake.url), &gate, "test", consent).unwrap();
+    assert!(lossy(&text(at(&result, "preview_token"))).starts_with("v1."));
+    if let Py::Dict(pairs) = &mut result {
+        pairs.retain(|(k, _)| *k != Key::from("preview_token"));
+    }
+    assert_eq!(
+        kassiber_pyjson::dumps(&result, &kassiber_pyjson::Options::new().sort_keys(true)).unwrap(),
+        r#"{"bitcoin_only": true, "choice": true, "exchange": "bitvavo", "excluded": {}, "other_assets": {"ETH": 1}, "unread": {}}"#
+    );
+    assert!(fake.seen.lock().unwrap().iter().all(|r| r.signed));
+    assert_eq!(count(&conn, "SELECT count(*) FROM wallets") + count(&conn, "SELECT count(*) FROM transactions"), before);
+    let quiet = serve_script(Script::new());
+    let bitfinex = desktop::preview(&conn, &backend("bitfinex", &quiet.url), &gate, "test", consent).unwrap();
+    assert_eq!(at(&bitfinex, "choice"), &Py::Bool(false));
+    assert!(quiet.seen.lock().unwrap().is_empty());
+}
+
+/// The sync after the asset question imports only the history the user
+/// answered for when the wallet keeps other assets: new Bitcoin activity or
+/// new other assets refuse it unwritten until the question is asked again.
+/// A Bitcoin-only answer binds no history, so new activity imports.
+#[test]
+fn bitvavo_sync_with_a_preview_token_refuses_a_changed_history() {
+    let gate = Gate::new(|| kassiber_net::Offline::Online, kassiber_net::Ledger::default());
+    let token_for = |conn: &Connection, script: Script| {
+        let fake = serve_script(script);
+        let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
+        let preview = desktop::preview(conn, &backend("bitvavo", &fake.url), &gate, "test", consent).unwrap();
+        lossy(&text(at(&preview, "preview_token")))
+    };
+    let sync = |conn: &Connection, script: Script, token: &str| {
+        let fake = serve_script(script);
+        let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
+        execute_with(conn, "p", "", &backend("bitvavo", &fake.url), "bitvavo", &gate, "test", consent, None, None, Some(token))
+    };
+    // A new BTC deposit between the check and the sync, and a new ETH buy.
+    let mut newer = Script::new();
+    newer.history.push(item("dep-late", "deposit", "2024-07-10T00:00:00.000Z", &[("received", "BTC", "0.001"), ("fees", "BTC", "0")]));
+    let mut eth = Script::new();
+    eth.history.push(item("buy-eth-2", "buy", "2024-07-11T00:00:00.000Z", &[("sent", "EUR", "50"), ("received", "ETH", "0.02"), ("fees", "EUR", "0.1"), ("price", "EUR", "2500")]));
+    let conn = book();
+    let token = token_for(&conn, Script::new());
+    assert_eq!(at(&sync(&conn, newer.clone(), &token).unwrap(), "imported"), &Py::from(7));
+    let conn = book();
+    let token = token_for(&conn, Script::new());
+    assert_eq!(at(&sync(&conn, eth.clone(), &token).unwrap(), "imported"), &Py::from(6));
+    let conn = book();
+    let token = token_for(&conn, Script::new());
+    scoped(&conn, "crypto");
+    for changed in [newer, eth] {
+        assert_eq!(sync(&conn, changed, &token).unwrap_err().code, "import_preview_stale");
+        assert_eq!(count(&conn, "SELECT count(*) FROM transactions"), 0);
+    }
+    assert_eq!(sync(&conn, Script::new(), "v1.x.y").unwrap_err().code, "import_preview_stale");
+    // The previewed history itself imports.
+    assert_eq!(at(&sync(&conn, Script::new(), &token).unwrap(), "imported"), &Py::from(7));
 }
 
 /// One BTC row Kassiber cannot book exactly refuses the whole sync by name,

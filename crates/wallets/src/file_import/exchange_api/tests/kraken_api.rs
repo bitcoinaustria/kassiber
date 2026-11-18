@@ -693,6 +693,41 @@ fn kraken_crypto_quoted_trade_hint_names_a_way_to_import_it() {
     }
 }
 
+/// A Bitcoin-only answer binds no history: the preview is the `crypto`
+/// scope's read, and the `bitcoin` scope's sync keeps the BTC rows of that
+/// same ledger (deposit, fiat buy and the BTC earn reward).
+#[test]
+fn kraken_bitcoin_only_answer_syncs_the_ledger_its_scope_reads() {
+    let fake = kraken(mixed_ledger(), fiat_trade());
+    let gate = Gate::new(
+        || kassiber_net::Offline::Online,
+        kassiber_net::Ledger::default(),
+    );
+    let conn = crate::file_import::tests::fixture();
+    conn.execute_batch("UPDATE profiles SET fiat_currency='EUR'; INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,asset,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','BTC','fixed');").unwrap();
+    let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
+    let preview =
+        desktop::preview(&conn, &backend("kraken", &fake.url), &gate, "test", consent).unwrap();
+    let token = lossy(&text(at(&preview, "preview_token")));
+    wallet("bitcoin")(&conn);
+    let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
+    let result = execute_with(
+        &conn,
+        "p",
+        "",
+        &backend("kraken", &fake.url),
+        "kraken",
+        &gate,
+        "test",
+        consent,
+        None,
+        None,
+        Some(&token),
+    )
+    .unwrap();
+    assert_eq!(at(&result, "imported"), &Py::from(3), "{result:?}");
+}
+
 /// The scope filters a trade by its principal legs: a Buy Crypto of ETH
 /// that pays its fee in BTC is no BTC trade. Each scope books the BTC fee
 /// as the same fee-only row; only the crypto scope books the ETH.

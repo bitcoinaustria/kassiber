@@ -127,7 +127,8 @@ rest operator), and refuse unknown arguments before any work.
 | --- | --- | --- | --- |
 | `ui.connections.exchange.status` | `wallet?` | none | `connections`: per exchange wallet of the active profile, `wallet_id`, `wallet`, `exchange`, `provider`, `backend`, `backend_configured`, `has_api_key`, `has_api_secret` (null for Bitpanda), `asset_scope` (only once the wallet stores one; absent means `bitcoin`) and `last_sync` (`status`, `at`, `imported`, `updated`, `fetched`, `skipped`, `provider_balance`, `assets`, `swap_pairs`, `corrections_ignored`, `changed_rows`, or the error envelope's `error`) |
 | `ui.connections.exchange.test` | `backend`, or `exchange`, `api_key`, `api_secret`, `url?` | the check above, once | `exchange`, `ok`, `read_only` (true when the exchange confirmed it, null when it does not say) |
-| `ui.connections.exchange.create` | `exchange`, `api_key`, `api_secret` (not for Bitpanda), `label?` or `wallet?` (attach the backend to that existing wallet of the same exchange, such as a CSV-imported one, instead of creating a wallet), `url?` | none | `exchange`, `wallet` (`id`, `label`, `kind`), `backend` (the redacted backend row) |
+| `ui.connections.exchange.preview` | `exchange`, `api_key`, `api_secret` (not for Bitpanda), `url?` | the sync's history reads, once (none for Bitfinex and Bitcoin.de) | `exchange`, `other_assets` (rows per crypto ticker other than Bitcoin), `excluded`, `unread`, `bitcoin_only` (false, with `bitcoin_only_error`, when the history trades BTC against another coin), `choice`, `preview_token` (binds the book, the exchange and the history's Bitcoin rows and other assets) |
+| `ui.connections.exchange.create` | `exchange`, `api_key`, `api_secret` (not for Bitpanda), `label?` or `wallet?` (attach the backend to that existing wallet of the same exchange, such as a CSV-imported one, instead of creating a wallet), `asset_scope?` (a new wallet's scope; refused with `wallet`), `preview_token?` (then the create also runs the first sync; a wallet that keeps other assets syncs exactly the previewed history, its Bitcoin rows and other assets, and a changed history refuses with `import_preview_stale` and leaves no connection behind; a Bitcoin-only answer binds no history, because the preview is the crypto scope's read; an exchange that reads only Bitcoin hands out no token), `url?` | none, or with `preview_token` the sync's reads | `exchange`, `wallet` (`id`, `label`, `kind`), `backend` (the redacted backend row), and with `preview_token` `sync` (the sync's data) or `sync_error` (its error; the connection stays) |
 | `ui.connections.exchange.sync` | `wallet`, `changed_rows?` (`skip` or `import`, the answer to an `import_changed_rows` refusal; see [re-importing a newer export](imports.md#re-importing-a-newer-export)) | the CLI sync's reads | the CLI's `wallets.sync-<kind>` data |
 
 `url` defaults to the exchange's public API and exists for tests and
@@ -138,10 +139,11 @@ proxies; the desktop never sends it.
 - Launch, route mounts, the wallet page, `status`, `create`, freshness and
   idle paths send nothing. A saved exchange backend is configuration, not
   consent.
-- `test` and `sync` each mint one explicit-trigger consent for their exact
-  route: `test` binds the kind, book, exchange and transport; `sync` binds
-  what the CLI command binds (book, profile, wallet, exchange, transport).
-  `test` revokes its grant when it returns. Every request rechecks the gate,
+- `test`, `preview` and `sync` each mint one explicit-trigger consent for
+  their exact route: `test` and `preview` bind their kind, book, exchange and
+  transport; `sync` binds what the CLI command binds (book, profile, wallet,
+  exchange, transport). `test` and `preview` revoke their grant when they
+  return. Every request rechecks the gate,
   so offline mode or `KASSIBER_NO_EGRESS` stops either before its first
   request, and the sync's publication savepoint is rechecked too.
 - An echoed key or secret is withheld from every error, as for the CLI, so

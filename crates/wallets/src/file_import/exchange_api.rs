@@ -77,7 +77,7 @@ pub fn execute(
     identity: Option<&Identity>,
 ) -> Result<Py, AppError> {
     execute_with(
-        conn, profile, wallet_ref, backend, expected, gate, version, consent, identity, None,
+        conn, profile, wallet_ref, backend, expected, gate, version, consent, identity, None, None,
     )
 }
 
@@ -95,6 +95,7 @@ pub fn execute_with(
     consent: &mut dyn FnMut(&Route) -> Option<Consent>,
     identity: Option<&Identity>,
     changed_rows: Option<ChangedRows>,
+    preview_token: Option<&str>,
 ) -> Result<Py, AppError> {
     let backend = to_py(backend)?;
     let (name, kind) = backend_kind(&backend, expected)?;
@@ -150,16 +151,11 @@ pub fn execute_with(
         return Err(echo_refusal(label));
     }
     let fetched = records.len();
-    let rows: Vec<csv::Row> = records
-        .into_iter()
-        .map(|record| csv::Row {
-            headers: vec![],
-            data: generic_json::projection(&record),
-            rest: None,
-            original: Some(record),
-        })
-        .collect();
-    let normalized = rows.iter().map(normalize).collect::<Result<Vec<_>, _>>()?;
+    let (rows, normalized) = normalized_rows(records)?;
+    // The history the user answered the asset question for, or nothing.
+    if let Some(token) = preview_token {
+        check_history(&book, &kind, &normalized, scope, token)?;
+    }
     let request = Request {
         profile_id: profile.into(),
         wallet: wallet.id.clone(),
@@ -249,6 +245,12 @@ pub fn execute_with(
 /// exchange contract.
 pub(super) fn file_exchange(format: Format) -> bool {
     contract::registry::by_format(format).is_some()
+}
+
+/// Whether `format` is an exchange export whose parser reads only Bitcoin.
+pub(super) fn file_reads_bitcoin_only(format: Format) -> bool {
+    contract::registry::by_format(format)
+        .is_some_and(|(_, export)| export.reads == contract::Reads::BitcoinOnly)
 }
 
 /// The exchange's own check before an import of its export, or a sync of its
@@ -622,19 +624,118 @@ fn wallet(
     if let Some(id) = existing {
         return resolve(conn, profile, &id);
     }
-    create_wallet(conn, profile, label, kind, &lossy(backend), ids)
+    create_wallet(conn, profile, label, kind, &lossy(backend), None, ids)
+}
+
+/// Fetched records as import rows and normalized records.
+fn normalized_rows(records: Vec<Py>) -> Result<(Vec<csv::Row>, Vec<Record>), AppError> {
+    let rows: Vec<csv::Row> = records
+        .into_iter()
+        .map(|record| csv::Row {
+            headers: vec![],
+            data: generic_json::projection(&record),
+            rest: None,
+            original: Some(record),
+        })
+        .collect();
+    let normalized = rows.iter().map(normalize).collect::<Result<Vec<_>, _>>()?;
+    Ok((rows, normalized))
+}
+
+/// The two halves of an exchange preview token: the history's Bitcoin rows
+/// (swap legs aside, which only the `crypto` scope reads) and its rows per
+/// other crypto asset, each bound to the book and the exchange.
+fn history_digests(book: &str, kind: &str, records: &[Record]) -> (String, String) {
+    let mut bitcoin: Vec<String> = Vec::new();
+    let mut other: BTreeMap<String, i64> = BTreeMap::new();
+    for r in records {
+        let asset = string(&r.fields, "asset");
+        match assets::class(&asset) {
+            assets::Class::Bitcoin if string(&r.fields, "kind") != "swap" => bitcoin.push(
+                json!([
+                    string(&r.fields, "external_id"),
+                    string(&r.fields, "occurred_at"),
+                    string(&r.fields, "direction"),
+                    asset,
+                    integer_or_zero(r.fields.get("amount")),
+                    integer_or_zero(r.fields.get("fee")),
+                ])
+                .to_string(),
+            ),
+            assets::Class::Crypto => *other.entry(asset).or_default() += 1,
+            _ => {}
+        }
+    }
+    bitcoin.sort();
+    let digest = |part: &str, value: Json| {
+        let bound = json!([
+            "kassiber.import_preview.exchange.v1",
+            book,
+            kind,
+            part,
+            value
+        ]);
+        Sha256::digest(bound.to_string().as_bytes())
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    };
+    (
+        digest("bitcoin", json!(bitcoin)),
+        digest("other", json!(other)),
+    )
+}
+
+/// The token `ui.connections.exchange.preview` hands out for `records`.
+fn history_token(book: &str, kind: &str, records: &[Record]) -> String {
+    let (bitcoin, other) = history_digests(book, kind, records);
+    format!("v1.{bitcoin}.{other}")
+}
+
+/// Refuses a sync whose history is no longer the one `token` previewed, when
+/// the wallet keeps other crypto assets: its Bitcoin rows and its rows per
+/// other asset. A Bitcoin-only wallet's answer binds no history: the preview
+/// is the `crypto` scope's read, and an exchange that reads only BTC hands
+/// out no token at all.
+fn check_history(
+    book: &str,
+    kind: &str,
+    records: &[Record],
+    scope: assets::Scope,
+    token: &str,
+) -> Result<(), AppError> {
+    let parts: Vec<&str> = token.split('.').collect();
+    let same = match parts[..] {
+        ["v1", _, _] if scope == assets::Scope::Bitcoin => true,
+        ["v1", bitcoin_part, other_part] => {
+            let (bitcoin, other) = history_digests(book, kind, records);
+            bitcoin_part == bitcoin && other_part == other
+        }
+        _ => false,
+    };
+    if same {
+        Ok(())
+    } else {
+        Err(preview_stale("history"))
+    }
 }
 
 /// The provider wallet `wallets sync-<kind>` creates on its first run:
-/// `label`, `kind` and `{"backend": name}`, through the shared lifecycle.
+/// `label`, `kind` and `{"backend": name}`, through the shared lifecycle;
+/// with `scope`, the asset scope the desktop asked before the first sync.
 fn create_wallet(
     conn: &Connection,
     profile: &str,
     label: &str,
     kind: &str,
     backend: &str,
+    scope: Option<assets::Scope>,
     ids: &mut Ids<'_>,
 ) -> Result<crate::Wallet, AppError> {
+    let mut config = json!({"backend": backend});
+    if let Some(scope) = scope {
+        config[assets::Scope::KEY] = json!(scope.as_str());
+    }
     let workspace: String = conn
         .query_row(
             "SELECT workspace_id FROM profiles WHERE id=?",
@@ -651,7 +752,7 @@ fn create_wallet(
             label: label.into(),
             kind: kind.into(),
             account: None,
-            config: json!({"backend": backend}),
+            config,
         },
         &mut |conn| {
             let id = ids.next(conn)?;

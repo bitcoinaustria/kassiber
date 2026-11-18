@@ -15,6 +15,7 @@ use kassiber_wallets::file_import::exchange_api::{self, desktop};
 pub(super) const COMMANDS: &[&str] = &[
     "ui.connections.exchange.status",
     "ui.connections.exchange.test",
+    "ui.connections.exchange.preview",
     "ui.connections.exchange.create",
     "ui.connections.exchange.sync",
 ];
@@ -24,6 +25,7 @@ fn allowed(operation: &str) -> &'static [&'static str] {
     match operation {
         "ui.connections.exchange.status" => &["wallet"],
         "ui.connections.exchange.test" => &["backend", "exchange", "api_key", "api_secret", "url"],
+        "ui.connections.exchange.preview" => &["exchange", "api_key", "api_secret", "url"],
         "ui.connections.exchange.create" => &[
             "exchange",
             "label",
@@ -31,6 +33,8 @@ fn allowed(operation: &str) -> &'static [&'static str] {
             "api_key",
             "api_secret",
             "url",
+            "asset_scope",
+            "preview_token",
         ],
         _ => &["wallet", "changed_rows"],
     }
@@ -156,7 +160,8 @@ impl RealBook {
         match operation {
             "ui.connections.exchange.status" => self.exchange_status(args),
             "ui.connections.exchange.test" => self.exchange_test(args),
-            "ui.connections.exchange.create" => self.exchange_create(args),
+            "ui.connections.exchange.preview" => self.exchange_preview(args),
+            "ui.connections.exchange.create" => self.exchange_create_after_preview(args),
             _ => self.exchange_sync(args),
         }
     }
@@ -284,6 +289,40 @@ impl RealBook {
         result
     }
 
+    /// `ui.connections.exchange.preview`: the history a pasted key reads,
+    /// counted by asset before the connection exists (one explicit request
+    /// of the Add connection dialog, under a consent for exactly this route).
+    fn exchange_preview(&mut self, args: &Value) -> Result<Value, AppError> {
+        let conn = self.conn()?;
+        let kind = exchange(args)?;
+        let credentials = credentials(&kind, args)?;
+        let mut backend = serde_json::json!({
+            "name": kind,
+            "kind": kind,
+            "url": url(&kind, args)?,
+            "token": credentials.key,
+        });
+        if let Some(secret) = credentials.secret {
+            backend["auth_header"] = serde_json::json!(secret);
+        }
+        let mut minted = None;
+        let result = desktop::preview(
+            conn,
+            &backend,
+            &self.lightning_gate,
+            env!("CARGO_PKG_VERSION"),
+            &mut |route| {
+                let consent = kassiber_net::Consent::explicit_trigger(route.request());
+                minted = Some(consent.clone());
+                Some(consent)
+            },
+        );
+        if let Some(consent) = minted {
+            consent.revoke();
+        }
+        result
+    }
+
     /// `ui.connections.exchange.create`: the backend `backends create` stores
     /// and the provider wallet `wallets sync-<kind>` creates. No network.
     /// With `wallet`, the backend is attached to that existing wallet of the
@@ -297,6 +336,17 @@ impl RealBook {
             return Err(AppError::new(
                 "validation",
                 "Name a new connection or attach to an existing wallet, not both",
+            ));
+        }
+        // The scope chosen before the first sync; an existing wallet keeps
+        // its own (`ui.wallets.update` changes it).
+        let scope = text(args, "asset_scope")?
+            .map(|value| Scope::parse(&value))
+            .transpose()?;
+        if attach.is_some() && scope.is_some() {
+            return Err(AppError::new(
+                "validation",
+                "An attached wallet keeps its asset scope",
             ));
         }
         let label =
@@ -359,7 +409,15 @@ impl RealBook {
         let identity = None;
         let created = match &attach {
             Some(reference) => desktop::attach_backend(conn, &profile, reference, &kind, &name),
-            None => desktop::create_wallet(conn, &profile, &label, &kind, &name, identity.as_ref()),
+            None => desktop::create_scoped_wallet(
+                conn,
+                &profile,
+                &label,
+                &kind,
+                &name,
+                scope,
+                identity.as_ref(),
+            ),
         };
         let wallet = match created {
             Ok(wallet) => wallet,
@@ -394,8 +452,76 @@ impl RealBook {
                 "ui.connections.exchange.sync requires args.wallet",
             )
         })?;
+        let changed_rows = text(args, "changed_rows")?
+            .map(|value| kassiber_wallets::file_import::ChangedRows::parse(&value))
+            .transpose()?;
+        self.exchange_sync_wallet(&reference, changed_rows, None)
+    }
+
+    /// `ui.connections.exchange.create` with `preview_token`: the new
+    /// connection and its first sync of exactly the previewed history. A
+    /// history that changed since leaves no connection behind
+    /// (`import_preview_stale`), so the dialog asks again; another sync
+    /// failure keeps the connection, as a separate Sync now would.
+    fn exchange_create_after_preview(&mut self, args: &Value) -> Result<Value, AppError> {
+        let Some(token) = text(args, "preview_token")? else {
+            return self.exchange_create(args);
+        };
+        if text(args, "wallet")?.is_some() {
+            return Err(AppError::new(
+                "validation",
+                "preview_token is for a new connection, not an attached wallet",
+            ));
+        }
+        let before = self.backends.clone();
+        let created = self.exchange_create(args)?;
+        let field = |path: &[&str]| {
+            path.iter()
+                .try_fold(&created, |v, k| get(v, k))
+                .map(kassiber_envelope::py_str)
+                .unwrap_or_default()
+        };
+        let (wallet, backend) = (field(&["wallet", "id"]), field(&["backend", "name"]));
+        match self.exchange_sync_wallet(&wallet, None, Some(&token)) {
+            Ok(sync) => {
+                let mut created = created;
+                kassiber_envelope::set(&mut created, "sync", sync);
+                Ok(created)
+            }
+            Err(error) if error.code == kassiber_wallets::file_import::PREVIEW_STALE => {
+                let conn = self.conn()?;
+                conn.execute("DELETE FROM wallets WHERE id=?", [&wallet])
+                    .map_err(|e| crate::real_store::error(map_sqlite_error(e)))?;
+                conn.execute("DELETE FROM backends WHERE name=?", [&backend])
+                    .map_err(|e| crate::real_store::error(map_sqlite_error(e)))?;
+                self.backends = before;
+                self.exchange_syncs.remove(&wallet);
+                Err(error)
+            }
+            Err(error) => {
+                let mut created = created;
+                kassiber_envelope::set(
+                    &mut created,
+                    "sync_error",
+                    get(&error.envelope(None), "error")
+                        .cloned()
+                        .unwrap_or(Value::Null),
+                );
+                Ok(created)
+            }
+        }
+    }
+
+    /// One exchange wallet's sync on the user's request; its result, or its
+    /// error, is this session's last sync.
+    fn exchange_sync_wallet(
+        &mut self,
+        reference: &str,
+        changed_rows: Option<kassiber_wallets::file_import::ChangedRows>,
+        preview_token: Option<&str>,
+    ) -> Result<Value, AppError> {
         let profile = self.exchange_profile()?;
-        let target = desktop::sync_target(self.conn()?, &profile, &reference)?;
+        let target = desktop::sync_target(self.conn()?, &profile, reference)?;
         let Some(backend) = target.backend.clone() else {
             return Err(AppError::new(
                 "config_error",
@@ -406,11 +532,14 @@ impl RealBook {
             )
             .with_hint("Add the exchange again with a read-only API key."));
         };
-        let changed_rows = text(args, "changed_rows")?
-            .map(|value| kassiber_wallets::file_import::ChangedRows::parse(&value))
-            .transpose()?;
-        let result =
-            self.import_exchange_api(&profile, &target.id, &backend, &target.kind, changed_rows);
+        let result = self.exchange_import(
+            &profile,
+            &target.id,
+            &backend,
+            &target.kind,
+            changed_rows,
+            preview_token,
+        );
         let at = kassiber_setup::Sources::now(&SetupSources, self.conn()?)?;
         let record = match &result {
             Ok(payload) => {

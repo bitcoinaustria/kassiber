@@ -487,3 +487,80 @@ fn inbound_fees_in_the_same_asset_leave_the_net_quantity() {
         "CoinTracking row 1 receives 1 ETH but charges a fee of 1 ETH"
     );
 }
+
+/// `ui.wallets.import_preview` (docs/reference/imports.md#choosing-the-assets-before-the-first-import):
+/// the other crypto assets a file holds, read before its wallet exists.
+#[test]
+fn the_preview_names_other_crypto_assets_and_whether_bitcoin_only_can_import() {
+    let preview = |content: &str, format: Format| {
+        let file = std::env::temp_dir().join(format!(
+            "kassiber-preview-{}-{:?}.csv",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::write(&file, content).unwrap();
+        let result = preview_assets(file.to_str().unwrap(), format, "History");
+        std::fs::remove_file(file).unwrap();
+        result.map(|r| {
+            kassiber_pyjson::dumps(&r, &kassiber_pyjson::Options::new().sort_keys(true)).unwrap()
+        })
+    };
+    let mixed = format!(
+        "{CT}Trade,0.1,BTC,3000,EUR,,,Kraken,,,2025-02-01,t-btc\n\
+         Trade,2,ETH,4000,EUR,,,Kraken,,,2025-02-02,t-eth\n\
+         Deposit,3,ETH,,,,,Kraken,,,2025-02-03,d-eth\n\
+         Deposit,10,SOL,,,,,Kraken,,,2025-02-04,d-sol\n"
+    );
+    assert_eq!(
+        preview(&mixed, Format::CoinTracking).unwrap(),
+        r#"{"bitcoin_only": true, "choice": true, "excluded": {}, "other_assets": {"ETH": 2, "SOL": 1}, "source_format": "cointracking_csv", "unread": {}}"#
+    );
+    // A Bitcoin-only history asks nothing.
+    let bitcoin = format!("{CT}Trade,0.1,BTC,3000,EUR,,,Kraken,,,2025-02-01,t-btc\n");
+    assert!(preview(&bitcoin, Format::CoinTracking)
+        .unwrap()
+        .contains(r#""choice": false"#));
+    // A trade of BTC against another coin: only the crypto scope imports it.
+    let swap = format!("{CT}Trade,100,SOL,0.1,BTC,,,Kraken,,,2025-02-03,t-sol\n");
+    let swapped = preview(&swap, Format::CoinTracking).unwrap();
+    assert!(swapped.contains(r#""bitcoin_only": false"#), "{swapped}");
+    assert!(
+        swapped.contains(r#""choice": true"#) && swapped.contains(r#""SOL": 1"#),
+        "{swapped}"
+    );
+    assert!(swapped.contains(r#""bitcoin_only_error": ""#), "{swapped}");
+    // Bitcoin readable, the crypto scope not (a fiat fee on a crypto trade):
+    // the other assets are named with the reason, not dropped silently.
+    let fiat_fee = format!("{CT}Trade,100,SOL,1,ETH,1,EUR,Kraken,,,2025-02-03,t-x\nTrade,0.1,BTC,3000,EUR,,,Kraken,,,2025-02-01,t-btc\n");
+    let refused = preview(&fiat_fee, Format::CoinTracking).unwrap();
+    assert!(
+        refused.contains(r#""choice": false"#) && refused.contains(r#""crypto_error": ""#),
+        "{refused}"
+    );
+    // The token binds the file's bytes.
+    let file = std::env::temp_dir().join(format!("kassiber-token-{}.csv", std::process::id()));
+    std::fs::write(&file, &mixed).unwrap();
+    let path = file.to_str().unwrap();
+    let token = file_preview_token("p", Format::CoinTracking, path).unwrap();
+    check_file_preview("p", Format::CoinTracking, path, &token).unwrap();
+    assert_ne!(
+        file_preview_token("q", Format::CoinTracking, path).unwrap(),
+        token
+    );
+    std::fs::write(
+        &file,
+        format!("{mixed}Deposit,1,DOT,,,,,Kraken,,,2025-02-05,d-dot\n"),
+    )
+    .unwrap();
+    assert_eq!(
+        check_file_preview("p", Format::CoinTracking, path, &token)
+            .unwrap_err()
+            .code,
+        "import_preview_stale"
+    );
+    std::fs::remove_file(file).unwrap();
+    // A generic file keeps no tally and offers nothing.
+    assert!(preview("date,amount\n2025-01-01,1\n", Format::Csv)
+        .unwrap()
+        .contains(r#""choice": false"#));
+}

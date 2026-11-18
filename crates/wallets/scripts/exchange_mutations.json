@@ -842,8 +842,8 @@
   {
     "id": "desktop-wallet-config",
     "file": "crates/wallets/src/file_import/exchange_api.rs",
-    "find": "            config: json!({\"backend\": backend}),",
-    "replace": "            config: json!({\"backend\": backend, \"source\": \"desktop\"}),",
+    "find": "    let mut config = json!({\"backend\": backend});",
+    "replace": "    let mut config = json!({\"backend\": backend, \"source\": \"desktop\"});",
     "rule": "A new connection's wallet stores the CLI sync's config.",
     "expect_failing": [
       "a_new_connection_wallet_is_the_one_the_cli_sync_creates"
@@ -3169,6 +3169,47 @@
       "bitcoinde_csv_names_other_coins_as_unread_in_either_scope"
     ],
     "rule": "An importer that reads only BTC reports the coins it left out as assets.unread, rows per ticker, which the desktop shows."
+  },
+  {
+    "id": "desktop-preview-reads-only-btc-exchanges-never",
+    "file": "crates/wallets/src/file_import/exchange_api/desktop.rs",
+    "find": "    if exchange.reads == contract::Reads::BitcoinOnly {",
+    "replace": "    if false && exchange.reads == contract::Reads::BitcoinOnly {",
+    "rule": "The asset preview sends nothing for an exchange Kassiber reads only Bitcoin from.",
+    "expect_failing": [
+      "binance_preview_asks_nothing_and_both_scopes_sync_every_dividend"
+    ]
+  },
+  {
+    "id": "exchange-preview-token-binds-history",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "        check_history(&book, &kind, &normalized, scope, token)?;",
+    "replace": "        let _ = token;",
+    "rule": "A sync after the asset question imports only the previewed history.",
+    "expect_failing": [
+      "bitvavo_sync_with_a_preview_token_refuses_a_changed_history"
+    ]
+  },
+  {
+    "id": "exchange-preview-bitcoin-binds-no-history",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "        [\"v1\", _, _] if scope == assets::Scope::Bitcoin => true,",
+    "replace": "        [\"v1\", _, _] if scope == assets::Scope::Bitcoin && false => true,",
+    "rule": "A Bitcoin-only answer binds no history: the preview is the crypto scope's read.",
+    "expect_failing": [
+      "bitvavo_sync_with_a_preview_token_refuses_a_changed_history",
+      "kraken_bitcoin_only_answer_syncs_the_ledger_its_scope_reads"
+    ]
+  },
+  {
+    "id": "file-preview-token-binds-bytes",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "    if file_preview_token(profile, format, file)? == token {",
+    "replace": "    if true || file_preview_token(profile, format, file)? == token {",
+    "rule": "A create or import after the asset question refuses a file that changed.",
+    "expect_failing": [
+      "the_preview_names_other_crypto_assets_and_whether_bitcoin_only_can_import"
+    ]
   },
   {
     "id": "exchange-sync-corrections-refuse",

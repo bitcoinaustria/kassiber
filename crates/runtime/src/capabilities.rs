@@ -190,7 +190,7 @@ const DAEMON_READ_KINDS: &str = "
     ui.review.cases ui.review.request_input ui.review.plan ui.review.receipt
     ui.freshness.status
     ui.workspace.health ui.projects.list ui.next_actions ui.review.badges
-    ui.wallets.ledger_preview ui.wallets.analyze_file ui.wallets.preview_descriptor
+    ui.wallets.ledger_preview ui.wallets.import_preview ui.wallets.analyze_file ui.wallets.preview_descriptor
     ui.imports.list
     ui.wallets.detect_script_types ui.connections.sources ui.connections.btcpay.key_guide
     ui.connections.exchange.status
@@ -248,7 +248,7 @@ const DAEMON_OPERATOR_KINDS: &str = "
     ui.wallets.document_import.import ui.wallets.import_samourai
     ui.connections.btcpay.create ui.connections.bullbitcoin_wallet.create
     ui.connections.btcpay.discover ui.connections.btcpay.test
-    ui.connections.exchange.test ui.connections.exchange.create ui.connections.exchange.sync
+    ui.connections.exchange.test ui.connections.exchange.preview ui.connections.exchange.create ui.connections.exchange.sync
     ui.metadata.bip329.import ui.metadata.bip329.export ui.wallets.update
     ui.wallets.sync ai.chat ai.chat.cancel ai.chat.permission_mode ai.tool_call.consent ui.chat.attachments.upload
 ";
