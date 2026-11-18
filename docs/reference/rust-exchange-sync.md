@@ -11,6 +11,7 @@ backend serves them. The Python reference lives in
 coordination). The Rust port is `crates/wallets/src/file_import/exchange_api.rs`
 with one module per exchange. The user-facing behavior is described under
 [DALI/RP2-inspired exchange imports](imports.md#dalirp2-inspired-exchange-imports).
+Every exchange now follows the shared [exchange contract](exchange-contract.md).
 
 ## Where exchange sync runs
 

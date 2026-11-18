@@ -14,7 +14,19 @@ const MOVEMENTS: [&str; 6] = [
 ];
 const INCOME: [&str; 3] = ["interest", "staking_reward", "inflation_reward"];
 
-pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
+pub(super) static EXCHANGE: Descriptor = Descriptor {
+    kind: "coinbase",
+    provider: "Coinbase",
+    reads: contract::Reads::BitcoinOnly,
+    default_url: "https://api.coinbase.com",
+    key_only: false,
+    fetch,
+    probe,
+    skipped: None,
+};
+
+/// Reads the BTC accounts' transactions; other accounts are not requested.
+fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {
     let mut budget = Budget::default();
     let accounts = paginated(client, "/v2/accounts", &mut budget)?;
     let mut transactions = vec![];
@@ -40,12 +52,12 @@ pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
         // str(item.get("currency") or ...): the code was truthy to get here.
         transactions.push((text(code), rows));
     }
-    records(&transactions)
+    records(&transactions, mapper)
 }
 
-/// `normalize_coinbase_records` over `{"currency", "transactions"}` items.
-pub(super) fn records(accounts: &[(PyStr, Vec<Py>)]) -> Result<Vec<Py>, AppError> {
-    let mut records = vec![];
+/// `normalize_coinbase_records` over `{"currency", "transactions"}` items:
+/// each transaction is one event.
+pub(super) fn records(accounts: &[(PyStr, Vec<Py>)], mapper: &mut Mapper) -> Result<(), AppError> {
     for (account_currency, rows) in accounts {
         for tx in rows.iter().filter(|tx| matches!(tx, Py::Dict(_))) {
             let amount = at(tx, "amount");
@@ -58,15 +70,15 @@ pub(super) fn records(accounts: &[(PyStr, Vec<Py>)]) -> Result<Vec<Py>, AppError
             } else {
                 asset(&Py::Str(account_currency.clone()))
             };
-            if !is_bitcoin(&currency) {
+            if !mapper.admit(&[&currency]) {
                 continue;
             }
-            if let Some(record) = normalize(tx, &currency)? {
-                records.push(record);
+            if let Some(event) = normalize(tx, &currency)? {
+                mapper.push(event)?;
             }
         }
     }
-    Ok(records)
+    Ok(())
 }
 
 #[derive(Default)]
@@ -139,7 +151,7 @@ fn page(client: &Client<'_>, collection: &str, path: &str) -> Result<(Vec<Py>, P
 
 /// The desktop key check: the first accounts page, which needs
 /// `wallet:accounts:read`. Coinbase does not say what else a key may do.
-pub(super) fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
+fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
     page(client, "/v2/accounts", "/v2/accounts")?;
     Ok(None)
 }
@@ -213,7 +225,7 @@ fn money(tx: &Py, key: &str) -> Result<(PriceNumber, Option<String>), AppError> 
 }
 
 /// `normalize_coinbase_transaction(tx, currency)`.
-fn normalize(tx: &Py, currency: &str) -> Result<Option<Py>, AppError> {
+fn normalize(tx: &Py, currency: &str) -> Result<Option<Event>, AppError> {
     let kind = at(tx, "type");
     let kind = lower(&kassiber_pytext::strip_py(&if truthy(kind) {
         text(kind)
@@ -240,18 +252,18 @@ fn normalize(tx: &Py, currency: &str) -> Result<Option<Py>, AppError> {
     };
     let raw = tx.clone();
     let token = kind.as_str().unwrap_or("");
-    let entry = |external_id, inbound, kind, description, pricing| Entry {
-        provider: "Coinbase",
-        external_id,
+    let event = |external_id, kind, inbound, description, pricing| Event {
         occurred_at: occurred_at.clone(),
-        inbound,
-        asset: currency.to_owned(),
-        amount: amount.clone(),
-        fee: PriceNumber::Finite(Decimal::zero()),
-        kind,
         raw: raw.clone(),
         description,
         pricing,
+        ..Event::one(
+            external_id,
+            kind,
+            inbound,
+            currency.to_owned(),
+            amount.clone(),
+        )
     };
     if TRADES.contains(&token) {
         let usable = match &native_currency {
@@ -278,10 +290,10 @@ fn normalize(tx: &Py, currency: &str) -> Result<Option<Py>, AppError> {
         if inbound && truth(&commission) {
             fiat_value = arithmetic(&fiat_value, &abs(commission)?, '+')?;
         }
-        return record(entry(
+        return Ok(Some(event(
             external_id,
+            Kind::Trade,
             inbound,
-            if inbound { "buy" } else { "sell" },
             None,
             Some(Pricing {
                 fiat_currency: native_currency.expect("fiat currency"),
@@ -290,8 +302,7 @@ fn normalize(tx: &Py, currency: &str) -> Result<Option<Py>, AppError> {
                 method: "coinbase_api",
                 external_ref: id,
             }),
-        ))
-        .map(Some);
+        )));
     }
     let description = || Some(format!("Coinbase {}", token.replace('_', " ")).into());
     if INCOME.contains(&token) {
@@ -300,7 +311,8 @@ fn normalize(tx: &Py, currency: &str) -> Result<Option<Py>, AppError> {
         } else {
             "staking"
         };
-        return record(entry(external_id, true, kind, description(), None)).map(Some);
+        let kind = Kind::Movement(kind);
+        return Ok(Some(event(external_id, kind, true, description(), None)));
     }
     if MOVEMENTS.contains(&token) {
         let network = at(tx, "network");
@@ -310,8 +322,8 @@ fn normalize(tx: &Py, currency: &str) -> Result<Option<Py>, AppError> {
         }
         .unwrap_or(external_id);
         let inbound = positive(&amount)?;
-        let kind = if inbound { "deposit" } else { "withdrawal" };
-        return record(entry(external_id, inbound, kind, description(), None)).map(Some);
+        let kind = Kind::Movement(if inbound { "deposit" } else { "withdrawal" });
+        return Ok(Some(event(external_id, kind, inbound, description(), None)));
     }
     Err(AppError::new("validation", "")
         .with_python_message(concat(&[

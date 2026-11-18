@@ -217,8 +217,12 @@ fn normalizers_match_python_reference_vectors() {
         let exchange = kassiber_envelope::py_str(at(vector, "exchange"));
         let name = kassiber_envelope::py_str(at(vector, "name"));
         let payload = at(vector, "payload");
-        let result = match exchange.as_str() {
-            "kraken" => kraken::normalize(at(payload, "ledgers"), at(payload, "trades")),
+        let exchange = contract::registry::by_kind(&exchange).expect("exchange");
+        let mut mapper = Mapper::new(exchange, assets::Scope::Bitcoin);
+        let result = match exchange.kind {
+            "kraken" => {
+                kraken::normalize(at(payload, "ledgers"), at(payload, "trades"), &mut mapper)
+            }
             "coinbase" => {
                 let Py::List(accounts) = payload else {
                     panic!("accounts")
@@ -235,10 +239,11 @@ fn normalizers_match_python_reference_vectors() {
                         (text(&pair[0]), rows.clone())
                     })
                     .collect();
-                coinbase::records(&accounts)
+                coinbase::records(&accounts, &mut mapper)
             }
-            _ => binance::normalize_payload(payload),
-        };
+            _ => binance::normalize_payload(payload, &mut mapper),
+        }
+        .map(|()| mapper.finish().records);
         let actual = match result {
             Ok(records) => dict([(
                 "records",
@@ -274,7 +279,8 @@ fn normalizers_match_python_reference_vectors() {
         let dump = |value: &Py| kassiber_pyjson::dumps(value, &Default::default()).unwrap();
         if dump(&actual) != dump(at(vector, "expected")) {
             failures.push(format!(
-                "{exchange} {name}\n  rust:   {}\n  python: {}",
+                "{} {name}\n  rust:   {}\n  python: {}",
+                exchange.kind,
                 dump(&actual),
                 dump(at(vector, "expected"))
             ));

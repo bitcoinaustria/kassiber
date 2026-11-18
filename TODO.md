@@ -743,6 +743,11 @@ projections stay Python. Progress and remaining work for this slice:
 - [ ] Bitpanda follow-ups: confirm the undocumented `operation_type` /
   `transaction_type` values and fee semantics against a real account, then
   widen the mapping; a CSV importer once the export's fee semantics are known.
+- [x] One [exchange contract](docs/reference/exchange-contract.md) for every
+  exchange: a registry of exchanges replaces per-name dispatch, and the asset
+  scope is a filter over each exchange's events. Kraken, Coinbase, Binance and
+  Bitpanda read BTC only until their other-asset layers, and every sync now
+  reports `assets` (other coins as `unread`) and `swap_pairs`.
 - [ ] Exchange error display: a very short request credential (a one- to
   three-character proxy password) is withheld wherever it occurs, Kassiber's
   own message text included, which garbles the error; consider refusing such

@@ -5,7 +5,18 @@ use super::*;
 /// Binance.com spot trading launched in July 2017; Python reads from there.
 const START_MS: &str = "1498867200000";
 
-pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
+pub(super) static EXCHANGE: Descriptor = Descriptor {
+    kind: "binance",
+    provider: "Binance",
+    reads: contract::Reads::BitcoinOnly,
+    default_url: "https://api.binance.com",
+    key_only: false,
+    fetch,
+    probe,
+    skipped: None,
+};
+
+fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {
     let end = now()?.as_millis().to_string();
     let fiat = signed_get(
         client,
@@ -38,12 +49,15 @@ pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
         ],
     )?;
     let dividends = attribute_get(&dividends, "rows")?;
-    normalize(&[
-        (Kind::Fiat, fiat),
-        (Kind::Deposit, deposits),
-        (Kind::Withdrawal, withdrawals),
-        (Kind::Dividend, dividends),
-    ])
+    normalize(
+        &[
+            (History::Fiat, fiat),
+            (History::Deposit, deposits),
+            (History::Withdrawal, withdrawals),
+            (History::Dividend, dividends),
+        ],
+        mapper,
+    )
 }
 
 /// Restrictions that only let a key read.
@@ -53,7 +67,7 @@ const READ_FLAGS: [&str; 2] = ["enableReading", "enableFixReadOnly"];
 /// the key may do. It must read, and every other `enable*`/`permits*` flag
 /// (trading, margin, futures, options, withdrawals, transfers, and any flag
 /// Binance adds later) must be off.
-pub(super) fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
+fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
     let restrictions = signed_get(client, "/sapi/v1/account/apiRestrictions", &[])?;
     let Py::Dict(flags) = &restrictions else {
         return Err(AppError::new(
@@ -97,14 +111,17 @@ pub(super) fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
 
 /// `normalize_binance_records(payload)` for an assembled payload dict.
 #[cfg(test)]
-pub(super) fn normalize_payload(payload: &Py) -> Result<Vec<Py>, AppError> {
+pub(super) fn normalize_payload(payload: &Py, mapper: &mut Mapper) -> Result<(), AppError> {
     let value = |key| get(payload, key).cloned().unwrap_or(Py::List(vec![]));
-    normalize(&[
-        (Kind::Fiat, value("fiat_payments")),
-        (Kind::Deposit, value("deposits")),
-        (Kind::Withdrawal, value("withdrawals")),
-        (Kind::Dividend, value("dividends")),
-    ])
+    normalize(
+        &[
+            (History::Fiat, value("fiat_payments")),
+            (History::Deposit, value("deposits")),
+            (History::Withdrawal, value("withdrawals")),
+            (History::Dividend, value("dividends")),
+        ],
+        mapper,
+    )
 }
 
 /// `payload.get(key, [])` on whatever the server returned.
@@ -143,7 +160,7 @@ fn signed_get(client: &Client<'_>, path: &str, params: &[(&str, &str)]) -> Resul
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Kind {
+enum History {
     Fiat,
     Deposit,
     Withdrawal,
@@ -152,8 +169,7 @@ enum Kind {
 
 /// `normalize_binance_records(payload)`: each history's rows in order, as
 /// `for row in payload.get(key, []) or []` iterates them.
-fn normalize(payload: &[(Kind, Py)]) -> Result<Vec<Py>, AppError> {
-    let mut records = vec![];
+fn normalize(payload: &[(History, Py)], mapper: &mut Mapper) -> Result<(), AppError> {
     for (kind, rows) in payload {
         let rows = match rows {
             Py::List(rows) => rows.as_slice(),
@@ -171,16 +187,18 @@ fn normalize(payload: &[(Kind, Py)]) -> Result<Vec<Py>, AppError> {
             }
         };
         for row in rows.iter().filter(|row| matches!(row, Py::Dict(_))) {
-            let record = match kind {
-                Kind::Fiat => fiat_payment(row)?,
-                Kind::Deposit => transfer(row, true)?,
-                Kind::Withdrawal => transfer(row, false)?,
-                Kind::Dividend => dividend(row)?,
+            let event = match kind {
+                History::Fiat => fiat_payment(row, mapper)?,
+                History::Deposit => transfer(row, true, mapper)?,
+                History::Withdrawal => transfer(row, false, mapper)?,
+                History::Dividend => dividend(row, mapper)?,
             };
-            records.extend(record);
+            if let Some(event) = event {
+                mapper.push(event)?;
+            }
         }
     }
-    Ok(records)
+    Ok(())
 }
 
 /// `str(value or "").strip().casefold()`.
@@ -194,12 +212,12 @@ fn folded(value: &Py) -> String {
 }
 
 /// `normalize_binance_fiat_payment(row)`.
-fn fiat_payment(row: &Py) -> Result<Option<Py>, AppError> {
+fn fiat_payment(row: &Py, mapper: &mut Mapper) -> Result<Option<Event>, AppError> {
     if folded(at(row, "status")) != "completed" {
         return Ok(None);
     }
     let currency = asset(at(row, "cryptoCurrency"));
-    if !is_bitcoin(&currency) {
+    if !mapper.admit(&[&currency]) {
         return Ok(None);
     }
     let fiat_currency = fiat_code(asset(at(row, "fiatCurrency")));
@@ -224,17 +242,10 @@ fn fiat_payment(row: &Py) -> Result<Option<Py>, AppError> {
     } else {
         Some(decimal(price, "0")?)
     };
-    record(Entry {
-        provider: "Binance",
-        external_id: concat(&["binance:".into(), reference.clone()]),
+    let external_id = concat(&["binance:".into(), reference.clone()]);
+    Ok(Some(Event {
         occurred_at,
-        inbound: true,
-        asset: currency,
-        amount,
-        fee: PriceNumber::Finite(Decimal::zero()),
-        kind: "buy",
         raw: row.clone(),
-        description: None,
         pricing: Some(Pricing {
             fiat_currency,
             fiat_value,
@@ -242,14 +253,14 @@ fn fiat_payment(row: &Py) -> Result<Option<Py>, AppError> {
             method: "binance_api",
             external_ref: reference,
         }),
-    })
-    .map(Some)
+        ..Event::one(external_id, Kind::Trade, true, currency, amount)
+    }))
 }
 
 /// `normalize_binance_transfer(row, inbound=...)`.
-fn transfer(row: &Py, inbound: bool) -> Result<Option<Py>, AppError> {
+fn transfer(row: &Py, inbound: bool, mapper: &mut Mapper) -> Result<Option<Event>, AppError> {
     let currency = asset(either(row, &["coin", "asset"]));
-    if !is_bitcoin(&currency) {
+    if !mapper.admit(&[&currency]) {
         return Ok(None);
     }
     let status = folded(at(row, "status"));
@@ -272,37 +283,27 @@ fn transfer(row: &Py, inbound: bool) -> Result<Option<Py>, AppError> {
                 format!(":{currency}:{}", repr(&amount)).into(),
             ])
         });
-    record(Entry {
-        provider: "Binance",
-        external_id,
+    let (kind, description) = match inbound {
+        true => ("deposit", "Binance deposit"),
+        false => ("withdrawal", "Binance withdrawal"),
+    };
+    Ok(Some(Event {
         occurred_at,
-        inbound,
-        asset: currency,
-        amount,
         fee: if inbound {
             PriceNumber::Finite(Decimal::zero())
         } else {
             fee
         },
-        kind: if inbound { "deposit" } else { "withdrawal" },
         raw: row.clone(),
-        description: Some(
-            if inbound {
-                "Binance deposit"
-            } else {
-                "Binance withdrawal"
-            }
-            .into(),
-        ),
-        pricing: None,
-    })
-    .map(Some)
+        description: Some(description.into()),
+        ..Event::one(external_id, Kind::Movement(kind), inbound, currency, amount)
+    }))
 }
 
 /// `normalize_binance_dividend(row)`.
-fn dividend(row: &Py) -> Result<Option<Py>, AppError> {
+fn dividend(row: &Py, mapper: &mut Mapper) -> Result<Option<Event>, AppError> {
     let currency = asset(either(row, &["asset", "coinName"]));
-    if !is_bitcoin(&currency) {
+    if !mapper.admit(&[&currency]) {
         return Ok(None);
     }
     let amount = decimal(either(row, &["amount", "profitAmount"]), "0")?;
@@ -319,18 +320,12 @@ fn dividend(row: &Py) -> Result<Option<Py>, AppError> {
         Some(info) => concat(&["Binance income - ".into(), info.clone()]),
         None => "Binance income".into(),
     };
-    record(Entry {
-        provider: "Binance",
-        external_id: concat(&["binance:".into(), reference]),
+    let kind = Kind::Movement(if mining { "mining" } else { "income" });
+    let external_id = concat(&["binance:".into(), reference]);
+    Ok(Some(Event {
         occurred_at,
-        inbound: true,
-        asset: currency,
-        amount,
-        fee: PriceNumber::Finite(Decimal::zero()),
-        kind: if mining { "mining" } else { "income" },
         raw: row.clone(),
         description: Some(description),
-        pricing: None,
-    })
-    .map(Some)
+        ..Event::one(external_id, kind, true, currency, amount)
+    }))
 }

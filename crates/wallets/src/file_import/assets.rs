@@ -120,8 +120,32 @@ pub(crate) struct Tally {
     skipped: BTreeMap<String, i64>,
     /// Non-crypto rows no scope keeps.
     excluded: BTreeMap<String, i64>,
+    /// Crypto rows of an importer that reads only BTC, which no scope keeps.
+    unread: BTreeMap<String, i64>,
+    /// What the import did not read at all, for `next_step`.
+    notices: Vec<String>,
 }
 impl Tally {
+    /// Counts, rows per ticker, the crypto assets an importer that reads only
+    /// BTC from `provider` left out, as `unread` and in `next_step`: not as
+    /// `skipped`, which would offer a scope that does not keep them.
+    pub(crate) fn unread(&mut self, provider: &str, rows: &BTreeMap<String, i64>) {
+        if rows.is_empty() {
+            return;
+        }
+        for (code, n) in rows {
+            *self.unread.entry(code.clone()).or_default() += n;
+        }
+        let rows: Vec<String> = rows
+            .iter()
+            .map(|(code, n)| format!("{code} ({n})"))
+            .collect();
+        self.notices.push(format!(
+            "Kassiber reads only BTC from {provider}, in either asset scope, and left out entries in {}; record them yourself (generic CSV/JSON import)",
+            rows.join(", ")
+        ));
+    }
+
     /// Whether a row in `code` of `class` may be imported under `scope`;
     /// a row left out is counted. Fiat is never a holding and is not counted.
     pub(crate) fn admit(&mut self, scope: Scope, code: &str, class: Class) -> bool {
@@ -141,8 +165,9 @@ impl Tally {
     }
 
     /// `{"scope", "skipped": {TICKER: rows}, "excluded": {TICKER: rows}}`,
-    /// plus `next_step` naming the command that keeps the skipped assets
-    /// when the `bitcoin` scope skipped any.
+    /// plus `unread: {TICKER: rows}` when an importer that reads only BTC
+    /// left any out, and `next_step` naming the command that keeps the
+    /// skipped assets when the `bitcoin` scope skipped any.
     pub(crate) fn envelope(&self, scope: Scope, wallet: &str) -> Py {
         let counts = |map: &BTreeMap<String, i64>| {
             dict(
@@ -156,15 +181,20 @@ impl Tally {
             ("skipped", counts(&self.skipped)),
             ("excluded", counts(&self.excluded)),
         ];
+        if !self.unread.is_empty() {
+            fields.push(("unread", counts(&self.unread)));
+        }
+        let mut steps = vec![];
         if !self.skipped.is_empty() {
-            fields.push((
-                "next_step",
-                s(format!(
-                    "{}, then sync or import again to keep {}",
-                    keep_command(wallet),
-                    self.skipped.keys().cloned().collect::<Vec<_>>().join(", ")
-                )),
+            steps.push(format!(
+                "{}, then sync or import again to keep {}",
+                keep_command(wallet),
+                self.skipped.keys().cloned().collect::<Vec<_>>().join(", ")
             ));
+        }
+        steps.extend(self.notices.iter().cloned());
+        if !steps.is_empty() {
+            fields.push(("next_step", s(steps.join("; "))));
         }
         dict(fields)
     }

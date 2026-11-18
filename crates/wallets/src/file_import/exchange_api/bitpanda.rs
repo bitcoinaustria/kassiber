@@ -22,13 +22,22 @@ const NAMED: [&str; 5] = ["deposit", "withdrawal", "reward", "buy", "sell"];
 /// Bitpanda's BTC quantities must be whole msat.
 const BTC_DECIMALS: usize = 11;
 
-pub(super) struct Fetched {
-    pub records: Vec<Py>,
-    /// Operations left out on purpose, by reason; reported in the envelope.
-    pub skipped: Py,
-}
+pub(super) static EXCHANGE: Descriptor = Descriptor {
+    kind: "bitpanda",
+    provider: "Bitpanda",
+    reads: contract::Reads::BitcoinOnly,
+    default_url: "https://api.public.bitpanda.com",
+    key_only: true,
+    fetch,
+    probe,
+    skipped: Some([
+        "fiat_only_operations",
+        "non_btc_operations",
+        "internal_btc_moves",
+    ]),
+};
 
-pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {
+fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {
     refuse_trading_keys(client)?;
     let mut budget = Budget::default();
     let btc = btc_asset(&pages(
@@ -39,13 +48,14 @@ pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {
     )?)?;
     let currencies = currencies(&read(client, "/v1/currencies")?)?;
     let operations = pages(client, "/v1/operations", &[], &mut budget)?;
-    normalize(&operations, &btc, &currencies, &[client.key, client.secret])
+    let secrets = [client.key, client.secret];
+    normalize(&operations, &btc, &currencies, &secrets, mapper)
 }
 
 /// The desktop key check: the write-scope refusal, then one read each with
 /// the two scopes the sync needs (`Trade (Read)` for currencies,
 /// `Transaction` for operations).
-pub(super) fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
+fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
     refuse_trading_keys(client)?;
     currencies(&read(client, "/v1/currencies")?)?;
     let page = read(client, "/v1/operations?page_size=1")?;
@@ -476,7 +486,8 @@ pub(super) fn normalize(
     btc: &str,
     currencies: &BTreeMap<String, String>,
     secrets: &[&str],
-) -> Result<Fetched, AppError> {
+    mapper: &mut Mapper,
+) -> Result<(), AppError> {
     let context = Scope {
         btc,
         currencies,
@@ -508,7 +519,6 @@ pub(super) fn normalize(
             None => unique.push((id, operation)),
         }
     }
-    let (mut fiat_only, mut other, mut internal) = (0i64, 0i64, 0i64);
     let mut relevant = vec![];
     for (id, operation) in unique {
         let refuse = Refusal {
@@ -523,11 +533,8 @@ pub(super) fn normalize(
                 && transactions
                     .iter()
                     .all(|tx| matches!(context.holding(at(tx, "asset_amount")), Holding::Fiat(_)));
-            if fiat {
-                fiat_only += 1;
-            } else {
-                other += 1;
-            }
+            // Bitpanda names only BTC and fiat by code here.
+            mapper.leave(fiat);
             continue;
         }
         let legs = transactions
@@ -553,31 +560,23 @@ pub(super) fn normalize(
             }
         }
     }
-    let mut records = vec![];
     for operation in &relevant {
         match classify(operation, &context, &ledger)? {
-            Some(record) => records.push(record),
-            None => internal += 1,
+            Some(event) => mapper.push(event)?,
+            None => mapper.internal(),
         }
     }
-    Ok(Fetched {
-        records,
-        skipped: dict([
-            ("fiat_only_operations", Py::from(fiat_only)),
-            ("non_btc_operations", Py::from(other)),
-            ("internal_btc_moves", Py::from(internal)),
-        ]),
-    })
+    Ok(())
 }
 
 const REVIEW: &str = "Kassiber imports only plain BTC buys, sells, deposits, withdrawals and rewards from Bitpanda; record this operation yourself (generic ledger import) after checking it in Bitpanda.";
 
-/// One BTC-touching operation to its record, `None` for an internal move.
+/// One BTC-touching operation to its event, `None` for an internal move.
 fn classify(
     operation: &Operation<'_>,
     context: &Scope<'_>,
     ledger: &Ledger,
-) -> Result<Option<Py>, AppError> {
+) -> Result<Option<Event>, AppError> {
     let refuse = Refusal {
         operation: operation.id,
         context,
@@ -676,15 +675,11 @@ fn classify(
             ))
         }
     };
-    record(Entry {
-        provider: "Bitpanda",
-        external_id: concat(&["bitpanda:".into(), leg.id.clone()]),
+    let external_id = concat(&["bitpanda:".into(), leg.id.clone()]);
+    let amount = PriceNumber::Finite(amount);
+    Ok(Some(Event {
         occurred_at: Some(occurred_at(leg.occurred)?),
-        inbound,
-        asset: "BTC".into(),
-        amount: PriceNumber::Finite(amount),
         fee: PriceNumber::Finite(fee),
-        kind: record_kind,
         raw: evidence(operation, leg, None),
         description: Some(
             match record_kind {
@@ -694,9 +689,14 @@ fn classify(
             }
             .into(),
         ),
-        pricing: None,
-    })
-    .map(Some)
+        ..Event::one(
+            external_id,
+            Kind::Movement(record_kind),
+            inbound,
+            "BTC".into(),
+            amount,
+        )
+    }))
 }
 
 /// A BTC buy or sell: one BTC leg with trade details against one cash leg
@@ -709,7 +709,7 @@ fn trade(
     fiat: &[&Leg],
     kind: &str,
     shown_kind: &str,
-) -> Result<Py, AppError> {
+) -> Result<Event, AppError> {
     let ([leg], [cash]) = (btc, fiat) else {
         return Err(refuse.because(
             format!("(type '{shown_kind}') is not one BTC leg against one cash leg"),
@@ -745,18 +745,11 @@ fn trade(
         Py::Str(id) if id.code_points().next().is_some() => id.clone(),
         _ => operation.id.clone(),
     };
-    let inbound = leg.inbound;
-    record(Entry {
-        provider: "Bitpanda",
-        external_id: concat(&["bitpanda:".into(), leg.id.clone()]),
+    let external_id = concat(&["bitpanda:".into(), leg.id.clone()]);
+    let amount = PriceNumber::Finite(leg.amount.clone());
+    Ok(Event {
         occurred_at: Some(occurred_at(leg.occurred)?),
-        inbound,
-        asset: "BTC".into(),
-        amount: PriceNumber::Finite(leg.amount.clone()),
-        fee: PriceNumber::Finite(Decimal::zero()),
-        kind: if inbound { "buy" } else { "sell" },
         raw: evidence(operation, leg, Some(cash)),
-        description: None,
         pricing: Some(Pricing {
             fiat_currency: currency.clone(),
             fiat_value: PriceNumber::Finite(cash.amount.clone()),
@@ -764,6 +757,7 @@ fn trade(
             method: "bitpanda_api",
             external_ref: reference,
         }),
+        ..Event::one(external_id, Kind::Trade, leg.inbound, "BTC".into(), amount)
     })
 }
 

@@ -3,17 +3,28 @@
 use super::*;
 use kassiber_pyjson::BigInt;
 
-pub(super) fn fetch(client: &Client<'_>) -> Result<Vec<Py>, AppError> {
+pub(super) static EXCHANGE: Descriptor = Descriptor {
+    kind: "kraken",
+    provider: "Kraken",
+    reads: contract::Reads::BitcoinOnly,
+    default_url: "https://api.kraken.com",
+    key_only: false,
+    fetch,
+    probe,
+    skipped: None,
+};
+
+fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {
     let mut pages = 0;
     let trades = paginated(client, "/0/private/TradesHistory", "trades", &mut pages)?;
     let ledgers = paginated(client, "/0/private/Ledgers", "ledger", &mut pages)?;
-    normalize(&ledgers, &trades)
+    normalize(&ledgers, &trades, mapper)
 }
 
 /// The desktop key check: the first page of both histories the sync reads,
 /// so a key without either query permission fails here. Kraken does not say
 /// what else a key may do.
-pub(super) fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
+fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
     for path in ["/0/private/TradesHistory", "/0/private/Ledgers"] {
         if !matches!(at(&post(client, path, "0")?, "result"), Py::Dict(_)) {
             return Err(AppError::new(
@@ -257,8 +268,9 @@ fn mapping_rows(payload: &Py, keys: &[&str]) -> Vec<(PyStr, Py)> {
     }
 }
 
-/// `normalize_kraken_records(ledger_payload, trades_payload)`.
-pub(super) fn normalize(ledgers: &Py, trades: &Py) -> Result<Vec<Py>, AppError> {
+/// `normalize_kraken_records(ledger_payload, trades_payload)`: each ledger
+/// row is one event.
+pub(super) fn normalize(ledgers: &Py, trades: &Py, mapper: &mut Mapper) -> Result<(), AppError> {
     let mut trade_rows = mapping_rows(trades, &["result", "trades"]);
     if trade_rows.is_empty() {
         trade_rows = mapping_rows(trades, &["trades"]);
@@ -275,10 +287,9 @@ pub(super) fn normalize(ledgers: &Py, trades: &Py) -> Result<Vec<Py>, AppError> 
     if rows.is_empty() {
         rows = mapping_rows(ledgers, &["ledger"]);
     }
-    let mut records = vec![];
     for (ledger_id, row) in rows {
         let currency = asset(at(&row, "asset"));
-        if !is_bitcoin(&currency) {
+        if !mapper.admit(&[&currency]) {
             continue;
         }
         let kind = at(&row, "type");
@@ -295,19 +306,13 @@ pub(super) fn normalize(ledgers: &Py, trades: &Py) -> Result<Vec<Py>, AppError> 
         let token = kind.as_str().unwrap_or("");
         if matches!(token, "deposit" | "withdrawal") {
             let inbound = at_least_zero(&amount)?;
-            records.push(record(Entry {
-                provider: "Kraken",
-                external_id,
+            let kind = Kind::Movement(if inbound { "deposit" } else { "withdrawal" });
+            mapper.push(Event {
                 occurred_at,
-                inbound,
-                asset: currency,
-                amount,
                 fee,
-                kind: if inbound { "deposit" } else { "withdrawal" },
                 raw,
-                description: None,
-                pricing: None,
-            })?);
+                ..Event::one(external_id, kind, inbound, currency, amount)
+            })?;
             continue;
         }
         if token != "trade" {
@@ -381,27 +386,22 @@ pub(super) fn normalize(ledgers: &Py, trades: &Py) -> Result<Vec<Py>, AppError> 
         } else {
             None
         };
-        records.push(record(Entry {
-            provider: "Kraken",
-            external_id,
+        let pricing = Pricing {
+            fiat_currency,
+            fiat_value,
+            fiat_rate,
+            method: "kraken_api",
+            external_ref: refid.unwrap_or(ledger_id),
+        };
+        mapper.push(Event {
             occurred_at,
-            inbound,
-            asset: currency,
-            amount,
             fee,
-            kind: if inbound { "buy" } else { "sell" },
+            pricing: Some(pricing),
             raw,
-            description: None,
-            pricing: Some(Pricing {
-                fiat_currency,
-                fiat_value,
-                fiat_rate,
-                method: "kraken_api",
-                external_ref: refid.unwrap_or(ledger_id),
-            }),
-        })?);
+            ..Event::one(external_id, Kind::Trade, inbound, currency, amount)
+        })?;
     }
-    Ok(records)
+    Ok(())
 }
 
 /// `_kraken_quote_from_pair(pair, base_asset)`. Of the fiat suffixes, the

@@ -182,10 +182,10 @@ longer stops a sync.
 
 Shared code: `crates/wallets/src/file_import/assets.rs` (`class`, `Class`,
 `Scope`, `Tally`, `FIAT`, `exact_units`), `swaps.rs` (pairing, run by the
-coordinator for every file import and exchange sync), and in
-`exchange_api.rs` the `Entry`/`record` builder, `swap_leg`, the mapper's
-`Fetched { records, skipped, tally, reported }` and `Client::scope`. An
-importer:
+coordinator for every file import and exchange sync), and for exchanges the
+[exchange contract](../reference/exchange-contract.md)
+(`exchange_api/contract.rs`): its `Mapper` applies the scope as a filter over
+every exchange's events and emits their records. An importer:
 
 1. Maps each provider ticker through its own alias table to a canonical
    code (`XXBT` -> `BTC`, `XETH` -> `ETH`, `ZEUR` -> `EUR`), then classifies it
@@ -194,7 +194,8 @@ importer:
    account type; never guessed from the ticker alone).
 2. Asks the wallet's `AssetScope` whether to emit a `Crypto` row, and records
    every row it leaves out in the shared `Skipped` tally (`skipped` /
-   `excluded` by ticker).
+   `excluded` by ticker). An exchange asks `Mapper::admit` with an event's
+   assets instead, before it reads the event's type.
 3. Emits rows through the shared builders: buys and sells against fiat with
    exact pricing; crypto-to-crypto swaps as two `swap` legs with a shared
    `swap_ref` (`swap_leg`); third-asset fees as `fee` rows; deposits,
@@ -202,14 +203,15 @@ importer:
    fee is in that same asset stores the net quantity and no fee
    (`assets::net_inbound`, for the shared `record` builder and the exports),
    because custody counts only an inbound row's amount; its value covers the
-   net quantity. Bitcoin rows keep their fee. A mapper returns its tally in
-   `Fetched.tally` (`Some`), which also turns on the `assets` and
-   `swap_pairs` envelope fields for that exchange.
+   net quantity. Bitcoin rows keep their fee. Every exchange sync reports
+   the `assets` and `swap_pairs` envelope fields.
 4. Refuses (fails closed) anything it cannot map exactly, naming the row.
 
 The coordinator stores the rows (other assets exactly, or refused), authors
 the swap pairs, and adds `swap_pairs` and `assets: {scope, skipped: {TICKER:
-rows}, excluded: {TICKER: rows}, next_step?}` to the result envelope.
+rows}, excluded: {TICKER: rows}, unread?: {TICKER: rows}, next_step?}` to the
+result envelope. `unread` counts the crypto rows of an importer that reads
+only BTC from its provider, which no scope keeps.
 File exports without a provider asset type take a row's ticker
 through `assets::file_row`. A format with no tally of its own (generic
 CSV/JSON, BTCPay) is screened by the coordinator instead: Bitcoin and Liquid

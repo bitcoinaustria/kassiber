@@ -22,7 +22,8 @@ pub fn probe(
 ) -> Result<Py, AppError> {
     let backend = to_py(backend)?;
     let (name, kind) = backend_kind(&backend, "")?;
-    let prepared = prepare(&backend, &kind, &name)?;
+    let exchange = exchange(&kind)?;
+    let prepared = prepare(&backend, exchange, &name)?;
     let binding: [u8; 32] = Sha256::digest(
         serde_json::to_vec(&json!([
             "ui.connections.exchange.test",
@@ -48,17 +49,11 @@ pub fn probe(
         base,
         key,
         secret,
-        source: provider(&kind),
+        source: exchange.provider,
     };
-    let read_only = match kind.as_str() {
-        "kraken" => kraken::probe(&client),
-        "coinbase" => coinbase::probe(&client),
-        "binance" => binance::probe(&client),
-        "bitpanda" => bitpanda::probe(&client),
-        _ => Err(unknown_kind(&kind)),
-    }
-    // An echoed request credential (a signature, say) leaves every error.
-    .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
+    let read_only = (exchange.probe)(&client)
+        // An echoed request credential (a signature, say) leaves every error.
+        .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
     Ok(dict([
         ("exchange", s(kind.as_str())),
         ("ok", Py::Bool(true)),
@@ -161,12 +156,14 @@ pub fn targets(conn: &Connection, profile: &str) -> Result<Vec<Target>, AppError
         .collect())
 }
 
-/// The provider's name, as the sync labels its wallet.
+/// The provider's name, as the sync labels its wallet; empty for a kind
+/// that is no exchange.
 pub fn provider_name(kind: &str) -> &'static str {
-    provider(kind)
+    contract::registry::by_kind(kind).map_or("", |exchange| exchange.provider)
 }
 
-/// The provider's public API, as `wallets sync-<kind>` defaults to it.
+/// The provider's public API, as `wallets sync-<kind>` defaults to it;
+/// empty for a kind that is no exchange.
 pub fn default_api_url(kind: &str) -> &'static str {
-    default_url(kind)
+    contract::registry::by_kind(kind).map_or("", |exchange| exchange.default_url)
 }

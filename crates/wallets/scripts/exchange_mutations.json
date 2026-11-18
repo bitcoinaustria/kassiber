@@ -356,8 +356,8 @@
   {
     "id": "bitpanda-write-scope-check",
     "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
-    "find": "pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {\n    refuse_trading_keys(client)?;\n",
-    "replace": "pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {\n    let _ = refuse_trading_keys;\n",
+    "find": "fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {\n    refuse_trading_keys(client)?;\n",
+    "replace": "fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<(), AppError> {\n    let _ = refuse_trading_keys;\n",
     "expect_failing": [
       "bitpanda_refuses_keys_that_can_trade"
     ],
@@ -608,9 +608,9 @@
   },
   {
     "id": "bitpanda-skip-counts",
-    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
-    "find": "                fiat_only += 1;",
-    "replace": "                other += 1;",
+    "file": "crates/wallets/src/file_import/exchange_api/contract.rs",
+    "find": "            true => self.fiat_only += 1,",
+    "replace": "            true => self.other += 1,",
     "expect_failing": [
       "bitpanda_reads_only_and_maps_every_btc_event"
     ],
@@ -619,7 +619,7 @@
   {
     "id": "bitpanda-key-alone",
     "file": "crates/wallets/src/file_import/exchange_api.rs",
-    "find": "        (Some(key), secret) if kind == \"bitpanda\" => (key, secret.unwrap_or_else(|| \"\".into())),",
+    "find": "        (Some(key), secret) if exchange.key_only => (key, secret.unwrap_or_else(|| \"\".into())),",
     "replace": "",
     "expect_failing": [
       "bitpanda_reads_only_and_maps_every_btc_event"
@@ -982,8 +982,8 @@
   {
     "id": "exchange-errors-withhold-request-credentials",
     "file": "crates/wallets/src/file_import/exchange_api.rs",
-    "find": "    } = fetched.map_err(|error| scrub_error(error, &client.http.display_credentials()))?;",
-    "replace": "    } = fetched?;",
+    "find": "        .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;\n    let contract::Mapped {",
+    "replace": "        ?;\n    let contract::Mapped {",
     "expect_failing": [
       "a_kraken_error_echoing_its_signature_withholds_it"
     ],

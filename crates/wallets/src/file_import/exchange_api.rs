@@ -18,8 +18,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 mod binance;
 mod bitpanda;
 mod coinbase;
+mod contract;
 pub mod desktop;
 mod kraken;
+use contract::{Descriptor, Event, Kind, Mapper};
 #[cfg(test)]
 mod tests;
 
@@ -29,25 +31,6 @@ const MAX_PAGES: usize = 10_000;
 const MAX_ROWS: usize = 1_000_000;
 /// Python has no overall budget; each read still has the backend timeout.
 const BUDGET: Duration = Duration::from_secs(3600);
-
-/// What one exchange's mapper returns.
-struct Fetched {
-    records: Vec<Py>,
-    /// Provider-specific counts of operations left out, in the envelope.
-    skipped: Option<Py>,
-    /// Rows left out by asset (docs/plan/24-crypto-assets.md); `None` for a
-    /// mapper that is still Bitcoin-only and does not count them yet.
-    tally: Option<assets::Tally>,
-}
-impl From<Vec<Py>> for Fetched {
-    fn from(records: Vec<Py>) -> Self {
-        Self {
-            records,
-            skipped: None,
-            tally: None,
-        }
-    }
-}
 
 /// Bitpanda is Rust only; Python knows the first three.
 pub const KINDS: [&str; 4] = ["kraken", "coinbase", "binance", "bitpanda"];
@@ -84,8 +67,9 @@ pub fn execute(
     let wallet = wallet(conn, profile, wallet_ref, &kind, &name, &mut ids)?;
     // The wallet's `asset_scope` decides which non-Bitcoin rows are kept.
     let scope = assets::Scope::of_wallet(conn, &wallet.id)?;
-    let label = provider(&kind);
-    let prepared = prepare(&backend, &kind, &name)?;
+    let exchange = exchange(&kind)?;
+    let label = exchange.provider;
+    let prepared = prepare(&backend, exchange, &name)?;
     let book = book_id(conn)?;
     let binding: [u8; 32] = Sha256::digest(
         serde_json::to_vec(&json!([
@@ -117,27 +101,15 @@ pub fn execute(
     };
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
-    let fetched = (|| -> Result<Fetched, AppError> {
-        Ok(match kind.as_str() {
-            "kraken" => kraken::fetch(&client)?.into(),
-            "coinbase" => coinbase::fetch(&client)?.into(),
-            "binance" => binance::fetch(&client)?.into(),
-            "bitpanda" => {
-                let fetched = bitpanda::fetch(&client)?;
-                Fetched {
-                    skipped: Some(fetched.skipped),
-                    ..fetched.records.into()
-                }
-            }
-            _ => return Err(unknown_kind(&kind)),
-        })
-    })();
+    let mut mapper = Mapper::new(exchange, scope);
     // Every error leaves with every credential the reads carried withheld.
-    let Fetched {
+    (exchange.fetch)(&client, &mut mapper)
+        .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
+    let contract::Mapped {
         records,
-        skipped,
         tally,
-    } = fetched.map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
+        skipped,
+    } = mapper.finish();
     if client.http.echoed() {
         return Err(echo_refusal(label));
     }
@@ -176,10 +148,7 @@ pub fn execute(
     // Both legs of each swap are stored now; pair them in the same write.
     .and_then(|mut result| {
         let pairs = swaps::pair(conn, profile, &wallet.id, &rows, &normalized)?;
-        if tally.is_some() {
-            let pairs = pairs.unwrap_or(0);
-            kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs));
-        }
+        kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs.unwrap_or(0)));
         Ok(result)
     })
     .and_then(|result| client.authorize().map(|()| result));
@@ -203,10 +172,8 @@ pub fn execute(
     if let Some(skipped) = skipped {
         kassiber_envelope::set(&mut result, "skipped", skipped);
     }
-    if let Some(tally) = &tally {
-        let assets = tally.envelope(scope, &wallet.label);
-        kassiber_envelope::set(&mut result, "assets", assets);
-    }
+    let assets = tally.envelope(scope, &wallet.label);
+    kassiber_envelope::set(&mut result, "assets", assets);
     Ok(result)
 }
 
@@ -250,21 +217,23 @@ struct Prepared {
 
 /// `fetch_*_records`' local steps: credentials, then base URL, timeout and
 /// opener, all before any request.
-fn prepare(backend: &Py, kind: &str, name: &PyStr) -> Result<Prepared, AppError> {
-    let label = provider(kind);
+fn prepare(backend: &Py, exchange: &Descriptor, name: &PyStr) -> Result<Prepared, AppError> {
+    let label = exchange.provider;
     let key = backend_value(backend, &["token", "api_key", "username"]);
     let secret = backend_value(backend, &["auth_header", "api_secret", "password"]);
-    // Bitpanda (Rust only) authenticates with the key alone; a stray secret
-    // is still withheld from every error.
+    // An exchange that authenticates with the key alone (Bitpanda) still
+    // has a stray secret withheld from every error.
     let (key, secret) = match (key, secret) {
-        (Some(key), secret) if kind == "bitpanda" => (key, secret.unwrap_or_else(|| "".into())),
+        (Some(key), secret) if exchange.key_only => (key, secret.unwrap_or_else(|| "".into())),
         (Some(key), Some(secret)) => (key, secret),
-        _ if kind == "bitpanda" => {
-            return Err(
-                AppError::new("config_error", "Bitpanda backend is missing its API key").with_hint(
-                    "Store a read-only Bitpanda API key in token (backends create --token-stdin).",
-                ),
+        _ if exchange.key_only => {
+            return Err(AppError::new(
+                "config_error",
+                format!("{label} backend is missing its API key"),
             )
+            .with_hint(format!(
+                "Store a read-only {label} API key in token (backends create --token-stdin)."
+            )))
         }
         _ => {
             return Err(AppError::new(
@@ -278,7 +247,7 @@ fn prepare(backend: &Py, kind: &str, name: &PyStr) -> Result<Prepared, AppError>
     let (key, secret) = (lossy(&key), lossy(&secret));
     let base = backend_value(backend, &["url"])
         .map(|url| lossy(&url))
-        .unwrap_or_else(|| default_url(kind).to_owned());
+        .unwrap_or_else(|| exchange.default_url.to_owned());
     let base = base.trim_end_matches('/').to_owned();
     let timeout = timeout(backend)?;
     // Python's opener uses system trust and only `tor_proxy`; chain-backend
@@ -307,30 +276,15 @@ fn book_id(conn: &Connection) -> Result<String, AppError> {
         .unwrap_or_default())
 }
 
-/// Only kinds in [`KINDS`] get this far; [`backend_kind`] refuses the rest.
-fn provider(kind: &str) -> &'static str {
-    match kind {
-        "kraken" => "Kraken",
-        "coinbase" => "Coinbase",
-        "bitpanda" => "Bitpanda",
-        _ => "Binance",
-    }
-}
-fn default_url(kind: &str) -> &'static str {
-    match kind {
-        "kraken" => "https://api.kraken.com",
-        "coinbase" => "https://api.coinbase.com",
-        "bitpanda" => "https://api.public.bitpanda.com",
-        _ => "https://api.binance.com",
-    }
-}
-/// A kind past [`backend_kind`] that a dispatch does not know: a bug, never
-/// a reason to read another exchange's API.
-fn unknown_kind(kind: &str) -> AppError {
-    AppError::new(
-        "internal_error",
-        format!("No exchange API reader for kind '{kind}'"),
-    )
+/// The exchange of a kind [`backend_kind`] accepted. A kind the registry
+/// does not know is a bug, never a reason to read another exchange's API.
+fn exchange(kind: &str) -> Result<&'static Descriptor, AppError> {
+    contract::registry::by_kind(kind).ok_or_else(|| {
+        AppError::new(
+            "internal_error",
+            format!("No exchange API reader for kind '{kind}'"),
+        )
+    })
 }
 
 /// `_get_or_create_exchange_api_wallet`: an explicit reference, else the
@@ -346,7 +300,7 @@ fn wallet(
     if !reference.is_empty() {
         return resolve(conn, profile, reference);
     }
-    let label = provider(kind);
+    let label = exchange(kind)?.provider;
     let existing: Option<String> = conn
         .query_row(
             "SELECT id FROM wallets WHERE profile_id=? AND lower(label)=lower(?) LIMIT 1",
