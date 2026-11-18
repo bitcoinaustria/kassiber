@@ -18,6 +18,7 @@ pub const SOURCE_FORMATS: &[&str] = &[
     "pocketbitcoin_csv",
     "strike_csv",
     "bisq_csv",
+    "bitfinex_csv",
     "ledgerlive_csv",
     "binance_supplemental_csv",
     "binance_history_csv",

@@ -214,6 +214,21 @@ pub(super) fn file_exchange(format: Format) -> bool {
     contract::registry::by_format(format).is_some()
 }
 
+/// The exchange's own step after an import of its export stored the rows.
+pub(super) fn after_file_insert(
+    format: Format,
+    conn: &Connection,
+    profile: &str,
+    wallet: &str,
+    rows: &[csv::Row],
+    ids: &mut Ids<'_>,
+) -> Result<(), AppError> {
+    match contract::registry::by_format(format).and_then(|(exchange, _)| exchange.after_insert) {
+        Some(after_insert) => after_insert(conn, profile, wallet, rows, ids),
+        None => Ok(()),
+    }
+}
+
 /// Whether an import of `format` tags rows whose order within one second
 /// Kassiber cannot know ([`tag_same_second`]).
 pub(super) fn tags_same_second(format: Format) -> bool {

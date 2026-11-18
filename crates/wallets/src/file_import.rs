@@ -77,6 +77,7 @@ pub enum Format {
     BinanceHistory,
     Bitvavo,
     Bitstamp,
+    Bitfinex,
     BtcpayCsv,
     BtcpayJson,
     Ledger,
@@ -105,6 +106,7 @@ impl Format {
             "binance_history_csv" => Self::BinanceHistory,
             "bitvavo_csv" => Self::Bitvavo,
             "bitstamp_csv" => Self::Bitstamp,
+            "bitfinex_csv" => Self::Bitfinex,
             "cointracking_csv" => Self::CoinTracking,
             "blockpit_csv" => Self::Blockpit,
             "wasabi_bundle" => Self::Wasabi,
@@ -136,13 +138,14 @@ impl Format {
             Self::BinanceHistory => "binance_history_csv",
             Self::Bitvavo => "bitvavo_csv",
             Self::Bitstamp => "bitstamp_csv",
+            Self::Bitfinex => "bitfinex_csv",
             Self::Ledger => "generic_ledger",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
         match self {
             // Exchange exports: the registry names each one's parser.
-            Self::BinanceHistory | Self::Bitvavo | Self::Bitstamp => {
+            Self::BinanceHistory | Self::Bitvavo | Self::Bitstamp | Self::Bitfinex => {
                 Ok(exchange_api::load_file(self, file, None)?
                     .map(|(rows, _)| rows)
                     .unwrap_or_default())
@@ -249,12 +252,14 @@ impl Format {
             || self == Self::Bisq
             || self == Self::Bitvavo
             || self == Self::Bitstamp
+            || self == Self::Bitfinex
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
             Self::Binance => ("Binance", "binance", "binance_rows"),
             Self::Bitvavo => ("Bitvavo", "bitvavo", "bitvavo_rows"),
             Self::Bitstamp => ("Bitstamp", "bitstamp", "bitstamp_rows"),
+            Self::Bitfinex => ("Bitfinex", "bitfinex", "bitfinex_rows"),
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),
@@ -2377,6 +2382,7 @@ fn apply_records(
     if exchange_api::tags_same_second(request.format) {
         exchange_api::tag_same_second(conn, profile, &wallet.id, &inserted_ids, ids)?;
     }
+    exchange_api::after_file_insert(request.format, conn, profile, &wallet.id, rows, ids)?;
     let invalidated = !imported.is_empty() || !updated.is_empty();
     if invalidated {
         invalidate_journals(conn, profile)?;

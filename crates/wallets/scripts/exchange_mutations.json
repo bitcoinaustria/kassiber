@@ -2177,6 +2177,16 @@
     "rule": "The reported balance is the BTC of the exchange and funding wallets, never the margin wallet."
   },
   {
+    "id": "bitfinex-ledger-altcoin-trade-refused",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "if let Some(other) = not_fiat(base, quote) {",
+    "replace": "if let Some(other) = None::<String> {",
+    "expect_failing": [
+      "bitfinex_ledgers_only_csv_refuses_an_altcoin_trade"
+    ],
+    "rule": "A ledger entry booking BTC against another coin refuses by name, never a deposit or withdrawal."
+  },
+  {
     "id": "bitfinex-unknown-ledger-entry-refused",
     "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
     "find": "_ => return Err(refused(\"has a description Kassiber does not map\".into())),",
@@ -2205,6 +2215,16 @@
       "bitfinex_refuses_what_it_cannot_book_by_name"
     ],
     "rule": "Two ledger entries cannot book the same trade, fee or withdrawal."
+  },
+  {
+    "id": "bitfinex-csv-spot-proof",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "if sources.spot_proof_required && t.entry[0].is_none() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bitfinex_csv_needs_the_exports_that_prove_its_rows"
+    ],
+    "rule": "A CSV trade imports only with its exchange-wallet ledger entry."
   },
   {
     "id": "bitfinex-btc-fee-entry-required",
@@ -2307,6 +2327,16 @@
     "rule": "A movement carries its on-chain txid in raw_json for transfer pairing."
   },
   {
+    "id": "bitfinex-csv-date-format",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/export.rs",
+    "find": "if shaped && crate::time::timestamp(&iso).is_ok() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "bitfinex_csv_refuses_unknown_shapes_and_dates"
+    ],
+    "rule": "Only YYYY-MM-DD HH:mm:ss dates are read."
+  },
+  {
     "id": "bitfinex-txid-lowercased",
     "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
     "find": "raw.push((\"txid\", s(hash.to_ascii_lowercase())));",
@@ -2375,6 +2405,16 @@
       "bitfinex_withdrawal_fees_come_from_movements_only_before_the_ledger"
     ],
     "rule": "Only a withdrawal requested before the ledger read's first entry may keep the fee its movement states."
+  },
+  {
+    "id": "bitfinex-ledger-dates-upper-bound",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
+    "find": "let after = sources.spot_proof_required && last.is_some_and(|last| requested > last);",
+    "replace": "let after = false;",
+    "expect_failing": [
+      "bitfinex_csv_withdrawal_fees_come_from_movements_only_before_the_ledgers_export"
+    ],
+    "rule": "A withdrawal requested after the ledgers export's last row is refused, naming the missing ledgers period."
   },
   {
     "id": "bitfinex-unchecked-fee-tagged",
@@ -2620,6 +2660,16 @@
       "bitfinex_counts_other_assets_as_unread_in_either_scope"
     ],
     "rule": "A Bitfinex row in another asset is counted as unread in either scope: Kassiber reads only BTC from Bitfinex."
+  },
+  {
+    "id": "bitfinex-csv-reads-scope",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex.rs",
+    "find": "        reads: contract::Reads::BitcoinOnly,\n        load: export::load,",
+    "replace": "        reads: contract::Reads::AllAssets,\n        load: export::load,",
+    "expect_failing": [
+      "bitfinex_counts_other_assets_as_unread_in_either_scope"
+    ],
+    "rule": "The Bitfinex Reports import reads only BTC, in either scope, and counts the other assets as unread."
   },
   {
     "id": "exchange-z-alias-kraken-only",

@@ -796,6 +796,25 @@ projections stay Python. Progress and remaining work for this slice:
   bundle the official SVG mark from the press kit; map further BTC types
   (`rebate`, `distribution`, `withdrawal_cancelled`) once a real export pins
   them (they refuse the import until then).
+- [x] Add the Rust-only, read-only Bitfinex API sync (`wallets sync-bitfinex`,
+  write-permission refusal, signed paged reads, the exchange and funding wallets' BTC as
+  `reported_balance`) and Reports CSV/zip import (`wallets import-bitfinex`)
+  on one mapping with shared ids, desktop cards and named mutation killers;
+  slimmed 2026-11-14 to exact one-to-one ledger pairing with ambiguity,
+  margin, derivatives, funding entries other than interest and paired
+  transfers, and unknown ledger entries refused by name; withdrawals without
+  ledger entries requested before the ledger's first entry keep their
+  movement fee, tagged `bitfinex-fee-unchecked`. See
+  [Bitfinex](docs/reference/bitfinex.md).
+- [ ] Bitfinex follow-ups: confirm the ledger description grammars and that a
+  withdrawal's `AMOUNT` excludes its fee against a real export (until then
+  withdrawals older than the ledger keep the movement's fee, tagged);
+  equal partial fills within 60 s and equal withdrawal fees close together
+  refuse as ambiguous; a later import does not add a txid to a stored
+  movement; read Lightning (`LNX`) movements; no `same-second-order-uncertain`
+  tagging yet; other crypto assets (a `crypto` asset scope is refused: the
+  sync reads only the BTC ledger and movements, and the ledger cross-checks
+  are BTC-only; both sources name what they leave out in `assets.next_step`).
 - [ ] Exchange error display: a very short request credential (a one- to
   three-character proxy password) is withheld wherever it occurs, Kassiber's
   own message text included, which garbles the error; consider refusing such

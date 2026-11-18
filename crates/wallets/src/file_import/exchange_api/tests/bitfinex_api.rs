@@ -3,6 +3,7 @@
 //! exports of the same events (docs/exchanges/samples/bitfinex). Kept out of
 //! rustfmt (tests.rs) so its fixture tables stay one row per line.
 use super::*;
+use crate::file_import::{Format, Request};
 use serde_json::Value as J;
 use std::sync::Mutex;
 
@@ -11,6 +12,10 @@ const DAY: i64 = 86_400_000;
 const JAN1: i64 = 1_704_067_200_000;
 const DEPOSIT_TX: &str = "AA00000000000000000000000000000000000000000000000000000000000001";
 const WITHDRAWAL_TX: &str = "bb00000000000000000000000000000000000000000000000000000000000002";
+const TRADES_CSV: &str = include_str!("../../../../../../docs/exchanges/samples/bitfinex/trades.csv");
+const MOVEMENTS_CSV: &str = include_str!("../../../../../../docs/exchanges/samples/bitfinex/movements.csv");
+const LEDGERS_CSV: &str = include_str!("../../../../../../docs/exchanges/samples/bitfinex/ledgers.csv");
+const LEDGERS_HEADER: &str = "#,DESCRIPTION,CURRENCY,AMOUNT,BALANCE,DATE,WALLET\n";
 
 /// A JSON number exactly as written (serde_json keeps arbitrary precision).
 fn n(text: &str) -> J {
@@ -141,6 +146,33 @@ fn sync_into(conn: &Connection, url: &str) -> Py {
     let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
     execute(conn, "p", "", &backend("bitfinex", url), "bitfinex", &gate, "test", consent, None).unwrap()
 }
+fn usd_book() -> Connection {
+    let conn = crate::file_import::tests::fixture();
+    conn.execute_batch("UPDATE profiles SET fiat_currency='USD';
+        INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,asset,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','BTC','fixed');").unwrap();
+    conn
+}
+/// A Reports zip of these CSV members.
+fn zip(members: &[(&str, &str)]) -> Vec<u8> {
+    kassiber_xlsx::archive(&members.iter().map(|(name, text)| ((*name).to_owned(), text.as_bytes().to_vec())).collect::<Vec<_>>()).unwrap()
+}
+fn all_three() -> Vec<u8> {
+    zip(&[("trades_FROM_x.csv", TRADES_CSV), ("movements_FROM_x.csv", MOVEMENTS_CSV), ("ledgers_FROM_x.csv", LEDGERS_CSV)])
+}
+fn import(conn: &Connection, content: &[u8]) -> Result<Py, AppError> {
+    let file = std::env::temp_dir().join(format!("kassiber-bitfinex-{}-{:?}.zip", std::process::id(), std::thread::current().id()));
+    std::fs::write(&file, content).unwrap();
+    let request = Request { profile_id: "p".into(), wallet: String::new(), file: file.to_str().unwrap().into(), format: Format::Bitfinex, mode: None, companion: None, timezone: None };
+    let result = crate::file_import::execute(conn, request, None);
+    std::fs::remove_file(file).unwrap();
+    result
+}
+fn refused_import(content: &[u8]) -> AppError {
+    let conn = usd_book();
+    let error = import(&conn, content).unwrap_err();
+    assert_eq!(count(&conn, "SELECT count(*) FROM transactions"), 0);
+    error
+}
 
 type Row = (String, String, i64, i64, Option<String>, Option<String>, String, String);
 fn txid(raw: &str) -> String {
@@ -210,6 +242,21 @@ fn bitfinex_reads_only_and_maps_every_btc_event() {
     let refused = loopback::run(&backend("bitfinex", &quiet.fake.url), "bitfinex", "", false, online());
     assert!(refused.result.is_err());
     assert!(quiet.targets().is_empty());
+}
+
+#[test]
+fn bitfinex_csv_and_api_deduplicate_in_one_wallet() {
+    let (served, _) = sync(Script::new());
+    let csv_first = usd_book();
+    let imported = import(&csv_first, &all_three()).unwrap();
+    assert_eq!(at(&imported, "bitfinex_rows"), &Py::from(6));
+    assert_eq!(rows(&csv_first), expected());
+    sync_into(&csv_first, &served.fake.url);
+    assert_eq!(rows(&csv_first), expected());
+    let api_first = usd_book();
+    sync_into(&api_first, &served.fake.url);
+    import(&api_first, &all_three()).unwrap();
+    assert_eq!(rows(&api_first), expected());
 }
 
 #[test]
@@ -341,6 +388,49 @@ fn bitfinex_api_numbers_are_read_from_their_exact_text() {
 }
 
 #[test]
+fn bitfinex_csv_needs_the_exports_that_prove_its_rows() {
+    for (content, needle) in [
+        // The trades export has no order type: only the ledger proves spot.
+        (zip(&[("t.csv", TRADES_CSV)]), "shows it was a spot trade"),
+        (zip(&[("t.csv", TRADES_CSV), ("m.csv", MOVEMENTS_CSV), ("l.csv", &LEDGERS_CSV.replace("on wallet exchange,BTC,-0.005,0.05498,2024-01-03 00:00:00,exchange", "on wallet margin,BTC,-0.005,0.05498,2024-01-03 00:00:00,margin"))]), "'margin' wallet"),
+        (format!("{LEDGERS_HEADER}2,Exchange 0.01 BTC for USD @ 42000.0 on wallet exchange,BTC,0.01,0.06,2024-01-02 00:00:00,exchange\n").into_bytes(), "needs the trades export"),
+        (LEDGERS_CSV.as_bytes().to_vec(), "needs the movements export"),
+    ] {
+        let error = refused_import(&content);
+        assert!(error.message.contains(needle), "{needle}: {}", error.message);
+    }
+}
+
+/// A ledgers-only export never turns a trade into a deposit or withdrawal:
+/// the BTC leg of BTC -> ETH (or only its ETH leg) refuses naming the coin.
+#[test]
+fn bitfinex_ledgers_only_csv_refuses_an_altcoin_trade() {
+    let btc = "20,Exchange 1.5 ETH for BTC @ 0.05 on wallet exchange,BTC,-0.075,0.1,2024-02-01 00:00:00,exchange\n";
+    let eth = "21,Exchange 1.5 ETH for BTC @ 0.05 on wallet exchange,ETH,1.5,1.5,2024-02-01 00:00:00,exchange\n";
+    for rows in [format!("{eth}{btc}"), eth.to_owned()] {
+        let error = refused_import(format!("{LEDGERS_HEADER}{rows}").as_bytes());
+        assert!(error.message.contains("books a trade of BTC against ETH"), "{}", error.message);
+    }
+    // Rows without BTC are skipped.
+    let conn = usd_book();
+    let other = "22,Exchange 1.5 ETH for USD @ 2300 on wallet exchange,ETH,1.5,1.5,2024-02-01 00:00:00,exchange\n";
+    import(&conn, format!("{LEDGERS_HEADER}{other}").as_bytes()).unwrap();
+    assert_eq!(count(&conn, "SELECT count(*) FROM transactions"), 0);
+}
+
+#[test]
+fn bitfinex_csv_refuses_unknown_shapes_and_dates() {
+    for (content, needle) in [
+        ("#,PAIR,AMOUNT\n1,BTC/USD,1\n".to_owned(), "not a Reports trades, movements or ledgers export"),
+        (format!("{LEDGERS_HEADER}1,Deposit (BITCOIN) #301 on wallet exchange,BTC,0.05,0.05,01-01-24 00:00:00,exchange\n"), "that is not YYYY-MM-DD HH:mm:ss"),
+        (format!("{LEDGERS_HEADER}1,Deposit (BITCOIN) #301 on wallet exchange,BTC,0.05,0.05,2024-01-01 00:00:00,exchange,extra\n"), "more fields than its header"),
+    ] {
+        let error = refused_import(content.as_bytes());
+        assert!(error.message.contains(needle), "{needle}: {}", error.message);
+    }
+}
+
+#[test]
 fn bitfinex_ledger_descriptions_follow_their_grammars() {
     use super::bitfinex::mapping::{describe, Described};
     let d = |t: &str| t.parse::<Decimal>().unwrap();
@@ -408,6 +498,31 @@ fn bitfinex_withdrawal_fees_come_from_movements_only_before_the_ledger() {
     }
 }
 
+/// The same for the Reports exports: a withdrawal the ledgers file shows,
+/// or one requested after its last row, refuses; one without ledger rows
+/// requested before its first row, or without any ledgers file, is tagged.
+#[test]
+fn bitfinex_csv_withdrawal_fees_come_from_movements_only_before_the_ledgers_export() {
+    let with = |movement: &str, ledger: &str| {
+        let movements = format!("{MOVEMENTS_CSV}{movement},BTC,COMPLETED,-1.0004,-0.0004,bc1qsyntheticdestination,,\n");
+        zip(&[("t.csv", TRADES_CSV), ("m.csv", &movements), ("l.csv", &format!("{LEDGERS_CSV}{ledger}"))])
+    };
+    let newest = "12,Bitcoin Withdrawal #320 on wallet exchange,BTC,-1.0004,0,2024-01-07 00:00:00,exchange\n";
+    for (content, needle) in [
+        (with("320,2024-01-07 00:00:00,2024-01-07 00:30:00", newest), "has a fee the ledger does not show"),
+        (with("320,2024-01-06 00:00:01,2024-01-06 00:30:00", ""), "was requested after the ledgers export's last row"),
+    ] {
+        let error = refused_import(&content);
+        assert!(error.message.contains(&format!("'movement 320' (type 'withdrawal') {needle}")), "{}", error.message);
+    }
+    let conn = usd_book();
+    import(&conn, &with("320,2023-12-31 23:00:00,2023-12-31 23:30:00", "")).unwrap();
+    assert_eq!(unchecked(&conn), [("bitfinex:movement:320".to_owned(), 40_000_000)]);
+    let alone = usd_book();
+    import(&alone, MOVEMENTS_CSV.as_bytes()).unwrap();
+    assert_eq!(unchecked(&alone), [("bitfinex:movement:302".to_owned(), 40_000_000)]);
+}
+
 /// The Bitfinex wallet a sync or an import finds by label, in `scope`.
 fn scoped(conn: &Connection, scope: &str) {
     let config = json!({"backend": "fixture", "asset_scope": scope}).to_string();
@@ -422,10 +537,12 @@ fn scoped(conn: &Connection, scope: &str) {
 #[test]
 fn bitfinex_counts_other_assets_as_unread_in_either_scope() {
     let dump = |value: &Py| kassiber_pyjson::dumps(value, &Default::default()).unwrap();
-    let left_out = |scope: &str| format!(r#"{{"scope": "{scope}", "skipped": {{}}, "excluded": {{}}, "unread": {{"ETH": 1}}, "next_step": "Kassiber reads only BTC from Bitfinex, in either asset scope, and left out entries in ETH (1); record them yourself (generic CSV/JSON import)"}}"#);
+    let left_out = |scope: &str, rows: i64| format!(r#"{{"scope": "{scope}", "skipped": {{}}, "excluded": {{}}, "unread": {{"ETH": {rows}}}, "next_step": "Kassiber reads only BTC from Bitfinex, in either asset scope, and left out entries in ETH ({rows}); record them yourself (generic CSV/JSON import)"}}"#);
     let (_, run) = sync(Script::new());
     let bitcoin = run.result.unwrap();
-    assert_eq!(dump(at(&bitcoin, "assets")), left_out("bitcoin"));
+    assert_eq!(dump(at(&bitcoin, "assets")), left_out("bitcoin", 1));
+    let conn = usd_book();
+    assert_eq!(dump(at(&import(&conn, &all_three()).unwrap(), "assets")), left_out("bitcoin", 2));
     // The `crypto` scope reads and books the same BTC rows; the other
     // assets stay unread, since Kassiber reads only BTC from Bitfinex.
     let served = serve_script(Script::new());
@@ -435,6 +552,10 @@ fn bitfinex_counts_other_assets_as_unread_in_either_scope() {
     };
     let run = loopback::run_prepared(&backend("bitfinex", &served.fake.url), "bitfinex", "", true, online(), &prepare);
     let crypto = run.result.unwrap();
-    assert_eq!(dump(at(&crypto, "assets")), left_out("crypto"));
+    assert_eq!(dump(at(&crypto, "assets")), left_out("crypto", 1));
     assert_eq!(at(&crypto, "imported"), at(&bitcoin, "imported"));
+    let conn = usd_book();
+    scoped(&conn, "crypto");
+    let imported = import(&conn, &all_three()).unwrap();
+    assert_eq!(dump(at(&imported, "assets")), left_out("crypto", 2));
 }

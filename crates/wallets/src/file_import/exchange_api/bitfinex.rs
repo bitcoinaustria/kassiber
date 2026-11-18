@@ -12,7 +12,8 @@ use super::*;
 use bitcoin::hashes::sha384;
 use std::sync::Mutex;
 
-pub(in crate::file_import) mod mapping;
+mod export;
+pub(super) mod mapping;
 use mapping::{map, Sources};
 
 /// Statuses Bitfinex answers its `["error", code, message]` arrays with.
@@ -38,7 +39,11 @@ pub(super) static EXCHANGE: Descriptor = Descriptor {
     fetch,
     probe,
     skipped: None,
-    files: &[],
+    files: &[contract::registry::FileFormat {
+        format: Format::Bitfinex,
+        reads: contract::Reads::BitcoinOnly,
+        load: export::load,
+    }],
     shared_ids: true,
     same_second_tags: false,
     after_insert: Some(mapping::tag_unchecked),

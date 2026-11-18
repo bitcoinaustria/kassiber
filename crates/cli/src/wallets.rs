@@ -125,6 +125,7 @@ pub fn execute(
         | "import-bisq"
         | "import-bitvavo"
         | "import-bitstamp"
+        | "import-bitfinex"
         | "import-ledger-live"
         | "import-cointracking"
         | "import-blockpit"
@@ -152,6 +153,7 @@ pub fn execute(
                     Some("import-bisq") => kassiber_wallets::file_import::Format::Bisq,
                     Some("import-bitvavo") => kassiber_wallets::file_import::Format::Bitvavo,
                     Some("import-bitstamp") => kassiber_wallets::file_import::Format::Bitstamp,
+                    Some("import-bitfinex") => kassiber_wallets::file_import::Format::Bitfinex,
                     Some("import-cointracking") => {
                         kassiber_wallets::file_import::Format::CoinTracking
                     }

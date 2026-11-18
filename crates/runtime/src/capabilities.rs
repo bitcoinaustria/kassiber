@@ -83,7 +83,7 @@ const CLI_OPERATOR_PATHS: &str = "
     wallets.import-bull wallets.import-bullbitcoin wallets.import-coinfinity
     wallets.import-21bitcoin wallets.import-pocket wallets.import-pocketbitcoin
     wallets.import-strike wallets.import-bisq wallets.import-bitvavo
-    wallets.import-bitstamp
+    wallets.import-bitstamp wallets.import-bitfinex
     wallets.import-ledger-live
     wallets.import-cointracking wallets.import-blockpit
     wallets.import-binance-supplemental wallets.import-binance-history wallets.sync-kraken

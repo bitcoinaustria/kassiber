@@ -416,6 +416,29 @@ whole file by name. Rows share their ids with the user's own `wallets
 sync-bitstamp`, so both keep one record per transaction; the API sync is set
 up by the user in the desktop or CLI, never in chat.
 
+Bitfinex Reports exports (custodial ledger):
+
+```bash
+kassiber wallets import-bitfinex --file /path/to/bitfinex-reports.zip
+```
+
+Import the Reports zip holding the Trades, Movements and Ledgers exports
+(full mode, into the `Bitfinex` wallet), exported with the `YYYY-MM-DD` date
+format in UTC. BTC spot trades against USD, EUR, GBP or JPY keep exact
+execution pricing; BTC deposits and withdrawals import as BTC activity,
+funding-wallet interest as `lending_interest`; paired transfers between the
+exchange and funding wallets and rows without BTC are left out (other coins
+named in `assets.unread`; Kassiber reads only BTC from Bitfinex, so a
+wallet whose `asset_scope` is `crypto` is refused). Every other
+BTC ledger entry must pair with its trade, fee or movement: margin,
+derivatives, other funding entries, BTC traded against another coin, unknown
+ledger entries, a trades file without its ledger, a withdrawal fee the
+ledger does not prove, and anything ambiguous refuse the whole file by name.
+Only a withdrawal with no ledger rows, requested before the ledgers export's
+first row (or with no ledgers file at all), keeps its movement fee, tagged
+`bitfinex-fee-unchecked` for review. The user's own
+`wallets sync-bitfinex` shares the ids; the assistant cannot run it.
+
 CoinTracking / Blockpit migration history:
 
 ```bash

@@ -401,6 +401,11 @@ mod tests {
                 "exchange-export",
             ),
             ("bitfinex", r#"{"backend":"b"}"#, "provider-api"),
+            (
+                "bitfinex",
+                r#"{"backend":"b","source_file":"f"}"#,
+                "exchange-export",
+            ),
             ("custom", r#"{"source_format":"generic_ledger"}"#, "manual"),
             ("custom", r#"{"source_format":" "}"#, "manual"),
             ("custom", r#"{"source_format":"bisq"}"#, "file-import"),
