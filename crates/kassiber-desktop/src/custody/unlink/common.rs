@@ -1444,36 +1444,15 @@ pub fn destructive_btn(
     enabled: bool,
     busy: bool,
 ) -> El {
-    let fill = if tk.dark {
-        tk.destructive.alpha(0.6)
-    } else {
-        tk.destructive
-    };
-    let mut b = row()
-        .key(key.into())
-        .h(tk.r(2.25))
-        .px(tk.r(1.0))
-        .gap(tk.r(0.5))
-        .center()
-        .radius(tk.r(0.375))
-        .fill(fill)
-        .role("button")
-        .label(label.to_owned())
-        .focusable(enabled)
-        .disabled(!enabled)
-        .busy(busy);
-    if enabled {
-        b = b.hover(fill.alpha(0.9));
-    } else {
-        b = b.opacity(0.5);
-    }
-    if busy {
-        b = b.child(kit::spinner(tk, tk.r(1.0), Color::WHITE));
-    }
-    b.child(
-        text(label.to_owned())
-            .font(tk.tsm(500.0))
-            .color(Color::WHITE),
+    crate::ui::button::button_busy(
+        tk,
+        key,
+        Var::Destructive,
+        crate::ui::button::Size::Default,
+        busy,
+        None,
+        label,
+        enabled,
     )
 }
 
@@ -1487,24 +1466,16 @@ pub fn md_btn(
     enabled: bool,
     busy: bool,
 ) -> El {
-    let b = kit::btn_md(
+    crate::ui::button::button_busy(
         tk,
         key,
         variant,
-        if busy { None } else { glyph },
+        crate::ui::button::Size::Default,
+        busy,
+        glyph,
         label,
         enabled,
-    );
-    if busy {
-        let fg = if variant == Var::Default {
-            tk.primary_fg
-        } else {
-            tk.fg
-        };
-        b.busy(true).child(kit::spinner(tk, tk.r(1.0), fg))
-    } else {
-        b
-    }
+    )
 }
 
 #[cfg(test)]

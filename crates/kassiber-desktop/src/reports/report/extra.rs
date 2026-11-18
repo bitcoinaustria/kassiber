@@ -372,7 +372,7 @@ fn ln_body(app: &App, tk: &Tk, id: &str) -> El {
     }
     for ch in &channels {
         let covers = ch["coversOpenCost"].as_bool().unwrap_or(false);
-        let (fill, ink, ring) = match (covers, tk.dark) {
+        let (_, ink, _) = match (covers, tk.dark) {
             (true, false) => (hexc("#ecfdf5"), hexc("#047857"), hexc("#059669").alpha(0.2)),
             (true, true) => (
                 hexc("#064e3b").alpha(0.3),
@@ -428,22 +428,15 @@ fn ln_body(app: &App, tk: &Tk, id: &str) -> El {
                 ))
                 .child(cell(
                     4,
-                    row()
-                        .px(tk.r(0.375))
-                        .py(tk.r(0.125))
-                        .radius(tk.r(0.375))
-                        .fill(fill)
-                        .border(1.0, ring)
-                        .border_layout()
-                        .child(
-                            text(t(if covers {
-                                "connections:node.profitabilityReport.yes"
-                            } else {
-                                "connections:node.profitabilityReport.notYet"
-                            }))
-                            .font(tk.t2xs(500.0))
-                            .color(ink),
-                        ),
+                    row().child(
+                        text(t(if covers {
+                            "connections:node.profitabilityReport.yes"
+                        } else {
+                            "connections:node.profitabilityReport.notYet"
+                        }))
+                        .font(tk.t2xs(500.0))
+                        .color(ink),
+                    ),
                 )),
         );
     }

@@ -1812,14 +1812,7 @@ pub fn component_preview(app: &App, tk: &Tk, comp: &Value) -> El {
                 ("grade", comp["evidence_grade"].as_str().unwrap_or("—")),
             ],
         );
-        head = head.child(
-            row()
-                .px(tk.r(0.5))
-                .py(tk.r(0.125))
-                .radius(999.0)
-                .border(1.0, tk.border)
-                .child(text(ev).font(tk.t2xs(400.0).mono()).color(tk.fg)),
-        );
+        head = head.child(text(ev).font(tk.t2xs(400.0).mono()).color(tk.muted_fg));
     }
     let mut block = col().w_full().gap(tk.r(0.75)).child(head);
     if let Some(p) = comp["conversion_policy"].as_str().filter(|p| !p.is_empty()) {
@@ -2552,39 +2545,14 @@ pub fn md_busy(
     label: &str,
     enabled: bool,
 ) -> El {
-    let fg = if variant == Var::Default {
-        tk.primary_fg
-    } else {
-        tk.fg
-    };
-    let icon_fg = match variant {
-        Var::Default => tk.primary_fg,
-        Var::Outline => tk.fg,
-        Var::Ghost => tk.fg,
-    };
-    let mut b = crate::txdetail::widgets::button_surface(
+    crate::ui::button::button_busy(
         tk,
-        row()
-            .key(key.to_owned())
-            .h(tk.r(2.25))
-            .px(tk.r(0.75))
-            .gap(tk.r(0.5))
-            .center(),
+        key,
         variant,
+        crate::ui::button::Size::Default,
+        busy,
+        Some(glyph),
+        label,
+        enabled,
     )
-    .role("button")
-    .label(label.to_owned())
-    .busy(busy)
-    .focusable(enabled)
-    .disabled(!enabled);
-    if !enabled {
-        b = b.opacity(0.5);
-    }
-    let lead = if busy {
-        kit::spinner(tk, tk.r(1.0), icon_fg)
-    } else {
-        ic(glyph, tk.r(1.0), icon_fg)
-    };
-    b.child(lead)
-        .child(text(label.to_owned()).font(tk.tsm(500.0)).color(fg))
 }

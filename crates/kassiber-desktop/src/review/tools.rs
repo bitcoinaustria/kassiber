@@ -1023,15 +1023,9 @@ fn wallet_list(app: &App, tk: &Tk, pairs: &[Value], selected: &str, tool: &str, 
         .map(|p| num(p, "issues") as usize)
         .sum();
     let amber = |n: usize| {
-        row()
-            .px(tk.r(0.375))
-            .radius(999.0)
-            .fill(rune::color::hex("#f59e0b").unwrap().alpha(0.15))
-            .child(
-                text(crate::format::count(n))
-                    .font(tk.txs(500.0).features("'tnum' 1"))
-                    .color(kit::amber_text(tk)),
-            )
+        text(crate::format::count(n))
+            .font(tk.txs(500.0).features("'tnum' 1"))
+            .color(kit::amber_text(tk))
     };
     let mut entries: Vec<(String, String, String, Option<&Value>, usize)> = vec![(
         ALL.into(),
@@ -1748,30 +1742,18 @@ fn side(
 
 fn issue(tk: &Tk, r: &Value, currency: &str, tool: &str) -> El {
     let tag = |s: String, tone: &str| {
-        let (fg, bg) = match tone {
-            "tax" => (
+        let fg = match tone {
+            "tax" => {
                 if tk.dark {
                     rune::color::hex("#fde68a").unwrap()
                 } else {
                     rune::color::hex("#92400e").unwrap()
-                },
-                rune::color::hex("#f59e0b").unwrap().alpha(0.15),
-            ),
-            "info" => (tk.muted_fg, tk.muted),
-            "warn" => (kit::amber_text(tk), Color::TRANSPARENT),
-            _ => (tk.muted_fg, Color::TRANSPARENT),
+                }
+            }
+            "warn" => kit::amber_text(tk),
+            _ => tk.muted_fg,
         };
-        let px = if tone == "plain" || tone == "warn" {
-            0.0
-        } else {
-            tk.r(0.375)
-        };
-        row()
-            .px(px)
-            .py(tk.r(0.125))
-            .radius(tk.r(0.125))
-            .fill(bg)
-            .child(text(s).font(tk.txs(400.0)).color(fg))
+        text(s).font(tk.txs(400.0)).color(fg)
     };
     let mut c = row().min_w(0.0).gap(tk.r(0.25)).items_start().flex_wrap();
     let status = s(r, "status");

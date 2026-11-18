@@ -276,37 +276,13 @@ fn btn_sized(
     enabled: bool,
     size: Size,
 ) -> El {
-    let (h, px) = match size {
-        Size::Default => (tk.r(2.25), tk.r(1.0)),
-        Size::Sm => (tk.r(2.0), tk.r(0.75)),
-        Size::Xs => (tk.r(1.75), tk.r(0.5)),
+    let variant = match kind {
+        Btn::Outline => Variant::Outline,
+        Btn::Primary => Variant::Default,
+        Btn::Ghost => Variant::Ghost,
+        Btn::Destructive => Variant::Destructive,
     };
-    let base = row().key(key.into()).h(h).px(px).gap(tk.r(0.375)).center();
-    let (b, ink) = match kind {
-        Btn::Outline => (button_surface(tk, base, Variant::Outline), tk.fg),
-        Btn::Primary => (button_surface(tk, base, Variant::Default), tk.primary_fg),
-        Btn::Ghost => (button_surface(tk, base, Variant::Ghost), tk.fg),
-        Btn::Destructive => {
-            let fill = if tk.dark {
-                tk.destructive.alpha(0.6)
-            } else {
-                tk.destructive
-            };
-            (
-                base.radius(tk.r(0.375)).fill(fill).hover(fill.alpha(0.9)),
-                Color::WHITE,
-            )
-        }
-    };
-    let mut b = b
-        .role("button")
-        .label(label.to_owned())
-        .focusable(enabled)
-        .disabled(!enabled);
-    if !enabled {
-        b = b.opacity(0.5);
-    }
-    b.child(text(label.to_owned()).font(tk.tsm(500.0)).color(ink))
+    crate::ui::button::button(tk, key, variant, size, None, label, enabled)
 }
 
 /// A press handler only while enabled.

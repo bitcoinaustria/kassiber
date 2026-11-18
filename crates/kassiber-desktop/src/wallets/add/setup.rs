@@ -2705,12 +2705,7 @@ fn bip329_preview(tk: &Tk, p: &Value) -> El {
             ));
             let b = match status {
                 "ambiguous" => badge_secondary(tk, &label),
-                "unmatched" => row()
-                    .px(tk.r(0.5))
-                    .py(tk.r(0.125))
-                    .radius(tk.r(0.375))
-                    .fill(tk.destructive.alpha(if tk.dark { 0.6 } else { 1.0 }))
-                    .child(text(label).font(tk.txs(500.0)).color(Color::WHITE)),
+                "unmatched" => crate::ui::tag(tk, tk.destructive, None, label.clone()),
                 _ => badge(tk, &label, None, false, false),
             };
             let mut item = col()

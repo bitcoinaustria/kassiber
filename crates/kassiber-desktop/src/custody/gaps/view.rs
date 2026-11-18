@@ -30,30 +30,14 @@ enum Badge {
     Outline,
 }
 
-/// shadcn `Badge`: `rounded-full border px-2 py-0.5 text-xs font-medium`.
+/// A status label (`crate::ui::tag`): destructive ink for problems, else the text or muted ink.
 fn badge(tk: &Tk, v: Badge, label: String) -> El {
-    let (bg, fg, border) = match v {
-        Badge::Default => (tk.primary, tk.primary_fg, Color::TRANSPARENT),
-        Badge::Secondary => (tk.muted, tk.fg, Color::TRANSPARENT),
-        Badge::Destructive => (
-            if tk.dark {
-                tk.destructive.alpha(0.6)
-            } else {
-                tk.destructive
-            },
-            Color::WHITE,
-            Color::TRANSPARENT,
-        ),
-        Badge::Outline => (Color::TRANSPARENT, tk.fg, tk.border),
+    let fg = match v {
+        Badge::Default => tk.fg,
+        Badge::Destructive => tk.destructive,
+        Badge::Secondary | Badge::Outline => tk.muted_fg,
     };
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(999.0)
-        .fill(bg)
-        .border(1.0, border)
-        .border_layout()
-        .child(text(label).font(tk.txs(500.0)).color(fg))
+    crate::ui::tag(tk, fg, None, label)
 }
 
 fn muted(tk: &Tk, s: String) -> El {

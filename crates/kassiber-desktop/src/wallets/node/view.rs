@@ -63,41 +63,12 @@ fn button_sm(
     enabled: bool,
     spin: bool,
 ) -> El {
-    let fg = if variant == Variant::Default {
-        tk.primary_fg
-    } else {
-        tk.fg
+    use crate::ui::button as b;
+    let v = match variant {
+        Variant::Default => b::Variant::Default,
+        Variant::Outline => b::Variant::Outline,
     };
-    let base = row()
-        .key(key.to_owned())
-        .h(tk.r(2.0))
-        .px(if glyph.is_some() {
-            tk.r(0.625)
-        } else {
-            tk.r(0.75)
-        })
-        .gap(tk.r(0.375))
-        .center()
-        .radius(tk.r(0.375));
-    let mut b = match variant {
-        Variant::Default => base.fill(tk.primary).hover(tk.primary.alpha(0.9)),
-        Variant::Outline => crate::ui::outline_surface(tk, base),
-    }
-    .role("button")
-    .label(label.to_owned())
-    .focusable(enabled)
-    .disabled(!enabled);
-    if !enabled {
-        b = b.opacity(0.5);
-    }
-    if let Some(g) = glyph {
-        let mut i = ic(g, tk.r(1.0), fg);
-        if spin {
-            i = i.looping(rune::LoopSpec::rotation(1.0));
-        }
-        b = b.child(i);
-    }
-    b.child(text(label.to_owned()).font(tk.tsm(500.0)).color(fg))
+    b::button_busy(tk, key, v, b::Size::Sm, spin, glyph, label, enabled)
 }
 
 /// The Refresh button (`onSync`, egress on press). `wide` keeps the header button as wide as its
@@ -276,49 +247,19 @@ fn compact_stat(tk: &Tk, glyph: &'static Icon, label: &str, value: String, detai
         )
 }
 
-/// A ring-inset status pill (`rounded-md px-1.5 py-0.5 text-2xs font-medium ring-1 ring-inset`).
+/// A status label in its tone's ink (`crate::ui::tag`).
 fn ring_pill(tk: &Tk, p: Pill, glyph: Option<&'static Icon>, label: String) -> El {
-    let mut r = row()
-        .px(tk.r(0.375))
-        .py(tk.r(0.125))
-        .gap(tk.r(0.25))
-        .center_y()
-        .radius(tk.r(0.375))
-        .fill(p.fill)
-        .border(1.0, p.ring)
-        .border_layout();
-    if let Some(g) = glyph {
-        r = r.child(ic(g, tk.r(0.875), p.ink));
-    }
-    r.child(text(label).font(tk.t2xs(500.0)).color(p.ink))
+    crate::ui::tag(tk, p.ink, glyph, label)
 }
 
-/// The gray count chip beside a card title (`px-2 py-1 text-2xs sm:text-xs`).
+/// The count beside a card title.
 fn count_chip(tk: &Tk, wide: bool, n: usize) -> El {
-    let p = m::gray(tk);
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.25))
-        .radius(tk.r(0.375))
-        .fill(p.fill)
-        .border(1.0, p.ring)
-        .border_layout()
-        .child(
-            text(n.to_string())
-                .font(if wide { tk.txs(500.0) } else { tk.t2xs(500.0) })
-                .color(p.ink),
-        )
+    crate::ui::count(tk, n, if wide { tk.tbase(400.0) } else { tk.tsm(400.0) })
 }
 
-/// Badge `variant="outline" rounded-md text-2xs`.
+/// A neutral label.
 fn outline_badge(tk: &Tk, s: String) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .border(1.0, tk.border)
-        .border_layout()
-        .child(text(s).font(tk.t2xs(500.0)).color(tk.fg))
+    crate::ui::tag(tk, tk.muted_fg, None, s)
 }
 
 /// An equal-column grid (`grid-cols-N gap-3`).
@@ -583,19 +524,17 @@ fn header(
     busy: bool,
     sm: bool,
 ) -> El {
-    let back = crate::ui::outline_surface(
+    let back = crate::ui::button::icon_button(
         tk,
-        row()
-            .key("node-back")
-            .size(tk.r(2.0), tk.r(2.0))
-            .center()
-            .radius(tk.r(0.375)),
+        "node-back",
+        crate::ui::button::Variant::Outline,
+        tk.r(2.0),
+        &I::ARROW_LEFT,
+        tk.r(1.0),
+        t("connections:node.header.backToWallets"),
     )
     .role("link")
-    .label(t("connections:node.header.backToWallets"))
-    .focusable(true)
-    .on_press(|a: &mut App| a.navigate("/connections"))
-    .child(ic(&I::ARROW_LEFT, tk.r(1.0), tk.fg));
+    .on_press(|a: &mut App| a.navigate("/connections"));
     let dot = || {
         text("·")
             .font(tk.txs(400.0))
@@ -756,28 +695,15 @@ fn hero(app: &App, tk: &Tk, c: &Conn, n: &Node, busy: bool, w: f32) -> El {
         _ => m::amber(tk),
     };
     let net_sat = n.routing.as_ref().map(|r| r.net_profit_sat).unwrap_or(0.0);
-    // Badge secondary `rounded-md`: `px-2 py-0.5 text-xs font-medium`, secondary fill.
-    let operator = row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .fill(tk.muted)
-        .border(1.0, Color::TRANSPARENT)
-        .border_layout()
-        .child(
-            text(t("connections:node.hero.operatorView"))
-                .font(tk.txs(500.0))
-                .color(tk.fg),
-        );
+    let operator = crate::ui::tag(
+        tk,
+        tk.muted_fg,
+        None,
+        t("connections:node.hero.operatorView"),
+    );
     let signal_pill = row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.25))
         .gap(tk.r(0.375))
         .center_y()
-        .radius(tk.r(0.375))
-        .fill(tone.fill)
-        .border(1.0, tone.ring)
-        .border_layout()
         .child(ic(&I::GAUGE, tk.r(0.875), tone.ink))
         .child(
             text(t(&format!("connections:node.hero.signal.{signal}")))

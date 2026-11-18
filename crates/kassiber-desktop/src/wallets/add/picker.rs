@@ -239,18 +239,9 @@ fn source_row(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El {
     )
 }
 
-/// Badge `variant="outline"`: text-xs medium, a hairline, rounded-md, px-2 py-0.5.
+/// A muted "planned" label.
 fn planned_badge(tk: &Tk) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .border(1.0, tk.border)
-        .child(
-            text(t("connections:add.plannedLabel"))
-                .font(tk.txs(500.0))
-                .color(tk.fg),
-        )
+    crate::ui::tag(tk, tk.muted_fg, None, t("connections:add.plannedLabel"))
 }
 
 /// `renderSourceSummary` for `src`.
@@ -367,29 +358,13 @@ pub fn summary_of(app: &App, cx: &Cx<App>, tk: &Tk, src: &'static Source) -> El 
 
 /// shadcn `Button` (`h-9 px-4 text-sm font-medium rounded-md`), outline or primary.
 pub fn button(tk: &Tk, key: &str, label: &str, primary: bool, enabled: bool) -> El {
-    let (fill, ink, border) = if primary {
-        (tk.primary, tk.primary_fg, Color::TRANSPARENT)
-    } else if tk.dark {
-        // `dark:bg-input/30 dark:border-input`: the input token (white at 15 %) at 30 %.
-        (Color::WHITE.alpha(0.045), tk.fg, tk.input)
+    use crate::ui::button::{Size, Variant};
+    let variant = if primary {
+        Variant::Default
     } else {
-        (tk.background, tk.fg, tk.border)
+        Variant::Outline
     };
-    row()
-        .key(key.to_owned())
-        .h(tk.r(2.25))
-        .px(tk.r(1.0))
-        .center()
-        .radius(tk.r(0.375))
-        .fill(fill)
-        .border(1.0, border)
-        .border_layout()
-        .opacity(if enabled { 1.0 } else { 0.5 })
-        .role("button")
-        .label(label.to_owned())
-        .disabled(!enabled)
-        .focusable(enabled)
-        .child(text(label.to_owned()).font(tk.tsm(500.0)).color(ink))
+    crate::ui::button::button(tk, key, variant, Size::Default, None, label, enabled)
 }
 
 /// The source step's body (`renderSourceStep`): categories, the searchable source list, and the

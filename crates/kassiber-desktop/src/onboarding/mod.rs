@@ -17,7 +17,6 @@
 //!   bridge's `KASSIBER_DEV_DATA_ROOT` here) whose `status` names the regtest demo, and then it
 //!   opens that book at once (`autoOpenedRegtestRef`). It starts no Docker or network service.
 
-pub mod chain;
 pub mod fields;
 pub mod model;
 pub mod projects;
@@ -139,7 +138,6 @@ pub struct Ui {
     pub seed_explicit: bool,
     /// AppShell's empty-book check ran for this entry into the app.
     validated: bool,
-    pub chain: chain::Loop,
     /// The shell's wordmark assembles after setup created the books (`celebrateBooksCreated`).
     pub celebrate: bool,
     /// Why the imported book this launch should open could not be opened (AppShell's
@@ -187,7 +185,6 @@ pub fn boot(app: &mut App) -> bool {
     } else {
         None
     };
-    ui.chain = chain::Loop::new(0.5);
     match app.onboarding.identity.clone() {
         Some(id) => {
             app.onboarding.validated = false;
@@ -304,10 +301,6 @@ pub fn enter_welcome_with(app: &mut App, probe: bool) {
         approved: ui.approved,
         seed: ui.seed,
         seed_explicit: ui.seed_explicit,
-        chain: chain::Loop {
-            at: app.clock,
-            ..chain::Loop::new(0.5)
-        },
         ..Ui::default()
     };
     app.onboarding.identity = None;
@@ -422,21 +415,6 @@ pub fn begin_setup(app: &mut App) {
     ui.finish_error = None;
     ui.import_error = None;
     ui.flow = Flow::Setup;
-    request_defaults(app);
-}
-
-/// "Or create with recommended defaults": the built-in servers chosen, straight to Security.
-pub fn begin_quick_start(app: &mut App) {
-    let ui = &mut app.onboarding;
-    ui.finish_error = None;
-    ui.import_error = None;
-    ui.form = Form {
-        backend_mode: Some(BackendMode::Default),
-        ..Form::default()
-    };
-    ui.step = SECURITY_STEP;
-    ui.flow = Flow::Setup;
-    ui.form.passphrase.focused = true;
     request_defaults(app);
 }
 
@@ -1194,7 +1172,7 @@ fn project_selected(app: &mut App, data: &Value) {
 
 // ---- Every frame -------------------------------------------------------------------------------
 
-pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
+pub fn poll(app: &mut App) -> bool {
     if !shows(app) {
         return false;
     }
@@ -1219,16 +1197,6 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     }
     changed |= track_touched(app);
     changed |= onion_effect(app);
-    // The live chain: one beat every 0.9 s while the start page shows.
-    if app.onboarding.flow == Flow::Start && app.onboarding.import_selection.is_none() {
-        let c = &mut app.onboarding.chain;
-        if app.clock - c.at >= chain::TICK {
-            c.advance(app.clock);
-            changed = true;
-        }
-        // The packets and slides step every 150 ms or so.
-        tx.wake_after(Duration::from_millis(150));
-    }
     changed
 }
 

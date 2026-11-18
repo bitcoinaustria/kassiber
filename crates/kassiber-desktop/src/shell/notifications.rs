@@ -711,20 +711,16 @@ fn panel(app: &App, tk: &Tk, conds: Vec<Condition>) -> El {
                 &I::TRIANGLE_ALERT
             };
             let action = c.action.clone().map(|(label, a)| {
-                row()
-                    .key(format!("sh-note-act{i}"))
-                    .h(tk.r(1.5))
-                    .px(tk.r(0.5))
-                    .center()
-                    .radius(tk.r(0.375))
-                    .border(1.0, tk.input)
-                    .border_layout()
-                    .hover(tk.accent)
-                    .role("button")
-                    .label(label.clone())
-                    .focusable(true)
-                    .on_press(move |s: &mut App| act(s, a))
-                    .child(text(label).font(tk.txs(500.0)).color(tk.fg))
+                crate::ui::button::button(
+                    tk,
+                    format!("sh-note-act{i}"),
+                    crate::ui::button::Variant::Outline,
+                    crate::ui::button::Size::Xs,
+                    None,
+                    &label,
+                    true,
+                )
+                .on_press(move |s: &mut App| act(s, a))
             });
             body = body.child(card_with(
                 tk,

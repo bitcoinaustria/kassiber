@@ -874,39 +874,33 @@ fn input_section(app: &App, tk: &Tk, hidden: bool, busy: bool, side_by_side: boo
     } else {
         "Ctrl+Enter"
     };
-    let mut check = row()
-        .key("rc-check")
-        .h(tk.r(2.0))
-        .px(tk.r(0.625))
-        .gap(tk.r(0.375))
-        .center_y()
-        .radius(tk.r(0.375))
-        .fill(tk.primary)
-        .role("button")
-        .label(label.clone())
-        .shortcut_hint(shortcut.to_owned())
-        .focusable(enabled)
-        .disabled(!enabled)
-        .opacity(if enabled { 1.0 } else { 0.5 })
-        .child(ic(&I::SEARCH, tk.r(1.0), tk.primary_fg))
-        .child(text(label).font(tk.tsm(500.0)).color(tk.primary_fg))
-        .child(
-            row()
-                .h(tk.r(1.25))
-                .min_w(tk.r(1.25))
-                .px(tk.r(0.25))
-                .center()
-                .radius(tk.r(0.25))
-                .fill(tk.primary_fg.alpha(0.15))
-                .a11y_hidden()
-                .child(
-                    text(shortcut)
-                        .font(tk.tkbd())
-                        .color(tk.primary_fg.alpha(0.8)),
-                ),
-        );
+    let mut check = crate::ui::button::button(
+        tk,
+        "rc-check",
+        crate::ui::button::Variant::Default,
+        crate::ui::button::Size::Sm,
+        Some(&I::SEARCH),
+        &label,
+        enabled,
+    )
+    .shortcut_hint(shortcut.to_owned())
+    .child(
+        row()
+            .h(tk.r(1.25))
+            .min_w(tk.r(1.25))
+            .px(tk.r(0.25))
+            .center()
+            .radius(tk.r(0.25))
+            .fill(tk.primary_fg.alpha(0.15))
+            .a11y_hidden()
+            .child(
+                text(shortcut)
+                    .font(tk.tkbd())
+                    .color(tk.primary_fg.alpha(0.8)),
+            ),
+    );
     if enabled {
-        check = check.hover(tk.primary_fg.alpha(0.1)).on_press(on_check);
+        check = check.on_press(on_check);
     }
     bar = bar.child(el().grow(1.0)).child(check);
     // One footer: the actions, then where the check runs.

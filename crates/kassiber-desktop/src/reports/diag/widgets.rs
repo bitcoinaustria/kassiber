@@ -21,66 +21,25 @@ pub fn shell(tk: &Tk) -> El {
         .fill(tk.background)
 }
 
-/// `pageDescriptionClassName`: `max-w-3xl text-sm text-muted-foreground`.
-pub fn description(tk: &Tk, s: String) -> El {
-    text(s)
-        .font(tk.tsm(400.0))
-        .color(tk.muted_fg)
-        .max_w(tk.r(48.0))
-        .wrap()
-}
-
-/// `pageHeaderClassName` at `sm`+: a row, items centred, space between, `gap-3`.
-pub fn header(tk: &Tk) -> El {
-    row().w_full().gap(tk.r(0.75)).center_y().justify_between()
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BadgeVariant {
-    Secondary,
     Outline,
 }
 
-/// shadcn `Badge` (`rounded-full border px-2 py-0.5 text-xs font-medium gap-1`, svg `size-3`).
-pub fn badge(tk: &Tk, variant: BadgeVariant, label: &str) -> El {
-    let b = row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .gap(tk.r(0.25))
-        .center_y()
-        .radius(tk.r(9999.0).min(999.0))
-        .border(
-            1.0,
-            if variant == BadgeVariant::Outline {
-                tk.border
-            } else {
-                Color::TRANSPARENT
-            },
-        );
-    let b = if variant == BadgeVariant::Secondary {
-        b.fill(tk.muted)
-    } else {
-        b
-    };
-    b.child(text(label.to_owned()).font(tk.txs(500.0)).color(tk.fg))
+/// A neutral label (`crate::ui::tag`).
+pub fn badge(tk: &Tk, _variant: BadgeVariant, label: &str) -> El {
+    crate::ui::tag(tk, tk.muted_fg, None, label)
 }
 
-/// A badge in a status tone (`border-…/30 bg-…/10 text-…`), optional leading glyph.
+/// A label in a status tone, optional leading glyph (`crate::ui::tag`).
 pub fn tone_badge(
     tk: &Tk,
     tone: &Tone,
     glyph: Option<(&'static Icon, Color)>,
     label: &str,
-    rounded_md: bool,
+    _rounded_md: bool,
 ) -> El {
-    let mut b = row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .gap(tk.r(0.25))
-        .center()
-        .radius(if rounded_md { tk.r(0.375) } else { 999.0 })
-        .fill(tone.bg)
-        .border(1.0, tone.border);
+    let mut b = row().gap(tk.r(0.25)).center_y();
     if let Some((g, c)) = glyph {
         b = b.child(ic(g, tk.r(0.75), c));
     }
@@ -239,7 +198,6 @@ pub fn select_menu(
 pub type Action = Rc<dyn Fn(&mut App, &mut Tx)>;
 
 pub enum Entry {
-    Label(String, bool),
     Sep,
     Item {
         key: String,
@@ -293,25 +251,6 @@ pub fn menu(
     };
     for e in entries {
         match e {
-            Entry::Label(l, small) => {
-                let st = if small {
-                    tk.txs(500.0).mono()
-                } else {
-                    tk.tsm(500.0)
-                };
-                let h = if small {
-                    tk.r(0.375) * 2.0 + tk.r(1.0)
-                } else {
-                    row_h(tk)
-                };
-                p.add(
-                    row().w_full().h(h).px(tk.r(0.5)).center_y().child(
-                        text(l)
-                            .font(st)
-                            .color(if small { tk.muted_fg } else { tk.fg }),
-                    ),
-                );
-            }
             Entry::Sep => p.add(el().h(1.0).w_full().my(tk.r(0.25)).fill(tk.border)),
             Entry::Item {
                 key,
@@ -497,48 +436,4 @@ pub fn menu_surface(tk: &Tk, content: El) -> El {
             color: Color::BLACK.alpha(if tk.dark { 0.8 } else { 0.55 }),
             ..Shadow::default()
         })
-}
-
-/// `SurfaceCardHeader` as the Wallets card uses it (`py-3.5 gap-4`, the card padding at the
-/// sides in place of `px-6`): the card's `h2`
-/// (`text-base font-medium`), a gray count badge, then the card's controls on the right.
-pub fn card_header(tk: &Tk, title: String, count: Option<usize>, right: El) -> El {
-    let gray = |s: &str| rune::color::hex(s).unwrap_or(Color::WHITE);
-    let (cfill, cink, cring) = if tk.dark {
-        (
-            gray("#1f2937").alpha(0.5),
-            gray("#9ca3af"),
-            gray("#9ca3af").alpha(0.2),
-        )
-    } else {
-        (gray("#f9fafb"), gray("#4b5563"), gray("#6b7280").alpha(0.1))
-    };
-    let mut left = row().grow(1.0).min_w(0.0).gap(tk.r(0.5)).center_y().child(
-        text(title)
-            .font(tk.tbase(500.0))
-            .color(tk.fg)
-            .role("heading")
-            .level(2),
-    );
-    if let Some(n) = count {
-        left = left.child(
-            row()
-                .ml(tk.r(0.25))
-                .px(tk.r(0.5))
-                .py(tk.r(0.25))
-                .radius(tk.r(0.375))
-                .fill(cfill)
-                .border(1.0, cring)
-                .center_y()
-                .child(text(n.to_string()).font(tk.txs(500.0)).color(cink)),
-        );
-    }
-    row()
-        .w_full()
-        .px(tk.card_pad())
-        .py(tk.r(0.875))
-        .gap(tk.r(1.0))
-        .center_y()
-        .child(left)
-        .child(right)
 }

@@ -4,7 +4,7 @@
 
 use std::collections::{HashSet, VecDeque};
 
-use rune::{Cx, El, TextEdit, Tx, col, el, row, text};
+use rune::{Cx, El, TextEdit, Tx, col, row, text};
 use serde_json::{Value, json};
 
 use super::widgets::{self, BadgeVariant};
@@ -755,39 +755,19 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
         .w(tk.r(20.0))
         .min_w(tk.r(9.0))
         .shrink();
-    let refresh = {
-        let g = ic(&I::REFRESH_CW, tk.r(1.0), tk.fg);
-        let g = if fetching {
-            g.looping(rune::LoopSpec::rotation(1.0))
-        } else {
-            g
-        };
-        let mut b = crate::txdetail::widgets::button_surface(
-            tk,
-            row()
-                .key("eg-refresh")
-                .h(tk.r(2.0))
-                .px(tk.r(0.75))
-                .gap(tk.r(0.5))
-                .center(),
-            Variant::Outline,
-        )
-        .role("button")
-        .label(t("review:egress.refresh"))
-        .focusable(!fetching)
-        .disabled(fetching)
-        .opacity(if fetching { 0.5 } else { 1.0 })
-        .child(g)
-        .child(
-            text(t("review:egress.refresh"))
-                .font(tk.tsm(500.0))
-                .color(tk.fg),
-        );
-        if !fetching {
-            b = b.on_press(fetch);
-        }
-        b
-    };
+    let mut refresh = crate::ui::button::button_busy(
+        tk,
+        "eg-refresh",
+        Variant::Outline,
+        crate::ui::button::Size::Sm,
+        fetching,
+        Some(&I::REFRESH_CW),
+        &t("review:egress.refresh"),
+        !fetching,
+    );
+    if !fetching {
+        refresh = refresh.on_press(fetch);
+    }
     let left = row()
         .min_w(0.0)
         .gap(tk.r(0.5))
@@ -795,7 +775,27 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
         .flex_wrap()
         .role("toolbar")
         .label(t("review:egress.queryPlaceholder"))
-        .child(query);
+        .child(query)
+        .child(crate::txdetail::widgets::hint_named(
+            tk,
+            t("review:egress.subtitle"),
+            t("review:egress.notMonitored"),
+            tk.muted_fg,
+        ))
+        .children(
+            (snap["allowlist_complete"].as_bool() == Some(false)).then(|| {
+                crate::ui::tag(
+                    tk,
+                    tk.muted_fg,
+                    Some(&I::LOCK_KEYHOLE),
+                    t("review:egress.db.incompleteAllowlist"),
+                )
+            }),
+        )
+        .children(
+            (snap["gap"].as_bool() == Some(true))
+                .then(|| crate::ui::tag(tk, tk.muted_fg, None, t("review:egress.gap"))),
+        );
     let mut page = widgets::shell(tk).child(crate::reports::ledger::common::page_header(
         tk,
         left,
@@ -824,17 +824,10 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
         );
     }
 
-    // ---- Stat tiles: what was recorded, then signals only (offline mode, unexpected
-    // destinations, a database header that isn't ciphertext). "0 unexpected" and
-    // "ciphertext-like" stay in the table's badges and the aside.
-    let total = snap["summary"]["total_records"].as_u64().unwrap_or(0);
+    // ---- Signals only (offline mode, destinations outside the allowlist, a database header
+    // that isn't ciphertext); the count sits beside the filter, the table lists the rest.
     let unexpected = snap["summary"]["unexpected"].as_u64().unwrap_or(0);
     let dests = destinations(&records);
-    let bytes: f64 = dests.iter().map(|d| d.bytes).sum();
-    let since = snap["started_at"]
-        .as_str()
-        .filter(|v| !v.is_empty())
-        .map(super::time::clock_time);
     let mut stats = Vec::new();
     let (off, env) = offline(app);
     if off || env {
@@ -858,43 +851,6 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
             .help(line),
         );
     }
-    let mut recorded = Stat::new(
-        "eg-metric-total",
-        &I::ACTIVITY,
-        t("review:egress.metric.total"),
-        crate::format::count(total as usize),
-    )
-    .line(format!(
-        "{}: {}",
-        t("review:egress.table.bytesOut"),
-        format_bytes(&json!(bytes))
-    ));
-    if let Some(since) = &since {
-        recorded = recorded.help(format!("{} · {since}", t("review:egress.subtitle")));
-    }
-    stats.push(recorded);
-    let mut kinds: Vec<String> = Vec::new();
-    for d in &dests {
-        for x in &d.subsystems {
-            let x = capitalize(&subsystem(x));
-            if !kinds.contains(&x) {
-                kinds.push(x);
-            }
-        }
-    }
-    stats.push(
-        Stat::new(
-            "eg-metric-dest",
-            &I::GLOBE,
-            t("review:egress.table.destination"),
-            crate::format::count(dests.len()),
-        )
-        .line(if kinds.is_empty() {
-            t("review:egress.subsystems.empty")
-        } else {
-            kinds.join(", ")
-        }),
-    );
     if unexpected > 0 {
         let first = dests
             .iter()
@@ -925,65 +881,35 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
             } else {
                 tk.warn.solid
             };
-            stats.push(
-                Stat::new(
-                    "eg-metric-db",
-                    &I::DATABASE,
-                    t("review:egress.metric.dbHeader"),
-                    db_label(&db),
-                )
-                .ink(ink)
-                .glyph_ink(ink)
-                .line(t("review:egress.db.title")),
-            );
+            let prefix = s(&db, "prefix_hex");
+            let mut st = Stat::new(
+                "eg-metric-db",
+                &I::DATABASE,
+                t("review:egress.metric.dbHeader"),
+                db_label(&db),
+            )
+            .ink(ink)
+            .glyph_ink(ink)
+            .line(t("review:egress.db.title"));
+            if !prefix.is_empty() {
+                st = st.help(format!("{}: {prefix}", t("review:egress.db.prefix")));
+            }
+            stats.push(st);
         }
     }
-    page = page.child(row_of(
-        app,
-        cx,
-        tk,
-        "eg-metrics",
-        t("chrome:shell.extras.egress"),
-        stats,
-    ));
+    if !stats.is_empty() {
+        page = page.child(row_of(
+            app,
+            cx,
+            tk,
+            "eg-metrics",
+            t("chrome:shell.extras.egress"),
+            stats,
+        ));
+    }
 
-    // ---- The ledger card: head with its signals (allowlist incomplete, rows evicted), the
-    // table on the kit, rows unfolding into their details.
-    let mut signals = row().gap(tk.r(0.5)).center_y().flex_wrap();
-    if snap["allowlist_complete"].as_bool() == Some(false) {
-        signals = signals.child(widgets::tone_badge(
-            tk,
-            &Tone {
-                bg: rune::Color::TRANSPARENT,
-                border: tk.border,
-                text: tk.fg,
-                solid: tk.fg,
-            },
-            Some((&I::LOCK_KEYHOLE, tk.fg)),
-            &t("review:egress.db.incompleteAllowlist"),
-            false,
-        ));
-    }
-    if snap["gap"].as_bool() == Some(true) {
-        signals = signals.child(widgets::badge(
-            tk,
-            BadgeVariant::Outline,
-            &t("review:egress.gap"),
-        ));
-    }
-    if fetching {
-        signals = signals.child(crate::reports::ledger::common::inline_status(
-            tk,
-            t("review:activity.refreshing"),
-        ));
-    }
-    let head = crate::reports::ledger::common::card_head(
-        tk,
-        t("review:egress.subtitle"),
-        Some(t("review:egress.notMonitored")),
-        Some(signals),
-    );
-    // `lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]`: the aside beside the ledger from `lg`.
+    // ---- The ledger: the table, rows unfolding into their details; destinations beside it
+    // once there are any (a press filters the table to one).
     let win = rune::memo::layout_size("sh-root")
         .map(|[w, _]| w)
         .filter(|w| *w > 0.0)
@@ -992,23 +918,20 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
         } else {
             1440.0
         });
-    // Beside the ledger only where the table keeps its columns next to it; otherwise the three
-    // cards sit in a row under it (stacked in a narrow window).
-    let lg = win >= 1720.0;
-    let md = win >= 1100.0;
+    let aside_w = tk.r(22.0);
+    let side = win >= 1720.0 && !dests.is_empty();
     let nav = if crate::shell::nav_folded(app, cx) {
         tk.r(3.0)
     } else {
         tk.r(16.0)
     };
-    let aside_w = tk.r(22.0);
     let avail = win
         - nav
         - tk.r(0.375)
         - 2.0
         - 2.0 * tk.page_pad()
         - 2.0
-        - if lg { tk.card_gap() + aside_w } else { 0.0 };
+        - if side { tk.card_gap() + aside_w } else { 0.0 };
     let least = columns(tk, &filtered).1.max(760.0);
     let (table_w, overflow) = crate::ui::table::fit(avail, least);
     let grid = table(app, tk, &records, &filtered, table_w).w(table_w);
@@ -1018,26 +941,16 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
         .w(0.0)
         .min_w(0.0)
         .clip_rounded(tk.r(0.75))
-        .child(head)
         .child(crate::ui::table::hscroll_if(
             "eg-table-scroll",
             t("chrome:shell.extras.egress"),
             overflow,
             grid,
         ));
-
-    // ---- The aside: requests per destination (a press filters the ledger to it), per
-    // subsystem, and the database header proof.
-    let mut dl = col().w_full().pb(tk.r(0.5)).role("list");
     if dests.is_empty() {
-        dl = dl.child(
-            text(t("review:egress.empty"))
-                .font(tk.tsm(400.0))
-                .color(tk.muted_fg)
-                .px(tk.r(1.0))
-                .pb(tk.r(0.5)),
-        );
+        return page.child(ledger.w_full());
     }
+    let mut dl = col().w_full().pb(tk.r(0.5)).role("list");
     for d in dests.iter().take(12) {
         let bad = d.unexpected > 0;
         let host = d.host.clone();
@@ -1098,115 +1011,21 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
                 ),
         );
     }
-    let mut subs = col().w_full().px(tk.r(1.0)).pb(tk.r(0.875)).gap(tk.r(0.5));
-    let by: Vec<(String, Value)> = snap["summary"]["by_subsystem"]
-        .as_object()
-        .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-        .unwrap_or_default();
-    if by.is_empty() {
-        subs = subs.child(
-            text(t("review:egress.subsystems.empty"))
-                .font(tk.tsm(400.0))
-                .color(tk.muted_fg),
-        );
-    } else {
-        for (name, item) in by {
-            subs = subs.child(
-                row()
-                    .w_full()
-                    .gap(tk.r(0.75))
-                    .center_y()
-                    .justify_between()
-                    .child(
-                        text(capitalize(&subsystem(&name)))
-                            .font(tk.tsm(400.0))
-                            .color(tk.fg),
-                    )
-                    .child(
-                        text(format!(
-                            "{} / {}",
-                            item["records"].as_u64().unwrap_or(0),
-                            format_bytes(&item["bytes_out"])
-                        ))
-                        .font(tk.txs(400.0).mono())
-                        .color(tk.muted_fg),
-                    ),
-            );
-        }
-    }
-    let db_body = col()
-        .w_full()
-        .px(tk.r(1.0))
-        .pb(tk.r(0.875))
-        .gap(tk.r(0.5))
-        .child(detail(
-            tk,
-            t("review:egress.db.classification"),
-            db_label(&db),
-            db_tone(&db),
-            false,
-        ))
-        .child(detail(
-            tk,
-            t("review:egress.db.prefix"),
-            if s(&db, "prefix_hex").is_empty() {
-                t("review:egress.db.none")
-            } else {
-                s(&db, "prefix_hex").to_owned()
-            },
-            Ink::Neutral,
-            true,
-        ));
-    let cards = [
-        aside_card(
-            tk,
-            "eg-destinations",
-            &I::GLOBE,
-            t("review:egress.table.destination"),
-            dl,
-        ),
-        aside_card(
-            tk,
-            "eg-subsystems",
-            &I::LAYOUT_DASHBOARD,
-            t("review:egress.subsystems.title"),
-            subs,
-        ),
-        aside_card(
-            tk,
-            "eg-db",
-            &I::DATABASE,
-            t("review:egress.db.title"),
-            db_body,
-        ),
-    ];
-    let aside = if lg {
-        col()
-            .w(aside_w)
-            .min_w(aside_w)
-            .gap(tk.card_gap())
-            .children(cards)
-    } else if md {
-        let [a, b, c] = cards;
-        row()
-            .w_full()
-            .gap(tk.card_gap())
-            .items_start()
-            .child(a.grow(1.3).w(0.0))
-            .child(b.grow(1.0).w(0.0))
-            .child(c.grow(1.0).w(0.0))
-    } else {
-        col().w_full().gap(tk.card_gap()).children(cards)
-    };
-    let _ = el;
-    if lg {
+    let card = aside_card(
+        tk,
+        "eg-destinations",
+        &I::GLOBE,
+        t("review:egress.table.destination"),
+        dl,
+    );
+    if side {
         page.child(
             row()
                 .w_full()
                 .gap(tk.card_gap())
                 .items_start()
                 .child(ledger)
-                .child(aside),
+                .child(col().w(aside_w).min_w(aside_w).child(card)),
         )
     } else {
         page.child(
@@ -1214,7 +1033,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
                 .w_full()
                 .gap(tk.card_gap())
                 .child(ledger.w_full())
-                .child(aside),
+                .child(card),
         )
     }
 }

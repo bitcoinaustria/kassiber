@@ -447,10 +447,6 @@ pub fn banner(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Option<El> {
     let badge = row()
         .gap(tk.r(0.375))
         .center_y()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(9.0))
-        .fill(amber.alpha(0.15))
         .a11y_hidden()
         .child(ic(&I::FLASK_CONICAL, tk.r(0.875), amber))
         .child(

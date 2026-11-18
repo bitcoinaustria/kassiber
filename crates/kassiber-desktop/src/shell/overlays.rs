@@ -84,6 +84,17 @@ fn ink2(tk: &Tk) -> Color {
     rune::color::hex(if tk.dark { "#c7c7c9" } else { "#3f3f46" }).expect("hex")
 }
 
+/// The lock screen's split layout widths (inner, form column, artwork) when the window holds
+/// the chain beside the form; None: the centred stack.
+fn lock_split(app: &App, tk: &Tk) -> Option<(f32, f32, f32)> {
+    let panel_w = app.shell.window_w - 2.0 * tk.r(0.375) - 2.0;
+    let inner_w = panel_w.min(tk.r(80.0)) - 2.0 * tk.r(2.5);
+    let gap = tk.r(3.0);
+    let left_w = tk.r(24.0).max((inner_w - gap) * 0.38);
+    let art_w = inner_w - left_w - gap;
+    (art_w >= tk.r(22.0)).then_some((inner_w, left_w, art_w))
+}
+
 /// The lock screen (LockScreen.tsx's `LockedFrame` + form) inside the page panel, which the
 /// shell already draws full width with the sidebar gone: the wordmark, the title and lead, the
 /// passphrase field (or "Open books" for a plaintext book), the error line, and the way out.
@@ -220,11 +231,14 @@ pub fn lock_screen(app: &App, tk: &Tk) -> El {
         form = form.child(open);
     }
     // A line stays reserved for the error, so a refusal does not jolt the form.
-    let mut err_line = row()
-        .key("sh-lock-error")
-        .w_full()
-        .min_h(tk.r(1.25))
-        .justify_center();
+    let err_line = row().key("sh-lock-error").w_full().min_h(tk.r(1.25));
+    // Under the field it belongs to: left in the split layout, centred in the stack.
+    let split_at = lock_split(app, tk);
+    let mut err_line = if split_at.is_some() {
+        err_line
+    } else {
+        err_line.justify_center()
+    };
     if let Some(e) = &l.error {
         err_line = err_line.child(
             row()
@@ -270,6 +284,28 @@ pub fn lock_screen(app: &App, tk: &Tk) -> El {
     } else {
         format!("chrome:lock.lead.{reason}")
     };
+    // The split layout's header: the same lines, left-aligned beside the artwork.
+    let header_left = col()
+        .w_full()
+        .gap(tk.r(0.75))
+        .child(
+            text(title.clone())
+                .font(
+                    TextStyle::new(tk.r(2.25), 600.0)
+                        .lh(tk.r(2.5))
+                        .tracking(-tk.r(2.25) * 0.025),
+                )
+                .color(tk.fg)
+                .role("heading")
+                .level(1)
+                .wrap(),
+        )
+        .child(
+            text(t(&lead_key))
+                .font(tk.tsm(400.0).lh(tk.r(1.4219)))
+                .color(ink2(tk))
+                .wrap(),
+        );
     let header = col()
         .items_center()
         .gap(tk.r(0.75))
@@ -293,37 +329,60 @@ pub fn lock_screen(app: &App, tk: &Tk) -> El {
                 .wrap()
                 .align(rune::Align::Center),
         );
-    let center = col()
-        .key("sh-lock-center")
-        .w_full()
-        .max_w(tk.r(28.0))
-        .items_center()
-        .gap(tk.r(2.5))
-        .py(tk.r(3.0))
-        .child({
-            // The pre-alpha chip sits by the wordmark here too (an owner request).
-            let mark = super::wordmark::animated(
-                app,
-                super::wordmark::Site::Lock,
-                MARK_CELL,
-                tk.fg,
-                false,
-            );
-            if app.prefs.alpha_visible {
-                let tag = super::titlebar::alpha_block(tk, MARK_CELL / 2.0)
-                    .label(t("chrome:preAlpha.label"))
-                    .role("img");
-                row()
-                    .items_end()
-                    .gap(MARK_CELL * 2.0)
-                    .child(mark)
-                    .child(tag.mb(MARK_CELL * 2.0))
-            } else {
-                mark
-            }
-        })
-        .child(header)
-        .child(form);
+    let mark = {
+        // The pre-alpha chip sits by the wordmark here too (an owner request).
+        let mark =
+            super::wordmark::animated(app, super::wordmark::Site::Lock, MARK_CELL, tk.fg, false);
+        if app.prefs.alpha_visible {
+            let tag = super::titlebar::alpha_block(tk, MARK_CELL / 2.0)
+                .label(t("chrome:preAlpha.label"))
+                .role("img");
+            row()
+                .items_end()
+                .gap(MARK_CELL * 2.0)
+                .child(mark)
+                .child(tag.mb(MARK_CELL * 2.0))
+        } else {
+            mark
+        }
+    };
+    let art_busy = l.submitting || l.touch_submitting;
+    let stack = |mark: El, art_el: Option<El>| {
+        col()
+            .key("sh-lock-center")
+            .w_full()
+            .max_w(tk.r(28.0))
+            .items_center()
+            .gap(tk.r(2.5))
+            .py(tk.r(3.0))
+            .child(mark)
+            .children(art_el)
+    };
+    // The split layout, as the start page's: the form on the left, the encrypted
+    // chain filling the right, a ruled footer. Narrow windows keep the centred stack.
+    let pad = tk.r(2.5);
+    let gap = tk.r(3.0);
+    let (inner_w, left_w, art_w) = split_at.unwrap_or_default();
+    let (center, body) = match split_at {
+        Some(_) => {
+            let mode = crate::art::calm::Mode::Locked { busy: art_busy };
+            let left = col()
+                .key("sh-lock-center")
+                .w(left_w)
+                .items_start()
+                .gap(tk.r(2.0))
+                .child(mark)
+                .child(header_left)
+                .child(form);
+            let art_h = tk.r(30.0).min(app.shell.window_h * 0.6);
+            let art = crate::art::calm::draw(tk, app.clock, art_w, art_h, mode);
+            (
+                None,
+                Some(row().w(inner_w).gap(gap).center_y().child(left).child(art)),
+            )
+        }
+        None => (Some(stack(mark, None).child(header).child(form)), None),
+    };
     let footer_label = t("chrome:lock.openOtherBooks");
     let footer = row()
         .key("sh-lock-other")
@@ -339,8 +398,67 @@ pub fn lock_screen(app: &App, tk: &Tk) -> El {
         .on_press(open_other_books)
         .child(ic(&I::ARROW_LEFT, tk.r(0.875), ink2(tk)))
         .child(text(footer_label).font(tk.tsm(500.0)).color(ink2(tk)));
+    // With developer tools on, the demo book opens from here too (a separate local copy; Leave
+    // demo comes back to this lock screen's books).
+    let demo = app.prefs.developer_tools.then(|| {
+        let busy = app.demo.busy() || l.submitting;
+        let label = t(if app.demo.busy() {
+            "onboarding:start.tryDemo.titleOpening"
+        } else {
+            "onboarding:start.tryDemo.title"
+        });
+        let mut d = row()
+            .key("sh-lock-demo")
+            .gap(tk.r(0.375))
+            .px(tk.r(0.25))
+            .py(tk.r(0.125))
+            .center_y()
+            .radius(tk.r(0.375))
+            .role("button")
+            .label(label.clone())
+            .help(t("onboarding:start.tryDemo.tooltip"))
+            .focusable(!busy)
+            .disabled(busy)
+            .child(ic(&I::FLASK_CONICAL, tk.r(0.875), ink2(tk)))
+            .child(text(label).font(tk.tsm(500.0)).color(ink2(tk)));
+        if busy {
+            d = d.opacity(0.5);
+        } else {
+            d = d.on_press(crate::demo::start);
+        }
+        d
+    });
     // `m-auto`: centred in the panel, scrolling to the wordmark in a short window.
     let panel_h = (app.shell.window_h - 40.0 - tk.r(0.375) - 2.0).max(tk.r(30.0));
+    let footer = if l.submitting {
+        footer.opacity(0.5)
+    } else {
+        footer
+    };
+    if let Some(body) = body {
+        return col()
+            .key("sh-lock-screen")
+            .w_full()
+            .h(panel_h)
+            .px(pad)
+            .items_center()
+            .child(el().grow(1.0))
+            .child(body)
+            .child(el().grow(1.0))
+            .child(
+                row()
+                    .w(inner_w)
+                    .center_y()
+                    .justify_between()
+                    .pt(tk.r(1.5))
+                    .mb(tk.r(2.0))
+                    .border_sides([1.0, 0.0, 0.0, 0.0], tk.border)
+                    .border_layout()
+                    .child(footer)
+                    .children(demo),
+            );
+    }
+    let center = center.unwrap_or_else(el);
     col()
         .key("sh-lock-screen")
         .w_full()
@@ -355,11 +473,9 @@ pub fn lock_screen(app: &App, tk: &Tk) -> El {
                 .w_full()
                 .justify_center()
                 .pb(tk.r(1.5))
-                .child(if l.submitting {
-                    footer.opacity(0.5)
-                } else {
-                    footer
-                }),
+                .gap(tk.r(1.5))
+                .child(footer)
+                .children(demo),
         )
 }
 

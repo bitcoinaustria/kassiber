@@ -40,7 +40,6 @@ pub enum Popup {
     ActRow,
     LogExport,
     LogFilter,
-    LogSettings,
 }
 
 /// This part's UI state (`app.reports.diag`).
@@ -253,10 +252,6 @@ pub const SCENES: &[super::Scene] = &[
     ("reports-logs-filter-menu", |a| {
         go(a, "/logs");
         a.reports.diag.popup = Some(Popup::LogFilter);
-    }),
-    ("reports-logs-settings-menu", |a| {
-        go(a, "/logs");
-        a.reports.diag.popup = Some(Popup::LogSettings);
     }),
     ("reports-logs-raw", |a| {
         go(a, "/logs");

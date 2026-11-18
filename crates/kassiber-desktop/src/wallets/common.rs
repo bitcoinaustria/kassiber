@@ -1,7 +1,7 @@
 //! Pieces every Wallets screen draws: `ConnectionStatusPill`, `ConnectionAssetBadge`, and the
 //! headless pump helper.
 
-use rune::{Color, Cx, El, Shadow, el, row, text};
+use rune::{Color, Cx, El, Shadow, el, row};
 
 use super::conn::{Conn, status_dot, status_style};
 use crate::app::App;
@@ -9,24 +9,15 @@ use crate::i18n::t;
 use crate::logos;
 use crate::theme::Tk;
 
-/// `ConnectionStatusPill` (`rounded-md px-1.5 py-0.5 text-2xs font-medium ring-1 ring-inset`);
-/// `synced` renders nothing when `hide_when_synced`.
+/// A connection's status as a label in its ink (`ConnectionStatusPill`); `synced` renders
+/// nothing when `hide_when_synced`.
 pub fn status_pill(tk: &Tk, status: &str, hide_when_synced: bool) -> Option<El> {
     if hide_when_synced && status == "synced" {
         return None;
     }
-    let (fill, ink, ring) = status_style(tk, status);
+    let (_, ink, _) = status_style(tk, status);
     let label = t(&format!("chrome:connectionStatus.{status}"));
-    Some(
-        row()
-            .px(tk.r(0.375))
-            .py(tk.r(0.125))
-            .radius(tk.r(0.375))
-            .fill(fill)
-            .border(1.0, ring)
-            .center_y()
-            .child(text(label).font(tk.t2xs(500.0)).color(ink)),
-    )
+    Some(crate::ui::tag(tk, ink, None, label))
 }
 
 /// `ConnectionAssetBadge`: the rail logo in a bordered muted tile (`size-8`, `md` = `size-9`),

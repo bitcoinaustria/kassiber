@@ -187,6 +187,8 @@
           "help": "One pool until the end of 2024; on 1 January 2025 its remaining cost basis is split across the wallets."
         },
         "unsupported": "Not available with {{method}}.",
+        "regionUnsupported": "Not available for {{country}} books.",
+        "default": "Default",
         "only": "This is the only pool {{country}} books can use.",
         "perCoin": "Each coin is pooled on its own: BTC and L-BTC never share a pool. Cost basis moves between them only as set under Review options."
       },

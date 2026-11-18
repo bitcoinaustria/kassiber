@@ -287,21 +287,14 @@ pub fn trow(tk: &Tk, last: bool, cells: Vec<El>) -> El {
         .children(cells)
 }
 
-/// shadcn `Badge` (`rounded-full border px-2 py-0.5 text-xs font-medium`).
-pub fn badge(tk: &Tk, label: &str, ink: Color, fill: Color, border: Color) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(999.0)
-        .fill(fill)
-        .border(1.0, border)
-        .border_layout()
-        .child(text(label.to_owned()).font(tk.txs(500.0)).color(ink))
+/// A label in `ink` (`crate::ui::tag`; the fill and border are no longer drawn).
+pub fn badge(tk: &Tk, label: &str, ink: Color, _fill: Color, _border: Color) -> El {
+    crate::ui::tag(tk, ink, None, label)
 }
 
-/// `Badge variant="outline"`.
+/// A neutral label.
 pub fn outline_badge(tk: &Tk, label: &str, ink: Color) -> El {
-    badge(tk, label, ink, Color::TRANSPARENT, tk.border)
+    crate::ui::tag(tk, ink, None, label)
 }
 
 /// `Skeleton`: `animate-pulse rounded-md bg-accent`.

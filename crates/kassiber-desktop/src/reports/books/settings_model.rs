@@ -258,6 +258,32 @@ pub enum ScopeState {
     Available,
     /// The country offers the scope, but the chosen method has no form of it.
     MethodUnsupported,
+    /// The country's rules don't offer the scope (shown, not choosable).
+    RegionUnsupported,
+}
+
+/// Every pool scope the app knows, in display order.
+pub const ALL_SCOPES: [&str; 3] = ["global", "wallet", "global_then_wallet"];
+
+/// `scope_states`, then every other known scope as `RegionUnsupported`: the choice is always
+/// shown, with the reason a scope can't be picked here.
+pub fn all_scope_states(choices: &Settings, method: &str) -> Vec<(String, ScopeState)> {
+    let mut out = scope_states(choices, method);
+    for s in ALL_SCOPES {
+        if !out.iter().any(|(x, _)| x == s) {
+            out.push((s.to_owned(), ScopeState::RegionUnsupported));
+        }
+    }
+    out
+}
+
+/// The country's default scope when its rules allow exactly one (the legal one); None where
+/// the book may choose.
+pub fn legal_scope(choices: &Settings) -> Option<&str> {
+    match choices.pools.as_slice() {
+        [only] => Some(only.as_str()),
+        _ => None,
+    }
 }
 
 /// Each scope the country offers (`cost_basis_pool_scopes`, in its order) and whether `method`
@@ -698,6 +724,18 @@ mod tests {
         let mut one = s.clone();
         one.pools = vec!["global".into()];
         assert_eq!(scope_states(&one, "FIFO").len(), 1);
+        // The form still shows every scope, the ones the country doesn't offer disabled, and
+        // names the single allowed one as the legal default.
+        assert_eq!(
+            all_scope_states(&one, "FIFO"),
+            vec![
+                ("global".into(), ScopeState::Available),
+                ("wallet".into(), ScopeState::RegionUnsupported),
+                ("global_then_wallet".into(), ScopeState::RegionUnsupported),
+            ]
+        );
+        assert_eq!(legal_scope(&one), Some("global"));
+        assert_eq!(legal_scope(&s), None);
     }
 
     #[test]

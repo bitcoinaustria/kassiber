@@ -462,21 +462,13 @@ pub fn tone(tk: &Tk, t: Tone) -> (Color, Color, Color) {
     }
 }
 
-/// The status chip: `inline-flex gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium` with a
-/// 1 pt ring and an optional 0.75 rem glyph. Draw it only for a state that needs attention.
+/// The status label: the tone's ink and an optional 0.75 rem glyph, no fill or ring (as
+/// `crate::ui::tag`). Draw it only for a state that needs attention.
 pub fn chip(tk: &Tk, t: Tone, glyph: Option<&'static Icon>, label: impl Into<String>) -> Node {
-    let (bg, fg, ring) = tone(tk, t);
+    let (_, fg, _) = tone(tk, t);
+    let fg = if t == Tone::Neutral { tk.muted_fg } else { fg };
     let label = label.into();
-    let mut r = hrow()
-        .px(tk.r(0.375) + 1.0)
-        .py(tk.r(0.125))
-        .gap(tk.r(0.25))
-        .center_y()
-        .min_w(0.0)
-        .radius(tk.r(0.375))
-        .fill(bg)
-        .border(1.0, ring)
-        .border_layout();
+    let mut r = hrow().gap(tk.r(0.25)).center_y().min_w(0.0);
     if let Some(g) = glyph {
         r = r.child(crate::ui::ic(g, tk.r(0.75), fg));
     }

@@ -8,7 +8,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use rune::{Color, Cx, El, KeyEvent, ScrollPos, ScrollSpec, TextEdit, Tx, col, el, row, text};
+use rune::{Color, Cx, El, KeyEvent, ScrollPos, ScrollSpec, TextEdit, Tx, col, row, text};
 use rune_kit::{Placement, TextArea};
 
 use super::logstore::{self, LEVELS, Record, Store};
@@ -532,10 +532,6 @@ fn copy_last(app: &mut App, tx: &mut Tx) {
 
 // ---- View ----------------------------------------------------------------------------------
 
-fn hex(s: &str) -> Color {
-    rune::color::hex(s).unwrap_or(Color::WHITE)
-}
-
 /// A `size-8` icon button: outline, or `secondary` with `border-primary` and a dot when active.
 fn menu_button(
     tk: &Tk,
@@ -597,10 +593,8 @@ fn chip(
         .px(tk.r(0.5))
         .gap(tk.r(0.25))
         .center_y()
-        .radius(tk.r(0.125))
-        .border(1.0, tk.primary.alpha(0.4))
-        .fill(tk.primary.alpha(0.1))
-        .hover(tk.primary.alpha(0.05))
+        .radius(tk.r(0.375))
+        .hover(tk.accent)
         .role("button")
         .label(aria)
         .focusable(true)
@@ -608,25 +602,24 @@ fn chip(
         .child(
             text(label)
                 .font(tk.txs(400.0).mono())
-                .color(tk.primary)
+                .color(tk.fg)
                 .truncate()
                 .shrink(),
         )
-        .child(ic(&I::X, tk.r(0.75), tk.primary))
+        .child(ic(&I::X, tk.r(0.75), tk.muted_fg))
 }
 
-/// The card header's controls: the search (substring or regex), the filter and settings menus.
+/// The card header's controls: the search (substring or regex) and one menu for the filters and
+/// the view settings.
 fn header_controls(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
     let s = &app.reports.diag.logs;
     let popup = app.reports.diag.popup;
-    let settings_active = s.regex || !s.redacted || s.mask_amounts;
-    match popup {
-        Some(Popup::LogFilter) => filter_menu(app, tk, layer),
-        Some(Popup::LogSettings) => settings_menu(app, tk, layer),
-        _ => {}
+    let active = has_filters(s) || s.regex || !s.redacted || s.mask_amounts;
+    if popup == Some(Popup::LogFilter) {
+        filter_menu(app, tk, layer);
     }
     row()
-        .gap(tk.r(0.25))
+        .gap(tk.r(0.375))
         .center_y()
         .child(
             widgets::input(
@@ -646,18 +639,9 @@ fn header_controls(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
             "logs-filter",
             &I::SLIDERS_HORIZONTAL,
             t("review:logsControls.filterLogsAria"),
-            has_filters(s),
+            active,
             popup == Some(Popup::LogFilter),
             Popup::LogFilter,
-        ))
-        .child(menu_button(
-            tk,
-            "logs-settings",
-            &I::SETTINGS,
-            t("review:logsControls.logSettingsAria"),
-            settings_active,
-            popup == Some(Popup::LogSettings),
-            Popup::LogSettings,
         ))
 }
 
@@ -666,8 +650,8 @@ fn chips(app: &App, tk: &Tk) -> El {
     let s = &app.reports.diag.logs;
     let q = s.query.text.trim().to_owned();
     let mut left = row()
-        .w_full()
         .min_w(0.0)
+        .shrink()
         .gap(tk.r(0.25))
         .center_y()
         .flex_wrap();
@@ -713,12 +697,6 @@ fn chips(app: &App, tk: &Tk) -> El {
                 },
             ));
         }
-    } else {
-        left = left.child(
-            text(t("review:logsControls.allCaptured"))
-                .font(tk.txs(400.0))
-                .color(tk.muted_fg),
-        );
     }
     left
 }
@@ -727,64 +705,72 @@ fn filter_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
     let s = &app.reports.diag.logs;
     let counts = s.store.level_counts();
     let total = s.store.records.len();
-    let mut e = vec![
-        Entry::Label(t("review:logsControls.filterLogsLabel"), false),
-        Entry::Check {
-            key: "logs-lvl-all".into(),
-            glyph: None,
-            label: t("review:logsControls.allLevels"),
-            mono: false,
-            upper: false,
-            trailing: Some(total.to_string()),
-            checked: s.level.is_none(),
-            on: Rc::new(|a, _| a.reports.diag.logs.level = None),
-        },
-    ];
+    let mut e = vec![Entry::Check {
+        key: "logs-lvl-all".into(),
+        glyph: None,
+        label: t("review:logsControls.allLevels"),
+        mono: false,
+        upper: false,
+        trailing: Some(total.to_string()),
+        checked: s.level.is_none(),
+        on: Rc::new(|a, _| a.reports.diag.logs.level = None),
+    }];
+    // Only the levels there are records of (and the chosen one).
     for (i, l) in LEVELS.iter().enumerate() {
+        if counts[i] == 0 && s.level != Some(*l) {
+            continue;
+        }
+        let mut name = (*l).to_owned();
+        if let Some(f) = name.get_mut(0..1) {
+            f.make_ascii_uppercase();
+        }
         e.push(Entry::Check {
             key: format!("logs-lvl-{l}"),
             glyph: None,
-            label: (*l).to_owned(),
+            label: name,
             mono: false,
-            upper: true,
+            upper: false,
             trailing: Some(counts[i].to_string()),
             checked: s.level == Some(*l),
             on: Rc::new(move |a, _| a.reports.diag.logs.level = Some(*l)),
         });
     }
-    e.push(Entry::Sep);
-    e.push(Entry::Label(t("review:logsControls.module"), false));
-    e.push(Entry::Check {
-        key: "logs-mod-all".into(),
-        glyph: None,
-        label: t("review:logsControls.allModules"),
-        mono: false,
-        upper: false,
-        trailing: Some(total.to_string()),
-        checked: s.module.is_none(),
-        on: Rc::new(|a, _| a.reports.diag.logs.module = None),
-    });
-    for (i, (m, n)) in s.store.module_counts().into_iter().enumerate() {
-        let checked = s.module.as_deref() == Some(m.as_str());
-        let mm = m.clone();
+    let modules = s.store.module_counts();
+    if modules.len() > 1 || s.module.is_some() {
+        e.push(Entry::Sep);
         e.push(Entry::Check {
-            key: format!("logs-mod-{i}"),
+            key: "logs-mod-all".into(),
             glyph: None,
-            label: m,
-            mono: true,
+            label: t("review:logsControls.allModules"),
+            mono: false,
             upper: false,
-            trailing: Some(n.to_string()),
-            checked,
-            on: Rc::new(move |a, _| {
-                let s = &mut a.reports.diag.logs;
-                s.module = if s.module.as_deref() == Some(mm.as_str()) {
-                    None
-                } else {
-                    Some(mm.clone())
-                };
-            }),
+            trailing: Some(total.to_string()),
+            checked: s.module.is_none(),
+            on: Rc::new(|a, _| a.reports.diag.logs.module = None),
         });
+        for (i, (m, n)) in modules.into_iter().enumerate() {
+            let checked = s.module.as_deref() == Some(m.as_str());
+            let mm = m.clone();
+            e.push(Entry::Check {
+                key: format!("logs-mod-{i}"),
+                glyph: None,
+                label: m,
+                mono: true,
+                upper: false,
+                trailing: Some(n.to_string()),
+                checked,
+                on: Rc::new(move |a, _| {
+                    let s = &mut a.reports.diag.logs;
+                    s.module = if s.module.as_deref() == Some(mm.as_str()) {
+                        None
+                    } else {
+                        Some(mm.clone())
+                    };
+                }),
+            });
+        }
     }
+    e.extend(settings_entries(s));
     if has_filters(s) {
         e.push(Entry::Sep);
         e.push(Entry::Item {
@@ -811,12 +797,10 @@ fn filter_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
     );
 }
 
-fn settings_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
-    let s = &app.reports.diag.logs;
-    let e = vec![
-        Entry::Label(t("review:logsControls.logSettingsLabel"), false),
+/// The view settings, after the filters in the same menu.
+fn settings_entries(s: &State) -> Vec<Entry> {
+    vec![
         Entry::Sep,
-        Entry::Label(t("review:logsControls.search"), true),
         Entry::Check {
             key: "logs-set-regex".into(),
             glyph: Some(&I::REGEX),
@@ -827,7 +811,6 @@ fn settings_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
             checked: s.regex,
             on: Rc::new(|a, _| a.reports.diag.logs.regex ^= true),
         },
-        Entry::Sep,
         Entry::Check {
             key: "logs-set-redacted".into(),
             glyph: Some(&I::SHIELD),
@@ -851,20 +834,18 @@ fn settings_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
             checked: s.mask_amounts,
             on: Rc::new(|a, _| a.reports.diag.logs.mask_amounts ^= true),
         },
-    ];
-    widgets::menu(
-        tk,
-        layer,
-        "logs-settings-menu",
-        "logs-settings",
-        Placement::BottomEnd,
-        Some(tk.r(14.0)),
-        e,
-    );
+    ]
 }
 
 fn export_menu(tk: &Tk, layer: &mut Vec<El>) {
     let e = vec![
+        Entry::Item {
+            key: "logs-copy".into(),
+            glyph: Some(&I::COPY),
+            label: t("review:logs.copy200"),
+            on: Rc::new(copy_last),
+        },
+        Entry::Sep,
         Entry::Item {
             key: "logs-exp-bundle".into(),
             glyph: Some(&I::FILE_ARCHIVE),
@@ -888,6 +869,13 @@ fn export_menu(tk: &Tk, layer: &mut Vec<El>) {
             glyph: Some(&I::FILE_TEXT),
             label: t("review:logs.exportMenu.log"),
             on: Rc::new(|a, tx| start_export(a, tx, "log")),
+        },
+        Entry::Sep,
+        Entry::Item {
+            key: "logs-clear".into(),
+            glyph: Some(&I::TRASH_2),
+            label: t("review:logs.clearLogsAria"),
+            on: Rc::new(|a, _| a.reports.diag.logs.store.clear()),
         },
     ];
     widgets::menu(
@@ -1233,115 +1221,64 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     let limit = s.render_limit.min(MAX_RENDERED);
     let visible = &idx[idx.len().saturating_sub(limit)..];
     let popup = app.reports.diag.popup;
-    // Header: the pulsing Live badge and the RAM note; Copy 200, Export, Clear.
-    let live = row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .gap(tk.r(0.25))
-        .center_y()
-        .radius(999.0)
-        .border(1.0, hex("#10b981").alpha(0.3))
-        .fill(hex("#10b981").alpha(0.1))
-        .child({
-            // The pulse (`animate-pulse`) runs only while it can be seen: Rune draws no frames for
-            // a hidden, minimised or occluded window, and under Reduce Motion the dot holds still.
-            let d = crate::ui::dot(tk.r(0.5), hex("#10b981"));
-            if cx.is_reduced_motion() {
-                d
-            } else {
-                d.looping(rune::LoopSpec::opacity(2.0, 0.0, 0.5, 1.0))
-            }
-        })
-        .child(
-            text(t("review:logs.live"))
-                .font(tk.txs(500.0))
-                .color(tk.good.text),
-        );
-    let sm = |b: El| b.h(tk.r(2.0)).px(tk.r(0.625)).gap(tk.r(0.5));
-    let copy = sm(button(
-        tk,
-        "logs-copy",
-        Variant::Outline,
-        Size::Default,
-        Some(&I::COPY),
-        &t("review:logs.copy200"),
-        true,
-    ))
-    .on_press_tx(copy_last);
-    let export = sm(button(
+    // One toolbar: the search and its active filters; the count (the RAM note on hover); the
+    // filter menu and Export (its menu also copies the newest records and clears). The log
+    // fills the rest; the page title already names it.
+    let export = button(
         tk,
         "logs-export",
-        Variant::Default,
-        Size::Default,
+        Variant::Outline,
+        Size::Sm,
         Some(&I::DOWNLOAD),
         &t("common:actions.export"),
         true,
-    ));
+    )
+    .help(t("review:logs.ramNote"));
     let export = crate::ui::popup::trigger(
         export,
         crate::ui::popup::Kind::Menu,
         popup == Some(Popup::LogExport),
         |a: &mut App| widgets::toggle(a, Popup::LogExport),
     );
-    let clear = crate::txdetail::widgets::icon_button(
-        tk,
-        "logs-clear",
-        Variant::Ghost,
-        tk.r(2.0),
-        &I::TRASH_2,
-        tk.r(1.0),
-        t("review:logs.clearLogsAria"),
-    )
-    .on_press(|a: &mut App| a.reports.diag.logs.store.clear());
     if popup == Some(Popup::LogExport) {
         export_menu(tk, layer);
     }
-    let head = widgets::header(tk)
-        .child(
-            row()
-                .min_w(0.0)
-                .gap(tk.r(0.5))
-                .center_y()
-                .flex_wrap()
-                .child(live)
-                .child(widgets::description(tk, t("review:logs.ramNote"))),
-        )
-        .child(
-            row()
-                .gap(tk.r(0.75))
-                .center_y()
-                .child(copy)
-                .child(export)
-                .child(clear),
+    let mut count = tc(
+        "review:logs.recordsCount",
+        idx.len(),
+        &[("count", &idx.len().to_string())],
+    );
+    if visible.len() < idx.len() {
+        count = format!(
+            "{count} · {}",
+            tc(
+                "review:logs.renderingNewest",
+                visible.len(),
+                &[("count", &visible.len().to_string())],
+            )
         );
-    // The card fills the rest of the page panel: the Wallets card's header, the active filters,
-    // then the panel's terminal-style log.
-    let win_h = if app.shell.window_h > 0.0 {
-        app.shell.window_h
-    } else {
-        900.0
-    };
-    let page_h = win_h - 40.0 - tk.r(0.375) - 2.0;
-    let hair = tk.border.alpha(tk.border.a * 0.6);
+    }
+    let toolbar = row()
+        .key("logs-toolbar")
+        .w_full()
+        .gap(tk.r(0.5))
+        .center_y()
+        .child(header_controls(app, tk, layer))
+        .children(has_filters(s).then(|| chips(app, tk)))
+        .child(rune::el().grow(1.0))
+        .child(
+            text(count)
+                .font(tk.txs(400.0).features("'tnum' 1"))
+                .color(tk.muted_fg)
+                .truncate(),
+        )
+        .child(export);
     let mut card = widgets::surface(tk)
         .key("logs-card")
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .clip_rounded(tk.r(0.75))
-        .child(widgets::card_header(
-            tk,
-            t("nav:book.logs"),
-            Some(idx.len()),
-            header_controls(app, tk, layer),
-        ))
-        .child(
-            row()
-                .w_full()
-                .px(tk.card_pad())
-                .pb(tk.r(0.75))
-                .child(chips(app, tk)),
-        );
+        .clip_rounded(tk.r(0.75));
     if !s.redacted {
         let time = s
             .raw_until
@@ -1353,7 +1290,6 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
                 .px(tk.card_pad())
                 .py(tk.r(0.5))
                 .fill(tk.destructive.alpha(0.1))
-                .border_sides([1.0, 0.0, 0.0, 0.0], tk.destructive.alpha(0.3))
                 .child(
                     text(tr("review:logs.rawWarning", &[("time", &time)]))
                         .font(tk.tsm(400.0))
@@ -1362,51 +1298,12 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
                 ),
         );
     }
-    let fill = ((s.store.bytes as f64 / logstore::MAX_BYTES as f64) * 100.0)
-        .round()
-        .min(100.0) as usize;
-    card = card.child(
-        col()
-            .w_full()
-            .border_sides([1.0, 0.0, 0.0, 0.0], hair)
-            .child(
-                row()
-                    .w_full()
-                    .px(tk.card_pad())
-                    .py(tk.r(0.375))
-                    .center_y()
-                    .justify_between()
-                    .child(
-                        text(tc(
-                            "review:logs.recordsLine",
-                            idx.len(),
-                            &[
-                                ("count", &idx.len().to_string()),
-                                ("size", &logstore::format_bytes(s.store.bytes)),
-                                ("percent", &fill.to_string()),
-                            ],
-                        ))
-                        .font(tk.txs(400.0))
-                        .color(tk.muted_fg),
-                    )
-                    .child(
-                        text(tc(
-                            "review:logs.renderingNewest",
-                            visible.len(),
-                            &[("count", &visible.len().to_string())],
-                        ))
-                        .font(tk.txs(400.0))
-                        .color(tk.muted_fg),
-                    ),
-            )
-            .child(
-                row()
-                    .w_full()
-                    .h(1.0)
-                    .child(el().h(1.0).grow(fill as f32).fill(tk.primary.alpha(0.6)))
-                    .child(el().h(1.0).grow((100 - fill) as f32).fill(hair)),
-            ),
-    );
+    let win_h = if app.shell.window_h > 0.0 {
+        app.shell.window_h
+    } else {
+        900.0
+    };
+    let page_h = win_h - 40.0 - tk.r(0.375) - 2.0;
     let mut viewport = col()
         .key("logs-viewport")
         .w_full()
@@ -1517,7 +1414,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     widgets::shell(tk)
         .h(page_h)
         .min_h(0.0)
-        .child(head)
+        .child(toolbar)
         .child(card)
 }
 

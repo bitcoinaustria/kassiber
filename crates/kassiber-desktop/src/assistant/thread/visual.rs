@@ -423,13 +423,10 @@ fn delta_pill(app: &App, tk: &Tk, label: String, value: f64) -> El {
     } else {
         (tk.muted_fg, tk.muted)
     };
+    let _ = bg;
     row()
         .gap(2.0)
         .center_y()
-        .radius(999.0)
-        .fill(bg)
-        .px(tk.r(0.375))
-        .py(2.0)
         .child(
             ic(
                 if value >= 0.0 {
@@ -1627,10 +1624,6 @@ fn overview(app: &App, tk: &Tk, v: &Visual, key: &str, wide: bool, expanded: boo
             row()
                 .gap(tk.r(0.25))
                 .center_y()
-                .radius(999.0)
-                .fill(tone.bg)
-                .px(tk.r(0.5))
-                .py(2.0)
                 .child(ic(glyph, tk.r(0.75), tone.text).a11y_hidden())
                 .child(text(label).font(tk.t2xs(500.0)).color(tone.text)),
         );
@@ -3103,7 +3096,7 @@ fn transactions(app: &App, tk: &Tk, v: &Visual) -> El {
         if let Some(st) = status {
             let k = format!("assistant:visual.transactions.status.{st}");
             name = name.child(
-                row().radius(999.0).fill(tk.warn.bg).px(tk.r(0.375)).child(
+                row().child(
                     text(if crate::i18n::has(&k) {
                         t(&k)
                     } else {

@@ -44,28 +44,14 @@ pub fn card_title(tk: &Tk, s: &str) -> El {
         .role("heading")
 }
 
-/// `Badge variant="secondary"`: `bg-secondary text-secondary-foreground rounded-md px-2 py-0.5
-/// text-xs font-medium`.
+/// A neutral label (`crate::ui::tag`).
 pub fn badge_secondary(tk: &Tk, s: &str) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .fill(tk.muted)
-        .center_y()
-        .child(text(s.to_owned()).font(tk.txs(500.0)).color(tk.fg))
+    crate::ui::tag(tk, tk.muted_fg, None, s)
 }
 
-/// `Badge variant="outline"`.
+/// A neutral label (`crate::ui::tag`).
 pub fn badge_outline(tk: &Tk, s: &str) -> El {
-    row()
-        .px(tk.r(0.5))
-        .py(tk.r(0.125))
-        .radius(tk.r(0.375))
-        .border(1.0, tk.border)
-        .border_layout()
-        .center_y()
-        .child(text(s.to_owned()).font(tk.txs(500.0)).color(tk.fg))
+    crate::ui::tag(tk, tk.muted_fg, None, s)
 }
 
 /// The amber notice tones (`border-amber-300 bg-amber-50 text-amber-900`, dark
@@ -546,29 +532,15 @@ pub fn dialog_footer(tk: &Tk, items: Vec<El>) -> El {
 
 /// shadcn `Button variant="destructive"` (`bg-destructive text-white`, dark `bg-destructive/60`).
 pub fn destructive_button(tk: &Tk, key: &str, label: &str, enabled: bool) -> El {
-    let fill = if tk.dark {
-        tk.destructive.alpha(0.6)
-    } else {
-        tk.destructive
-    };
-    row()
-        .key(key.to_owned())
-        .h(tk.r(2.25))
-        .px(tk.r(1.0))
-        .center()
-        .radius(tk.r(0.375))
-        .fill(fill)
-        .hover(fill.alpha(0.9))
-        .role("button")
-        .label(label.to_owned())
-        .focusable(enabled)
-        .disabled(!enabled)
-        .opacity(if enabled { 1.0 } else { 0.5 })
-        .child(
-            text(label.to_owned())
-                .font(tk.tsm(500.0))
-                .color(Color::WHITE),
-        )
+    crate::ui::button::button(
+        tk,
+        key,
+        crate::ui::button::Variant::Destructive,
+        crate::ui::button::Size::Default,
+        None,
+        label,
+        enabled,
+    )
 }
 
 /// The error line under a form (`m-0 text-sm text-destructive`).

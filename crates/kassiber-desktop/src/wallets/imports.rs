@@ -200,22 +200,16 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, _layer: &mut Vec<El>) -> El {
     let sm = app.shell.window_w <= 0.0 || app.shell.window_w >= 640.0;
     // `pageHeaderClassName`: description left, the outline `Connections` button right.
     let back_label = t("review:imports.connections");
-    let back = crate::ui::outline_surface(
+    let back = crate::ui::button::button(
         tk,
-        row()
-            .key("imports-back")
-            .h(tk.r(2.0))
-            .px(tk.r(0.625))
-            .gap(tk.r(0.5))
-            .center()
-            .radius(tk.r(0.375)),
+        "imports-back",
+        crate::ui::button::Variant::Outline,
+        crate::ui::button::Size::Sm,
+        Some(&I::ARROW_LEFT),
+        &back_label,
+        true,
     )
-    .role("button")
-    .label(back_label.clone())
-    .focusable(true)
-    .on_press(|a: &mut App| a.navigate("/connections"))
-    .child(ic(&I::ARROW_LEFT, tk.r(1.0), tk.fg))
-    .child(text(back_label).font(tk.tsm(500.0)).color(tk.fg));
+    .on_press(|a: &mut App| a.navigate("/connections"));
     let desc = text(t("review:imports.description"))
         .font(tk.tsm(400.0))
         .color(tk.muted_fg)
