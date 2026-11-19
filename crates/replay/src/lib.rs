@@ -114,6 +114,17 @@ pub fn export(
     sources: &impl kassiber_transfers::Sources,
 ) -> Result<Export, AppError> {
     check_passphrase(passphrase)?;
+    // One read snapshot of the book for the source, its stored figures and
+    // the local check: another connection processing meanwhile can't mix
+    // revisions into one bundle.
+    let read = if conn.is_autocommit() {
+        Some(
+            conn.unchecked_transaction()
+                .map_err(|error| AppError::new("internal_error", error.to_string()))?,
+        )
+    } else {
+        None
+    };
     let source = reproduce::bundle_source(conn, workspace, profile).map_err(app)?;
     if source.status != "current" {
         return Err(AppError::new(
@@ -161,6 +172,7 @@ pub fn export(
     let fidelity = reproduce::diff(&masked(&mapped)?, &masked(&outputs)?, 5);
     ensure_faithful(&fidelity)?;
     let local = reproduce::check(conn, workspace, profile, 1, sources).map_err(app)?;
+    drop(read);
     let inputs_text = serde_json::to_string(&inputs)
         .map_err(|error| AppError::new("internal_error", error.to_string()))?;
     let outputs_text = serde_json::to_string(&tables_json(&outputs))
@@ -335,7 +347,10 @@ pub fn verify(sealed: &[u8], passphrase: &str, limit: usize) -> Result<Value, Ap
         outputs::project(&tables, &outputs::Mode::Verify)
             .map_err(|refused| Refusal::from(unsupported(refused)))
     };
-    let recomputed = match reproduce::snapshot_tables(snapshot.clone()).and_then(canonical) {
+    if !snapshot.profile.get("id").is_some_and(Value::is_string) {
+        return Err(corrupt("The bundle's inputs name no book profile"));
+    }
+    let recomputed = match recompute(snapshot.clone())?.and_then(canonical) {
         Ok(tables) => tables,
         Err(refusal) => {
             report.insert("status".into(), json!("refused"));
@@ -347,7 +362,7 @@ pub fn verify(sealed: &[u8], passphrase: &str, limit: usize) -> Result<Value, Ap
         }
     };
     let compared = reproduce::diff(&recorded, &recomputed, limit);
-    let deterministic = reproduce::snapshot_tables(snapshot)
+    let deterministic = recompute(snapshot)?
         .and_then(canonical)
         .map(|again| reproduce::diff(&recomputed, &again, 1).identical())
         .ok();
@@ -383,6 +398,18 @@ pub fn verify(sealed: &[u8], passphrase: &str, limit: usize) -> Result<Value, Ap
     section.extend(stored.fields());
     report.insert("stored".into(), Value::Object(section));
     Ok(Value::Object(report))
+}
+
+/// Recompute a bundle's inputs, which come from outside: the journal
+/// pipeline expects loader-shaped rows, so a malformed bundle that trips it
+/// is corruption, never a crash.
+fn recompute(
+    snapshot: kassiber_custody::snapshot::Snapshot,
+) -> Result<Result<Vec<Table>, Refusal>, AppError> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        reproduce::snapshot_tables(snapshot)
+    }))
+    .map_err(|_| corrupt("The bundle's inputs are malformed"))
 }
 
 /// Hex runs of 40 or more characters masked as `#`, in keys and strings.

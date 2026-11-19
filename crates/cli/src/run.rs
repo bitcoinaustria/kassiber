@@ -108,6 +108,9 @@ pub struct Streams {
 }
 
 /// `USAGE_HINT` of the `--machine` usage-error envelope.
+/// `diagnostics replay-bundle verify`: needs no book, project or broker.
+pub(crate) const REPLAY_VERIFY: &str = "diagnostics.replay-bundle.verify";
+
 const USAGE_HINT: &str = "Global flags such as --machine, --format, --output, --project, and --data-root go before the subcommand. Check `kassiber --machine commands describe <command path>` for the exact arguments.";
 
 /// The global flags after parsing.
@@ -424,9 +427,12 @@ pub fn run(
     // _maybe_migrate_default_state_root, before broker routing and
     // bootstrap. `commands describe` never migrates (nor bootstraps), and
     // neither does `backup import`, which restores into the root it finds.
+    // A replay bundle carries its own inputs: verifying one migrates,
+    // selects and routes no project.
     let migrate = globals.selection.data_root.is_none()
         && globals.selection.env_file.is_none()
         && !matches!(path.first(), Some(&"commands") | Some(&"verify-download"))
+        && dotted != REPLAY_VERIFY
         && path[..] != ["backup", "import"]
         && !(path.first() == Some(&"operator")
             && matches!(

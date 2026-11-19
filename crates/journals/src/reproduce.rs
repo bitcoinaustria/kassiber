@@ -37,7 +37,10 @@ impl Cell {
         match value {
             Sql::Null => Self::Null,
             Sql::Integer(n) => Self::Int(n),
-            Sql::Real(n) => Self::real(n),
+            // SQLite stores a REAL zero as +0.0: -0.0 reads back positive, so
+            // the in-memory build carries the stored form (the exact text
+            // column keeps the sign).
+            Sql::Real(n) => Self::real(if n == 0.0 { 0.0 } else { n }),
             Sql::Text(text) => Self::Text(text),
             Sql::Blob(bytes) => Self::Blob(bytes),
         }
@@ -920,9 +923,35 @@ pub fn snapshot_tables(
         .map_err(|message| Refusal::new("ValueError", message))?;
     let profile = serde_json::to_value(&snapshot.profile)
         .map_err(|error| Refusal::new("ValueError", error.to_string()))?;
+    // Persistence keeps only quarantines of the profile's own transactions
+    // (a synthetic or foreign id is dropped before storage); so does this.
+    let live: std::collections::HashSet<String> = snapshot
+        .transactions
+        .iter()
+        .filter_map(|t| t.get("id").map(crate::string))
+        .chain(snapshot.anchors.keys().cloned())
+        .collect();
     // The same custody, fusion, engine and render path `journals process`
     // stores from.
-    process::render_loaded(&profile, &snapshot, state_tables)
+    process::render_loaded(&profile, &snapshot, |state| {
+        let mut tables = state_tables(state)?;
+        live_quarantines(&mut tables, &live);
+        Ok(tables)
+    })
+}
+
+/// Drops quarantine rows whose transaction is not one of `live`.
+fn live_quarantines(tables: &mut [Table], live: &std::collections::HashSet<String>) {
+    for table in tables
+        .iter_mut()
+        .filter(|t| t.name == "journal_quarantines")
+    {
+        table.rows.retain(|row| {
+            row.transaction_id
+                .as_ref()
+                .is_some_and(|id| live.contains(id))
+        });
+    }
 }
 
 /// What a replay bundle captures of one profile: its settings, journal
@@ -1216,6 +1245,38 @@ mod tests {
         assert_ne!(Cell::real(0.0), Cell::real(-0.0));
         let table = Table::new("t", vec![row("a", 1), row("a", 2)]);
         assert_eq!(table.rows[1].key, "a#2");
+    }
+
+    /// The in-memory build reads a REAL as SQLite stores it: a negative
+    /// zero comes back positive, so a correctly stored signed-zero entry is
+    /// not a replay difference.
+    #[test]
+    fn a_real_zero_reads_as_sqlite_stores_it() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE t(x REAL); INSERT INTO t VALUES(-0.0)")
+            .unwrap();
+        let stored: Sql = conn.query_row("SELECT x FROM t", [], |r| r.get(0)).unwrap();
+        assert_eq!(Cell::from_sql(Sql::Real(-0.0)), Cell::from_sql(stored));
+        assert_eq!(Cell::from_sql(Sql::Real(-0.0)), Cell::real(0.0));
+        assert_eq!(Cell::from_sql(Sql::Real(-1.5)), Cell::real(-1.5));
+    }
+
+    #[test]
+    fn quarantines_of_transactions_outside_the_profile_are_dropped() {
+        let quarantine = |id: &str| Row {
+            key: id.into(),
+            transaction_id: Some(id.into()),
+            wallet_id: None,
+            year: None,
+            columns: BTreeMap::from([("reason".into(), Cell::text("x"))]),
+        };
+        let mut tables = vec![Table::new(
+            "journal_quarantines",
+            vec![quarantine("tx-1"), quarantine("synthetic:unknown")],
+        )];
+        live_quarantines(&mut tables, &["tx-1".to_owned()].into_iter().collect());
+        let kept: Vec<_> = tables[0].rows.iter().map(|r| r.key.as_str()).collect();
+        assert_eq!(kept, ["tx-1"]);
     }
 
     #[test]
