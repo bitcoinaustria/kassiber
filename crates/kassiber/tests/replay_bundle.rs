@@ -8,7 +8,7 @@
 mod support;
 
 use kassiber_pyjson::Value;
-use support::{path, text, Daemon, Desk};
+use support::{kind_of, path, text, Daemon, Desk};
 
 const PASSPHRASE: &str = "cli-replay-passphrase";
 
@@ -112,6 +112,8 @@ fn cli_exports_and_verifies_a_bundle_without_other_writes() {
         Some(bundle_arg.as_str()),
         "{exported:?}"
     );
+    // Each operation answers under the kind `commands describe` advertises.
+    assert_eq!(kind_of(&exported), "diagnostics.replay-bundle.export");
     assert_eq!(
         data(&exported, &["manifest", "local_check", "status"]),
         Some("identical")
@@ -167,6 +169,7 @@ fn cli_exports_and_verifies_a_bundle_without_other_writes() {
         Some("identical"),
         "{verified:?}"
     );
+    assert_eq!(kind_of(&verified), "diagnostics.replay-bundle.verify");
     assert!(!base.join("no-book").exists(), "verify created a data root");
 
     // Nor does it need one: without --data-root it migrates, selects and
