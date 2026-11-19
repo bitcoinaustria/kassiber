@@ -775,5 +775,15 @@
       "bisq_holds_or_refuses_ambiguous_escrow_evidence"
     ],
     "rule": "An escrow transaction books for one trade; a second trade naming it is refused."
+  },
+  {
+    "id": "bisq-read-under-write-lock",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "        kassiber_store::begin_write_savepoint(conn, \"wallet_file_import\")\n            .map_err(database_error)?;\n        savepoint.open = true;\n        let mut parsed = bisq::read(",
+    "replace": "        let mut parsed = bisq::read(",
+    "expect_failing": [
+      "bisq_checks_the_book_under_the_write_lock"
+    ],
+    "rule": "A Bisq export is checked against the book under the import's write lock, so a concurrent import of the same trade refuses."
   }
 ]
