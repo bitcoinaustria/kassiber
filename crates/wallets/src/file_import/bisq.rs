@@ -122,13 +122,25 @@ impl Book<'_> {
         };
         rows.into_iter().map(observed).collect()
     }
+    /// Another trade whose stored legs name `txid` as their escrow deposit or
+    /// payout.
+    fn claimed_by_other(&self, trade: &str, txid: &str) -> Result<Option<String>, AppError> {
+        self.conn
+            .query_row(
+                "SELECT substr(external_id,6,length(external_id)-5-length(json_extract(raw_json,'$.bisq_leg'))-1) FROM transactions WHERE profile_id=?1 AND external_id LIKE 'bisq:%' AND substr(external_id,1,length(?2))!=?2 AND (json_extract(raw_json,'$.bisq_deposit_txid')=?3 OR json_extract(raw_json,'$.bisq_payout_txid')=?3) ORDER BY external_id LIMIT 1",
+                params![self.profile, format!("bisq:{trade}:"), txid],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(database_error)
+    }
     /// The legs of `trade` an earlier import stored anywhere in the book, by
-    /// leg: wallet, direction, asset, msat, kind, date, contract time, zone
-    /// and (trade leg) volume, price and currency.
+    /// leg: wallet, direction, asset, msat, kind, date, contract time, zone,
+    /// escrow txids and (trade leg) volume, price and currency.
     fn stored(&self, trade: &str) -> Result<BTreeMap<String, String>, AppError> {
         let mut statement = self
             .conn
-            .prepare("SELECT substr(external_id,length(?2)+1),wallet_id||'|'||direction||'|'||asset||'|'||amount||'|'||COALESCE(kind,'')||'|'||occurred_at||'|'||COALESCE(json_extract(raw_json,'$.bisq_contract_time'),'')||'|'||COALESCE(json_extract(raw_json,'$.bisq_timezone'),'')||'|'||CASE WHEN external_id=?2||'trade' THEN COALESCE(fiat_value_exact,'')||'|'||COALESCE(fiat_rate_exact,'')||'|'||COALESCE(fiat_currency,'') ELSE '' END FROM transactions WHERE profile_id=?1 AND external_id IN (?2||'deposit',?2||'trade',?2||'payout')")
+            .prepare("SELECT substr(external_id,length(?2)+1),wallet_id||'|'||direction||'|'||asset||'|'||amount||'|'||COALESCE(kind,'')||'|'||occurred_at||'|'||COALESCE(json_extract(raw_json,'$.bisq_contract_time'),'')||'|'||COALESCE(json_extract(raw_json,'$.bisq_timezone'),'')||'|'||COALESCE(json_extract(raw_json,'$.bisq_deposit_txid'),'')||'|'||COALESCE(json_extract(raw_json,'$.bisq_payout_txid'),'')||'|'||CASE WHEN external_id=?2||'trade' THEN COALESCE(fiat_value_exact,'')||'|'||COALESCE(fiat_rate_exact,'')||'|'||COALESCE(fiat_currency,'') ELSE '' END FROM transactions WHERE profile_id=?1 AND external_id IN (?2||'deposit',?2||'trade',?2||'payout')")
             .map_err(database_error)?;
         let rows = statement
             .query_map(params![self.profile, format!("bisq:{trade}:")], |r| {
@@ -195,13 +207,32 @@ fn load_zone(name: Option<&str>) -> Result<Zone, AppError> {
         ));
     };
     let tzpath = zone::tzpath(std::env::var("PYTHONTZPATH").ok().as_deref());
-    if let Ok(zone) = zone::load(name, &tzpath) {
+    load_zone_in(name, &tzpath)
+}
+
+/// [`load_zone`] with the zoneinfo directories to search.
+fn load_zone_in(name: &str, tzpath: &[std::path::PathBuf]) -> Result<Zone, AppError> {
+    if let Ok(zone) = zone::load(name, tzpath) {
         return Ok(zone);
     }
     match calendar::zone(name) {
         _ if name == "UTC" => Ok(Zone::utc(name)),
         Some(rule) if rule.eu_summer_time() => {
             Ok(Zone::eu(name, i64::from(rule.standard_offset_s())))
+        }
+        // A southern zone keeps its own summer time (Sydney, Auckland).
+        Some(rule) if rule.summer_rule().is_some() => {
+            let (start, end) = rule.summer_rule().expect("a summer rule");
+            let posix = |change: calendar::Change, end: bool| {
+                let (month, week, seconds) = change.posix(end);
+                (i64::from(month), i64::from(week), i64::from(seconds))
+            };
+            Ok(Zone::posix_rule(
+                name,
+                i64::from(rule.standard_offset_s()),
+                posix(start, false),
+                posix(end, true),
+            ))
         }
         Some(rule) => Ok(Zone::pinned(name, i64::from(rule.standard_offset_s()), &[], None)),
         None => Err(AppError::new("validation", format!("Unknown time zone '{name}'")).with_hint(
@@ -497,7 +528,13 @@ fn movements(rows: &[csv::Row], zone: &Zone) -> Result<BTreeMap<String, Movement
         } else {
             &mut entry.payout
         };
-        if !list.iter().any(|e| e.txid == txid) {
+        // The same row twice is one fact; the same txid with another amount
+        // or date stays as a second entry, so the trade is held as
+        // conflicting rather than read from whichever row came first.
+        if !list
+            .iter()
+            .any(|e| e.txid == txid && e.sats == sats && e.at_us == at_us)
+        {
             list.push(Escrow {
                 txid,
                 at_us,
@@ -532,6 +569,8 @@ fn parse(
     let movements = movements(&transactions, zone)?;
     let country = book.country()?;
     let mut seen = BTreeMap::<String, Json>::new();
+    // Escrow txid -> the trade of this export that books it.
+    let mut claimed = BTreeMap::<String, String>::new();
     for row in &rows {
         let columns = Columns::new(row);
         let raw = columns.json();
@@ -593,11 +632,13 @@ fn parse(
         let escrow_txs = movements.get(&id);
         let txids: Vec<String> = escrow_txs
             .map(|m| {
-                m.deposit
-                    .iter()
-                    .chain(&m.payout)
-                    .map(|e| e.txid.clone())
-                    .collect()
+                let mut txids = Vec::new();
+                for e in m.deposit.iter().chain(&m.payout) {
+                    if !txids.contains(&e.txid) {
+                        txids.push(e.txid.clone());
+                    }
+                }
+                txids
             })
             .unwrap_or_default();
         let hold = |reason: &'static str| -> Result<Hold, AppError> {
@@ -694,9 +735,13 @@ fn parse(
             _ if -deposit.sats < deposited => Some("deposit_amount_mismatch"),
             _ if payout.sats != paid_out => Some("payout_amount_mismatch"),
             ([], _) => Some("deposit_not_in_book"),
+            // Several owned rows of one escrow transaction do not say which
+            // one is Bisq's: never paired, so never booked as settled.
+            ([_, _, ..], _) => Some("deposit_debit_mismatch"),
             ([observed], _) if observed.movement_msat != debit_msat => {
                 Some("deposit_debit_mismatch")
             }
+            (_, [_, _, ..]) => Some("payout_receipt_mismatch"),
             (_, [observed]) if observed.movement_msat != paid_out * 1000 => {
                 Some("payout_receipt_mismatch")
             }
@@ -721,6 +766,22 @@ fn parse(
             parsed.held.push(hold(reason)?);
             continue;
         }
+        // An escrow transaction belongs to one trade: another trade of this
+        // export or of the book naming it would book the same movement twice.
+        for txid in [&deposit.txid, &payout.txid] {
+            let other = match claimed.get(txid) {
+                Some(other) => Some(other.clone()),
+                None => book.claimed_by_other(&id, txid)?,
+            };
+            if let Some(other) = other {
+                return Err(refuse(
+                    &id,
+                    format!("names escrow transaction {txid}, which trade {other} also names"),
+                    "A Bisq escrow transaction belongs to one trade. Import the exports unchanged, or roll back the import that booked the other trade first (kassiber imports rollback).",
+                ));
+            }
+            claimed.insert(txid.clone(), id.clone());
+        }
         let times = [deposit_us, trade_us, payout_us].map(crate::time::iso_seconds);
         // A trade already in the book must match this export exactly: changed
         // amounts or prices refuse, and so do moved escrow dates or another
@@ -732,15 +793,18 @@ fn parse(
                 String::new()
             };
             let facts = format!(
-                "{}|{direction}|BTC|{}|{kind}|{}|{contract}|{}|{pricing}",
+                "{}|{direction}|BTC|{}|{kind}|{}|{contract}|{}|{}|{}|{pricing}",
                 book.escrow,
                 quantity * 1000,
                 times[index],
-                zone.key
+                zone.key,
+                deposit.txid,
+                payout.txid
             );
             if !stored.is_empty() && stored.get(*leg) != (*quantity != 0).then_some(&facts) {
-                let what =
-                    format!("its {leg} leg differs in amount, price, wallet, date or time zone");
+                let what = format!(
+                    "its {leg} leg differs in amount, price, wallet, date, time zone or escrow transaction"
+                );
                 return Err(conflict(&id, &what));
             }
         }
@@ -914,6 +978,28 @@ pub(super) fn finish(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Without tzdata (Windows) a southern registry zone keeps its own
+    /// summer time: Sydney is UTC+11 in January, and its repeated autumn
+    /// hour is refused as ambiguous rather than read at one offset.
+    #[test]
+    fn southern_zones_keep_their_summer_time_without_tzdata() {
+        let sydney = load_zone_in("Australia/Sydney", &[]).unwrap();
+        assert_eq!(
+            utc(&sydney, "t", "Jan 15, 2025 12:00:00 PM").unwrap(),
+            utc(&Zone::utc("UTC"), "t", "Jan 15, 2025 1:00:00 AM").unwrap()
+        );
+        assert_eq!(
+            utc(&sydney, "t", "Jul 15, 2025 12:00:00 PM").unwrap(),
+            utc(&Zone::utc("UTC"), "t", "Jul 15, 2025 2:00:00 AM").unwrap()
+        );
+        let repeated = utc(&sydney, "t", "Apr 6, 2025 2:30:00 AM").unwrap_err();
+        assert!(
+            repeated.message.contains("showed twice"),
+            "{}",
+            repeated.message
+        );
+    }
 
     #[test]
     fn reads_bisq_dates_amounts_ids_and_tax_years_exactly() {
