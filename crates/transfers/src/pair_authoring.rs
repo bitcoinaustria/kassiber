@@ -650,8 +650,9 @@ pub enum Evidenced {
 /// A same-asset transfer pair an importer proves: the provider's own export
 /// names the outbound transaction's txid and states how much of its observed
 /// debit paid miner fees (`declared_fee_msat`). The fee becomes an explicit
-/// network-fee allocation, never suspense; a debit that does not reconcile to
-/// principal plus that fee is refused. The owner's decisions win: an edge the
+/// network-fee allocation, never suspense. Legs of two assets, a negative
+/// fee, or a debit that is not exactly the whole inbound amount plus that fee
+/// are refused. The owner's decisions win: an edge the
 /// owner unpaired or dismissed, or a leg another review already covers, is
 /// declined rather than paired again. The pair records `pair_source
 /// provider_txid` and `authored_source import`; `notes` names the evidence.
@@ -664,6 +665,12 @@ pub fn create_evidenced(
     notes: &str,
     sources: &dyn Sources,
 ) -> Result<Evidenced> {
+    if declared_fee_msat < 0 {
+        return Err(AppError::new(
+            "validation",
+            format!("A provider-stated miner fee cannot be negative ({declared_fee_msat} msat)"),
+        ));
+    }
     atomic(c, || {
         let now = sources.now(c)?;
         if crate::pairing::service::declined_edge(c, scope, out_id, in_id, &now)? {
@@ -688,6 +695,19 @@ pub fn create_evidenced(
         .is_empty()
         {
             return Ok(Evidenced::Declined("already_reviewed"));
+        }
+        // Evidence of one transfer, never a conversion between assets.
+        let (out_asset, in_asset) = (
+            spec::asset(&value(&out, "asset")),
+            spec::asset(&value(&inbound, "asset")),
+        );
+        if out_asset != in_asset {
+            return Err(AppError::new(
+                "validation",
+                format!(
+                    "An evidenced transfer pair moves one asset, not {out_asset} to {in_asset}"
+                ),
+            ));
         }
         let carrying = s("carrying-value");
         network(&out, &inbound, "carrying-value")?;

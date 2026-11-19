@@ -382,22 +382,10 @@ fn csv_import_failures_are_atomic_and_empty_runs_preserve_readiness() {
         0
     );
     assert!(import(&conn, "date,amount\n2025-01-01,1\ninvalid,2\n").is_err());
-    assert_eq!(
-        scalar(
-            &conn,
-            "SELECT count(*) FROM transactions WHERE external_id LIKE 'bisq:%'"
-        ),
-        0
-    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
     conn.execute_batch("CREATE TRIGGER fail_batch BEFORE INSERT ON import_batches BEGIN SELECT RAISE(ABORT,'batch denied');END;").unwrap();
     assert!(import(&conn, "date,amount\n2025-01-01,1\n").is_err());
-    assert_eq!(
-        scalar(
-            &conn,
-            "SELECT count(*) FROM transactions WHERE external_id LIKE 'bisq:%'"
-        ),
-        0
-    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
     assert_eq!(
         scalar(
             &conn,
@@ -941,13 +929,7 @@ fn json_sqlcipher_binding_refusal_preserves_the_reference_driver_message() {
         error.message,
         "Error binding parameter 29 - probably unsupported type."
     );
-    assert_eq!(
-        scalar(
-            &conn,
-            "SELECT count(*) FROM transactions WHERE external_id LIKE 'bisq:%'"
-        ),
-        0
-    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
     assert_eq!(
         scalar(
             &conn,
@@ -1435,13 +1417,7 @@ fn bull_relevant_validates_only_matched_prices_and_preserves_committed_raw() {
         ),
         0
     );
-    assert_eq!(
-        scalar(
-            &conn,
-            "SELECT count(*) FROM transactions WHERE external_id LIKE 'bisq:%'"
-        ),
-        0
-    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
     import(&conn, "date,txid,amount\n2025-01-01,match,0.002\n").unwrap();
     let rows=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap()).unwrap();
     let request = Request {
@@ -2615,13 +2591,7 @@ fn ledgerlive_refusals_and_late_failure_leave_the_book_unchanged() {
     )
     .unwrap_err();
     assert_eq!(error.code, "validation");
-    assert_eq!(
-        scalar(
-            &conn,
-            "SELECT count(*) FROM transactions WHERE external_id LIKE 'bisq:%'"
-        ),
-        0
-    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
     conn.execute_batch("CREATE TRIGGER refuse_ledgerlive BEFORE INSERT ON import_batches BEGIN SELECT RAISE(ABORT,'ledgerlive denied');END;").unwrap();
     assert!(import_kind(
         &conn,
@@ -3637,13 +3607,7 @@ fn binance_late_failure_rolls_back_records_flags_runs_and_readiness() {
             let body = format!("id,amount,asset,divTime\nreward,0.00001,BTC,{value}\n");
             let error = binance_import(&conn, &body, "full", "Source").unwrap_err();
             assert_eq!(error.message, "Invalid value NaN (not a number)");
-            assert_eq!(
-                scalar(
-                    &conn,
-                    "SELECT count(*) FROM transactions WHERE external_id LIKE 'bisq:%'"
-                ),
-                0
-            );
+            assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
         }
         for mode in ["full", "relevant"] {
             let conn = fixture_codec(encrypted);
@@ -3884,13 +3848,7 @@ fn ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches() {
             kassiber_envelope::get(error.details.as_ref().unwrap(), "sqlite_error_code"),
             Some(&Py::from(1811))
         );
-        assert_eq!(
-            scalar(
-                &conn,
-                "SELECT count(*) FROM transactions WHERE external_id LIKE 'bisq:%'"
-            ),
-            0
-        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
         assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 0);
         assert_eq!(
             scalar(
@@ -4083,13 +4041,7 @@ fn btcpay_late_failure_rolls_back_transactions_metadata_runs_and_readiness() {
         let conn = fixture_codec(encrypted);
         let body = "TransactionId,Timestamp,Amount\nfirst,2025-01-02,1 BTC\nsecond,invalid,1 BTC\n";
         assert!(import_kind(&conn, body, Format::BtcpayCsv).is_err());
-        assert_eq!(
-            scalar(
-                &conn,
-                "SELECT count(*) FROM transactions WHERE external_id LIKE 'bisq:%'"
-            ),
-            0
-        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
     }
 }
 
@@ -5889,6 +5841,94 @@ fn bisq_refuses_exports_that_contradict_stored_legs() {
         "{}",
         error.message
     );
+}
+
+/// Escrow evidence that does not name one fact is held or refused, never
+/// read from whichever row came first: several owned observations of one
+/// escrow transaction, Funds rows that disagree about one txid, a re-export
+/// that moves a trade to another escrow transaction, and two trades naming
+/// the same escrow transaction.
+#[test]
+fn bisq_holds_or_refuses_ambiguous_escrow_evidence() {
+    // The buyer's deposit observed in two owned wallets.
+    let conn = bisq_book();
+    bisq_onchain(&conn, BISQ_DEPOSITS);
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('second','ws','p','Second','custom','2025-01-01')").unwrap();
+    let copy = "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) SELECT 'copy',workspace_id,profile_id,'second','fp-copy',external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at FROM transactions WHERE external_id=?";
+    conn.execute(copy, [bisq_txid("a1")]).unwrap();
+    let result = import_bisq(&conn, BISQ_TRADES).unwrap();
+    assert_eq!(
+        held(&result),
+        ["a1b2c3d4 deposit_debit_mismatch", "d15e0001 not_completed"]
+    );
+    assert!(!bisq_legs(&conn).contains("a1b2c3d4"));
+
+    // A second Funds row for the buyer's payout txid with another amount
+    // holds the trade in either order; an identical second row does not.
+    let payout = "\"Mar 16, 2024 10:00:00 AM\",a1b2c3d4-0f1e2d3c-4b5a-4978-8a9b-0c1d2e3f4a5b-199,Multisig payout,Received with: bc1qsyntheticpayout00000000000000000000000,b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1,0.031,,3100\n";
+    let other = payout.replace(",0.031,", ",0.0311,");
+    let (header, body) = BISQ_TRANSACTIONS.split_at(BISQ_TX_HEADER.len());
+    for transactions in [
+        format!("{BISQ_TRANSACTIONS}{other}"),
+        format!("{header}{other}{body}"),
+    ] {
+        let conn = bisq_book();
+        bisq_onchain(&conn, BISQ_DEPOSITS);
+        let result = import_bisq_files(&conn, BISQ_TRADES, Some(&transactions)).unwrap();
+        assert_eq!(
+            held(&result),
+            ["a1b2c3d4 conflicting_escrow_txs", "d15e0001 not_completed"]
+        );
+    }
+    let conn = bisq_book();
+    bisq_onchain(&conn, BISQ_DEPOSITS);
+    let doubled = format!("{BISQ_TRANSACTIONS}{payout}");
+    let result = import_bisq_files(&conn, BISQ_TRADES, Some(&doubled)).unwrap();
+    assert_eq!(held(&result), ["d15e0001 not_completed"]);
+
+    // A re-export naming another payout txid for a stored trade refuses.
+    let before = scalar(&conn, "SELECT count(*) FROM transactions");
+    let moved = BISQ_TRANSACTIONS.replace(&bisq_txid("d2"), &bisq_txid("dd"));
+    let error = import_bisq_files(&conn, BISQ_TRADES, Some(&moved)).unwrap_err();
+    assert!(
+        error
+            .message
+            .starts_with("Bisq trade e5f6a7b8 conflicts with its escrow legs already in the book"),
+        "{}",
+        error.message
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), before);
+
+    // Another trade naming a stored trade's escrow transactions refuses, and
+    // so do two trades of one export naming the same ones.
+    let twin = "a1b2c3d5,\"Mar 15, 2024 2:30:45 PM\",BTC/EUR,60000.0000,1.00%,0.025,1500,EUR,0.00005,0.000175,,0.006,0.006,Buy BTC,Completed\n";
+    let twin_rows = bisq_tx(
+        "a1b2c3d5-1|Mar 15, 2024 2:41:10 PM|Multisig deposit|a1|-0.00605
+        a1b2c3d5-1|Mar 16, 2024 10:00:00 AM|Multisig payout|b1|0.031",
+    );
+    let twin_rows = twin_rows.trim_start_matches(BISQ_TX_HEADER);
+    let error = import_bisq_files(
+        &conn,
+        &format!("{BISQ_HEADER}{twin}"),
+        Some(&format!("{BISQ_TRANSACTIONS}{twin_rows}")),
+    )
+    .unwrap_err();
+    let claim = format!(
+        "Bisq trade a1b2c3d5 names escrow transaction {}, which trade a1b2c3d4 also names",
+        bisq_txid("a1")
+    );
+    assert_eq!(error.message, claim);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), before);
+    let conn = bisq_book();
+    bisq_onchain(&conn, BISQ_DEPOSITS);
+    let error = import_bisq_files(
+        &conn,
+        &format!("{BISQ_TRADES}{twin}"),
+        Some(&format!("{BISQ_TRANSACTIONS}{twin_rows}")),
+    )
+    .unwrap_err();
+    assert_eq!(error.message, claim);
+    assert_eq!(bisq_count(&conn), 0);
 }
 
 /// The escrow ledger needs a dedicated bisq wallet; a wallet of another kind

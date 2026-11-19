@@ -2851,5 +2851,35 @@
       "authoring_sequences_match_python_rows_and_errors_byte_for_byte"
     ],
     "rule": "A harness build counts the expiry from the pinned wall clock its Python vector froze."
+  },
+  {
+    "id": "evidenced-negative-fee",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "    if declared_fee_msat < 0 {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "a_negative_stated_fee_is_refused"
+    ],
+    "rule": "A provider-stated fee below zero is refused, never read as no fee."
+  },
+  {
+    "id": "evidenced-same-asset",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "        if out_asset != in_asset {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "legs_of_different_assets_are_refused"
+    ],
+    "rule": "An evidenced pair moves one asset; a conversion is never activated through it."
+  },
+  {
+    "id": "evidenced-whole-receipt",
+    "file": "crates/transfers/src/pair_spec.rs",
+    "find": "    if received != reviewed {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "an_inbound_amount_the_debit_does_not_cover_is_refused"
+    ],
+    "rule": "An evidenced pair's reviewed principal is the whole inbound amount."
   }
 ]
