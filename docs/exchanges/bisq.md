@@ -12,8 +12,9 @@
   `TransactionsListItem.java`), English or German, plus the exporting
   computer's IANA zone (`--timezone`): Bisq writes local time without an offset
   (`DisplayUtils.formatDateTime`). There is no UTC default. Without system
-  tzdata (Windows) only the tax countries' zones are known; `PYTHONTZPATH`
-  points at a zoneinfo directory for others.
+  tzdata (Windows) only the tax countries' zones are known, each with its own
+  summer-time rule (the EU's, or a southern one such as Sydney's);
+  `PYTHONTZPATH` points at a zoneinfo directory for others.
 - **Watch-only wallet first:** add the xpubs from Account > Wallet info
   (`BTC segwit wallet`, and `BTC legacy wallet` for old wallets) and sync.
 
@@ -59,9 +60,12 @@ covers it or it is excluded, so a deposit never books as a disposal. Txids only
 accumulate; a hold clears when a later export completes the trade with escrow
 transactions covering all of them. Reasons: `not_completed` (mediated,
 arbitrated, `N/A` or unknown status), `missing_deposit_tx`,
-`missing_payout_tx`, `conflicting_escrow_txs`, `deposit_amount_mismatch`,
+`missing_payout_tx`, `conflicting_escrow_txs` (also Funds rows that name one
+txid with different amounts or dates; identical rows count once),
+`deposit_amount_mismatch`,
 `payout_amount_mismatch`, `deposit_not_in_book` (sync, then import again),
-`deposit_debit_mismatch`, `payout_receipt_mismatch`, `payout_precedes_deposit`,
+`deposit_debit_mismatch` and `payout_receipt_mismatch` (also when several
+owned rows observe one escrow transaction), `payout_precedes_deposit`,
 `tax_year_boundary` (contract and trade leg in different UTC or book tax
 years). Canceled offers are skipped (`bisq_canceled_skipped`).
 
@@ -69,9 +73,11 @@ The whole import is **refused, naming the trade**, for: altcoin and BSQ
 markets (`<coin>/BTC`: altcoin-market trades are not supported yet); a quote
 that is not a fiat currency Kassiber knows; an unknown offer type; inexact or
 missing amounts, deposits, price, volume or date; a date the zone skipped or
-repeated; two trade ids sharing a short id or one id with different rows; and
-any difference from legs an earlier import stored (amounts, prices, wallet,
-moved escrow dates or another `--timezone`), including a stored trade this
+repeated; two trade ids sharing a short id or one id with different rows; an
+escrow transaction another trade of the export or of the book already names;
+and any difference from legs an earlier import stored (amounts, prices,
+wallet, escrow txids, moved escrow dates or another `--timezone`), including a
+stored trade this
 export would hold. Roll back the earlier import (`imports rollback`) to
 re-import such a trade. Nothing is written for a refused file.
 

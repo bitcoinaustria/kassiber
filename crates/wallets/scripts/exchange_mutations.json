@@ -845,5 +845,55 @@
     "expect_failing": [
       "file_import::tests::bisq_pairs_legs_by_txid_with_the_stated_miner_fee_and_respects_the_owner"
     ]
+  },
+  {
+    "id": "bisq-southern-zone-rule",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "        Some(rule) if rule.summer_rule().is_some() => {",
+    "replace": "        Some(rule) if false && rule.summer_rule().is_some() => {",
+    "expect_failing": [
+      "southern_zones_keep_their_summer_time_without_tzdata"
+    ],
+    "rule": "Without tzdata a southern registry zone keeps its own summer time, never a fixed standard offset."
+  },
+  {
+    "id": "bisq-conflicting-funds-rows",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "            .any(|e| e.txid == txid && e.sats == sats && e.at_us == at_us)",
+    "replace": "            .any(|e| e.txid == txid)",
+    "expect_failing": [
+      "bisq_holds_or_refuses_ambiguous_escrow_evidence"
+    ],
+    "rule": "Funds rows that disagree about one escrow txid hold the trade instead of keeping the first."
+  },
+  {
+    "id": "bisq-several-deposit-observations",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "            ([_, _, ..], _) => Some(\"deposit_debit_mismatch\"),",
+    "replace": "            ([_, _, ..], _) if false => Some(\"deposit_debit_mismatch\"),",
+    "expect_failing": [
+      "bisq_holds_or_refuses_ambiguous_escrow_evidence"
+    ],
+    "rule": "Several owned observations of one escrow deposit hold the trade; it is never booked unpaired."
+  },
+  {
+    "id": "bisq-reimport-escrow-txids",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "                zone.key,\n                deposit.txid,\n                payout.txid\n",
+    "replace": "                zone.key,\n                \"\",\n                \"\"\n",
+    "expect_failing": [
+      "bisq_completed_trades_become_priced_escrow_ledgers_that_net_to_zero"
+    ],
+    "rule": "Stored and exported legs compare their escrow transactions."
+  },
+  {
+    "id": "bisq-one-trade-per-escrow-tx",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "            if let Some(other) = other {",
+    "replace": "            if let Some(other) = other.filter(|_| false) {",
+    "expect_failing": [
+      "bisq_holds_or_refuses_ambiguous_escrow_evidence"
+    ],
+    "rule": "An escrow transaction books for one trade; a second trade naming it is refused."
   }
 ]
