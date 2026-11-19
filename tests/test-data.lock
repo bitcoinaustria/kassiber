@@ -2,7 +2,7 @@
 # scripts/fetch-test-data.sh; never edit by hand (see
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
-commit cd5852688cfe298208162c930aeeb798774c19ba
+commit 53d75b400264a423dc9d1b9382fb1f45c0359bd5
 ab2bfbb90cc8996dcee6933efaf1a0fd9ea88f89 crates/ai/tests/data/vectors.json
 b02df587ab3b14801a923c1049f1ce4062b1188e crates/chain/fixtures/python_btcpay.json
 76906734c1ea7bd4f09690ad90894cfcadf9f333 crates/chain/fixtures/python_cln.json
@@ -361,16 +361,16 @@ e34cee35d2bd3f0a19750dd2a9c5018283b708d8 docs/reference/tax-country-ie-vectors.j
 31880f97f7dae43ec53841f1eb55a75125d7152a docs/reference/tax-country-jp-vectors.json
 9d61c8df144465ff8bfd95193370d5cc4e828a9e docs/reference/tax-country-us-vectors.json
 925f522a471bdddc300b4dbf9c7c4233731ac009 tax-engine/core/tests/data/us_fixtures.json
-7c958502ec7eb4ddbc0ab2939644699f5d3d4174 tests/data/sessions/blobs-00.tar.gz
-6907f859e9ab909f2ecacfdb105621ee7c7da6cc tests/data/sessions/blobs-01.tar.gz
+21c1dfb8997beedc5a575d99e8eb4b65bfba0a5b tests/data/sessions/blobs-00.tar.gz
+af14a6025f04d300aae547c688a61f5e9db05825 tests/data/sessions/blobs-01.tar.gz
 f81f9095aaf6f44d562f03d60a78eb6dda202e50 tests/data/sessions/blobs-02.tar.gz
 414d180f905f964f2f3a5064a00739b544f9eaa2 tests/data/sessions/blobs-03.tar.gz
 9e87a17434bb31acd939fb89d9ab3562c23fdc2e tests/data/sessions/blobs-04.tar.gz
-2f0f599f8953e11a95a68fcaccbd977bb684552c tests/data/sessions/blobs-05.tar.gz
+d1204cb8af0fca3ac3baa16d6b84cf9c3ee259c6 tests/data/sessions/blobs-05.tar.gz
 8b2b8214af0c53db6644c62daef481d5e4e3fce2 tests/data/sessions/blobs-06.tar.gz
 04407ccc64aef568fb392c772897f4033f04ca5b tests/data/sessions/blobs-07.tar.gz
 5ce6490180b7e5c4fd5b29f97cfb126714500830 tests/data/sessions/dropped.tsv
-ba119b73c30e42af2e9f1fb6b2d3909dc01dee5e tests/data/sessions/sessions.tar.gz
+30f1b1911436c4275e5388852eebdd6fe7589fe5 tests/data/sessions/sessions.tar.gz
 c11fcc0f65d3774dba1b50d9073e021445108cfa tests/fixtures/btcpay_bark/0.13.0/invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted.json
 42cc6ab29f70c797cd2a005d7f4012e8e9ed6fc6 tests/fixtures/btcpay_bark/0.13.0/invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted.json
 58e6a62b68c6ed0b56157f6775cbba73850e29ed tests/fixtures/btcpay_bark/0.13.0/invoice.E5mxtedvENirbwt55k2V1m.payment-methods.accounted.json
