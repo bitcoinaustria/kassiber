@@ -287,6 +287,8 @@ fn csv_refuses_what_it_cannot_read_by_name() {
         ("Date,Amount,Currency\n2025-01-01,\"1 234,50\",EUR\n", "giro", "not an amount"),
         ("Date,Amount,Currency\n2025-01-01,(100.00),EUR\n", "giro", "not an amount"),
         ("Date;Amount;Currency\n2025-01-01;-1.00;EUR\n", "nobody", "does not name the account"),
+        ("Date;Amount;Currency;Description\n2025-01-01;10;EUR;\"unfinished\n2025-01-02;20;EUR;second\n", "giro", "quoted field is never closed"),
+        ("Date;Amount;Currency\n2025-01-01;10;EUR\n2025-0x-02;20;EUR\n", "giro", "Row 3, column 1 (booking_date): the cell is not a valid date"),
     ];
     for (text, option, expected) in cases {
         let message = refused(text, &options(option));
@@ -368,6 +370,19 @@ fn money_is_exact_decimal_text() {
     assert_eq!(
         m("50000").times(m("0.00500000000")).unwrap().canonical(),
         "250.00"
+    );
+    // Past 18 digits the product rounds once, on the whole remainder: a
+    // digit-by-digit carry would make this 0.010000000000000001.
+    assert_eq!(
+        m("1.000000000000000049")
+            .times(m("0.01"))
+            .unwrap()
+            .canonical(),
+        "0.01"
+    );
+    assert_eq!(
+        m("-1.000000000000000050").times(m("0.01")).unwrap(),
+        m("-0.010000000000000001")
     );
     for bad in ["1e3", "1,5", " 1", "", "-", "1.2.3"] {
         assert!(Money::parse(bad).is_none(), "{bad}");
