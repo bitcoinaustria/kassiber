@@ -1325,7 +1325,13 @@ fn finish(app: &mut App) {
     }
     app.refresh_reads();
     app.send("ui.wallets.list", Value::Null, "wallets.add.wallets");
-    if !job.stay_open {
+    // A Bisq import that held trades keeps its summary open: those trades booked nothing, and
+    // the toast alone would read as success.
+    let held = st(app)
+        .last_import
+        .as_ref()
+        .is_some_and(|r| !super::bisq::held_lines(r).is_empty());
+    if !job.stay_open && !held {
         app.ov.add_open = false;
     }
 }
@@ -2189,6 +2195,41 @@ mod tests {
         let job = st(&app).job.as_ref().expect("the job runs on");
         assert_eq!((&job.stage, job.label.as_str()), (&Stage::Create, "Cold"));
         assert!(app.ov.add_open);
+    }
+
+    /// An import that held Bisq trades leaves the dialog open on its summary; one that held
+    /// none closes it as before.
+    #[test]
+    fn a_bisq_import_with_held_trades_keeps_its_summary_open() {
+        for (held, open) in [
+            (
+                json!([{"trade_id": "AbC12", "status": "Mediated", "reason": "not_completed"}]),
+                true,
+            ),
+            (json!([]), false),
+        ] {
+            let mut app = crate::app::tests::quiet_app();
+            app.ov.add_open = true;
+            stm(&mut app).job = Some(Job {
+                stage: Stage::ImportFile,
+                label: "Bisq".into(),
+                syncs: VecDeque::new(),
+                done: None,
+                stay_open: false,
+                form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
+            });
+            let reply = Reply {
+                kind: "ui.wallets.import_file".into(),
+                data: json!({"imported": 0, "bisq_review_required": held}),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            };
+            on_job(&mut app, &reply);
+            assert!(st(&app).job.is_none());
+            assert_eq!(app.ov.add_open, open);
+            assert!(st(&app).last_import.is_some());
+        }
     }
 
     #[test]
