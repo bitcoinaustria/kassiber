@@ -52,6 +52,9 @@ Each refusal names the row, column number or field and never quotes the file.
   amount, amount header, `--currency`), or no currency at all.
 - A line without an own account: CAMT names it per statement; a CSV needs
   `--account` (IBAN, number or a label) or a mapped `account` column.
+- A CSV whose quoted field is never closed (it would swallow the rows after
+  it), and a row with an amount whose date cell starts like a date but is
+  not one (`2025-0x-02`); blank dates and footer labels are skipped.
 
 ## Storage and re-import
 
@@ -67,6 +70,9 @@ reference: a line equal to a stored one on every field is skipped only when
 the bank's reference or end-to-end id identifies it; without one it is
 refused (`bank_statement_line_ambiguous`), and a line whose group holds only
 different lines is refused naming the field (`bank_statement_line_conflict`).
+Within one file, a line carrying the bank's reference that repeats an earlier
+line of the file is that same booking (counted as existing); a second version
+of it is refused the same way.
 
 `documents rollback-statement` plans first and with `--confirm` deletes the
 import's lines, document and file; it refuses while a line is accepted
@@ -86,10 +92,11 @@ in `unmatched` with its reason: `no_exact_amount` (fees, partial or split
 payments) or `ambiguous` (two candidates). Purchases without an exact value
 are listed separately. Accepted and rejected pairs leave the pool.
 
-Accepting (a suggestion, or any explicit lines and purchases) reuses or
-creates a reviewed `fiat_purchase` source per purchase, links it as a
-`manual_source` (`method` `bank_statement`) and records an `accepted`
-decision. Generated text names only dates, amounts, a curated exchange and
+Accepting (a suggestion, or any explicit lines and purchases) reuses a
+purchase's reviewed `fiat_purchase` source together with its reviewed link,
+or creates the source and links it as a `manual_source` (`method`
+`bank_statement`), and records an `accepted` decision; the purchase keeps one
+allocation. Generated text names only dates, amounts, a curated exchange and
 the account's short form (`••3201`). Rejecting records `rejected`; on an
 accepted pair it withdraws the line from the source's evidence and keeps the
 source. The source-of-funds report lists accepted lines as `bank_evidence`
