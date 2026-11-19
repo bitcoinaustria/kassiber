@@ -168,6 +168,39 @@ fn cli_exports_and_verifies_a_bundle_without_other_writes() {
         "{verified:?}"
     );
     assert!(!base.join("no-book").exists(), "verify created a data root");
+
+    // Nor does it need one: without --data-root it migrates, selects and
+    // routes no project, so nothing appears under the default state root.
+    let before = files(&base);
+    let verified = desk
+        .raw_command(&[
+            "--machine",
+            "diagnostics",
+            "replay-bundle",
+            "verify",
+            &bundle_arg,
+            "--bundle-passphrase-fd",
+            "0",
+        ])
+        .spawn()
+        .map(|mut child| {
+            use std::io::Write;
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(PASSPHRASE.as_bytes())
+                .unwrap();
+            child.wait_with_output().unwrap()
+        })
+        .unwrap();
+    let verified = json(&verified);
+    assert_eq!(
+        data(&verified, &["status"]),
+        Some("identical"),
+        "{verified:?}"
+    );
+    assert_eq!(files(&base), before, "verify wrote project state");
 }
 
 #[test]
