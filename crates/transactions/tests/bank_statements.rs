@@ -990,3 +990,23 @@ fn the_book_lists_purchases_without_an_exact_value_and_refuses_unknown_ones() {
         "not_found"
     );
 }
+
+/// A decision a keep-decisions reset withholds (its transaction came back changed) no longer
+/// hides the line from suggestions: the pair is offered for review again.
+#[test]
+fn a_reset_withheld_decision_is_suggested_again() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let file = dir.path().join("s.csv");
+    fs::write(&file, csv_ref(&[MARCH])).unwrap();
+    import_file(conn, &dir.path().join("attachments"), &file, own(), false).unwrap();
+    let suggested = |conn: &Connection| {
+        let found = matching::suggest_for_book(conn, &scope(), None).unwrap();
+        list(get(&found, "suggestions").unwrap()).len()
+    };
+    assert_eq!(suggested(conn), 1);
+    conn.execute_batch("INSERT INTO bank_statement_line_decisions(line_id,transaction_id,profile_id,state,created_at,updated_at) SELECT id,'buy1','p','accepted','2025-04-01T00:00:00Z','2025-04-01T00:00:00Z' FROM bank_statement_lines").unwrap();
+    assert_eq!(suggested(conn), 0);
+    conn.execute_batch("INSERT INTO book_reset_transactions(transaction_id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,amount_includes_fee,state,changed_fields_json,created_at) VALUES('buy1','w','p','kraken','f0','2025-03-05T10:00:00Z','inbound','BTC',1000000000,0,0,'changed','[\"amount\"]','2025-05-01T00:00:00Z')").unwrap();
+    assert_eq!(suggested(conn), 1);
+}

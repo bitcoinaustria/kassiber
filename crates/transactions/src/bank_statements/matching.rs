@@ -295,7 +295,7 @@ pub(crate) fn decisions(conn: &Connection, scope: &Scope<'_>) -> Result<Decision
     }
     for row in rows(
         conn,
-        "SELECT d.line_id,d.transaction_id,d.state FROM bank_statement_line_decisions d JOIN transactions t ON t.id=d.transaction_id AND t.profile_id=d.profile_id WHERE d.profile_id=?",
+        &format!("SELECT d.line_id,d.transaction_id,d.state FROM bank_statement_line_decisions d JOIN transactions t ON t.id=d.transaction_id AND t.profile_id=d.profile_id WHERE d.profile_id=? AND {}", super::store::CURRENT_DECISION),
         [scope.profile_id],
     )? {
         let text = |k: &str| crate::documents::text(&row, k).to_owned();
