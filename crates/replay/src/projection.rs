@@ -248,7 +248,7 @@ const EXTERNAL_ID_KINDS: &[&str] = &[
     "row",
     "reference",
 ];
-const PRICING_SOURCE_KINDS: &[&str] = &[
+pub(crate) const PRICING_SOURCE_KINDS: &[&str] = &[
     "manual",
     "market",
     "import",
@@ -264,7 +264,7 @@ const PRICING_SOURCE_KINDS: &[&str] = &[
     "manual_rate_cache",
     "fmv_provider",
 ];
-const PRICING_QUALITIES: &[&str] = &[
+pub(crate) const PRICING_QUALITIES: &[&str] = &[
     "exact",
     "coarse",
     "estimated",
@@ -279,7 +279,7 @@ const PRICING_QUALITIES: &[&str] = &[
 ];
 /// `fiat_price_source`: a provider, or the rates cache the journal pricing
 /// stamps (`journals/src/prebuild/pricing.rs`).
-const PRICE_SOURCES: &[&str] = &[
+pub(crate) const PRICE_SOURCES: &[&str] = &[
     "coingecko",
     "kraken",
     "coinbase",
@@ -297,7 +297,7 @@ const PRICE_SOURCES: &[&str] = &[
     "river",
     "rates_cache",
 ];
-const PRICING_GRANULARITIES: &[&str] = &[
+pub(crate) const PRICING_GRANULARITIES: &[&str] = &[
     "exact",
     "minute",
     "hourly",
@@ -306,7 +306,7 @@ const PRICING_GRANULARITIES: &[&str] = &[
     "day",
     "transaction",
 ];
-const PRICING_PROVIDERS: &[&str] = &[
+pub(crate) const PRICING_PROVIDERS: &[&str] = &[
     "coingecko",
     "kraken",
     "coinbase",
@@ -323,7 +323,10 @@ const PRICING_PROVIDERS: &[&str] = &[
     "strike",
     "river",
 ];
-const PRICING_METHODS: &[&str] = &[
+pub(crate) const PRICING_PAIRS: &[&str] = &[
+    "BTC-EUR", "BTC-USD", "BTC-CHF", "BTC-GBP", "BTCEUR", "BTCUSD",
+];
+pub(crate) const PRICING_METHODS: &[&str] = &[
     "quarantine_price_override",
     "import",
     "manual",
@@ -723,12 +726,7 @@ const TRANSACTION: Schema = &[
     ("fiat_value_exact", F::Amount),
     ("pricing_source_kind", F::Enum(PRICING_SOURCE_KINDS)),
     ("pricing_provider", F::Enum(PRICING_PROVIDERS)),
-    (
-        "pricing_pair",
-        F::Enum(&[
-            "BTC-EUR", "BTC-USD", "BTC-CHF", "BTC-GBP", "BTCEUR", "BTCUSD",
-        ]),
-    ),
+    ("pricing_pair", F::Enum(PRICING_PAIRS)),
     ("pricing_timestamp", F::Time),
     ("pricing_fetched_at", F::Time),
     ("pricing_granularity", F::Enum(PRICING_GRANULARITIES)),
@@ -1852,6 +1850,38 @@ mod tests {
     fn project(schema: Schema, value: Value) -> String {
         let p = Pseudonymizer::new([9; 32]);
         Projection::new(&p).object(schema, &value).to_string()
+    }
+
+    /// Every engine constant survives an actual projection of a row that
+    /// carries it, through documents held as text and nested objects.
+    #[test]
+    fn engine_constants_survive_a_projection_as_written() {
+        let p = Pseudonymizer::new([9; 32]);
+        let projection = Projection::new(&p);
+        for (name, path, values, _) in ENGINE_CONSTANTS {
+            for value in *values {
+                // The row: `path` down to the value, documents as JSON text.
+                let mut nested = json!(value);
+                for depth in (1..path.len()).rev() {
+                    let wrapped = json!({ path[depth]: nested });
+                    nested = match class_of(name, &path[..depth]) {
+                        Some(F::Doc(_)) => json!(wrapped.to_string()),
+                        _ => wrapped,
+                    };
+                }
+                let row = json!({ path[0]: nested });
+                let mut out = projection.object(section(name).unwrap(), &row);
+                for (depth, key) in path.iter().enumerate() {
+                    out = out[*key].clone();
+                    if depth + 1 < path.len() {
+                        if let Value::String(text) = &out {
+                            out = serde_json::from_str(text).unwrap();
+                        }
+                    }
+                }
+                assert_eq!(out, json!(value), "{name}.{}", path.join("."));
+            }
+        }
     }
 
     #[test]

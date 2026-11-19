@@ -6,7 +6,7 @@
 //! that projection generated. A cell that does not parse, or a column,
 //! table or calculation field the schema does not name, is refused, never
 //! copied.
-use crate::projection::Projection;
+use crate::projection::{self, Projection};
 use crate::typed;
 use kassiber_journals::reproduce::{Cell, Row, Table};
 use kassiber_pyjson::{Key, PyStr, Value as Py};
@@ -81,6 +81,10 @@ const LOCATION_KINDS: &[&str] = &[
     "external_origin",
     "fee",
     "custody_suspense",
+    // A reviewed gap kept in custody, and an arbitration conflict
+    // (custody/src/quantity/reviewed.rs, arbitration.rs).
+    "retained_custody",
+    "conflicting",
 ];
 /// Engine-named locations that carry no book data.
 const LOCATION_CONSTANTS: &[&str] = &[
@@ -237,6 +241,9 @@ enum C {
     Bool,
     Id,
     Enum(&'static [&'static str]),
+    /// A value copied from an input field: listed, else that field's
+    /// pseudonym.
+    Authored(&'static [&'static str]),
     /// A tax-country registry value, printed again from its constant.
     Parsed(fn(&str) -> Option<String>),
     /// Derived engine identity (embeds observation digests): left out.
@@ -245,105 +252,33 @@ enum C {
     List(&'static [(&'static str, C)]),
 }
 
+/// A calculation's pricing provenance copies the transaction's: the same
+/// values the input schema keeps, and otherwise the pseudonyms it gave them.
 const PRICING: &[(&str, C)] = &[
     ("fiat_currency", C::Parsed(crate::registry::fiat)),
     ("fiat_rate_exact", C::Amount),
     ("fiat_value_exact", C::Amount),
     (
         "pricing_source_kind",
-        C::Enum(&[
-            "manual",
-            "market",
-            "import",
-            "exchange",
-            "provider",
-            "reviewed",
-            "cache",
-            "fallback",
-            "transaction",
-            "receipt",
-            "rates_cache",
-            "manual_override",
-        ]),
+        C::Authored(projection::PRICING_SOURCE_KINDS),
     ),
     (
         "pricing_quality",
-        C::Enum(&[
-            "exact",
-            "coarse",
-            "estimated",
-            "derived",
-            "fallback",
-            "missing",
-            "approximate",
-            "hourly",
-            "daily",
-        ]),
+        C::Authored(projection::PRICING_QUALITIES),
     ),
-    (
-        "fiat_price_source",
-        C::Enum(&[
-            "coingecko",
-            "kraken",
-            "coinbase",
-            "binance",
-            "bitpanda",
-            "bitstamp",
-            "ecb",
-            "mempool",
-            "reviewed-receipt",
-            "manual",
-            "import",
-        ]),
-    ),
+    ("fiat_price_source", C::Authored(projection::PRICE_SOURCES)),
     ("pricing_timestamp", C::Time),
     (
         "pricing_provider",
-        C::Enum(&[
-            "coingecko",
-            "kraken",
-            "coinbase",
-            "binance",
-            "bitpanda",
-            "bitstamp",
-            "ecb",
-            "mempool",
-            "reviewed-receipt",
-            "manual",
-            "import",
-        ]),
+        C::Authored(projection::PRICING_PROVIDERS),
     ),
-    (
-        "pricing_pair",
-        C::Enum(&[
-            "BTC-EUR", "BTC-USD", "BTC-CHF", "BTC-GBP", "BTCEUR", "BTCUSD",
-        ]),
-    ),
+    ("pricing_pair", C::Authored(projection::PRICING_PAIRS)),
     ("pricing_fetched_at", C::Time),
     (
         "pricing_granularity",
-        C::Enum(&[
-            "exact",
-            "minute",
-            "hourly",
-            "hour",
-            "daily",
-            "day",
-            "transaction",
-        ]),
+        C::Authored(projection::PRICING_GRANULARITIES),
     ),
-    (
-        "pricing_method",
-        C::Enum(&[
-            "quarantine_price_override",
-            "import",
-            "manual",
-            "nearest",
-            "interpolated",
-            "close",
-            "rates_cache",
-        ]),
-    ),
+    ("pricing_method", C::Authored(projection::PRICING_METHODS)),
 ];
 const SOURCE: &[(&str, C)] = &[
     ("transaction_id", C::Id),
@@ -411,6 +346,19 @@ impl Context<'_, '_, '_> {
             return Ok((*constant).to_owned());
         }
         let parts: Vec<&str> = text.split(':').collect();
+        // Custody-gap holds (custody/src/quantity/holds.rs) name the held
+        // observation's quantity digest, which the engine recomputes from the
+        // projected inputs: mapped like any digest, a hex id of its length.
+        if parts.len() == 2 && parts[0] == "gap-capacity-hold" {
+            return Ok(format!("gap-capacity-hold:{}", self.digest(parts[1])?));
+        }
+        if parts.len() == 3 && parts[0] == "gap-hold" {
+            return Ok(format!(
+                "gap-hold:{}:{}",
+                self.id(parts[1])?,
+                self.digest(parts[2])?
+            ));
+        }
         if parts.len() == 4 && parts[0] == "component" && parts[2] == "allocation" {
             return Ok(format!(
                 "component:{}:allocation:{}",
@@ -419,6 +367,17 @@ impl Context<'_, '_, '_> {
             ));
         }
         self.id(text)
+    }
+
+    /// A digest the engine derived: in the book's own outputs mapped like a
+    /// hex id; in a recomputation any 64-character lowercase hex digest.
+    fn digest(&self, text: &str) -> Result<String, Unsafe> {
+        let hex = text.len() == 64 && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+        match (self.mode, hex) {
+            (_, false) => Err(self.refuse()),
+            (Mode::Map(projection), true) => Ok(projection.id(text)),
+            (Mode::Validate(_) | Mode::Verify, true) => Ok(text.to_owned()),
+        }
     }
 
     fn enumerated(&self, values: &'static [&'static str], text: &str) -> Result<String, Unsafe> {
@@ -528,6 +487,7 @@ impl Context<'_, '_, '_> {
             }
             (C::Id, Py::Str(_)) => string(self.id(&text(value)?)?),
             (C::Enum(values), Py::Str(_)) => string(self.enumerated(values, &text(value)?)?),
+            (C::Authored(values), Py::Str(_)) => string(self.authored(values, &text(value)?)?),
             (C::Parsed(parse), Py::Str(_)) => {
                 string(parse(&text(value)?).ok_or_else(|| self.refuse())?)
             }
@@ -620,4 +580,116 @@ pub fn project(tables: &[Table], mode: &Mode<'_, '_>) -> Result<Vec<Table>, Unsa
         out.push(Table::new(spec.table, rows));
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pseudonym::Pseudonymizer;
+
+    fn row(columns: Vec<(&str, Cell)>) -> Row {
+        Row {
+            key: String::new(),
+            transaction_id: None,
+            wallet_id: None,
+            year: None,
+            columns: columns
+                .into_iter()
+                .map(|(k, v)| (k.to_owned(), v))
+                .collect(),
+        }
+    }
+
+    /// Rates-cache pricing and carried basis (the provenance the journals
+    /// write) project in every mode, and a recomputation may carry the
+    /// pseudonyms the inputs gave other values.
+    #[test]
+    fn engine_pricing_provenance_projects_in_every_mode() {
+        let calculation = |quality: &str| {
+            format!(
+                r#"{{"schema_version": 1, "fragments": [{{"event": {{"pricing": {{"pricing_source_kind": "fmv_provider", "pricing_quality": "{quality}", "fiat_price_source": "rates_cache", "pricing_method": "carrying_value"}}}}}}]}}"#
+            )
+        };
+        let table = |quality: &str| {
+            vec![Table::new(
+                "journal_entries",
+                vec![row(vec![("calculation", Cell::text(calculation(quality)))])],
+            )]
+        };
+        let p = Pseudonymizer::new([3; 32]);
+        let projection = Projection::new(&p);
+        for quality in ["coarse_fallback", "provider_sample"] {
+            assert!(project(&table(quality), &Mode::Verify).is_ok());
+            assert!(project(&table(quality), &Mode::Validate(&BTreeSet::new())).is_ok());
+            assert!(project(&table(quality), &Mode::Map(&projection)).is_ok());
+        }
+        // A value outside the list: the book's own run maps it, and the
+        // recomputation is checked against that pseudonym.
+        let mapped = project(&table("bespoke"), &Mode::Map(&projection)).unwrap();
+        let generated = projection.generated();
+        assert!(project(&table("bespoke"), &Mode::Validate(&BTreeSet::new())).is_err());
+        let Cell::Text(text) = &mapped[0].rows[0].columns["calculation"] else {
+            panic!("calculation");
+        };
+        let pseudonym = generated
+            .iter()
+            .find(|g| text.contains(g.as_str()))
+            .unwrap();
+        let recomputed = vec![Table::new(
+            "journal_entries",
+            vec![row(vec![(
+                "calculation",
+                Cell::text(calculation(pseudonym)),
+            )])],
+        )];
+        assert!(project(&recomputed, &Mode::Validate(&generated)).is_ok());
+    }
+
+    /// Retained custody and custody-gap hold locations are balances the
+    /// engine books; they project, and a hold keeps its shape.
+    #[test]
+    fn retained_custody_and_gap_hold_balances_project() {
+        let digest = "ab".repeat(32);
+        let balances = |kind: &str, location: &str| {
+            vec![Table::new(
+                "journal_quantity_balances",
+                vec![row(vec![
+                    ("location_kind", Cell::text(kind)),
+                    ("location_id", Cell::text(location)),
+                    ("asset", Cell::text("BTC")),
+                    ("amount_msat", Cell::Int(5)),
+                ])],
+            )]
+        };
+        let p = Pseudonymizer::new([3; 32]);
+        let projection = Projection::new(&p);
+        let hold = format!("gap-capacity-hold:{digest}");
+        for (kind, location) in [
+            ("retained_custody", "unclassified_origin".to_owned()),
+            ("custody_suspense", hold.clone()),
+        ] {
+            assert!(project(&balances(kind, &location), &Mode::Verify).is_ok());
+            assert!(project(
+                &balances(kind, &location),
+                &Mode::Validate(&BTreeSet::new())
+            )
+            .is_ok());
+        }
+        let mapped = project(
+            &balances("custody_suspense", &hold),
+            &Mode::Map(&projection),
+        )
+        .unwrap();
+        let Cell::Text(location) = &mapped[0].rows[0].columns["location_id"] else {
+            panic!("location");
+        };
+        let mapped_digest = location.strip_prefix("gap-capacity-hold:").unwrap();
+        assert_eq!(mapped_digest.len(), 64);
+        assert_ne!(mapped_digest, digest);
+        assert!(project(
+            &balances("custody_suspense", "gap-capacity-hold:xyz"),
+            &Mode::Verify
+        )
+        .is_err());
+    }
 }
