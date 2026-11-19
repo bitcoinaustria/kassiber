@@ -129,15 +129,12 @@ fn plan_lines(
         stored.insert(group, found.iter().map(fields).collect());
     }
     let mut next: BTreeMap<&String, usize> = stored.iter().map(|(g, l)| (*g, l.len())).collect();
+    // Lines of this file carrying the bank's reference, by group: the same
+    // booking twice in one file is one line, as it is across files, and two
+    // versions of it are refused.
+    let mut referenced: BTreeMap<&String, [String; 5]> = BTreeMap::new();
     let mut keys = Vec::with_capacity(groups.len());
     for (line, group) in statement.lines.iter().zip(&groups) {
-        let candidates = stored.get(group).map_or(&[][..], Vec::as_slice);
-        if candidates.is_empty() {
-            let n = next.entry(group).or_insert(0);
-            *n += 1;
-            keys.push(Some(content_hash(&[group, &n.to_string()])));
-            continue;
-        }
         let fields = [
             line.value_date.as_deref(),
             line.counterparty_name.as_deref(),
@@ -158,6 +155,35 @@ fn plan_lines(
             line.amount.canonical(),
             &line.currency,
         );
+        if line.bank_reference.is_some() {
+            match referenced.get(group) {
+                Some(first) if *first == fields => {
+                    keys.push(None);
+                    continue;
+                }
+                Some(first) => {
+                    let field = (0..5)
+                        .find(|i| first[*i] != fields[*i])
+                        .map_or("a field", |i| COMPARED[i]);
+                    return Err(invalid(format!(
+                        "Line {}: the file has another line with the same account, date, amount, currency and reference, but its {field} differs",
+                        at.0
+                    ))
+                    .with_hint("Check the statement; Kassiber does not guess which line is right.")
+                    .with_details(dict([("reason", s("bank_statement_line_conflict")), ("position", int(at.0)), ("field", s(field))])));
+                }
+                None => {
+                    referenced.insert(group, fields.clone());
+                }
+            }
+        }
+        let candidates = stored.get(group).map_or(&[][..], Vec::as_slice);
+        if candidates.is_empty() {
+            let n = next.entry(group).or_insert(0);
+            *n += 1;
+            keys.push(Some(content_hash(&[group, &n.to_string()])));
+            continue;
+        }
         if candidates.contains(&fields) {
             if line.bank_reference.is_some() || line.end_to_end_id.is_some() {
                 keys.push(None);

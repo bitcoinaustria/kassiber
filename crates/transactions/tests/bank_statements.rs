@@ -335,6 +335,8 @@ fn csv_refuses_what_it_cannot_read_by_name() {
         ("Date,Amount,Currency\n2025-01-01,\"1 234,50\",EUR\n", "giro", "not an amount"),
         ("Date,Amount,Currency\n2025-01-01,(100.00),EUR\n", "giro", "not an amount"),
         ("Date;Amount;Currency\n2025-01-01;-1.00;EUR\n", "nobody", "does not name the account"),
+        ("Date;Amount;Currency;Description\n2025-01-01;10;EUR;\"unfinished\n2025-01-02;20;EUR;second\n", "giro", "quoted field is never closed"),
+        ("Date;Amount;Currency\n2025-01-01;10;EUR\n2025-0x-02;20;EUR\n", "giro", "Row 3, column 1 (booking_date): the cell is not a valid date"),
     ];
     for (text, option, expected) in cases {
         let message = refused(text, &options(option));
@@ -459,6 +461,19 @@ fn money_is_exact_decimal_text() {
     assert_eq!(
         m("50000").times(m("0.00500000000")).unwrap().canonical(),
         "250.00"
+    );
+    // Past 18 digits the product rounds once, on the whole remainder: a
+    // digit-by-digit carry would make this 0.010000000000000001.
+    assert_eq!(
+        m("1.000000000000000049")
+            .times(m("0.01"))
+            .unwrap()
+            .canonical(),
+        "0.01"
+    );
+    assert_eq!(
+        m("-1.000000000000000050").times(m("0.01")).unwrap(),
+        m("-0.010000000000000001")
     );
     for bad in ["1e3", "1,5", " 1", "", "-", "1.2.3"] {
         assert!(Money::parse(bad).is_none(), "{bad}");
@@ -598,6 +613,52 @@ fn imports_dedupe_by_reference_and_roll_back_exactly_what_they_added() {
             .code,
         "not_found"
     );
+}
+
+/// A booking that carries the bank's reference is one line whether it comes
+/// twice in one file or in two files; two versions of it in one file are
+/// refused. Equal lines without a reference stay separate bookings.
+#[test]
+fn a_referenced_booking_repeated_in_one_file_is_one_line() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let root = dir.path().join("attachments");
+    let twice = dir.path().join("twice.csv");
+    fs::write(&twice, csv_ref(&[MARCH, MARCH, SALARY])).unwrap();
+    let imported = import_file(conn, &root, &twice, own(), false).unwrap();
+    assert_eq!(
+        (
+            int(&imported, "lines_new"),
+            int(&imported, "lines_existing")
+        ),
+        (2, 1)
+    );
+    assert_eq!(count(conn, "SELECT COUNT(*) FROM bank_statement_lines"), 2);
+    let versions = dir.path().join("versions.csv");
+    fs::write(
+        &versions,
+        csv_ref(&[APRIL, &APRIL.replace("Einkauf", "Retoure")]),
+    )
+    .unwrap();
+    let error = import_file(conn, &root, &versions, own(), false).unwrap_err();
+    let details = error.details.as_ref().unwrap();
+    assert_eq!(
+        (text(details, "reason"), text(details, "field")),
+        (
+            "bank_statement_line_conflict".into(),
+            "remittance text".into()
+        )
+    );
+    assert_eq!(count(conn, "SELECT COUNT(*) FROM bank_statement_lines"), 2);
+    // Two equal reference-free lines are two bookings.
+    let plain = dir.path().join("plain.csv");
+    fs::write(
+        &plain,
+        "Buchungsdatum;Empfänger;Verwendungszweck;Betrag;Währung\n07.03.2025;Cafe;x;-3,00;EUR\n07.03.2025;Cafe;x;-3,00;EUR\n",
+    )
+    .unwrap();
+    let imported = import_file(conn, &root, &plain, own(), false).unwrap();
+    assert_eq!(int(&imported, "lines_new"), 2);
 }
 
 #[test]

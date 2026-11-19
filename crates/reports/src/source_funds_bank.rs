@@ -10,7 +10,7 @@ use kassiber_transactions::{
 };
 
 /// A reviewed link from this source already funds the purchase.
-const EXISTING_SOURCE: &str = "SELECT s.* FROM source_funds_links l JOIN source_funds_sources s ON s.id=l.from_source_id WHERE l.profile_id=? AND l.to_transaction_id=? AND l.state='reviewed' AND s.source_type='fiat_purchase' ORDER BY s.created_at, s.id LIMIT 1";
+const EXISTING_SOURCE: &str = "SELECT s.*, l.id AS link_id FROM source_funds_links l JOIN source_funds_sources s ON s.id=l.from_source_id WHERE l.profile_id=? AND l.to_transaction_id=? AND l.state='reviewed' AND s.source_type='fiat_purchase' ORDER BY s.created_at, s.id LIMIT 1";
 
 /// Text of a column; NULL is empty (unlike `py_str`).
 fn txt(row: &Value, key: &str) -> String {
@@ -184,23 +184,35 @@ fn accept_inner(
                 (txt(&source, "id"), true)
             }
         };
-        let args = scoped(vec![
-            ("from_source", s(source_id.as_str())),
-            ("to_transaction", s(tx_id.as_str())),
-            ("link_type", s("manual_source")),
-            ("state", s("reviewed")),
-            ("confidence", s("strong")),
-            ("method", s("bank_statement")),
-            ("allocation_policy", s("explicit")),
-            ("allocation_amount", s(btc.as_str())),
-            (
-                "explanation",
-                s(format!("Fiat purchase paid by bank transfer: {summary}")),
-            ),
-            ("attachments", Value::List(vec![])),
-        ]);
-        let link =
-            super::source_funds_links::execute(conn, "source-funds.links.create", &args, sources)?;
+        // The purchase's reviewed link from that source stays its one
+        // allocation; the bank lines attach to the source as evidence.
+        let link_id = match existing.first() {
+            Some(found) => value(found, "link_id").clone(),
+            None => {
+                let args = scoped(vec![
+                    ("from_source", s(source_id.as_str())),
+                    ("to_transaction", s(tx_id.as_str())),
+                    ("link_type", s("manual_source")),
+                    ("state", s("reviewed")),
+                    ("confidence", s("strong")),
+                    ("method", s("bank_statement")),
+                    ("allocation_policy", s("explicit")),
+                    ("allocation_amount", s(btc.as_str())),
+                    (
+                        "explanation",
+                        s(format!("Fiat purchase paid by bank transfer: {summary}")),
+                    ),
+                    ("attachments", Value::List(vec![])),
+                ]);
+                let link = super::source_funds_links::execute(
+                    conn,
+                    "source-funds.links.create",
+                    &args,
+                    sources,
+                )?;
+                value(&link, "id").clone()
+            }
+        };
         for line in lines {
             conn.execute(
                 "INSERT INTO bank_statement_line_decisions(line_id,transaction_id,profile_id,state,source_id,group_key,reasons_json,created_at,updated_at) VALUES(?,?,?,'accepted',?,?,?,?,?) ON CONFLICT(line_id,transaction_id) DO UPDATE SET state='accepted', source_id=excluded.source_id, group_key=excluded.group_key, reasons_json=excluded.reasons_json, updated_at=excluded.updated_at",
@@ -212,7 +224,7 @@ fn accept_inner(
             ("transaction_id", s(tx_id.as_str())),
             ("source_id", s(source_id.as_str())),
             ("source_created", Value::Bool(created)),
-            ("link_id", value(&link, "id").clone()),
+            ("link_id", link_id),
         ]));
     }
     Ok(dict([
