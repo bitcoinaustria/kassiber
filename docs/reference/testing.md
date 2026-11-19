@@ -1413,7 +1413,9 @@ tests.
 
 - `scripts/fetch-test-data.sh` fetches the pinned commit from the same
   repository with git, writes each locked file at its path (the `.gitignore`
-  block lists them all), and verifies every hash. CI runs it before any test;
+  block lists them all), and verifies every hash. In a shallow clone (CI's
+  checkout) it fetches only the pinned commit, not the data branch's history.
+  CI runs it before any test;
   `scripts/quality-gate.sh` refuses to start without it.
 - Without the data, a Rust test build names the missing file; nothing is
   skipped silently. `scripts/fetch-test-data.sh --check` verifies without
