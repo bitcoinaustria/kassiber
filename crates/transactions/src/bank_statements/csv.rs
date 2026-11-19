@@ -522,6 +522,21 @@ pub(super) fn parse(
         .filter(|(_, r)| r.iter().any(|c| !c.trim().is_empty()))
         .map(|(i, r)| (i + 1, r))
         .collect();
+    // A row with values past the header's last column has an unquoted
+    // delimiter in a value (`1,234.56` under a comma delimiter): its cells no
+    // longer line up with the headers, so it is refused, not read shifted.
+    // Empty trailing cells (a delimiter at the end of a row) are harmless.
+    let width = table[header_index].len();
+    if let Some((row, _)) = body
+        .iter()
+        .find(|(_, r)| r.iter().skip(width).any(|c| !c.trim().is_empty()))
+    {
+        return Err(invalid(format!(
+            "Row {row} has more values than the header has columns, so its values can't be matched to columns"
+        ))
+        .with_hint("Export the statement again unchanged; a value containing the delimiter must be quoted.")
+        .with_details(dict([("reason", s("bank_csv_row_too_wide"))])));
+    }
     let get = |row: &Vec<String>, column: Option<usize>| {
         column
             .and_then(|c| row.get(c))
