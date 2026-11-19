@@ -726,6 +726,20 @@
     "ambiguous_other": "{{count}} purchases or transfers fit more than one counterpart and are not suggested; accept the right pairs by hand.",
     "accountLabel": "Your account",
     "accountPlaceholder": "IBAN or a name, e.g. Giro",
-    "accountHelp": "Needed for CSV exports, which do not say which account they are from. Kept in your book."
+    "accountHelp": "Needed for CSV exports, which do not say which account they are from. Kept in your book.",
+    "loadError": "The suggested matches could not be loaded.",
+    "retry": "Retry",
+    "reason": {
+      "sameCurrency": "same currency {{currency}}",
+      "equalAmount": "bank amount equals the purchase value {{value}}",
+      "sameDay": "booked the same day as the purchase",
+      "daysBefore_one": "booked {{count}} day before the purchase",
+      "daysBefore_other": "booked {{count}} days before the purchase",
+      "daysAfter_one": "booked {{count}} day after the purchase",
+      "daysAfter_other": "booked {{count}} days after the purchase",
+      "namesExchange": "counterparty or reference names {{exchange}}",
+      "exchangeWallet": "matches the purchase's {{exchange}} wallet",
+      "explicit": "accepted as an explicit pairing, not a suggestion"
+    }
   }
 }

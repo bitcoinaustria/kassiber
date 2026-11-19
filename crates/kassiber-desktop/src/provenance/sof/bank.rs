@@ -22,6 +22,8 @@ pub const LIST: &str = "ui.source_funds.bank_lines.list";
 pub const IMPORT: &str = "ui.documents.import_statement";
 pub const ACCEPT: &str = "ui.source_funds.bank_lines.accept";
 pub const REJECT: &str = "ui.source_funds.bank_lines.reject";
+/// `bank_statements::store::list_lines`' largest page.
+pub const LINES_LIMIT: i64 = 5000;
 
 /// The panel's own state, kept with the case.
 #[derive(Default)]
@@ -122,6 +124,71 @@ pub fn accepted(data: Option<&Value>) -> Vec<Value> {
     .unwrap_or_default()
 }
 
+/// A suggestion's reason in the reader's language. The daemon writes its reasons in fixed
+/// English shapes (`bank_statements::matching::reasons`); each known shape is translated with
+/// its value, anything else is shown as written.
+pub fn reason_text(reason: &str) -> String {
+    let after = |prefix: &str| reason.strip_prefix(prefix).filter(|v| !v.is_empty());
+    let days = |suffix: &str| {
+        reason
+            .strip_prefix("booked ")
+            .and_then(|r| r.strip_suffix(suffix))
+            .and_then(|n| n.split(' ').next())
+            .and_then(|n| n.parse::<usize>().ok())
+    };
+    if let Some(currency) = after("same currency ") {
+        return tr(
+            "sourceFunds:bank.reason.sameCurrency",
+            &[("currency", currency)],
+        );
+    }
+    if let Some(value) = after("bank amount equals the purchase value ") {
+        return tr("sourceFunds:bank.reason.equalAmount", &[("value", value)]);
+    }
+    if reason == "booked the same day as the purchase" {
+        return t("sourceFunds:bank.reason.sameDay");
+    }
+    for (suffix, key) in [
+        (
+            " day before the purchase",
+            "sourceFunds:bank.reason.daysBefore",
+        ),
+        (
+            " days before the purchase",
+            "sourceFunds:bank.reason.daysBefore",
+        ),
+        (
+            " day after the purchase",
+            "sourceFunds:bank.reason.daysAfter",
+        ),
+        (
+            " days after the purchase",
+            "sourceFunds:bank.reason.daysAfter",
+        ),
+    ] {
+        if let Some(n) = days(suffix) {
+            return tc(key, n, &[]);
+        }
+    }
+    if let Some(exchange) = after("counterparty or reference names ") {
+        return tr(
+            "sourceFunds:bank.reason.namesExchange",
+            &[("exchange", exchange)],
+        );
+    }
+    if let Some(exchange) = after("matches the purchase's ").and_then(|r| r.strip_suffix(" wallet"))
+    {
+        return tr(
+            "sourceFunds:bank.reason.exchangeWallet",
+            &[("exchange", exchange)],
+        );
+    }
+    if reason == "accepted as an explicit pairing, not a suggestion" {
+        return t("sourceFunds:bank.reason.explicit");
+    }
+    reason.to_owned()
+}
+
 /// The decision a suggestion's buttons send: exactly its lines and purchases.
 pub fn decision_args(s: &Value) -> Value {
     json!({
@@ -172,10 +239,18 @@ pub fn want_reads(app: &mut App, enabled: bool) {
         app,
         |s| &mut s.bank.lines,
         LIST,
-        json!({"direction": "out"}),
+        // Accepted evidence is filtered here from the newest outgoing lines: ask for the store's
+        // maximum, not its default 200 (an accepted-decision filter is a TODO).
+        json!({"direction": "out", "limit": LINES_LIMIT}),
         "provenance.sof.bank.lines",
         enabled,
     );
+}
+
+/// Drops the panel's failed reads so the next poll asks again.
+pub fn retry_reads(a: &mut App) {
+    a.provenance.sof.bank.suggest.invalidate();
+    a.provenance.sof.bank.lines.invalidate();
 }
 
 fn busy(app: &App) -> bool {
@@ -322,7 +397,7 @@ fn suggestion_card(tk: &Tk, i: usize, s: &Value, pending: bool) -> El {
             list(s, "reasons")
                 .iter()
                 .filter_map(Value::as_str)
-                .map(|r| small(tk, format!("• {r}"))),
+                .map(|r| small(tk, format!("• {}", reason_text(r)))),
         );
     let accept = s.clone();
     let reject = s.clone();
@@ -453,7 +528,35 @@ fn body(app: &App, tk: &Tk) -> El {
         );
     }
     let data = reads.suggest.data();
-    if reads.suggest.fetching() || reads.suggest.loading() {
+    if reads.suggest.error() {
+        // A failed read is never shown as "no matches"; retrying drops the failure so the
+        // next poll asks again.
+        let retry = kit::button(
+            tk,
+            "sof-bank-retry",
+            Variant::Outline,
+            Size::Sm,
+            None,
+            &t("sourceFunds:bank.retry"),
+            true,
+        )
+        .on_press(retry_reads);
+        out = out.child(
+            row()
+                .w_full()
+                .gap(tk.r(0.75))
+                .center_y()
+                .flex_wrap()
+                .child(
+                    text(t("sourceFunds:bank.loadError"))
+                        .font(tk.tsm(400.0))
+                        .color(tk.destructive)
+                        .role("alert")
+                        .wrap(),
+                )
+                .child(retry),
+        );
+    } else if reads.suggest.fetching() || reads.suggest.loading() {
         out = out.child(small(tk, t("sourceFunds:case.loading")).role("status"));
     } else {
         let list = suggestions(data);
@@ -676,6 +779,98 @@ mod tests {
     }
 
     #[test]
+    fn match_reasons_read_in_the_selected_language() {
+        for (reason, key) in [
+            ("same currency EUR", "sourceFunds:bank.reason.sameCurrency"),
+            (
+                "bank amount equals the purchase value 1000.00",
+                "sourceFunds:bank.reason.equalAmount",
+            ),
+            (
+                "booked the same day as the purchase",
+                "sourceFunds:bank.reason.sameDay",
+            ),
+            (
+                "booked 1 day before the purchase",
+                "sourceFunds:bank.reason.daysBefore",
+            ),
+            (
+                "booked 3 days before the purchase",
+                "sourceFunds:bank.reason.daysBefore",
+            ),
+            (
+                "booked 1 day after the purchase",
+                "sourceFunds:bank.reason.daysAfter",
+            ),
+            (
+                "counterparty or reference names Kraken",
+                "sourceFunds:bank.reason.namesExchange",
+            ),
+            (
+                "matches the purchase's Kraken wallet",
+                "sourceFunds:bank.reason.exchangeWallet",
+            ),
+            (
+                "accepted as an explicit pairing, not a suggestion",
+                "sourceFunds:bank.reason.explicit",
+            ),
+        ] {
+            assert!(
+                crate::i18n::has(key) || crate::i18n::has(&format!("{key}_one")),
+                "{key}"
+            );
+            // The English bundle reads exactly as the daemon wrote it.
+            assert_eq!(reason_text(reason), reason);
+        }
+        crate::i18n::set_lang(crate::i18n::Lang::De);
+        let de = [
+            "same currency EUR",
+            "bank amount equals the purchase value 1000.00",
+            "booked 3 days before the purchase",
+            "booked 1 day after the purchase",
+            "matches the purchase's Kraken wallet",
+        ]
+        .map(reason_text);
+        crate::i18n::set_lang(crate::i18n::Lang::En);
+        assert_eq!(
+            de,
+            [
+                "gleiche Währung EUR",
+                "Bankbetrag entspricht dem Kaufwert 1000.00",
+                "3 Tage vor dem Kauf gebucht",
+                "1 Tag nach dem Kauf gebucht",
+                "passt zur Kraken-Wallet des Kaufs",
+            ]
+        );
+        // An unknown shape is shown as written.
+        assert_eq!(reason_text("something new"), "something new");
+    }
+
+    /// A failed suggestion read is an error with a retry, never "no matches"; retrying clears
+    /// the failure so the panel asks again.
+    #[test]
+    fn a_failed_suggestion_read_offers_a_retry() {
+        let mut app = crate::app::tests::quiet_app();
+        let q = &mut app.provenance.sof.bank.suggest;
+        q.current = "{}".into();
+        q.errors.insert("{}".into(), "database is locked".into());
+        assert!(app.provenance.sof.bank.suggest.error());
+        retry_reads(&mut app);
+        let q = &app.provenance.sof.bank.suggest;
+        assert!(!q.error() && q.errors.is_empty());
+    }
+
+    /// Accepted evidence is read from the store's largest page of outgoing lines, not the
+    /// default 200 newest.
+    #[test]
+    fn the_lines_read_asks_for_the_largest_page() {
+        let mut app = crate::app::tests::quiet_app();
+        want_reads(&mut app, true);
+        let key: Value = serde_json::from_str(&app.provenance.sof.bank.lines.current).unwrap();
+        assert_eq!(key, json!({"direction": "out", "limit": LINES_LIMIT}));
+    }
+
+    #[test]
     fn every_panel_string_has_a_bundle_key() {
         for k in [
             "title",
@@ -695,6 +890,8 @@ mod tests {
             "accountLabel",
             "accountPlaceholder",
             "accountHelp",
+            "loadError",
+            "retry",
         ] {
             assert!(crate::i18n::has(&format!("sourceFunds:bank.{k}")), "{k}");
         }

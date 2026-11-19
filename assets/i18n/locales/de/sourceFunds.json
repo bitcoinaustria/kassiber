@@ -726,6 +726,20 @@
     "ambiguous_other": "{{count}} Käufe oder Überweisungen passen zu mehr als einem Gegenstück und werden nicht vorgeschlagen; bestätige die richtigen Paare von Hand.",
     "accountLabel": "Dein Konto",
     "accountPlaceholder": "IBAN oder ein Name, z. B. Giro",
-    "accountHelp": "Nötig für CSV-Exporte, die das Konto nicht nennen. Bleibt in deinem Buch."
+    "accountHelp": "Nötig für CSV-Exporte, die das Konto nicht nennen. Bleibt in deinem Buch.",
+    "loadError": "Die Zuordnungsvorschläge konnten nicht geladen werden.",
+    "retry": "Erneut versuchen",
+    "reason": {
+      "sameCurrency": "gleiche Währung {{currency}}",
+      "equalAmount": "Bankbetrag entspricht dem Kaufwert {{value}}",
+      "sameDay": "am selben Tag wie der Kauf gebucht",
+      "daysBefore_one": "{{count}} Tag vor dem Kauf gebucht",
+      "daysBefore_other": "{{count}} Tage vor dem Kauf gebucht",
+      "daysAfter_one": "{{count}} Tag nach dem Kauf gebucht",
+      "daysAfter_other": "{{count}} Tage nach dem Kauf gebucht",
+      "namesExchange": "Empfänger oder Verwendungszweck nennt {{exchange}}",
+      "exchangeWallet": "passt zur {{exchange}}-Wallet des Kaufs",
+      "explicit": "als ausdrückliche Zuordnung bestätigt, kein Vorschlag"
+    }
   }
 }

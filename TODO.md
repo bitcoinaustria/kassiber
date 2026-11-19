@@ -2005,8 +2005,7 @@ See [tax countries](docs/reference/tax-countries.md) and
   purchase suggestions, accept into a reviewed `fiat_purchase` source, report
   disclosure, CLI/daemon/desktop/assistant surfaces. See
   [bank statements](docs/reference/bank-statements.md).
-- [ ] Bank statements follow-ups: localized suggestion reasons in the desktop,
-  a desktop rollback action, and Windows-1252 decoding beyond the Latin-1
+- [ ] Bank statements follow-ups: a desktop rollback action, and Windows-1252 decoding beyond the Latin-1
   fallback; the CAMT `EndToEndId` as line identity when `AcctSvcrRef` is
   absent (two such transfers on one day and amount refuse today as
   `bank_statement_line_conflict` when imported apart); an explicit CSV
