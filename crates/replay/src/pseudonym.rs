@@ -39,6 +39,9 @@ pub const PUBLIC_HEX: &[&str] = &[
     "0000000000000000000000000000000000000000000000000000000000000000",
 ];
 
+/// Keyed bytes in an `id-`/`label-` pseudonym.
+const TAG_BYTES: usize = 16;
+
 pub struct Pseudonymizer {
     key: [u8; 32],
 }
@@ -79,11 +82,13 @@ impl Pseudonymizer {
         out
     }
 
+    /// `prefix-` and 16 keyed bytes (128 bits): distinct values never share
+    /// a pseudonym in practice, so rows keep their identities.
     fn tag(&self, prefix: &str, domain: &str, text: &str) -> String {
-        let bytes = self.stream(domain, text, 5);
+        let bytes = self.stream(domain, text, TAG_BYTES);
         format!(
             "{prefix}-{}",
-            bytes[..5]
+            bytes[..TAG_BYTES]
                 .iter()
                 .map(|b| format!("{b:02x}"))
                 .collect::<String>()
@@ -332,6 +337,17 @@ mod tests {
         }
         assert_eq!(p.id(&"0".repeat(64)), "0".repeat(64));
         assert!(p.label("Alice").starts_with("label-"));
+    }
+
+    /// Whole-value pseudonyms keep 128 keyed bits: two ids that shared a
+    /// 40-bit tag under this key stay distinct.
+    #[test]
+    fn whole_value_pseudonyms_do_not_collide() {
+        let p = Pseudonymizer::new([7; 32]);
+        let (a, b) = (p.id("transaction-1483887"), p.id("transaction-1897022"));
+        assert_ne!(a, b);
+        assert_eq!(a.len(), "id-".len() + 2 * TAG_BYTES);
+        assert_eq!(p.label("x").len(), "label-".len() + 2 * TAG_BYTES);
     }
 
     #[test]
