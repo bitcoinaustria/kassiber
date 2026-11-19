@@ -2145,6 +2145,11 @@ on the CLI, daemon and desktop.
 - [ ] Teach the projection schema the value when a real book's export is
   refused with `replay_bundle_unfaithful` or `replay_bundle_unsafe_stored`.
   Done when the frozen test books and the demo organization export.
+- [ ] Compare engine-derived digests exactly instead of masking them: the
+  fidelity and stored checks mask every 40+ character hex run, so balance rows
+  whose keys differ only by a gap-hold digest share one masked key and only
+  one of them is compared. Map the book's observation digests to the
+  projected ones and mask nothing.
 
 ## Daemon, contracts, and performance
 

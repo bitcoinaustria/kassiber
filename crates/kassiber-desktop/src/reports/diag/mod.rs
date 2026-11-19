@@ -111,6 +111,8 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 /// Leaving one of this part's pages (`crate::reports::on_leave`).
 pub fn leave(app: &mut App, from: &str) {
     app.reports.diag.popup = None;
+    // The replay consent was given on this page, for this book.
+    replay::close(app);
     match from {
         "/activity" => app.reports.diag.act.leave(),
         "/logs" => app.reports.diag.logs.leave(),

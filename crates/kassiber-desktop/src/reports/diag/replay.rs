@@ -27,6 +27,9 @@ pub struct State {
     pub passphrase: TextEdit,
     pub confirmation: TextEdit,
     pub pending: bool,
+    /// The export request this dialog waits for: a reply to any other (sent before the dialog
+    /// was closed or reopened) is not this dialog's.
+    pub request: Option<String>,
     /// The saved bundle's path, as the daemon reports it.
     pub saved: Option<String>,
     pub error: Option<String>,
@@ -80,8 +83,9 @@ fn submit(a: &mut App) {
     let s = st(a);
     s.error = None;
     s.pending = true;
-    if a.send(KIND, args, TAG).is_none() {
-        st(a).pending = false;
+    match a.send(KIND, args, TAG) {
+        Some(id) => st(a).request = Some(id),
+        None => st(a).pending = false,
     }
 }
 
@@ -89,7 +93,12 @@ pub fn on_reply(a: &mut App, tag: &str, r: &Reply) {
     if tag != TAG {
         return;
     }
+    let current = a.reply_id().map(str::to_owned);
     let s = st(a);
+    if s.request.is_none() || s.request != current {
+        return;
+    }
+    s.request = None;
     s.pending = false;
     s.passphrase = TextEdit::new("");
     s.confirmation = TextEdit::new("");
@@ -401,6 +410,68 @@ mod tests {
             }
             .ready()
         );
+    }
+
+    /// An export still running when the dialog closes answers nobody: the reopened dialog keeps
+    /// its own passphrase and never shows the earlier file as its result.
+    #[test]
+    fn a_reply_lands_only_in_the_dialog_that_sent_it() {
+        let mut app = crate::app::tests::quiet_app();
+        open(&mut app);
+        let earlier = crate::app::tests::inject(&mut app, KIND, TAG);
+        st(&mut app).request = Some(earlier.clone());
+        st(&mut app).pending = true;
+        close(&mut app);
+        open(&mut app);
+        st(&mut app).passphrase = TextEdit::new("new passphrase");
+        crate::app::tests::answer(
+            &mut app,
+            &earlier,
+            KIND,
+            json!({"file": "/old.kassiber-replay"}),
+        );
+        app.pump();
+        let s = &app.reports.diag.replay;
+        assert_eq!(
+            (s.saved.as_deref(), s.passphrase.text.as_str()),
+            (None, "new passphrase")
+        );
+        // The dialog's own request lands.
+        let current = crate::app::tests::inject(&mut app, KIND, TAG);
+        st(&mut app).request = Some(current.clone());
+        st(&mut app).pending = true;
+        crate::app::tests::answer(
+            &mut app,
+            &current,
+            KIND,
+            json!({"file": "/new.kassiber-replay"}),
+        );
+        app.pump();
+        let s = &app.reports.diag.replay;
+        assert_eq!(s.saved.as_deref(), Some("/new.kassiber-replay"));
+        assert!(!s.pending && s.request.is_none() && s.passphrase.text.is_empty());
+    }
+
+    /// Consent belongs to the book it was given for: leaving Logs or switching books forgets
+    /// the dialog, passphrase and confirmation included.
+    #[test]
+    fn leaving_logs_or_switching_books_forgets_the_consent() {
+        let consented = |app: &mut App| {
+            open(app);
+            let s = st(app);
+            s.understood = true;
+            s.passphrase = TextEdit::new("long enough passphrase");
+            s.confirmation = TextEdit::new("long enough passphrase");
+            assert!(app.reports.diag.replay.ready());
+        };
+        let mut app = crate::app::tests::quiet_app();
+        consented(&mut app);
+        super::super::leave(&mut app, "/logs");
+        assert!(!app.reports.diag.replay.open && !app.reports.diag.replay.understood);
+        consented(&mut app);
+        app.reset_book_state();
+        let s = &app.reports.diag.replay;
+        assert!(!s.open && !s.understood && s.passphrase.text.is_empty());
     }
 
     #[test]
