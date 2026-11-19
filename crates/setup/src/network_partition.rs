@@ -124,12 +124,14 @@ fn partition_snapshot(conn: &Connection, profile: &str, args: &Value) -> Result<
         ));
     }
     // Held Bisq trades name txids, not rows: a partition cannot carry them.
+    // A cleared hold whose trade legs are gone (a rolled-back import) is
+    // open again: the same predicate as kassiber_wallets' bisq holds `OPEN`.
     let holds = kassiber_store::optional::PROVIDER_TRADE_HOLDS;
     if kassiber_store::optional::present(conn, holds)
         .map_err(|e| AppError::new(e.code, e.message))?
         && !rows(
             conn,
-            "SELECT 1 FROM provider_trade_holds WHERE profile_id=? AND state='held'",
+            "SELECT 1 FROM provider_trade_holds h WHERE h.profile_id=? AND (h.state='held' OR NOT EXISTS(SELECT 1 FROM transactions l WHERE l.profile_id=h.profile_id AND l.excluded=0 AND substr(l.external_id,1,length(h.provider)+length(h.trade_id)+2)=h.provider||':'||h.trade_id||':'))",
             [profile],
         )?
         .is_empty()

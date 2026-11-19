@@ -5751,6 +5751,24 @@ f4 2024-05-01T11:25:00Z outbound 0.00605 0",
             assert!(held(&result).is_empty(), "{result:?}");
             assert!(bisq_hold_rows(&conn).starts_with("d15e0001 not_completed cleared"));
             assert!(bisq_hold_quarantines(&conn, "p").unwrap().is_empty());
+            // Rolling the completing import back (imports rollback deletes
+            // its legs) leaves no settlement evidence: the hold is open again
+            // once the pair's component, now one-sided (it blocks reports
+            // until repaired), is superseded too.
+            let legs = "DELETE FROM transactions WHERE external_id LIKE 'bisq:d15e0001:%'";
+            assert_eq!(conn.execute(legs, []).unwrap(), 3);
+            let pair = "UPDATE custody_components SET state='superseded' WHERE id IN (SELECT component_id FROM custody_component_transaction_memberships WHERE transaction_id=?)";
+            assert_eq!(conn.execute(pair, [&deposit]).unwrap(), 1);
+            let reopened = bisq_hold_quarantines(&conn, "p").unwrap();
+            assert_eq!(reopened.len(), 1);
+            assert_eq!(
+                kassiber_envelope::get(&reopened[0], "transaction_id"),
+                Some(&Py::Str(deposit.clone().into()))
+            );
+            // Importing the completed export again settles it once more.
+            let result = import_bisq_files(&conn, &completed, Some(&transactions)).unwrap();
+            assert!(held(&result).is_empty(), "{result:?}");
+            assert!(bisq_hold_quarantines(&conn, "p").unwrap().is_empty());
         }
     }
 }

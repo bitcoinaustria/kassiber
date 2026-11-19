@@ -5,8 +5,10 @@
 //! until a custody review covers it or the owner excludes it, so a held
 //! trade's deposit never books as an ordinary disposal. Txids only accumulate;
 //! a hold clears only when a later export completes the trade with escrow
-//! transactions covering every txid it named. See `docs/exchanges/bisq.md`
-//! and `docs/reference/database-compatibility.md#opt-in-schema-groups`.
+//! transactions covering every txid it named, and stays cleared only while
+//! that trade's legs are in the book: rolling the completing import back
+//! opens it again ([`OPEN`]). See `docs/exchanges/bisq.md` and
+//! `docs/reference/database-compatibility.md#opt-in-schema-groups`.
 use super::super::*;
 use super::Parsed;
 use kassiber_store::optional::{self, PROVIDER_TRADE_HOLDS};
@@ -15,6 +17,11 @@ use std::collections::BTreeSet;
 /// The quarantine reason journals store.
 pub const REASON: &str = "bisq_trade_review_required";
 const PROVIDER: &str = "bisq";
+/// SQL predicate on a hold row aliased `h`: held, or cleared while none of
+/// the completed trade's legs (`bisq:<trade>:<leg>`) are live in the book.
+/// The clearance rests on those legs; an imports rollback deletes them and
+/// so re-opens the hold. `kassiber_setup::network_partition` repeats it.
+pub const OPEN: &str = "(h.state='held' OR NOT EXISTS(SELECT 1 FROM transactions l WHERE l.profile_id=h.profile_id AND l.excluded=0 AND substr(l.external_id,1,length(h.provider)+length(h.trade_id)+2)=h.provider||':'||h.trade_id||':'))";
 
 /// One held trade and the on-chain txids Funds > Transactions names for it.
 pub(in super::super) struct Hold {
@@ -40,12 +47,9 @@ pub(super) fn anchors(
     if !present(conn)? {
         return Ok(BTreeSet::new());
     }
+    let sql = format!("SELECT txids_json FROM provider_trade_holds h WHERE profile_id=? AND provider=? AND trade_id=? AND {OPEN}");
     let txids: Option<String> = conn
-        .query_row(
-            "SELECT txids_json FROM provider_trade_holds WHERE profile_id=? AND provider=? AND trade_id=? AND state='held'",
-            params![profile, PROVIDER, trade],
-            |r| r.get(0),
-        )
+        .query_row(&sql, params![profile, PROVIDER, trade], |r| r.get(0))
         .optional()
         .map_err(database_error)?;
     Ok(txids.as_deref().map(strings).unwrap_or_default())
@@ -125,9 +129,8 @@ pub fn quarantines(conn: &Connection, profile: &str) -> Result<Vec<Py>, AppError
     if !present(conn)? {
         return Ok(Vec::new());
     }
-    let mut statement = conn
-        .prepare("SELECT t.id,t.workspace_id,h.trade_id,h.trade_status,h.reason,lower(t.external_id) FROM provider_trade_holds h JOIN json_each(h.txids_json) j JOIN transactions t ON t.profile_id=h.profile_id AND t.excluded=0 AND lower(t.external_id)=j.value WHERE h.profile_id=? AND h.state='held' AND NOT EXISTS(SELECT 1 FROM custody_component_transaction_memberships m JOIN custody_components c ON c.id=m.component_id WHERE m.profile_id=h.profile_id AND m.transaction_id=t.id AND c.state='active') ORDER BY h.provider,h.trade_id,j.value,t.id")
-        .map_err(database_error)?;
+    let sql = format!("SELECT t.id,t.workspace_id,h.trade_id,h.trade_status,h.reason,lower(t.external_id) FROM provider_trade_holds h JOIN json_each(h.txids_json) j JOIN transactions t ON t.profile_id=h.profile_id AND t.excluded=0 AND lower(t.external_id)=j.value WHERE h.profile_id=? AND {OPEN} AND NOT EXISTS(SELECT 1 FROM custody_component_transaction_memberships m JOIN custody_components c ON c.id=m.component_id WHERE m.profile_id=h.profile_id AND m.transaction_id=t.id AND c.state='active') ORDER BY h.provider,h.trade_id,j.value,t.id");
+    let mut statement = conn.prepare(&sql).map_err(database_error)?;
     let rows = statement
         .query_map([profile], |r| {
             (0..6)
