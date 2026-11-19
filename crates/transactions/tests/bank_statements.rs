@@ -570,6 +570,52 @@ fn imports_dedupe_by_reference_and_roll_back_exactly_what_they_added() {
     );
 }
 
+/// A booking that carries the bank's reference is one line whether it comes
+/// twice in one file or in two files; two versions of it in one file are
+/// refused. Equal lines without a reference stay separate bookings.
+#[test]
+fn a_referenced_booking_repeated_in_one_file_is_one_line() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let root = dir.path().join("attachments");
+    let twice = dir.path().join("twice.csv");
+    fs::write(&twice, csv_ref(&[MARCH, MARCH, SALARY])).unwrap();
+    let imported = import_file(conn, &root, &twice, own(), false).unwrap();
+    assert_eq!(
+        (
+            int(&imported, "lines_new"),
+            int(&imported, "lines_existing")
+        ),
+        (2, 1)
+    );
+    assert_eq!(count(conn, "SELECT COUNT(*) FROM bank_statement_lines"), 2);
+    let versions = dir.path().join("versions.csv");
+    fs::write(
+        &versions,
+        csv_ref(&[APRIL, &APRIL.replace("Einkauf", "Retoure")]),
+    )
+    .unwrap();
+    let error = import_file(conn, &root, &versions, own(), false).unwrap_err();
+    let details = error.details.as_ref().unwrap();
+    assert_eq!(
+        (text(details, "reason"), text(details, "field")),
+        (
+            "bank_statement_line_conflict".into(),
+            "remittance text".into()
+        )
+    );
+    assert_eq!(count(conn, "SELECT COUNT(*) FROM bank_statement_lines"), 2);
+    // Two equal reference-free lines are two bookings.
+    let plain = dir.path().join("plain.csv");
+    fs::write(
+        &plain,
+        "Buchungsdatum;Empfänger;Verwendungszweck;Betrag;Währung\n07.03.2025;Cafe;x;-3,00;EUR\n07.03.2025;Cafe;x;-3,00;EUR\n",
+    )
+    .unwrap();
+    let imported = import_file(conn, &root, &plain, own(), false).unwrap();
+    assert_eq!(int(&imported, "lines_new"), 2);
+}
+
 #[test]
 fn lines_kassiber_cannot_place_are_refused_by_name() {
     let (dir, book) = book();
