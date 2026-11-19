@@ -265,32 +265,60 @@ fn clear_notes(a: &mut App) {
     }
 }
 
+/// The book (the case's scope and the app's) and the account a statement picker opened for.
+struct Origin {
+    scope: Option<Value>,
+    book: Value,
+    account: String,
+}
+
+fn origin(a: &mut App) -> Origin {
+    Origin {
+        scope: super::scope_value(a),
+        book: a.expected_scope(),
+        account: panel(a)
+            .map(|p| p.account.text.to_owned())
+            .unwrap_or_default(),
+    }
+}
+
 fn pick(a: &mut App, tx: &mut Tx) {
     clear_notes(a);
+    let from = origin(a);
     let opts = rune::FileDialogOptions {
         title: t("sourceFunds:bank.pickTitle"),
         ..Default::default()
     }
     .filter(t("sourceFunds:bank.fileFilter"), &["xml", "csv"]);
-    tx.open_file(opts, |a: &mut App, result, _tx: &mut Tx| match result {
-        Ok(Some(p)) => import(a, &p.to_string_lossy()),
-        Ok(None) => {}
-        Err(e) => {
-            if let Some(p) = panel(a) {
-                p.error = Some(e.0);
+    tx.open_file(
+        opts,
+        move |a: &mut App, result, _tx: &mut Tx| match result {
+            Ok(Some(p)) => picked(a, &from, &p.to_string_lossy()),
+            Ok(None) => {}
+            Err(e) => {
+                if let Some(p) = panel(a) {
+                    p.error = Some(e.0);
+                }
             }
-        }
-    });
+        },
+    );
 }
 
-fn import(a: &mut App, file: &str) {
-    let account = panel(a)
-        .map(|p| p.account.text.to_owned())
-        .unwrap_or_default();
+/// A picked statement imports only into the book the picker opened for, with the account stated
+/// then: after a book switch (or before the book's scope is known) the file is dropped.
+fn picked(a: &mut App, from: &Origin, file: &str) {
+    let now = origin(a);
+    if from.scope.is_none() || now.scope != from.scope || now.book != from.book {
+        return;
+    }
+    import(a, file, &from.account);
+}
+
+fn import(a: &mut App, file: &str, account: &str) {
     if super::send(
         a,
         IMPORT,
-        import_args(file, &account),
+        import_args(file, account),
         "provenance.sof.bank.import",
     ) {
         a.provenance.sof.busy.insert("bank.import");
@@ -696,7 +724,7 @@ mod tests {
     fn a_reply_lands_in_the_case_it_was_sent_from() {
         let mut app = crate::app::tests::quiet_app();
         open_case(&mut app, "tx-a");
-        import(&mut app, "/x/statement.xml");
+        import(&mut app, "/x/statement.xml", "");
         decide(&mut app, ACCEPT, &suggestion());
         open_case(&mut app, "tx-b");
         let shown = |app: &App| {
@@ -727,7 +755,7 @@ mod tests {
         assert!(app.provenance.sof.sent_from.values().all(|q| q.is_empty()));
         assert!(!busy(&app));
 
-        import(&mut app, "/x/giro.csv");
+        import(&mut app, "/x/giro.csv", "");
         on_reply(
             &mut app,
             "import",
@@ -736,6 +764,37 @@ mod tests {
         let b = &app.provenance.sof.case.as_ref().expect("case").bank;
         assert_eq!(b.message, Some(t("sourceFunds:bank.alreadyImported")));
         assert_eq!(b.error, None);
+    }
+
+    /// A statement picked after the book switched (or before its scope was known) is dropped:
+    /// it never imports into the book open when the picker returns.
+    #[test]
+    fn a_picked_statement_imports_only_into_the_book_that_opened_the_picker() {
+        let mut app = crate::app::tests::quiet_app();
+        open_case(&mut app, "tx-a");
+        let book = |w: &str, p: &str| Some(Ok((w.to_owned(), p.to_owned())));
+        let imports = |app: &App| {
+            app.pending
+                .values()
+                .filter(|(_, kind, _)| kind == IMPORT)
+                .count()
+        };
+        // No scope yet: nothing to bind the file to.
+        let from = origin(&mut app);
+        picked(&mut app, &from, "/x/statement.xml");
+        assert_eq!(imports(&app), 0);
+        app.provenance.sof.scope = book("ws-1", "book-1");
+        let from = origin(&mut app);
+        app.provenance.sof.scope = book("ws-1", "book-2");
+        picked(&mut app, &from, "/x/statement.xml");
+        assert_eq!(imports(&app), 0);
+        assert!(!busy(&app));
+        assert!(app.provenance.sof.sent_from.values().all(|q| q.is_empty()));
+        // Back in the book it opened for, the file imports.
+        app.provenance.sof.scope = book("ws-1", "book-1");
+        picked(&mut app, &from, "/x/statement.xml");
+        assert_eq!(imports(&app), 1);
+        assert!(busy(&app));
     }
 
     #[test]
