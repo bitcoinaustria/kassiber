@@ -118,7 +118,13 @@ if [ "$mode" = publish ]; then
 fi
 
 if ! git cat-file -e "$commit^{commit}" 2>/dev/null; then
-  git fetch --no-tags --quiet "$remote" "$commit" 2>/dev/null ||
+  # A shallow clone (CI's checkout) takes only the pinned commit: without
+  # --depth, git fetches the data branch's whole history, gigabytes of older
+  # archives, which outgrew the frontend job's time limit. A full clone keeps
+  # fetching normally so it never becomes shallow.
+  depth=
+  [ "$(git rev-parse --is-shallow-repository)" = true ] && depth=--depth=1
+  git fetch --no-tags --quiet $depth "$remote" "$commit" 2>/dev/null ||
     git fetch --no-tags --quiet "$remote" "refs/heads/$branch:refs/remotes/$remote/$branch" ||
     true
 fi
