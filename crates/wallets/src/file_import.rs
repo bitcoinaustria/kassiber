@@ -1501,9 +1501,9 @@ struct OpenSavepoint<'a> {
 impl Drop for OpenSavepoint<'_> {
     fn drop(&mut self) {
         if self.open {
-            let _ = self
-                .conn
-                .execute_batch("ROLLBACK TO wallet_file_import;RELEASE wallet_file_import");
+            let _ = self.conn.execute_batch(
+                "ROLLBACK TO SAVEPOINT wallet_file_import; RELEASE SAVEPOINT wallet_file_import",
+            );
         }
     }
 }
