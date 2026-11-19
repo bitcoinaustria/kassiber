@@ -570,6 +570,44 @@ fn imports_dedupe_by_reference_and_roll_back_exactly_what_they_added() {
     );
 }
 
+/// After a keep-decisions reset, a resync that gives a transaction id back with changed facts
+/// keeps its reservation: bank decisions from before it are withheld (no evidence, no decision
+/// shown) until the line is reviewed again.
+#[test]
+fn decisions_wait_for_review_when_a_reset_brings_their_transaction_back_changed() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let root = dir.path().join("attachments");
+    let file = dir.path().join("march.csv");
+    fs::write(&file, csv_ref(&[MARCH])).unwrap();
+    import_file(conn, &root, &file, own(), false).unwrap();
+    conn.execute_batch("INSERT INTO source_funds_sources(id,workspace_id,profile_id,source_type,label,asset,created_at,updated_at) VALUES('src','w','p','fiat_purchase','Kraken buy','BTC','2025','2025'); INSERT INTO bank_statement_line_decisions(line_id,transaction_id,profile_id,state,source_id,created_at,updated_at) SELECT id,'buy1','p','accepted','src','2025-04-01T00:00:00Z','2025-04-01T00:00:00Z' FROM bank_statement_lines").unwrap();
+    let out = || LineFilter {
+        direction: "out".into(),
+        document: None,
+        limit: 0,
+    };
+    let decided = |conn: &Connection| {
+        let lines = store::list_lines(conn, &scope(), &out()).unwrap();
+        let decisions = get(&list(&lines)[0], "decisions").unwrap();
+        list(decisions).len()
+    };
+    assert_eq!(store::accepted_lines(conn, "src").unwrap().len(), 1);
+    assert_eq!(decided(conn), 1);
+    // The reset's reservation for buy1, left 'changed' by the resync.
+    conn.execute_batch("INSERT INTO book_reset_transactions(transaction_id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,amount_includes_fee,state,changed_fields_json,created_at) VALUES('buy1','w','p','kraken','f0','2025-03-05T10:00:00Z','inbound','BTC',1000000000,0,0,'changed','[\"amount\"]','2025-05-01T00:00:00Z')").unwrap();
+    assert!(store::accepted_lines(conn, "src").unwrap().is_empty());
+    assert_eq!(decided(conn), 0);
+    // A review after the reset counts again.
+    conn.execute(
+        "UPDATE bank_statement_line_decisions SET updated_at='2025-05-02T00:00:00Z'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(store::accepted_lines(conn, "src").unwrap().len(), 1);
+    assert_eq!(decided(conn), 1);
+}
+
 /// A booking that carries the bank's reference is one line whether it comes
 /// twice in one file or in two files; two versions of it in one file are
 /// refused. Equal lines without a reference stay separate bookings.

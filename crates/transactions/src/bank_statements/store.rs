@@ -667,6 +667,12 @@ impl StoredLine {
     }
 }
 
+/// SQL predicate on a decision aliased `d`: not withheld by a keep-decisions book reset. A
+/// resync that gives the decision's transaction id back with changed facts keeps the id's
+/// reservation (`book_reset_transactions`), and decisions from before it wait for a new review
+/// instead of attaching to the changed transaction.
+pub(crate) const CURRENT_DECISION: &str = "NOT EXISTS(SELECT 1 FROM book_reset_transactions r WHERE r.transaction_id=d.transaction_id AND d.updated_at<=r.created_at)";
+
 /// The accepted lines supporting one source-of-funds source.
 pub fn accepted_lines(conn: &Connection, source_id: &str) -> Result<Vec<StoredLine>> {
     if !tables_present(conn)? {
@@ -674,7 +680,7 @@ pub fn accepted_lines(conn: &Connection, source_id: &str) -> Result<Vec<StoredLi
     }
     let found = rows(
         conn,
-        "SELECT DISTINCT l.*, i.bank_name FROM bank_statement_line_decisions d JOIN bank_statement_lines l ON l.id=d.line_id JOIN bank_statement_imports i ON i.id=l.import_id JOIN transactions t ON t.id=d.transaction_id AND t.profile_id=d.profile_id WHERE d.source_id=? AND d.state='accepted' ORDER BY l.booking_date, l.id",
+        &format!("SELECT DISTINCT l.*, i.bank_name FROM bank_statement_line_decisions d JOIN bank_statement_lines l ON l.id=d.line_id JOIN bank_statement_imports i ON i.id=l.import_id JOIN transactions t ON t.id=d.transaction_id AND t.profile_id=d.profile_id WHERE d.source_id=? AND d.state='accepted' AND {CURRENT_DECISION} ORDER BY l.booking_date, l.id"),
         [source_id],
     )?;
     Ok(found.iter().map(StoredLine::from_row).collect())
@@ -705,7 +711,7 @@ pub fn list_lines(conn: &Connection, scope: &Scope<'_>, filter: &LineFilter) -> 
         params![scope.profile_id, filter.document.clone().unwrap_or_default(), limit],
     )?;
     let mut decisions: BTreeMap<String, Vec<Value>> = BTreeMap::new();
-    for row in rows(conn, "SELECT line_id,transaction_id,state,source_id,group_key,updated_at FROM bank_statement_line_decisions WHERE profile_id=? ORDER BY updated_at, transaction_id", [scope.profile_id])? {
+    for row in rows(conn, &format!("SELECT line_id,transaction_id,state,source_id,group_key,updated_at FROM bank_statement_line_decisions d WHERE profile_id=? AND {CURRENT_DECISION} ORDER BY updated_at, transaction_id"), [scope.profile_id])? {
         let item = dict(["transaction_id", "state", "source_id", "group_key", "updated_at"].map(|k| (k, get(&row, k).cloned().unwrap_or(Value::Null))));
         decisions.entry(text(&row, "line_id").unwrap_or_default()).or_default().push(item);
     }
