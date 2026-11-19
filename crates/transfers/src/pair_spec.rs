@@ -585,16 +585,26 @@ pub(super) fn stated_fee(row: &Value) -> Option<i128> {
 
 /// Check a provider-stated fee against the pair's observed debit before the
 /// residual is allocated: the debit must be the reviewed principal plus
-/// exactly that fee.
+/// exactly that fee, and the principal the whole inbound amount (a pair the
+/// evidence reconciles only in part is not proven).
 pub(super) fn check_stated_fee(spec: &Value, row: &Value) -> Result<()> {
     let reviewed = n(&value(&list(spec, "legs")[0], "amount_msat"));
     let debit = wallet_movement(&boundary(row, "out"));
+    let received = wallet_movement(&boundary(row, "in"));
     let stated = stated_fee(row).unwrap_or(0);
     if stated < 0 || debit - reviewed != stated {
         return Err(AppError::new(
             "validation",
             format!(
                 "the observed debit of {debit} msat is not the reviewed {reviewed} msat plus the stated fee of {stated} msat"
+            ),
+        ));
+    }
+    if received != reviewed {
+        return Err(AppError::new(
+            "validation",
+            format!(
+                "the observed receipt of {received} msat is not the reviewed {reviewed} msat the debit carries"
             ),
         ));
     }
