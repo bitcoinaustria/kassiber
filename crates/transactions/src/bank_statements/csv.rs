@@ -60,8 +60,10 @@ fn header_currency(header: &str) -> Option<(String, String)> {
         .then(|| (normalize(stem), code.to_owned()))
 }
 
-/// CSV rows with one delimiter; quotes may span lines.
-fn rows(text: &str, delimiter: char) -> Vec<Vec<String>> {
+/// CSV rows with one delimiter; quotes may span lines. The flag is set when a
+/// quoted field is still open at the end of the file: it swallowed every row
+/// after it, and only the rows before it are returned.
+fn rows(text: &str, delimiter: char) -> (Vec<Vec<String>>, bool) {
     let (mut rows, mut row, mut field, mut quoted) = (Vec::new(), Vec::new(), String::new(), false);
     let mut chars = text.chars().peekable();
     while let Some(c) = chars.next() {
@@ -92,11 +94,14 @@ fn rows(text: &str, delimiter: char) -> Vec<Vec<String>> {
             c => field.push(c),
         }
     }
+    if quoted {
+        return (rows, true);
+    }
     if !field.is_empty() || !row.is_empty() {
         row.push(field);
         rows.push(row);
     }
-    rows
+    (rows, false)
 }
 
 /// Column indices per field; `remittance` may name several.
@@ -245,7 +250,7 @@ fn mapped_plan(header: &[String], map: &[(String, Value)]) -> Result<Option<Plan
 fn choose(text: &str, map: &[(String, Value)]) -> Result<(Vec<Vec<String>>, usize, Plan)> {
     let mapped = map.iter().any(|(k, _)| !OPTIONS.contains(&k.as_str()));
     for delimiter in [';', '\t', ','] {
-        let table = rows(text, delimiter);
+        let (table, open) = rows(text, delimiter);
         for index in 0..table.len().min(HEADER_SEARCH_ROWS) {
             let header = &table[index];
             if header.len() < 2 {
@@ -259,6 +264,13 @@ fn choose(text: &str, map: &[(String, Value)]) -> Result<(Vec<Vec<String>>, usiz
                 },
             };
             if let Some(plan) = plan.filter(Plan::usable) {
+                if open {
+                    return Err(invalid(
+                        "A quoted field is never closed, so the rows after it can't be read",
+                    )
+                    .with_hint("Export the statement again unchanged.")
+                    .with_details(dict([("reason", s("bank_csv_unterminated_quote"))])));
+                }
                 return Ok((table, index, plan));
             }
         }
@@ -281,6 +293,14 @@ fn parts(raw: &str) -> Option<(char, Vec<&str>)> {
         .iter()
         .all(|v| !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit()));
     (p.len() == 3 && numeric).then_some((separator, p))
+}
+
+/// A cell that starts like a date (a digit, then a date separator) without
+/// reading as one: a transaction row whose date is malformed, never a footer
+/// label to skip.
+fn date_like(raw: &str) -> bool {
+    let date = raw.trim().split([' ', 'T']).next().unwrap_or("");
+    date.starts_with(|c: char| c.is_ascii_digit()) && date.contains(['.', '/', '-'])
 }
 
 /// A date cell in one named format.
@@ -539,7 +559,7 @@ pub(super) fn parse(
         let Some(date) = date_format.and_then(|f| read_date(&date_cell, f)) else {
             if !date_cell.is_empty()
                 && amounts.iter().any(|(_, v)| !v.is_empty())
-                && parts(&date_cell).is_some()
+                && (parts(&date_cell).is_some() || date_like(&date_cell))
             {
                 return Err(invalid(format!(
                     "Row {row_number}, {}: the cell is not a valid date",
