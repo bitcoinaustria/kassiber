@@ -60,11 +60,20 @@ fn header_currency(header: &str) -> Option<(String, String)> {
         .then(|| (normalize(stem), code.to_owned()))
 }
 
-/// CSV rows with one delimiter; quotes may span lines. The flag is set when a
-/// quoted field is still open at the end of the file: it swallowed every row
-/// after it, and only the rows before it are returned.
-fn rows(text: &str, delimiter: char) -> (Vec<Vec<String>>, bool) {
+/// CSV rows with one delimiter; quotes may span lines.
+struct Table {
+    rows: Vec<Vec<String>>,
+    /// A quoted field is still open at the end of the file: it swallowed
+    /// every row after it, and only the rows before it are returned.
+    open: bool,
+    /// The first row (index) with text after a closing quote (`"10"0`): the
+    /// field's value can't be read.
+    after_quote: Option<usize>,
+}
+
+fn rows(text: &str, delimiter: char) -> Table {
     let (mut rows, mut row, mut field, mut quoted) = (Vec::new(), Vec::new(), String::new(), false);
+    let (mut closed, mut after_quote) = (false, None);
     let mut chars = text.chars().peekable();
     while let Some(c) = chars.next() {
         if quoted {
@@ -73,35 +82,46 @@ fn rows(text: &str, delimiter: char) -> (Vec<Vec<String>>, bool) {
                     chars.next();
                     field.push('"');
                 }
-                '"' => quoted = false,
+                '"' => {
+                    quoted = false;
+                    closed = true;
+                }
                 c => field.push(c),
             }
             continue;
+        }
+        if closed && c != delimiter && !matches!(c, '\r' | '\n' | ' ') {
+            after_quote.get_or_insert(rows.len());
         }
         match c {
             '"' if field.trim().is_empty() => {
                 field.clear();
                 quoted = true;
             }
-            c if c == delimiter => row.push(std::mem::take(&mut field)),
+            c if c == delimiter => {
+                closed = false;
+                row.push(std::mem::take(&mut field));
+            }
             '\r' | '\n' => {
                 if c == '\r' && chars.peek() == Some(&'\n') {
                     chars.next();
                 }
+                closed = false;
                 row.push(std::mem::take(&mut field));
                 rows.push(std::mem::take(&mut row));
             }
             c => field.push(c),
         }
     }
-    if quoted {
-        return (rows, true);
-    }
-    if !field.is_empty() || !row.is_empty() {
+    if !quoted && (!field.is_empty() || !row.is_empty()) {
         row.push(field);
         rows.push(row);
     }
-    (rows, false)
+    Table {
+        rows,
+        open: quoted,
+        after_quote,
+    }
 }
 
 /// Column indices per field; `remittance` may name several.
@@ -250,7 +270,11 @@ fn mapped_plan(header: &[String], map: &[(String, Value)]) -> Result<Option<Plan
 fn choose(text: &str, map: &[(String, Value)]) -> Result<(Vec<Vec<String>>, usize, Plan)> {
     let mapped = map.iter().any(|(k, _)| !OPTIONS.contains(&k.as_str()));
     for delimiter in [';', '\t', ','] {
-        let (table, open) = rows(text, delimiter);
+        let Table {
+            rows: table,
+            open,
+            after_quote,
+        } = rows(text, delimiter);
         for index in 0..table.len().min(HEADER_SEARCH_ROWS) {
             let header = &table[index];
             if header.len() < 2 {
@@ -270,6 +294,16 @@ fn choose(text: &str, map: &[(String, Value)]) -> Result<(Vec<Vec<String>>, usiz
                     )
                     .with_hint("Export the statement again unchanged.")
                     .with_details(dict([("reason", s("bank_csv_unterminated_quote"))])));
+                }
+                // Rows above the header are never read; from it on, a value
+                // with text after its closing quote is refused, not guessed.
+                if let Some(row) = after_quote.filter(|row| *row >= index) {
+                    return Err(invalid(format!(
+                        "Row {} has text after a closing quote, so its value can't be read",
+                        row + 1
+                    ))
+                    .with_hint("Export the statement again unchanged.")
+                    .with_details(dict([("reason", s("bank_csv_text_after_quote"))])));
                 }
                 return Ok((table, index, plan));
             }
