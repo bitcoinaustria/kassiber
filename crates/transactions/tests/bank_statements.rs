@@ -90,6 +90,8 @@ const CAMT: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
   <NtryDtls><TxDtls><Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs><RltdPties><Dbtr><Pty><Nm>Example Employer AG</Nm></Pty></Dbtr></RltdPties>
   <RmtInf><Strd><CdtrRefInf><Ref>RF18539007547034</Ref></CdtrRefInf></Strd></RmtInf></TxDtls></NtryDtls></Ntry>
  <Ntry><Amt Ccy="EUR">5.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts>PDNG</Sts><BookgDt><Dt>2025-03-06</Dt></BookgDt></Ntry>
+ <Ntry><Amt Ccy="EUR">6.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts><Prtry>PDNG</Prtry></Sts><BookgDt><Dt>2025-03-06</Dt></BookgDt></Ntry>
+ <Ntry><Amt Ccy="EUR">7.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts><Prtry>BOOK</Prtry></Sts><BookgDt><Dt>2025-03-07</Dt></BookgDt></Ntry>
 </Stmt></BkToCstmrStmt></Document>"#;
 
 #[test]
@@ -130,7 +132,11 @@ fn camt_reads_entries_parties_and_references_and_skips_pending() {
     assert_eq!(incoming.end_to_end_id, None);
     assert_eq!(
         parsed.skipped,
-        vec![(3, "entry status PDNG is not booked".to_owned())]
+        vec![
+            (3, "entry status PDNG is not booked".to_owned()),
+            (4, "entry status PDNG is not booked".to_owned()),
+            (5, "entry status is not booked".to_owned())
+        ]
     );
 }
 
@@ -336,6 +342,7 @@ fn csv_refuses_what_it_cannot_read_by_name() {
         ("Date,Amount,Currency\n2025-01-01,(100.00),EUR\n", "giro", "not an amount"),
         ("Date;Amount;Currency\n2025-01-01;-1.00;EUR\n", "nobody", "does not name the account"),
         ("Date;Amount;Currency;Description\n2025-01-01;10;EUR;\"unfinished\n2025-01-02;20;EUR;second\n", "giro", "quoted field is never closed"),
+        ("Date;Amount;Currency\n2025-01-01;\"10\"0;EUR\n", "giro", "Row 2 has text after a closing quote"),
         ("Date;Amount;Currency\n2025-01-01;10;EUR\n2025-0x-02;20;EUR\n", "giro", "Row 3, column 1 (booking_date): the cell is not a valid date"),
     ];
     for (text, option, expected) in cases {
@@ -613,6 +620,44 @@ fn imports_dedupe_by_reference_and_roll_back_exactly_what_they_added() {
             .code,
         "not_found"
     );
+}
+
+/// After a keep-decisions reset, a resync that gives a transaction id back with changed facts
+/// keeps its reservation: bank decisions from before it are withheld (no evidence, no decision
+/// shown) until the line is reviewed again.
+#[test]
+fn decisions_wait_for_review_when_a_reset_brings_their_transaction_back_changed() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let root = dir.path().join("attachments");
+    let file = dir.path().join("march.csv");
+    fs::write(&file, csv_ref(&[MARCH])).unwrap();
+    import_file(conn, &root, &file, own(), false).unwrap();
+    conn.execute_batch("INSERT INTO source_funds_sources(id,workspace_id,profile_id,source_type,label,asset,created_at,updated_at) VALUES('src','w','p','fiat_purchase','Kraken buy','BTC','2025','2025'); INSERT INTO bank_statement_line_decisions(line_id,transaction_id,profile_id,state,source_id,created_at,updated_at) SELECT id,'buy1','p','accepted','src','2025-04-01T00:00:00Z','2025-04-01T00:00:00Z' FROM bank_statement_lines").unwrap();
+    let out = || LineFilter {
+        direction: "out".into(),
+        document: None,
+        limit: 0,
+    };
+    let decided = |conn: &Connection| {
+        let lines = store::list_lines(conn, &scope(), &out()).unwrap();
+        let decisions = get(&list(&lines)[0], "decisions").unwrap();
+        list(decisions).len()
+    };
+    assert_eq!(store::accepted_lines(conn, "src").unwrap().len(), 1);
+    assert_eq!(decided(conn), 1);
+    // The reset's reservation for buy1, left 'changed' by the resync.
+    conn.execute_batch("INSERT INTO book_reset_transactions(transaction_id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,amount_includes_fee,state,changed_fields_json,created_at) VALUES('buy1','w','p','kraken','f0','2025-03-05T10:00:00Z','inbound','BTC',1000000000,0,0,'changed','[\"amount\"]','2025-05-01T00:00:00Z')").unwrap();
+    assert!(store::accepted_lines(conn, "src").unwrap().is_empty());
+    assert_eq!(decided(conn), 0);
+    // A review after the reset counts again.
+    conn.execute(
+        "UPDATE bank_statement_line_decisions SET updated_at='2025-05-02T00:00:00Z'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(store::accepted_lines(conn, "src").unwrap().len(), 1);
+    assert_eq!(decided(conn), 1);
 }
 
 /// A booking that carries the bank's reference is one line whether it comes
@@ -951,4 +996,24 @@ fn the_book_lists_purchases_without_an_exact_value_and_refuses_unknown_ones() {
             .code,
         "not_found"
     );
+}
+
+/// A decision a keep-decisions reset withholds (its transaction came back changed) no longer
+/// hides the line from suggestions: the pair is offered for review again.
+#[test]
+fn a_reset_withheld_decision_is_suggested_again() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let file = dir.path().join("s.csv");
+    fs::write(&file, csv_ref(&[MARCH])).unwrap();
+    import_file(conn, &dir.path().join("attachments"), &file, own(), false).unwrap();
+    let suggested = |conn: &Connection| {
+        let found = matching::suggest_for_book(conn, &scope(), None).unwrap();
+        list(get(&found, "suggestions").unwrap()).len()
+    };
+    assert_eq!(suggested(conn), 1);
+    conn.execute_batch("INSERT INTO bank_statement_line_decisions(line_id,transaction_id,profile_id,state,created_at,updated_at) SELECT id,'buy1','p','accepted','2025-04-01T00:00:00Z','2025-04-01T00:00:00Z' FROM bank_statement_lines").unwrap();
+    assert_eq!(suggested(conn), 0);
+    conn.execute_batch("INSERT INTO book_reset_transactions(transaction_id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,amount_includes_fee,state,changed_fields_json,created_at) VALUES('buy1','w','p','kraken','f0','2025-03-05T10:00:00Z','inbound','BTC',1000000000,0,0,'changed','[\"amount\"]','2025-05-01T00:00:00Z')").unwrap();
+    assert_eq!(suggested(conn), 1);
 }
