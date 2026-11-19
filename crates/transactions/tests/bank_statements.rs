@@ -88,6 +88,8 @@ const CAMT: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
   <NtryDtls><TxDtls><Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs><RltdPties><Dbtr><Pty><Nm>Example Employer AG</Nm></Pty></Dbtr></RltdPties>
   <RmtInf><Strd><CdtrRefInf><Ref>RF18539007547034</Ref></CdtrRefInf></Strd></RmtInf></TxDtls></NtryDtls></Ntry>
  <Ntry><Amt Ccy="EUR">5.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts>PDNG</Sts><BookgDt><Dt>2025-03-06</Dt></BookgDt></Ntry>
+ <Ntry><Amt Ccy="EUR">6.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts><Prtry>PDNG</Prtry></Sts><BookgDt><Dt>2025-03-06</Dt></BookgDt></Ntry>
+ <Ntry><Amt Ccy="EUR">7.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><Sts><Prtry>BOOK</Prtry></Sts><BookgDt><Dt>2025-03-07</Dt></BookgDt></Ntry>
 </Stmt></BkToCstmrStmt></Document>"#;
 
 #[test]
@@ -128,7 +130,11 @@ fn camt_reads_entries_parties_and_references_and_skips_pending() {
     assert_eq!(incoming.end_to_end_id, None);
     assert_eq!(
         parsed.skipped,
-        vec![(3, "entry status PDNG is not booked".to_owned())]
+        vec![
+            (3, "entry status PDNG is not booked".to_owned()),
+            (4, "entry status PDNG is not booked".to_owned()),
+            (5, "entry status is not booked".to_owned())
+        ]
     );
 }
 
@@ -334,6 +340,7 @@ fn csv_refuses_what_it_cannot_read_by_name() {
         ("Date,Amount,Currency\n2025-01-01,(100.00),EUR\n", "giro", "not an amount"),
         ("Date;Amount;Currency\n2025-01-01;-1.00;EUR\n", "nobody", "does not name the account"),
         ("Date;Amount;Currency;Description\n2025-01-01;10;EUR;\"unfinished\n2025-01-02;20;EUR;second\n", "giro", "quoted field is never closed"),
+        ("Date;Amount;Currency\n2025-01-01;\"10\"0;EUR\n", "giro", "Row 2 has text after a closing quote"),
         ("Date;Amount;Currency\n2025-01-01;10;EUR\n2025-0x-02;20;EUR\n", "giro", "Row 3, column 1 (booking_date): the cell is not a valid date"),
     ];
     for (text, option, expected) in cases {

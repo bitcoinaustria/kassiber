@@ -126,7 +126,16 @@ pub(super) fn parse(input: &str) -> Result<ParsedStatement> {
         }
         for entry in children(statement, "Ntry") {
             position += 1;
-            let status = text(entry, &["Sts", "Cd"]).or_else(|| text(entry, &["Sts"]));
+            // `Sts` is the code itself (camt.053.001.02), `Sts/Cd` or `Sts/Prtry` (later
+            // versions). Only an ISO BOOK books: a proprietary status means what the bank says,
+            // and a status that does not read is not booked either.
+            let status =
+                child(entry, "Sts").map(|sts| match (text(sts, &["Cd"]), text(sts, &["Prtry"])) {
+                    (Some(code), _) => code,
+                    (None, Some(proprietary)) if proprietary != "BOOK" => proprietary,
+                    (None, Some(_)) => String::new(),
+                    (None, None) => text(sts, &[]).unwrap_or_default(),
+                });
             if let Some(status) = status.filter(|s| s != "BOOK") {
                 let known = ["PDNG", "INFO", "FUTR"].into_iter().find(|k| *k == status);
                 parsed.skipped.push((
