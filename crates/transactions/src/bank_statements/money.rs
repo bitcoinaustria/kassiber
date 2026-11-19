@@ -82,21 +82,27 @@ impl Money {
     }
 
     /// Exact product with another exact decimal, kept within the supported
-    /// scale by rounding half away from zero only past 18 fractional digits.
+    /// scale by rounding half away from zero only past 18 fractional digits,
+    /// once, on the whole discarded remainder.
     pub fn times(self, other: Money) -> Option<Money> {
-        let mut units = self.units.checked_mul(other.units)?;
-        let mut scale = self.scale + other.scale;
-        while scale > MAX_SCALE {
-            let rem = units % 10;
-            units /= 10;
-            if rem >= 5 {
-                units += 1;
-            } else if rem <= -5 {
-                units -= 1;
-            }
-            scale -= 1;
+        let units = self.units.checked_mul(other.units)?;
+        let scale = self.scale + other.scale;
+        if scale <= MAX_SCALE {
+            return Some(Money { units, scale });
         }
-        Some(Money { units, scale })
+        // Both scales are at most 18, so the divisor is at most 10^18.
+        let divisor = 10i128.pow(scale - MAX_SCALE);
+        let (quotient, remainder) = (units / divisor, units % divisor);
+        let away = remainder.unsigned_abs() * 2 >= divisor.unsigned_abs();
+        let units = match (away, units < 0) {
+            (false, _) => quotient,
+            (true, false) => quotient + 1,
+            (true, true) => quotient - 1,
+        };
+        Some(Money {
+            units,
+            scale: MAX_SCALE,
+        })
     }
 
     /// Canonical text: no trailing zeros beyond two fractional digits, at
