@@ -1492,6 +1492,22 @@ pub enum DesktopImport {
     Samourai(samourai::Request),
 }
 
+/// The `wallet_file_import` savepoint while it is open: dropped open (an
+/// early return), it is rolled back and released.
+struct OpenSavepoint<'a> {
+    conn: &'a Connection,
+    open: bool,
+}
+impl Drop for OpenSavepoint<'_> {
+    fn drop(&mut self) {
+        if self.open {
+            let _ = self
+                .conn
+                .execute_batch("ROLLBACK TO wallet_file_import;RELEASE wallet_file_import");
+        }
+    }
+}
+
 fn run(
     conn: &Connection,
     request: Request,
@@ -1553,6 +1569,8 @@ fn run(
         None => None,
     };
     let mut bisq_escrow = None;
+    // Rolls the import's savepoint back on any early return once it is open.
+    let mut savepoint = OpenSavepoint { conn, open: false };
     let rows = if let Some(bundle) = &bundle {
         wasabi::rows(&bundle.records)?
     } else if request.format == Format::Ledger {
@@ -1579,6 +1597,12 @@ fn run(
                 "Omit --wallet to use the default Bisq wallet, or create one with `wallets create --kind bisq`.",
             ));
         }
+        // A Bisq export is validated against the book (stored legs, escrow
+        // transactions another trade books), so it is read under the write
+        // lock: a concurrent import can't commit the same trade in between.
+        kassiber_store::begin_write_savepoint(conn, "wallet_file_import")
+            .map_err(database_error)?;
+        savepoint.open = true;
         let mut parsed = bisq::read(
             &bisq::Book {
                 conn,
@@ -1617,7 +1641,11 @@ fn run(
     } else {
         rows.iter().map(normalize).collect::<Result<Vec<_>, _>>()?
     };
-    kassiber_store::begin_write_savepoint(conn, "wallet_file_import").map_err(database_error)?;
+    if !savepoint.open {
+        kassiber_store::begin_write_savepoint(conn, "wallet_file_import")
+            .map_err(database_error)?;
+        savepoint.open = true;
+    }
     let result = if mode == Some("relevant") {
         exchange::enrich(conn, &request, &rows)
     } else {
@@ -1671,6 +1699,7 @@ fn run(
         }
         (_, result) => result,
     };
+    savepoint.open = false;
     if result.is_ok() {
         conn.execute_batch("RELEASE wallet_file_import")
             .map_err(database_error)?;

@@ -5931,6 +5931,82 @@ fn bisq_holds_or_refuses_ambiguous_escrow_evidence() {
     assert_eq!(bisq_count(&conn), 0);
 }
 
+/// Two imports into different Bisq wallets of one book never both book a
+/// trade: the export is checked against the book under the write lock, so an
+/// import that waited for another's commit sees its legs and refuses.
+#[test]
+fn bisq_checks_the_book_under_the_write_lock() {
+    let dir = std::env::temp_dir().join(format!(
+        "kassiber-bisq-lock-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("book.sqlite3");
+    let open = |path: &std::path::Path| {
+        let conn = Connection::open(path).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=20000",
+        )
+        .unwrap();
+        conn
+    };
+    let first = open(&path);
+    let creation: Json =
+        serde_json::from_str(include_str!("../../../store/fixtures/creation.json")).unwrap();
+    for sql in creation["statements"].as_array().unwrap() {
+        first.execute_batch(sql.as_str().unwrap()).unwrap();
+    }
+    first.execute_batch("INSERT INTO workspaces(id,label,created_at) VALUES('ws','Workspace','2025-01-01');
+        INSERT INTO profiles(id,workspace_id,label,fiat_currency,created_at) VALUES('p','ws','Book','EUR','2025-01-01');
+        INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('wallet','ws','p','Source','custom','{}','2025-01-01'),('second-bisq','ws','p','Bisq Two','bisq','{}','2025-01-01');
+        INSERT OR IGNORE INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','2025-01-01')").unwrap();
+    bisq_onchain(&first, BISQ_DEPOSITS);
+    // The first import holds the write lock until it commits.
+    first.execute_batch("BEGIN IMMEDIATE").unwrap();
+    import_bisq(&first, BISQ_TRADES).unwrap();
+    let files = dir.clone();
+    let second = std::thread::spawn(move || {
+        let conn = open(&files.join("book.sqlite3"));
+        let (trades, companion) = (files.join("history.csv"), files.join("transactions.csv"));
+        std::fs::write(&trades, BISQ_TRADES).unwrap();
+        std::fs::write(&companion, BISQ_TRANSACTIONS).unwrap();
+        execute(
+            &conn,
+            Request {
+                profile_id: "p".into(),
+                wallet: "Bisq Two".into(),
+                file: trades.to_str().unwrap().into(),
+                format: Format::Bisq,
+                mode: None,
+                companion: Some(companion.to_str().unwrap().into()),
+                timezone: Some("UTC".into()),
+            },
+            None,
+        )
+    });
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    first.execute_batch("COMMIT").unwrap();
+    let error = second.join().unwrap().unwrap_err();
+    assert!(
+        error
+            .message
+            .contains("conflicts with its escrow legs already in the book"),
+        "{}",
+        error.message
+    );
+    assert_eq!(
+        scalar(
+            &first,
+            "SELECT count(*) FROM transactions WHERE wallet_id='second-bisq'"
+        ),
+        0
+    );
+    drop(first);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// The escrow ledger needs a dedicated bisq wallet; a wallet of another kind
 /// is refused before anything is written.
 #[test]
