@@ -658,4 +658,16 @@ fn partition_refuses_a_book_that_holds_bisq_trades() {
         "{}",
         refused.message
     );
+    // A cleared hold rests on the completed trade's legs: without them (a
+    // rolled-back import) it is open again and still refuses.
+    conn.execute("UPDATE provider_trade_holds SET state='cleared'", [])
+        .unwrap();
+    let refused = partition::plan(conn, "profile-1", &args).unwrap_err();
+    assert!(refused.message.contains("holds Bisq trades"));
+    conn.execute(
+        "UPDATE transactions SET external_id='bisq:trade-1:trade' WHERE id=(SELECT min(id) FROM transactions WHERE profile_id='profile-1')",
+        [],
+    )
+    .unwrap();
+    partition::plan(conn, "profile-1", &args).unwrap();
 }

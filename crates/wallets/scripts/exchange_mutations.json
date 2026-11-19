@@ -785,5 +785,15 @@
       "bisq_checks_the_book_under_the_write_lock"
     ],
     "rule": "A Bisq export is checked against the book under the import's write lock, so a concurrent import of the same trade refuses."
+  },
+  {
+    "id": "bisq-cleared-hold-needs-legs",
+    "file": "crates/wallets/src/file_import/bisq/holds.rs",
+    "find": "pub const OPEN: &str = \"(h.state='held' OR NOT EXISTS(",
+    "replace": "pub const OPEN: &str = \"(h.state='held' OR 0 AND NOT EXISTS(",
+    "expect_failing": [
+      "bisq_held_trades_persist_quarantine_and_clear_only_on_proof"
+    ],
+    "rule": "A cleared Bisq hold stays cleared only while the completed trade's legs are in the book; rolling the completing import back re-opens it."
   }
 ]
