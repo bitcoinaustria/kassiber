@@ -158,5 +158,45 @@
       "imports_dedupe_by_reference_and_roll_back_exactly_what_they_added"
     ],
     "rule": "Counterparty IBANs are stored masked only."
+  },
+  {
+    "id": "bank-csv-open-quote",
+    "file": "crates/transactions/src/bank_statements/csv.rs",
+    "find": "                if open {",
+    "replace": "                if false && open {",
+    "expect_failing": [
+      "csv_refuses_what_it_cannot_read_by_name"
+    ],
+    "rule": "A quoted field left open at the end of the file is refused; it would swallow the rows after it."
+  },
+  {
+    "id": "bank-csv-malformed-date",
+    "file": "crates/transactions/src/bank_statements/csv.rs",
+    "find": "                && (parts(&date_cell).is_some() || date_like(&date_cell))",
+    "replace": "                && parts(&date_cell).is_some()",
+    "expect_failing": [
+      "csv_refuses_what_it_cannot_read_by_name"
+    ],
+    "rule": "A date-shaped cell that is not a date, with an amount, is refused, never skipped as a footer."
+  },
+  {
+    "id": "bank-money-round-once",
+    "file": "crates/transactions/src/bank_statements/money.rs",
+    "find": "        let away = remainder.unsigned_abs() * 2 >= divisor.unsigned_abs();",
+    "replace": "        let away = remainder.unsigned_abs() % 10 * 2 >= 10;",
+    "expect_failing": [
+      "money_is_exact_decimal_text"
+    ],
+    "rule": "Products past 18 digits round once on the whole remainder."
+  },
+  {
+    "id": "bank-referenced-repeat-in-file",
+    "file": "crates/transactions/src/bank_statements/store.rs",
+    "find": "        if line.bank_reference.is_some() {\n            match referenced.get(group) {",
+    "replace": "        if false {\n            match referenced.get(group) {",
+    "expect_failing": [
+      "a_referenced_booking_repeated_in_one_file_is_one_line"
+    ],
+    "rule": "A referenced booking repeated in one file is one line; two versions of it are refused."
   }
 ]

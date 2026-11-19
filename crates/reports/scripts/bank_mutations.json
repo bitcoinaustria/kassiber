@@ -18,5 +18,15 @@
       "accept_refuses_pairs_that_cannot_be_funding_and_writes_nothing"
     ],
     "rule": "A purchase priced in another currency is refused."
+  },
+  {
+    "id": "bank-accept-reuses-reviewed-link",
+    "file": "crates/reports/src/source_funds_bank.rs",
+    "find": "        let link_id = match existing.first() {",
+    "replace": "        let link_id = match None::<&Value> {",
+    "expect_failing": [
+      "accepting_reuses_the_reviewed_link_the_purchase_already_has"
+    ],
+    "rule": "Accepting bank evidence keeps the purchase's existing reviewed link as its one allocation."
   }
 ]
