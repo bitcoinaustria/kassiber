@@ -4,7 +4,9 @@
 //! they never pass silently, when the loader or the engine changes.
 #![recursion_limit = "256"]
 
-use kassiber_replay::projection::{section, unclassified, MARKERS};
+use kassiber_replay::projection::{
+    class_of, kept, section, unclassified, ENGINE_CONSTANTS, F, MARKERS,
+};
 use kassiber_store::{Book, OpenOptions};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -191,6 +193,36 @@ fn every_field_the_loader_emits_is_classified() {
         missing.is_empty(),
         "unclassified loaded fields: {missing:?}"
     );
+}
+
+/// Every value the engine compares a field against survives the schema as
+/// written, and the source file named for it still names it: a constant the
+/// projection replaced would make the projected book compute differently.
+#[test]
+fn every_engine_constant_survives_the_schema() {
+    let mut problems = Vec::new();
+    for (section_name, path, values, site) in ENGINE_CONSTANTS {
+        let source =
+            std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(site))
+                .unwrap_or_else(|e| panic!("{site}: {e}"));
+        for value in *values {
+            if !source.contains(&format!("\"{value}\"")) {
+                problems.push(format!("{site} no longer names {value:?}"));
+            }
+            if !kept(section_name, path, value) {
+                problems.push(format!("{section_name}.{} drops {value:?}", path.join(".")));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+    // The observer's chain instance in raw_json is kept as an identity, so
+    // the network gate still sees it agree or disagree with the wallet's.
+    for section_name in ["transactions", "book_network.observations"] {
+        assert!(matches!(
+            class_of(section_name, &["raw_json", "chain_instance_id"]),
+            Some(F::External)
+        ));
+    }
 }
 
 #[test]

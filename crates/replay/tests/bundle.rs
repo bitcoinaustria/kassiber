@@ -235,6 +235,20 @@ fn tampered_outputs_and_mutated_inputs_give_precise_diffs_and_corruption_is_refu
     let error = kassiber_replay::verify(&sealed, PASSPHRASE, 5).unwrap_err();
     assert_eq!(error.code, "replay_bundle_corrupt");
 
+    // Inputs missing a field the pipeline indexes are corruption, not a
+    // crash (checksums updated, so only the content is wrong).
+    for field in ["id", "fiat_currency"] {
+        let mut malformed = document.clone();
+        let mut inputs: Value =
+            serde_json::from_str(malformed["parts"]["inputs"].as_str().unwrap()).unwrap();
+        inputs["profile"].as_object_mut().unwrap().remove(field);
+        malformed["parts"]["inputs"] = Value::from(serde_json::to_string(&inputs).unwrap());
+        match kassiber_replay::verify(&reseal(malformed), PASSPHRASE, 5) {
+            Err(error) => assert_eq!(error.code, "replay_bundle_corrupt", "{field}"),
+            Ok(report) => assert_eq!(report["status"], "refused", "{field}: {report:#}"),
+        }
+    }
+
     let error = kassiber_replay::verify(&exported.sealed, "wrong-passphrase", 5).unwrap_err();
     assert_eq!(error.code, "age_decrypt_failed");
     drop(book);
