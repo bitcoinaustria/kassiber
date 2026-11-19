@@ -341,6 +341,8 @@ fn csv_refuses_what_it_cannot_read_by_name() {
         ("Date;Amount;Currency\n2025-01-01;-1.00;EUR\n", "nobody", "does not name the account"),
         ("Date;Amount;Currency;Description\n2025-01-01;10;EUR;\"unfinished\n2025-01-02;20;EUR;second\n", "giro", "quoted field is never closed"),
         ("Date;Amount;Currency\n2025-01-01;\"10\"0;EUR\n", "giro", "Row 2 has text after a closing quote"),
+        ("Date,Amount (EUR),Description\n2025-01-01,1,234.56,Payment\n", "giro", "Row 2 has more values than the header"),
+        ("Date;Amount;Currency\n2025-01-01;-1,00;EUR\n2025-01-02;-2,00;EUR;x\n", "giro", "Row 3 has more values than the header"),
         ("Date;Amount;Currency\n2025-01-01;10;EUR\n2025-0x-02;20;EUR\n", "giro", "Row 3, column 1 (booking_date): the cell is not a valid date"),
     ];
     for (text, option, expected) in cases {
