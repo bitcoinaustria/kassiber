@@ -134,6 +134,60 @@ fn accepting_creates_a_reviewed_fiat_source_and_reports_the_line() {
     assert_eq!(count(conn, "SELECT COUNT(*) FROM source_funds_sources"), 1);
 }
 
+/// A purchase whose reviewed fiat source the owner already linked keeps
+/// that one link: accepting bank evidence attaches to it instead of adding
+/// a second full allocation the report would count twice.
+#[test]
+fn accepting_reuses_the_reviewed_link_the_purchase_already_has() {
+    let (_dir, book) = book();
+    let conn = book.connection();
+    let execute = |kind: &str, args: Vec<(&str, Value)>| {
+        let mut args = args;
+        args.extend([("workspace", s("w")), ("profile", s("p"))]);
+        kassiber_reports::execute(conn, kind, &dict(args)).unwrap()
+    };
+    let source = execute(
+        "source-funds.sources.create",
+        vec![
+            ("source_type", s("fiat_purchase")),
+            ("label", s("Kraken purchase")),
+            ("asset", s("BTC")),
+            ("amount", s("0.02")),
+            ("fiat_currency", s("EUR")),
+            ("acquired_at", s("2025-03-05T10:00:00Z")),
+            ("attachments", Value::List(vec![])),
+        ],
+    );
+    let link = execute(
+        "source-funds.links.create",
+        vec![
+            ("from_source", get(&source, "id").unwrap().clone()),
+            ("to_transaction", s("buy1")),
+            ("link_type", s("manual_source")),
+            ("state", s("reviewed")),
+            ("confidence", s("strong")),
+            ("method", s("manual")),
+            ("allocation_policy", s("explicit")),
+            ("allocation_amount", s("0.02")),
+            ("attachments", Value::List(vec![])),
+        ],
+    );
+    let lines = vec![line(conn, "-1000.00")];
+    let accepted =
+        source_funds_bank::accept(conn, &scope(), &lines, &["buy1".into()], &SystemSources)
+            .unwrap();
+    let first = match get(&accepted, "accepted") {
+        Some(Value::List(items)) => items[0].clone(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(get(&first, "link_id"), get(&link, "id"));
+    assert_eq!(get(&first, "source_created"), Some(&Value::Bool(false)));
+    assert_eq!(count(conn, "SELECT COUNT(*) FROM source_funds_links"), 1);
+    let standard = report(conn, "standard");
+    assert!(standard.contains("bank_evidence"), "{standard}");
+    assert!(!standard.contains("source_overallocation"), "{standard}");
+}
+
 #[test]
 fn accept_refuses_pairs_that_cannot_be_funding_and_writes_nothing() {
     let (_dir, book) = book();
