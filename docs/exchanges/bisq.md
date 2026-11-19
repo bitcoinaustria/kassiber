@@ -58,10 +58,12 @@ table with the txids its exports name). Journals quarantine every live
 transaction a hold names (`bisq_trade_review_required`) until a custody review
 covers it or it is excluded, so a deposit never books as a disposal. Txids only
 accumulate; a hold clears when a later export completes the trade with escrow
-transactions covering all of them. Reasons: `not_completed` (mediated,
-arbitrated, `N/A` or unknown status), `missing_deposit_tx`,
-`missing_payout_tx`, `conflicting_escrow_txs` (also Funds rows that name one
-txid with different amounts or dates; identical rows count once),
+transactions covering all of them, and stays cleared only while that trade's
+legs are in the book: rolling the completing import back opens it again.
+Reasons: `not_completed` (mediated, arbitrated, `N/A` or unknown status),
+`missing_deposit_tx`, `missing_payout_tx`, `conflicting_escrow_txs` (also Funds
+rows that name one txid with different amounts or dates; identical rows count
+once),
 `deposit_amount_mismatch`,
 `payout_amount_mismatch`, `deposit_not_in_book` (sync, then import again),
 `deposit_debit_mismatch` and `payout_receipt_mismatch` (also when several
