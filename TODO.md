@@ -2145,6 +2145,13 @@ on the CLI, daemon and desktop.
 - [ ] Teach the projection schema the value when a real book's export is
   refused with `replay_bundle_unfaithful` or `replay_bundle_unsafe_stored`.
   Done when the frozen test books and the demo organization export.
+- [ ] Keep the interpreted values the projection still withholds (Codex review
+  on #793/#794): Liquid graph `role` and `raw_hex` (decode and project the
+  public graph facts), Binance's `network = "BTC"` rail, the `rate:`/`value:`
+  prefix of an accepted coarse price, `at_category_override = "none"`, and
+  Austrian marker tokens in notes and descriptions. Books that need one are
+  refused as `replay_bundle_unfaithful` today; done when each has a
+  value-level projection test.
 - [ ] Compare engine-derived digests exactly instead of masking them: the
   fidelity and stored checks mask every 40+ character hex run, so balance rows
   whose keys differ only by a gap-hold digest share one masked key and only
