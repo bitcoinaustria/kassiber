@@ -20,6 +20,9 @@ const PROVIDERS: &[&str] = &[
     "Bull Bitcoin",
     "bull",
     "Bull",
+    // Bull Bitcoin's wallet CSV import stamps this source; the network gate
+    // reads it exactly (custody/src/gates/network.rs).
+    "bullbitcoin_wallet_csv",
 ];
 
 /// Swap flows the matcher's `kind` and `flow` read.

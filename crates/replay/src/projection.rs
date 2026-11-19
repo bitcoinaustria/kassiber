@@ -172,6 +172,35 @@ const TX_KINDS: &[&str] = &[
     "routing",
     "invoice",
     "expense",
+    "hard_fork",
+    "mining_reward",
+    "routing_income",
+    "theft",
+    "withdraw",
+    "sent",
+    "transfer_out",
+    "unknown",
+    "samourai_deposit",
+    "samourai_tx0",
+    "samourai_premix",
+    "samourai_postmix",
+    "samourai_badbank",
+    "whirlpool_tx0",
+    "whirlpool_mix",
+    "premix",
+    "postmix",
+    "badbank",
+    "coinjoin",
+    "lnd_invoice",
+    "lnd_pay",
+    "cln_invoice",
+    "cln_pay",
+    "ln_invoice",
+    "ln_pay",
+    "revenue",
+    "sale",
+    "exchange_buy",
+    "customer_payment",
 ];
 const WALLET_KINDS: &[&str] = &[
     "descriptor",
@@ -204,6 +233,8 @@ const WALLET_KINDS: &[&str] = &[
     "bark",
     "liquid",
     "lightning",
+    "samourai-whirlpool",
+    "whirlpool",
 ];
 const EXTERNAL_ID_KINDS: &[&str] = &[
     "txid",
@@ -230,6 +261,8 @@ const PRICING_SOURCE_KINDS: &[&str] = &[
     "receipt",
     "rates_cache",
     "manual_override",
+    "manual_rate_cache",
+    "fmv_provider",
 ];
 const PRICING_QUALITIES: &[&str] = &[
     "exact",
@@ -241,6 +274,28 @@ const PRICING_QUALITIES: &[&str] = &[
     "approximate",
     "hourly",
     "daily",
+    "coarse_fallback",
+    "provider_sample",
+];
+/// `fiat_price_source`: a provider, or the rates cache the journal pricing
+/// stamps (`journals/src/prebuild/pricing.rs`).
+const PRICE_SOURCES: &[&str] = &[
+    "coingecko",
+    "kraken",
+    "coinbase",
+    "binance",
+    "bitpanda",
+    "bitstamp",
+    "ecb",
+    "mempool",
+    "reviewed-receipt",
+    "manual",
+    "import",
+    "cointracking",
+    "blockpit",
+    "strike",
+    "river",
+    "rates_cache",
 ];
 const PRICING_GRANULARITIES: &[&str] = &[
     "exact",
@@ -276,6 +331,9 @@ const PRICING_METHODS: &[&str] = &[
     "interpolated",
     "close",
     "rates_cache",
+    "unsupported_price_range",
+    "direct_payout_review",
+    "carrying_value",
 ];
 const REVIEW_STATUSES: &[&str] = &[
     "review",
@@ -301,10 +359,44 @@ const AT_CATEGORIES: &[&str] = &[
     "neu_loss",
     "neu_swap",
 ];
-const PRIVACY_BOUNDARIES: &[&str] = &["coinjoin", "payjoin", "whirlpool", "none", "mixed"];
-const PAYMENT_HASH_SOURCES: &[&str] = &["invoice", "import", "native", "provider", "derived"];
+const PRIVACY_BOUNDARIES: &[&str] = &[
+    "coinjoin",
+    "payjoin",
+    "whirlpool",
+    "none",
+    "mixed",
+    "collaborative",
+    "payment_in_coinjoin",
+    "sweep",
+];
+const PAYMENT_HASH_SOURCES: &[&str] = &[
+    "invoice",
+    "import",
+    "native",
+    "provider",
+    "derived",
+    "lnd",
+    "core_lightning",
+    "chain_script_unique_outpoint",
+    "chain_script",
+    "boltz",
+    "boltz-regtest",
+    "bullbitcoin",
+    "generic_ledger",
+    "importer",
+    "importer_backfill",
+];
 const ACCOUNT_CODES: &[&str] = &["treasury"];
-const FEE_ATTRIBUTIONS: &[&str] = &["sender", "receiver", "wallet", "none", "shared", "unknown"];
+const FEE_ATTRIBUTIONS: &[&str] = &[
+    "sender",
+    "receiver",
+    "wallet",
+    "none",
+    "shared",
+    "unknown",
+    "exact",
+    "implicit_wallet_delta",
+];
 const OBSERVER_KINDS: &[&str] = &["bdk", "lwk", "electrum", "esplora", "bitcoinrpc", "import"];
 const COMPONENT_TYPES: &[&str] = &[
     "manual_bridge",
@@ -317,7 +409,7 @@ const COMPONENT_TYPES: &[&str] = &[
     "channel",
     "migration",
 ];
-const CONSERVATION_MODES: &[&str] = &["quantity", "value", "none"];
+const CONSERVATION_MODES: &[&str] = &["quantity", "value", "none", "conversion"];
 const COMPONENT_STATES: &[&str] = &["draft", "active", "superseded", "reopened", "rejected"];
 const EVIDENCE_KINDS: &[&str] = &[
     "reviewed_custody",
@@ -369,6 +461,8 @@ const TERM_KINDS: &[&str] = &[
     "peg",
     "fee",
     "loan",
+    "direct_swap_payout",
+    "custody_component",
 ];
 const POLICIES: &[&str] = &[
     "carrying-value",
@@ -412,7 +506,34 @@ const REFERENCE_TABLES: &[&str] = &[
     "wallet_utxos",
 ];
 const ENVIRONMENTS: &[&str] = &["main", "test", "signet", "regtest"];
-const GAP_ACTIONS: &[&str] = &["accept", "dismiss", "defer", "reopen", "hold", "resolve"];
+/// A term's `review_kind`: the pair kind it was reviewed as
+/// (`transfers/src/pair_authoring.rs` KINDS), read for its transfer kind.
+const REVIEW_KINDS: &[&str] = &[
+    "manual",
+    "coinjoin",
+    "whirlpool",
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap-refund",
+    "custody-component",
+];
+/// A term's `review_source`: the pair source (`pair_authoring.rs`).
+const REVIEW_SOURCES: &[&str] = &["manual", "bulk_exact", "bulk_selected", "rule_auto"];
+/// A gap review's `event_kind` (`transfers/src/gap_review.rs`).
+const GAP_EVENTS: &[&str] = &["review_decision", "bridge_reopened"];
+const GAP_ACTIONS: &[&str] = &[
+    "accept",
+    "dismiss",
+    "defer",
+    "reopen",
+    "hold",
+    "resolve",
+    "dismissed",
+    "resolved",
+];
 const OWNED_SOURCES: &[&str] = &[
     "wallet_utxos",
     "descriptor",
@@ -422,8 +543,19 @@ const OWNED_SOURCES: &[&str] = &[
     "import",
     "derived",
 ];
-const SAMOURAI_ROLES: &[&str] = &["deposit", "premix", "postmix", "badbank", "ricochet"];
-const CHANNEL_TAGS: &[&str] = &["open", "close", "funding", "sweep", "force_close", "splice"];
+const SAMOURAI_SECTIONS: &[&str] = &["deposit", "premix", "postmix", "badbank", "ricochet"];
+/// A Samourai source set's wallet role (`wallets/src/file_import/samourai.rs`).
+const SAMOURAI_ROLES: &[&str] = &["parent", "child"];
+const CHANNEL_TAGS: &[&str] = &[
+    "open",
+    "close",
+    "funding",
+    "sweep",
+    "force_close",
+    "splice",
+    "channel_open",
+    "channel_close",
+];
 
 static ROW_LIST: F = F::Row;
 static EXTERNAL_LIST: F = F::External;
@@ -440,12 +572,12 @@ const CONFIG: Schema = &[
 const SAMOURAI: Schema = &[
     ("role", F::Enum(SAMOURAI_ROLES)),
     ("group_id", F::Row),
-    ("section", F::Enum(SAMOURAI_ROLES)),
+    ("section", F::Enum(SAMOURAI_SECTIONS)),
 ];
 
 /// The on-chain and Lightning payload fields the graph, confirmation,
 /// network and channel interpreters read from `raw_json`.
-static RAW_FIELDS: [(&str, F); 84] = [
+static RAW_FIELDS: [(&str, F); 85] = [
     ("txid", F::External),
     ("hash", F::External),
     ("tx_hash", F::External),
@@ -465,6 +597,9 @@ static RAW_FIELDS: [(&str, F); 84] = [
     ("hex", F::External),
     ("raw_hex", F::External),
     ("asset_id", F::External),
+    // The observer's chain instance, which the network gate compares with
+    // the wallet configuration's (custody/src/gates/network.rs).
+    ("chain_instance_id", F::External),
     ("observer_owned_scripts", F::List(&EXTERNAL_LIST)),
     ("tx", F::Obj(&RAW_FIELDS)),
     // The ownership graph an observer stored beside the transaction, read
@@ -583,7 +718,7 @@ const TRANSACTION: Schema = &[
     ("fiat_currency", F::Parsed(registry::fiat)),
     ("fiat_rate", F::Amount),
     ("fiat_value", F::Amount),
-    ("fiat_price_source", F::Enum(PRICING_PROVIDERS)),
+    ("fiat_price_source", F::Enum(PRICE_SOURCES)),
     ("fiat_rate_exact", F::Amount),
     ("fiat_value_exact", F::Amount),
     ("pricing_source_kind", F::Enum(PRICING_SOURCE_KINDS)),
@@ -762,16 +897,16 @@ const TERM: Schema = &[
     ("term_kind", F::Enum(TERM_KINDS)),
     ("legacy_source_id", F::Row),
     ("source_row_hash", F::Digest),
-    ("review_kind", F::Enum(AUTHORED_SOURCES)),
+    ("review_kind", F::Enum(REVIEW_KINDS)),
     ("tax_policy", F::Enum(POLICIES)),
     ("reviewed_source_amount_msat", F::Amount),
     ("swap_fee_msat", F::Amount),
     (
         "swap_fee_kind",
-        F::Enum(&["network", "service", "spread", "none", "mixed"]),
+        F::Enum(&["network", "service", "spread", "none", "mixed", "combined"]),
     ),
     ("confidence_at_review", F::Enum(CONFIDENCES)),
-    ("review_source", F::Enum(AUTHORED_SOURCES)),
+    ("review_source", F::Enum(REVIEW_SOURCES)),
     ("review_notes", F::Text),
     ("payout_asset", F::Enum(ASSETS)),
     ("payout_amount_msat", F::Amount),
@@ -914,7 +1049,7 @@ const GAP_REVIEW: Schema = &[
     ("revision", F::Int),
     ("candidate_fingerprint", F::Digest),
     ("action", F::Enum(GAP_ACTIONS)),
-    ("event_kind", F::Enum(TX_KINDS)),
+    ("event_kind", F::Enum(GAP_EVENTS)),
     ("component_id", F::Row),
     ("authored_source", F::Enum(AUTHORED_SOURCES)),
     ("reason", F::Text),
@@ -1016,6 +1151,104 @@ pub const SECTIONS: &[(&str, Schema)] = &[
 pub fn section(name: &str) -> Option<Schema> {
     SECTIONS.iter().find(|(n, _)| *n == name).map(|(_, s)| *s)
 }
+
+/// The class of the field at `path` (a field, then fields of nested
+/// documents and objects) in section `name`.
+pub fn class_of(name: &str, path: &[&str]) -> Option<F> {
+    fn at(schema: Schema, path: &[&str]) -> Option<F> {
+        let (first, rest) = path.split_first()?;
+        let (_, class) = schema.iter().find(|(n, _)| n == first)?;
+        if rest.is_empty() {
+            return Some(*class);
+        }
+        match class {
+            F::Doc(schema) | F::Obj(schema) | F::IntOr(schema) | F::Or(_, schema) => {
+                at(schema, rest)
+            }
+            _ => None,
+        }
+    }
+    at(section(name)?, path)
+}
+
+/// Whether the schema keeps `value` as written in the field at `path`.
+pub fn kept(name: &str, path: &[&str], value: &str) -> bool {
+    let leaf = |class: &F| match class {
+        F::Enum(values) => values.contains(&value),
+        F::Parsed(parse) => parse(value).as_deref() == Some(value),
+        _ => false,
+    };
+    match class_of(name, path) {
+        Some(F::Or(scalar, _)) => leaf(scalar),
+        Some(F::List(class) | F::DocList(class)) => leaf(class),
+        Some(class) => leaf(&class),
+        None => false,
+    }
+}
+
+/// Values the engine compares a field against (or writes and reads back),
+/// each with a source file that names it: the schema must keep every one,
+/// or a projected book computes differently and the export is refused.
+/// `tests/projection_coverage.rs` checks both.
+#[rustfmt::skip]
+pub const ENGINE_CONSTANTS: &[(&str, &[&str], &[&str], &str)] = &[
+    ("transactions", &["pricing_quality"], &["coarse_fallback"],
+        "custody/src/coarse_review.rs"),
+    ("transactions", &["pricing_quality"], &["coarse_fallback", "provider_sample", "exact"],
+        "journals/src/prebuild/pricing.rs"),
+    ("transactions", &["pricing_source_kind"], &["manual_rate_cache", "fmv_provider"],
+        "journals/src/prebuild/pricing.rs"),
+    ("transactions", &["fiat_price_source"], &["rates_cache"],
+        "journals/src/prebuild/pricing.rs"),
+    ("transactions", &["pricing_method"], &["unsupported_price_range"],
+        "custody/src/finalized_projection/valuation.rs"),
+    ("transactions", &["pricing_method"], &["direct_payout_review"],
+        "custody/src/finalized_projection/payouts.rs"),
+    ("transactions", &["observation_fee_attribution"], &["exact", "implicit_wallet_delta"],
+        "custody/src/interpretation/pipeline.rs"),
+    ("transactions", &["privacy_boundary"], &["coinjoin", "collaborative", "payjoin", "payment_in_coinjoin", "sweep"],
+        "custody/src/interpretation/privacy.rs"),
+    ("transactions", &["payment_hash_source"], &["lnd", "core_lightning"],
+        "custody/src/interpretation/recorded.rs"),
+    ("transactions", &["payment_hash_source"], &["chain_script_unique_outpoint", "chain_script", "boltz", "boltz-regtest", "bullbitcoin", "generic_ledger", "importer", "importer_backfill"],
+        "custody/src/interpretation/matcher.rs"),
+    ("transactions", &["kind"], &["lnd_invoice", "lnd_pay", "cln_invoice", "cln_pay", "ln_invoice", "ln_pay"],
+        "custody/src/interpretation/recorded.rs"),
+    ("transactions", &["kind"], &["samourai_deposit", "samourai_tx0", "samourai_premix", "samourai_postmix", "samourai_badbank", "whirlpool_tx0", "whirlpool_mix", "premix", "postmix", "badbank", "coinjoin"],
+        "custody/src/gaps/normalize.rs"),
+    ("transactions", &["kind"], &["buy", "airdrop", "hardfork", "hard_fork", "income", "interest", "lending_interest", "mining", "mining_reward", "routing_income", "staking", "wages", "withdrawal", "withdraw", "send", "sent", "transfer", "transfer_out", "unknown"],
+        "journals/src/quarantine.rs"),
+    ("transactions", &["kind"], &["lost", "stolen", "theft"],
+        "tax-countries/src/lib.rs"),
+    ("transactions", &["wallet_kind"], &["samourai", "samourai-whirlpool", "whirlpool"],
+        "custody/src/gaps/normalize.rs"),
+    ("transactions", &["raw_json", "_kassiber_provenance", "import_source"], &["lnd", "core-lightning"],
+        "custody/src/interpretation/recorded.rs"),
+    ("transactions", &["raw_json", "source"], &["bullbitcoin_wallet_csv"],
+        "custody/src/gates/network.rs"),
+    ("book_network.observations", &["raw_json", "source"], &["bullbitcoin_wallet_csv"],
+        "custody/src/gates/network.rs"),
+    ("channel_records", &["tag"], &["channel_open", "channel_close"],
+        "custody/src/interpretation/channels.rs"),
+    ("wallets", &["config_json", "samourai", "role"], &["parent", "child"],
+        "custody/src/gaps/normalize.rs"),
+    ("wallets", &["config_json", "samourai", "section"], &["deposit", "premix", "postmix", "badbank"],
+        "custody/src/interpretation/samourai.rs"),
+    ("components.header", &["conservation_mode"], &["quantity", "conversion"],
+        "custody/src/components/mod.rs"),
+    ("components.economic_terms", &["term_kind"], &["transaction_pair", "direct_swap_payout"],
+        "custody/src/quantity/reviewed.rs"),
+    ("components.economic_terms", &["review_kind"], &["manual", "coinjoin", "whirlpool", "chain-swap", "peg-in", "peg-out", "reverse-submarine-swap", "submarine-swap", "swap-refund"],
+        "transfers/src/pair_authoring.rs"),
+    ("components.economic_terms", &["swap_fee_kind"], &["combined"],
+        "transfers/src/payout_create.rs"),
+    ("gap_reviews", &["action"], &["dismissed"],
+        "custody/src/gaps/mod.rs"),
+    ("gap_reviews", &["action"], &["resolved"],
+        "transfers/src/gap_review_store.rs"),
+    ("gap_reviews", &["event_kind"], &["review_decision", "bridge_reopened"],
+        "custody/src/gaps/mod.rs"),
+];
 
 /// Every field name the input projection classifies: in any section, any
 /// document or nested object, and the ownership index's sections and match
