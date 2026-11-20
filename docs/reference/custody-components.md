@@ -157,7 +157,9 @@ Pair authoring uses that same debit when allocating a reviewed residual: a
 1,000 msat principal, separate 10 msat fee, and 998 msat receipt produce a
 1,010 msat source, 998 msat destination, 2 msat suspense, and 10 msat fee.
 For a reviewed swap refund, the remaining principal shortfall can instead be
-an additional reviewed fee. It consumes principal separately from the observed
+an additional reviewed fee. The Bisq import allocates the miner fees Bisq states for a
+native deposit debit (recorded as one amount with no fee) the same way, with
+authored source `import`. It consumes principal separately from the observed
 miner fee; both fee allocations must retain their distinct meanings.
 
 Anchored legs always inherit the imported transaction's canonical occurrence

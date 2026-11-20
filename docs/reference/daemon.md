@@ -561,7 +561,10 @@ state and are not AI tools.
 wallet sources. It accepts `label`, `kind`, and the same wallet config fields
 the CLI stores (`backend`, `chain`, `network`, `descriptor`,
 `change_descriptor`, `source_file`, `source_format`, `store_id`,
-etc.) and returns the redacted wallet row. Desktop callers can pass
+etc.) and returns the redacted wallet row. A `bisq` wallet also takes
+`companion_file` (the Funds > Transactions export) and `timezone` (the
+exporting computer's IANA zone), stored as `source_companion_file` and
+`source_timezone`. Desktop callers can pass
 `wallet_material` instead of separate descriptor fields; the daemon recognizes
 common descriptor export shapes, including plaintext BSMS descriptor records,
 and stores receive/change descriptors when the material contains both.
@@ -596,7 +599,9 @@ preview to confirm a descriptor produces the expected wallet before
 committing.
 
 `ui.wallets.import_file` accepts `wallet`, `source_file`, and `source_format`
-for wallet-scoped CSV/JSON imports. Wallet CSV import results include
+for wallet-scoped CSV/JSON imports. `source_format="bisq_csv"` also requires
+`companion_file` and `timezone`, and imports the [Bisq](../exchanges/bisq.md) escrow ledger in
+full mode, with `wallet` optional. Wallet CSV import results include
 `inserted_records`, `updated_records`, and `unchanged` so the desktop can show
 what changed after an exchange CSV import. For
 `source_format="bullbitcoin_csv"` or `source_format="coinfinity_csv"`, `wallet`
