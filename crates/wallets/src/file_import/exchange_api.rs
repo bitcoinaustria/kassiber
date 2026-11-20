@@ -124,6 +124,8 @@ pub fn execute(
         file: String::new(),
         format: Format::Json,
         mode: None,
+        companion: None,
+        timezone: None,
     };
     kassiber_store::begin_write_savepoint(conn, "exchange_api_import").map_err(database_error)?;
     let result = apply_records(
