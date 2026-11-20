@@ -49,6 +49,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.reveal-descriptor",
     "maintenance.purge-legacy-ledger",
     "diagnostics.collect",
+    "diagnostics.replay-bundle.export",
+    "diagnostics.replay-bundle.verify",
     "backends.list",
     "backends.kinds",
     "wallets.kinds",
@@ -365,6 +367,7 @@ const NO_DATABASE_PATHS: &[&str] = &[
     "wallets.kinds",
     "wallets.ledger-template",
     "wallets.analyze-file",
+    "diagnostics.replay-bundle.verify",
 ];
 
 /// `_SECRET_DEST_FRAGMENTS`.

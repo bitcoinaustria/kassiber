@@ -60,6 +60,12 @@ source freshness failures, and quarantines dated in or before the year.
 the open book; it accepts only `limit` (1-200, default 20) and returns the
 check's report. It does not contact the network.
 
+`ui.diagnostics.replay_bundle.export` (operator) needs `confirm: true` and
+`passphrase` (at least 8 characters), refuses `file`, `workspace` and
+`profile`, writes a managed `exports/diagnostics/replay-<time>.kassiber-replay`
+and returns `file`, `bytes`, `sha256`, `encrypted`, `disclosure` and the bundle
+`manifest`. It does not contact the network either.
+
 `ui.transactions.export_platform_csv` writes the transactions in another
 tool's import format into the managed exports directory. It accepts `platform`
 (`cointracking` or `blockpit`) and an optional `wallets` list (or the single

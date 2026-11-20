@@ -94,7 +94,7 @@ fn cli_proxy_kind(got: String, expected: String) -> (String, String) {
 fn rust_only(got: String, expected: String) -> (String, String) {
     let names: Vec<&str> = kassiber_cli::spec::RUST_ONLY_LEAVES
         .iter()
-        .map(|leaf| leaf.rsplit('.').next().unwrap())
+        .flat_map(|leaf| leaf.split('.').skip(1))
         .chain(kassiber_cli::spec::RUST_ONLY_BACKEND_KINDS.iter().copied())
         .collect();
     if !names

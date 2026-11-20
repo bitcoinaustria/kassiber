@@ -44,6 +44,7 @@ kassiber-journals = { path = "../journals" }
 
 kassiber-transfers = { path = "../transfers" }
 kassiber-custody = { path = "../custody" }
+kassiber-replay = { path = "../replay" }
 kassiber-rates = { path = "../rates" }
 kassiber-setup = { path = "../setup" }
 

@@ -49,6 +49,7 @@ const CLI_READ_PATHS: &str = "
     imports.list
     review.cases review.plan review.receipt
     journals.list journals.quarantined journals.transfers.list journals.verify
+    diagnostics.replay-bundle.verify
     journals.events.list journals.events.get journals.quarantine.show journals.quarantine.groups loans.list
     transfers.list transfers.gaps.list transfers.gaps.history transfers.gaps.plan
     transfers.components.list transfers.components.show transfers.components.plan
@@ -106,7 +107,7 @@ const CLI_OPERATOR_PATHS: &str = "
     reports.export-austrian-e1kv-csv reports.export-exit-tax-pdf
     reports.export-exit-tax-xlsx reports.export-year-handoff reports.cross-check rates.sync
     rates.rebuild rates.set
-    diagnostics.collect
+    diagnostics.collect diagnostics.replay-bundle.export
 ";
 
 const CLI_ACCOUNTING_DECISION_PATHS: &str = "
@@ -196,7 +197,7 @@ const DAEMON_OPERATOR_KINDS: &str = "
     ui.chain_analysis.sources.authorize ui.chain_analysis.sources.revoke ui.chain_analysis.sources.run
     ui.chain_analysis.datasets.import ui.chain_analysis.datasets.import.start ui.chain_analysis.datasets.revoke ui.chain_analysis.datasets.discard ui.chain_analysis.datasets.discard.start
     ui.chain_analysis.cases.save ui.chain_analysis.cases.delete ui.chain_analysis.labels.upsert ui.chain_analysis.labels.delete ui.chain_analysis.labels.import ui.chain_analysis.acquire.apply
-    ui.transactions.export_csv ui.transactions.export_xlsx
+    ui.transactions.export_csv ui.transactions.export_xlsx ui.diagnostics.replay_bundle.export
     ui.transactions.export_platform_csv
     ui.reports.capital_gains ui.reports.summary ui.reports.balance_sheet
     ui.reports.portfolio_summary ui.reports.tax_summary

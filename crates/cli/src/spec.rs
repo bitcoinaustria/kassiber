@@ -107,6 +107,8 @@ pub const RUST_ONLY_LEAVES: &[&str] = &[
     "projects.demo",
     "profiles.settings",
     "profiles.configure",
+    "diagnostics.replay-bundle.export",
+    "diagnostics.replay-bundle.verify",
 ];
 /// Backend kinds only the Rust backend accepts, extra `--kind` choices of
 /// `backends create` and `backends update`.

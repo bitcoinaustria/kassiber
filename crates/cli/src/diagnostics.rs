@@ -113,3 +113,49 @@ impl FailureContext {
         }
     }
 }
+
+/// The replay bundle passphrase: `--bundle-passphrase-fd`, else a no-echo
+/// prompt (twice when exporting). Machine and non-interactive runs must
+/// pass the descriptor.
+pub fn replay_passphrase(
+    args: &Namespace,
+    export: bool,
+) -> Result<zeroize::Zeroizing<String>, AppError> {
+    if let Some(Value::Int(fd)) = args.get("bundle_passphrase_fd") {
+        let fd = i32::try_from(fd.clone()).map_err(|_| {
+            AppError::new(
+                "invalid_passphrase",
+                "passphrase descriptor must be non-negative",
+            )
+        })?;
+        let passphrase = kassiber_secrets::read_passphrase_from_fd(fd)
+            .map_err(kassiber_secrets::service::storage_error)?;
+        return Ok(zeroize::Zeroizing::new(passphrase.expose().to_owned()));
+    }
+    if args.flag("machine") || args.flag("non_interactive") {
+        return Err(AppError::new(
+            "interaction_required",
+            "replay bundle passphrase input is required in non-interactive mode",
+        )
+        .with_hint("Pass --bundle-passphrase-fd."));
+    }
+    let first = kassiber_secrets::service::prompt_passphrase("Replay bundle passphrase: ")?;
+    if export {
+        let again =
+            kassiber_secrets::service::prompt_passphrase("Confirm replay bundle passphrase: ")?;
+        if again.expose() != first.expose() {
+            return Err(
+                AppError::new("invalid_passphrase", "passphrases do not match")
+                    .with_hint("Re-run the command and re-enter the passphrase carefully."),
+            );
+        }
+    }
+    Ok(zeroize::Zeroizing::new(first.expose().to_owned()))
+}
+
+/// The parsed arguments plus the passphrase, for the replay bundle service.
+pub fn replay_arguments(args: &Namespace, passphrase: &str) -> Value {
+    let mut result = dict(args.items().iter().map(|(k, v)| (k.as_str(), v.clone())));
+    kassiber_envelope::set(&mut result, "passphrase", s(passphrase));
+    result
+}

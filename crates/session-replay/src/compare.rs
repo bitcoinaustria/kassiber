@@ -726,6 +726,7 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.backends.certificate.fetch",
     "ui.backends.certificate.trust",
     "ui.profiles.settings",
+    "ui.diagnostics.replay_bundle.export",
 ];
 
 /// Replayed daemon output without the Rust-only kinds in its `daemon.ready`

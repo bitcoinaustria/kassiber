@@ -4,7 +4,7 @@
 use crate::spec::*;
 
 /// Every parser `build_parser()` builds, depth first; index 0 is `kassiber`.
-pub(crate) static PARSERS: [Parser; 390] = [
+pub(crate) static PARSERS: [Parser; 393] = [
     Parser {
         prog: "kassiber",
         description: Some("Open-source, local-first Bitcoin accounting with wallet buckets and multi-wallet support. CLI surface of the Kassiber suite; a desktop GUI is also available."),
@@ -5583,7 +5583,7 @@ pub(crate) static PARSERS: [Parser; 390] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("diagnostics_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("collect", 371)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("diagnostics_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("collect", 371), ("replay-bundle", 390)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5871,6 +5871,48 @@ pub(crate) static PARSERS: [Parser; 390] = [
         options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--wallet", 3), ("--file", 4), ("--transactions", 5), ("--timezone", 6)],
         mutex_groups: &[],
         sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5, 6] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber diagnostics replay-bundle",
+        description: Some("Export or verify an encrypted, pseudonymized replay bundle of one book's journal inputs and outputs."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("replay_bundle_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("export", 391), ("verify", 392)], choice_help: &[ChoiceHelp { dest: "export", metavar: "export", help: Help::Text("Write an encrypted replay bundle of the book's journal inputs and outputs") }, ChoiceHelp { dest: "verify", metavar: "verify", help: Help::Text("Re-run a replay bundle's journals and diff them against its recorded outputs") }] }) },
+        ],
+        options: &[("-h", 0), ("--help", 0)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber diagnostics replay-bundle export",
+        description: Some("Write the book's journal inputs (pseudonymized txids, addresses and labels; exact amounts, dates, rates and tax settings) and outputs into a passphrase-encrypted bundle. No descriptors, xpubs, keys, credentials or backend URLs are included."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--file"], dest: Some("file"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("Destination `.kassiber-replay` file path (separate from the global --output)"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--bundle-passphrase-fd"], dest: Some("bundle_passphrase_fd"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Text("Read the bundle passphrase from this open file descriptor"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::StoreTrue, option_strings: &["--confirm"], dest: Some("confirm"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Confirm the bundle holds exact amounts, dates, rates and tax settings of this book"), metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--file", 3), ("--bundle-passphrase-fd", 4), ("--confirm", 5)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber diagnostics replay-bundle verify",
+        description: Some("Decrypt a replay bundle, recompute its journals from its inputs and compare them with its recorded outputs. Opens no book and uses no network."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &[], dest: Some("file"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("Path to the `.kassiber-replay` file"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--bundle-passphrase-fd"], dest: Some("bundle_passphrase_fd"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Text("Read the bundle passphrase from this open file descriptor"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--limit"], dest: Some("limit"), nargs: Nargs::Single, constant: Lit::None, default: Lit::Int(20), value_type: ValueType::Int, required: false, help: Help::Text("Differences to list (1-200); counts always cover every row"), metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--bundle-passphrase-fd", 2), ("--limit", 3)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0, 2, 3] }],
         defaults: &[],
     },
 ];
