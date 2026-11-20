@@ -23,6 +23,11 @@ const DEFERRED_ALLOWED: &[(&str, &str, &str)] = &[
         "read-only: loads the replay bundle's snapshot in one consistent read and rolls back",
     ),
     (
+        "crates/replay/src/lib.rs",
+        "export",
+        "read-only: one consistent snapshot for the bundle's source, stored figures and local check, rolled back",
+    ),
+    (
         "crates/store/src/write_lock.rs",
         "begin_write_savepoint",
         "the helper itself",
