@@ -14,6 +14,7 @@
 //!   wallet material, Samourai, Wasabi and backend-row helpers.
 
 pub mod bbqr;
+pub mod bisq;
 pub mod btcpay;
 pub mod camera;
 pub mod exchange;
@@ -81,6 +82,10 @@ pub struct Form {
     pub gap_limit: TextEdit,
     pub target_wallet: String,
     pub source_file: TextEdit,
+    /// Bisq's Funds > Transactions export, read beside the trade history.
+    pub companion_file: TextEdit,
+    /// The IANA zone of the computer that wrote a local-time export (Bisq).
+    pub source_timezone: TextEdit,
     /// Deposit, Badbank, Premix, Postmix.
     pub samourai: [TextEdit; 4],
     /// "rpc" | "bundle-file".
@@ -111,6 +116,37 @@ pub fn core_default_url(network: &str) -> &'static str {
         .find(|(n, _)| *n == network)
         .map(|(_, u)| *u)
         .unwrap_or(CORE_DEFAULT_RPC_URLS[0].1)
+}
+
+/// This computer's IANA zone, the usual source of a Bisq export (the web's
+/// `Intl.DateTimeFormat().resolvedOptions().timeZone`): `TZ` when it names a zone, else the zone
+/// `/etc/localtime` links to; empty when neither says (the owner types it).
+pub fn local_time_zone() -> String {
+    let tz = std::env::var("TZ").unwrap_or_default();
+    let from_env = zone_name(tz.trim_start_matches(':'));
+    if !from_env.is_empty() {
+        return from_env;
+    }
+    std::fs::read_link("/etc/localtime")
+        .ok()
+        .and_then(|p| p.to_str().map(zone_from_link))
+        .unwrap_or_default()
+}
+
+/// The `Area/City` part of a zoneinfo path, or a bare name that looks like one.
+fn zone_from_link(path: &str) -> String {
+    path.rsplit_once("zoneinfo/")
+        .map(|(_, z)| zone_name(z))
+        .unwrap_or_default()
+}
+
+fn zone_name(z: &str) -> String {
+    let ok = !z.is_empty()
+        && !z.starts_with('/')
+        && (z.contains('/') || z == "UTC")
+        && z.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '+'));
+    if ok { z.to_owned() } else { String::new() }
 }
 
 impl Form {
@@ -157,6 +193,8 @@ impl Form {
             gap_limit: te("40"),
             target_wallet: String::new(),
             source_file: te(""),
+            companion_file: te(""),
+            source_timezone: te(&local_time_zone()),
             samourai: [te(""), te(""), te(""), te("")],
             wasabi_mode: if m.source_format == Some("wasabi_bundle") {
                 "rpc"
@@ -1085,6 +1123,7 @@ pub const SCENES: &[crate::app::Scene] = &[
         scene_continue(a, "btcpay-csv")
     }),
     ("wallets-add-river", |a| scene_continue(a, "river")),
+    ("wallets-add-bisq", |a| scene_continue(a, "bisq")),
     ("wallets-add-bullbitcoin", |a| {
         scene_continue(a, "bullbitcoin")
     }),
@@ -1121,4 +1160,28 @@ pub fn scoped(app: &App, mut args: Value) -> Value {
     }
     args["expected_scope"] = app.expected_scope();
     args
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{zone_from_link, zone_name};
+
+    #[test]
+    fn the_local_zone_comes_from_a_zoneinfo_link_or_name() {
+        assert_eq!(
+            zone_from_link("/usr/share/zoneinfo/Europe/Vienna"),
+            "Europe/Vienna"
+        );
+        assert_eq!(
+            zone_from_link("/var/db/timezone/zoneinfo/America/Argentina/Buenos_Aires"),
+            "America/Argentina/Buenos_Aires"
+        );
+        assert_eq!(zone_from_link("/etc/localtime.real"), "");
+        assert_eq!(zone_name("UTC"), "UTC");
+        assert_eq!(zone_name("Etc/GMT+1"), "Etc/GMT+1");
+        // POSIX rules and paths are not IANA names: the owner types the zone instead.
+        assert_eq!(zone_name("CET-1CEST,M3.5.0,M10.5.0/3"), "");
+        assert_eq!(zone_name("/usr/share/zoneinfo/Europe/Vienna"), "");
+        assert_eq!(zone_name(""), "");
+    }
 }
