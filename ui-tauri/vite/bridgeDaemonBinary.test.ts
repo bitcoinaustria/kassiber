@@ -30,7 +30,8 @@ describe("resolveBridgeDaemonBinary", () => {
     if (result.ok) return;
     expect(result.message).toContain("KASSIBER_BIN");
     expect(result.message).toContain("cargo build -p kassiber");
-    expect(result.message).not.toMatch(/python|uv\b/i);
+    // \b on both sides: the message names a random temp dir that can end in "uv".
+    expect(result.message).not.toMatch(/\bpython\b|\buv\b/i);
   });
 
   it("prefers target/release over target/debug", () => {

@@ -1,0 +1,5 @@
+Trade ID,Date/Time,Market,Price,Deviation,Amount in BTC,Amount,Currency,Transaction Fee,Trade Fee BTC,Trade Fee BSQ,Buyer Deposit,Seller Deposit,Offer type,Status
+a1b2c3d4,"Mar 15, 2024 2:30:45 PM",BTC/EUR,60000.0000,1.00%,0.025,1500,EUR,0.00005,0.000175,,0.006,0.006,Buy BTC,Completed
+e5f6a7b8,"Apr 2, 2024 9:05:10 AM",BTC/EUR,62000.0000,-0.50%,0.05,3100,EUR,0.00004,,12.34,0.0075,0.0075,Sell BTC,Completed
+c0ffee01,"Apr 20, 2024 6:00:00 PM",BTC/EUR,63000.0000,0.00%,0.1,6300,EUR,0.00003,0.0007,,0.015,0.015,Sell BTC,Canceled
+d15e0001,"May 1, 2024 11:11:11 AM",BTC/EUR,58000.0000,2.00%,0.02,1160,EUR,0.00005,0.00014,,0.006,0.006,Buy BTC,Mediated

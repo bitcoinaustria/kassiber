@@ -60,6 +60,7 @@ pub mod role {
 const BOUNDS: &[(u64, [f32; 4])] = &[
     (0x4b6659f8b144ae41, [0.000, 0.000, 1.000, 1.000]), // 21bitcoin.png
     (0x7db9874a9dfcbeda, [0.000, 0.000, 1.000, 1.000]), // binance.svg
+    (0x6311a3b36c9cbdde, [0.000, 0.000, 0.885, 0.987]), // bisq.svg
     (0x24e278ad2b7fce45, [0.207, 0.041, 0.793, 0.959]), // bitbox.svg
     (0x648daec469342a7f, [0.000, 0.000, 1.000, 1.000]), // bitcoin.svg
     (0x6a23b2c946006f26, [0.000, 0.070, 0.570, 0.930]), // bitpanda.svg

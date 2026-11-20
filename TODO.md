@@ -2008,6 +2008,18 @@ See [tax countries](docs/reference/tax-countries.md) and
   a fixture from a real export and its kind joins `EXCHANGE_TXID_WALLET_KINDS`.
   Deposits from an owned wallet to a platform still need a review.
 
+- [ ] Confirm the [Bisq](docs/exchanges/bisq.md) formats against a real
+  Portfolio > History and Funds > Transactions export, then add Bisq Easy
+  (Bisq 2) closed trades as order evidence and a reviewed flow for mediated
+  and arbitrated trades, whose payouts Funds > Transactions names. The
+  Bisq 1 escrow ledger is pinned from source only.
+- [ ] Bisq refusals that could become reviewed flows if real users hit them
+  (the slim importer refuses by trade id instead): redating stored legs whose
+  escrow dates moved or were read in another `--timezone`; network partitions
+  of a book with held trades; revising or grouping a pair with a
+  provider-stated miner fee; fiat markets outside the shared fiat list;
+  altcoin-market trades as crypto-scope swap legs once the multi-asset
+  foundation lands.
 - [ ] Offer a stored import run's `column_map` as the default for a repeat
   platform export, with review before reuse. Generic mapping already exists;
   this task is persistence/reuse in the next import flow.

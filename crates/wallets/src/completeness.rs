@@ -13,13 +13,14 @@ const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
 const DESCRIPTOR_KINDS: [&str; 4] = ["descriptor", "xpub", "silent-payment", "samourai"];
 const LIGHTNING_NODE_KINDS: [&str; 2] = ["coreln", "lnd"];
 const EXCHANGE_API_KINDS: [&str; 4] = ["kraken", "coinbase", "binance", "bitpanda"];
-const CUSTODIAL_EXPORT_KINDS: [&str; 10] = [
+const CUSTODIAL_EXPORT_KINDS: [&str; 11] = [
     "river",
     "bullbitcoin",
     "coinfinity",
     "21bitcoin",
     "pocketbitcoin",
     "strike",
+    "bisq",
     "kraken",
     "coinbase",
     "binance",

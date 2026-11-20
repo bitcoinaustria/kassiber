@@ -381,6 +381,14 @@ pub(super) fn append_residual(
     } else {
         "suspense_continuation"
     };
+    // A fee the provider stated for this pair (its term keeps it through
+    // edits and regrouping) is a reviewed network fee when it is exactly
+    // the shortfall; anything else stays a reviewed suspense.
+    let classification = if stated_fee(row) == Some(residual) {
+        "network_fee"
+    } else {
+        classification
+    };
     let mut parts = Vec::new();
     let mut principal_residual = residual;
     if fee > 0 && fee <= residual {
@@ -565,4 +573,40 @@ pub(super) fn retarget(spec: &mut Value, prior: &str) {
 
 fn s(v: impl AsRef<str>) -> Value {
     kassiber_envelope::s(v.as_ref())
+}
+
+/// The pair term's `swap_fee_kind` for a miner fee its provider states.
+pub(super) const STATED_FEE: &str = "provider_stated_network_fee";
+/// The complete fee a provider stated for a pair's outbound debit, as the
+/// pair term records it (`swap_fee_msat` with kind [`STATED_FEE`]).
+pub(super) fn stated_fee(row: &Value) -> Option<i128> {
+    (text(row, "swap_fee_kind") == STATED_FEE).then(|| n(&value(row, "swap_fee_msat")))
+}
+
+/// Check a provider-stated fee against the pair's observed debit before the
+/// residual is allocated: the debit must be the reviewed principal plus
+/// exactly that fee, and the principal the whole inbound amount (a pair the
+/// evidence reconciles only in part is not proven).
+pub(super) fn check_stated_fee(spec: &Value, row: &Value) -> Result<()> {
+    let reviewed = n(&value(&list(spec, "legs")[0], "amount_msat"));
+    let debit = wallet_movement(&boundary(row, "out"));
+    let received = wallet_movement(&boundary(row, "in"));
+    let stated = stated_fee(row).unwrap_or(0);
+    if stated < 0 || debit - reviewed != stated {
+        return Err(AppError::new(
+            "validation",
+            format!(
+                "the observed debit of {debit} msat is not the reviewed {reviewed} msat plus the stated fee of {stated} msat"
+            ),
+        ));
+    }
+    if received != reviewed {
+        return Err(AppError::new(
+            "validation",
+            format!(
+                "the observed receipt of {received} msat is not the reviewed {reviewed} msat the debit carries"
+            ),
+        ));
+    }
+    Ok(())
 }

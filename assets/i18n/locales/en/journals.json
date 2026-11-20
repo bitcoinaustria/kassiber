@@ -492,12 +492,19 @@
         "amount": "an unknown amount",
         "date": "earlier date",
         "root": "see the cause above",
-        "currency": "a currency"
+        "currency": "a currency",
+        "trade": "a Bisq trade",
+        "holdReason": "the exports do not settle it"
       },
       "reviewedSuspensePair": {
         "title": "A linked transfer doesn't add up",
         "why": "This transaction is linked to another as a move between your wallets, but less arrived than left. The difference is held open, so cost basis from here on can't be final.",
         "provide": "Compare the two sides of each linked transfer below. Unlink one only if you know its two transactions are unrelated; different transaction ids alone don't show that. If it was a move between your wallets, open it and record where the difference went."
+      },
+      "bisqTradeHold": {
+        "title": "A Bisq trade waits for your review",
+        "why": "The Bisq import held trade {{trade}}: {{holdReason}}. Kassiber does not book the transactions Bisq names for it, so a security deposit cannot count as a disposal.",
+        "provide": "Record what the trade actually moved: review this transaction with a custody component or link, or exclude it if it is not yours."
       }
     },
     "category": {
