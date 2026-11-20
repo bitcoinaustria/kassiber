@@ -940,6 +940,14 @@
       "label": "Export file path",
       "btcpayLabel": "BTCPay CSV export path",
       "btcpayHelper": "Choose a BTCPay wallet transactions CSV export. Kassiber imports comments as notes and labels as tags.",
+      "bisqLabel": "Bisq trade history CSV",
+      "bisqHelper": "In Bisq 1, open Portfolio → History and choose Export to CSV, with Bisq set to English or German. Sync the watch-only Bisq wallet first.",
+      "bisqTransactionsLabel": "Bisq transactions CSV",
+      "bisqTransactionsHelper": "In Bisq 1, open Funds → Transactions and choose Export to CSV. It dates and names each trade's escrow deposit and payout.",
+      "bisqTransactionsError": "Choose the Funds → Transactions export as well.",
+      "bisqTimezoneLabel": "Time zone of the exporting computer",
+      "bisqTimezoneHelper": "Bisq writes dates in local time without a zone. Kassiber filled in this computer's zone; change it if the exports came from another computer (an IANA name such as Europe/Vienna).",
+      "bisqTimezoneError": "Enter the time zone the exports were written in.",
       "cointrackingLabel": "CoinTracking CSV export",
       "cointrackingHelper": "Set CoinTracking to English, then choose Transactions → Export → CSV. Export the complete history.",
       "blockpitLabel": "Blockpit transaction CSV",
@@ -949,6 +957,7 @@
     },
     "fileFilter": {
       "phoenixCsv": "Phoenix CSV",
+      "bisqCsv": "Bisq CSV",
       "riverCsv": "River CSV",
       "bullbitcoinCsv": "Bull Bitcoin CSV",
       "bullbitcoinWalletCsv": "Bull Bitcoin wallet CSV",
@@ -1406,6 +1415,21 @@
       "matchedBook": "Matched against this book",
       "matchedWallet": "Matched against the selected wallet",
       "changed": "{{value}} changed",
+      "bisqHeld": "{{value}} Bisq trades held for review (nothing booked; journals quarantine their transactions)",
+      "bisqHeldTrade": "Trade {{trade}} ({{status}}): {{reason}}",
+      "bisqReason": {
+        "not_completed": "not a plainly completed trade (mediated, arbitrated or unknown status)",
+        "missing_deposit_tx": "no Multisig deposit row in Funds → Transactions",
+        "missing_payout_tx": "no Multisig payout row in Funds → Transactions",
+        "conflicting_escrow_txs": "more than one deposit or payout row",
+        "deposit_amount_mismatch": "the deposit is smaller than its escrow share",
+        "payout_amount_mismatch": "the payout differs from the contract",
+        "deposit_not_in_book": "the watch-only wallet has not observed the deposit yet; sync it and import again",
+        "deposit_debit_mismatch": "the observed deposit debit differs from Bisq's",
+        "payout_receipt_mismatch": "the observed payout differs from the contract",
+        "payout_precedes_deposit": "the payout is dated before the trade",
+        "tax_year_boundary": "contract and deposit fall in different tax years"
+      },
       "metric": {
         "rowsRead": "Rows read",
         "inserted": "Inserted",
@@ -1805,6 +1829,15 @@
           "BTC buys, sells, Lightning, and on-chain rows become active platform activity",
           "Fiat-only funding and reversal rows are skipped",
           "Rows use Strike BTC Price as exact CSV pricing when present"
+        ]
+      },
+      "bisq": {
+        "description": "Peer-to-peer trades as escrow ledgers with exact contract pricing.",
+        "details": [
+          "Needs Portfolio > History and Funds > Transactions exports from Bisq 1",
+          "Each completed BTC/fiat trade becomes deposit, trade and payout legs that net to zero",
+          "Legs pair by txid with the watch-only Bisq wallet; sync that wallet first and name the export's time zone",
+          "Mediated, arbitrated or incomplete trades are held for review; altcoin and BSQ trades are refused"
         ]
       },
       "21bitcoin": {

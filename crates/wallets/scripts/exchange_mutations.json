@@ -725,5 +725,195 @@
     "expect_failing": [
       "binance_btc_rail_imports_and_other_rails_refuse"
     ]
+  },
+  {
+    "id": "bisq-escrow-nets-to-zero",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "(amount + seller_deposit, seller_deposit)",
+    "replace": "(seller_deposit, seller_deposit)",
+    "rule": "A seller's escrow receives the trade amount plus the deposit, so every trade's legs net to zero.",
+    "expect_failing": [
+      "file_import::tests::bisq_completed_trades_become_priced_escrow_ledgers_that_net_to_zero"
+    ]
+  },
+  {
+    "id": "bisq-altcoin-market-refused",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "if base != \"BTC\" {",
+    "replace": "if false {",
+    "rule": "An altcoin-market trade refuses the import, naming trade and coin.",
+    "expect_failing": [
+      "file_import::tests::bisq_refuses_altcoin_markets_and_non_fiat_quotes_by_trade"
+    ]
+  },
+  {
+    "id": "bisq-fiat-quote-refused",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "!tax_platform::FIAT.contains(&quote) || ",
+    "replace": "",
+    "rule": "A fiat market's quote must be a fiat currency.",
+    "expect_failing": [
+      "file_import::tests::bisq_refuses_altcoin_markets_and_non_fiat_quotes_by_trade"
+    ]
+  },
+  {
+    "id": "bisq-not-completed-held",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "if !COMPLETED.contains(&status.as_str()) {",
+    "replace": "if false {",
+    "rule": "A mediated, arbitrated or unknown status is held, never booked.",
+    "expect_failing": [
+      "file_import::tests::bisq_holds_unshapeable_trades_and_refuses_inexact_rows"
+    ]
+  },
+  {
+    "id": "bisq-unobserved-deposit-held",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "([], _) => Some(\"deposit_not_in_book\"),",
+    "replace": "([], _) => None,",
+    "rule": "A trade whose deposit the wallet has not observed waits.",
+    "expect_failing": [
+      "file_import::tests::bisq_holds_unshapeable_trades_and_refuses_inexact_rows"
+    ]
+  },
+  {
+    "id": "bisq-debit-mismatch-held",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "if observed.movement_msat != debit_msat",
+    "replace": "if false",
+    "rule": "An observed deposit debit must equal Bisq's net amount.",
+    "expect_failing": [
+      "file_import::tests::bisq_holds_unshapeable_trades_and_refuses_inexact_rows"
+    ]
+  },
+  {
+    "id": "bisq-tax-year-held",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": ".then_some(\"tax_year_boundary\")",
+    "replace": ".then_some(\"tax_year_boundary\").filter(|_| false)",
+    "rule": "A trade whose contract and trade leg fall in different tax years is held.",
+    "expect_failing": [
+      "file_import::tests::bisq_holds_unshapeable_trades_and_refuses_inexact_rows"
+    ]
+  },
+  {
+    "id": "bisq-stored-legs-match",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "if !stored.is_empty() && stored.get(*leg)",
+    "replace": "if false && stored.get(*leg)",
+    "rule": "An export that contradicts stored legs (amounts, dates, zone) refuses.",
+    "expect_failing": [
+      "file_import::tests::bisq_refuses_exports_that_contradict_stored_legs"
+    ]
+  },
+  {
+    "id": "bisq-stored-trade-never-held",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "        let hold = |reason: &'static str| -> Result<Hold, AppError> {\n            if !stored.is_empty() {",
+    "replace": "        let hold = |reason: &'static str| -> Result<Hold, AppError> {\n            if false {",
+    "rule": "A trade already in the book refuses instead of being held.",
+    "expect_failing": [
+      "file_import::tests::bisq_refuses_exports_that_contradict_stored_legs"
+    ]
+  },
+  {
+    "id": "bisq-hold-anchors-accumulate",
+    "file": "crates/wallets/src/file_import/bisq/holds.rs",
+    "find": "txids.extend(hold.txids.iter().cloned());",
+    "replace": "txids = hold.txids.iter().cloned().collect();",
+    "rule": "A hold's txids only accumulate.",
+    "expect_failing": [
+      "file_import::tests::bisq_held_trades_persist_quarantine_and_clear_only_on_proof"
+    ]
+  },
+  {
+    "id": "bisq-hold-clears-on-proof",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "_ if !holds::anchors(book.conn, book.profile, &id)?",
+    "replace": "_ if false && !holds::anchors(book.conn, book.profile, &id)?",
+    "rule": "A trade stays held while an earlier export named an escrow txid this one does not explain.",
+    "expect_failing": [
+      "file_import::tests::bisq_held_trades_persist_quarantine_and_clear_only_on_proof"
+    ]
+  },
+  {
+    "id": "bisq-stated-fee-pair-fixed",
+    "file": "crates/transfers/src/pair_authoring.rs",
+    "find": "    if spec::stated_fee(old).is_some() {\n        return Err(stated_fee_fixed(&id));",
+    "replace": "    if false {\n        return Err(stated_fee_fixed(&id));",
+    "rule": "A pair with a provider-stated miner fee cannot be revised.",
+    "expect_failing": [
+      "file_import::tests::bisq_pairs_legs_by_txid_with_the_stated_miner_fee_and_respects_the_owner"
+    ]
+  },
+  {
+    "id": "bisq-southern-zone-rule",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "        Some(rule) if rule.summer_rule().is_some() => {",
+    "replace": "        Some(rule) if false && rule.summer_rule().is_some() => {",
+    "expect_failing": [
+      "southern_zones_keep_their_summer_time_without_tzdata"
+    ],
+    "rule": "Without tzdata a southern registry zone keeps its own summer time, never a fixed standard offset."
+  },
+  {
+    "id": "bisq-conflicting-funds-rows",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "            .any(|e| e.txid == txid && e.sats == sats && e.at_us == at_us)",
+    "replace": "            .any(|e| e.txid == txid)",
+    "expect_failing": [
+      "bisq_holds_or_refuses_ambiguous_escrow_evidence"
+    ],
+    "rule": "Funds rows that disagree about one escrow txid hold the trade instead of keeping the first."
+  },
+  {
+    "id": "bisq-several-deposit-observations",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "            ([_, _, ..], _) => Some(\"deposit_debit_mismatch\"),",
+    "replace": "            ([_, _, ..], _) if false => Some(\"deposit_debit_mismatch\"),",
+    "expect_failing": [
+      "bisq_holds_or_refuses_ambiguous_escrow_evidence"
+    ],
+    "rule": "Several owned observations of one escrow deposit hold the trade; it is never booked unpaired."
+  },
+  {
+    "id": "bisq-reimport-escrow-txids",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "                zone.key,\n                deposit.txid,\n                payout.txid\n",
+    "replace": "                zone.key,\n                \"\",\n                \"\"\n",
+    "expect_failing": [
+      "bisq_completed_trades_become_priced_escrow_ledgers_that_net_to_zero"
+    ],
+    "rule": "Stored and exported legs compare their escrow transactions."
+  },
+  {
+    "id": "bisq-one-trade-per-escrow-tx",
+    "file": "crates/wallets/src/file_import/bisq.rs",
+    "find": "            if let Some(other) = other {",
+    "replace": "            if let Some(other) = other.filter(|_| false) {",
+    "expect_failing": [
+      "bisq_holds_or_refuses_ambiguous_escrow_evidence"
+    ],
+    "rule": "An escrow transaction books for one trade; a second trade naming it is refused."
+  },
+  {
+    "id": "bisq-read-under-write-lock",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "        kassiber_store::begin_write_savepoint(conn, \"wallet_file_import\")\n            .map_err(database_error)?;\n        savepoint.open = true;\n        let mut parsed = bisq::read(",
+    "replace": "        let mut parsed = bisq::read(",
+    "expect_failing": [
+      "bisq_checks_the_book_under_the_write_lock"
+    ],
+    "rule": "A Bisq export is checked against the book under the import's write lock, so a concurrent import of the same trade refuses."
+  },
+  {
+    "id": "bisq-cleared-hold-needs-legs",
+    "file": "crates/wallets/src/file_import/bisq/holds.rs",
+    "find": "pub const OPEN: &str = \"(h.state='held' OR NOT EXISTS(",
+    "replace": "pub const OPEN: &str = \"(h.state='held' OR 0 AND NOT EXISTS(",
+    "expect_failing": [
+      "bisq_held_trades_persist_quarantine_and_clear_only_on_proof"
+    ],
+    "rule": "A cleared Bisq hold stays cleared only while the completed trade's legs are in the book; rolling the completing import back re-opens it."
   }
 ]

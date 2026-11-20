@@ -254,6 +254,7 @@ pub fn wallet_data_provenance(kind: &Value, config: &Value) -> String {
         "21bitcoin",
         "pocketbitcoin",
         "strike",
+        "bisq",
         "wasabi",
     ]
     .contains(&kind.as_str())

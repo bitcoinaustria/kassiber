@@ -7,6 +7,7 @@ mod durable;
 pub mod encryption;
 pub mod layout;
 pub mod observer;
+pub mod optional;
 pub mod pinned;
 pub mod price_currency;
 pub mod projects;

@@ -110,6 +110,11 @@ kassiber-setup = { path = "../setup" }
 kassiber-rates = { path = "../rates" }
 # Reuse managed evidence storage and its validator; do not add a blob store.
 kassiber-transactions = { path = "../transactions" }
+# The book's tax calendar, to hold a Bisq trade whose escrow crosses a tax year.
+kassiber-tax-countries = { path = "../tax-countries" }
+# Pair Bisq escrow legs with the on-chain rows their txids name, through the
+# shared pair authoring (wallets has no pairing of its own).
+kassiber-transfers = { path = "../transfers" }
 # The generic-ledger template workbook, through the shared renderer.
 kassiber-xlsx = { path = "../xlsx" }
 # Audited descriptor grammars, BIP32, script construction and confidential
