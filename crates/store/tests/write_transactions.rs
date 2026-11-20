@@ -18,6 +18,11 @@ use std::path::{Path, PathBuf};
 /// before the daemon starts its workers, and are read-only once applied.
 const DEFERRED_ALLOWED: &[(&str, &str, &str)] = &[
     (
+        "crates/journals/src/reproduce.rs",
+        "bundle_source",
+        "read-only: loads the replay bundle's snapshot in one consistent read and rolls back",
+    ),
+    (
         "crates/store/src/write_lock.rs",
         "begin_write_savepoint",
         "the helper itself",
