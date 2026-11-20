@@ -4,6 +4,7 @@
 //!
 //! Nothing here performs network I/O. Export writes only the sealed bytes the
 //! caller asks for; no plaintext copy reaches disk.
+pub mod outputs;
 pub mod projection;
 pub mod pseudonym;
 pub mod registry;
