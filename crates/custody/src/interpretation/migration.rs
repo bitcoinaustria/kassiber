@@ -95,6 +95,7 @@ pub fn quarantines(snapshot: &Snapshot) -> Result<Vec<Py>, String> {
         .iter()
         .flatten()
         .chain(snapshot.reset_hold_quarantines.iter().flatten())
+        .chain(snapshot.provider_hold_quarantines.iter().flatten())
     {
         let mut quarantine = Vec::new();
         for key in [

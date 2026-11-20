@@ -14,6 +14,7 @@ mod history;
 pub mod legacy_migration;
 pub mod legacy_refresh;
 mod pair_authoring;
+pub use pair_authoring::{create_evidenced, Evidenced};
 pub mod pair_guidance;
 mod pair_spec;
 pub mod pairing;
