@@ -16,6 +16,17 @@ use crate::redact::{redact_ai_tool_result, redact_tool_arguments};
 pub const AUTO_CONTEXT_MAX_CHARS: usize = 24_000;
 /// `AUTO_CONTEXT_ENTRY_MAX_CHARS`: one tool's entry.
 pub const AUTO_CONTEXT_ENTRY_MAX_CHARS: usize = 6_000;
+/// The pinned item's entry ("Ask about this"): it is what the question is
+/// about, so it gets most of the message budget.
+pub const PINNED_CONTEXT_ENTRY_MAX_CHARS: usize = 16_000;
+/// Sections of a pinned review packet that are never dropped to fit.
+const PINNED_KEPT_SECTIONS: [&str; 5] = [
+    "gap",
+    "local_reference",
+    "next_actions",
+    "safety",
+    "transaction",
+];
 /// `AUTO_CONTEXT_LIST_LIMIT`: list items kept per list.
 pub const AUTO_CONTEXT_LIST_LIMIT: usize = 25;
 /// `AUTO_CONTEXT_STRING_LIMIT`: characters kept per string.
@@ -437,6 +448,46 @@ impl Plan {
 
 fn int(n: i64) -> Value {
     Value::from(n)
+}
+
+/// The typed review read for the entity the desktop pinned ("Ask about
+/// this"), keyed by the bound screen context's `entity_type`. Only entity
+/// types with a local, read-only review packet qualify; anything else (or a
+/// context the daemon unbound because the item is not in the open book)
+/// plans nothing.
+pub fn pinned_entity_read(screen_context: Option<&Value>) -> Option<AutoRead> {
+    let context = screen_context?;
+    let id = match get(context, "entity_id") {
+        Some(Value::Str(id)) if !kassiber_pytext::strip(&lossy(id)).is_empty() => id.clone(),
+        _ => return None,
+    };
+    let (name, field) = match get(context, "entity_type") {
+        Some(Value::Str(kind)) if kind.is("transaction") => {
+            ("ui.transactions.review_context", "transaction")
+        }
+        Some(Value::Str(kind)) if kind.is("custody_gap") => {
+            ("ui.custody.gaps.review_context", "gap_id")
+        }
+        _ => return None,
+    };
+    Some(AutoRead {
+        name,
+        arguments: dict([(field, Value::Str(id))]),
+    })
+}
+
+/// `planned` with the pinned entity's read first, so it is the first entry
+/// the context budget keeps; a keyword read of the same call is not repeated
+/// and the per-turn cap still holds.
+pub fn with_pinned_entity_read(planned: Vec<AutoRead>, pinned: Option<AutoRead>) -> Vec<AutoRead> {
+    let Some(pinned) = pinned else {
+        return planned;
+    };
+    let mut out = Vec::with_capacity(planned.len() + 1);
+    out.push(pinned.clone());
+    out.extend(planned.into_iter().filter(|read| *read != pinned));
+    out.truncate(MAX_PLANNED_READS);
+    out
 }
 
 /// `_planned_auto_read_tools(validated)`: only for Kassiber's own system
@@ -1100,6 +1151,60 @@ fn context_entry(entry: &Value) -> Value {
     ])
 }
 
+/// The pinned item's entry: whole when it fits the pinned budget, otherwise
+/// without its largest review sections (named in `omitted_sections`, so the
+/// model can read one with the tool's own flags), and only as a last resort
+/// the ordinary summary.
+fn pinned_context_entry(entry: &Value) -> Value {
+    let trimmed = trim_auto_context_value(&redact_ai_tool_result(entry), 0);
+    if model_json(&trimmed).len() <= PINNED_CONTEXT_ENTRY_MAX_CHARS {
+        return trimmed;
+    }
+    let empty = Value::Dict(Vec::new());
+    let result = get_or(&trimmed, "result", &empty);
+    let envelope = get_or(result, "envelope", &empty);
+    let Some(Value::Dict(sections)) = get(envelope, "data") else {
+        return context_entry(entry);
+    };
+    let mut sections = sections.clone();
+    let mut omitted: Vec<Value> = Vec::new();
+    let build = |sections: &[(Key, Value)], omitted: &[Value]| {
+        let mut envelope = envelope.clone();
+        kassiber_envelope::set(&mut envelope, "data", Value::Dict(sections.to_vec()));
+        let mut result = result.clone();
+        kassiber_envelope::set(&mut result, "envelope", envelope);
+        let mut out = trimmed.clone();
+        kassiber_envelope::set(&mut out, "result", result);
+        kassiber_envelope::set(&mut out, "omitted_sections", Value::List(omitted.to_vec()));
+        kassiber_envelope::set(
+            &mut out,
+            "truncation_reason",
+            s("pinned review packet exceeded its context budget; omitted sections can be read with the same tool"),
+        );
+        out
+    };
+    loop {
+        let candidate = build(&sections, &omitted);
+        if model_json(&candidate).len() <= PINNED_CONTEXT_ENTRY_MAX_CHARS {
+            return candidate;
+        }
+        let largest = sections
+            .iter()
+            .enumerate()
+            .filter(|(_, (key, _))| {
+                !matches!(key, Key::Str(name) if PINNED_KEPT_SECTIONS.iter().any(|kept| name.is(kept)))
+            })
+            .max_by_key(|(index, (_, value))| (model_json(value).len(), std::cmp::Reverse(*index)))
+            .map(|(index, _)| index);
+        let Some(index) = largest else {
+            return context_entry(entry);
+        };
+        if let (Key::Str(name), _) = sections.remove(index) {
+            omitted.push(Value::Str(name));
+        }
+    }
+}
+
 /// One executed auto-read for the context message: `{"tool", "arguments",
 /// "result"}`, with the arguments and result already redacted.
 pub fn context_record(name: &str, arguments: &Value, result: &Value) -> Value {
@@ -1124,10 +1229,25 @@ is unavailable.\n";
 /// `_auto_tool_context_for_model(context)`: entries in order until the
 /// message would pass its budget; the rest are counted, not sent.
 pub fn auto_tool_context_for_model(context: &[Value]) -> String {
+    auto_tool_context(context, false)
+}
+
+/// The same when the first entry is the pinned item's review read: that
+/// entry gets [`PINNED_CONTEXT_ENTRY_MAX_CHARS`] and the others share what
+/// is left of the message budget.
+pub fn pinned_auto_tool_context_for_model(context: &[Value]) -> String {
+    auto_tool_context(context, true)
+}
+
+fn auto_tool_context(context: &[Value], pinned_first: bool) -> String {
     let mut entries: Vec<Value> = Vec::new();
     let mut omitted = 0;
     for (index, entry) in context.iter().enumerate() {
-        let candidate = context_entry(entry);
+        let candidate = if pinned_first && index == 0 {
+            pinned_context_entry(entry)
+        } else {
+            context_entry(entry)
+        };
         let mut trial = entries.clone();
         trial.push(candidate.clone());
         let payload = dict([
@@ -1164,5 +1284,152 @@ pub fn insert_auto_tool_context_content(messages: &mut Vec<Value>, content: Valu
     ) {
         Some(index) => messages.insert(index, message),
         None => messages.push(message),
+    }
+}
+
+#[cfg(test)]
+mod pinned_tests {
+    use super::*;
+
+    fn screen(kind: &str, id: Value) -> Value {
+        dict([
+            ("route", s("/transactions")),
+            ("entity_type", s(kind)),
+            ("entity_id", id),
+        ])
+    }
+
+    #[test]
+    fn pinned_entities_map_to_their_local_review_read() {
+        let tx = pinned_entity_read(Some(&screen("transaction", s("tx-1")))).unwrap();
+        assert_eq!(tx.name, "ui.transactions.review_context");
+        assert_eq!(tx.arguments, dict([("transaction", s("tx-1"))]));
+        let gap = pinned_entity_read(Some(&screen("custody_gap", s("g-1")))).unwrap();
+        assert_eq!(gap.name, "ui.custody.gaps.review_context");
+        assert_eq!(gap.arguments, dict([("gap_id", s("g-1"))]));
+        // Both reads stay local and read-only, so they may run without consent.
+        for read in [tx, gap] {
+            let entry = crate::catalog::get_tool(read.name).unwrap();
+            assert_eq!(entry.kind_class, crate::catalog::KindClass::ReadOnly);
+            assert!(!entry.egresses);
+        }
+    }
+
+    #[test]
+    fn no_pinned_read_without_a_typed_reviewable_entity() {
+        assert_eq!(pinned_entity_read(None), None);
+        assert_eq!(pinned_entity_read(Some(&screen("wallet", s("w")))), None);
+        assert_eq!(
+            pinned_entity_read(Some(&screen("transaction", s("  ")))),
+            None
+        );
+        assert_eq!(
+            pinned_entity_read(Some(&screen("transaction", Value::Null))),
+            None
+        );
+        // The daemon drops an entity that is not in the open book.
+        let unbound = dict([("route", s("/transactions"))]);
+        assert_eq!(pinned_entity_read(Some(&unbound)), None);
+    }
+
+    #[test]
+    fn the_pinned_read_runs_first_once_and_within_the_cap() {
+        let read = |name: &'static str, arguments: Value| AutoRead { name, arguments };
+        let pinned = read(
+            "ui.transactions.review_context",
+            dict([("transaction", s("t"))]),
+        );
+        let planned = vec![
+            read("ui.workspace.health", dict::<&str>([])),
+            pinned.clone(),
+            read("ui.next_actions", dict::<&str>([])),
+        ];
+        let out = with_pinned_entity_read(planned.clone(), Some(pinned.clone()));
+        let names: Vec<&str> = out.iter().map(|r| r.name).collect();
+        assert_eq!(
+            names,
+            [
+                "ui.transactions.review_context",
+                "ui.workspace.health",
+                "ui.next_actions"
+            ]
+        );
+        assert_eq!(with_pinned_entity_read(planned.clone(), None), planned);
+        let many: Vec<AutoRead> = (0..MAX_PLANNED_READS)
+            .map(|i| read("ui.workspace.health", dict([("i", Value::from(i))])))
+            .collect();
+        let capped = with_pinned_entity_read(many, Some(pinned.clone()));
+        assert_eq!(capped.len(), MAX_PLANNED_READS);
+        assert_eq!(capped[0], pinned);
+    }
+
+    fn packet(sections: Vec<(&str, usize)>) -> Value {
+        let data: Vec<(Key, Value)> = sections
+            .into_iter()
+            .map(|(name, size)| {
+                // Lists of short strings stay under the trim's per-string and
+                // per-list limits, so only the entry budget decides.
+                let items = (0..size.min(AUTO_CONTEXT_LIST_LIMIT))
+                    .map(|_| s("x".repeat(400)))
+                    .collect();
+                (Key::from(name), Value::List(items))
+            })
+            .collect();
+        context_record(
+            "ui.transactions.review_context",
+            &dict([("transaction", s("t"))]),
+            &dict([
+                ("ok", Value::Bool(true)),
+                (
+                    "envelope",
+                    dict([
+                        ("kind", s("ui.transactions.review_context")),
+                        ("data", Value::Dict(data)),
+                    ]),
+                ),
+            ]),
+        )
+    }
+
+    #[test]
+    fn a_small_pinned_packet_is_sent_whole() {
+        let entry = packet(vec![("transaction", 2), ("journal", 4)]);
+        let text = pinned_auto_tool_context_for_model(&[entry]);
+        assert!(text.contains("\"journal\""));
+        assert!(!text.contains("omitted_sections"));
+        assert!(!text.contains("\"truncated\":true"));
+    }
+
+    #[test]
+    fn an_oversized_pinned_packet_drops_its_largest_sections_first() {
+        // ~10 kB graph, ~8 kB privacy, ~4 kB journal, ~1.6 kB row.
+        let entry = packet(vec![
+            ("transaction", 4),
+            ("graph", 25),
+            ("journal", 10),
+            ("privacy", 20),
+            ("next_actions", 2),
+        ]);
+        let text = pinned_auto_tool_context_for_model(std::slice::from_ref(&entry));
+        assert!(text.len() <= AUTO_CONTEXT_MAX_CHARS);
+        // `model_json` is compact with sorted keys.
+        assert!(text.contains("\"omitted_sections\":[\"graph\"]"), "{text}");
+        assert!(!text.contains("\"graph\":["));
+        for kept in ["transaction", "journal", "privacy", "next_actions"] {
+            assert!(text.contains(&format!("\"{kept}\":[")), "{kept} kept");
+        }
+        // Without the pin the same read is cut to the generic summary.
+        let plain = auto_tool_context_for_model(&[entry]);
+        assert!(plain.contains("\"truncated\":true"));
+        assert!(!plain.contains("\"journal\""));
+    }
+
+    #[test]
+    fn kept_sections_are_never_dropped() {
+        // Only kept sections, together over budget: the summary fallback.
+        let entry = packet(vec![("transaction", 25), ("next_actions", 25)]);
+        let text = pinned_auto_tool_context_for_model(&[entry]);
+        assert!(text.contains("\"truncated\":true"));
+        assert!(!text.contains("omitted_sections"));
     }
 }

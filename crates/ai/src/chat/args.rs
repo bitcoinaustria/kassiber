@@ -483,6 +483,10 @@ pub struct Validated {
     pub seed_history: bool,
     pub seed_notices: SeedNotices,
     pub screen_context: Option<Value>,
+    /// `read_pinned_entity`: the desktop pinned the screen context's entity
+    /// ("Ask about this"), so its typed review read runs before the first
+    /// provider leg. Opt-in, so a request without it reads exactly as before.
+    pub read_pinned_entity: bool,
     /// `attachments`: the chat's staging grants, in the order attached.
     pub attachments: Vec<Value>,
     pub desktop_secret_store_bridge: Value,
@@ -737,6 +741,11 @@ pub fn validate(args: &Value) -> Result<Validated, AppError> {
     };
     let seed_notices = seed_notices(get(args, "seed_notices"), &messages)?;
     let screen_context = screen_context(get(args, "screen_context"))?;
+    let read_pinned_entity = match get(args, "read_pinned_entity") {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(flag)) => *flag,
+        Some(_) => return Err(validation("ai.chat read_pinned_entity must be a boolean")),
+    };
     let attachments = attachments(get(args, "attachments"))?;
     if get(args, "tool_loop_max_iterations").is_none() && tools_enabled {
         let selected = select_tool_capabilities(Some(&messages), screen_context.as_ref());
@@ -761,9 +770,54 @@ pub fn validate(args: &Value) -> Result<Validated, AppError> {
         seed_history,
         seed_notices,
         screen_context,
+        read_pinned_entity,
         attachments,
         desktop_secret_store_bridge: get(args, "_desktop_secret_store_bridge")
             .cloned()
             .unwrap_or(Value::Null),
     })
+}
+
+#[cfg(test)]
+mod read_pinned_entity_tests {
+    use super::*;
+
+    fn args(extra: Option<Value>) -> Value {
+        let mut args = dict([
+            ("model", s("m")),
+            (
+                "messages",
+                Value::List(vec![dict([("role", s("user")), ("content", s("hi"))])]),
+            ),
+        ]);
+        if let Some(extra) = extra {
+            set(&mut args, "read_pinned_entity", extra);
+        }
+        args
+    }
+
+    #[test]
+    fn read_pinned_entity_is_an_opt_in_boolean() {
+        assert!(!validate(&args(None)).unwrap().read_pinned_entity);
+        assert!(
+            !validate(&args(Some(Value::Null)))
+                .unwrap()
+                .read_pinned_entity
+        );
+        assert!(
+            !validate(&args(Some(Value::Bool(false))))
+                .unwrap()
+                .read_pinned_entity
+        );
+        assert!(
+            validate(&args(Some(Value::Bool(true))))
+                .unwrap()
+                .read_pinned_entity
+        );
+        let error = validate(&args(Some(s("yes")))).unwrap_err();
+        assert_eq!(
+            error.message,
+            "ai.chat read_pinned_entity must be a boolean"
+        );
+    }
 }
