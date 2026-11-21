@@ -2010,9 +2010,9 @@ See [tax countries](docs/reference/tax-countries.md) and
   absent (two such transfers on one day and amount refuse today as
   `bank_statement_line_conflict` when imported apart); an explicit CSV
   delimiter for positional column maps (punctuation in a description can pick
-  the wrong one, which refuses the file); and an accepted-decision filter for
-  `bank-lines list`, so the desktop's accepted evidence does not rest on the
-  newest 5000 outgoing lines.
+  the wrong one, which refuses the file as `bank_csv_ambiguous_delimiter`);
+  and an accepted-decision filter for `bank-lines list`, so the desktop's
+  accepted evidence does not rest on the newest 5000 outgoing lines.
 - [ ] Bank statement cases now refused, to build only on demand (dropped in
   the 2026-11-14 size pass): MT940 files; splitting CAMT batch entries into
   their `TxDtls`; fee-tolerant (within 3 %) and split/merge (one transfer for
