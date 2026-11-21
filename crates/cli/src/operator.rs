@@ -159,13 +159,25 @@ mod tests {
         for (leaf, extra, expected) in [
             ("list", &[][..], Capability::Read),
             ("suggest", &[][..], Capability::Read),
-            ("accept", &["--transaction", "t", "--line", "l"][..], Capability::AccountingDecisions),
-            ("reject", &["--transaction", "t", "--line", "l"][..], Capability::AccountingDecisions),
+            (
+                "accept",
+                &["--transaction", "t", "--line", "l"][..],
+                Capability::AccountingDecisions,
+            ),
+            (
+                "reject",
+                &["--transaction", "t", "--line", "l"][..],
+                Capability::AccountingDecisions,
+            ),
         ] {
             let mut items = vec!["--machine", "source-funds", "bank-lines", leaf];
             items.extend_from_slice(extra);
-            let parsed = classify(&argv(&items)).unwrap_or_else(|error| panic!("{leaf}: {error:?}"));
-            assert_eq!(parsed.command_path, format!("source-funds.bank-lines.{leaf}"));
+            let parsed =
+                classify(&argv(&items)).unwrap_or_else(|error| panic!("{leaf}: {error:?}"));
+            assert_eq!(
+                parsed.command_path,
+                format!("source-funds.bank-lines.{leaf}")
+            );
             assert_eq!(parsed.capability, expected, "{leaf}");
         }
     }
@@ -178,7 +190,11 @@ mod tests {
     fn every_subcommand_destination_extends_the_command_path() {
         let known: Vec<&str> = std::iter::once("command")
             .chain(kassiber_envelope::KIND_SUBCOMMAND_ATTRS.iter().copied())
-            .chain(kassiber_envelope::COMMAND_PATH_ONLY_SUBCOMMAND_ATTRS.iter().copied())
+            .chain(
+                kassiber_envelope::COMMAND_PATH_ONLY_SUBCOMMAND_ATTRS
+                    .iter()
+                    .copied(),
+            )
             .collect();
         let missing: Vec<&str> = crate::spec::parsers()
             .iter()

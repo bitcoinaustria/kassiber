@@ -195,12 +195,18 @@ pub fn reason_text(reason: &str) -> String {
     reason.to_owned()
 }
 
-/// The decision a suggestion's buttons send: exactly its lines and purchases.
-pub fn decision_args(s: &Value) -> Value {
-    json!({
+/// The decision a suggestion's buttons send: exactly its lines and purchases. Accepting also names
+/// the suggestion shown, so the daemon refuses it for a new review once the pair is no longer that
+/// exact, unique match (instead of recording it as an explicit pairing).
+pub fn decision_args(kind: &str, s: &Value) -> Value {
+    let mut a = json!({
         "line_ids": s.get("line_ids").cloned().unwrap_or(json!([])),
         "transaction_ids": s.get("transaction_ids").cloned().unwrap_or(json!([])),
-    })
+    });
+    if kind == ACCEPT {
+        a["suggestion_id"] = s.get("id").cloned().unwrap_or(Value::Null);
+    }
+    a
 }
 
 /// The import request: the picked file, and the stated account when there is one.
@@ -334,7 +340,12 @@ fn import(a: &mut App, file: &str, account: &str) {
 
 fn decide(a: &mut App, kind: &'static str, s: &Value) {
     clear_notes(a);
-    if super::send(a, kind, decision_args(s), "provenance.sof.bank.decide") {
+    if super::send(
+        a,
+        kind,
+        decision_args(kind, s),
+        "provenance.sof.bank.decide",
+    ) {
         a.provenance.sof.busy.insert("bank.decide");
         super::sent_from(a, "bank.decide");
     }
@@ -385,6 +396,9 @@ pub fn on_reply(a: &mut App, sub: &str, r: &Reply) {
             // Accepted lines become evidence on a reviewed source: every case read refreshes.
             if r.error.is_none() {
                 super::invalidate(a);
+            } else if sub == "decide" {
+                // A refused decision (a suggestion that went stale) asks for the current matches.
+                retry_reads(a);
             }
         }
         _ => {}
@@ -713,8 +727,13 @@ mod tests {
     #[test]
     fn decisions_send_exactly_the_suggestions_ids() {
         assert_eq!(
-            decision_args(&suggestion()),
+            decision_args(REJECT, &suggestion()),
             json!({"line_ids": ["L1"], "transaction_ids": ["T1"]})
+        );
+        // Accepting binds to the suggestion shown.
+        assert_eq!(
+            decision_args(ACCEPT, &suggestion()),
+            json!({"line_ids": ["L1"], "transaction_ids": ["T1"], "suggestion_id": "abc"})
         );
     }
 

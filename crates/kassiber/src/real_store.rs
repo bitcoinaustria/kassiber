@@ -1815,11 +1815,24 @@ impl Book for RealBook {
             Command::Accept {
                 lines,
                 transactions,
+                suggestion: None,
             } => kassiber_reports::source_funds_bank::accept(
                 self.conn()?,
                 &scope,
                 lines,
                 transactions,
+                &ReportSources,
+            ),
+            Command::Accept {
+                lines,
+                transactions,
+                suggestion: Some(suggestion),
+            } => kassiber_reports::source_funds_bank::accept_suggestion(
+                self.conn()?,
+                &scope,
+                lines,
+                transactions,
+                suggestion,
                 &ReportSources,
             ),
             other => kassiber_transactions::bank_statements::execute(
