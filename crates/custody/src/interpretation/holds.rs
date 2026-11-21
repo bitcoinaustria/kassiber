@@ -24,6 +24,10 @@ const SYNTHETIC: [&str; 5] = [
     "multi-consol:",
 ];
 
+/// The internal hold of a transaction a confirmed conflicting spend replaced.
+/// It never becomes a quarantine reason.
+const REPLACED: &str = "replaced_by_confirmed_spend";
+
 fn positive_sign(ordering: std::cmp::Ordering) -> bool {
     ordering.is_gt()
 }
@@ -375,7 +379,27 @@ fn conflicts_from_states<R: Row>(
     facts: &[Facts],
     states: &BTreeMap<Physical, bool>,
 ) -> Result<Ids, String> {
+    conflict_sets(rows, facts, states).map(|(losers, _)| losers)
+}
+
+/// Every row whose transaction shares a prevout with another observed
+/// transaction, and the subset of those rows that a confirmed spend replaced.
+///
+/// A transaction is replaced when it is explicitly unconfirmed and some
+/// conflict group it belongs to has exactly one confirmed member, which is
+/// not it. That prevout is spent on chain, so the transaction can only come
+/// back through a reorg that unconfirms the winner; the next run then sees no
+/// confirmed member and holds the whole group again. A group with two or more
+/// confirmed members contradicts the chain and keeps every member a loser
+/// that is never replaced (fail closed), as does a member whose confirmation
+/// was never observed explicitly.
+fn conflict_sets<R: Row>(
+    rows: &[R],
+    facts: &[Facts],
+    states: &BTreeMap<Physical, bool>,
+) -> Result<(Ids, Ids), String> {
     let mut row_txid = BTreeMap::new();
+    let mut explicit_txids = BTreeSet::new();
     let mut outpoints: BTreeMap<Physical, BTreeSet<Physical>> = BTreeMap::new();
     for (row, fact) in rows.iter().zip(facts) {
         let parsed = fact.parsed.as_ref().map_err(Clone::clone)?;
@@ -383,6 +407,9 @@ fn conflicts_from_states<R: Row>(
             continue;
         };
         row_txid.insert(codec::pystr(row.at("id")), scope.clone());
+        if fact.explicit.is_some() {
+            explicit_txids.insert(scope.clone());
+        }
         if let Some(parsed) = parsed {
             for entry in stored::list(stored::get(parsed, "inputs")) {
                 if let Some(outpoint) = canonical_outpoint(stored::get(entry, "outpoint")) {
@@ -395,6 +422,8 @@ fn conflicts_from_states<R: Row>(
         }
     }
     let mut losers = BTreeSet::new();
+    let mut superseded = BTreeSet::new();
+    let mut contradicted = BTreeSet::new();
     for txids in outpoints.values() {
         if txids.len() < 2 {
             continue;
@@ -407,12 +436,24 @@ fn conflicts_from_states<R: Row>(
             if confirmed.len() != 1 || !confirmed.contains(txid) {
                 losers.insert(txid.clone());
             }
+            if confirmed.len() > 1 {
+                contradicted.insert(txid.clone());
+            } else if confirmed.len() == 1
+                && states.get(txid) == Some(&false)
+                && explicit_txids.contains(txid)
+            {
+                superseded.insert(txid.clone());
+            }
         }
     }
-    Ok(row_txid
-        .into_iter()
-        .filter_map(|(id, txid)| losers.contains(&txid).then_some(id))
-        .collect())
+    let ids = |txids: &BTreeSet<Physical>| -> Ids {
+        row_txid
+            .iter()
+            .filter_map(|(id, txid)| txids.contains(txid).then(|| id.clone()))
+            .collect()
+    };
+    let replaced: BTreeSet<_> = superseded.difference(&contradicted).cloned().collect();
+    Ok((ids(&losers), ids(&replaced)))
 }
 
 #[cfg(test)]
@@ -675,10 +716,10 @@ pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, 
     let _span = crate::timing::span("interpretation.holds");
     let facts = facts(input.rows);
     let states = confirmation_states(input.rows, &facts, false)?;
-    let conflict_ids = if input.has_chain_events {
-        conflicts_from_states(input.rows, &facts, &states)?
+    let (conflict_ids, replaced_ids) = if input.has_chain_events {
+        conflict_sets(input.rows, &facts, &states)?
     } else {
-        Ids::new()
+        (Ids::new(), Ids::new())
     };
     let pending_ids = pending_from_states(input.rows, &facts, &states)?;
     // Only looked up; a later row with the same id replaces an earlier one.
@@ -712,7 +753,10 @@ pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, 
         .cloned()
         .collect();
     let mut reasons = BTreeMap::new();
+    // A replaced transaction is kept out of booking like a hold, but it is
+    // settled chain history: it gets no quarantine and blocks no report.
     for (ids, reason) in [
+        (&replaced_ids, REPLACED),
         (&conflict_ids, "conflicting_spend"),
         (&pending_ids, "pending_onchain_confirmation"),
         (&fanout_ids, "owned_fanout_unresolved"),
@@ -782,6 +826,9 @@ pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, 
     }
     let mut quarantines = Vec::new();
     for (id, reason) in &reasons {
+        if *reason == REPLACED {
+            continue;
+        }
         let row = by_id[id.as_str()];
         let wallet_id = codec::text(row.at("wallet_id"));
         let wallet = input.wallets.get(&wallet_id).unwrap_or(&Value::Null);
@@ -811,7 +858,7 @@ pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, 
         .filter_map(|(id, reason)| {
             matches!(
                 *reason,
-                "conflicting_spend" | "pending_onchain_confirmation"
+                "conflicting_spend" | "pending_onchain_confirmation" | REPLACED
             )
             .then_some(id.clone())
         })
@@ -906,6 +953,161 @@ mod tests {
         }
         assert!(count > 0);
     }
+    /// An outbound row spending `bb..bb:1`; `confirmed` is the synced status
+    /// (`None` writes no status at all).
+    fn spend(id: &str, txid: char, confirmed: Option<bool>) -> Value {
+        spend_outputs(id, txid, confirmed, &[1])
+    }
+    /// An outbound row spending `bb..bb:<vout>` for each listed vout.
+    fn spend_outputs(id: &str, txid: char, confirmed: Option<bool>, vouts: &[u32]) -> Value {
+        let txid = txid.to_string().repeat(64);
+        let vin: Vec<_> = vouts
+            .iter()
+            .map(|vout| {
+                json!({"txid":"b".repeat(64),"vout":vout,"prevout":{"value_sats":13,
+                    "scriptpubkey":"00141111111111111111111111111111111111111111"}})
+            })
+            .collect();
+        let mut raw = json!({"chain":"bitcoin","network":"main","txid":txid,"vin":vin,
+            "vout":[{"n":0,"value_sats":10,
+                "scriptpubkey":"00142222222222222222222222222222222222222222"}]});
+        if let Some(confirmed) = confirmed {
+            raw["status"] = json!({"confirmed":confirmed});
+        }
+        json!({"id":id,"workspace_id":"workspace","profile_id":"profile",
+            "wallet_id":"wallet-a","direction":"outbound","asset":"BTC","amount":10000,
+            "fee":0,"occurred_at":"2026-01-01T00:00:00Z","external_id":txid,
+            "raw_json":raw.to_string()})
+    }
+    /// (blocked, quarantine reasons by id, transient) of the hold stage.
+    fn hold(rows: &[Value]) -> (Ids, BTreeMap<String, String>, Ids) {
+        let none = Ids::new();
+        let holds = compute(Inputs {
+            rows,
+            derivation_rows: rows,
+            pairs: &[],
+            wallets: &BTreeMap::new(),
+            has_chain_events: true,
+            excluded: &none,
+            blocked: &none,
+            resolved: &none,
+        })
+        .unwrap();
+        let reasons = holds
+            .quarantines
+            .iter()
+            .map(|q| (codec::text(&q["transaction_id"]), codec::text(&q["reason"])))
+            .collect();
+        (holds.blocked_ids, reasons, holds.transient_ids)
+    }
+    fn ids<const N: usize>(ids: [&str; N]) -> Ids {
+        ids.into_iter().map(str::to_owned).collect()
+    }
+    fn reasons<const N: usize>(pairs: [(&str, &str); N]) -> BTreeMap<String, String> {
+        pairs
+            .into_iter()
+            .map(|(id, reason)| (id.to_owned(), reason.to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn a_confirmed_replacement_settles_the_replaced_spend_without_a_quarantine() {
+        // The fee bump confirmed: the original stays out of booking, but it is
+        // settled chain history, so nothing asks for review.
+        let rows = [
+            spend("bump", 'a', Some(true)),
+            spend("original", 'c', Some(false)),
+        ];
+        assert_eq!(
+            hold(&rows),
+            (ids(["original"]), reasons([]), ids(["original"]))
+        );
+        let facts = facts(&rows);
+        let states = confirmation_states(&rows, &facts, false).unwrap();
+        assert_eq!(
+            conflict_sets(&rows, &facts, &states).unwrap(),
+            (ids(["original"]), ids(["original"]))
+        );
+    }
+
+    #[test]
+    fn an_unconfirmed_replacement_holds_every_conflicting_spend() {
+        let rows = [
+            spend("bump", 'a', Some(false)),
+            spend("original", 'c', Some(false)),
+        ];
+        assert_eq!(
+            hold(&rows),
+            (
+                ids(["bump", "original"]),
+                reasons([
+                    ("bump", "conflicting_spend"),
+                    ("original", "conflicting_spend")
+                ]),
+                ids(["bump", "original"])
+            )
+        );
+    }
+
+    #[test]
+    fn a_reorg_that_unconfirms_the_replacement_holds_the_group_again() {
+        let settled = [
+            spend("bump", 'a', Some(true)),
+            spend("original", 'c', Some(false)),
+        ];
+        assert_eq!(hold(&settled).1, reasons([]));
+        // The next sync after the reorg observes the bump in the mempool again.
+        let reorged = [
+            spend("bump", 'a', Some(false)),
+            spend("original", 'c', Some(false)),
+        ];
+        assert_eq!(
+            hold(&reorged).1,
+            reasons([
+                ("bump", "conflicting_spend"),
+                ("original", "conflicting_spend")
+            ])
+        );
+    }
+
+    #[test]
+    fn contradicting_or_unobserved_confirmations_still_fail_closed() {
+        // Two confirmed spends of one prevout cannot both be chain history.
+        let rows = [
+            spend("first", 'a', Some(true)),
+            spend("second", 'c', Some(true)),
+            spend("third", 'd', Some(false)),
+        ];
+        assert_eq!(
+            hold(&rows).1,
+            reasons([
+                ("first", "conflicting_spend"),
+                ("second", "conflicting_spend"),
+                ("third", "conflicting_spend")
+            ])
+        );
+        // A transaction that also conflicts with two confirmed spends of
+        // another prevout stays held, although a single winner settled the
+        // first prevout.
+        let rows = [
+            spend_outputs("winner", 'a', Some(true), &[1]),
+            spend_outputs("loser", 'c', Some(false), &[1, 2]),
+            spend_outputs("first", 'd', Some(true), &[2]),
+            spend_outputs("second", 'e', Some(true), &[2]),
+        ];
+        assert_eq!(
+            hold(&rows).1,
+            reasons([
+                ("first", "conflicting_spend"),
+                ("loser", "conflicting_spend"),
+                ("second", "conflicting_spend")
+            ])
+        );
+        // A sibling without an explicit status is not proven unconfirmed.
+        let rows = [spend("bump", 'a', Some(true)), spend("unknown", 'c', None)];
+        assert_eq!(hold(&rows).1, reasons([("unknown", "conflicting_spend")]));
+    }
+
     #[test]
     fn unscoped_groups_read_row_text_and_strict_txids() {
         let row = |id: &str, direction: &str, wallet: &str, external: Value| json!({"id":id,"direction":direction,"wallet_id":wallet,"external_id":external,"asset":"BTC","amount":1000,"raw_json":"{}"});

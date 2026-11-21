@@ -1911,6 +1911,16 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Quarantine follow-ups
 
+- [ ] Stop a replaced transaction from raising `missing_prices`. Journals
+  now settle a transaction that a confirmed conflicting spend replaced
+  without a quarantine ([quarantines](docs/reference/tax.md#quarantines)),
+  but the compatibility Electrum observer stores an unconfirmed row at
+  `1970-01-01T00:00:00Z` and never withdraws it once replaced, so the row
+  stays unpriced and the desktop report blockers keep listing it (regtest
+  RBF probe, 2026-11-21). Done when an unconfirmed Electrum row gets a real
+  observation time or a replaced row no longer counts as missing a price,
+  and the compatibility Electrum route can retract replaced transactions as
+  the Esplora route does.
 - [ ] Offer a user-triggered "reprice from market rates" for
   `price_currency_mismatch` rows. A book whose currency changed holds every
   row priced in the old currency ([quarantines](docs/reference/tax.md#quarantines));

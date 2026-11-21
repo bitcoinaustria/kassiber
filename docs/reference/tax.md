@@ -582,11 +582,22 @@ Quarantine causes typically include:
   Core RPC wallet rows do not yet stamp it, so Core mempool activity remains on
   the prior journal path because Kassiber cannot distinguish those rows from
   graphless imports using `confirmed_at` alone.
-- `conflicting_spend` — transactions share a prevout. The unconfirmed
-  replacement (or every conflicting txid when the winner is ambiguous) is held
-  from tax booking and cannot become a verified custody movement. Sync and
-  verify which txid won; this is not a normal carrying-value pairing or
-  bulk-pair action.
+- `conflicting_spend` — transactions share a prevout and the chain has not
+  settled which one won: none of them is confirmed, two or more claim to be
+  (contradictory chain data), or a loser's status was never observed. Every
+  such txid is held from tax booking and cannot become a verified custody
+  movement. Sync and verify which txid won; this is not a normal
+  carrying-value pairing or bulk-pair action.
+- A transaction that a confirmed conflicting spend replaced (an RBF fee bump
+  or a double spend that confirmed) is not a quarantine. When exactly one txid
+  of a shared prevout is confirmed and another is explicitly unconfirmed, each
+  journal run derives the unconfirmed one as replaced from the stored chain
+  facts: it stays in the transaction list as observed, is kept out of tax
+  booking and custody movements like a hold, and blocks no report. Nothing is
+  stored, so a reorg that leaves the winner unconfirmed makes the next run hold
+  the whole group as `conflicting_spend` again. A transfer pair that names the
+  replaced row is held as `transfer_pair_dependency_blocked`; pair the
+  confirmed txid instead.
 - Pending and conflicting holds (and the dependency holds they cause) are
   transient: they keep rows out of booking and custody moves, but they are not
   persisted as custody quantity issues, so they neither freeze later basis nor

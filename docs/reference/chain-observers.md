@@ -65,7 +65,11 @@ uncovered earlier scope withhold absence authority; incomplete rounds retain
 earlier positive observations for later verification. A full scan clears fetch
 caches while preserving these observation candidates. The configured backend
 remains the source of this evidence; counter checks are not a cryptographic or
-atomic snapshot guarantee against a malicious server.
+atomic snapshot guarantee against a malicious server. A replaced transaction
+that no retraction withdrew (the compatibility Electrum observer keeps no
+history membership to retract from) stays stored as observed; once a
+conflicting spend of the same prevout confirms, journal processing derives it
+as replaced instead of holding it (see [tax quarantines](tax.md#quarantines)).
 
 Cancellation fences native observer connection creation, each exposed SDK
 network step, repeated incremental BDK scans, and transitions between source
