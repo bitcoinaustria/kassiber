@@ -22,6 +22,10 @@ Current policies:
 - `generic` -> lot accounting in Kassiber's [tax engine](tax-engine.md)
 - `at` -> Austrian accounting in the same engine (Austrian normalization, the regime tracker, and moving-average defaults for new wallets), with the report crate (`crates/reports`) keeping the current disposal-category / Kennzahl mapping
 
+Fee units, the long-term threshold and the moving average's holding period
+are policy choices other tools may make differently
+([policy choices](tax-engine.md#policy-choices)).
+
 Tax countries come from one registry ([tax countries](tax-countries.md)).
 Every country other than `generic` and `at` is a selectable **preview**
 country: the United States ([specification](tax-country-us.md)),
