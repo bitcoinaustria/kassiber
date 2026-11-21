@@ -51,6 +51,10 @@ fn main() -> ExitCode {
     let _gate = Gate::new(|| Offline::Unavailable, Ledger::process());
     // Test builds only: a recorded session's SQLite seed (no-op otherwise).
     kassiber_store::seed_test_prng();
+    // SQLite's one-time initialization, finished here before the broker,
+    // daemon or job threads open their first connections (SQLCipher's
+    // `sqlcipher_export` is registered at the end of it).
+    kassiber_store::initialize();
     // BIP329 label matching reads the derived ownership index, which lives
     // above the metadata service it serves.
     kassiber_wallets::identify::register_bip329_ownership();
