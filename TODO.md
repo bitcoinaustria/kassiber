@@ -2010,9 +2010,9 @@ See [tax countries](docs/reference/tax-countries.md) and
   absent (two such transfers on one day and amount refuse today as
   `bank_statement_line_conflict` when imported apart); an explicit CSV
   delimiter for positional column maps (punctuation in a description can pick
-  the wrong one, which refuses the file); and an accepted-decision filter for
-  `bank-lines list`, so the desktop's accepted evidence does not rest on the
-  newest 5000 outgoing lines.
+  the wrong one, which refuses the file as `bank_csv_ambiguous_delimiter`);
+  and an accepted-decision filter for `bank-lines list`, so the desktop's
+  accepted evidence does not rest on the newest 5000 outgoing lines.
 - [ ] Bank statement cases now refused, to build only on demand (dropped in
   the 2026-11-14 size pass): MT940 files; splitting CAMT batch entries into
   their `TxDtls`; fee-tolerant (within 3 %) and split/merge (one transfer for
@@ -2039,7 +2039,8 @@ See [tax countries](docs/reference/tax-countries.md) and
 - [ ] Bisq refusals that could become reviewed flows if real users hit them
   (the slim importer refuses by trade id instead): redating stored legs whose
   escrow dates moved or were read in another `--timezone`; network partitions
-  of a book with held trades; revising or grouping a pair with a
+  of a book with held or cleared trades (carrying the holds into the
+  partition); revising or grouping a pair with a
   provider-stated miner fee; fiat markets outside the shared fiat list;
   altcoin-market trades as crypto-scope swap legs once the multi-asset
   foundation lands.

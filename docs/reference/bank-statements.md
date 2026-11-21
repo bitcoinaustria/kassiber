@@ -42,6 +42,12 @@ by name (`bank_statement_mt940`); export CAMT.053 or CSV instead.
 
 Each refusal names the row, column number or field and never quotes the file.
 
+- A map that names every column only by number, when the delimiter it read
+  with skipped a row another delimiter splits into every mapped column
+  (`bank_csv_ambiguous_delimiter`): a comma file with semicolons in its
+  descriptions would otherwise take a transaction as the header and a
+  description suffix as an amount. Name the columns by header instead.
+
 - A decimal mark no row decides (`1.000` alone), a day/month order no row
   decides (`03/04/2025`), malformed grouping (`1,2,3`), a currency symbol,
   space or apostrophe grouping, or two columns that could be the same field.
