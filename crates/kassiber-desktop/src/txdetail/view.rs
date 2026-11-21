@@ -316,6 +316,12 @@ fn tab_bar(app: &App, tk: &Tk, o: &Open, sheet: bool, layer: &mut Vec<El>) -> El
         .child(right)
 }
 
+/// The menu's Assistant entry, as the assistant panel's own (`surfaces`): AI features on, and
+/// not while the assistant page itself shows.
+fn assistant_available(app: &App) -> bool {
+    app.prefs.ai_features && app.route.path() != "/assistant"
+}
+
 /// `AddSurfaceMenu`: the panel's surfaces with their single-key shortcuts.
 fn add_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
     let dev = app.prefs.developer_tools;
@@ -332,11 +338,8 @@ fn add_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
             &I::SPARKLES,
             t("assistant:panel.title"),
             "A",
-            app.prefs.ai_features,
-            |a| {
-                a.detail.add_open = false;
-                crate::assistant::open_panel(a);
-            },
+            assistant_available(app),
+            |a| crate::assistant::panel::open_surface(a, 0),
         ),
         (
             &I::LIST_CHECKS,
@@ -403,6 +406,11 @@ fn add_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
             );
         if ok {
             r = r.hover(tk.accent).focus_highlight(tk.accent).on_press(act);
+        } else if i == 0 {
+            // The assistant panel's own surface entry: unavailable while its page shows.
+            if app.prefs.ai_features {
+                r = r.help(t("assistant:panel.assistantUnavailable"));
+            }
         } else {
             r = r.help(t("assistant:panel.developerOnly"));
         }
@@ -418,7 +426,7 @@ fn add_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
                 return false;
             };
             let target = match s.to_ascii_lowercase().as_str() {
-                "a" => Some(0),
+                "a" if assistant_available(a) => Some(0),
                 "q" => Some(1),
                 "h" if a.prefs.developer_tools => Some(2),
                 "l" if a.prefs.developer_tools => Some(3),
@@ -428,7 +436,7 @@ fn add_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
             let Some(t) = target else { return false };
             a.detail.add_open = false;
             match t {
-                0 => crate::assistant::open_panel(a),
+                0 => crate::assistant::panel::open_surface(a, 0),
                 1 => a.navigate("/review"),
                 2 => crate::assistant::panel::open_surface(a, 2),
                 3 => crate::assistant::panel::open_surface(a, 3),
@@ -985,4 +993,30 @@ pub fn dock(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> Option
 /// and controls leave the accessibility tree as the web's do).
 pub fn page_hidden(app: &App) -> bool {
     app.detail.open.is_some() && app.detail.maximized && !sheet_mode(app)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The detail panel's Assistant entry follows the assistant panel's own: off on the
+    /// assistant page, and opening the panel focuses its composer.
+    #[test]
+    fn the_assistant_entry_matches_the_panel_surface() {
+        let mut app = crate::app::tests::quiet_app();
+        app.prefs.ai_features = true;
+        app.route = crate::app::Route("/assistant".into());
+        assert!(!assistant_available(&app));
+        app.route = crate::app::Route("/transactions".into());
+        assert!(assistant_available(&app));
+        app.prefs.ai_features = false;
+        assert!(!assistant_available(&app));
+        app.prefs.ai_features = true;
+        app.detail.add_open = true;
+        app.assistant.draft.focused = false;
+        crate::assistant::panel::open_surface(&mut app, 0);
+        assert!(!app.detail.add_open);
+        assert!(app.assistant.draft.focused);
+        assert!(app.prefs.right_panel_open);
+    }
 }
