@@ -403,6 +403,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         |a| case(a).show_advanced ^= true,
         body,
     ))
+    .child(super::bank::view(app, tk))
 }
 
 fn advanced(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, ww: f32) -> El {
