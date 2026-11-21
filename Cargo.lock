@@ -2501,6 +2501,7 @@ dependencies = [
  "kassiber-pytext",
  "kassiber-rates",
  "kassiber-release",
+ "kassiber-replay",
  "kassiber-reports",
  "kassiber-runtime",
  "kassiber-secrets",
@@ -2895,6 +2896,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-replay"
+version = "0.1.0"
+dependencies = [
+ "bitcoin_hashes",
+ "getrandom 0.4.3",
+ "kassiber-backup",
+ "kassiber-custody",
+ "kassiber-envelope",
+ "kassiber-journals",
+ "kassiber-pydecimal",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-store",
+ "kassiber-tax-core",
+ "kassiber-tax-countries",
+ "kassiber-transfers",
+ "serde_json",
+]
+
+[[package]]
 name = "kassiber-repo-checks"
 version = "0.1.0"
 dependencies = [
@@ -3100,7 +3121,9 @@ dependencies = [
  "kassiber-rates",
  "kassiber-setup",
  "kassiber-store",
+ "kassiber-tax-countries",
  "kassiber-transactions",
+ "kassiber-transfers",
  "kassiber-xlsx",
  "lwk_common",
  "lwk_wollet",

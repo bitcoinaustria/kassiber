@@ -8,7 +8,7 @@
 //! row, each value with its storage class. The product's migrating open must
 //! produce the identical dump, plaintext and SQLCipher, and a second open must
 //! change nothing.
-use kassiber_store::{rusqlite::Connection, Book, OpenOptions};
+use kassiber_store::{rusqlite, rusqlite::Connection, Book, OpenOptions};
 use serde_json::{json, Value};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -175,21 +175,36 @@ fn difference(expected: &Value, actual: &Value) -> Option<String> {
 }
 
 fn encrypt(plain: &Path, cipher: &Path) {
-    let conn = Connection::open(plain).unwrap();
+    // SQLCipher registers sqlcipher_export only after SQLite already counts
+    // as initialized (sqlite3_initialize runs SQLITE_EXTRA_INIT last), so a
+    // connection another thread opens in that window lacks the function. The
+    // vectors run four at a time beside other tests, so retry with a fresh
+    // connection on exactly that error.
+    for _ in 0..50 {
+        match try_encrypt(plain, cipher) {
+            Err(error) if format!("{error:?}").contains("no such function: sqlcipher_export") => {
+                std::thread::sleep(std::time::Duration::from_millis(20))
+            }
+            other => return other.unwrap(),
+        }
+    }
+    try_encrypt(plain, cipher).unwrap()
+}
+
+fn try_encrypt(plain: &Path, cipher: &Path) -> rusqlite::Result<()> {
+    let conn = Connection::open(plain)?;
     conn.execute(
         &format!(
             "ATTACH DATABASE ?1 AS encrypted KEY '{}'",
             PASSPHRASE.replace('\'', "''")
         ),
         [cipher.to_str().unwrap()],
-    )
-    .unwrap();
+    )?;
     conn.execute_batch(
         "PRAGMA encrypted.cipher_compatibility=4; PRAGMA encrypted.kdf_iter=256000;
          PRAGMA encrypted.cipher_page_size=4096; SELECT sqlcipher_export('encrypted');
          DETACH DATABASE encrypted;",
     )
-    .unwrap();
 }
 
 fn open_dump(database: &Path, passphrase: Option<&str>) -> Value {

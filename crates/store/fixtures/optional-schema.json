@@ -43,5 +43,19 @@
       "bank_statement_lines",
       "CREATE TABLE bank_statement_lines (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    import_id TEXT NOT NULL REFERENCES bank_statement_imports(id) ON DELETE CASCADE,\n    document_id TEXT NOT NULL REFERENCES external_documents(id) ON DELETE CASCADE,\n    line_index INTEGER NOT NULL,\n    booking_date TEXT NOT NULL,\n    value_date TEXT,\n    amount TEXT NOT NULL,\n    currency TEXT NOT NULL,\n    counterparty_name TEXT,\n    counterparty_iban_masked TEXT,\n    remittance TEXT,\n    bank_reference TEXT,\n    end_to_end_id TEXT,\n    account_id TEXT NOT NULL,\n    account_masked TEXT,\n    dedupe_group TEXT NOT NULL,\n    dedupe_key TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    UNIQUE (profile_id, dedupe_key)\n)"
     ]
+  ],
+  "provider_trade_holds": [
+    [
+      "index",
+      "idx_provider_trade_holds_profile",
+      "provider_trade_holds",
+      "CREATE INDEX idx_provider_trade_holds_profile\n    ON provider_trade_holds(profile_id, state)"
+    ],
+    [
+      "table",
+      "provider_trade_holds",
+      "provider_trade_holds",
+      "CREATE TABLE provider_trade_holds (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    provider TEXT NOT NULL,\n    trade_id TEXT NOT NULL,\n    trade_status TEXT NOT NULL,\n    reason TEXT NOT NULL,\n    state TEXT NOT NULL CHECK(state IN ('held', 'cleared')),\n    txids_json TEXT NOT NULL DEFAULT '[]',\n    cleared_reason TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    UNIQUE (profile_id, provider, trade_id)\n)"
+    ]
   ]
 }

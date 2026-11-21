@@ -1339,6 +1339,8 @@ impl App {
         self.reports.diag.act = Default::default();
         self.reports.diag.chg = Default::default();
         self.reports.diag.popup = None;
+        // Replay consent and its passphrase belong to the book they were given for.
+        self.reports.diag.replay = Default::default();
         let a = std::mem::take(&mut self.assistant);
         self.assistant.selection = a.selection;
         self.assistant.effort = a.effort;

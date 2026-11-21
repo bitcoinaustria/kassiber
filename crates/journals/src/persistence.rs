@@ -80,10 +80,10 @@ fn t(s: impl Into<String>) -> Sql {
 fn opt(s: Option<String>) -> Sql {
     s.map_or(Sql::Null, t)
 }
-fn real(d: &JournalDecimal) -> Sql {
+pub(crate) fn real(d: &JournalDecimal) -> Sql {
     Sql::Real(d.0.to_string().parse().expect("Decimal float spelling"))
 }
-fn amount(d: &JournalDecimal) -> Result<Sql, Refusal> {
+pub(crate) fn amount(d: &JournalDecimal) -> Result<Sql, Refusal> {
     if let Some(n) =
         d.0.coefficient_u128()
             .filter(|n| *n <= u128::from(u64::MAX))
@@ -104,7 +104,7 @@ fn amount(d: &JournalDecimal) -> Result<Sql, Refusal> {
     bind(&msat(&d.0)?)
 }
 
-fn decimal_bindings(d: Option<&JournalDecimal>) -> Result<(Sql, Sql), Refusal> {
+pub(crate) fn decimal_bindings(d: Option<&JournalDecimal>) -> Result<(Sql, Sql), Refusal> {
     let Some(d) = d else {
         return Ok((Sql::Null, Sql::Null));
     };

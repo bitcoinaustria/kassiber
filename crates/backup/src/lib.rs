@@ -3,6 +3,7 @@
 pub mod archive;
 pub mod desktop;
 mod encryption;
+pub use encryption::{open_with_passphrase, seal_with_passphrase};
 pub mod service;
 
 use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};

@@ -108,7 +108,7 @@
       "byWallet": "Wallets: {{wallets}}",
       "byYear": "Jahre: {{years}}",
       "truncated": "Die ersten {{count}} Abweichungen werden angezeigt.",
-      "nextStep": "Eine erneute Verarbeitung ersetzt die gespeicherten Zeilen."
+      "nextStep": "Eine erneute Verarbeitung ersetzt die gespeicherten Zeilen. Um die Abweichung zu melden, exportiere ein Replay-Bundle unter Logs → Exportieren."
     }
   },
   "reportable": {
@@ -492,12 +492,19 @@
         "amount": "einen unbekannten Betrag",
         "date": "früheres Datum",
         "root": "siehe Ursache oben",
-        "currency": "eine Währung"
+        "currency": "eine Währung",
+        "trade": "ein Bisq-Handel",
+        "holdReason": "die Importdaten reichen nicht aus"
       },
       "reviewedSuspensePair": {
         "title": "Eine verknüpfte Übertragung geht nicht auf",
         "why": "Diese Transaktion ist mit einer anderen als Bewegung zwischen deinen Wallets verknüpft, aber es kam weniger an, als abging. Die Differenz wird offen gehalten, daher sind die Anschaffungskosten ab hier nicht endgültig.",
         "provide": "Vergleiche bei jeder Verknüpfung unten die beiden Seiten. Hebe eine Verknüpfung nur auf, wenn du weißt, dass ihre zwei Transaktionen nichts miteinander zu tun haben; verschiedene Transaktions-IDs allein zeigen das nicht. War es eine Bewegung zwischen deinen Wallets, öffne sie und erfasse, wohin die Differenz ging."
+      },
+      "bisqTradeHold": {
+        "title": "Ein Bisq-Handel wartet auf deine Prüfung",
+        "why": "Der Bisq-Import hat Handel {{trade}} zurückgehalten: {{holdReason}}. Kassiber bucht die Transaktionen, die Bisq für diesen Handel nennt, nicht, damit eine Kaution nicht als Veräußerung zählt.",
+        "provide": "Halte fest, was der Handel tatsächlich bewegt hat: Prüfe die Transaktion mit einer Custody-Komponente oder einer Verknüpfung, oder schließe sie aus, wenn sie nicht dir gehört."
       }
     },
     "category": {

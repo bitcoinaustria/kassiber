@@ -1,0 +1,36 @@
+[package]
+name = "kassiber-replay"
+description = "Journal replay bundles: pseudonymized, encrypted inputs and outputs of one journal run"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-journals = { path = "../journals" }
+kassiber-custody = { path = "../custody" }
+# The backups' age passphrase envelope, reused in memory.
+kassiber-backup = { path = "../backup" }
+kassiber-store = { path = "../store" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pydecimal = { path = "../pydecimal" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-transfers = { path = "../transfers" }
+kassiber-tax-countries = { path = "../tax-countries" }
+# The engine's quarantine reasons, which the output schema admits.
+kassiber-tax-core = { path = "../../tax-engine/core" }
+serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
+# Keyed pseudonyms (HMAC-SHA-256) and part digests; already locked for the
+# journals' identities.
+bitcoin_hashes = "0.14"
+# The per-bundle pseudonym key; the workspace's locked entropy source.
+getrandom = "=0.4.3"
+
+[dev-dependencies]
+kassiber-store = { path = "../store", features = ["test-hooks"] }
+
+[lints.rust]
+unsafe_code = "forbid"

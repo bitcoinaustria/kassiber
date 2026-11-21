@@ -284,6 +284,8 @@ fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppEr
                 file: "inline:wasabi_bundle".into(),
                 format: file_import::Format::Wasabi,
                 mode: None,
+                companion: None,
+                timezone: None,
             },
             payload: bundle.clone(),
         });
@@ -323,7 +325,7 @@ fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppEr
             let wallet = optional_string(args, "wallet")?;
             (wallet, Some(mode()?.unwrap_or_else(|| "full".into())), None)
         }
-        "strike_csv" => (optional_string(args, "wallet")?, Some("full".into()), None),
+        "strike_csv" | "bisq_csv" => (optional_string(args, "wallet")?, Some("full".into()), None),
         _ => {
             let wallet = required("wallet", "Wallet")?;
             let column_map = match get(args, "column_map") {
@@ -346,6 +348,8 @@ fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppEr
             file,
             format,
             mode,
+            companion: crate::wallets::companion_file(args)?,
+            timezone: crate::imports::optional_string(args, "timezone")?,
         },
         column_map,
     })

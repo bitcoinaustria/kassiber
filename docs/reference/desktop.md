@@ -351,6 +351,14 @@ The Journals screen's **Check reproducibility** runs `ui.journals.verify` and
 shows whether the stored journals are identical to a recomputation, stale, or
 which tables, wallets and years differ.
 
+Logs → Export also offers **Replay bundle…**, the explicit export of a
+[replay bundle](replay-bundle.md): the dialog states what the file holds (exact
+amounts, dates, rates and tax settings; pseudonymized identifiers and labels; no
+descriptors, keys, credentials or server addresses), needs a tick that the user
+understood it and a passphrase entered twice (at least 8 characters), and then
+calls `ui.diagnostics.replay_bundle.export`. The daemon writes the encrypted file
+under `exports/diagnostics/` and returns its path; the app never names a path.
+
 Transaction detail shows a Transaction flow panel beside its tabs, above them
 in narrow windows; the review checklist sits in the header's timeline bar. The
 panel uses `ui.transactions.graph` to draw a local, read-only flow view: valued

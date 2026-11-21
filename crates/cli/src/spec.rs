@@ -101,11 +101,14 @@ pub const AI_PROVIDER_KIND_CHANGE_HELP: &str = "Change the privacy kind, or make
 /// (added by hand).
 pub const RUST_ONLY_LEAVES: &[&str] = &[
     "wallets.sync-bitpanda",
+    "wallets.import-bisq",
     "journals.verify",
     "backends.trust-certificate",
     "projects.demo",
     "profiles.settings",
     "profiles.configure",
+    "diagnostics.replay-bundle.export",
+    "diagnostics.replay-bundle.verify",
 ];
 /// Backend kinds only the Rust backend accepts, extra `--kind` choices of
 /// `backends create` and `backends update`.

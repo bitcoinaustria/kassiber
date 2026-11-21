@@ -930,7 +930,8 @@
       "supportBundle": "Support-Bundle",
       "markdown": "Markdown",
       "jsonl": "JSONL",
-      "log": "Log"
+      "log": "Log",
+      "replayBundle": "Replay-Bundle…"
     },
     "clearLogsAria": "Protokoll leeren",
     "support": {
@@ -969,7 +970,22 @@
     "filterLevel": "Level {{level}}",
     "filterModule": "Modul {{module}}",
     "filterSearch": "Suche \"{{query}}\"",
-    "jumpToLatest": "↓ Zu den neuesten springen ({{count}} neu)"
+    "jumpToLatest": "↓ Zu den neuesten springen ({{count}} neu)",
+    "replayBundle": {
+      "title": "Replay-Bundle exportieren",
+      "description": "Mit einem Replay-Bundle kann eine Maintainerin oder ein Maintainer die Journalberechnung dieses Buchs ohne dein Buch nachrechnen und vergleichen.",
+      "contains": "Es enthält die genauen Beträge, Daten, Kurse und Steuereinstellungen der Transaktionen dieses Buchs. Transaktions-IDs, Adressen, Bezeichnungen und Notizen werden durch Pseudonyme ersetzt.",
+      "excludes": "Es enthält keine Deskriptoren, xpubs, Schlüssel, Zugangsdaten oder Serveradressen. Wer Datei und Passphrase hat, kann die Beträge lesen: Teile es nur mit Personen, denen du vertraust, und schick die Passphrase getrennt.",
+      "understood": "Ich verstehe, was das Bundle enthält.",
+      "passphrase": "Bundle-Passphrase",
+      "confirmPassphrase": "Passphrase wiederholen",
+      "tooShort_one": "Verwende mindestens {{count}} Zeichen.",
+      "tooShort_other": "Verwende mindestens {{count}} Zeichen.",
+      "mismatch": "Die Passphrasen stimmen nicht überein.",
+      "export": "Bundle exportieren",
+      "saved": "Replay-Bundle gespeichert:",
+      "sharePassphrase": "Teile die Passphrase über einen anderen Kanal als die Datei."
+    }
   },
   "logsControls": {
     "allCaptured": "Alle erfassten Datensätze",

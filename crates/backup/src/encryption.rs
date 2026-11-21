@@ -200,10 +200,84 @@ fn decrypt_capped(
     }
 }
 
+/// Seal `plaintext` in the backups' age passphrase envelope, entirely in
+/// memory: no plaintext copy reaches a file.
+pub fn seal_with_passphrase(plaintext: &[u8], passphrase: &str) -> Result<Vec<u8>> {
+    let encryptor = age::Encryptor::with_user_passphrase(passphrase.to_owned().into());
+    let mut sealed = Vec::new();
+    let mut writer = encryptor.wrap_output(&mut sealed).map_err(io_error)?;
+    writer.write_all(plaintext).map_err(io_error)?;
+    writer.finish().map_err(io_error)?;
+    Ok(sealed)
+}
+
+/// Open an envelope `seal_with_passphrase` (or a passphrase backup) wrote,
+/// in memory, under the backups' scrypt work-factor ceiling.
+pub fn open_with_passphrase(sealed: &[u8], passphrase: &str) -> Result<Vec<u8>> {
+    open_capped(sealed, passphrase, MAX_PASSPHRASE_WORK_FACTOR)
+}
+
+fn open_capped(sealed: &[u8], passphrase: &str, max_work_factor: u8) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let fail = |e: age::DecryptError| {
+        let reason = match e {
+            age::DecryptError::ExcessiveWork { required, .. } => format!(
+                "the file demands scrypt work factor {required}, above the \
+                 {max_work_factor} Kassiber accepts"
+            ),
+            other => other.to_string(),
+        };
+        AppError::new(
+            "age_decrypt_failed",
+            format!("age passphrase decryption failed: {reason}"),
+        )
+    };
+    let decryptor = age::Decryptor::new(sealed).map_err(fail)?;
+    let mut identity = age::scrypt::Identity::new(passphrase.to_owned().into());
+    identity.set_max_work_factor(max_work_factor);
+    let mut reader = decryptor
+        .decrypt(std::iter::once(&identity as &dyn age::Identity))
+        .map_err(fail)?;
+    let mut plaintext = Vec::new();
+    reader.read_to_end(&mut plaintext).map_err(|e| {
+        AppError::new(
+            "age_decrypt_failed",
+            format!("age passphrase decryption failed: {e}"),
+        )
+    })?;
+    Ok(plaintext)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::{Read, Seek, Write};
+
+    #[test]
+    fn memory_envelopes_round_trip_and_refuse_a_wrong_passphrase_or_excess_work() {
+        let mut recipient = age::scrypt::Recipient::new("memory-passphrase".to_owned().into());
+        recipient.set_work_factor(10);
+        let encryptor =
+            age::Encryptor::with_recipients(std::iter::once(&recipient as &dyn age::Recipient))
+                .unwrap();
+        let mut sealed = Vec::new();
+        let mut writer = encryptor.wrap_output(&mut sealed).unwrap();
+        writer.write_all(b"bundle bytes").unwrap();
+        writer.finish().unwrap();
+        assert!(!sealed.windows(6).any(|w| w == b"bundle"));
+        assert_eq!(
+            open_with_passphrase(&sealed, "memory-passphrase").unwrap(),
+            b"bundle bytes"
+        );
+        let wrong = open_with_passphrase(&sealed, "other-passphrase").unwrap_err();
+        assert_eq!(wrong.code, "age_decrypt_failed");
+        let heavy = open_capped(&sealed, "memory-passphrase", 9).unwrap_err();
+        assert!(
+            heavy.message.contains("work factor 10"),
+            "{}",
+            heavy.message
+        );
+    }
 
     /// A passphrase-encrypted file demanding work factor `log_n`.
     fn encrypted(dir: &Path, log_n: u8) -> std::path::PathBuf {

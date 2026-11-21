@@ -20,7 +20,7 @@
 //! A `gl_*` trigger no Kassiber version shipped is schema drift: the binary
 //! refuses the book, names the trigger and leaves the file unchanged.
 use super::support::*;
-use kassiber_store::rusqlite::{types::ValueRef, Connection};
+use kassiber_store::rusqlite::{self, types::ValueRef, Connection};
 use serde_json::{json, Value};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -52,22 +52,37 @@ fn ledger_book(cipher: bool) -> Sandbox {
     if cipher {
         let plain = sandbox.path("plain.sqlite3");
         std::fs::write(&plain, input).unwrap();
-        let conn = Connection::open(&plain).unwrap();
-        conn.execute(
-            &format!(
-                "ATTACH DATABASE ?1 AS encrypted KEY '{}'",
-                PASSPHRASE.replace('\'', "''")
-            ),
-            [database.to_str().unwrap()],
-        )
-        .unwrap();
-        conn.execute_batch(
-            "PRAGMA encrypted.cipher_compatibility=4; PRAGMA encrypted.kdf_iter=256000;
-             PRAGMA encrypted.cipher_page_size=4096; SELECT sqlcipher_export('encrypted');
-             DETACH DATABASE encrypted;",
-        )
-        .unwrap();
-        drop(conn);
+        let encrypt = || -> rusqlite::Result<()> {
+            let conn = Connection::open(&plain)?;
+            conn.execute(
+                &format!(
+                    "ATTACH DATABASE ?1 AS encrypted KEY '{}'",
+                    PASSPHRASE.replace('\'', "''")
+                ),
+                [database.to_str().unwrap()],
+            )?;
+            conn.execute_batch(
+                "PRAGMA encrypted.cipher_compatibility=4; PRAGMA encrypted.kdf_iter=256000;
+                 PRAGMA encrypted.cipher_page_size=4096; SELECT sqlcipher_export('encrypted');
+                 DETACH DATABASE encrypted;",
+            )
+        };
+        // SQLCipher registers sqlcipher_export only after SQLite already
+        // counts as initialized, so a connection opened while a parallel test
+        // initializes SQLite lacks it: retry with a fresh connection.
+        let mut result = encrypt();
+        for _ in 0..50 {
+            match &result {
+                Err(error)
+                    if format!("{error:?}").contains("no such function: sqlcipher_export") =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                    result = encrypt();
+                }
+                _ => break,
+            }
+        }
+        result.unwrap();
         std::fs::remove_file(plain).unwrap();
         sandbox.passphrase = Some(PASSPHRASE.to_owned());
     } else {
