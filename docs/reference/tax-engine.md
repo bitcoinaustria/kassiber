@@ -659,7 +659,9 @@ expenses.
 disposal takes its lots:
 
 - **global**: every lot of the asset (RP2's universal application), as
-  before.
+  before. The plain moving average there (`src/pool.rs`) prices each
+  fragment at the pool's running average but takes the lots FIFO, so the
+  oldest open lots' acquisitions date the disposal's holding period.
 - **wallet** (`src/wallets.rs`): only the disposing wallet's lots. It is
   country-neutral: the United States' per-wallet identification and
   Germany's per-wallet order of use are the same pass. One pass
@@ -703,6 +705,46 @@ A US book on the global scope fails when it has a disposal on or after
 2025-01-01 UTC: from 2025 units are identified per wallet or account
 (Treas. Reg. § 1.1012-1(j)); a book that spans the change uses
 `global_then_wallet`.
+
+## Policy choices
+
+Another tool can agree with Kassiber on prices and cost basis and still
+report different gains. Where that comes from one of these choices, it is
+policy, not a defect. The linked sections own each rule.
+
+- **Fees that buy nothing.** A network fee on a move between the user's
+  own wallets, and a fee-only spend, realize no gain or loss under the
+  generic `fee_units: basis` (generic, Austrian and US books): the fee
+  units leave the book with proceeds equal to their basis, and the tax
+  summary leaves the fee and move rows out ([rules countries](#rules-countries),
+  [US-TRANSFER-FEE](tax-country-us.md#events)). Some tools book zero
+  proceeds, a loss equal to the basis; a rules country with `disposal` or
+  `disposal_before_sale` realizes the fee at its value instead.
+- **Long-term threshold.** A generic book is long-term from
+  `tax_long_term_days` (365 by default) whole 24-hour days between the two
+  instants ([countries and pool scopes](#countries-and-pool-scopes)). The
+  anniversary rule (long-term only once the disposal date is after the
+  acquisition date's anniversary) is what `us` and a rules country's
+  `more_than_one_year` apply. On these boundary days the generic rule says
+  long-term and the anniversary rule short-term: exactly 365 days in a
+  common year, 365 days across 29 February (2023-03-01 to 2024-02-29), 366
+  days ending on the anniversary (2023-03-01 to 2024-03-01), and 29
+  February to the next 28 February.
+- **Holding period under the moving average.** A disposal's cost is the
+  running average, but its fragments take lots FIFO, so the oldest open
+  lots date its holding period, in the global and the wallet scope
+  ([matching methods](#matching-methods)). Some tools split the holding period pro rata across every open
+  lot; cost basis is the same, the long-term and short-term split is not.
+- **Holds fail closed.** A hold is never booked with a guessed basis while
+  the rest of the book is marked non-final. A hold that leaves an asset's
+  lots uncertain, such as an unpriced receipt or a non-sale disposal, holds
+  the asset's later disposals (`basis_provenance_incomplete`). An
+  unresolved custody quantity issue holds every later event of its exposure
+  pool (`custody_basis_barrier`) and blocks every report
+  ([why a transaction is quarantined](custody-resolution.md#why-a-transaction-is-quarantined)).
+  Unconfirmed and conflicting transactions are held explicitly
+  (`pending_onchain_confirmation`, `conflicting_spend`), not ignored
+  ([quarantines](tax.md#quarantines)).
 
 ## Schema 1: the fixture API
 
