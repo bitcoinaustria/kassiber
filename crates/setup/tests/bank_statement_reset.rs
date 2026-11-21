@@ -118,3 +118,47 @@ fn a_book_without_bank_tables_wipes_exactly_as_before() {
     assert!(get(get(&result, "removed").unwrap(), "bank_statement_lines").is_none());
     assert!(!kassiber_store::optional::bank_statements_present(conn).unwrap());
 }
+
+/// A keep-decisions reset would replace a 'changed' reservation with the
+/// changed transaction's facts, and the next resync would settle it and
+/// release the bank decisions it withholds without a review. Such a reset is
+/// refused until those lines are reviewed again; reviewing one admits it.
+#[test]
+fn keep_decisions_reset_refuses_while_a_reservation_withholds_bank_decisions() {
+    let f = Fixture::seed();
+    let (wid, pid) = seed_bank(&f);
+    let conn = f.book.connection();
+    conn.execute(
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('wallet',?,?,'Wallet','descriptor','2025')",
+        [&wid, &pid],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO book_reset_transactions(transaction_id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,amount_includes_fee,metadata_json,state,changed_fields_json,created_at) VALUES('tx',?,?,'wallet','fp','2025-03-05T10:00:00Z','inbound','BTC',1,0,0,'{}','changed','[\"amount\"]','2026')",
+        [&wid, &pid],
+    )
+    .unwrap();
+    let attachments = f._root.path().join("attachments");
+    let refused =
+        profile_reset::execute(conn, &dict::<&str>([]), &attachments, &f.sources).unwrap_err();
+    assert_eq!(
+        refused.code, "book_reset_withheld_bank_decisions",
+        "{refused:?}"
+    );
+    assert_eq!(
+        scalar(
+            conn,
+            "SELECT COUNT(*) FROM book_reset_transactions WHERE state='changed'"
+        ),
+        1,
+        "nothing was reset"
+    );
+    // Reviewing the line again (a decision newer than the reservation)
+    // admits the reset.
+    conn.execute(
+        "UPDATE bank_statement_line_decisions SET updated_at='2027'",
+        [],
+    )
+    .unwrap();
+    profile_reset::execute(conn, &dict::<&str>([]), &attachments, &f.sources).unwrap();
+}
