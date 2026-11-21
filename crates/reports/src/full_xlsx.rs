@@ -294,6 +294,53 @@ mod tests {
         assert!(!root.path().join("reports").exists());
     }
 
+    /// A configured Silent Payments wallet that has not finished its scan
+    /// has no freshness failure, but its holdings are unknown: final
+    /// exports wait for the scan, as the report-readiness snapshot does.
+    #[test]
+    fn final_exports_wait_for_a_pending_silent_payments_scan() {
+        let root = tempfile::tempdir().unwrap();
+        let book = kassiber_store::Book::create(&root.path().join("data"), None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(include_str!("../tests/data/book.sql"))
+            .unwrap();
+        conn.execute_batch(
+            "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) \
+             VALUES('sp','ws','p','Silent','silent-payment','{\"sp_descriptor\":\"sp(material)\"}','fixed')",
+        )
+        .unwrap();
+        let args = dict::<&str>([]);
+        let export =
+            || export_request::execute(conn, "ui.reports.export_xlsx", &args, root.path(), &Fixed);
+        let refused = export().unwrap_err();
+        assert_eq!(refused.code, "report_freshness_blocked");
+        assert!(!root.path().join("reports").exists());
+        // The CLI's final report exports are refused alike, before writing.
+        for command in [
+            "reports.export-xlsx",
+            "reports.export-csv",
+            "reports.export-capital-gains-csv",
+            "reports.export-austrian-e1kv-csv",
+            "reports.export-austrian-e1kv-xlsx",
+            "reports.export-exit-tax-xlsx",
+        ] {
+            let target = root.path().join("cli-export");
+            let args = dict([
+                ("file", s(target.to_str().unwrap())),
+                ("dir", s(target.to_str().unwrap())),
+            ]);
+            let refused =
+                export_request::execute(conn, command, &args, root.path(), &Fixed).unwrap_err();
+            assert_eq!(refused.code, "report_freshness_blocked", "{command}");
+            assert!(!target.exists(), "{command}");
+        }
+        // Scanning, but not complete: still refused.
+        conn.execute_batch("INSERT INTO freshness_source_states(profile_id,source_key,source_type,source_label,status,blocking_reports,checkpoint_json,updated_at) VALUES('p','onchain_wallet:sp','wallet','Silent','fresh',0,'{\"silent_payment\":{\"scan_complete\":false}}','fixed')").unwrap();
+        assert_eq!(export().unwrap_err().code, "report_freshness_blocked");
+        conn.execute_batch("UPDATE freshness_source_states SET checkpoint_json='{\"silent_payment\":{\"scan_complete\":true}}' WHERE source_key='onchain_wallet:sp'").unwrap();
+        assert_eq!(text(&export().unwrap(), "format"), "xlsx");
+    }
+
     #[test]
     fn full_xlsx_managed_request_preserves_format_and_freshness() {
         let root = tempfile::tempdir().unwrap();

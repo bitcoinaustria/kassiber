@@ -745,74 +745,8 @@ fn icon_line(tk: &Tk, glyph: &'static rune::Icon, color: Color, content: El) -> 
 
 /// `TaxSentences`: how each tax year moves, from the core's after-minus-before figures.
 fn tax_sentences(app: &App, tk: &Tk, artifact: &Value) -> Vec<El> {
-    let tax = &artifact["after"]["tax"];
-    let years = artifact["delta"]["years"].as_array();
-    let valid = tax["fiat_currency"].is_string()
-        && tax["years"].is_array()
-        && years.is_some_and(|ys| {
-            ys.iter().all(|y| {
-                y["year"].is_i64() && y["realized_gain_loss"].is_string() && y["income"].is_string()
-            })
-        });
-    if !valid {
-        return vec![];
-    }
-    let cur = tax["fiat_currency"].as_str().unwrap_or("EUR");
-    let hidden = app.prefs.hide_sensitive();
-    let money = |v: f64| {
-        if hidden {
-            MASK.to_owned()
-        } else {
-            crate::format::fiat(v.abs(), cur)
-        }
-    };
-    let mut out = vec![];
-    for y in years.unwrap() {
-        let year = y["year"].to_string();
-        let gain: f64 = y["realized_gain_loss"]
-            .as_str()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0.0);
-        let income: f64 = y["income"]
-            .as_str()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0.0);
-        let cents = y["estimated_tax_eur_cents"].as_f64().unwrap_or(0.0);
-        if gain.is_finite() && gain != 0.0 {
-            out.push(tr(
-                if gain > 0.0 {
-                    "review:transfersPage.effects.tax.gainUp"
-                } else {
-                    "review:transfersPage.effects.tax.gainDown"
-                },
-                &[("year", &year), ("amount", &money(gain))],
-            ));
-        }
-        if income.is_finite() && income != 0.0 {
-            out.push(tr(
-                if income > 0.0 {
-                    "review:transfersPage.effects.tax.incomeUp"
-                } else {
-                    "review:transfersPage.effects.tax.incomeDown"
-                },
-                &[("year", &year), ("amount", &money(income))],
-            ));
-        }
-        if cents != 0.0 {
-            out.push(tr(
-                if cents > 0.0 {
-                    "review:transfersPage.effects.tax.taxUp"
-                } else {
-                    "review:transfersPage.effects.tax.taxDown"
-                },
-                &[("year", &year), ("amount", &money(cents / 100.0))],
-            ));
-        }
-    }
-    if out.is_empty() {
-        out.push(t("review:transfersPage.effects.tax.none"));
-    }
-    out.into_iter()
+    tax_lines(artifact, app.prefs.hide_sensitive())
+        .into_iter()
         .map(|s| {
             icon_line(
                 tk,
@@ -826,6 +760,139 @@ fn tax_sentences(app: &App, tk: &Tk, artifact: &Value) -> Vec<El> {
             .key("preview-tax")
         })
         .collect()
+}
+
+/// The tax sentences' text. Every year the core lists changed (`delta.years`) gets at least
+/// one: its gain and income moves, an Austrian year's Kennzahl moves, and its indicative
+/// estimate, which the core sends as null when either side has none to compare (withheld or
+/// not applicable): unknown, never zero.
+fn tax_lines(artifact: &Value, hidden: bool) -> Vec<String> {
+    let tax = &artifact["after"]["tax"];
+    let years = artifact["delta"]["years"].as_array();
+    let valid = tax["fiat_currency"].is_string()
+        && tax["years"].is_array()
+        && years.is_some_and(|ys| {
+            ys.iter().all(|y| {
+                y["year"].is_i64() && y["realized_gain_loss"].is_string() && y["income"].is_string()
+            })
+        });
+    if !valid {
+        return vec![];
+    }
+    let cur = tax["fiat_currency"].as_str().unwrap_or("EUR");
+    let money = |v: f64| {
+        if hidden {
+            MASK.to_owned()
+        } else {
+            crate::format::fiat(v.abs(), cur)
+        }
+    };
+    let eur = |cents: f64| {
+        if hidden {
+            MASK.to_owned()
+        } else {
+            crate::format::fiat(cents.abs() / 100.0, "EUR")
+        }
+    };
+    let decimal = |v: &Value| -> f64 {
+        v.as_str()
+            .and_then(|s| s.parse::<f64>().ok())
+            .filter(|v| v.is_finite())
+            .unwrap_or(0.0)
+    };
+    let mut out = vec![];
+    for y in years.unwrap() {
+        let year = y["year"].to_string();
+        let before = out.len();
+        let gain = decimal(&y["realized_gain_loss"]);
+        let income = decimal(&y["income"]);
+        if gain != 0.0 {
+            out.push(tr(
+                if gain > 0.0 {
+                    "review:transfersPage.effects.tax.gainUp"
+                } else {
+                    "review:transfersPage.effects.tax.gainDown"
+                },
+                &[("year", &year), ("amount", &money(gain))],
+            ));
+        }
+        if income != 0.0 {
+            out.push(tr(
+                if income > 0.0 {
+                    "review:transfersPage.effects.tax.incomeUp"
+                } else {
+                    "review:transfersPage.effects.tax.incomeDown"
+                },
+                &[("year", &year), ("amount", &money(income))],
+            ));
+        }
+        // An Austrian year: each Kennzahl's change in EUR cents.
+        if let Some(fields) = y["kennzahlen"].as_object() {
+            for (code, change) in fields {
+                let cents = change.as_f64().unwrap_or(0.0);
+                if cents != 0.0 {
+                    out.push(tr(
+                        if cents > 0.0 {
+                            "review:transfersPage.effects.tax.kennzahlUp"
+                        } else {
+                            "review:transfersPage.effects.tax.kennzahlDown"
+                        },
+                        &[("year", &year), ("code", code), ("amount", &eur(cents))],
+                    ));
+                }
+            }
+        }
+        match y.get("estimated_tax_eur_cents") {
+            Some(Value::Null) => out.push(tr(
+                if y["indicative_status"] == "withheld" {
+                    "review:transfersPage.effects.tax.taxWithheld"
+                } else {
+                    "review:transfersPage.effects.tax.taxUnavailable"
+                },
+                &[("year", &year)],
+            )),
+            Some(v) => {
+                let cents = v.as_f64().unwrap_or(0.0);
+                if cents != 0.0 {
+                    out.push(tr(
+                        if cents > 0.0 {
+                            "review:transfersPage.effects.tax.taxUp"
+                        } else {
+                            "review:transfersPage.effects.tax.taxDown"
+                        },
+                        &[("year", &year), ("amount", &eur(cents))],
+                    ));
+                }
+            }
+            None => {}
+        }
+        // Listed as changed with nothing above to say (a status the copy doesn't name).
+        if out.len() == before {
+            out.push(tr(
+                "review:transfersPage.effects.tax.yearChanged",
+                &[("year", &year)],
+            ));
+        }
+    }
+    // The plan compares only the latest years and counts the rest per side; a change there
+    // isn't in `delta`, so "no changes" would overclaim.
+    let omitted = ["before", "after"]
+        .iter()
+        .filter_map(|side| artifact[side]["tax"]["years_omitted"].as_u64())
+        .max()
+        .unwrap_or(0);
+    if omitted > 0 {
+        if out.is_empty() {
+            out.push(t("review:transfersPage.effects.tax.noneInCompared"));
+        }
+        out.push(tr(
+            "review:transfersPage.effects.tax.yearsOmitted",
+            &[("count", &omitted.to_string())],
+        ));
+    } else if out.is_empty() {
+        out.push(t("review:transfersPage.effects.tax.none"));
+    }
+    out
 }
 
 /// `PreviewOutcomeView`.
@@ -1523,5 +1590,79 @@ mod reset_tests {
         RUNNING.with(|r| r.borrow_mut().insert("[\"w\",\"p\",7,\"ops\"]".into(), 0.0));
         app.reset_book_state();
         assert!(RUNNING.with(|r| r.borrow().is_empty()));
+    }
+}
+
+#[cfg(test)]
+mod tax_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// A year the core lists only for a Kennzahl move and an estimate that became withheld
+    /// (sent as null) is a change: never "No tax year changes", never a zero estimate.
+    #[test]
+    fn a_kennzahl_move_and_a_withheld_estimate_are_tax_changes() {
+        let artifact = json!({
+            "after": {"tax": {"fiat_currency": "EUR", "years": []}},
+            "delta": {"years": [{
+                "year": 2024, "realized_gain_loss": "0.00", "income": "0.00",
+                "kennzahlen": {"172": -12_345, "174": 12_345},
+                "estimated_tax_eur_cents": null, "indicative_status": "withheld"
+            }, {
+                "year": 2025, "realized_gain_loss": "0.00", "income": "0.00",
+                "kennzahlen": {}, "estimated_tax_eur_cents": null, "indicative_status": "indicative"
+            }]}
+        });
+        let lines = tax_lines(&artifact, false);
+        assert!(
+            !lines.iter().any(|l| l == "No tax year changes."),
+            "{lines:?}"
+        );
+        assert_eq!(lines.len(), 4, "{lines:?}");
+        assert!(lines[0].starts_with("2024: KZ 172"), "{lines:?}");
+        assert!(lines[2].contains("withheld"), "{lines:?}");
+        assert!(lines[3].starts_with("2025:"), "{lines:?}");
+        // A year with an estimate delta still reads as before.
+        let mut up = artifact.clone();
+        up["delta"]["years"] = json!([{
+            "year": 2024, "realized_gain_loss": "100.00", "income": "0.00",
+            "estimated_tax_eur_cents": 2750
+        }]);
+        assert_eq!(tax_lines(&up, false).len(), 2);
+    }
+
+    /// Pairing a 2015 sale in a book with ten later income years removes a 2015 gain the plan
+    /// never compared: 2015 is counted in `before.tax.years_omitted` and `delta` is empty.
+    #[test]
+    fn omitted_years_are_never_no_changes() {
+        let artifact = json!({
+            "before": {"tax": {"fiat_currency": "EUR", "years": [], "years_omitted": 1}},
+            "after": {"tax": {"fiat_currency": "EUR", "years": [], "years_omitted": 0}},
+            "delta": {"years": []}
+        });
+        assert_eq!(
+            tax_lines(&artifact, false),
+            vec![
+                "No changes in the tax years compared.",
+                "1 older tax year was not compared and may change.",
+            ]
+        );
+        // Listed changes keep their lines; the larger side's count follows them.
+        let mut changed = artifact.clone();
+        changed["after"]["tax"]["years_omitted"] = json!(3);
+        changed["delta"]["years"] = json!([{
+            "year": 2024, "realized_gain_loss": "-300.00", "income": "0.00"
+        }]);
+        let lines = tax_lines(&changed, false);
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert!(lines[0].starts_with("2024:"), "{lines:?}");
+        assert_eq!(
+            lines[1],
+            "3 older tax years were not compared and may change."
+        );
+        // Nothing omitted: the plain sentence stands.
+        let mut whole = artifact;
+        whole["before"]["tax"]["years_omitted"] = json!(0);
+        assert_eq!(tax_lines(&whole, false), vec!["No tax year changes."]);
     }
 }

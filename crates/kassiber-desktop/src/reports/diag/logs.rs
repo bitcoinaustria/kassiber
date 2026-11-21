@@ -291,6 +291,10 @@ pub fn on_key(app: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
             s.support_open = false;
             true
         }
+        rune::Key::Escape if app.reports.diag.replay.open => {
+            super::replay::close(app);
+            true
+        }
         rune::Key::Escape if has_filters(s) => {
             s.query = TextEdit::new("");
             s.level = None;
@@ -299,6 +303,7 @@ pub fn on_key(app: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         rune::Key::Text(t)
             if t == "/"
+                && !app.reports.diag.replay.open
                 && !ev.mods.cmd
                 && !ev.mods.ctrl
                 && tx.focused().is_none_or(|k| !k.contains("logs-search")) =>
@@ -870,6 +875,12 @@ fn export_menu(tk: &Tk, layer: &mut Vec<El>) {
             label: t("review:logs.exportMenu.log"),
             on: Rc::new(|a, tx| start_export(a, tx, "log")),
         },
+        Entry::Item {
+            key: "logs-exp-replay".into(),
+            glyph: Some(&I::SHIELD),
+            label: t("review:logs.exportMenu.replayBundle"),
+            on: Rc::new(|a, _| super::replay::open(a)),
+        },
         Entry::Sep,
         Entry::Item {
             key: "logs-clear".into(),
@@ -1398,6 +1409,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     if s.support_open {
         support_dialog(app, tk, layer);
     }
+    super::replay::dialog(app, tk, layer);
     if let Some(format) = s.confirm_raw {
         widgets::confirm(
             tk,

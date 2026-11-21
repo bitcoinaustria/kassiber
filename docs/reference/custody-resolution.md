@@ -81,6 +81,8 @@ establish an external origin.
 | Only some N:M destination receipts have synced | Remains unresolved until the destination population is complete; recorded and synthesized receipt paths must not overlap source allocations. |
 | Incomplete input ownership, unknown Liquid amounts, duplicate receipts, unexplained own residual | Review remains necessary. Connecting a missing wallet or completing sync may provide the missing facts. |
 | Proven custody movement with missing acquisition basis or required fee price | Custody remains understood; tax reporting can still be blocked until the accounting evidence is supplied. |
+| A Bisq escrow leg whose Funds > Transactions row names the txid of exactly one owned observed row, with the observed debit equal to Bisq's net amount | The Bisq import authors the pair (`provider_txid`, authored source `import`) and allocates the stated miner fee as a reviewed network fee; an edge the owner unpaired or dismissed is never paired again. See [Bisq](../exchanges/bisq.md). |
+| A Bisq trade the import cannot shape (mediated, arbitrated, or inconsistent) | `bisq_trade_review_required` holds every transaction its exports name until a custody review covers it or it is excluded; no deposit books as a disposal. |
 
 For HTLC claim/refund observations, LWK and Bitcoin Core RPC retain a small
 non-secret attestation after inspecting the witness. The matcher requires
@@ -414,6 +416,8 @@ year before 2022 has none (`not_applicable`, no crypto Kennzahlen yet), and
 previewing a book that is not the active one withholds it with
 `report_scope_not_active`. `delta` lists the years that change, after minus
 before; its `estimated_tax_eur_cents` is null when either side is withheld.
+A change in an omitted year is not in `delta`, so the desktop preview says how
+many older years it did not compare instead of reporting no change.
 The preview stores the computed journal inside a savepoint that is always
 rolled back, so it never persists. Apply recomputes both sides and refuses an
 artifact whose `delta` does not match them.

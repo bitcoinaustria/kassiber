@@ -5,12 +5,12 @@
 use rune::{Color, Cx, El, col, row, text};
 use serde_json::Value;
 
-use super::model::{self, Completeness, Glyph, Region, Report, Tone};
+use super::model::{self, Completeness, CoreReadiness, Glyph, Region, Report, Tone};
 use super::widgets::{arrow_link, card, info_note, select_menu, select_trigger, tnum, toggle};
 use super::{Popup, files};
 use crate::app::{App, Load};
 use crate::format;
-use crate::i18n::{t, tc, tr};
+use crate::i18n::{t, tr};
 use crate::icons as I;
 use crate::reports::ledger::common::{self as lc, Col, ColW, avail, column_widths, tw};
 use crate::theme::Tk;
@@ -59,6 +59,15 @@ fn completeness(app: &App) -> (Option<Completeness>, bool) {
     }
 }
 
+/// The core's report-readiness verdict from the page's `ui.report.blockers` read.
+fn core_readiness(app: &App) -> CoreReadiness {
+    match &app.reports.report.blockers {
+        Load::Ready(d) => CoreReadiness::parse(d),
+        Load::Idle | Load::Loading => CoreReadiness::Checking,
+        Load::Failed(_) => CoreReadiness::Unavailable,
+    }
+}
+
 /// The page's content width (`@container/reports`).
 fn page_width(app: &App, cx: &Cx<App>, tk: &Tk) -> f32 {
     avail(
@@ -103,6 +112,7 @@ pub fn page(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         comp.as_ref(),
         pending,
         blocking_source_count(app),
+        &core_readiness(app),
     );
     let provisional = model::provisional(&report, comp.as_ref(), pending);
     let mut page = lc::shell(tk)
@@ -510,8 +520,11 @@ fn breakdown(
         Some(arrow_link(
             tk,
             "rep-year-link",
-            &tr("reports:breakdown.yearLink", &[("year", &year.to_string())]),
-            model::transactions_href(year, &[]),
+            &tr(
+                "reports:breakdown.yearLink",
+                &[("year", &r.year_label(year))],
+            ),
+            r.transactions_href(year, &[]),
         )),
     );
     let card = card(tk, "rep-breakdown")
@@ -899,15 +912,10 @@ fn rules(tk: &Tk, r: &Report, year: i32) -> El {
         ]
     } else {
         let mut v = vec![
-            (t("reports:rules.region"), t("reports:rules.generic")),
+            (t("reports:rules.region"), r.region_name()),
             (t("reports:rules.method"), model::method_label(&r.method)),
         ];
-        if let Some(days) = r.long_term_days {
-            v.push((
-                t("reports:rules.longTermAfter"),
-                tc("reports:rules.days", days.max(0.0) as usize, &[]),
-            ));
-        }
+        v.extend(r.holding_rule());
         v.push((t("reports:rules.tax"), t("reports:rules.noRate")));
         v.push((t("reports:rules.taxYear"), r.tax_year_rule()));
         v

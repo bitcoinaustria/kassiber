@@ -163,6 +163,8 @@ pub fn import_draft(
         file: request.source_file.into(),
         format: Format::Document,
         mode: None,
+        companion: None,
+        timezone: None,
     };
     let paths =
         kassiber_paths::Context::from_env().map_err(|e| AppError::new(e.code, e.message))?;

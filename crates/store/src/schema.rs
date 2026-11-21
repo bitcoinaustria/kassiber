@@ -43,7 +43,9 @@ pub fn table_names() -> Vec<String> {
     names
 }
 pub fn verify(conn: &Connection) -> Result<()> {
-    let expected: Value = serde_json::from_str(MANIFEST).expect("checked-in schema manifest");
+    let manifest: Value = serde_json::from_str(MANIFEST).expect("checked-in schema manifest");
+    // Opt-in objects (bank statements, provider trade holds) are expected once the book uses them.
+    let expected = crate::optional::expected_objects(conn, &manifest)?;
     // Identical SQLite definitions imply identical parsed structure. Avoid
     // creating a second database and walking every pragma on the usual fresh
     // schema. Historical ALTER layouts still take the full normalized gate.

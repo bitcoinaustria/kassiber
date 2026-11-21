@@ -10,6 +10,7 @@
 mod ai;
 pub mod argparse;
 mod attachments;
+mod bank_statements;
 pub mod chat;
 mod chats;
 mod commercial;

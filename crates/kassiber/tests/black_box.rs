@@ -22,6 +22,8 @@ mod ai_document;
 mod ai_tools;
 #[path = "black_box/audit_package.rs"]
 mod audit_package;
+#[path = "black_box/bank_statements.rs"]
+mod bank_statements;
 #[path = "black_box/cli_proxy.rs"]
 mod cli_proxy;
 #[path = "black_box/evidence_summary.rs"]

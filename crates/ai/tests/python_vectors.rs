@@ -88,6 +88,7 @@ fn python_tools() -> impl Iterator<Item = &'static kassiber_ai::ToolEntry> {
     tools()
         .iter()
         .filter(|tool| !RUST_ONLY_TOOLS.contains(&tool.name.as_str()))
+        .filter(|tool| !kassiber_ai::catalog::RUST_ONLY_TOOLS.contains(&tool.name.as_str()))
 }
 
 #[test]
@@ -119,7 +120,10 @@ fn selection_matches_python() {
             Ok(selected) => {
                 let indexes: Vec<Value> = selected
                     .iter()
-                    .filter(|tool| !RUST_ONLY_TOOLS.contains(&tool.name.as_str()))
+                    .filter(|tool| {
+                        !RUST_ONLY_TOOLS.contains(&tool.name.as_str())
+                            && !kassiber_ai::catalog::RUST_ONLY_TOOLS.contains(&tool.name.as_str())
+                    })
                     .map(|tool| {
                         Value::from(
                             tools()

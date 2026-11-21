@@ -49,6 +49,8 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.reveal-descriptor",
     "maintenance.purge-legacy-ledger",
     "diagnostics.collect",
+    "diagnostics.replay-bundle.export",
+    "diagnostics.replay-bundle.verify",
     "backends.list",
     "backends.kinds",
     "wallets.kinds",
@@ -119,6 +121,13 @@ pub const IMPLEMENTED: &[&str] = &[
     "documents.create",
     "documents.attach",
     "documents.import-report",
+    "documents.import-statement",
+    "documents.statement-imports",
+    "documents.rollback-statement",
+    "source-funds.bank-lines.list",
+    "source-funds.bank-lines.suggest",
+    "source-funds.bank-lines.accept",
+    "source-funds.bank-lines.reject",
     "btcpay.key-url",
     "btcpay.provenance.sync",
     "btcpay.inspect",
@@ -173,6 +182,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.import-coinfinity",
     "wallets.import-21bitcoin",
     "wallets.import-strike",
+    "wallets.import-bisq",
     "wallets.import-ledger-live",
     "wallets.import-cointracking",
     "wallets.import-blockpit",
@@ -364,6 +374,7 @@ const NO_DATABASE_PATHS: &[&str] = &[
     "wallets.kinds",
     "wallets.ledger-template",
     "wallets.analyze-file",
+    "diagnostics.replay-bundle.verify",
 ];
 
 /// `_SECRET_DEST_FRAGMENTS`.

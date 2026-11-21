@@ -281,8 +281,21 @@ pub fn wealth(
     Ok(Wealth { rows, total })
 }
 
-/// The figures of `years` (every year with an event, and any the caller
-/// adds), in year order.
+/// Whether any wallet holds a positive quantity of an asset at the end of
+/// `year`.
+fn held_at_end(movements: &[Movement], year: i32) -> Result<bool> {
+    let mut holdings: BTreeMap<(&str, &str), Decimal> = BTreeMap::new();
+    for movement in movements.iter().filter(|m| year_of(&m.date) <= year) {
+        let slot = holdings
+            .entry((movement.wallet.as_str(), movement.asset.as_str()))
+            .or_insert_with(Decimal::zero);
+        *slot = add(slot, &movement.quantity)?;
+    }
+    Ok(holdings.values().any(Decimal::is_positive))
+}
+
+/// The figures of `years` (every year with an event, any the caller adds,
+/// and every year between them with a year-end holding), in year order.
 pub fn years(
     book: &Book,
     extra: &[i32],
@@ -301,6 +314,15 @@ pub fn years(
         .collect();
     all.sort_unstable();
     all.dedup();
+    // A year without events still has a year-end holding to declare.
+    if let (Some(&first), Some(&last)) = (all.first(), all.last()) {
+        for year in first + 1..last {
+            if !all.contains(&year) && held_at_end(&book.movements, year)? {
+                all.push(year);
+            }
+        }
+        all.sort_unstable();
+    }
     let five = Decimal::from(5u8);
     let two = Decimal::from(2u8);
     let mut out = Vec::new();
@@ -630,8 +652,9 @@ pub fn load(conn: &Connection, profile_id: &str, zone: &str, wallet: Option<&str
         conn,
         "SELECT je.transaction_id,je.occurred_at,je.entry_type,je.asset,je.quantity,\
          je.proceeds,je.proceeds_exact,je.cost_basis,je.cost_basis_exact,je.gain_loss,je.gain_loss_exact,\
-         je.calculation_json,je.calculation_compact,COALESCE(w.label,'') AS wallet,\
-         COALESCE(NULLIF(t.kind_override,''),t.kind,'') AS kind,t.fiat_value,t.fiat_value_exact,t.amount AS transaction_amount \
+         je.calculation_json,je.calculation_compact,je.fiat_value AS booked_value,je.fiat_value_exact AS booked_value_exact,COALESCE(w.label,'') AS wallet,\
+         COALESCE(NULLIF(t.kind_override,''),t.kind,'') AS kind,t.fiat_value,t.fiat_value_exact,t.amount AS transaction_amount,\
+         COALESCE(t.taxability_override,1)!=0 AS taxable \
          FROM journal_entries je LEFT JOIN wallets w ON w.id=je.wallet_id \
          LEFT JOIN transactions t ON t.id=je.transaction_id \
          WHERE je.profile_id=?1 AND (?2 IS NULL OR je.wallet_id=?2) \
@@ -657,6 +680,10 @@ pub fn load(conn: &Connection, profile_id: &str, zone: &str, wallet: Option<&str
                 quantity: signed.clone(),
             });
         }
+        // A reviewed non-taxable disposal still moves the holding.
+        if crate::layer_reads::non_taxable(entry) {
+            continue;
+        }
         match entry_type.as_str() {
             "income" => book.income.push(Income {
                 transaction_id,
@@ -669,13 +696,21 @@ pub fn load(conn: &Connection, profile_id: &str, zone: &str, wallet: Option<&str
                 value: exact(entry, "proceeds")?,
             }),
             "acquisition" => {
-                // An acquisition entry carries no value: its transaction's
-                // fiat value is the purchase price or the receipt's value.
-                let mut value = exact(entry, "fiat_value")?;
+                // The value the journal booked for this acquisition (its
+                // slice of the transaction), which a rate-priced purchase
+                // has though its transaction stores no fiat value. A journal
+                // without it falls back to the transaction's value.
+                let booked = truthy(value(entry, "booked_value_exact"))
+                    || !matches!(value(entry, "booked_value"), Value::Null);
+                let mut value = if booked {
+                    exact(entry, "booked_value")?
+                } else {
+                    exact(entry, "fiat_value")?
+                };
                 // A slice of the transaction carries its share.
                 let whole = int(entry, "transaction_amount").unsigned_abs();
                 let part = int(entry, "quantity").unsigned_abs();
-                if whole != 0 && part != whole {
+                if !booked && whole != 0 && part != whole {
                     value = value
                         .mul(&Decimal::from(part), &DECIMAL)
                         .and_then(|v| v.div(&Decimal::from(whole), &DECIMAL))
@@ -786,7 +821,15 @@ pub fn model(conn: &Connection, profile: &Value, wallet: Option<&str>) -> Result
     let book = load(conn, &profile_id, zone, wallet)?;
     let cache = valuations(conn, zone)?;
     let value = |year: i32, asset: &str| cache.get(&(year, asset.to_owned())).cloned();
-    let years = years(&book, &[], &value, &inputs)?;
+    // The latest year with a stated year-end value is reported while the
+    // book still holds coins then, though nothing moved since.
+    let mut latest = Vec::new();
+    if let Some(year) = cache.keys().map(|(year, _)| *year).max() {
+        if held_at_end(&book.movements, year)? {
+            latest.push(year);
+        }
+    }
+    let years = years(&book, &latest, &value, &inputs)?;
     let year_value = |y: &Year| -> Value {
         let ks = &y.ks36;
         dict([

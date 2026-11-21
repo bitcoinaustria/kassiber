@@ -309,6 +309,7 @@ fn apply_route(app: &mut App) {
         }
         f.txids = v;
     }
+    f.range = DateRange::parse(get("since"), get("until"), get("zone"));
     f.status = get("status").and_then(|v| Status::ALL.into_iter().find(|s| s.param() == v));
     f.flow = get("flow").and_then(|v| Flow::parse(&v));
     f.payment = get("payment").filter(|v| PAYMENTS.contains(&v.as_str()));
@@ -371,6 +372,13 @@ pub fn write_url(app: &mut App) {
     }
     if !f.txids.is_empty() {
         q.push(("txids".into(), f.txids.join(",")));
+    }
+    if let Some(r) = &f.range {
+        q.push(("since".into(), r.window.since.clone()));
+        q.push(("until".into(), r.window.until.clone()));
+        if let Some(z) = &r.zone {
+            q.push(("zone".into(), z.clone()));
+        }
     }
     if let Some(s) = f.status {
         q.push(("status".into(), s.param().into()));
@@ -959,5 +967,51 @@ mod switch_tests {
         );
         assert_eq!(app.txs.rows.len(), 1);
         assert_eq!(app.txs.rows[0].id, "b1");
+    }
+}
+
+#[cfg(test)]
+mod range_tests {
+    use super::*;
+
+    /// The Reports page's fiscal-year link (a group too large for exact ids) lists that year's
+    /// own bounds, not a calendar year, and keeps them in the URL.
+    #[test]
+    fn a_linked_date_range_bounds_the_list() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route(
+            "/transactions?period=all&since=2024-04-05T23%3A00%3A00Z\
+             &until=2025-04-05T22%3A59%3A59Z&zone=Europe%2FLondon"
+                .into(),
+        );
+        apply_route(&mut app);
+        let range = app.txs.filters.range.clone().expect("the range is read");
+        assert_eq!(range.label(), "2024-04-06 – 2025-04-05");
+        let ui = &app.txs;
+        let args = list_args(
+            &ui.filters,
+            ui.resolved(),
+            ui.years(),
+            false,
+            &ui.candidates,
+        );
+        assert_eq!(
+            (&args["since"], &args["until"]),
+            (
+                &json!("2024-04-05T23:00:00Z"),
+                &json!("2025-04-05T22:59:59Z")
+            )
+        );
+        assert!(app.route.0.contains("since=2024-04-05T23%3A00%3A00Z"));
+        // Malformed or reversed bounds are no range.
+        assert!(DateRange::parse(Some("2025".into()), Some("2024".into()), None).is_none());
+        assert!(
+            DateRange::parse(
+                Some("2025-04-05T23:00:00Z".into()),
+                Some("2024-04-05T23:00:00Z".into()),
+                None
+            )
+            .is_none()
+        );
     }
 }

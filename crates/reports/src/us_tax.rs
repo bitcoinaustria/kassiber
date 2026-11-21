@@ -230,7 +230,9 @@ fn civil(days: i64) -> String {
 }
 
 /// The book's rows, income and fees, from its journal, in journal order.
-/// A `wallet` id limits them to that wallet.
+/// A `wallet` id limits them to that wallet. Disposals and income of a
+/// transaction reviewed as not taxable are left out, as the review figures
+/// leave them out.
 pub fn load(
     conn: &Connection,
     profile_id: &str,
@@ -246,6 +248,7 @@ pub fn load(
          LEFT JOIN transactions t ON t.id=je.transaction_id \
          WHERE je.profile_id=?1 AND (?2 IS NULL OR je.wallet_id=?2) \
          AND je.entry_type IN ('disposal','income','fee','transfer_fee') \
+         AND (je.entry_type NOT IN ('disposal','income') OR COALESCE(t.taxability_override,1)!=0) \
          ORDER BY je.occurred_at,je.created_at,je.id",
         kassiber_store::rusqlite::params![profile_id, wallet],
     )?;

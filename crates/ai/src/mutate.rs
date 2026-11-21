@@ -27,7 +27,7 @@ use crate::ToolError;
 pub const CUSTODY_GAP_MUTATING_KINDS: [&str; 1] = ["ui.custody.review.apply"];
 
 /// `_SOURCE_FUNDS_MUTATING_AI_DAEMON_KINDS`.
-const SOURCE_FUNDS_MUTATIONS: [&str; 11] = [
+const SOURCE_FUNDS_MUTATIONS: [&str; 13] = [
     "ui.source_funds.sources.create",
     "ui.source_funds.links.create",
     "ui.source_funds.links.review",
@@ -39,6 +39,8 @@ const SOURCE_FUNDS_MUTATIONS: [&str; 11] = [
     "ui.source_funds.cases.save",
     "ui.source_funds.export_pdf",
     "ui.source_funds.export_bundle",
+    "ui.source_funds.bank_lines.accept",
+    "ui.source_funds.bank_lines.reject",
 ];
 
 /// The commercial writes whose payloads pass the evidence filter.

@@ -69,10 +69,16 @@ fn desktop_allowlist() -> BTreeSet<String> {
 }
 
 /// Kinds the desktop app allows that the Tauri shell does not, with the reason.
-const DESKTOP_ONLY_KINDS: &[(&str, &str)] = &[(
-    "ui.profiles.settings",
-    "Book settings reads any book's settings and choices (docs/reference/daemon.md); the Tauri dialog predates it",
-)];
+const DESKTOP_ONLY_KINDS: &[(&str, &str)] = &[
+    (
+        "ui.profiles.settings",
+        "Book settings reads any book's settings and choices (docs/reference/daemon.md); the Tauri dialog predates it",
+    ),
+    (
+        "ui.report.blockers",
+        "The Rune Reports page reads the core's report-readiness barrier (docs/reference/desktop.md); the Tauri Reports screen never did",
+    ),
+];
 
 fn tauri_list(name: &str) -> BTreeSet<String> {
     let text = read("ui-tauri/src-tauri/src/lib.rs");

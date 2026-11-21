@@ -450,7 +450,9 @@
       "clearPayment": "Filter {{label}} entfernen",
       "clearWithFees": "Filter „Mit Gebühren“ entfernen",
       "transactionSet": "{{count}} ausgewählt",
-      "clearTransactionSet": "Auswahl aufheben"
+      "clearTransactionSet": "Auswahl aufheben",
+      "dateRange": "{{start}} – {{end}}",
+      "clearDateRange": "Zeitraum zurücksetzen"
     },
     "empty": "Keine Transaktionen gefunden, die deinen Filtern entsprechen.",
     "pairedTransfer": {

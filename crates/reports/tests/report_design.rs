@@ -74,15 +74,27 @@ fn check_csv(files: &[(String, Vec<u8>)], name: &str) {
     }
 }
 
+/// The cases' golden. `KASSIBER_GOLDEN_WRITE=1` (refused under CI) rewrites
+/// each successful case's expected model from the current output, in the
+/// file's own compact form; review the diff, then publish the test data.
+const SUMMARY_GOLDEN: &str = "tests/data/summary_model.json";
+
 #[test]
 fn summary_model_matches_python_and_renders_deterministically() {
+    let write = std::env::var_os("KASSIBER_GOLDEN_WRITE").is_some_and(|v| v == "1");
+    assert!(
+        !write || std::env::var_os("CI").is_none(),
+        "KASSIBER_GOLDEN_WRITE is refused in CI"
+    );
     let cases = kassiber_pytext::loads(include_str!("data/summary_model.json")).unwrap();
-    let Value::List(cases) = cases else { panic!() };
+    let Value::List(mut cases) = cases else {
+        panic!()
+    };
     let root = tempfile::tempdir().unwrap();
     let book = Book::create(&root.path().join("data"), None).unwrap();
     let conn = book.connection();
     let mut rendered = 0;
-    for case in &cases {
+    for case in &mut cases {
         let name = kassiber_envelope::py_str(get(case, "name"));
         conn.execute_batch("SAVEPOINT oracle_fixture").unwrap();
         conn.execute_batch(include_str!("data/book.sql")).unwrap();
@@ -90,6 +102,12 @@ fn summary_model_matches_python_and_renders_deterministically() {
             .unwrap();
         let args =
             kassiber_pytext::loads(&kassiber_envelope::py_str(get(case, "args_json"))).unwrap();
+        if write {
+            if let Ok(model) = report_design::summary_model(conn, &args, &Fixed) {
+                let expected = kassiber_envelope::dict([("ok", get(&model, "summary").clone())]);
+                kassiber_envelope::set(case, "expected", expected);
+            }
+        }
         let expected = get(case, "expected");
         match report_design::summary_model(conn, &args, &Fixed) {
             Ok(model) => {
@@ -165,6 +183,19 @@ fn summary_model_matches_python_and_renders_deterministically() {
             .unwrap();
     }
     assert!(rendered >= 15, "{rendered}");
+    if write {
+        let compact = kassiber_pyjson::Options {
+            ensure_ascii: false,
+            separators: Some((",".into(), ":".into())),
+            ..Default::default()
+        };
+        let lines: Vec<String> = cases
+            .iter()
+            .map(|case| kassiber_pyjson::dumps(case, &compact).unwrap())
+            .collect();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(SUMMARY_GOLDEN);
+        std::fs::write(path, format!("[\n{}\n]\n", lines.join(",\n"))).unwrap();
+    }
 }
 
 #[test]

@@ -10,11 +10,7 @@ const AUTOINVEST: &[&str] = &[
     "base asset amount + symbol",
 ];
 const DIVIDENDS: &[&str] = &["id", "amount", "asset", "divtime"];
-const FIAT: &[&str] = &[
-    "AED", "ARS", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD",
-    "HUF", "ILS", "INR", "JPY", "KRW", "MXN", "NOK", "NZD", "PLN", "RON", "SEK", "SGD", "THB",
-    "TRY", "USD", "ZAR",
-];
+const FIAT: &[&str] = kassiber_transactions::FIAT_CODES;
 
 pub(super) fn parse(rows: Vec<csv::Row>) -> Result<Vec<csv::Row>, AppError> {
     let Some(first) = rows.first() else {

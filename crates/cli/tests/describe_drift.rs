@@ -18,6 +18,9 @@ use kassiber_pyjson::{dumps, Options, Value};
 /// must still be Python's.
 /// Each Rust-only leaf and the Python leaf it is described like.
 const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[("sync-bitpanda", "sync-binance")];
+/// Rust-only leaves with a grammar of their own and the Python leaf they
+/// follow: Python has nothing to compare, so they describe themselves.
+const RUST_ONLY_OWN: &[(&str, &str)] = &[("import-bisq", "import-strike")];
 
 /// Rust-only leaves with no Python sibling to be described like, each with
 /// the leaf it follows and its reviewed description
@@ -47,6 +50,17 @@ fn python_catalog() -> Value {
             .expect("sibling");
         let text = compact(&commands[at]).replace(sibling, leaf);
         commands.insert(at + 1, kassiber_pytext::loads(&text).unwrap());
+    }
+    for (leaf, sibling) in RUST_ONLY_OWN {
+        let at = commands
+            .iter()
+            .position(|c| compact(c).contains(&format!("\"wallets.{sibling}\"")))
+            .expect("sibling");
+        let own = leaves()
+            .into_iter()
+            .find(|l| l.dotted() == format!("wallets.{leaf}"))
+            .expect("rust-only leaf");
+        commands.insert(at + 1, describe_leaf(&own));
     }
     for (after, entry) in RUST_ONLY_ENTRIES {
         let at = commands
@@ -107,7 +121,19 @@ fn python_catalog() -> Value {
             .expect("command group");
         commands.insert(at + 1, entry);
     }
-    let added = kassiber_cli::spec::RUST_ONLY_LEAVES.len();
+    // Commands new in Rust describe themselves, in the Rust tree's order.
+    let mut python_entries = std::mem::take(commands).into_iter();
+    let mut added_new = 0;
+    for leaf in leaves() {
+        if kassiber_cli::spec::rust_only_new(&leaf.dotted()) {
+            commands.push(describe_leaf(&leaf));
+            added_new += 1;
+        } else {
+            commands.push(python_entries.next().expect("python entry"));
+        }
+    }
+    commands.extend(python_entries);
+    let added = kassiber_cli::spec::RUST_ONLY_LEAVES.len() + added_new;
     let Value::Int(count) = field(data, "count") else {
         panic!("count")
     };

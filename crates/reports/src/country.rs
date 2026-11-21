@@ -39,6 +39,15 @@ pub fn austrian(normalized: &str) -> bool {
     entry(normalized).is_some_and(|entry| entry.rules == Rules::Austria)
 }
 
+/// Whether the country disposes of fee units paid in the asset at their
+/// value (the UK, among others), so its fee entries realize a gain. Elsewhere
+/// a fee entry's proceeds are its basis and it realizes nothing.
+pub fn realizes_fee_units(normalized: &str) -> bool {
+    entry(normalized)
+        .and_then(|entry| entry.engine)
+        .is_some_and(|engine| engine.fee_units != kassiber_tax_countries::FeeUnits::Basis)
+}
+
 /// Whether the book's calendar is Europe/Vienna.
 pub fn vienna(normalized: &str) -> bool {
     entry(normalized).is_some_and(|entry| entry.timezone == kassiber_tax_countries::VIENNA)

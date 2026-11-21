@@ -685,10 +685,13 @@ pub fn build(
                     )?;
                 }
                 from_id = format!("source:{source_id}");
-                nodes.insert(
-                    from_id.clone(),
-                    disclosure::source_node(&endpoint, &mode, &q(upstream.clone()))?,
-                );
+                let mut node = disclosure::source_node(&endpoint, &mode, &q(upstream.clone()))?;
+                // Accepted bank-statement lines; absent when there are none.
+                let bank = super::source_funds_bank::evidence(conn, &source_id, &mode)?;
+                if !bank.is_empty() {
+                    kassiber_envelope::set(&mut node, "bank_evidence", Value::List(bank));
+                }
+                nodes.insert(from_id.clone(), node);
                 match source_type.as_str() {
                     "missing_history"=>finding(&mut findings,"missing_history","warning","Reviewed missing-history gap included; it is not a real root source.",&source_id,Some((&upstream,&source_asset)))?,
                     "opening_balance_attestation"=>finding(&mut findings,"opening_balance_attestation","warning","Opening balance is an attested prior-history stop, not a fully traced root source.",&source_id,None)?,

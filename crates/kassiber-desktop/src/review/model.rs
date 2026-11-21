@@ -425,6 +425,7 @@ fn reason_cause(reason: &str) -> Option<&'static str> {
         "native_transition_fee_timing_unresolved" => "nativeTransitionFeeTiming",
         "custody_authored_migration_incomplete" => "migrationIncomplete",
         "synthetic_import_duplicate_review_required" => "importDuplicate",
+        "bisq_trade_review_required" => "bisqTradeHold",
         "book_reset_decision_held" => "resetDecisionHeld",
         "custody_basis_barrier" => "basisBarrier",
         "transfer_pair_dependency_blocked" => "pairDependency",
@@ -624,7 +625,12 @@ pub fn cause_copy_full(
         .unwrap_or_else(|| t("journals:quarantine.cause.fallback.root"));
     let (required, available) = (fmt("required_msat"), fmt("available_msat"));
     let (pc, bc) = (cur("price_currency"), cur("book_currency"));
-    let values: [(&str, &str); 9] = [
+    let trade = opt(evidence, "bisq_trade_id")
+        .unwrap_or_else(|| t("journals:quarantine.cause.fallback.trade"));
+    let hold = opt(evidence, "bisq_hold_reason")
+        .map(|r| crate::wallets::add::bisq::reason(&r))
+        .unwrap_or_else(|| t("journals:quarantine.cause.fallback.holdReason"));
+    let values: [(&str, &str); 11] = [
         ("wallet", &wallet),
         ("wallets", &wallets),
         ("asset", &asset),
@@ -634,6 +640,8 @@ pub fn cause_copy_full(
         ("root", &root),
         ("priceCurrency", &pc),
         ("bookCurrency", &bc),
+        ("trade", &trade),
+        ("holdReason", &hold),
     ];
     let base = match key {
         Some(k) => format!("journals:quarantine.cause.{k}"),
@@ -1489,6 +1497,33 @@ mod tests {
             "needs_decision"
         );
         assert_eq!(action_label(&unlinked[0]), "Link it back");
+    }
+
+    #[test]
+    fn a_held_bisq_trade_names_its_trade_and_reason() {
+        let reason = "bisq_trade_review_required";
+        let evidence = json!({
+            "bisq_trade_id": "AbC12",
+            "bisq_trade_status": "Mediation",
+            "bisq_hold_reason": "not_completed",
+        });
+        assert_eq!(
+            category_for_reason(reason, &evidence, &Value::Null),
+            "needs_decision"
+        );
+        let copy = cause_copy(reason, "needs_decision", &evidence, None, None);
+        assert_eq!(copy.title, "A Bisq trade waits for your review");
+        assert!(copy.why.contains("AbC12"), "{}", copy.why);
+        assert!(
+            copy.why
+                .contains("not a plainly completed trade (mediated, arbitrated or unknown status)"),
+            "{}",
+            copy.why
+        );
+        // Without evidence the copy still reads, with the fallbacks.
+        let bare = cause_copy(reason, "needs_decision", &json!({}), None, None);
+        assert!(bare.why.contains("a Bisq trade"), "{}", bare.why);
+        assert!(!exclusion_fits_reason(reason, "needs_decision", &evidence));
     }
 
     #[test]

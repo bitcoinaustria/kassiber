@@ -688,23 +688,15 @@ fn privacy_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
 
 /// Locked: the title bar keeps only the Alpha chip, right-aligned.
 fn locked_bar(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
-    // The chip sits where the unlocked bar's content starts: right after the traffic lights, or
-    // at the edge in full screen (an owner request; the web pins it to the right).
-    let lead = if cfg!(target_os = "macos") && !full_screen() {
-        80.0_f32.max(tk.r(0.5))
-    } else {
-        tk.r(0.75)
-    };
-    let r = row()
+    // Empty while locked, but still the window's drag region: with drag-regions-only chrome
+    // (`main.rs`), a bar without `.window_drag()` cannot move the window.
+    let _ = (app, layer);
+    row()
         .key("titlebar")
         .w_full()
         .h(40.0)
-        .center_y()
-        .pl(lead)
-        .pr(tk.r(0.75))
-        .fill(tk.chrome);
-    let _ = (app, layer);
-    r
+        .fill(tk.chrome)
+        .window_drag()
 }
 
 pub fn view(app: &App, tk: &Tk, folded: bool, narrow: bool, layer: &mut Vec<El>) -> El {

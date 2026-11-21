@@ -801,6 +801,29 @@ pub fn auto_pair_before_journals_captured(
     crate::sql::capture_sqlite(|| Ok(auto_pair_before_journals(c, scope, sources)?))
 }
 
+/// Whether the owner has turned this edge down: unpaired a pair of exactly
+/// these legs (and not paired them again), or dismissed the edge until a
+/// time after `now`. Importers that pair from provider evidence ask this
+/// first, as the automatic pairing pass does, so they never undo a decision.
+pub(crate) fn declined_edge(
+    c: &Connection,
+    scope: &Scope<'_>,
+    out: &str,
+    inbound: &str,
+    now: &str,
+) -> Result<bool> {
+    let edge = (out.to_owned(), inbound.to_owned());
+    if unpaired(c, scope)?.contains(&edge) {
+        return Ok(true);
+    }
+    let dismissals = rows(
+        c,
+        "SELECT * FROM transaction_pair_dismissals WHERE profile_id=? AND out_transaction_id=? AND in_transaction_id=?",
+        [scope.profile_id, out, inbound],
+    )?;
+    Ok(matcher::active_dismissals(&dismissals, now).contains(&edge))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

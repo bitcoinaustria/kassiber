@@ -8247,6 +8247,98 @@
    "summary_template": "Check journal reproducibility",
    "egresses": false,
    "reversible": false
+  },
+  {
+   "name": "ui.source_funds.bank_lines.suggest",
+   "wire_name": "ui_source_funds_bank_lines_suggest",
+   "description": "Read exact matches between outgoing bank-statement lines and Bitcoin purchases, with reasons, and the purchases left unmatched (no exact amount, or ambiguous). Bank lines are evidence only: IBANs are masked, a counterparty is named only when it is a known exchange, and remittance text is withheld. Use before proposing an accept or reject.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "transaction": {
+      "type": "string",
+      "description": "Only suggestions involving this purchase id."
+     }
+    }
+   },
+   "kind_class": "read_only",
+   "daemon_kind": "ui.source_funds.bank_lines.suggest",
+   "summary_template": "Read bank-statement match suggestions",
+   "egresses": false,
+   "reversible": false
+  },
+  {
+   "name": "ui.source_funds.bank_lines.accept",
+   "wire_name": "ui_source_funds_bank_lines_accept",
+   "description": "After explicit consent, accept bank-statement lines as the fiat source of Bitcoin purchases: reuses or creates a reviewed fiat_purchase source per purchase and links it. Evidence only; grants no basis or ownership. Pass the line_ids and transaction_ids of a suggestion.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "line_ids",
+     "transaction_ids"
+    ],
+    "properties": {
+     "line_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 12
+     },
+     "transaction_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 12
+     }
+    }
+   },
+   "kind_class": "mutating",
+   "daemon_kind": "ui.source_funds.bank_lines.accept",
+   "summary_template": "Accept bank lines as source-of-funds evidence",
+   "egresses": false,
+   "reversible": false
+  },
+  {
+   "name": "ui.source_funds.bank_lines.reject",
+   "wire_name": "ui_source_funds_bank_lines_reject",
+   "description": "After explicit consent, reject pairings of bank-statement lines with purchases so they are not suggested again; withdraws previously accepted evidence for those pairs while keeping the reviewed source.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "line_ids",
+     "transaction_ids"
+    ],
+    "properties": {
+     "line_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 12
+     },
+     "transaction_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 12
+     }
+    }
+   },
+   "kind_class": "mutating",
+   "daemon_kind": "ui.source_funds.bank_lines.reject",
+   "summary_template": "Reject bank-line matches",
+   "egresses": false,
+   "reversible": false
   }
  ],
  "aliases": {

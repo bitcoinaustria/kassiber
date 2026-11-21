@@ -7,6 +7,7 @@ mod durable;
 pub mod encryption;
 pub mod layout;
 pub mod observer;
+pub mod optional;
 pub mod pinned;
 pub mod price_currency;
 pub mod projects;
@@ -22,6 +23,11 @@ pub mod transaction_order;
 mod unreleased;
 mod write_lock;
 pub use schema::table_names;
+/// The schema fingerprint of an open connection (the replay bundle's
+/// manifest names the schema its inputs were read from).
+pub fn schema_fingerprint(conn: &rusqlite::Connection) -> Result<String> {
+    schema::fingerprint(conn)
+}
 pub use write_lock::{
     begin_write_savepoint, debug_assert_no_write, write_savepoint, write_transaction,
 };

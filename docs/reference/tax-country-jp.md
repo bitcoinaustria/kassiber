@@ -275,6 +275,7 @@ What Kassiber does today, and where (2026-11-07).
 | tax years from 2027 | the year is refused, `jp_separate_taxation_regime_unconfirmed` (its figures are withheld; the review lists the year) |
 | tax years before 2009 | refused, `jp_tax_year_unknown` |
 | a disposal without known acquisitions | quarantine (`insufficient_lots` or `missing_cost_basis`), the coin's year withheld as `missing_cost_basis`, the year's total `null`; no automatic 5 % rule |
+| a disposal reviewed as not taxable (`taxability_override = 0`) | the 計算書 has no line for it, so the coin's year is withheld as `non_taxable_disposal_unsupported`, the sale carries that review flag, and the year's total is `null`; its units still leave the holding, so later years open correctly. A non-taxable receipt is no income |
 | airdrop, routing income, unlabelled income | quarantine `jp_airdrop_requires_review`, `jp_routing_income_requires_review`, `jp_income_requires_review` |
 | lost, stolen or theft outflow | quarantine `jp_lost_requires_review` |
 | the wallet pool scope, a lot method | refused by the profile; the engine refuses the averages on the wallet scope |

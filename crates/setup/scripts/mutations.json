@@ -690,5 +690,15 @@
       "network_evidence_matches_python_including_absence_and_contradictions"
     ],
     "rule": "Only a BTC row reads Binance's BTC rail; a Liquid row naming it contradicts itself."
+  },
+  {
+    "id": "partition-refuses-bisq-holds",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "    if kassiber_store::optional::present(conn, holds)\n",
+    "replace": "    if false && kassiber_store::optional::present(conn, holds)\n",
+    "expect_failing": [
+      "partition_refuses_a_book_that_holds_bisq_trades"
+    ],
+    "rule": "A network partition refuses a book with held Bisq trades instead of dropping the holds."
   }
 ]

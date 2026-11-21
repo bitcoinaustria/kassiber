@@ -637,3 +637,63 @@ fn partition_export_preserves_ids_encryption_attachments_and_source() {
             .unwrap());
     }
 }
+
+/// Bank-statement evidence is not split by network: a partition of a book
+/// holding statements is refused by name, never exported without them.
+#[test]
+fn partition_refuses_a_book_with_bank_statements() {
+    let f = seed(5);
+    let conn = f.book.connection();
+    let args = dict([
+        ("environment", s("main")),
+        ("wallet_ids", Value::List(vec![s("wallet-a")])),
+    ]);
+    assert!(
+        partition::plan(conn, "profile-1", &args).is_ok(),
+        "empty bank tables do not block"
+    );
+    conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+    kassiber_store::optional::ensure_bank_statement_schema(conn).unwrap();
+    conn.execute_batch("COMMIT").unwrap();
+    conn.execute_batch("INSERT INTO external_documents(id,workspace_id,profile_id,document_type,label,created_at,updated_at) VALUES('doc','ws-1','profile-1','statement','Statement','2026','2026'); INSERT INTO bank_statement_imports(id,workspace_id,profile_id,document_id,source_format,file_sha256,file_key,account_keys,imported_at) VALUES('imp','ws-1','profile-1','doc','csv','a','k','a','2026');").unwrap();
+    let error = partition::plan(conn, "profile-1", &args).unwrap_err();
+    assert_eq!(
+        get(error.details.as_ref().unwrap(), "reason"),
+        Some(&s("bank_statements_partition"))
+    );
+}
+
+#[test]
+fn partition_refuses_a_book_that_holds_bisq_trades() {
+    let f = seed(5);
+    let conn = f.book.connection();
+    let args = dict([
+        ("environment", s("main")),
+        ("wallet_ids", Value::List(vec![s("wallet-a")])),
+    ]);
+    kassiber_store::optional::ensure(conn, kassiber_store::optional::PROVIDER_TRADE_HOLDS).unwrap();
+    partition::plan(conn, "profile-1", &args).unwrap();
+    conn.execute(
+        "INSERT INTO provider_trade_holds(id,workspace_id,profile_id,provider,trade_id,trade_status,reason,state,created_at,updated_at) VALUES('hold-1','ws-1','profile-1','bisq','trade-1','Mediated','not_completed','held','2026-01-01','2026-01-01')",
+        [],
+    )
+    .unwrap();
+    let refused = partition::plan(conn, "profile-1", &args).unwrap_err();
+    assert!(
+        refused.message.contains("holds Bisq trades"),
+        "{}",
+        refused.message
+    );
+    // A cleared hold rests on the completed trade's legs: without them (a
+    // rolled-back import) it is open again and still refuses.
+    conn.execute("UPDATE provider_trade_holds SET state='cleared'", [])
+        .unwrap();
+    let refused = partition::plan(conn, "profile-1", &args).unwrap_err();
+    assert!(refused.message.contains("holds Bisq trades"));
+    conn.execute(
+        "UPDATE transactions SET external_id='bisq:trade-1:trade' WHERE id=(SELECT min(id) FROM transactions WHERE profile_id='profile-1')",
+        [],
+    )
+    .unwrap();
+    partition::plan(conn, "profile-1", &args).unwrap();
+}

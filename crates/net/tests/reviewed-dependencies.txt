@@ -40,6 +40,7 @@ objc2-app-kit std NSWindow
 objc2-foundation
 pyo3 macros abi3-py310
 rpassword
+roxmltree
 rusqlite bundled-sqlcipher bundled-sqlcipher-vendored-openssl backup functions hooks
 security-framework OSX_10_15
 security-framework-sys
@@ -105,6 +106,10 @@ kassiber-backup test-hooks
 bitcoin_hashes
 
 kassiber-diagnostics test-hooks
+
+# Replay bundles: journal recomputation, keyed pseudonyms and the backups'
+# in-memory age envelope; no transport, file access only for the chosen bundle.
+kassiber-replay
 
 # Pure BDK wallet/index/update types; no protocol client or storage features.
 bdk_wallet std

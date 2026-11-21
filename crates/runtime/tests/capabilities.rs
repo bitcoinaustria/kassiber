@@ -45,6 +45,7 @@ fn tables_match_python() {
     // carry their siblings' capability; Python has no entry for them.
     let rust_only = [
         ("wallets.sync-bitpanda", "wallets.sync-binance"),
+        ("wallets.import-bisq", "wallets.import-strike"),
         ("journals.verify", "journals.list"),
         // Pinning a certificate is a trust decision, admin like revealing a token.
         ("backends.trust-certificate", "backends.reveal-token"),
@@ -54,6 +55,22 @@ fn tables_match_python() {
         // profiles get, a change as profiles set (an accounting decision).
         ("profiles.settings", "profiles.get"),
         ("profiles.configure", "profiles.set"),
+        // Bank statements (docs/reference/bank-statements.md).
+        ("documents.import-statement", "documents.import-report"),
+        ("documents.statement-imports", "documents.list"),
+        ("documents.rollback-statement", "imports.rollback"),
+        ("source-funds.bank-lines.list", "source-funds.links.list"),
+        ("source-funds.bank-lines.suggest", "source-funds.links.list"),
+        (
+            "source-funds.bank-lines.accept",
+            "source-funds.links.review",
+        ),
+        (
+            "source-funds.bank-lines.reject",
+            "source-funds.links.review",
+        ),
+        ("diagnostics.replay-bundle.verify", "journals.list"),
+        ("diagnostics.replay-bundle.export", "diagnostics.collect"),
     ];
     for (leaf, sibling) in rust_only {
         assert_eq!(cli_capability(leaf), cli_capability(sibling), "{leaf}");
@@ -89,6 +106,32 @@ fn tables_match_python() {
         ("ui.transfers.pair_options", "ui.transfers.list"),
         // Any book's settings and choices: a read beside the books snapshot.
         ("ui.profiles.settings", "ui.profiles.snapshot"),
+        (
+            "ui.documents.import_statement",
+            "ui.documents.import_report",
+        ),
+        ("ui.documents.statement_imports", "ui.documents.list"),
+        ("ui.documents.rollback_statement", "ui.imports.rollback"),
+        (
+            "ui.source_funds.bank_lines.list",
+            "ui.source_funds.links.list",
+        ),
+        (
+            "ui.source_funds.bank_lines.suggest",
+            "ui.source_funds.links.list",
+        ),
+        (
+            "ui.source_funds.bank_lines.accept",
+            "ui.source_funds.links.review",
+        ),
+        (
+            "ui.source_funds.bank_lines.reject",
+            "ui.source_funds.links.review",
+        ),
+        (
+            "ui.diagnostics.replay_bundle.export",
+            "ui.transactions.export_csv",
+        ),
     ];
     for (kind, sibling) in rust_only_kinds {
         assert!(daemon_capability(kind).is_some(), "{kind}");

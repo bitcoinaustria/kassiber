@@ -108,6 +108,9 @@ pub struct Streams {
 }
 
 /// `USAGE_HINT` of the `--machine` usage-error envelope.
+/// `diagnostics replay-bundle verify`: needs no book, project or broker.
+pub(crate) const REPLAY_VERIFY: &str = "diagnostics.replay-bundle.verify";
+
 const USAGE_HINT: &str = "Global flags such as --machine, --format, --output, --project, and --data-root go before the subcommand. Check `kassiber --machine commands describe <command path>` for the exact arguments.";
 
 /// The global flags after parsing.
@@ -424,9 +427,12 @@ pub fn run(
     // _maybe_migrate_default_state_root, before broker routing and
     // bootstrap. `commands describe` never migrates (nor bootstraps), and
     // neither does `backup import`, which restores into the root it finds.
+    // A replay bundle carries its own inputs: verifying one migrates,
+    // selects and routes no project.
     let migrate = globals.selection.data_root.is_none()
         && globals.selection.env_file.is_none()
         && !matches!(path.first(), Some(&"commands") | Some(&"verify-download"))
+        && dotted != REPLAY_VERIFY
         && path[..] != ["backup", "import"]
         && !(path.first() == Some(&"operator")
             && matches!(
@@ -735,6 +741,12 @@ pub fn run(
             .and_then(|payload| emit(&mut sink, format, &kind, payload)),
         "wallets.import-ledger" if namespace.flag("dry_run") => crate::wallets::preview_ledger(&namespace)
             .and_then(|payload| emit(&mut sink,format,&kind,payload)),
+        // No book, configuration or network: the bundle carries its inputs.
+        "diagnostics.replay-bundle.verify" => crate::diagnostics::replay_passphrase(&namespace, false)
+            .and_then(|passphrase| {
+                store.local_service(&dotted, &crate::diagnostics::replay_arguments(&namespace, &passphrase))
+            })
+            .and_then(|payload| emit(&mut sink, format, &kind, payload)),
         "wallets.ledger-template" => crate::wallets::ledger_template(&namespace)
             .and_then(|payload| emit(&mut sink, format, &kind, payload)),
         // No book: the runtime layout is bootstrapped as in Python.
@@ -1008,6 +1020,18 @@ fn book_command(
                 !bootstrap.selection_explicit,
             )?;
         }
+        if operation == "diagnostics.replay-bundle.export" {
+            if !namespace.flag("confirm") {
+                return Err(AppError::new(
+                    "confirmation_required",
+                    "A replay bundle holds the exact amounts, dates, exchange rates and tax settings of this book; identifiers and labels are pseudonymized",
+                )
+                .with_hint("Re-run with --confirm to export it; see `kassiber diagnostics replay-bundle export --help`."));
+            }
+            let passphrase = crate::diagnostics::replay_passphrase(namespace, true)?;
+            let args = crate::diagnostics::replay_arguments(namespace, &passphrase);
+            return emit(book.replay_bundle_export(&args, build.version)?);
+        }
         if operation == "diagnostics.collect" {
             return emit(crate::diagnostics::execute(
                 book.as_mut(),
@@ -1118,6 +1142,13 @@ fn book_command(
         }
         if operation.starts_with("loans.") {
             return emit(crate::loans::execute(book.as_mut(), operation, namespace)?);
+        }
+        if let Some(kind) = crate::bank_statements::kind(operation) {
+            return emit(crate::bank_statements::execute(
+                book.as_mut(),
+                kind,
+                namespace,
+            )?);
         }
         if operation.starts_with("documents.") {
             return emit(crate::documents::execute(

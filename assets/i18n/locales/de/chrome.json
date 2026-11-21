@@ -799,15 +799,14 @@
   "demo": {
     "badge": "Demo",
     "region": "Demo-Buch",
-    "body": "Beispieldaten auf Regtest, getrennt von deinen eigenen Büchern. Es gibt keinen Sync-Server; „Demo zurücksetzen“ beginnt von vorn.",
+    "body": "Beispieldaten auf Regtest, getrennt von deinen eigenen Büchern. Zum Verlassen oder Zurücksetzen auf den Buchnamen klicken.",
     "leave": "Demo verlassen",
     "reset": "Demo zurücksetzen",
-    "more": "Weitere Demo-Aktionen",
-    "connectAgent": "Agent verbinden",
     "preparing": "Demo-Buch wird vorbereitet…",
     "startFailed": "Das Demo-Buch konnte nicht gestartet werden.",
     "leaveFailed": "Die Demo konnte nicht verlassen werden.",
     "resetDone": "Das Demo-Buch wurde zurückgesetzt.",
+    "opened": "Du bist im Demo-Buch: Beispieldaten, getrennt von deinen eigenen Büchern. Zum Verlassen auf den Buchnamen klicken.",
     "tryEntry": "Demo-Buch ausprobieren",
     "mcpHint": "In der Demo öffnet der Agent-Befehl nur das Demo-Buch und nutzt die eigenen Agent-Einstellungen der Demo."
   }

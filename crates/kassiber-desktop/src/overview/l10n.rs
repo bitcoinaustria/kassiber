@@ -153,10 +153,11 @@ pub fn market_caption(s: &Snapshot, now: f64) -> (String, bool) {
 }
 
 fn source_label(source: &str) -> String {
-    if source == "manual" {
-        t("overview:marketRate.manual")
-    } else {
-        crate::model::source_label(source)
+    match source {
+        "manual" => t("overview:marketRate.manual"),
+        // The demo book's synthetic rates (docs/reference/demo.md#the-payload).
+        crate::model::DEMO_RATE_SOURCE => t("overview:marketRate.sample"),
+        _ => crate::model::source_label(source),
     }
 }
 

@@ -142,6 +142,15 @@ fn catalog() -> &'static Catalog {
 }
 
 /// `TOOL_CATALOG`, in order.
+/// Tools new in the Rust backend, absent from the frozen Python vectors
+/// (bank statements, `docs/reference/bank-statements.md`). They are appended
+/// to the catalog so every Python tool keeps its position.
+pub const RUST_ONLY_TOOLS: &[&str] = &[
+    "ui.source_funds.bank_lines.suggest",
+    "ui.source_funds.bank_lines.accept",
+    "ui.source_funds.bank_lines.reject",
+];
+
 pub fn tools() -> &'static [ToolEntry] {
     &catalog().tools
 }

@@ -930,7 +930,8 @@
       "supportBundle": "Support bundle",
       "markdown": "Markdown",
       "jsonl": "JSONL",
-      "log": "Log"
+      "log": "Log",
+      "replayBundle": "Replay bundle…"
     },
     "clearLogsAria": "Clear logs",
     "support": {
@@ -969,7 +970,22 @@
     "filterLevel": "level {{level}}",
     "filterModule": "module {{module}}",
     "filterSearch": "search \"{{query}}\"",
-    "jumpToLatest": "↓ Jump to latest ({{count}} new)"
+    "jumpToLatest": "↓ Jump to latest ({{count}} new)",
+    "replayBundle": {
+      "title": "Export replay bundle",
+      "description": "A replay bundle lets a maintainer re-run this book's journal calculation and compare the results, without your book.",
+      "contains": "It holds the exact amounts, dates, exchange rates and tax settings of this book's transactions. Transaction ids, addresses, labels and notes are replaced by pseudonyms.",
+      "excludes": "It holds no descriptors, xpubs, keys, credentials or server addresses. Anyone with the file and its passphrase can read the amounts: share it only with someone you trust and send the passphrase separately.",
+      "understood": "I understand what the bundle holds.",
+      "passphrase": "Bundle passphrase",
+      "confirmPassphrase": "Repeat passphrase",
+      "tooShort_one": "Use at least {{count}} character.",
+      "tooShort_other": "Use at least {{count}} characters.",
+      "mismatch": "The passphrases do not match.",
+      "export": "Export bundle",
+      "saved": "Replay bundle saved:",
+      "sharePassphrase": "Share the passphrase over a different channel than the file."
+    }
   },
   "logsControls": {
     "allCaptured": "All captured records",
@@ -1341,7 +1357,15 @@
         "incomeUp": "{{year}}: {{amount}} more income.",
         "incomeDown": "{{year}}: {{amount}} less income.",
         "taxUp": "{{year}}: about {{amount}} more tax.",
-        "taxDown": "{{year}}: about {{amount}} less tax."
+        "taxDown": "{{year}}: about {{amount}} less tax.",
+        "kennzahlUp": "{{year}}: KZ {{code}} rises by {{amount}}.",
+        "kennzahlDown": "{{year}}: KZ {{code}} falls by {{amount}}.",
+        "taxWithheld": "{{year}}: the tax estimate is withheld until reports are ready, so its change is not known.",
+        "taxUnavailable": "{{year}}: no tax estimate to compare.",
+        "yearChanged": "{{year}}: the tax figures change.",
+        "noneInCompared": "No changes in the tax years compared.",
+        "yearsOmitted_one": "{{count}} older tax year was not compared and may change.",
+        "yearsOmitted_other": "{{count}} older tax years were not compared and may change."
       }
     },
     "unlink": {

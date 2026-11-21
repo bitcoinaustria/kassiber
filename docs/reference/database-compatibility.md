@@ -24,6 +24,8 @@ and asserts the resulting behavior, not merely that schema creation succeeds.
 | Kept reset decisions (`book_reset_transactions`, `book_reset_parked_rows`) | Not applicable | Not applicable | Tested in `test_book_reset_keeps_decisions.py` | Created empty by the base schema on every open; no audit or input-version bump. Only "Reset book data" writes them and only an import, the wipe, or a wallet/book delete removes rows. A book without rows builds exactly as before. See [book reset](book-reset.md). |
 | A book's own tax calendar (`settings` key `tax.calendar.profile.<id>`) | Not applicable | Not applicable | Tested in `crates/setup/tests/book_settings.rs` and `crates/custody` (`a_books_own_calendar_reaches_the_engine_only_when_chosen`) | No schema object: a JSON value `{"tax_year_start": "MM-DD", "timezone": "Area/City"}` beside the book's other per-book settings, written only by a book settings change and only with what differs from the country's calendar. A book without the key, every existing one included, keeps its country's calendar, its engine requests and its stored rows. A setting the country no longer allows (or that cannot be read) fails closed where the calendar is computed with (journal processing and every report reader), while the book's settings and `profiles get` still open and report it as `calendar_invalid`; a `default` reset of `tax_year_start` and `timezone` through `profiles configure` / `ui.profiles.update` repairs it (marking the journals stale), and a region switch or any other `profiles set` change drops it. A network partition export copies the key with the book; deleting a book set removes its books' keys. See [book settings](tax.md#book-settings). |
 | Tax-year readers of books whose year does not start on 1 January (every existing United Kingdom book) | Not applicable | Not applicable | Tested in `crates/reports` (`readers_cut_a_books_own_tax_year_and_keep_every_other_cut`, `snapshots_cover_the_books_own_tax_year`) and `crates/workspace` (`realized_tax_year_to_date_reads_instants_in_any_offset`) | No schema object and no migration: stored journals and snapshots keep their bytes, but what a UK book's year labels mean changes. Its readers cut the 6 April year the engine's `journal_tax_summary.year` already used, instead of the calendar year in London: tax summary, review figures and tax-year list, capital-gains CSV, year handoff (`tax_year` "2024" is 2024-04-06 to 2025-04-05), cross-check, export ranges, desktop gains view, Overview realized figure, and the period of a saved or filed report's summaries. A snapshot saved before keeps its calendar-year summaries, so an impact check of it compares those with its tax year's figures and reports the difference (`review_required` when filed); a new export records the tax-year figures. Calendar-year books are unchanged. See [tax years](tax.md#tax-years). |
+| Bank statement evidence (`bank_statement_imports`, `bank_statement_lines`, `bank_statement_line_decisions`) | Not applicable | Not applicable | Tested in `crates/store/src/optional.rs` and `crates/transactions/tests/bank_statements.rs` | Opt-in, not in the base schema: the first statement import creates the tables and indexes of `crates/store/fixtures/optional-schema.json` inside its own write transaction, so a book that never imports a statement keeps the manifest layout byte for byte and no upgrade touches it. Once one exists the whole set is expected exactly; a partial or drifted set fails the structural gate. The set was never released before its current form, so books written by intermediate development builds of this feature are not migrated. No audit or input-version bump. Only a statement import, its rollback, and accept/reject decisions write them; no journal, balance or report total reads them. Decisions name purchases by id without a foreign key, so after "Reset book data" a re-observed purchase that gets its old id back binds again; a decision naming a missing purchase is inert. See [bank statements](bank-statements.md). |
+| Bisq trade holds (`provider_trade_holds`, opt-in) | Not applicable | Not applicable | Tested in `crates/store/src/optional.rs` and the wallet import tests | Created only by the first Bisq import that holds a trade, inside its write transaction; books without a hold keep exactly the manifest's layout. No audit, input-version bump, or semantics bump: writing a hold invalidates the book's journals. Older Rust builds refuse a book with the table; the released Python app (v0.22.78) opens it and ignores the holds, like every correction since its release (see [opt-in schema groups](#opt-in-schema-groups)). |
 
 Primary automated coverage:
 
@@ -418,6 +420,33 @@ decimal refusal during processing, including rollback of earlier pricing writes.
 The private comparison dump preserves infinite REAL bits rather than substituting
 null; this adds no database or product format. See the
 [uncovered numeric paths](r4-journal-pipeline.md#r4-10-uncovered-numeric-paths).
+
+## Opt-in schema groups
+
+Some features keep their rows in tables a book gets only on first use
+(`crates/store/fixtures/optional-schema.json`, one key per group;
+`crates/store/src/optional.rs`). A book that never used the feature has none
+of the group's objects; once one exists, admission expects the whole group
+exactly as the fixture defines it. The first group is `provider_trade_holds`,
+Bisq trades the importer [holds for review](../exchanges/bisq.md#holds-and-refusals).
+
+- **Older Rust builds refuse such a book**: admission refuses a table its
+  manifest does not know (`requires_python_migration`); the store test
+  `opening_refuses_a_table_this_build_does_not_know` pins it.
+- **The released Python app (v0.22.78) opens it and ignores the holds**, as it
+  ignores every journal correction since its release, so its own journals
+  would book a held deposit as a disposal; use the current app for accounting.
+  Its rebuild updates the processing markers, and
+  `trg_journal_semantics_unstamped` clears the semantics stamp, so the current
+  app rebuilds with the holds on its next open
+  (`a_v0_22_78_rebuild_leaves_holds_journals_stale`). No semantics bump is
+  needed; writing a hold invalidates the book's journals.
+
+The second group, `bank_statements`, holds the tables of the
+[bank-statement import](bank-statements.md). Older Rust builds refuse a book
+that has them in the same way; the released Python app opens it and ignores
+them. No journal reads them, so its journals are unaffected. Each group is
+expected on its own (`groups_are_expected_independently`).
 
 ## Storage added by main #675 to #708
 

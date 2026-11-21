@@ -309,12 +309,12 @@ pub fn size_pill(tk: &Tk, id: WidgetId, name: &str, size: Size, w: f32, h: f32) 
 }
 
 /// The page header's buttons: Add connection and Edit; while editing, Add widget, Reset and Done.
-pub fn header(app: &App, tk: &Tk, narrow: bool, add_connection: El) -> El {
+pub fn header(app: &App, tk: &Tk, narrow: bool, add_connection: Option<El>) -> El {
     let r = row().gap(tk.r(0.5)).center_y();
     if !app.ov.edit.on {
         let edit =
             crate::ui::outline_button(tk, "overview-edit", None, &copy::edit()).on_press_tx(enter);
-        return r.child(edit).child(add_connection);
+        return r.child(edit).children(add_connection);
     }
     let add = if narrow {
         crate::ui::icon_button(tk, "ov-add", &I::PLUS, &copy::add_widget())

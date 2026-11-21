@@ -37,7 +37,7 @@ fn list(value: &Value) -> &[Value] {
 const RUST_ONLY: &[&str] = &["journals_verify"];
 
 fn python_only(tool: &&kassiber_mcp::tools::McpTool) -> bool {
-    !RUST_ONLY.contains(&tool.name.as_str())
+    !RUST_ONLY.contains(&tool.name.as_str()) && !rust_only(tool.entry.name.as_str())
 }
 
 const GRANTS: [&str; 3] = ["read", "operator", "accounting_decisions"];
@@ -81,13 +81,14 @@ fn listings_and_definitions_follow_the_grant() {
             );
         }
     }
+    let rust_names: Vec<Value> = mcp_tools()
+        .iter()
+        .filter(|tool| !python_only(tool))
+        .map(|tool| s(tool.name.as_str()))
+        .collect();
     let definitions: Vec<Value> = tool_definitions("accounting_decisions", "full")
         .into_iter()
-        .filter(|definition| {
-            !RUST_ONLY
-                .iter()
-                .any(|name| get(definition, "name") == Some(&s(*name)))
-        })
+        .filter(|d| !get(d, "name").is_some_and(|n| rust_names.contains(n)))
         .collect();
     assert_eq!(definitions, list(field(&vectors, "definitions")));
 }
@@ -99,7 +100,10 @@ fn refusals_name_what_the_call_needs() {
         panic!()
     };
     let mut seen = 0;
-    for tool in mcp_tools() {
+    for tool in mcp_tools()
+        .iter()
+        .filter(|tool| !rust_only(tool.entry.name.as_str()))
+    {
         for grant in GRANTS {
             for access in ACCESS {
                 let key = format!("{}/{grant}/{access}", tool.name);
@@ -152,6 +156,33 @@ fn instructions_capabilities_and_client_names_match_python() {
     for case in list(field(&vectors, "client_labels")) {
         let have = client_label(Some(field(case, "value"))).map_or(Value::Null, s);
         assert_eq!(&have, field(case, "label"), "{case:?}");
+    }
+}
+
+/// Tools new in Rust (`kassiber_ai::catalog::RUST_ONLY_TOOLS`), absent from
+/// Python's vectors; compared separately below.
+fn rust_only(entry: &str) -> bool {
+    kassiber_ai::catalog::RUST_ONLY_TOOLS.contains(&entry)
+}
+
+#[test]
+fn rust_only_bank_statement_tools_follow_the_grant() {
+    let tools: Vec<_> = mcp_tools()
+        .iter()
+        .filter(|tool| rust_only(tool.entry.name.as_str()))
+        .collect();
+    assert_eq!(tools.len(), 3);
+    for tool in &tools {
+        let read = tool.entry.name.ends_with(".suggest");
+        assert_eq!(
+            tool.required.as_str(),
+            if read { "read" } else { "accounting_decisions" },
+            "{}",
+            tool.name
+        );
+        assert!(!tool.egress && !tool.destructive);
+        assert_eq!(refusal_for(tool, "read", "full").is_some(), !read);
+        assert!(refusal_for(tool, "accounting_decisions", "full").is_none());
     }
 }
 

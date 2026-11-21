@@ -1651,8 +1651,8 @@ mod tests {
         let request = austrian(
             vec![
                 row("alt-buy", "A", "inbound", ALT, 100_000_000_000, json!({})),
-                // An inbound override is the event's regime, but the tracker
-                // keeps the time's: B holds Alt only.
+                // An inbound override is the event's regime and the one the
+                // tracker makes available: B holds Neu only.
                 row(
                     "said-neu",
                     "B",
@@ -1713,9 +1713,10 @@ mod tests {
             ],
         );
         let normalized = run_pass(&request).unwrap();
-        // The move spends A's Neu left after the election (48 BTC) first,
-        // its fee from that slice, then 12.001 BTC of Alt; its override
-        // twin keeps its own flows.
+        // The election takes 1 BTC of A's Neu and the Alt override 1 BTC of
+        // its Alt, so the move spends the 49 BTC of Neu left first, its fee
+        // from that slice, then 11.001 BTC of Alt; its override twin keeps
+        // its own flows.
         assert_eq!(
             regimes(&request, &normalized),
             vec![
@@ -1724,15 +1725,15 @@ mod tests {
                 json!(["neu-buy", "neu", null]),
                 json!(["sale", "neu", "wahlrecht"]),
                 json!(["said-alt", "alt", null]),
-                json!(["b-sale", "alt", null]),
+                json!(["b-sale", "neu", null]),
                 json!([
                     "move-out",
                     "neu",
                     [
-                        12_001_000_000_u64,
-                        48_000_000_000_u64,
-                        12_001_000_000_u64,
-                        47_999_000_000_u64
+                        11_001_000_000_u64,
+                        49_000_000_000_u64,
+                        11_001_000_000_u64,
+                        48_999_000_000_u64
                     ]
                 ]),
                 json!([

@@ -124,6 +124,8 @@ pub fn execute(
         file: String::new(),
         format: Format::Json,
         mode: None,
+        companion: None,
+        timezone: None,
     };
     kassiber_store::begin_write_savepoint(conn, "exchange_api_import").map_err(database_error)?;
     let result = apply_records(
@@ -544,11 +546,7 @@ fn asset(value: &Py) -> String {
 fn is_bitcoin(code: &str) -> bool {
     matches!(code, "BTC" | "LBTC")
 }
-const FIAT: [&str; 29] = [
-    "AED", "ARS", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD",
-    "HUF", "ILS", "INR", "JPY", "KRW", "MXN", "NOK", "NZD", "PLN", "RON", "SEK", "SGD", "THB",
-    "TRY", "USD", "ZAR",
-];
+const FIAT: &[&str] = kassiber_transactions::FIAT_CODES;
 fn is_fiat(code: &str) -> bool {
     FIAT.contains(&code)
 }

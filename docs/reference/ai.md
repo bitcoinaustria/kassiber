@@ -1409,7 +1409,9 @@ counts, and a cut table or difference list as `tables_omitted` /
 `differences_omitted` with `truncated` set. When the check fails before producing a report, the assistant gets the
 error code and a fixed message, never the error text, which can quote book
 values. It does not refresh journals first, since a stale book is one of
-the answers it gives, and it is not an automatic context read.
+the answers it gives, and it is not an automatic context read. Replay bundle
+export is not an assistant tool: it needs the user's confirmation and a
+passphrase the assistant must never see.
 
 Quoted or search-like questions can trigger `ui.transactions.search` before the
 provider is called. Matching transaction notes, descriptions, counterparties,
@@ -1947,6 +1949,19 @@ explicit about privacy-hop ambiguity unless the user has reviewed stronger
 evidence. `ui_source_funds_assemble`, `ui_source_funds_cases_save`, and the
 virtual `ui_source_funds_export` complete that workflow; export results sent to
 the model include the filename/format but not the managed local path.
+
+Bank-statement evidence ([bank statements](bank-statements.md)) has one read
+and two consent-gated writes. `ui_source_funds_bank_lines_suggest` returns the
+exact match suggestions with their reasons and the unmatched purchases;
+every bank-statement result the assistant sees is projected first: IBANs
+stay masked, a counterparty name appears only when it names a curated
+exchange, and remittance text, bank references and column plans are
+withheld; amounts, ids and hashes reach the assistant exactly.
+`ui_source_funds_bank_lines_accept` and `ui_source_funds_bank_lines_reject`
+take explicit `line_ids` and `transaction_ids` and run the same accept/reject
+service as the CLI and desktop. Importing a statement and rolling one back are
+not assistant tools: a statement file is a local path, and rollback is an
+admin-class deletion.
 
 AI source admission and case saving run in the mutating executor
 ([`crates/ai/src/mutate.rs`](../../crates/ai/src/mutate.rs)). A call needs a

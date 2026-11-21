@@ -84,6 +84,12 @@
     "config_fields": "source_file, source_format"
   },
   {
+    "kind": "bisq",
+    "summary": "Bisq 1 trade-history CSV importer: each completed BTC/fiat trade as an escrow ledger with exact pricing.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
     "kind": "ledgerlive",
     "summary": "Ledger Live CSV importer for BTC/LBTC wallet movement only.",
     "requires": "",

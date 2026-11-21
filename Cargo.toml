@@ -45,6 +45,7 @@ members = [
   "crates/xlsx",
   "crates/reports",
   "crates/repo-checks",
+  "crates/replay",
   "crates/wallets",
   "crates/workspace",
   "tax-engine/core",

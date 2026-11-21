@@ -60,6 +60,12 @@ source freshness failures, and quarantines dated in or before the year.
 the open book; it accepts only `limit` (1-200, default 20) and returns the
 check's report. It does not contact the network.
 
+`ui.diagnostics.replay_bundle.export` (operator) needs `confirm: true` and
+`passphrase` (at least 8 characters), refuses `file`, `workspace` and
+`profile`, writes a managed `exports/diagnostics/replay-<time>.kassiber-replay`
+and returns `file`, `bytes`, `sha256`, `encrypted`, `disclosure` and the bundle
+`manifest`. It does not contact the network either.
+
 `ui.transactions.export_platform_csv` writes the transactions in another
 tool's import format into the managed exports directory. It accepts `platform`
 (`cointracking` or `blockpit`) and an optional `wallets` list (or the single
@@ -274,6 +280,12 @@ never performs public lookup. Raw evidence URLs, managed paths,
 document bytes, backend identities, descriptors, xpubs, and raw importer JSON
 are removed before provider context. The kind is AI-only and intentionally
 absent from the desktop invoke allowlist.
+
+`ui.report.blockers` (read, arguments ignored) is the core's report-readiness
+barrier: `ready` and the `blockers` that hold the book's reports back. It is
+a maintained read like `ui.reports.capital_gains` (a book whose report-read
+refresh policy is on may refresh first; nothing else leaves the machine). The
+AI tools and the desktop Reports page read it; the Tauri shell does not.
 
 `ui.transfers.dismissals.list` reads the profile's transfer-candidate
 dismissals (`include_expired`, `limit` up to 500) with both legs' full ids,
@@ -555,7 +567,10 @@ state and are not AI tools.
 wallet sources. It accepts `label`, `kind`, and the same wallet config fields
 the CLI stores (`backend`, `chain`, `network`, `descriptor`,
 `change_descriptor`, `source_file`, `source_format`, `store_id`,
-etc.) and returns the redacted wallet row. Desktop callers can pass
+etc.) and returns the redacted wallet row. A `bisq` wallet also takes
+`companion_file` (the Funds > Transactions export) and `timezone` (the
+exporting computer's IANA zone), stored as `source_companion_file` and
+`source_timezone`. Desktop callers can pass
 `wallet_material` instead of separate descriptor fields; the daemon recognizes
 common descriptor export shapes, including plaintext BSMS descriptor records,
 and stores receive/change descriptors when the material contains both.
@@ -590,7 +605,9 @@ preview to confirm a descriptor produces the expected wallet before
 committing.
 
 `ui.wallets.import_file` accepts `wallet`, `source_file`, and `source_format`
-for wallet-scoped CSV/JSON imports. Wallet CSV import results include
+for wallet-scoped CSV/JSON imports. `source_format="bisq_csv"` also requires
+`companion_file` and `timezone`, and imports the [Bisq](../exchanges/bisq.md) escrow ledger in
+full mode, with `wallet` optional. Wallet CSV import results include
 `inserted_records`, `updated_records`, and `unchanged` so the desktop can show
 what changed after an exchange CSV import. For
 `source_format="bullbitcoin_csv"` or `source_format="coinfinity_csv"`, `wallet`
@@ -1095,7 +1112,9 @@ report unsafe. Rate limits are normal state: a 429/`Retry-After` cools down the
 affected source/provider only, while other queued jobs can continue. The
 `blocking_reports` flag, not the cooldown label alone, decides whether reports
 must wait. Final accounting exports enforce that persisted flag in both the
-desktop daemon and CLI. Read-only previews, raw transaction exports, and audit
+desktop daemon and CLI, and also wait while a configured Silent Payments
+wallet's scan is pending or incomplete (the `silent_payment_scan_*` report
+blockers): before its first scan such a wallet has no freshness row to flag. Read-only previews, raw transaction exports, and audit
 packages remain available so a failed source can still be investigated and
 repaired without producing a misleading final report.
 

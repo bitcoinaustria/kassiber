@@ -51,10 +51,12 @@ pub mod privacy_mirror;
 pub mod psbt_privacy;
 pub mod report_design;
 pub mod review_figures;
+pub mod scan_readiness;
 mod snapshot_write;
 mod snapshots;
 mod source_funds_assemble;
 mod source_funds_assembly;
+pub mod source_funds_bank;
 pub mod source_funds_batch;
 pub mod source_funds_bundle;
 pub mod source_funds_cases;
@@ -524,6 +526,21 @@ fn capital_gains(conn: &Connection, profile: &Value) -> Result<Value> {
         replace(row, "quantity", float(&btc(quantity)?)?);
     }
     Ok(Value::List(result))
+}
+
+/// A stored journal entry's calculation, decoded from whichever of its
+/// compact or JSON encodings is set, as the gain explanation reads it. The
+/// replay bundle compares entries by this decoded form.
+pub fn journal_calculation(
+    json: Option<&str>,
+    compact: Option<&str>,
+) -> Option<kassiber_pyjson::Value> {
+    use kassiber_pyjson::Value;
+    let text = |value: Option<&str>| value.map_or(Value::Null, |text| Value::Str(text.into()));
+    gain_explanation::calculation(&kassiber_envelope::dict([
+        ("calculation_json", text(json)),
+        ("calculation_compact", text(compact)),
+    ]))
 }
 
 /// A book whose latest time holds three BTC prices: file order z (30000),

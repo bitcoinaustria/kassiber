@@ -379,6 +379,18 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("documents", "document evidence services"))
     }
+    /// Bank statements as source-of-funds evidence (import, review, rollback).
+    fn bank_statements(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _command: &kassiber_transactions::bank_statements::Command,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented(
+            "bank statements",
+            "bank-statement evidence services",
+        ))
+    }
     fn commercial(
         &mut self,
         _workspace: Option<&Value>,
@@ -644,6 +656,13 @@ pub trait Book: Send {
     /// leftovers, or with `confirm` their permanent removal.
     fn purge_legacy_ledger(&mut self, _confirm: bool) -> Result<Value, AppError> {
         Err(not_implemented("maintenance", "legacy ledger purge"))
+    }
+    /// `diagnostics replay-bundle export` / `ui.diagnostics.replay_bundle.export`:
+    /// seal the selected profile's replay bundle into `args.file`. `args`
+    /// carries `passphrase` (already read by the caller), `confirm`, and the
+    /// optional `workspace` / `profile` selectors.
+    fn replay_bundle_export(&mut self, _args: &Value, _version: &str) -> Result<Value, AppError> {
+        Err(not_implemented("diagnostics", "replay bundle export"))
     }
     /// `wallets reveal-descriptor` (CLI only): the raw descriptors, blinding
     /// key and whole stored configuration of one wallet, on a book this

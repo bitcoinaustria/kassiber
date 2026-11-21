@@ -461,7 +461,7 @@ pub fn load(
         "SELECT je.transaction_id,je.occurred_at,je.entry_type,je.asset,je.quantity,\
          je.proceeds,je.proceeds_exact,je.cost_basis,je.cost_basis_exact,\
          je.calculation_json,je.calculation_compact,COALESCE(w.label,'') AS wallet,\
-         COALESCE(NULLIF(t.kind_override,''),t.kind,'') AS kind \
+         COALESCE(NULLIF(t.kind_override,''),t.kind,'') AS kind,COALESCE(t.taxability_override,1)!=0 AS taxable \
          FROM journal_entries je LEFT JOIN wallets w ON w.id=je.wallet_id \
          LEFT JOIN transactions t ON t.id=je.transaction_id \
          WHERE je.profile_id=?1 AND (?2 IS NULL OR je.wallet_id=?2) \
@@ -476,6 +476,9 @@ pub fn load(
         let asset = text(entry, "asset");
         let quantity = btc(int(entry, "quantity"))?.copy_abs();
         let kind = kassiber_pytext::lower(kassiber_pytext::strip(&text(entry, "kind")));
+        if crate::layer_reads::non_taxable(entry) {
+            continue;
+        }
         match text(entry, "entry_type").as_str() {
             "acquisition" => acquisitions.push(Acquisition {
                 transaction_id,

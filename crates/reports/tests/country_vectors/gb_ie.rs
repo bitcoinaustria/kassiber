@@ -424,6 +424,7 @@ pub(super) fn gb_compute(vector: &Value) -> Value {
                         .cloned()
                         .unwrap_or_else(Decimal::zero),
                     pieces,
+                    taxable: true,
                 });
             }
         }

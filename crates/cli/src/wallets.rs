@@ -104,6 +104,8 @@ pub fn execute(
                     file: namespace.text("file").unwrap_or_default().into(),
                     format: kassiber_wallets::file_import::Format::Ledger,
                     mode: None,
+                    companion: None,
+                    timezone: None,
                 },
                 column_map,
             )
@@ -119,6 +121,7 @@ pub fn execute(
         | "import-pocket"
         | "import-pocketbitcoin"
         | "import-strike"
+        | "import-bisq"
         | "import-ledger-live"
         | "import-cointracking"
         | "import-blockpit"
@@ -129,6 +132,8 @@ pub fn execute(
                 profile_id,
                 wallet,
                 mode: namespace.text("mode").map(str::to_owned),
+                companion: namespace.text("transactions").map(str::to_owned),
+                timezone: namespace.text("timezone").map(str::to_owned),
                 file: namespace.text("file").unwrap_or_default().into(),
                 format: match namespace.text("wallets_command") {
                     Some("import-wasabi") => kassiber_wallets::file_import::Format::Wasabi,
@@ -140,6 +145,7 @@ pub fn execute(
                     Some("import-coinfinity") => kassiber_wallets::file_import::Format::Coinfinity,
                     Some("import-21bitcoin") => kassiber_wallets::file_import::Format::TwentyOne,
                     Some("import-strike") => kassiber_wallets::file_import::Format::Strike,
+                    Some("import-bisq") => kassiber_wallets::file_import::Format::Bisq,
                     Some("import-cointracking") => {
                         kassiber_wallets::file_import::Format::CoinTracking
                     }

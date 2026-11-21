@@ -268,6 +268,55 @@ mod rerecorded_stdout_tests {
     }
 }
 
+#[cfg(test)]
+mod recorded_entries_tests {
+    use super::{recorded_entries, Paths};
+    use crate::{Blobs, Entry};
+
+    /// A re-recorded chat transcript (a state file with the daemon's `daemon.ready`) lists no
+    /// Rust-only kind, or it could never replay clean again; other lines stay as they were.
+    #[test]
+    fn a_rerecorded_transcript_lists_no_rust_only_kind() {
+        let dir = std::env::temp_dir().join(format!(
+            "kassiber-rerecorded-entries-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = Blobs::new(&dir.join("blobs"));
+        let kind = crate::compare::RUST_ONLY_KINDS[0];
+        let text = format!(
+            "{{\"kind\":\"daemon.ready\",\"data\":{{\"supported_kinds\":[\"status\",\"{kind}\"]}}}}\n\
+             {{\"kind\":\"ai.chat\",\"data\":{{\"note\":\"{kind}\"}}}}\n"
+        );
+        let blob = store.put(text.as_bytes()).unwrap();
+        let entries = vec![Entry::File {
+            path: "chat.ndjson".into(),
+            mode: 0o644,
+            blob,
+            size: text.len() as u64,
+            encryption: None,
+        }];
+        let out = recorded_entries(&entries, &store, &Paths::default(), &dir.join("work")).unwrap();
+        let Entry::File { blob, size, .. } = &out[0] else {
+            panic!("{out:?}")
+        };
+        let kept = String::from_utf8(store.get(blob).unwrap()).unwrap();
+        let mut lines = kept.lines();
+        let ready = lines.next().unwrap();
+        assert!(!ready.contains(kind), "{ready}");
+        assert!(ready.contains("\"status\""), "{ready}");
+        assert!(
+            lines.next().unwrap().contains(kind),
+            "only daemon.ready changes"
+        );
+        assert_eq!(*size, kept.len() as u64);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
 /// One root's entries with replayed paths mapped back (see
 /// [`Replayed::recorded_after`]).
 fn recorded_entries(
@@ -339,7 +388,11 @@ fn recorded_entries(
                 }
                 None
             } else if let Ok(text) = std::str::from_utf8(&bytes) {
-                let moved = paths.back(text);
+                // A text file can hold the daemon's records (a chat client's log of its
+                // stream): its `daemon.ready` keeps the recordings' shape like stdout
+                // (`rerecorded_stdout`), since the comparison drops the Rust-only kinds
+                // from every replayed file too.
+                let moved = crate::compare::without_rust_only_kinds(&paths.back(text));
                 (moved != text).then(|| moved.into_bytes())
             } else {
                 None

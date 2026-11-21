@@ -17,6 +17,7 @@
 //! explorer only from a press (egress the user asks for). Exports write into the book's
 //! `exports/reports` folder, then ask where to keep a copy with the native Save dialog.
 
+pub mod bank;
 pub mod disclose;
 pub mod graph;
 pub mod kit;
@@ -292,6 +293,8 @@ pub struct Case {
     pub pages_error: bool,
     pub pages_loading: bool,
     pub last_target: String,
+    /// The trace stage's bank statements panel.
+    pub bank: bank::Panel,
 }
 
 impl Case {
@@ -351,6 +354,7 @@ impl Case {
             pages_error: false,
             pages_loading: false,
             last_target: String::new(),
+            bank: bank::Panel::default(),
         }
     }
 
@@ -420,6 +424,8 @@ pub struct Sof {
     pub saves: std::collections::VecDeque<(bool, String)>,
     /// For each export render in flight: (bundle, recipe, the saved case) as asked.
     pub exports: std::collections::VecDeque<(bool, String, Value)>,
+    /// The bank statements panel's reads.
+    pub bank: bank::Reads,
 }
 
 // ---- Scope and requests -----------------------------------------------------------------------
@@ -978,6 +984,13 @@ fn step(app: &mut App) -> bool {
         "provenance.sof.diagram",
         disclosure && !target_id.is_empty(),
     );
+    let bank_open = app
+        .provenance
+        .sof
+        .case
+        .as_ref()
+        .is_some_and(|c| c.bank.open);
+    bank::want_reads(app, bank_open && stage_now == Stage::Trace);
     reconcile_link(app);
     auto_assemble(app);
     app.pending.len() != before
@@ -1217,6 +1230,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "save" => on_saved(app, r),
+        b if b.starts_with("bank.") => bank::on_reply(app, &b["bank.".len()..], r),
         "export" => on_exported(app, r),
         _ => {}
     }
@@ -1234,6 +1248,8 @@ fn invalidate(app: &mut App) {
         &mut s.evidence,
         &mut s.recipients,
         &mut s.wallets,
+        &mut s.bank.suggest,
+        &mut s.bank.lines,
     ] {
         q.invalidate();
     }
