@@ -3074,6 +3074,7 @@ dependencies = [
  "kassiber-pytext",
  "kassiber-store",
  "kassiber-tax-countries",
+ "roxmltree 0.21.2",
  "sha2 0.11.1",
  "tempfile",
 ]
