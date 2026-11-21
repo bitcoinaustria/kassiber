@@ -114,6 +114,8 @@ pub(super) fn prepare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kassiber_xlsx::{Cell, Operation};
+
     struct Fixed;
     impl kassiber_setup::Sources for Fixed {
         fn now(&self, _: &Connection) -> Result<String> {
@@ -161,6 +163,10 @@ mod tests {
         let mut cases: serde_json::Value =
             serde_json::from_str(include_str!("../tests/data/full_xlsx.json")).unwrap();
         normalize_numbers(&mut cases);
+        let version = include_str!("../../kassiber/Cargo.toml")
+            .lines()
+            .find_map(|line| line.strip_prefix("version = \"")?.strip_suffix('"'))
+            .expect("Kassiber package version");
         let root = tempfile::tempdir().unwrap();
         let book = kassiber_store::Book::create(&root.path().join("data"), None).unwrap();
         let conn = book.connection();
@@ -192,6 +198,24 @@ mod tests {
                 let (_, actual) = result.unwrap();
                 let mut expected: Document =
                     serde_json::from_value(case["expected"]["document"].clone()).unwrap();
+                // The frozen Python workbook contains the version of the app that wrote it.
+                // Verify that the Rust workbook stamps the current version in the same cell.
+                if let Some(verify) = expected
+                    .sheets
+                    .iter_mut()
+                    .find(|sheet| sheet.name == "Verify")
+                {
+                    let cell = verify.operations.iter_mut().find_map(|op| match op {
+                        Operation::Cell {
+                            row: 4,
+                            col: 1,
+                            value,
+                            ..
+                        } => Some(value),
+                        _ => None,
+                    });
+                    *cell.expect("Verify sheet version cell") = Cell::String(version.to_owned());
+                }
                 // In the shared design's palette.
                 expected.formats = expected
                     .formats
