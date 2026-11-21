@@ -189,7 +189,11 @@ reversed or linked across bundles.
 Chain observations that were current get new observation digests, and
 reviewed custody components whose evidence matched get commitments (and
 authored evidence snapshots) to the projected evidence, so reviews keep
-applying.
+applying. A gap candidate is named by an id and fingerprint derived from its
+transaction and wallet ids; the reviews that dismiss a candidate the book's
+own run dismisses are bound to the id and fingerprint the projected candidate
+(the same source and return legs) derives, so the dismissal still applies.
+Stale and conflicting reviews stay as projected.
 
 ### What the outputs keep
 

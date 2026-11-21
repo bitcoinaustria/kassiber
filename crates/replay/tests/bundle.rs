@@ -737,3 +737,95 @@ fn raw_json_status_survives_as_object_and_as_text() {
     drop(book);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// One promotion-eligible custody gap (a Samourai wallet's send and its
+/// later return): the run holds both legs for review.
+const ELIGIBLE_GAP: &str = "DELETE FROM transactions WHERE id IN ('return-001','return-002'); UPDATE transactions SET amount=599000000000 WHERE id='return-000'; UPDATE wallets SET kind='samourai' WHERE id='wallet-a'; UPDATE transactions SET privacy_boundary=NULL WHERE id='source'; DELETE FROM wallets WHERE id IN ('destination-1','destination-2'); UPDATE wallets SET label='Destination' WHERE id='destination-0';";
+
+fn quarantine_reasons(conn: &Connection) -> Vec<String> {
+    conn.prepare(
+        "SELECT reason || ':' || detail_json FROM journal_quarantines ORDER BY transaction_id",
+    )
+    .unwrap()
+    .query_map([], |row| row.get(0))
+    .unwrap()
+    .collect::<Result<_, _>>()
+    .unwrap()
+}
+
+/// A dismissed gap candidate stays dismissed in the projected run: the
+/// review is rebound to the candidate the pseudonymized ids derive, so the
+/// bundle reproduces the book (no hold the book's own run suppressed).
+#[test]
+fn a_dismissed_gap_candidate_stays_dismissed_in_the_bundle() {
+    use kassiber_pyjson::Value as Py;
+    let (root, book) = book("gaps-10-processed", ELIGIBLE_GAP);
+    let conn = book.connection();
+    assert!(
+        quarantine_reasons(conn)
+            .iter()
+            .any(|r| r.contains("custody_gap_review_required")),
+        "the fixture holds a gap for review"
+    );
+    let scope = kassiber_transfers::Scope {
+        workspace_id: "ws-1",
+        profile_id: "profile-1",
+    };
+    let listed = kassiber_transfers::execute(
+        conn,
+        &scope,
+        "transfers.gaps.list",
+        &kassiber_envelope::dict::<&str>([]),
+    )
+    .unwrap();
+    let gaps = match kassiber_envelope::get(&listed, "gaps") {
+        Some(Py::List(items)) => items.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(gaps.len(), 1, "{listed:?}");
+    let gap_id = kassiber_envelope::get(&gaps[0], "gap_id").unwrap().clone();
+    let version: i64 = conn
+        .query_row(
+            "SELECT journal_input_version FROM profiles WHERE id='profile-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    kassiber_transfers::execute(
+        conn,
+        &scope,
+        "transfers.gaps.apply",
+        &kassiber_envelope::dict([
+            ("action", kassiber_envelope::s("dismiss")),
+            ("gap_id", gap_id),
+            ("reason", kassiber_envelope::s("not a custody gap")),
+            ("expected_input_version", Py::Int(version.into())),
+        ]),
+    )
+    .unwrap();
+    kassiber_journals::service::process(conn, None, None, &mut |_| {})
+        .unwrap()
+        .after_reply()
+        .unwrap();
+    assert!(
+        !quarantine_reasons(conn)
+            .iter()
+            .any(|r| r.contains("custody_gap_review_required")),
+        "the dismissal suppresses the hold in the book"
+    );
+    let exported = kassiber_replay::export(
+        conn,
+        None,
+        None,
+        PASSPHRASE,
+        "2026-11-12T00:00:00+00:00",
+        "0.0.0-test",
+        &kassiber_transfers::SystemSources,
+    )
+    .unwrap_or_else(|error| panic!("{error:?}"));
+    assert_eq!(exported.manifest["pseudonymization"]["faithful"], true);
+    let report = kassiber_replay::verify(&exported.sealed, PASSPHRASE, 3).unwrap();
+    assert_eq!(report["status"], "identical", "{report:#}");
+    drop(book);
+    std::fs::remove_dir_all(root).unwrap();
+}

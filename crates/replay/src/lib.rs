@@ -16,6 +16,7 @@ use kassiber_journals::reproduce::{self, Table};
 use kassiber_journals::Refusal;
 use pseudonym::{sha256_hex, Pseudonymizer};
 use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 pub const FORMAT: &str = "kassiber.replay-bundle";
@@ -148,6 +149,12 @@ pub fn export(
             .map_err(|error| AppError::new("internal_error", error.to_string()))
     };
     rebind_commitments(&source.snapshot, &decode(&inputs)?, &mut inputs);
+    rebind_gap_dismissals(
+        &source.snapshot,
+        &decode(&inputs)?,
+        &mut inputs,
+        &projection,
+    );
     let pseudonymized = decode(&inputs)?;
     let generated = projection.generated();
     // The recomputation from projected inputs, checked against the values the
@@ -541,6 +548,88 @@ fn rebind_commitments(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/// A gap review dismisses a candidate by its `gap_id` and fingerprint, and
+/// both derive from the candidate's transaction and wallet ids, which the
+/// projection replaced. For each candidate the book's own run dismisses,
+/// bind its reviews to the id and fingerprint the projected candidate (the
+/// same source and return legs) derives, so the dismissal still applies.
+/// Stale or conflicting reviews dismissed nothing before and stay as
+/// projected; a candidate the projected run lacks is left to the fidelity
+/// check.
+fn rebind_gap_dismissals(
+    original: &kassiber_custody::snapshot::Snapshot,
+    pseudonymized: &kassiber_custody::snapshot::Snapshot,
+    inputs: &mut Value,
+    projection: &projection::Projection<'_>,
+) {
+    use kassiber_custody::gaps::{candidate_fingerprint, dismissed_fingerprints};
+    let Ok(reviews) = serde_json::to_value(&original.gap_reviews) else {
+        return;
+    };
+    let dismissed = dismissed_fingerprints(reviews.as_array().map_or(&[], Vec::as_slice));
+    let Some(dismissed) = dismissed.as_object().filter(|d| !d.is_empty()) else {
+        return;
+    };
+    let candidates = |snapshot| -> Vec<Value> {
+        kassiber_custody::run_loaded(snapshot, false)
+            .map(|stages| {
+                stages.gaps["accounting_candidates"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default()
+    };
+    let legs = |candidate: &Value, map: &dyn Fn(&str) -> String| -> (Vec<String>, Vec<String>) {
+        let ids = |key: &str| {
+            let mut ids: Vec<String> = candidate[key]
+                .as_array()
+                .map(|items| items.iter().filter_map(Value::as_str).map(map).collect())
+                .unwrap_or_default();
+            ids.sort();
+            ids
+        };
+        (ids("source_ids"), ids("return_ids"))
+    };
+    // Every candidate the book's run dismisses, by its projected legs.
+    let mut wanted = BTreeMap::new();
+    for candidate in candidates(original) {
+        let Some(gap) = candidate["gap_id"].as_str() else {
+            continue;
+        };
+        let current = candidate_fingerprint(&candidate).ok();
+        if dismissed.get(gap).and_then(Value::as_str) == current.as_deref() {
+            let projected = legs(&candidate, &|id| projection.id(id));
+            wanted.insert(projected, (projection.id(gap), current.unwrap_or_default()));
+        }
+    }
+    if wanted.is_empty() {
+        return;
+    }
+    for candidate in candidates(pseudonymized) {
+        let Some((mapped_gap, fingerprint)) = wanted.get(&legs(&candidate, &str::to_owned)) else {
+            continue;
+        };
+        let (Some(gap), Ok(rebound)) = (
+            candidate["gap_id"].as_str(),
+            candidate_fingerprint(&candidate),
+        ) else {
+            continue;
+        };
+        // Digests are projected like ids.
+        let projected_fingerprint = projection.id(fingerprint);
+        if let Some(rows) = inputs["gap_reviews"].as_array_mut() {
+            for row in rows.iter_mut().filter(|row| {
+                row["gap_id"] == mapped_gap.as_str()
+                    && row["candidate_fingerprint"] == projected_fingerprint.as_str()
+            }) {
+                row["gap_id"] = json!(gap);
+                row["candidate_fingerprint"] = json!(rebound);
             }
         }
     }
