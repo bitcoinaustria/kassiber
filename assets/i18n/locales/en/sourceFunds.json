@@ -728,6 +728,7 @@
     "accountPlaceholder": "IBAN or a name, e.g. Giro",
     "accountHelp": "Needed for CSV exports, which do not say which account they are from. Kept in your book.",
     "loadError": "The suggested matches could not be loaded.",
+    "acceptedLoadError": "The accepted bank evidence could not be loaded.",
     "retry": "Retry",
     "reason": {
       "sameCurrency": "same currency {{currency}}",

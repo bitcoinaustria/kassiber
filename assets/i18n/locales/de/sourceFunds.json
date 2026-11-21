@@ -728,6 +728,7 @@
     "accountPlaceholder": "IBAN oder ein Name, z. B. Giro",
     "accountHelp": "Nötig für CSV-Exporte, die das Konto nicht nennen. Bleibt in deinem Buch.",
     "loadError": "Die Zuordnungsvorschläge konnten nicht geladen werden.",
+    "acceptedLoadError": "Die bestätigten Nachweise aus Kontoauszügen konnten nicht geladen werden.",
     "retry": "Erneut versuchen",
     "reason": {
       "sameCurrency": "gleiche Währung {{currency}}",
