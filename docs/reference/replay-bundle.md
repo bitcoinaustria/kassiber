@@ -184,7 +184,11 @@ classified but left unimplemented on the text path.
 
 The key is 32 random bytes generated per bundle and zeroed after export, so
 pseudonyms are consistent inside one bundle (links survive) and cannot be
-reversed or linked across bundles.
+reversed or linked across bundles. The engine breaks ties by id (the
+Austrian regime tracker depletes Alt/Neu availability in that order for rows
+at the same time), so the whole-value `id-…` pseudonyms are handed out in the
+original identifiers' sort order: the bundle keeps which of two ids sorts
+first, never their text.
 
 Chain observations that were current get new observation digests, and
 reviewed custody components whose evidence matched get commitments (and

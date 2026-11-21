@@ -829,3 +829,61 @@ fn a_dismissed_gap_candidate_stays_dismissed_in_the_bundle() {
     drop(book);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// The engine breaks ties between equal-time rows by id (the Austrian
+/// regime tracker depletes Alt/Neu availability in that order), so the
+/// projected ids keep the original ids' relative order: a random key must
+/// never reorder same-time disposals and change the books' figures.
+#[test]
+fn projected_ids_keep_the_original_order() {
+    let (root, book) = book("paired-short-processed", "");
+    let conn = book.connection();
+    let originals: Vec<(String, String)> = conn
+        .prepare("SELECT id, direction || ':' || amount || ':' || substr(occurred_at,1,10) FROM transactions")
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert!(originals.len() >= 7);
+    for _ in 0..3 {
+        let exported = export(conn);
+        let document = open(&exported.sealed);
+        let inputs: Value =
+            serde_json::from_str(document["parts"]["inputs"].as_str().unwrap()).unwrap();
+        let projected: Vec<(String, String)> = inputs["transactions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| {
+                let occurred = row["occurred_at"].as_str().unwrap();
+                (
+                    row["id"].as_str().unwrap().to_owned(),
+                    format!(
+                        "{}:{}:{}",
+                        row["direction"].as_str().unwrap(),
+                        row["amount"],
+                        &occurred[..10]
+                    ),
+                )
+            })
+            .collect();
+        let id_of = |key: &str| {
+            let found: Vec<&String> = projected
+                .iter()
+                .filter(|(_, k)| k == key)
+                .map(|(id, _)| id)
+                .collect();
+            assert_eq!(found.len(), 1, "{key}: {projected:?}");
+            found[0].clone()
+        };
+        let mut by_original = originals.clone();
+        by_original.sort();
+        let order: Vec<String> = by_original.iter().map(|(_, key)| id_of(key)).collect();
+        let mut sorted = order.clone();
+        sorted.sort();
+        assert_eq!(order, sorted, "projected ids reorder the originals");
+    }
+    drop(book);
+    std::fs::remove_dir_all(root).unwrap();
+}

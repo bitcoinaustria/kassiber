@@ -139,7 +139,8 @@ pub fn export(
         Pseudonymizer::random().map_err(|message| AppError::new("internal_error", message))?;
     let snapshot = serde_json::to_value(&source.snapshot)
         .map_err(|error| AppError::new("internal_error", error.to_string()))?;
-    let projection = projection::Projection::new(&pseudonymizer);
+    let projection = projection::Projection::ordered(&pseudonymizer, &snapshot)
+        .map_err(|message| AppError::new("internal_error", message))?;
     let mut inputs = projection
         .snapshot(&snapshot)
         .map_err(|message| AppError::new("internal_error", message))?;
