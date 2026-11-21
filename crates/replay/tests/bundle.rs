@@ -737,3 +737,153 @@ fn raw_json_status_survives_as_object_and_as_text() {
     drop(book);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// One promotion-eligible custody gap (a Samourai wallet's send and its
+/// later return): the run holds both legs for review.
+const ELIGIBLE_GAP: &str = "DELETE FROM transactions WHERE id IN ('return-001','return-002'); UPDATE transactions SET amount=599000000000 WHERE id='return-000'; UPDATE wallets SET kind='samourai' WHERE id='wallet-a'; UPDATE transactions SET privacy_boundary=NULL WHERE id='source'; DELETE FROM wallets WHERE id IN ('destination-1','destination-2'); UPDATE wallets SET label='Destination' WHERE id='destination-0';";
+
+fn quarantine_reasons(conn: &Connection) -> Vec<String> {
+    conn.prepare(
+        "SELECT reason || ':' || detail_json FROM journal_quarantines ORDER BY transaction_id",
+    )
+    .unwrap()
+    .query_map([], |row| row.get(0))
+    .unwrap()
+    .collect::<Result<_, _>>()
+    .unwrap()
+}
+
+/// A dismissed gap candidate stays dismissed in the projected run: the
+/// review is rebound to the candidate the pseudonymized ids derive, so the
+/// bundle reproduces the book (no hold the book's own run suppressed).
+#[test]
+fn a_dismissed_gap_candidate_stays_dismissed_in_the_bundle() {
+    use kassiber_pyjson::Value as Py;
+    let (root, book) = book("gaps-10-processed", ELIGIBLE_GAP);
+    let conn = book.connection();
+    assert!(
+        quarantine_reasons(conn)
+            .iter()
+            .any(|r| r.contains("custody_gap_review_required")),
+        "the fixture holds a gap for review"
+    );
+    let scope = kassiber_transfers::Scope {
+        workspace_id: "ws-1",
+        profile_id: "profile-1",
+    };
+    let listed = kassiber_transfers::execute(
+        conn,
+        &scope,
+        "transfers.gaps.list",
+        &kassiber_envelope::dict::<&str>([]),
+    )
+    .unwrap();
+    let gaps = match kassiber_envelope::get(&listed, "gaps") {
+        Some(Py::List(items)) => items.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(gaps.len(), 1, "{listed:?}");
+    let gap_id = kassiber_envelope::get(&gaps[0], "gap_id").unwrap().clone();
+    let version: i64 = conn
+        .query_row(
+            "SELECT journal_input_version FROM profiles WHERE id='profile-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    kassiber_transfers::execute(
+        conn,
+        &scope,
+        "transfers.gaps.apply",
+        &kassiber_envelope::dict([
+            ("action", kassiber_envelope::s("dismiss")),
+            ("gap_id", gap_id),
+            ("reason", kassiber_envelope::s("not a custody gap")),
+            ("expected_input_version", Py::Int(version.into())),
+        ]),
+    )
+    .unwrap();
+    kassiber_journals::service::process(conn, None, None, &mut |_| {})
+        .unwrap()
+        .after_reply()
+        .unwrap();
+    assert!(
+        !quarantine_reasons(conn)
+            .iter()
+            .any(|r| r.contains("custody_gap_review_required")),
+        "the dismissal suppresses the hold in the book"
+    );
+    let exported = kassiber_replay::export(
+        conn,
+        None,
+        None,
+        PASSPHRASE,
+        "2026-11-12T00:00:00+00:00",
+        "0.0.0-test",
+        &kassiber_transfers::SystemSources,
+    )
+    .unwrap_or_else(|error| panic!("{error:?}"));
+    assert_eq!(exported.manifest["pseudonymization"]["faithful"], true);
+    let report = kassiber_replay::verify(&exported.sealed, PASSPHRASE, 3).unwrap();
+    assert_eq!(report["status"], "identical", "{report:#}");
+    drop(book);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// The engine breaks ties between equal-time rows by id (the Austrian
+/// regime tracker depletes Alt/Neu availability in that order), so the
+/// projected ids keep the original ids' relative order: a random key must
+/// never reorder same-time disposals and change the books' figures.
+#[test]
+fn projected_ids_keep_the_original_order() {
+    let (root, book) = book("paired-short-processed", "");
+    let conn = book.connection();
+    let originals: Vec<(String, String)> = conn
+        .prepare("SELECT id, direction || ':' || amount || ':' || substr(occurred_at,1,10) FROM transactions")
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert!(originals.len() >= 7);
+    for _ in 0..3 {
+        let exported = export(conn);
+        let document = open(&exported.sealed);
+        let inputs: Value =
+            serde_json::from_str(document["parts"]["inputs"].as_str().unwrap()).unwrap();
+        let projected: Vec<(String, String)> = inputs["transactions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| {
+                let occurred = row["occurred_at"].as_str().unwrap();
+                (
+                    row["id"].as_str().unwrap().to_owned(),
+                    format!(
+                        "{}:{}:{}",
+                        row["direction"].as_str().unwrap(),
+                        row["amount"],
+                        &occurred[..10]
+                    ),
+                )
+            })
+            .collect();
+        let id_of = |key: &str| {
+            let found: Vec<&String> = projected
+                .iter()
+                .filter(|(_, k)| k == key)
+                .map(|(id, _)| id)
+                .collect();
+            assert_eq!(found.len(), 1, "{key}: {projected:?}");
+            found[0].clone()
+        };
+        let mut by_original = originals.clone();
+        by_original.sort();
+        let order: Vec<String> = by_original.iter().map(|(_, key)| id_of(key)).collect();
+        let mut sorted = order.clone();
+        sorted.sort();
+        assert_eq!(order, sorted, "projected ids reorder the originals");
+    }
+    drop(book);
+    std::fs::remove_dir_all(root).unwrap();
+}
