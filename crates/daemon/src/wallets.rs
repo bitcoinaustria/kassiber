@@ -183,7 +183,15 @@ fn auth(
     Ok(None)
 }
 pub(crate) fn source_file(args: &Value) -> Result<Option<String>, AppError> {
-    let Some(file) = crate::imports::optional_string(args, "source_file")? else {
+    local_file(args, "source_file")
+}
+/// The second export some formats read beside `source_file` (Bisq's Funds >
+/// Transactions CSV), resolved like it.
+pub(crate) fn companion_file(args: &Value) -> Result<Option<String>, AppError> {
+    local_file(args, "companion_file")
+}
+fn local_file(args: &Value, key: &str) -> Result<Option<String>, AppError> {
+    let Some(file) = crate::imports::optional_string(args, key)? else {
         return Ok(None);
     };
     let expanded = if let Some(tail) = file.strip_prefix("~/") {
@@ -268,6 +276,12 @@ fn build_config(args: &Value, update: bool) -> Result<Json, AppError> {
     }
     if let Some(file) = source_file(args)? {
         c["source_file"] = json!(file);
+    }
+    if let Some(file) = companion_file(args)? {
+        c["source_companion_file"] = json!(file);
+    }
+    if let Some(zone) = crate::imports::optional_string(args, "timezone")? {
+        c["source_timezone"] = json!(zone);
     }
     if let Some(gap) = get(args, "gap_limit").filter(|v| **v != Value::Null && **v != s("")) {
         if !matches!(gap, Value::Bool(_) | Value::Int(_)) {

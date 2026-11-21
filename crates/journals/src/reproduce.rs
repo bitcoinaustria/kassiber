@@ -1,7 +1,8 @@
 //! Journal reproducibility (docs/reference/replay-bundle.md): recompute a
 //! book's journals in a private in-memory copy and compare them with the
-//! stored ones in a bounded diff. Nothing here writes to the caller's book.
-use crate::{pipeline, process, service, Refusal};
+//! stored ones, and the canonical tables and bounded diff the replay bundle
+//! shares. Nothing here writes to the caller's book.
+use crate::{pipeline, process, service, JournalState, Refusal};
 use kassiber_store::rusqlite::{types::Value as Sql, Connection};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -36,7 +37,10 @@ impl Cell {
         match value {
             Sql::Null => Self::Null,
             Sql::Integer(n) => Self::Int(n),
-            Sql::Real(n) => Self::real(n),
+            // SQLite stores a REAL zero as +0.0: -0.0 reads back positive, so
+            // the in-memory build carries the stored form (the exact text
+            // column keeps the sign).
+            Sql::Real(n) => Self::real(if n == 0.0 { 0.0 } else { n }),
             Sql::Text(text) => Self::Text(text),
             Sql::Blob(bytes) => Self::Blob(bytes),
         }
@@ -52,6 +56,27 @@ impl Cell {
             Self::Text(text) => json!(text),
             Self::Blob(bytes) => json!({"blob": hex(bytes)}),
         }
+    }
+
+    pub fn from_json(value: &Value) -> Result<Self, String> {
+        Ok(match value {
+            Value::Null => Self::Null,
+            Value::String(text) => Self::Text(text.clone()),
+            Value::Number(n) => Self::Int(
+                n.as_i64()
+                    .ok_or_else(|| "replay cell integers must fit 64 bits".to_owned())?,
+            ),
+            Value::Object(map) if map.len() == 1 => {
+                if let Some(Value::String(text)) = map.get("real") {
+                    Self::real(parse_float(text)?)
+                } else if let Some(Value::String(text)) = map.get("blob") {
+                    Self::Blob(unhex(text)?)
+                } else {
+                    return Err("unknown replay cell".into());
+                }
+            }
+            _ => return Err("unknown replay cell".into()),
+        })
     }
 
     /// Two differing values for a report: long texts are cut to a window
@@ -109,8 +134,36 @@ impl Cell {
     }
 }
 
+fn parse_float(text: &str) -> Result<f64, String> {
+    match text {
+        "inf" => Ok(f64::INFINITY),
+        "-inf" => Ok(f64::NEG_INFINITY),
+        "nan" => Ok(f64::NAN),
+        _ => text.parse().map_err(|_| "invalid replay real".to_owned()),
+    }
+}
+
 pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn unhex(text: &str) -> Result<Vec<u8>, String> {
+    // Byte pairs of ASCII hex digits only: a multi-byte character must be
+    // refused as corruption, never sliced.
+    let digit = |byte: u8| (byte as char).to_digit(16).filter(|_| byte.is_ascii());
+    let bytes = text.as_bytes();
+    if !bytes.len().is_multiple_of(2) {
+        return Err("invalid replay blob".into());
+    }
+    bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| match (digit(pair[0]), digit(pair[1])) {
+            (Some(high), Some(low)) => Ok((high * 16 + low) as u8),
+            _ => Err("invalid replay blob".to_owned()),
+        })
+        .collect()
 }
 
 /// One compared row: its key within the table, the context a report groups
@@ -147,6 +200,54 @@ impl Table {
             name: name.into(),
             rows,
         }
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "table": self.name,
+            "rows": self.rows.iter().map(|row| {
+                let mut out = Map::new();
+                out.insert("key".into(), json!(row.key));
+                for (name, value) in [("transaction_id", &row.transaction_id), ("wallet_id", &row.wallet_id), ("year", &row.year)] {
+                    if let Some(value) = value {
+                        out.insert(name.into(), json!(value));
+                    }
+                }
+                out.insert("columns".into(), Value::Object(row.columns.iter().map(|(k, v)| (k.clone(), v.to_json())).collect()));
+                Value::Object(out)
+            }).collect::<Vec<_>>(),
+        })
+    }
+
+    pub fn from_json(value: &Value) -> Result<Self, String> {
+        let name = value["table"]
+            .as_str()
+            .ok_or("replay table without a name")?;
+        let rows = value["rows"]
+            .as_array()
+            .ok_or("replay table without rows")?
+            .iter()
+            .map(|row| {
+                let text = |key: &str| row.get(key).and_then(Value::as_str).map(str::to_owned);
+                Ok(Row {
+                    key: text("key").ok_or("replay row without a key")?,
+                    transaction_id: text("transaction_id"),
+                    wallet_id: text("wallet_id"),
+                    year: text("year"),
+                    columns: row["columns"]
+                        .as_object()
+                        .ok_or("replay row without columns")?
+                        .iter()
+                        .map(|(k, v)| Ok((k.clone(), Cell::from_json(v)?)))
+                        .collect::<Result<_, String>>()?,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        // Keys arrive already suffixed; keep them as recorded.
+        Ok(Self {
+            name: name.to_owned(),
+            rows,
+        })
     }
 }
 
@@ -491,6 +592,422 @@ pub fn stored_tables(conn: &Connection, profile_id: &str) -> Result<Vec<Table>, 
     Ok(tables)
 }
 
+/// The replay bundle's canonical outputs: the journal figures exactly as
+/// persistence stores them (quantities as integer msat, exact decimal text,
+/// REAL holdings and tax-summary values), so the same tables come from an
+/// in-memory build (`state_tables`) and from a book's stored journals
+/// (`stored_outputs`). Presentation text, calculation encodings and row ids
+/// are left out.
+const ENTRY_COLUMNS: [&str; 20] = [
+    "transaction_id",
+    "wallet_id",
+    "account_id",
+    "occurred_at",
+    "entry_type",
+    "asset",
+    "quantity",
+    "fiat_value",
+    "fiat_value_exact",
+    "unit_cost",
+    "unit_cost_exact",
+    "cost_basis",
+    "cost_basis_exact",
+    "proceeds",
+    "proceeds_exact",
+    "gain_loss",
+    "gain_loss_exact",
+    "at_category",
+    "at_kennzahl",
+    "capital_gains_type",
+];
+
+/// An entry's calculation in its decoded form, whichever encoding stored
+/// it, as the gain explanation reads it; sorted-key JSON text.
+fn calculation_cell(json: Option<&str>, compact: Option<&str>) -> Result<Cell, Refusal> {
+    if json.is_none() && compact.is_none() {
+        return Ok(Cell::Null);
+    }
+    Ok(match kassiber_reports::journal_calculation(json, compact) {
+        Some(value) => Cell::Text(
+            kassiber_pyjson::dumps(
+                &value,
+                &kassiber_pyjson::Options {
+                    sort_keys: true,
+                    ..Default::default()
+                },
+            )
+            .map_err(|error| Refusal::new("ValueError", error.to_string()))?,
+        ),
+        None => Cell::text("undecodable"),
+    })
+}
+
+fn entry_row(columns: BTreeMap<String, Cell>) -> Row {
+    let text = |name: &str| text_of(columns.get(name)).unwrap_or_default();
+    Row {
+        key: format!(
+            "{}|{}|{}|{}",
+            text("transaction_id"),
+            text("wallet_id"),
+            text("entry_type"),
+            text("asset")
+        ),
+        transaction_id: text_of(columns.get("transaction_id")),
+        wallet_id: text_of(columns.get("wallet_id")),
+        year: year_of(columns.get("occurred_at")),
+        columns,
+    }
+}
+
+fn keyed(
+    key: &[&str],
+    columns: BTreeMap<String, Cell>,
+    wallet: Option<&str>,
+    year: Option<&str>,
+) -> Row {
+    Row {
+        key: key_of(&columns, key),
+        transaction_id: None,
+        wallet_id: wallet.and_then(|c| text_of(columns.get(c))),
+        year: year.and_then(|c| year_of(columns.get(c))),
+        columns,
+    }
+}
+
+const SUMMARY_KEY: [&str; 4] = ["year", "asset", "transaction_type", "capital_gains_type"];
+const WALLET_KEY: [&str; 3] = ["wallet_id", "account_code", "asset"];
+const ACCOUNT_KEY: [&str; 3] = ["account_id", "account_code", "asset"];
+const BALANCE_KEY: [&str; 3] = ["location_kind", "location_id", "asset"];
+
+/// The canonical outputs of one in-memory journal build, converted the way
+/// persistence converts them before it stores a row.
+pub fn state_tables(state: &JournalState<'_>) -> Result<Vec<Table>, Refusal> {
+    use crate::persistence::{amount, bind, real};
+    let cell = |value: &Value| -> Result<Cell, Refusal> { Ok(Cell::from_sql(bind(value)?)) };
+    // Both stored representations, REAL and exact text, as persistence
+    // binds them: reports read either.
+    let both = |columns: &mut BTreeMap<String, Cell>,
+                name: &str,
+                value: Option<&crate::JournalDecimal>|
+     -> Result<(), Refusal> {
+        let (real, exact) = crate::persistence::decimal_bindings(value)?;
+        columns.insert(name.to_owned(), Cell::from_sql(real));
+        columns.insert(format!("{name}_exact"), Cell::from_sql(exact));
+        Ok(())
+    };
+    let mut entries = Vec::with_capacity(state.entries.len());
+    for e in &state.entries {
+        let quantity = match &e.quantity {
+            crate::JournalQuantity::Finite(d) => amount(d)?,
+            other => bind(&other.msat()?)?,
+        };
+        let mut columns = BTreeMap::new();
+        columns.insert("transaction_id".into(), cell(&e.transaction_id)?);
+        columns.insert("wallet_id".into(), cell(e.wallet_id)?);
+        columns.insert("account_id".into(), cell(e.account_id)?);
+        columns.insert("occurred_at".into(), cell(&e.occurred_at)?);
+        columns.insert("entry_type".into(), Cell::text(e.entry_type));
+        columns.insert("asset".into(), Cell::text(e.asset.as_ref()));
+        columns.insert("quantity".into(), Cell::from_sql(quantity));
+        both(&mut columns, "fiat_value", Some(&e.fiat_value))?;
+        both(&mut columns, "unit_cost", Some(&e.unit_cost))?;
+        both(&mut columns, "cost_basis", e.cost_basis.as_ref())?;
+        both(&mut columns, "proceeds", e.proceeds.as_ref())?;
+        both(&mut columns, "gain_loss", e.gain_loss.as_ref())?;
+        let calculation = match &e.calculation {
+            Some(calculation) => {
+                let value = serde_json::to_value(calculation)
+                    .map_err(|error| Refusal::new("ValueError", error.to_string()))?;
+                let (json, compact) = crate::storage::encode_calculation(&value)?;
+                calculation_cell(json.as_deref(), compact.as_deref())?
+            }
+            None => Cell::Null,
+        };
+        columns.insert("calculation".into(), calculation);
+        columns.insert(
+            "at_category".into(),
+            e.at_category.as_deref().map_or(Cell::Null, Cell::text),
+        );
+        columns.insert(
+            "at_kennzahl".into(),
+            e.at_kennzahl
+                .flatten()
+                .map_or(Cell::Null, |n| Cell::Int(n.into())),
+        );
+        columns.insert(
+            "capital_gains_type".into(),
+            e.capital_gains_type.map_or(Cell::Null, Cell::text),
+        );
+        entries.push(entry_row(columns));
+    }
+    let mut tables = vec![Table::new("journal_entries", entries)];
+    let mut summary = Vec::with_capacity(state.tax_summary.len());
+    for s in &state.tax_summary {
+        let quantity = if crate::truth(&s.quantity_msat) {
+            bind(&s.quantity_msat)?
+        } else {
+            amount(&crate::JournalDecimal(s.quantity.to_string().parse()?))?
+        };
+        let columns = BTreeMap::from([
+            ("year".into(), Cell::Int(s.year.into())),
+            ("asset".into(), Cell::text(s.asset.as_str())),
+            ("transaction_type".into(), Cell::text(s.transaction_type)),
+            (
+                "capital_gains_type".into(),
+                Cell::text(s.capital_gains_type),
+            ),
+            ("quantity".into(), Cell::from_sql(quantity)),
+            ("proceeds".into(), Cell::real(s.proceeds)),
+            ("cost_basis".into(), Cell::real(s.cost_basis)),
+            ("gain_loss".into(), Cell::real(s.gain_loss)),
+        ]);
+        summary.push(keyed(&SUMMARY_KEY, columns, None, Some("year")));
+    }
+    tables.push(Table::new("journal_tax_summary", summary));
+    for (name, holdings, wallet) in [
+        ("journal_wallet_holdings", &state.wallet_holdings, true),
+        ("journal_account_holdings", &state.account_holdings, false),
+    ] {
+        let mut rows = Vec::with_capacity(holdings.pairs.len());
+        for (key, holding) in &holdings.pairs {
+            if key.len() != 4 {
+                return Err(Refusal::new("ValueError", "holding key width"));
+            }
+            // Wallet: id, label, account code, asset; account: id, code, label, asset.
+            let (identity, names) = if wallet {
+                ([&key[0], &key[2], &key[3]], WALLET_KEY)
+            } else {
+                ([&key[0], &key[1], &key[3]], ACCOUNT_KEY)
+            };
+            let mut columns = BTreeMap::new();
+            for (name, value) in names.iter().zip(identity) {
+                columns.insert((*name).to_owned(), cell(value)?);
+            }
+            columns.insert(
+                "quantity".into(),
+                Cell::from_sql(amount(&holding.quantity)?),
+            );
+            columns.insert(
+                "cost_basis".into(),
+                Cell::from_sql(real(&holding.cost_basis)),
+            );
+            rows.push(keyed(&names, columns, wallet.then_some("wallet_id"), None));
+        }
+        tables.push(Table::new(name, rows));
+    }
+    let (_, postings) = state.quantity_refs();
+    let mut balances = BTreeMap::<(String, String, String), i128>::new();
+    for posting in postings {
+        let amount = posting.at("amount_msat").as_i64().ok_or_else(|| {
+            Refusal::new("OverflowError", "quantity posting does not fit 64 bits")
+        })?;
+        *balances
+            .entry((
+                crate::string(posting.at("location_kind")),
+                crate::string(posting.at("location_id")),
+                crate::string(posting.at("asset")),
+            ))
+            .or_default() += i128::from(amount);
+    }
+    let mut rows = Vec::new();
+    for ((kind, location, asset), amount) in balances {
+        if amount == 0 {
+            continue;
+        }
+        let amount = i64::try_from(amount)
+            .map_err(|_| Refusal::new("OverflowError", "quantity balance does not fit 64 bits"))?;
+        let wallet = kind == "wallet";
+        let columns = BTreeMap::from([
+            ("location_kind".into(), Cell::Text(kind)),
+            ("location_id".into(), Cell::Text(location)),
+            ("asset".into(), Cell::Text(asset)),
+            ("amount_msat".into(), Cell::Int(amount)),
+        ]);
+        rows.push(keyed(
+            &BALANCE_KEY,
+            columns,
+            wallet.then_some("location_id"),
+            None,
+        ));
+    }
+    tables.push(Table::new("journal_quantity_balances", rows));
+    let quarantines = crate::persistence::dedupe_quarantines(&state.quarantines)?
+        .into_iter()
+        .map(|q| {
+            let id = crate::string(&q.transaction_id);
+            Row {
+                key: id.clone(),
+                transaction_id: Some(id),
+                wallet_id: None,
+                year: None,
+                columns: BTreeMap::from([("reason".into(), Cell::text(q.reason))]),
+            }
+        })
+        .collect();
+    tables.push(Table::new("journal_quarantines", quarantines));
+    Ok(tables)
+}
+
+/// The same canonical tables from a book's stored journals: the figures the
+/// user saw, which a replay bundle carries next to its recomputation.
+pub fn stored_outputs(conn: &Connection, profile_id: &str) -> Result<Vec<Table>, Refusal> {
+    let read = |sql: &str| select(conn, sql, profile_id);
+    let entries = read(&format!(
+        "SELECT {},calculation_json,calculation_compact FROM journal_entries WHERE profile_id = ?",
+        ENTRY_COLUMNS.join(",")
+    ))?
+    .into_iter()
+    .map(|mut columns| {
+        let text = |cell: Option<Cell>| match cell {
+            Some(Cell::Text(text)) => Some(text),
+            _ => None,
+        };
+        let json = text(columns.remove("calculation_json"));
+        let compact = text(columns.remove("calculation_compact"));
+        columns.insert(
+            "calculation".into(),
+            calculation_cell(json.as_deref(), compact.as_deref())?,
+        );
+        Ok(entry_row(columns))
+    })
+    .collect::<Result<_, Refusal>>()?;
+    let mut tables = vec![Table::new("journal_entries", entries)];
+    let summary = read("SELECT year,asset,transaction_type,capital_gains_type,quantity,proceeds,cost_basis,gain_loss FROM journal_tax_summary WHERE profile_id = ?")?
+        .into_iter()
+        .map(|columns| keyed(&SUMMARY_KEY, columns, None, Some("year")))
+        .collect();
+    tables.push(Table::new("journal_tax_summary", summary));
+    let wallets = read("SELECT wallet_id,account_code,asset,quantity,cost_basis FROM journal_wallet_holdings WHERE profile_id = ?")?
+        .into_iter()
+        .map(|columns| keyed(&WALLET_KEY, columns, Some("wallet_id"), None))
+        .collect();
+    tables.push(Table::new("journal_wallet_holdings", wallets));
+    let accounts = read("SELECT account_id,account_code,asset,quantity,cost_basis FROM journal_account_holdings WHERE profile_id = ?")?
+        .into_iter()
+        .map(|columns| keyed(&ACCOUNT_KEY, columns, None, None))
+        .collect();
+    tables.push(Table::new("journal_account_holdings", accounts));
+    let balances = read("SELECT location_kind,location_id,asset,amount_msat FROM journal_quantity_balances WHERE profile_id = ?")?
+        .into_iter()
+        .map(|columns| {
+            let wallet = columns.get("location_kind") == Some(&Cell::text("wallet"));
+            keyed(&BALANCE_KEY, columns, wallet.then_some("location_id"), None)
+        })
+        .collect();
+    tables.push(Table::new("journal_quantity_balances", balances));
+    let quarantines =
+        read("SELECT transaction_id,reason FROM journal_quarantines WHERE profile_id = ?")?
+            .into_iter()
+            .map(|mut columns| {
+                let id = text_of(columns.get("transaction_id")).unwrap_or_default();
+                columns.remove("transaction_id");
+                Row {
+                    key: id.clone(),
+                    transaction_id: Some(id),
+                    wallet_id: None,
+                    year: None,
+                    columns,
+                }
+            })
+            .collect();
+    tables.push(Table::new("journal_quarantines", quarantines));
+    Ok(tables)
+}
+
+/// Build the canonical outputs of a loaded custody snapshot in memory.
+pub fn snapshot_tables(
+    snapshot: kassiber_custody::snapshot::Snapshot,
+) -> Result<Vec<Table>, Refusal> {
+    snapshot
+        .validate_loaded()
+        .map_err(|message| Refusal::new("ValueError", message))?;
+    let profile = serde_json::to_value(&snapshot.profile)
+        .map_err(|error| Refusal::new("ValueError", error.to_string()))?;
+    // Persistence keeps only quarantines of the profile's own transactions
+    // (a synthetic or foreign id is dropped before storage); so does this.
+    let live: std::collections::HashSet<String> = snapshot
+        .transactions
+        .iter()
+        .filter_map(|t| t.get("id").map(crate::string))
+        .chain(snapshot.anchors.keys().cloned())
+        .collect();
+    // The same custody, fusion, engine and render path `journals process`
+    // stores from.
+    process::render_loaded(&profile, &snapshot, |state| {
+        let mut tables = state_tables(state)?;
+        live_quarantines(&mut tables, &live);
+        Ok(tables)
+    })
+}
+
+/// Drops quarantine rows whose transaction is not one of `live`.
+fn live_quarantines(tables: &mut [Table], live: &std::collections::HashSet<String>) {
+    for table in tables
+        .iter_mut()
+        .filter(|t| t.name == "journal_quarantines")
+    {
+        table.rows.retain(|row| {
+            row.transaction_id
+                .as_ref()
+                .is_some_and(|id| live.contains(id))
+        });
+    }
+}
+
+/// What a replay bundle captures of one profile: its settings, journal
+/// freshness, and the custody snapshot the journal pipeline loads, read in
+/// one read transaction as of the last processing time.
+pub struct BundleSource {
+    pub profile: Value,
+    pub status: &'static str,
+    pub reason: &'static str,
+    pub snapshot: kassiber_custody::snapshot::Snapshot,
+}
+
+/// Load the replay bundle's source for the selected profile. Read-only.
+pub fn bundle_source(
+    conn: &Connection,
+    workspace: Option<&kassiber_pyjson::Value>,
+    profile: Option<&kassiber_pyjson::Value>,
+) -> Result<BundleSource, Refusal> {
+    let read = if conn.is_autocommit() {
+        Some(conn.unchecked_transaction()?)
+    } else {
+        None
+    };
+    let resolved = service::profile(conn, workspace, profile)?;
+    let profile_id = resolved["id"]
+        .as_str()
+        .ok_or_else(|| Refusal::new("KeyError", "id"))?
+        .to_owned();
+    let (status, reason) = crate::views::freshness_of(conn, &profile_id)?
+        .ok_or_else(|| Refusal::new("KeyError", "id"))?;
+    let as_of = resolved["last_processed_at"]
+        .as_str()
+        .filter(|at| !at.is_empty())
+        .unwrap_or("1970-01-01T00:00:00+00:00")
+        .to_owned();
+    let loaded = crate::loader::load_read_snapshot(
+        conn,
+        kassiber_custody::codec::from_json(&resolved)?,
+        &as_of,
+    )
+    .map_err(|error| match error {
+        crate::loader::Error::Reference(refusal) => refusal,
+        other => Refusal::new("RuntimeError", other.to_string()),
+    })?;
+    let snapshot = loaded
+        .into_custody()
+        .map_err(|error| Refusal::new("RuntimeError", error.to_string()))?;
+    drop(read);
+    Ok(BundleSource {
+        profile: resolved,
+        status,
+        reason,
+        snapshot,
+    })
+}
+
 /// The processing payload fields that mean the run first changed inputs.
 const INPUT_CHANGES: &[&str] = &[
     "auto_priced",
@@ -709,6 +1226,17 @@ mod tests {
     }
 
     #[test]
+    fn malformed_blobs_are_corruption_not_a_panic() {
+        for text in ["\u{20ac}x", "zz", "abc", "0g", "\u{e9}\u{e9}"] {
+            assert!(Cell::from_json(&json!({"blob": text})).is_err(), "{text:?}");
+        }
+        assert_eq!(
+            Cell::from_json(&json!({"blob": "00ff"})).unwrap(),
+            Cell::Blob(vec![0, 255])
+        );
+    }
+
+    #[test]
     fn reals_compare_by_bits_and_repeated_keys_get_suffixes() {
         assert_ne!(
             Cell::real(0.1),
@@ -717,5 +1245,53 @@ mod tests {
         assert_ne!(Cell::real(0.0), Cell::real(-0.0));
         let table = Table::new("t", vec![row("a", 1), row("a", 2)]);
         assert_eq!(table.rows[1].key, "a#2");
+    }
+
+    /// The in-memory build reads a REAL as SQLite stores it: a negative
+    /// zero comes back positive, so a correctly stored signed-zero entry is
+    /// not a replay difference.
+    #[test]
+    fn a_real_zero_reads_as_sqlite_stores_it() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE t(x REAL); INSERT INTO t VALUES(-0.0)")
+            .unwrap();
+        let stored: Sql = conn.query_row("SELECT x FROM t", [], |r| r.get(0)).unwrap();
+        assert_eq!(Cell::from_sql(Sql::Real(-0.0)), Cell::from_sql(stored));
+        assert_eq!(Cell::from_sql(Sql::Real(-0.0)), Cell::real(0.0));
+        assert_eq!(Cell::from_sql(Sql::Real(-1.5)), Cell::real(-1.5));
+    }
+
+    #[test]
+    fn quarantines_of_transactions_outside_the_profile_are_dropped() {
+        let quarantine = |id: &str| Row {
+            key: id.into(),
+            transaction_id: Some(id.into()),
+            wallet_id: None,
+            year: None,
+            columns: BTreeMap::from([("reason".into(), Cell::text("x"))]),
+        };
+        let mut tables = vec![Table::new(
+            "journal_quarantines",
+            vec![quarantine("tx-1"), quarantine("synthetic:unknown")],
+        )];
+        live_quarantines(&mut tables, &["tx-1".to_owned()].into_iter().collect());
+        let kept: Vec<_> = tables[0].rows.iter().map(|r| r.key.as_str()).collect();
+        assert_eq!(kept, ["tx-1"]);
+    }
+
+    #[test]
+    fn cells_and_tables_round_trip_through_the_bundle_encoding() {
+        for cell in [
+            Cell::Null,
+            Cell::Int(-7),
+            Cell::real(0.1),
+            Cell::real(f64::INFINITY),
+            Cell::text("x"),
+            Cell::Blob(vec![0, 255]),
+        ] {
+            assert_eq!(Cell::from_json(&cell.to_json()).unwrap(), cell);
+        }
+        let table = Table::new("t", vec![row("a", 1), row("a", 2)]);
+        assert_eq!(Table::from_json(&table.to_json()).unwrap(), table);
     }
 }

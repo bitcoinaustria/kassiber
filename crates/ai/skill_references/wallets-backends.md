@@ -358,6 +358,25 @@ transactions anywhere in the current book and do not create standalone rows.
 Use `--mode full` only when the shared provider export itself should be kept as
 excluded evidence with matched / wallet-gap / ambiguous reconciliation tags.
 
+Bisq 1 trades (an escrow ledger; sync the watch-only Bisq wallet first, from
+the xpubs Bisq shows under Account > Wallet info):
+
+```bash
+kassiber wallets import-bisq --file /path/to/tradeHistory.csv \
+  --transactions /path/to/transactions.csv --timezone Europe/Vienna
+```
+
+Both Bisq exports and the exporting computer's IANA time zone are required:
+Portfolio > History prices each trade and Funds > Transactions dates and
+names its escrow deposit and payout, in local time without an offset. Each
+completed BTC/fiat trade becomes `bisq:<trade id>:deposit|trade|payout` rows
+in a `bisq` wallet that net to zero; legs whose txid the book already observed
+are paired automatically, others wait for `transfers suggest`. Read
+`bisq_review_required` in the response: mediated, arbitrated or not yet
+observed trades are held, write nothing, and quarantine the transactions they
+name (`bisq_trade_review_required`) until a custody review covers them.
+Altcoin and BSQ markets refuse the import by name.
+
 CoinTracking / Blockpit migration history:
 
 ```bash

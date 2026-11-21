@@ -434,7 +434,7 @@ pub fn dismissal_is_active(expires_at: &Value, now: &str) -> bool {
         .is_some_and(|(expiry, now)| expiry <= now)
 }
 /// `_active_dismissals`: the (out, in) pairs still vetoed at `now`.
-fn active_dismissals(dismissals: &[Value], now: &str) -> HashSet<(String, String)> {
+pub(super) fn active_dismissals(dismissals: &[Value], now: &str) -> HashSet<(String, String)> {
     let now = now_seconds(now);
     dismissals
         .iter()

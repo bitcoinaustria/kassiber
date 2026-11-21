@@ -76,7 +76,8 @@ pub(super) const PAYMENT: &str = r#"CASE
             THEN 'Lightning'
           WHEN lower(w.kind) IN (
               'kraken', 'bitstamp', 'coinbase', 'bitpanda', 'river', 'binance',
-              'bullbitcoin', 'coinfinity', 'strike', 'exchange', '21bitcoin', 'pocketbitcoin'
+              'bullbitcoin', 'coinfinity', 'strike', 'exchange', '21bitcoin', 'pocketbitcoin',
+              'bisq'
             )
             THEN 'Exchange'
           WHEN lower(w.kind) IN (

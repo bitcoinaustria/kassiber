@@ -636,6 +636,26 @@ pub fn inspect_with_error<E: From<AppError>>(
                     operations.insert(0, s("unpair"));
                 }
             }
+            if reason == "bisq_trade_review_required" {
+                // A held Bisq trade: review what it moved, or exclude a row
+                // that is not the owner's.
+                let detail = &details[*id];
+                set(
+                    &mut case,
+                    "bisq_trade",
+                    dict(
+                        [
+                            "trade_id",
+                            "trade_status",
+                            "hold_reason",
+                            "txid",
+                            "resolution",
+                        ]
+                        .map(|key| (key, value(detail, key))),
+                    ),
+                );
+                operations = vec![s("custody_component"), s("exclude")];
+            }
             if reason == "synthetic_import_duplicate_review_required" {
                 let detail = &details[*id];
                 set(

@@ -4,7 +4,7 @@
 use crate::spec::*;
 
 /// Every parser `build_parser()` builds, depth first; index 0 is `kassiber`.
-pub(crate) static PARSERS: [Parser; 397] = [
+pub(crate) static PARSERS: [Parser; 401] = [
     Parser {
         prog: "kassiber",
         description: Some("Open-source, local-first Bitcoin accounting with wallet buckets and multi-wallet support. CLI surface of the Kassiber suite; a desktop GUI is also available."),
@@ -2041,7 +2041,7 @@ pub(crate) static PARSERS: [Parser; 397] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("wallets_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 143), ("create", 144), ("kinds", 145), ("get", 146), ("update", 147), ("delete", 148), ("reveal-descriptor", 149), ("import-json", 150), ("import-csv", 151), ("import-btcpay", 152), ("import-phoenix", 153), ("import-wasabi", 154), ("import-river", 155), ("import-bull", 156), ("import-bullbitcoin", 156), ("import-coinfinity", 157), ("import-21bitcoin", 158), ("import-pocket", 159), ("import-pocketbitcoin", 159), ("import-strike", 160), ("import-ledger-live", 161), ("import-cointracking", 162), ("import-blockpit", 163), ("import-binance-supplemental", 164), ("sync-kraken", 165), ("sync-coinbase", 166), ("sync-binance", 167), ("sync-bitpanda", 383), ("import-ledger", 168), ("analyze-file", 169), ("ledger-template", 170), ("preview-document", 171), ("import-document", 172), ("import-samourai", 173), ("sync-btcpay", 174), ("attach-btcpay", 175), ("attach-bullbitcoin-wallet", 176), ("sync", 177), ("derive", 178), ("identify", 179)], choice_help: &[ChoiceHelp { dest: "reveal-descriptor", metavar: "reveal-descriptor", help: Help::Text("Print the raw descriptor / change descriptor / blinding key (requires database unlock)") }, ChoiceHelp { dest: "import-ledger", metavar: "import-ledger", help: Help::Text("Import a filled-in generic ledger (.xlsx or CSV/TSV) into a wallet") }, ChoiceHelp { dest: "analyze-file", metavar: "analyze-file", help: Help::Text("Report what an arbitrary exchange/broker export contains and whether it can be imported") }, ChoiceHelp { dest: "ledger-template", metavar: "ledger-template", help: Help::Text("Write a blank generic-ledger import template (.xlsx, or .csv by extension)") }, ChoiceHelp { dest: "preview-document", metavar: "preview-document", help: Help::Text("Use a local vision model to draft transaction rows from an image/PDF") }, ChoiceHelp { dest: "import-document", metavar: "import-document", help: Help::Text("Import ready local-OCR draft rows into a wallet and attach the source document") }, ChoiceHelp { dest: "attach-btcpay", metavar: "attach-btcpay", help: Help::Text("Record a BTCPay provenance route on an existing settlement wallet") }, ChoiceHelp { dest: "attach-bullbitcoin-wallet", metavar: "attach-bullbitcoin-wallet", help: Help::Text("Record a Bull Bitcoin unified wallet export route on an existing wallet") }, ChoiceHelp { dest: "identify", metavar: "identify", help: Help::Text("Check whether addresses / txids belong to any wallet (reconciliation)") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("wallets_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 143), ("create", 144), ("kinds", 145), ("get", 146), ("update", 147), ("delete", 148), ("reveal-descriptor", 149), ("import-json", 150), ("import-csv", 151), ("import-btcpay", 152), ("import-phoenix", 153), ("import-wasabi", 154), ("import-river", 155), ("import-bull", 156), ("import-bullbitcoin", 156), ("import-coinfinity", 157), ("import-21bitcoin", 158), ("import-pocket", 159), ("import-pocketbitcoin", 159), ("import-strike", 160), ("import-bisq", 389), ("import-ledger-live", 161), ("import-cointracking", 162), ("import-blockpit", 163), ("import-binance-supplemental", 164), ("sync-kraken", 165), ("sync-coinbase", 166), ("sync-binance", 167), ("sync-bitpanda", 383), ("import-ledger", 168), ("analyze-file", 169), ("ledger-template", 170), ("preview-document", 171), ("import-document", 172), ("import-samourai", 173), ("sync-btcpay", 174), ("attach-btcpay", 175), ("attach-bullbitcoin-wallet", 176), ("sync", 177), ("derive", 178), ("identify", 179)], choice_help: &[ChoiceHelp { dest: "reveal-descriptor", metavar: "reveal-descriptor", help: Help::Text("Print the raw descriptor / change descriptor / blinding key (requires database unlock)") }, ChoiceHelp { dest: "import-ledger", metavar: "import-ledger", help: Help::Text("Import a filled-in generic ledger (.xlsx or CSV/TSV) into a wallet") }, ChoiceHelp { dest: "analyze-file", metavar: "analyze-file", help: Help::Text("Report what an arbitrary exchange/broker export contains and whether it can be imported") }, ChoiceHelp { dest: "ledger-template", metavar: "ledger-template", help: Help::Text("Write a blank generic-ledger import template (.xlsx, or .csv by extension)") }, ChoiceHelp { dest: "preview-document", metavar: "preview-document", help: Help::Text("Use a local vision model to draft transaction rows from an image/PDF") }, ChoiceHelp { dest: "import-document", metavar: "import-document", help: Help::Text("Import ready local-OCR draft rows into a wallet and attach the source document") }, ChoiceHelp { dest: "attach-btcpay", metavar: "attach-btcpay", help: Help::Text("Record a BTCPay provenance route on an existing settlement wallet") }, ChoiceHelp { dest: "attach-bullbitcoin-wallet", metavar: "attach-bullbitcoin-wallet", help: Help::Text("Record a Bull Bitcoin unified wallet export route on an existing wallet") }, ChoiceHelp { dest: "identify", metavar: "identify", help: Help::Text("Check whether addresses / txids belong to any wallet (reconciliation)") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4469,7 +4469,7 @@ pub(crate) static PARSERS: [Parser; 397] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("documents_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 299), ("create", 300), ("attach", 301), ("import-report", 302), ("import-statement", 389), ("statement-imports", 390), ("rollback-statement", 391)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("documents_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 299), ("create", 300), ("attach", 301), ("import-report", 302), ("import-statement", 393), ("statement-imports", 394), ("rollback-statement", 395)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4553,7 +4553,7 @@ pub(crate) static PARSERS: [Parser; 397] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("review-context", 304), ("request-input", 305), ("sources", 306), ("links", 310), ("suggest", 316), ("assemble", 317), ("cases", 318), ("coverage", 320), ("recipients", 321), ("bank-lines", 392)], choice_help: &[ChoiceHelp { dest: "review-context", metavar: "review-context", help: Help::Text("Inspect one provenance target and its reachable evidence") }, ChoiceHelp { dest: "request-input", metavar: "request-input", help: Help::Text("Describe missing user input for an inspected provenance target") }, ChoiceHelp { dest: "assemble", metavar: "assemble", help: Help::Text("Auto-assemble the reviewed flow graph behind a target from local evidence (tx inputs/outputs, payment hashes, platform ids).") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("review-context", 304), ("request-input", 305), ("sources", 306), ("links", 310), ("suggest", 316), ("assemble", 317), ("cases", 318), ("coverage", 320), ("recipients", 321), ("bank-lines", 396)], choice_help: &[ChoiceHelp { dest: "review-context", metavar: "review-context", help: Help::Text("Inspect one provenance target and its reachable evidence") }, ChoiceHelp { dest: "request-input", metavar: "request-input", help: Help::Text("Describe missing user input for an inspected provenance target") }, ChoiceHelp { dest: "assemble", metavar: "assemble", help: Help::Text("Auto-assemble the reviewed flow graph behind a target from local evidence (tx inputs/outputs, payment hashes, platform ids).") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5583,7 +5583,7 @@ pub(crate) static PARSERS: [Parser; 397] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("diagnostics_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("collect", 371)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("diagnostics_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("collect", 371), ("replay-bundle", 390)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5857,6 +5857,65 @@ pub(crate) static PARSERS: [Parser; 397] = [
         defaults: &[],
     },
     Parser {
+        prog: "kassiber wallets import-bisq",
+        description: Some("Import Bisq 1 trades as a per-trade escrow ledger from the Portfolio > History and Funds > Transactions CSV exports."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--wallet"], dest: Some("wallet"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--file"], dest: Some("file"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("Portfolio > History CSV export (closed trades)"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--transactions"], dest: Some("transactions"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("Funds > Transactions CSV export: dates and txids of each trade's escrow deposit and payout"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--timezone"], dest: Some("timezone"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("IANA time zone of the computer that exported the files, e.g. Europe/Vienna (Bisq writes local time without an offset)"), metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--wallet", 3), ("--file", 4), ("--transactions", 5), ("--timezone", 6)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5, 6] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber diagnostics replay-bundle",
+        description: Some("Export or verify an encrypted, pseudonymized replay bundle of one book's journal inputs and outputs."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("replay_bundle_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("export", 391), ("verify", 392)], choice_help: &[ChoiceHelp { dest: "export", metavar: "export", help: Help::Text("Write an encrypted replay bundle of the book's journal inputs and outputs") }, ChoiceHelp { dest: "verify", metavar: "verify", help: Help::Text("Re-run a replay bundle's journals and diff them against its recorded outputs") }] }) },
+        ],
+        options: &[("-h", 0), ("--help", 0)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber diagnostics replay-bundle export",
+        description: Some("Write the book's journal inputs (pseudonymized txids, addresses and labels; exact amounts, dates, rates and tax settings) and outputs into a passphrase-encrypted bundle. No descriptors, xpubs, keys, credentials or backend URLs are included."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--file"], dest: Some("file"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("Destination `.kassiber-replay` file path (separate from the global --output)"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--bundle-passphrase-fd"], dest: Some("bundle_passphrase_fd"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Text("Read the bundle passphrase from this open file descriptor"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::StoreTrue, option_strings: &["--confirm"], dest: Some("confirm"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Confirm the bundle holds exact amounts, dates, rates and tax settings of this book"), metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--file", 3), ("--bundle-passphrase-fd", 4), ("--confirm", 5)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber diagnostics replay-bundle verify",
+        description: Some("Decrypt a replay bundle, recompute its journals from its inputs and compare them with its recorded outputs. Opens no book and uses no network."),
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &[], dest: Some("file"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("Path to the `.kassiber-replay` file"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--bundle-passphrase-fd"], dest: Some("bundle_passphrase_fd"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Text("Read the bundle passphrase from this open file descriptor"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--limit"], dest: Some("limit"), nargs: Nargs::Single, constant: Lit::None, default: Lit::Int(20), value_type: ValueType::Int, required: false, help: Help::Text("Differences to list (1-200); counts always cover every row"), metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--bundle-passphrase-fd", 2), ("--limit", 3)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0, 2, 3] }],
+        defaults: &[],
+    },
+    Parser {
         prog: "kassiber documents import-statement",
         description: Some("Import a bank statement (CAMT.053, MT940 or bank CSV) as source-of-funds evidence. Lines never become transactions or balances."),
         actions: &[
@@ -5910,7 +5969,7 @@ pub(crate) static PARSERS: [Parser; 397] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_bank_lines_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 393), ("suggest", 394), ("accept", 395), ("reject", 396)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_bank_lines_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 397), ("suggest", 398), ("accept", 399), ("reject", 400)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],

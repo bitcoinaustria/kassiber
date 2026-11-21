@@ -92,6 +92,10 @@ const MAINTAINED_READS: &[&str] = &[
 
 /// The audit package's evidence surface; its PDF/package export stays unported.
 const EVIDENCE_SUMMARY: &str = "ui.audit.evidence.summary";
+/// Seal the open book's replay bundle into the managed exports directory
+/// (docs/reference/replay-bundle.md); the desktop confirms and supplies the
+/// passphrase.
+pub const REPLAY_BUNDLE_EXPORT: &str = "ui.diagnostics.replay_bundle.export";
 
 const UNLOCK_SCOPE: &str = "unlock_database";
 const UNLOCK_LABEL: &str = "Enter the SQLCipher database passphrase to unlock Kassiber.";
@@ -119,6 +123,7 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.source_funds.bank_lines.suggest",
     "ui.source_funds.bank_lines.accept",
     "ui.source_funds.bank_lines.reject",
+    "ui.diagnostics.replay_bundle.export",
 ];
 
 /// Every kind `daemon.ready` advertises.
@@ -197,6 +202,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(bank_statements::kinds());
     kinds.push("ui.journals.process");
     kinds.extend(journals::KINDS);
+    kinds.push(REPLAY_BUNDLE_EXPORT);
     kinds.extend(transfers::KINDS);
     kinds.extend(services::kinds().filter(|k| views::KINDS.contains(k)));
     kinds.extend(services::kinds().filter(|k| networks::KINDS.contains(k)));
@@ -1122,6 +1128,35 @@ impl Daemon {
             }
             let payload =
                 chain_analysis_ops::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if kind_text == REPLAY_BUNDLE_EXPORT {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let empty = kassiber_envelope::dict::<&str>([]);
+            let args = match args.as_ref() {
+                None | Some(Value::Null) => &empty,
+                Some(value @ Value::Dict(_)) => value,
+                Some(_) => {
+                    return Err(AppError::new("validation", "daemon args must be an object").into())
+                }
+            };
+            // The desktop gets a managed file; it cannot name a path or another book.
+            for key in ["file", "workspace", "profile"] {
+                if kassiber_envelope::get(args, key).is_some() {
+                    return Err(AppError::new(
+                        "validation",
+                        format!("{REPLAY_BUNDLE_EXPORT} does not accept argument {key}"),
+                    )
+                    .into());
+                }
+            }
+            let version = self.build.version;
+            let payload = self.book_mut()?.replay_bundle_export(args, version)?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,

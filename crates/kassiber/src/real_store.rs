@@ -10,6 +10,7 @@ mod journals;
 mod lightning;
 mod onboarding;
 mod rates_rebuild;
+mod replay;
 mod reproduce;
 
 use std::path::{Path, PathBuf};
@@ -369,6 +370,9 @@ impl BookStore for RealStore {
         )
     }
     fn local_service(&self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        if operation == "diagnostics.replay-bundle.verify" {
+            return replay::verify_bundle(args);
+        }
         if operation == "verify-download" {
             let field = |key| {
                 kassiber_envelope::py_str(kassiber_envelope::get(args, key).unwrap_or(&Value::Null))
@@ -2991,6 +2995,13 @@ impl Book for RealBook {
     ) -> Result<Value, AppError> {
         let (_, profile_id) = self.resolve_scope(workspace, profile)?;
         kassiber_wallets::descriptor_material(self.conn()?, &profile_id, wallet)
+    }
+    fn replay_bundle_export(&mut self, args: &Value, version: &str) -> Result<Value, AppError> {
+        #[cfg(feature = "test-harness")]
+        let sources = journals::Sources;
+        #[cfg(not(feature = "test-harness"))]
+        let sources = kassiber_transfers::SystemSources;
+        replay::export(self.conn()?, &self.data_root, args, version, &sources)
     }
     fn purge_legacy_ledger(&mut self, confirm: bool) -> Result<Value, AppError> {
         let conn = self.conn()?;

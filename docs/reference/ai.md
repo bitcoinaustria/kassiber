@@ -1409,7 +1409,9 @@ counts, and a cut table or difference list as `tables_omitted` /
 `differences_omitted` with `truncated` set. When the check fails before producing a report, the assistant gets the
 error code and a fixed message, never the error text, which can quote book
 values. It does not refresh journals first, since a stale book is one of
-the answers it gives, and it is not an automatic context read.
+the answers it gives, and it is not an automatic context read. Replay bundle
+export is not an assistant tool: it needs the user's confirmation and a
+passphrase the assistant must never see.
 
 Quoted or search-like questions can trigger `ui.transactions.search` before the
 provider is called. Matching transaction notes, descriptions, counterparties,
