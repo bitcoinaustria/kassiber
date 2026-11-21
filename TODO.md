@@ -2144,6 +2144,32 @@ on the CLI, daemon, desktop and assistant.
   dismissal) should report as `stale` rather than a difference when the
   check runs long after processing.
 
+## Replay bundles
+
+Shipped: [encrypted, generated replay bundles](docs/reference/replay-bundle.md#replay-bundle)
+on the CLI, daemon and desktop.
+
+- [ ] Add a daemon kind and a desktop picker for `replay-bundle verify` if
+  maintainers want it in the app; the CLI verify needs no book today.
+- [ ] Measure export on a large book (two journal runs plus the stored
+  outputs in memory). Done when the peak memory and time are recorded in the
+  reference.
+- [ ] Teach the projection schema the value when a real book's export is
+  refused with `replay_bundle_unfaithful` or `replay_bundle_unsafe_stored`.
+  Done when the frozen test books and the demo organization export.
+- [ ] Keep the interpreted values the projection still withholds (Codex review
+  on #793/#794): Liquid graph `role` and `raw_hex` (decode and project the
+  public graph facts), Binance's `network = "BTC"` rail, the `rate:`/`value:`
+  prefix of an accepted coarse price, `at_category_override = "none"`, and
+  Austrian marker tokens in notes and descriptions. Books that need one are
+  refused as `replay_bundle_unfaithful` today; done when each has a
+  value-level projection test.
+- [ ] Compare engine-derived digests exactly instead of masking them: the
+  fidelity and stored checks mask every 40+ character hex run, so balance rows
+  whose keys differ only by a gap-hold digest share one masked key and only
+  one of them is compared. Map the book's observation digests to the
+  projected ones and mask nothing.
+
 ## Daemon, contracts, and performance
 
 - [ ] Support OpenCode 2 OAuth-backed private turns once credentials can be
