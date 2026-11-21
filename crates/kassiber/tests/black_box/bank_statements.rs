@@ -109,6 +109,8 @@ fn every_tool_that_can_carry_bank_evidence_projects_it() {
     let listed = sandbox
         .machine(&["source-funds", "bank-lines", "list", "--direction", "out"])
         .json();
+    // Each leaf answers under its own kind, as `commands describe` advertises.
+    assert_eq!(listed["kind"], "source-funds.bank-lines.list", "{listed}");
     let first = listed["data"]["lines"]
         .as_array()
         .unwrap()
@@ -130,6 +132,7 @@ fn every_tool_that_can_carry_bank_evidence_projects_it() {
         ])
         .json();
     assert_eq!(accepted["data"]["state"], "accepted", "{accepted}");
+    assert_eq!(accepted["kind"], "source-funds.bank-lines.accept");
     // The CLI is the user's own terminal: it shows the counterparty and the
     // bank reference, with IBANs masked.
     let report = sandbox

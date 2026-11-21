@@ -421,6 +421,7 @@ pub const KIND_SUBCOMMAND_ATTRS: &[&str] = &[
     "source_funds_links_command",
     "source_funds_cases_command",
     "source_funds_recipients_command",
+    "source_funds_bank_lines_command",
     "events_command",
     "quarantine_command",
     "quarantine_resolve_command",

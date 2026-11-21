@@ -153,4 +153,40 @@ mod tests {
             Capability::Operator
         );
     }
+
+    #[test]
+    fn source_funds_bank_lines_leaves_classify_under_their_own_capability() {
+        for (leaf, extra, expected) in [
+            ("list", &[][..], Capability::Read),
+            ("suggest", &[][..], Capability::Read),
+            ("accept", &["--transaction", "t", "--line", "l"][..], Capability::AccountingDecisions),
+            ("reject", &["--transaction", "t", "--line", "l"][..], Capability::AccountingDecisions),
+        ] {
+            let mut items = vec!["--machine", "source-funds", "bank-lines", leaf];
+            items.extend_from_slice(extra);
+            let parsed = classify(&argv(&items)).unwrap_or_else(|error| panic!("{leaf}: {error:?}"));
+            assert_eq!(parsed.command_path, format!("source-funds.bank-lines.{leaf}"));
+            assert_eq!(parsed.capability, expected, "{leaf}");
+        }
+    }
+
+    /// Every nested subcommand destination in the grammar must extend the
+    /// command path, or its leaves collapse onto the group (which has no
+    /// capability entry, so the broker refuses them and the envelope kind
+    /// loses the leaf).
+    #[test]
+    fn every_subcommand_destination_extends_the_command_path() {
+        let known: Vec<&str> = std::iter::once("command")
+            .chain(kassiber_envelope::KIND_SUBCOMMAND_ATTRS.iter().copied())
+            .chain(kassiber_envelope::COMMAND_PATH_ONLY_SUBCOMMAND_ATTRS.iter().copied())
+            .collect();
+        let missing: Vec<&str> = crate::spec::parsers()
+            .iter()
+            .flat_map(|parser| parser.actions.iter())
+            .filter(|action| action.subparsers.is_some())
+            .filter_map(|action| action.dest)
+            .filter(|dest| !known.contains(dest))
+            .collect();
+        assert!(missing.is_empty(), "{missing:?}");
+    }
 }
