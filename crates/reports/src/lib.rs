@@ -56,6 +56,7 @@ mod snapshot_write;
 mod snapshots;
 mod source_funds_assemble;
 mod source_funds_assembly;
+pub mod source_funds_bank;
 pub mod source_funds_batch;
 pub mod source_funds_bundle;
 pub mod source_funds_cases;

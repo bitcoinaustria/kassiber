@@ -5,7 +5,9 @@ use kassiber_pyjson::Value;
 use kassiber_store::{rusqlite::Connection, Book};
 use kassiber_transactions::{
     bank_statements::{
-        mask_ibans, parse,
+        ai_project_bank_evidence, ai_projection, mask_ibans,
+        matching::{self, Buy, Decisions, Line, Outcome},
+        parse,
         store::{self, ImportRequest, LineFilter},
         Format, Money, ParseOptions, ParsedStatement,
     },
@@ -411,6 +413,49 @@ fn free_text_shows_every_valid_iban_masked_and_nothing_else() {
 }
 
 #[test]
+fn the_assistant_sees_masked_ibans_and_exchange_names_only() {
+    let line = |name: &str| {
+        dict([
+            ("amount", s("-1000.00")),
+            ("counterparty_name", s(name)),
+            ("counterparty_iban_masked", s("AT** **** **** **** 3201")),
+            ("bank_reference", s("SENTINEL-REF")),
+            ("remittance", s("SENTINEL remittance")),
+        ])
+    };
+    let report = dict([
+        (
+            "bank_evidence",
+            Value::List(vec![line("Sentinel Holder GmbH"), line("Payward Ltd")]),
+        ),
+        ("remittance", s("not bank evidence")),
+    ]);
+    let lines = dict([
+        ("lines", Value::List(vec![line("Payward Ltd")])),
+        ("preview", s("y")),
+    ]);
+    for projected in [
+        format!("{:?}", ai_project_bank_evidence(&report)),
+        format!("{:?}", ai_projection(&lines)),
+    ] {
+        for gone in [
+            "Sentinel Holder",
+            "SENTINEL-REF",
+            "SENTINEL remittance",
+            "Payward Ltd",
+            "preview",
+        ] {
+            assert!(!projected.contains(gone), "{gone}: {projected}");
+        }
+        assert!(
+            projected.contains("Kraken") && projected.contains("AT** **** **** **** 3201"),
+            "{projected}"
+        );
+    }
+    assert!(format!("{:?}", ai_project_bank_evidence(&report)).contains("not bank evidence"));
+}
+
+#[test]
 fn money_is_exact_decimal_text() {
     let m = |v: &str| Money::parse(v).unwrap();
     assert_eq!(
@@ -739,4 +784,238 @@ fn lines_kassiber_cannot_place_are_refused_by_name() {
         1,
         "refused imports leave nothing behind"
     );
+}
+
+#[test]
+fn accepted_evidence_blocks_rollback() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let root = dir.path().join("attachments");
+    let file = dir.path().join("s.csv");
+    fs::write(&file, csv_ref(&[MARCH])).unwrap();
+    let import_id = text(
+        get(
+            &import_file(conn, &root, &file, own(), false).unwrap(),
+            "import",
+        )
+        .unwrap(),
+        "id",
+    );
+    conn.execute_batch("INSERT INTO bank_statement_line_decisions(line_id,transaction_id,profile_id,state,created_at,updated_at) SELECT id,'gone','p','accepted','2025','2025' FROM bank_statement_lines").unwrap();
+    assert_eq!(
+        store::rollback(conn, &scope(), &root, &import_id, true)
+            .unwrap_err()
+            .code,
+        "conflict"
+    );
+    let line: String = conn
+        .query_row("SELECT id FROM bank_statement_lines", [], |r| r.get(0))
+        .unwrap();
+    // A decision whose purchase is gone can still be rejected, which frees the import.
+    matching::reject(conn, &scope(), &[line], &["gone".into()]).unwrap();
+    store::rollback(conn, &scope(), &root, &import_id, true).unwrap();
+}
+
+// Matching.
+
+fn line(id: &str, date: &str, amount: &str) -> Line {
+    Line {
+        id: id.into(),
+        booking_date: date.into(),
+        amount: Money::parse(amount).unwrap(),
+        currency: "EUR".into(),
+        exchange: None,
+    }
+}
+
+fn buy(id: &str, at: &str, value: &str) -> Buy {
+    Buy {
+        id: id.into(),
+        occurred_at: at.into(),
+        amount_msat: 1,
+        currency: "EUR".into(),
+        value: Money::parse(value).unwrap(),
+        exchange: Some("kraken"),
+        wallet_label: "Kraken".into(),
+    }
+}
+
+fn outcomes(lines: &[Line], buys: &[Buy], decisions: &Decisions) -> Vec<(String, String, String)> {
+    let mut found: Vec<_> = matching::suggest(lines, buys, decisions)
+        .into_iter()
+        .map(|o| match o {
+            Outcome::Pair { line, buy, .. } => ("pair".into(), line, buy),
+            Outcome::Unmatched { id, reason, .. } => (reason.into(), id, String::new()),
+        })
+        .collect();
+    found.sort();
+    found
+}
+
+fn row(kind: &str, a: &str, b: &str) -> (String, String, String) {
+    (kind.into(), a.into(), b.into())
+}
+
+#[test]
+fn only_an_exact_unique_pair_in_the_window_is_suggested() {
+    let buys = [buy("B", "2025-03-11T10:00:00Z", "100.00")];
+    let fits = |l: Line| outcomes(&[l], &buys, &Decisions::default());
+    assert_eq!(
+        fits(line("L", "2025-03-01", "100")),
+        [row("pair", "L", "B")],
+        "10 days before"
+    );
+    assert_eq!(
+        fits(line("L", "2025-03-12", "100.00")),
+        [row("pair", "L", "B")],
+        "1 day after"
+    );
+    for (date, amount) in [
+        ("2025-02-28", "100.00"),
+        ("2025-03-13", "100.00"),
+        ("2025-03-10", "100.01"),
+        ("2025-03-10", "102.00"),
+        ("2025-03-10", "99.99"),
+    ] {
+        assert_eq!(
+            fits(line("L", date, amount)),
+            [row("no_exact_amount", "B", "")],
+            "{date} {amount}"
+        );
+    }
+    let chf = Line {
+        currency: "CHF".into(),
+        ..line("L", "2025-03-10", "100.00")
+    };
+    assert_eq!(fits(chf), [row("no_exact_amount", "B", "")]);
+    let Outcome::Pair { reasons, .. } = &matching::suggest(
+        &[Line {
+            exchange: Some("kraken"),
+            ..line("L", "2025-03-09", "100")
+        }],
+        &buys,
+        &Decisions::default(),
+    )[0] else {
+        panic!()
+    };
+    assert_eq!(
+        reasons,
+        &[
+            "same currency EUR",
+            "bank amount equals the purchase value 100.00",
+            "booked 2 days before the purchase",
+            "counterparty or reference names Kraken",
+            "matches the purchase's Kraken wallet"
+        ]
+    );
+}
+
+#[test]
+fn two_candidates_or_a_split_are_left_unmatched_by_name() {
+    let none = Decisions::default();
+    let two_lines = outcomes(
+        &[
+            line("L1", "2025-03-10", "70"),
+            line("L2", "2025-03-11", "70"),
+        ],
+        &[buy("B", "2025-03-11T10:00:00Z", "70")],
+        &none,
+    );
+    assert_eq!(two_lines, [row("ambiguous", "B", "")]);
+    let two_buys = outcomes(
+        &[line("L", "2025-03-10", "70")],
+        &[
+            buy("B1", "2025-03-11T10:00:00Z", "70"),
+            buy("B2", "2025-03-11T11:00:00Z", "70"),
+        ],
+        &none,
+    );
+    assert_eq!(
+        two_buys,
+        [
+            row("ambiguous", "B1", ""),
+            row("ambiguous", "B2", ""),
+            row("ambiguous", "L", "")
+        ]
+    );
+    let split = outcomes(
+        &[line("L", "2025-03-10", "100")],
+        &[
+            buy("B1", "2025-03-11T10:00:00Z", "60"),
+            buy("B2", "2025-03-11T11:00:00Z", "40"),
+        ],
+        &none,
+    );
+    assert_eq!(
+        split,
+        [
+            row("no_exact_amount", "B1", ""),
+            row("no_exact_amount", "B2", "")
+        ]
+    );
+}
+
+#[test]
+fn decisions_remove_decided_lines_purchases_and_rejected_pairs() {
+    let lines = [
+        line("L1", "2025-03-10", "70"),
+        line("L2", "2025-03-10", "80"),
+    ];
+    let buys = [
+        buy("B1", "2025-03-11T10:00:00Z", "70"),
+        buy("B2", "2025-03-11T10:00:00Z", "80"),
+    ];
+    let mut decided = Decisions::default();
+    decided.accepted_lines.insert("L1".into());
+    decided.accepted_buys.insert("B1".into());
+    decided.rejected.insert(("L2".into(), "B2".into()));
+    assert_eq!(
+        outcomes(&lines, &buys, &decided),
+        [row("no_exact_amount", "B2", "")]
+    );
+}
+
+#[test]
+fn the_book_lists_purchases_without_an_exact_value_and_refuses_unknown_ones() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let file = dir.path().join("s.csv");
+    fs::write(&file, csv_ref(&[MARCH, SALARY])).unwrap();
+    import_file(conn, &dir.path().join("attachments"), &file, own(), false).unwrap();
+    let found = matching::suggest_for_book(conn, &scope(), None).unwrap();
+    let suggestion = &list(get(&found, "suggestions").unwrap())[0];
+    assert_eq!(
+        get(suggestion, "transaction_ids"),
+        Some(&Value::List(vec![s("buy1")]))
+    );
+    assert_eq!(
+        get(&found, "purchases_without_exact_fiat_value"),
+        Some(&Value::List(vec![s("buy2")]))
+    );
+    assert_eq!(
+        matching::suggest_for_book(conn, &scope(), Some("nope"))
+            .unwrap_err()
+            .code,
+        "not_found"
+    );
+}
+
+/// A decision a keep-decisions reset withholds (its transaction came back changed) no longer
+/// hides the line from suggestions: the pair is offered for review again.
+#[test]
+fn a_reset_withheld_decision_is_suggested_again() {
+    let (dir, book) = book();
+    let conn = book.connection();
+    let file = dir.path().join("s.csv");
+    fs::write(&file, csv_ref(&[MARCH])).unwrap();
+    import_file(conn, &dir.path().join("attachments"), &file, own(), false).unwrap();
+    let suggested = |conn: &Connection| {
+        let found = matching::suggest_for_book(conn, &scope(), None).unwrap();
+        list(get(&found, "suggestions").unwrap()).len()
+    };
+    assert_eq!(suggested(conn), 1);
+    conn.execute_batch("INSERT INTO bank_statement_line_decisions(line_id,transaction_id,profile_id,state,created_at,updated_at) SELECT id,'buy1','p','accepted','2025-04-01T00:00:00Z','2025-04-01T00:00:00Z' FROM bank_statement_lines").unwrap();
+    assert_eq!(suggested(conn), 0);
+    conn.execute_batch("INSERT INTO book_reset_transactions(transaction_id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,amount_includes_fee,state,changed_fields_json,created_at) VALUES('buy1','w','p','kraken','f0','2025-03-05T10:00:00Z','inbound','BTC',1000000000,0,0,'changed','[\"amount\"]','2025-05-01T00:00:00Z')").unwrap();
+    assert_eq!(suggested(conn), 1);
 }

@@ -631,6 +631,16 @@ impl StoredLine {
         }
     }
 
+    /// The curated exchange the counterparty or remittance names, if any.
+    pub fn named_exchange(&self) -> Option<&'static str> {
+        let words = format!(
+            "{} {}",
+            self.counterparty_name.as_deref().unwrap_or(""),
+            self.remittance.as_deref().unwrap_or("")
+        );
+        super::matching::named_exchange(&words)
+    }
+
     /// The line as a read returns it: free text with IBANs masked.
     pub fn payload(&self, row: &Value) -> Value {
         let outgoing = Money::parse(&self.amount).is_some_and(|m| m.is_negative());

@@ -1306,6 +1306,43 @@ pub fn source_funds(model: &Value) -> Document {
                 .collect(),
         )));
     }
+    // Accepted bank-statement lines on root sources (absent when none).
+    let bank_rows: Vec<Vec<Cell>> = list(value(report, "graph"), "nodes")
+        .iter()
+        .filter(|n| text(n, "node_type") == "source")
+        .flat_map(|n| list(n, "bank_evidence").iter())
+        .map(|line| {
+            let opt = |key: &str| match value(line, key) {
+                Value::Null => Cell::Empty,
+                v => Cell::Text(py_str(v)),
+            };
+            vec![
+                Cell::Date(text(line, "booking_date")),
+                exact(value(line, "amount")).map_or(Cell::Empty, Cell::Fiat),
+                txt_or(line, "currency"),
+                opt("bank_name"),
+                opt("counterparty_name"),
+                opt("counterparty_iban_masked"),
+                opt("bank_reference"),
+            ]
+        })
+        .collect();
+    if !bank_rows.is_empty() {
+        blocks.push(Block::Table(table(
+            "bank_evidence",
+            t("sof.bank_evidence").into(),
+            vec![
+                col("date", t("sof.col.booking_date"), Kind::Date, 0.8),
+                col("amount", t("sof.col.amount"), Kind::Fiat, 0.9),
+                col("currency", t("sof.col.currency"), Kind::Text, 0.5),
+                col("bank", t("sof.col.bank"), Kind::Text, 1.0),
+                col("counterparty", t("sof.col.counterparty"), Kind::Text, 1.2),
+                col("iban", "IBAN", Kind::Code, 1.4),
+                col("reference", t("sof.col.reference"), Kind::Code, 1.2),
+            ],
+            bank_rows,
+        )));
+    }
     let wallets_named: Vec<String> = list(preview, "wallets_named").iter().map(py_str).collect();
     let mut footprint = vec![
         fact(
