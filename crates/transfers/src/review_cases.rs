@@ -636,6 +636,11 @@ pub fn inspect_with_error<E: From<AppError>>(
                     operations.insert(0, s("unpair"));
                 }
             }
+            if reason == "privacy_hop_unresolved" && text(&case, "direction") == "inbound" {
+                // A collaborative receipt: classifying its net amount (an
+                // acquisition review) clears the hold when the chain proves it.
+                operations.insert(0, s("kind_override"));
+            }
             if reason == "bisq_trade_review_required" {
                 // A held Bisq trade: review what it moved, or exclude a row
                 // that is not the owner's.

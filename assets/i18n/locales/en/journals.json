@@ -249,6 +249,11 @@
         "why": "More than 1 % (at least 2,500 sats) of this transfer is explained neither by the receipt nor by the fee.",
         "provide": "If part went to another wallet of yours, connect it; otherwise link the correct receipt or record the difference."
       },
+      "privacyHopReceipt": {
+        "title": "Shared receipt needs a classification",
+        "why": "You received more than you put into this shared transaction (a Payjoin, for example). The chain shows how much you gained, not what the other party paid you for.",
+        "provide": "Classify the receipt (income, purchase, …) in the transaction's Tax tab. Excluding it would drop a real receipt."
+      },
       "privacyHop": {
         "title": "CoinJoin or shared transaction needs evidence",
         "why": "This row is part of a shared transaction. The chain does not show which part was yours, a payment or a fee.",

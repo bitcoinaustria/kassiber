@@ -14,6 +14,36 @@ const LIKELY: [&str; 5] = [
     "likelyCoinJoin",
 ];
 
+/// Acquisition kinds the owner can give a collaborative receipt's net amount
+/// (`kind_override`, the acquisition review). `deposit` says nothing about
+/// where the value came from, so it does not count.
+const RECEIPT_KINDS: [&str; 9] = [
+    "airdrop",
+    "buy",
+    "hardfork",
+    "income",
+    "interest",
+    "lending_interest",
+    "mining",
+    "staking",
+    "wages",
+];
+
+/// A collaborative receipt (Payjoin and the like) whose net amount the owner
+/// classified: an inbound row whose amount is the wallet's net delta
+/// (`implicit_wallet_delta`) with an authored acquisition kind. Row-local
+/// only; the interpreter also requires a current authoritative observation
+/// and no other row of the same transaction.
+pub(crate) fn classified_receipt<R: Fields + ?Sized>(row: &R) -> bool {
+    let lower = |key: &str| codec::pystr(row.at(key)).py_strip().py_lower();
+    if row.at("privacy_boundary").is_null() || row.at("kind_override").is_null() {
+        return false;
+    }
+    lower("direction") == "inbound"
+        && lower("observation_fee_attribution") == "implicit_wallet_delta"
+        && RECEIPT_KINDS.contains(&lower("kind_override").replace(['-', ' '], "_").as_str())
+}
+
 fn boolish(value: &Py) -> bool {
     if matches!(value, Py::Bool(true)) {
         return true;
@@ -59,6 +89,44 @@ fn evidence<R: Fields + ?Sized>(row: &R) -> Option<Py> {
     Some(detail)
 }
 
+/// The classified collaborative receipts whose net amount the chain proves:
+/// a current authoritative observation states the row's amount as the
+/// wallet's net delta, and no other row in the book (another wallet, an
+/// import) shares the transaction, so none of the owner's value in it is
+/// unaccounted for. The owner's acquisition kind supplies only the commercial
+/// meaning the graph cannot.
+fn classified_receipts<R: Row>(rows: &[R], context: &Context) -> Ids {
+    let txid = |row: &R| codec::pystr(row.at("external_id")).py_strip().py_lower();
+    let mut rows_per_txid: BTreeMap<String, usize> = BTreeMap::new();
+    for row in rows {
+        let key = txid(row);
+        if !key.is_empty() && !context.excluded.contains(&codec::text(row.at("id"))) {
+            *rows_per_txid.entry(key).or_default() += 1;
+        }
+    }
+    let mut ids = Ids::new();
+    for row in rows {
+        if !classified_receipt(row) {
+            continue;
+        }
+        let key = txid(row);
+        if key.is_empty() || rows_per_txid.get(&key) != Some(&1) {
+            continue;
+        }
+        let Some(observation) = context.observations.get(&anchor(row)) else {
+            continue;
+        };
+        if codec::truth(&observation["authoritative_chain_observation"])
+            && observation["fee_attribution"] == "implicit_wallet_delta"
+            && observation["direction"] == "inbound"
+            && super::claims::principal(observation) > 0
+        {
+            ids.insert(codec::text(row.at("id")));
+        }
+    }
+    ids
+}
+
 pub(super) fn compute<R: Row>(
     rows: &[R],
     auto: &[Value],
@@ -88,6 +156,7 @@ pub(super) fn compute<R: Row>(
             }
         }
     }
+    resolved.extend(classified_receipts(rows, context));
     resolved.extend(context.excluded.iter().cloned());
     resolved.extend(native_ids.iter().cloned());
     let has_boundaries = rows
@@ -145,6 +214,28 @@ mod tests {
             assert_eq!(json!(actual), vector["expected"], "{}", vector["case"]);
         }
     }
+    #[test]
+    fn only_an_inbound_net_delta_with_an_acquisition_kind_is_a_classified_receipt() {
+        let receipt = json!({"direction":"inbound","privacy_boundary":"collaborative",
+            "observation_fee_attribution":"implicit_wallet_delta","kind_override":"income"});
+        assert!(classified_receipt(&receipt));
+        for (key, value) in [
+            ("direction", json!("outbound")),
+            ("privacy_boundary", Value::Null),
+            ("observation_fee_attribution", json!("exact")),
+            ("kind_override", Value::Null),
+            ("kind_override", json!("deposit")),
+            ("kind_override", json!("withdrawal")),
+        ] {
+            let mut row = receipt.clone();
+            row[key] = value.clone();
+            assert!(!classified_receipt(&row), "{key}={value}");
+        }
+        let mut spelled = receipt.clone();
+        spelled["kind_override"] = json!(" Lending-Interest ");
+        assert!(classified_receipt(&spelled));
+    }
+
     #[test]
     fn privacy_resolution_vectors() {
         let vectors: Vec<Value> = serde_json::from_str(include_str!(

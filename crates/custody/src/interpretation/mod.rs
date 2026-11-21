@@ -15,7 +15,7 @@ mod native;
 mod ownership;
 mod pairs;
 mod pipeline;
-mod privacy;
+pub(crate) mod privacy;
 mod reconciliation;
 mod recorded;
 mod reviewed;

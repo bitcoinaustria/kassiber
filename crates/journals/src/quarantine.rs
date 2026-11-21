@@ -180,6 +180,14 @@ fn reason(reason: &str) -> Info {
 
 /// `quarantine_catalog.reason_info`, resolving the quantity umbrella.
 fn reason_info(name: &str, detail: &Py) -> Info {
+    // A collaborative receipt (a Payjoin the owner received, say) clears
+    // when the owner classifies its net amount; see custody-resolution.md.
+    if name == "privacy_hop_unresolved" && text_or_empty(get(detail, "direction")) == "inbound" {
+        return info(
+            "needs_decision",
+            &["classify", "connect_wallet", "attach_evidence"],
+        );
+    }
     if name != "custody_quantity_unresolved" {
         return reason(name);
     }
@@ -1938,6 +1946,25 @@ mod tests {
             ["restore_pairing", "pair_transfer", "sync_wallet"]
         );
         assert!(!info.downstream());
+    }
+
+    #[test]
+    fn a_held_collaborative_receipt_leads_with_classifying_it() {
+        let held = |direction: &str| {
+            reason_info(
+                "privacy_hop_unresolved",
+                &dict([("direction", s(direction))]),
+            )
+        };
+        assert_eq!(
+            held("inbound").actions,
+            ["classify", "connect_wallet", "attach_evidence"]
+        );
+        assert_eq!(held("inbound").category, "needs_decision");
+        assert_eq!(
+            held("outbound").actions,
+            ["connect_wallet", "attach_evidence"]
+        );
     }
 
     #[test]
